@@ -6,6 +6,14 @@ Each chronicle follows the development anatomy: **Problem** → **Attempted Solu
 
 ---
 
+### [The Blind Spot in the Browser: Conquering Shadow DOM and the 144-Key Limit in Link Hints](./shadow-dom-link-hints.md)
+
+How Web Components hid navigation links from query selectors, why hardcoded 2-letter permutations created silent key collisions, and how recursive shadow tree crawling restored mouse-free navigation.
+
+`DOM` · `Web Components` · `Keyboard Navigation` · `Link Hints` · `Vim`
+
+---
+
 ### [The Accidental Resurrection: How Closing a Tab Defeated Tab Hibernation](./accidental-tab-resurrection.md)
 
 How a naive index decrement broke tab closure ergonomics, why sleeping background tabs were silently woken into memory, and how Most Recently Used (MRU) lifecycle awareness restored efficiency.

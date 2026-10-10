@@ -36,6 +36,7 @@ export default defineConfig({
         text: 'Engineering Blog',
         items: [
           { text: 'Chronicles Overview', link: '/blog/' },
+          { text: 'Link Hints & Shadow DOM', link: '/blog/shadow-dom-link-hints' },
           { text: 'Accidental Tab Resurrection', link: '/blog/accidental-tab-resurrection' },
           { text: 'Google Auth & Botguard', link: '/blog/google-auth-rrk46-botguard' },
           { text: 'Shadow DOM Keyboard Trap', link: '/blog/shadow-dom-keyboard-trap' },
