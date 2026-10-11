@@ -4,6 +4,12 @@ Deep dives into the most challenging bugs, feature failures, and architectural l
 
 Each chronicle follows the development anatomy: **Problem** → **Attempted Solution** → **The Bug / Fail** → **The Architectural Fix**.
 
+### [The Dark Reader Dilemma: Taming Navigation Amnesia, Picture Inversion, and Blend Mode Blackouts](./dark-reader-navigation-persistence.md)
+
+How transient Chromium frames wiped injected stylesheets on redirect, why responsive picture tags and blend modes turned product photos into black voids, and how lifecycle-aware state restored seamless dark mode.
+
+`CSS Filters` · `Dark Reader` · `Lifecycle Architecture` · `Chromium` · `Electron`
+
 ---
 
 ### [The Blind Spot in the Browser: Conquering Shadow DOM and the 144-Key Limit in Link Hints](./shadow-dom-link-hints.md)

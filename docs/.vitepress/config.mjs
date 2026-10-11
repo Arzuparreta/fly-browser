@@ -36,6 +36,7 @@ export default defineConfig({
         text: 'Engineering Blog',
         items: [
           { text: 'Chronicles Overview', link: '/blog/' },
+          { text: 'Dark Reader Dilemma', link: '/blog/dark-reader-navigation-persistence' },
           { text: 'Link Hints & Shadow DOM', link: '/blog/shadow-dom-link-hints' },
           { text: 'Accidental Tab Resurrection', link: '/blog/accidental-tab-resurrection' },
           { text: 'Google Auth & Botguard', link: '/blog/google-auth-rrk46-botguard' },
