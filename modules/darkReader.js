@@ -18,8 +18,15 @@ body {
 }
 
 /* Re-invert media elements so photos, videos, canvases and charts preserve natural colours */
-img, video, canvas:not(.pdf-page-canvas), svg:not(:root), picture, embed, object, iframe {
+img, video, canvas:not(.pdf-page-canvas), svg:not(:root), embed, object, iframe {
     filter: invert(100%) hue-rotate(180deg) !important;
+    mix-blend-mode: normal !important;
+}
+
+/* Reset mix-blend-mode and prevent double inversion on picture containers */
+picture {
+    filter: none !important;
+    mix-blend-mode: normal !important;
 }
 
 /* Re-invert background image icons and leaf elements without inverting textual content */
@@ -53,14 +60,20 @@ img {
 `;
 
 export function isWebviewDarkReaderActive(wv) {
-    return !!(wv && wv.__miseDarkKey);
+    return !!(wv && wv.__miseDarkReaderEnabled);
 }
 
 export async function setWebviewDarkReader(wv, enable) {
-    if (!wv || typeof wv.insertCSS !== 'function') return false;
+    if (!wv) return false;
+    wv.__miseDarkReaderEnabled = !!enable;
+
     if (enable) {
-        if (!wv.__miseDarkKey) {
+        if (typeof wv.insertCSS === 'function') {
             try {
+                if (wv.__miseDarkKey && typeof wv.removeInsertedCSS === 'function') {
+                    try { await wv.removeInsertedCSS(wv.__miseDarkKey); } catch (e) {}
+                    wv.__miseDarkKey = null;
+                }
                 const key = await wv.insertCSS(DARK_READER_CSS);
                 wv.__miseDarkKey = key;
                 return true;
@@ -69,15 +82,30 @@ export async function setWebviewDarkReader(wv, enable) {
                 return false;
             }
         }
-        return true;
+        return false;
     } else {
-        if (wv.__miseDarkKey) {
+        if (wv.__miseDarkKey && typeof wv.removeInsertedCSS === 'function') {
             try {
                 await wv.removeInsertedCSS(wv.__miseDarkKey);
             } catch (err) {}
             wv.__miseDarkKey = null;
         }
         return false;
+    }
+}
+
+export async function reapplyWebviewDarkReader(wv) {
+    if (!wv || !wv.__miseDarkReaderEnabled) return;
+    if (typeof wv.insertCSS !== 'function') return;
+    try {
+        if (wv.__miseDarkKey && typeof wv.removeInsertedCSS === 'function') {
+            try { await wv.removeInsertedCSS(wv.__miseDarkKey); } catch (e) {}
+            wv.__miseDarkKey = null;
+        }
+        const key = await wv.insertCSS(DARK_READER_CSS);
+        wv.__miseDarkKey = key;
+    } catch (err) {
+        console.error('Failed to reapply Dark Reader CSS on navigation:', err);
     }
 }
 
@@ -101,6 +129,15 @@ export async function toggleDarkReaderOnActiveTab() {
     const willEnable = !isWebviewDarkReaderActive(activeWv);
     await setWebviewDarkReader(activeWv, willEnable);
 
+    // Track tab Dark Reader state in central state store
+    const activeListItem = document.querySelector('#TabList li.selected');
+    const currentIdx = activeListItem ? Array.from(document.querySelectorAll('#TabList li')).indexOf(activeListItem) : -1;
+    if (currentIdx >= 0) {
+        if (!state.tabDarkReaderStates) state.tabDarkReaderStates = {};
+        if (!state.tabDarkReaderStates[currentWS]) state.tabDarkReaderStates[currentWS] = [];
+        state.tabDarkReaderStates[currentWS][currentIdx] = willEnable;
+    }
+
     // If split view is active, toggle the secondary pane as well
     if (isSplitActive(currentWS)) {
         const split = getSplitState(currentWS);
@@ -109,6 +146,9 @@ export async function toggleDarkReaderOnActiveTab() {
         const otherWv = views[otherIdx];
         if (otherWv) {
             await setWebviewDarkReader(otherWv, willEnable);
+            if (otherIdx >= 0) {
+                state.tabDarkReaderStates[currentWS][otherIdx] = willEnable;
+            }
         }
     }
 

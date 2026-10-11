@@ -11,6 +11,7 @@ export const state = {
     tabMediaAudible: {},
     tabFavicons: {},
     tabHistory: {},
+    tabDarkReaderStates: {},
     splitStates: {},
     
     // UI Active Flags
