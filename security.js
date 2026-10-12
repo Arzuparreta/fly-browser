@@ -151,17 +151,7 @@ function hardenSession(targetSession, spellLang = 'en-GB') {
         return true;
     });
 
-    // Route Google authentication requests through the WebLite sign-in flow
-    if (targetSession.webRequest && typeof targetSession.webRequest.onBeforeRequest === 'function') {
-        targetSession.webRequest.onBeforeRequest({ urls: ['*://accounts.google.com/*'] }, (details, callback) => {
-            const url = details.url || '';
-            if (url.includes('flowName=GlifWebSignIn')) {
-                const redirectedUrl = url.replaceAll('flowName=GlifWebSignIn', 'flowName=WebLiteSignIn');
-                return callback({ redirectURL: redirectedUrl });
-            }
-            callback({});
-        });
-    }
+    attachNetworkHandlers(targetSession);
 
     const cleanUserAgent = (ua) => {
         return (ua || '')
@@ -197,34 +187,52 @@ function hardenSession(targetSession, spellLang = 'en-GB') {
             callback({ requestHeaders: headers });
         });
     }
+}
 
-    // Intercept main frame navigation to PDF documents and route to built-in viewer
-    if (targetSession.webRequest && typeof targetSession.webRequest.onHeadersReceived === 'function') {
-        targetSession.webRequest.onHeadersReceived((details, callback) => {
-            if (details.resourceType === 'main_frame' && details.url) {
-                const viewerPrefix = 'file://' + path.join(__dirname, 'assets', 'pdfjs', 'viewer.html');
-                if (!details.url.startsWith(viewerPrefix)) {
-                    const headers = details.responseHeaders || {};
-                    let isPdf = false;
-                    for (const [headerKey, headerVal] of Object.entries(headers)) {
-                        if (headerKey.toLowerCase() === 'content-type') {
-                            const valStr = Array.isArray(headerVal) ? headerVal.join(' ') : String(headerVal);
-                            const lowerVal = valStr.toLowerCase();
-                            if (lowerVal.includes('application/pdf') || lowerVal.includes('application/x-pdf')) {
-                                isPdf = true;
-                                break;
-                            }
+// Electron keeps a single listener per webRequest event, so the ad-blocker's
+// onBeforeRequest and onHeadersReceived would replace ours. Register one
+// listener for each that runs Mise's rules first, then hands over to the blocker.
+function attachNetworkHandlers(targetSession) {
+    if (!targetSession.webRequest) return;
+
+    const blockingEnabled = () => blockerInstance && blockerInstance.isBlockingEnabled(targetSession);
+
+    targetSession.webRequest.onBeforeRequest({ urls: ['<all_urls>'] }, (details, callback) => {
+        // Route Google authentication requests through the WebLite sign-in flow
+        const url = details.url || '';
+        if (url.includes('flowName=GlifWebSignIn') && /^https?:\/\/accounts\.google\.com\//i.test(url)) {
+            return callback({ redirectURL: url.replaceAll('flowName=GlifWebSignIn', 'flowName=WebLiteSignIn') });
+        }
+        if (blockingEnabled()) return blockerInstance.onBeforeRequest(details, callback);
+        callback({});
+    });
+
+    targetSession.webRequest.onHeadersReceived({ urls: ['<all_urls>'] }, (details, callback) => {
+        // Intercept main frame navigation to PDF documents and route to built-in viewer
+        if (details.resourceType === 'main_frame' && details.url) {
+            const viewerPrefix = 'file://' + path.join(__dirname, 'assets', 'pdfjs', 'viewer.html');
+            if (!details.url.startsWith(viewerPrefix)) {
+                const headers = details.responseHeaders || {};
+                let isPdf = false;
+                for (const [headerKey, headerVal] of Object.entries(headers)) {
+                    if (headerKey.toLowerCase() === 'content-type') {
+                        const valStr = Array.isArray(headerVal) ? headerVal.join(' ') : String(headerVal);
+                        const lowerVal = valStr.toLowerCase();
+                        if (lowerVal.includes('application/pdf') || lowerVal.includes('application/x-pdf')) {
+                            isPdf = true;
+                            break;
                         }
                     }
-                    if (isPdf) {
-                        const viewerUrl = mintPdfViewerUrl(details.url);
-                        return callback({ redirectURL: viewerUrl });
-                    }
+                }
+                if (isPdf) {
+                    const viewerUrl = mintPdfViewerUrl(details.url);
+                    return callback({ redirectURL: viewerUrl });
                 }
             }
-            callback({ responseHeaders: details.responseHeaders });
-        });
-    }
+        }
+        if (blockingEnabled()) return blockerInstance.onHeadersReceived(details, callback);
+        callback({ responseHeaders: details.responseHeaders });
+    });
 }
 
 async function applyTrustedDomainExceptions() {
@@ -309,6 +317,7 @@ async function initialiseAdblocker(targetSession) {
             });
         }
         blockerInstance.enableBlockingInSession(targetSession);
+        attachNetworkHandlers(targetSession);
         ipcInitialized = true;
     } catch (err) {
         console.error('Failed to attach network filters to session:', err);
