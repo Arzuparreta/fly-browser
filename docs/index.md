@@ -47,7 +47,7 @@ features:
 
 ## Why Mise Browser?
 
-Most modern web browsers consume gigabytes of memory, leak telemetry continuously, and expect a pointing device for every interaction. **Mise** takes a fundamentally different path: it treats web navigation as a keyboard-centric, distraction-free environment designed to respect both your hardware and your privacy.
+Most modern web browsers consume gigabytes of memory, leak telemetry continuously, and expect a pointing device for every interaction. Named after the Czech word for *"mission"* (pronounced *mee-seh*), **Mise** takes a fundamentally different path: it treats web navigation as an intentional, keyboard-centric, distraction-free environment designed to respect both your hardware and your privacy.
 
 ::: tip ARCHITECTURAL PILLARS
 * **Memory Conservation:** Idle tabs detach from DOM memory. Twenty tabs take the RAM footprint of two.

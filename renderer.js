@@ -182,6 +182,19 @@ window.promptQuickmark = promptQuickmark;
 window.addCurrentPageToBookmarks = addCurrentPageToBookmarks;
 window.focusSidebar = focusSidebar;
 
+export async function testCleanGoogleSignIn() {
+    try {
+        if (window.miseAPI && typeof window.miseAPI.clearGoogleAuthCookies === 'function') {
+            await window.miseAPI.clearGoogleAuthCookies('MisePrivateProfile');
+        }
+        setTargetUrl('Opening clean Google sign-in test in volatile partition...', 3500);
+        spawnTabWithUrl('https://accounts.google.com/ServiceLogin?mise_test_auth=1');
+    } catch (err) {
+        console.error('Failed to launch clean Google sign-in test:', err);
+    }
+}
+window.testCleanGoogleSignIn = testCleanGoogleSignIn;
+
 export function focusSidebar() {
     const activeEl = document.activeElement;
     const isInsideTabList = activeEl && (activeEl.closest('#TabList') || activeEl.id === 'TabList');

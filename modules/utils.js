@@ -113,6 +113,8 @@ export function isMatchingDomain(url, targetDomain) {
 
 // Checks whether a URL matches domains designated for isolated private sessions
 export function isTargetPrivateDomain(url) {
+    if (!url || typeof url !== 'string') return false;
+    if (url.includes('mise_test_auth=1')) return true;
     return isMatchingDomain(url, 'ycombinator.com');
 }
 

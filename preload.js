@@ -84,6 +84,7 @@ contextBridge.exposeInMainWorld('miseAPI', {
     clearDiagnosticsLogs: () => ipcRenderer.invoke('clear-diagnostics-logs'),
     setDiagnosticsEnabled: (enabled) => ipcRenderer.invoke('set-diagnostics-enabled', enabled),
     logDiagnosticsEvent: (eventData) => ipcRenderer.invoke('log-diagnostics-event', eventData),
+    clearGoogleAuthCookies: (partitionName) => ipcRenderer.invoke('clear-google-auth-cookies', partitionName),
     minimizeWindow: () => ipcRenderer.send('window-minimize'),
     toggleMaximizeWindow: () => ipcRenderer.send('window-toggle-maximize'),
     closeWindow: () => ipcRenderer.send('window-close'),

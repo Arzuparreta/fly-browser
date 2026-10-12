@@ -1648,6 +1648,12 @@ function createWindow() {
         event.returnValue = security.getGoogleSignInUserAgent(hostname);
     });
 
+    ipcMain.handle('clear-google-auth-cookies', async (event, partitionName) => {
+        const targetSession = partitionName ? session.fromPartition(partitionName) : session.fromPartition('MisePrivateProfile');
+        await security.clearGoogleAuthCookies(targetSession);
+        return true;
+    });
+
     userContent.initializeUserContent(CONFIG_DIR, mainWindow);
 
     mainWindow.webContents.on('will-attach-webview', (event, webPreferences, params) => {

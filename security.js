@@ -18,7 +18,10 @@ let trustedDomains = [];
 let appliedExceptionFilters = [];
 
 // Define a permanent location for the compiled adblocker cache file
-const CACHE_PATH = path.join(app.getPath('userData'), 'adblock_cache.bin');
+const userDataDir = (app && typeof app.getPath === 'function')
+    ? app.getPath('userData')
+    : path.join(require('os').tmpdir(), 'mise-browser');
+const CACHE_PATH = path.join(userDataDir, 'adblock_cache.bin');
 
 // Infrastructure domains required for Google authentication and bot detection
 const GOOGLE_AUTH_DOMAINS = [
@@ -245,7 +248,7 @@ function attachNetworkHandlers(targetSession) {
 
     targetSession.webRequest.onHeadersReceived({ urls: ['<all_urls>'] }, (details, callback) => {
         // Intercept main frame navigation to PDF documents and route to built-in viewer
-        if (details.resourceType === 'main_frame' && details.url) {
+        if ((details.resourceType === 'main_frame' || details.resourceType === 'mainFrame') && details.url) {
             const viewerPrefix = 'file://' + path.join(__dirname, 'assets', 'pdfjs', 'viewer.html');
             if (!details.url.startsWith(viewerPrefix)) {
                 const headers = details.responseHeaders || {};
@@ -470,6 +473,8 @@ module.exports = {
     clearGoogleAuthCookies,
     setGoogleSignInUserAgent,
     getGoogleSignInUserAgent,
+    isGoogleSignInRequest,
+    attachNetworkHandlers,
     mintPdfViewerUrl,
     validatePdfAccess
 };

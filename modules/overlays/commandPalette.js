@@ -563,6 +563,22 @@ export const COMMAND_DEFINITIONS = [
         }
     },
     {
+        id: 'test-google-signin',
+        title: 'Test Clean Google Sign-In Flow',
+        desc: 'Open Google Sign-In in a clean, unauthenticated scratch partition',
+        details: 'Purges cached Google auth tokens from the volatile private partition and launches a test tab to verify that Google accepts sign-in without security rejection (rrk=46).',
+        tip: 'Use this diagnostic action to audit whether Google authentication works without risking your active workspace logins.',
+        category: 'Preferences & System',
+        icon: 'fa-solid fa-shield-halved',
+        actionId: 'test-google-signin',
+        keywords: ['google', 'auth', 'signin', 'login', 'test', 'clean', 'diagnostic', 'rrk46'],
+        action: async () => {
+            if (window.testCleanGoogleSignIn) {
+                await window.testCleanGoogleSignIn();
+            }
+        }
+    },
+    {
         id: 'toggle-dark-reader',
         title: 'Toggle Dark Reader on Active Tab',
         desc: 'Invert web page colours into high-contrast dark theme preserving media',

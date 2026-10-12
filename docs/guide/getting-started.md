@@ -2,6 +2,8 @@
 
 Mise Browser is a personal, keyboard-centric web browser designed specifically for low-power and fanless Linux systems.
 
+The name **Mise** originates from the Czech word for *"mission"* (pronounced roughly as *mee-seh*). It represents the project's core mission: reclaiming the web browser as an intentional, ultra-lean tool built for privacy, focus, and low-resource efficiency rather than an all-consuming operating system of its own.
+
 Typical desktop browsers consume gigabytes of memory across dozens of background processes, producing heat and throttling on fanless hardware. Mise provides an ultra-lean browsing environment by stripping away unnecessary browser overhead while delivering modern privacy isolation, multi-account containers, and complete mouse-free operation.
 
 ---
