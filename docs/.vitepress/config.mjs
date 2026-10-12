@@ -26,6 +26,7 @@ export default defineConfig({
     nav: [
       { text: 'Guide', link: '/guide/getting-started' },
       { text: 'Features', link: '/guide/navigation' },
+      { text: 'Scripts', link: '/guide/community-scripts' },
       { text: 'Blog', link: '/blog/' },
       { text: 'Policies', link: '/guide/privacy-policy' },
       { text: 'Reference', link: '/reference/keybinds' },
@@ -60,7 +61,8 @@ export default defineConfig({
           { text: 'Privacy & Trusted Sites', link: '/guide/privacy-and-shields' },
           { text: 'Notes, Bookmarks & Quickmarks', link: '/guide/notes-and-bookmarks' },
           { text: 'Terminal Security & Oversight', link: '/guide/terminal-oversight' },
-          { text: 'User Scripts & Styles', link: '/guide/user-scripts-and-styles' }
+          { text: 'User Scripts & Styles', link: '/guide/user-scripts-and-styles' },
+          { text: 'Community Scripts', link: '/guide/community-scripts' }
         ]
       },
       {

@@ -52,6 +52,10 @@ By handling core browser mechanics in the engine and letting users drop in
 clean `.user.js` and `.user.css` files, Mise delivers the exact customisations
 users want while maintaining a near-zero idle resource footprint.
 
+::: tip COMMUNITY SCRIPTS & STYLES
+Looking for tested customisations like Amazon Dark Mode, Tokyo Night Wikipedia, or YouTube distraction filters? Explore the [Community Scripts Directory](/guide/community-scripts) and the official [Mise-community-scripts repository](https://github.com/Rakosn1cek/Mise-community-scripts).
+:::
+
 ---
 
 ## Directory Locations
