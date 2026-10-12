@@ -64,6 +64,8 @@ chmod +x Mise.Browser-0.14.0.AppImage
 ./Mise.Browser-0.14.0.AppImage
 ```
 
+No `libfuse2` is needed. On systems without FUSE, run it with `--appimage-extract-and-run`.
+
 ### Verifying Package Integrity
 
 Download `SHA256SUMS.txt` into the same folder as your downloaded package and run:
