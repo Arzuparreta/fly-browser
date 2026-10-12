@@ -23,6 +23,9 @@ import {
     navigateFrameForward, 
     applyCSSThemeToView,
     toggleGlobalMediaPlayback,
+    toggleTabAudioMute,
+    toggleActiveTabAudioMute,
+    toggleGlobalAudioMute,
     initializeTabSleepManager,
     hibernateInactiveTabs,
     wakeTab,
@@ -168,6 +171,9 @@ window.toggleCommandPaletteView = toggleCommandPaletteView;
 window.closeCommandPalette = closeCommandPalette;
 window.buildDashboardTree = buildDashboardTree;
 window.toggleGlobalMediaPlayback = toggleGlobalMediaPlayback;
+window.toggleTabAudioMute = toggleTabAudioMute;
+window.toggleActiveTabAudioMute = toggleActiveTabAudioMute;
+window.toggleGlobalAudioMute = toggleGlobalAudioMute;
 window.toggleSplitView = toggleSplitView;
 window.cycleSplitOrientation = cycleSplitOrientation;
 window.switchSplitFocus = switchSplitFocus;
@@ -596,6 +602,8 @@ function setupEventListeners() {
             case 'jump-quickmark': promptQuickmark('jump'); break;
             case 'add-bookmark': addCurrentPageToBookmarks(); break;
             case 'toggle-global-media': toggleGlobalMediaPlayback(); break;
+            case 'toggle-tab-audio-mute': toggleActiveTabAudioMute(); break;
+            case 'toggle-global-audio-mute': toggleGlobalAudioMute(); break;
             case 'toggle-split': toggleSplitView(); break;
             case 'switch-split-focus': switchSplitFocus(); break;
             case 'swap-split-panes': swapSplitPanes(); break;

@@ -215,7 +215,8 @@ export function createWebView(url, currentWS, idx) {
         if (liveIdx < 0) return;
         if (!state.tabMediaAudible[currentWS]) state.tabMediaAudible[currentWS] = [];
         state.tabMediaAudible[currentWS][liveIdx] = true;
-        updateTabMediaIndicator(currentWS, liveIdx, true);
+        const isMuted = typeof webview.isAudioMuted === 'function' ? webview.isAudioMuted() : !!state.tabAudioMuted[currentWS]?.[liveIdx];
+        updateTabMediaIndicator(currentWS, liveIdx, true, isMuted);
     });
     
     webview.addEventListener('media-paused', () => {
@@ -223,7 +224,8 @@ export function createWebView(url, currentWS, idx) {
         if (liveIdx < 0) return;
         if (!state.tabMediaAudible[currentWS]) state.tabMediaAudible[currentWS] = [];
         state.tabMediaAudible[currentWS][liveIdx] = false;
-        updateTabMediaIndicator(currentWS, liveIdx, false);
+        const isMuted = typeof webview.isAudioMuted === 'function' ? webview.isAudioMuted() : !!state.tabAudioMuted[currentWS]?.[liveIdx];
+        updateTabMediaIndicator(currentWS, liveIdx, false, isMuted);
     });
 
     webview.addEventListener('did-start-loading', () => {
@@ -234,7 +236,7 @@ export function createWebView(url, currentWS, idx) {
         if (liveIdx >= 0) {
             if (!state.tabActivityTimestamps[currentWS]) state.tabActivityTimestamps[currentWS] = [];
             state.tabActivityTimestamps[currentWS][liveIdx] = Date.now();
-            updateTabMediaIndicator(currentWS, liveIdx, false);
+            updateTabMediaIndicator(currentWS, liveIdx, false, false);
         }
     });
 
@@ -442,6 +444,12 @@ export function handleNormalModeAction(action, extra, webview, currentWS, idx) {
             break;
         case 'toggle-reader-view':
             toggleReaderViewOnActiveTab();
+            break;
+        case 'toggle-tab-audio-mute':
+            toggleTabAudioMute(currentWS, idx);
+            break;
+        case 'toggle-global-audio-mute':
+            toggleGlobalAudioMute();
             break;
     }
 }
@@ -785,10 +793,18 @@ export function renderWorkspaceUI(targetTabToFocus = null) {
             li.appendChild(sleepBadge);
         }
 
-        if (state.tabMediaAudible[currentWS][idx]) {
+        const isAudible = !!state.tabMediaAudible[currentWS]?.[idx];
+        const isMuted = !!state.tabAudioMuted[currentWS]?.[idx];
+
+        if (isAudible || isMuted) {
             const mediaBadge = document.createElement('span');
-            mediaBadge.className = 'tab-media-badge';
-            mediaBadge.innerHTML = ' 🔊';
+            mediaBadge.className = 'tab-media-badge' + (isMuted ? ' is-muted' : '');
+            mediaBadge.title = isMuted ? 'Tab audio muted (click to unmute)' : 'Tab playing audio (click to mute)';
+            mediaBadge.innerHTML = isMuted ? '<i class="fa-solid fa-volume-xmark"></i>' : '<i class="fa-solid fa-volume-high"></i>';
+            mediaBadge.addEventListener('click', (e) => {
+                e.stopPropagation();
+                toggleTabAudioMute(currentWS, idx);
+            });
             li.appendChild(mediaBadge);
         }
 
@@ -798,7 +814,7 @@ export function renderWorkspaceUI(targetTabToFocus = null) {
         li.appendChild(shieldBtn);
         
         li.addEventListener('click', (e) => {
-            if (e.target.closest('.tab-shield-btn')) return;
+            if (e.target.closest('.tab-shield-btn') || e.target.closest('.tab-media-badge')) return;
             if (state.dashboardActive && typeof window.toggleDashboardView === 'function') {
                 window.toggleDashboardView();
             }
@@ -1012,6 +1028,7 @@ export function handleTabRemoval() {
                 if (state.tabSleepStates[wsName]) state.tabSleepStates[wsName].splice(idx, 1);
                 if (state.tabActivityTimestamps[wsName]) state.tabActivityTimestamps[wsName].splice(idx, 1);
                 if (state.tabMediaAudible[wsName]) state.tabMediaAudible[wsName].splice(idx, 1);
+                if (state.tabAudioMuted[wsName]) state.tabAudioMuted[wsName].splice(idx, 1);
                 if (state.sessionState.tab_titles?.[wsName]) state.sessionState.tab_titles[wsName].splice(idx, 1);
                 if (state.sessionState.tab_sleep_states?.[wsName]) state.sessionState.tab_sleep_states[wsName].splice(idx, 1);
                 if (state.tabDarkReaderStates?.[wsName]) state.tabDarkReaderStates[wsName].splice(idx, 1);
@@ -1045,6 +1062,7 @@ export function handleTabRemoval() {
                 delete state.tabSleepStates[wsName];
                 delete state.tabActivityTimestamps[wsName];
                 delete state.tabMediaAudible[wsName];
+                delete state.tabAudioMuted[wsName];
                 delete state.tabFavicons?.[wsName];
                 delete state.tabDarkReaderStates?.[wsName];
                 delete state.tabHistory?.[wsName];
@@ -1083,6 +1101,7 @@ export function handleTabRemoval() {
     if (state.tabSleepStates[currentWS]) state.tabSleepStates[currentWS].splice(currentIdx, 1);
     if (state.tabActivityTimestamps[currentWS]) state.tabActivityTimestamps[currentWS].splice(currentIdx, 1);
     if (state.tabMediaAudible[currentWS]) state.tabMediaAudible[currentWS].splice(currentIdx, 1);
+    if (state.tabAudioMuted[currentWS]) state.tabAudioMuted[currentWS].splice(currentIdx, 1);
     if (state.tabFavicons?.[currentWS]) state.tabFavicons[currentWS].splice(currentIdx, 1);
     if (state.sessionState.tab_titles?.[currentWS]) state.sessionState.tab_titles[currentWS].splice(currentIdx, 1);
     if (state.sessionState.tab_sleep_states?.[currentWS]) state.sessionState.tab_sleep_states[currentWS].splice(currentIdx, 1);
@@ -1193,9 +1212,79 @@ export function toggleGlobalMediaPlayback() {
             }
         });
     });
+    if (typeof setTargetUrl === 'function') {
+        setTargetUrl('Toggled global media playback', 2000);
+    }
 }
 
-export function updateTabMediaIndicator(workspaceId, tabIdx, isAudible) {
+export function toggleTabAudioMute(workspaceId, tabIdx) {
+    const ws = workspaceId || state.sessionState.current_workspace;
+    const views = state.activeViewsCache[ws];
+    if (!views || !views[tabIdx]) return;
+
+    const wv = views[tabIdx];
+    if (!wv || typeof wv.setAudioMuted !== 'function') return;
+
+    if (!state.tabAudioMuted[ws]) state.tabAudioMuted[ws] = [];
+    const currentlyMuted = typeof wv.isAudioMuted === 'function' ? wv.isAudioMuted() : !!state.tabAudioMuted[ws][tabIdx];
+    const newMutedState = !currentlyMuted;
+
+    wv.setAudioMuted(newMutedState);
+    state.tabAudioMuted[ws][tabIdx] = newMutedState;
+
+    const isAudible = state.tabMediaAudible[ws]?.[tabIdx] || false;
+    updateTabMediaIndicator(ws, tabIdx, isAudible, newMutedState);
+
+    const title = state.activeTitlesCache[ws]?.[tabIdx] || 'Tab';
+    const statusMsg = newMutedState ? `Muted audio: ${title}` : `Unmuted audio: ${title}`;
+    if (typeof setTargetUrl === 'function') {
+        setTargetUrl(statusMsg, 2500);
+    }
+}
+
+export function toggleActiveTabAudioMute() {
+    const currentWS = state.sessionState.current_workspace;
+    const activeListItem = document.querySelector('#TabList li.selected');
+    if (!activeListItem) return;
+    const tabIdx = Array.from(document.querySelectorAll('#TabList li')).indexOf(activeListItem);
+    if (tabIdx >= 0) {
+        toggleTabAudioMute(currentWS, tabIdx);
+    }
+}
+
+export function toggleGlobalAudioMute() {
+    let anyUnmuted = false;
+    Object.entries(state.activeViewsCache).forEach(([wsName, views]) => {
+        views.forEach((wv) => {
+            if (wv && typeof wv.isAudioMuted === 'function') {
+                if (!wv.isAudioMuted()) {
+                    anyUnmuted = true;
+                }
+            }
+        });
+    });
+
+    const targetMuted = anyUnmuted;
+
+    Object.entries(state.activeViewsCache).forEach(([wsName, views]) => {
+        if (!state.tabAudioMuted[wsName]) state.tabAudioMuted[wsName] = [];
+        views.forEach((wv, idx) => {
+            if (wv && typeof wv.setAudioMuted === 'function') {
+                wv.setAudioMuted(targetMuted);
+                state.tabAudioMuted[wsName][idx] = targetMuted;
+                const isAudible = state.tabMediaAudible[wsName]?.[idx] || false;
+                updateTabMediaIndicator(wsName, idx, isAudible, targetMuted);
+            }
+        });
+    });
+
+    const statusMsg = targetMuted ? 'Muted audio globally across all tabs' : 'Unmuted audio globally across all tabs';
+    if (typeof setTargetUrl === 'function') {
+        setTargetUrl(statusMsg, 2500);
+    }
+}
+
+export function updateTabMediaIndicator(workspaceId, tabIdx, isAudible, isMutedOverride) {
     if (state.sessionState.current_workspace !== workspaceId) return;
 
     const tabList = document.querySelectorAll('#TabList li');
@@ -1203,18 +1292,35 @@ export function updateTabMediaIndicator(workspaceId, tabIdx, isAudible) {
     if (!targetLi) return;
 
     let mediaBadge = targetLi.querySelector('.tab-media-badge');
+    const isMuted = isMutedOverride !== undefined ? isMutedOverride : !!state.tabAudioMuted[workspaceId]?.[tabIdx];
 
-    if (isAudible) {
+    if (isAudible || isMuted) {
         if (!mediaBadge) {
             mediaBadge = document.createElement('span');
-            mediaBadge.className = 'tab-media-badge';
-            mediaBadge.innerHTML = ' 🔊';
+            mediaBadge.className = 'tab-media-badge' + (isMuted ? ' is-muted' : '');
             const shieldBtn = targetLi.querySelector('.tab-shield-btn');
             if (shieldBtn) {
                 targetLi.insertBefore(mediaBadge, shieldBtn);
             } else {
                 targetLi.appendChild(mediaBadge);
             }
+        } else {
+            mediaBadge.className = 'tab-media-badge' + (isMuted ? ' is-muted' : '');
+        }
+
+        mediaBadge.title = isMuted ? 'Tab audio muted (click to unmute)' : 'Tab playing audio (click to mute)';
+        mediaBadge.innerHTML = isMuted ? '<i class="fa-solid fa-volume-xmark"></i>' : '<i class="fa-solid fa-volume-high"></i>';
+
+        if (!mediaBadge.__muteListenerAttached) {
+            mediaBadge.__muteListenerAttached = true;
+            mediaBadge.addEventListener('click', (e) => {
+                e.stopPropagation();
+                const currentWS = state.sessionState.current_workspace;
+                const liveIdx = Array.from(document.querySelectorAll('#TabList li')).indexOf(targetLi);
+                if (liveIdx >= 0) {
+                    toggleTabAudioMute(currentWS, liveIdx);
+                }
+            });
         }
     } else {
         if (mediaBadge) {

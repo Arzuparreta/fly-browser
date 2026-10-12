@@ -2133,12 +2133,33 @@ body.zen-mode #right-content {
 }
 
 .tab-media-badge {
-    font-size: 0.85em;
+    font-size: 0.8em;
     margin-left: 6px;
-    opacity: 0.9;
+    padding: 2px 4px;
+    border-radius: 4px;
+    opacity: 0.85;
     user-select: none;
-    display: inline-block;
-    vertical-align: middle;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+    color: var(--accent);
+    transition: opacity 0.15s ease, background 0.15s ease, color 0.15s ease;
+}
+
+.tab-media-badge:hover {
+    opacity: 1;
+    background: rgba(122, 162, 247, 0.15);
+}
+
+.tab-media-badge.is-muted {
+    color: #f7768e;
+    opacity: 0.85;
+}
+
+.tab-media-badge.is-muted:hover {
+    opacity: 1;
+    background: rgba(247, 118, 142, 0.15);
 }
 
 /* Share Modal Overlay */

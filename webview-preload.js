@@ -668,6 +668,14 @@ window.addEventListener('keydown', (e) => {
             e.preventDefault();
             try { ipcRenderer.sendToHost('normal-mode-action', 'focus-sidebar'); } catch (err) {}
             break;
+        case 'm':
+            e.preventDefault();
+            try { ipcRenderer.sendToHost('normal-mode-action', 'toggle-tab-audio-mute'); } catch (err) {}
+            break;
+        case 'M':
+            e.preventDefault();
+            try { ipcRenderer.sendToHost('normal-mode-action', 'toggle-global-audio-mute'); } catch (err) {}
+            break;
         case 'y':
             e.preventDefault();
             try {

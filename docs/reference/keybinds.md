@@ -48,6 +48,8 @@ All keyboard shortcuts in Mise Browser are fully customisable via `~/.config/mis
 | **Ctrl + Shift + A** | `add-bookmark` | Saves the current tab into `bookmarks.json` |
 | **Ctrl + Shift + 0** | `toggle-global-media` | Plays or pauses media playback globally |
 | **F10** | `toggle-global-media` | Secondary global media play/pause binding |
+| **Ctrl + Shift + M** | `toggle-tab-audio-mute` | Mutes or unmutes audio on active tab |
+| **F8** | `toggle-tab-audio-mute` | Secondary active tab audio mute toggle |
 | **Ctrl + Shift + I** | `toggle-devtools` | Opens Chromium DevTools in a dedicated window |
 | **F12** | `toggle-devtools` | Secondary shortcut for DevTools |
 
@@ -72,6 +74,8 @@ When viewing web content without an active text field or prompt, Mise operates i
 | `/` | In-page text search |
 | `f` | Trigger Link Hints overlay |
 | `e` | Toggle Native Reader View |
+| `m` | Toggle audio mute on active tab |
+| `M` | Toggle audio mute globally across all tabs |
 | `w` | Open Workspace Dashboard |
 | `s` | Focus sidebar tab list |
 | `y` | Copy current page URL to clipboard |

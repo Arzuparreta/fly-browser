@@ -484,6 +484,31 @@ export const COMMAND_DEFINITIONS = [
         keywords: ['media', 'play', 'pause', 'music', 'video', 'stream'],
         action: () => window.toggleGlobalMediaPlayback && window.toggleGlobalMediaPlayback()
     },
+    {
+        id: 'toggle-tab-audio-mute',
+        title: 'Toggle Tab Audio Mute',
+        desc: 'Mute or unmute audio output for the active tab',
+        details: 'Toggles audio mute state for the active tab without pausing video or audio playback.',
+        tip: 'Press Ctrl+Shift+M, F8, or m in NORMAL mode to toggle tab audio mute instantly.',
+        category: 'Tools & Notes',
+        icon: 'fa-solid fa-volume-xmark',
+        actionId: 'toggle-tab-audio-mute',
+        shortcut: ['Ctrl+Shift+M', 'F8'],
+        keywords: ['mute', 'audio', 'sound', 'volume', 'silence', 'unmute', 'speaker'],
+        action: () => window.toggleActiveTabAudioMute && window.toggleActiveTabAudioMute()
+    },
+    {
+        id: 'toggle-global-audio-mute',
+        title: 'Toggle Global Audio Mute',
+        desc: 'Mute or unmute audio output across all tabs and workspaces',
+        details: 'Silences all web audio and media output across all open tabs simultaneously.',
+        tip: 'Press M in NORMAL mode to toggle global audio mute.',
+        category: 'Tools & Notes',
+        icon: 'fa-solid fa-volume-xmark',
+        actionId: 'toggle-global-audio-mute',
+        keywords: ['mute', 'audio', 'sound', 'volume', 'silence', 'global', 'all', 'panictab'],
+        action: () => window.toggleGlobalAudioMute && window.toggleGlobalAudioMute()
+    },
 
     // User Scripts & Styles
     {
