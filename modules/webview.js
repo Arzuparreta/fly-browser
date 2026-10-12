@@ -1023,6 +1023,7 @@ export function handleTabRemoval() {
                         .map(hIdx => (hIdx > idx ? hIdx - 1 : hIdx));
                 }
 
+                state.sessionState.tab_dark_reader = state.tabDarkReaderStates;
                 window.miseAPI.saveSession(state.sessionState);
                 renderWorkspaceUI();
                 if (typeof window.buildDashboardTree === 'function') {
@@ -1088,6 +1089,7 @@ export function handleTabRemoval() {
     if (state.tabDarkReaderStates?.[currentWS]) state.tabDarkReaderStates[currentWS].splice(currentIdx, 1);
     if (state.sessionState.tab_favicons?.[currentWS]) state.sessionState.tab_favicons[currentWS].splice(currentIdx, 1);
 
+    state.sessionState.tab_dark_reader = state.tabDarkReaderStates;
     window.miseAPI.saveSession(state.sessionState);
     window.miseAllowWebviewFocus = true;
 

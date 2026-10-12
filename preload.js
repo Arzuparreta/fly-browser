@@ -4,6 +4,7 @@ const { contextBridge, ipcRenderer } = require('electron');
 // Preload private API exposure
 contextBridge.exposeInMainWorld('miseAPI', {
     getSession: () => ipcRenderer.invoke('get-session'),
+    getSessionRecoveryStatus: () => ipcRenderer.invoke('get-session-recovery-status'),
     saveSession: (sessionData) => ipcRenderer.invoke('save-session', sessionData),
     getWebviewPreloadPath: () => ipcRenderer.sendSync('get-webview-preload-path'),
     getPdfViewerPath: () => ipcRenderer.sendSync('get-pdf-viewer-path'),

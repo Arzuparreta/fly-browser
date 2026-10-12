@@ -33,7 +33,39 @@ const NOTES_PATH = path.join(CONFIG_DIR, 'notes.md');
 const BOOKMARKS_PATH = path.join(CONFIG_DIR, 'bookmarks.json');
 const QUICKMARKS_PATH = path.join(CONFIG_DIR, 'quickmarks.json');
 const sessionPath = path.join(CONFIG_DIR, 'session.json');
+const sessionBackupPath = path.join(CONFIG_DIR, 'session.json.bak');
+const sentinelPath = path.join(CONFIG_DIR, 'session_sentinel.json');
 const historyPath = path.join(CONFIG_DIR, 'history.json');
+
+let isCrashRecovery = false;
+
+function checkAndInitializeSentinel() {
+    try {
+        if (!fs.existsSync(CONFIG_DIR)) fs.mkdirSync(CONFIG_DIR, { recursive: true });
+        if (fs.existsSync(sentinelPath)) {
+            const raw = fs.readFileSync(sentinelPath, 'utf8');
+            const data = JSON.parse(raw);
+            if (data && data.clean_exit === false) {
+                isCrashRecovery = true;
+            }
+        }
+    } catch (err) {}
+    markSentinelState(false);
+}
+
+function markSentinelState(cleanExit) {
+    try {
+        if (!fs.existsSync(CONFIG_DIR)) fs.mkdirSync(CONFIG_DIR, { recursive: true });
+        const data = {
+            clean_exit: !!cleanExit,
+            timestamp: Date.now(),
+            pid: process.pid
+        };
+        const tmpPath = sentinelPath + '.tmp';
+        fs.writeFileSync(tmpPath, JSON.stringify(data, null, 2), 'utf8');
+        fs.renameSync(tmpPath, sentinelPath);
+    } catch (err) {}
+}
 
 const DEFAULT_THEME_COLORS = {
     dark: {
@@ -1088,20 +1120,66 @@ ipcMain.handle('read-reader-code', async () => {
     return '';
 });
 
+ipcMain.handle('get-session-recovery-status', async () => {
+    return { wasCrash: isCrashRecovery };
+});
+
 ipcMain.handle('get-session', async () => {
     try {
-        if (fs.existsSync(sessionPath)) return JSON.parse(fs.readFileSync(sessionPath, 'utf8'));
-    } catch (err) {}
+        if (fs.existsSync(sessionPath)) {
+            const raw = fs.readFileSync(sessionPath, 'utf8');
+            const parsed = JSON.parse(raw);
+            if (parsed && typeof parsed.workspaces === 'object' && parsed.current_workspace) {
+                return parsed;
+            }
+        }
+    } catch (err) {
+        diagnostics.logEvent('warn', 'session', 'Failed to parse primary session file, attempting recovery from backup', { error: err.message });
+    }
+
+    // Resilient fallback: attempt recovery from rolling backup journal
+    try {
+        if (fs.existsSync(sessionBackupPath)) {
+            const rawBackup = fs.readFileSync(sessionBackupPath, 'utf8');
+            const parsedBackup = JSON.parse(rawBackup);
+            if (parsedBackup && typeof parsedBackup.workspaces === 'object' && parsedBackup.current_workspace) {
+                diagnostics.logEvent('info', 'session', 'Successfully recovered session state from session.json.bak');
+                return parsedBackup;
+            }
+        }
+    } catch (backupErr) {
+        diagnostics.logEvent('error', 'session', 'Failed to recover session from backup', { error: backupErr.message });
+    }
+
     return { current_workspace: "Workspace 1", workspaces: { "Workspace 1": ["https://duckduckgo.com"] } };
 });
 
 ipcMain.handle('save-session', async (event, sessionData) => {
     try {
+        if (!sessionData || typeof sessionData !== 'object') return false;
         const dir = path.dirname(sessionPath);
         if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
-        fs.writeFileSync(sessionPath, JSON.stringify(sessionData, null, 4), 'utf8');
+
+        const serialized = JSON.stringify(sessionData, null, 4);
+        const tempPath = sessionPath + '.tmp';
+
+        // Write to temporary file first
+        fs.writeFileSync(tempPath, serialized, 'utf8');
+
+        // Rotate existing valid session to backup before overwriting
+        if (fs.existsSync(sessionPath)) {
+            try {
+                fs.copyFileSync(sessionPath, sessionBackupPath);
+            } catch (copyErr) {}
+        }
+
+        // Atomically rename temporary file to destination
+        fs.renameSync(tempPath, sessionPath);
         return true;
-    } catch (err) { return false; }
+    } catch (err) {
+        diagnostics.logEvent('error', 'session', 'Failed to save session atomically', { error: err.message });
+        return false;
+    }
 });
 
 ipcMain.handle('search-history', async (event, query) => {
@@ -1503,11 +1581,15 @@ function createWindow() {
 
     // Configure active workspace partition; other partitions configure lazily on demand
     try {
+        let initialSession = null;
         if (fs.existsSync(sessionPath)) {
-            const initialSession = JSON.parse(fs.readFileSync(sessionPath, 'utf8'));
-            const activeWs = (initialSession && initialSession.current_workspace) || 'default';
-            configureAndHardenSession(session.fromPartition(getWorkspacePartition(activeWs)));
+            try { initialSession = JSON.parse(fs.readFileSync(sessionPath, 'utf8')); } catch (e) {}
         }
+        if (!initialSession && fs.existsSync(sessionBackupPath)) {
+            try { initialSession = JSON.parse(fs.readFileSync(sessionBackupPath, 'utf8')); } catch (e) {}
+        }
+        const activeWs = (initialSession && initialSession.current_workspace) || 'default';
+        configureAndHardenSession(session.fromPartition(getWorkspacePartition(activeWs)));
     } catch (err) {
         console.error('Failed to initialise active workspace session:', err);
     }
@@ -1515,6 +1597,10 @@ function createWindow() {
     security.setTrustedDomains(loadBrowserConfig().trusted_domains || []);
 
     mainWindow.loadFile('index.html');
+
+    mainWindow.on('close', () => {
+        markSentinelState(true);
+    });
 
     mainWindow.on('maximize', () => {
         if (mainWindow && !mainWindow.isDestroyed() && mainWindow.webContents) {
@@ -1848,11 +1934,16 @@ if (gotSingleInstanceLock) {
     });
 
     app.on('before-quit', () => {
+        markSentinelState(true);
         flushHistoryToDisk();
     });
 
     app.whenReady().then(() => {
+        checkAndInitializeSentinel();
         diagnostics.initDiagnostics(loadBrowserConfig());
+        if (isCrashRecovery) {
+            diagnostics.logEvent('warn', 'session', 'Detected previous unclean shutdown or crash, initialising recovery mode');
+        }
         createWindow();
         initializeMemoryWatcher();
     });

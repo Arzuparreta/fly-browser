@@ -288,27 +288,65 @@ let findActive = false;
 async function initializeBrowser() {
     state.sessionState = await window.miseAPI.getSession();
     
-    // Restore cached titles, sleeping tab states, and favicons if present
+    // Check crash recovery sentinel
+    let isCrashRecovery = false;
+    try {
+        if (window.miseAPI && typeof window.miseAPI.getSessionRecoveryStatus === 'function') {
+            const status = await window.miseAPI.getSessionRecoveryStatus();
+            isCrashRecovery = !!(status && status.wasCrash);
+        }
+    } catch (e) {}
+
+    // Restore cached titles, sleeping tab states, favicons, and dark reader flags
     if (state.sessionState.tab_titles) {
         state.activeTitlesCache = { ...state.sessionState.tab_titles };
     }
     if (state.sessionState.tab_favicons) {
         state.tabFavicons = { ...state.sessionState.tab_favicons };
     }
-    if (state.sessionState.tab_sleep_states) {
+    if (state.sessionState.tab_dark_reader) {
+        state.tabDarkReaderStates = { ...state.sessionState.tab_dark_reader };
+    }
+
+    if (state.sessionState.tab_sleep_states && !isCrashRecovery) {
         state.tabSleepStates = { ...state.sessionState.tab_sleep_states };
-    } else {
-        // Initialise background tabs as sleeping on boot to conserve memory
+        // Initialise any awake background tabs as sleeping on boot to conserve memory
         Object.keys(state.sessionState.workspaces || {}).forEach(ws => {
             const urls = state.sessionState.workspaces[ws] || [];
             if (!state.tabSleepStates[ws]) state.tabSleepStates[ws] = [];
             urls.forEach((u, i) => {
                 if (ws !== state.sessionState.current_workspace || i !== 0) {
+                    if (!state.tabSleepStates[ws][i]) {
+                        state.tabSleepStates[ws][i] = {
+                            url: u,
+                            title: state.activeTitlesCache[ws]?.[i] || u,
+                            scrollX: 0,
+                            scrollY: 0,
+                            darkReader: !!state.tabDarkReaderStates?.[ws]?.[i],
+                            hibernatedAt: Date.now()
+                        };
+                    }
+                } else {
+                    state.tabSleepStates[ws][i] = null;
+                }
+            });
+        });
+    } else {
+        // Crash recovery or initial cold boot: force ALL background tabs to sleep to eliminate memory spikes
+        Object.keys(state.sessionState.workspaces || {}).forEach(ws => {
+            const urls = state.sessionState.workspaces[ws] || [];
+            const previousSleep = state.sessionState.tab_sleep_states?.[ws] || [];
+            if (!state.tabSleepStates[ws]) state.tabSleepStates[ws] = [];
+            urls.forEach((u, i) => {
+                if (ws !== state.sessionState.current_workspace || i !== 0) {
+                    const prev = previousSleep[i];
                     state.tabSleepStates[ws][i] = {
-                        url: u,
-                        title: state.activeTitlesCache[ws]?.[i] || u,
-                        scrollX: 0,
-                        scrollY: 0,
+                        url: prev?.url || u,
+                        title: prev?.title || state.activeTitlesCache[ws]?.[i] || u,
+                        scrollX: prev?.scrollX || 0,
+                        scrollY: prev?.scrollY || 0,
+                        sessionStorage: prev?.sessionStorage || null,
+                        darkReader: prev?.darkReader || !!state.tabDarkReaderStates?.[ws]?.[i],
                         hibernatedAt: Date.now()
                     };
                 } else {
@@ -374,6 +412,12 @@ async function initializeBrowser() {
     initStatusBar();
     initClock();
     initWindowControls(initialCfg);
+
+    if (isCrashRecovery) {
+        setTimeout(() => {
+            setTargetUrl('Session restored after unexpected shutdown', 4000);
+        }, 400);
+    }
 
     if (window.miseAPI && typeof window.miseAPI.getBrowserSettings === 'function') {
         window.miseAPI.getBrowserSettings().then((cfg) => {

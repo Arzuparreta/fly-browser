@@ -152,6 +152,9 @@ export async function toggleDarkReaderOnActiveTab() {
         }
     }
 
+    state.sessionState.tab_dark_reader = state.tabDarkReaderStates;
+    window.miseAPI.saveSession(state.sessionState);
+
     updateDarkReaderButtonUI(willEnable);
     setTargetUrl(willEnable ? 'Dark Reader: On' : 'Dark Reader: Off', 1500);
 }
