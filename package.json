@@ -21,6 +21,9 @@
       "output": "dist",
       "buildResources": "build"
     },
+    "toolsets": {
+      "appimage": "1.0.3"
+    },
     "files": [
       "main.js",
       "preload.js",
