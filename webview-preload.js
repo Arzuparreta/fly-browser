@@ -506,6 +506,7 @@ window.addEventListener('keydown', (e) => {
         if (readerOverlay) {
             e.preventDefault();
             e.stopPropagation();
+            e.stopImmediatePropagation();
             readerOverlay.remove();
             document.documentElement.style.overflow = '';
             try { ipcRenderer.sendToHost('reader-view-toggled', { active: false }); } catch (err) {}
@@ -520,11 +521,13 @@ window.addEventListener('keydown', (e) => {
             }
             e.preventDefault();
             e.stopPropagation();
+            e.stopImmediatePropagation();
         }
         if (isExplicitInsert) {
             isExplicitInsert = false;
             e.preventDefault();
             e.stopPropagation();
+            e.stopImmediatePropagation();
         }
         try { ipcRenderer.sendToHost('guest-input-focus', false); } catch (err) {}
         return;
@@ -534,6 +537,7 @@ window.addEventListener('keydown', (e) => {
     if (e.key === 'F9') {
         e.preventDefault();
         e.stopPropagation();
+        e.stopImmediatePropagation();
         try { ipcRenderer.sendToHost('normal-mode-action', 'toggle-reader-view'); } catch (err) {}
         return;
     }
@@ -555,44 +559,50 @@ window.addEventListener('keydown', (e) => {
 
     const key = e.key;
 
+    function consumeEvent(evt) {
+        evt.preventDefault();
+        evt.stopPropagation();
+        evt.stopImmediatePropagation();
+    }
+
     // Smooth page scrolling
     if (key === 'j') {
-        e.preventDefault();
+        consumeEvent(e);
         scrollPageBy(0, 80);
         return;
     }
     if (key === 'k') {
-        e.preventDefault();
+        consumeEvent(e);
         scrollPageBy(0, -80);
         return;
     }
     if (key === 'd') {
-        e.preventDefault();
+        consumeEvent(e);
         try { ipcRenderer.sendToHost('normal-mode-action', 'toggle-dark-reader'); } catch (err) {}
         return;
     }
     if (key === 'e') {
-        e.preventDefault();
+        consumeEvent(e);
         try { ipcRenderer.sendToHost('normal-mode-action', 'toggle-reader-view'); } catch (err) {}
         return;
     }
     if (key === 'u') {
-        e.preventDefault();
+        consumeEvent(e);
         scrollPageBy(0, -Math.floor(window.innerHeight * 0.5));
         return;
     }
     if (key === 'h') {
-        e.preventDefault();
+        consumeEvent(e);
         scrollPageBy(-80, 0);
         return;
     }
     if (key === 'l') {
-        e.preventDefault();
+        consumeEvent(e);
         scrollPageBy(80, 0);
         return;
     }
     if (key === 'g') {
-        e.preventDefault();
+        consumeEvent(e);
         const now = Date.now();
         if (now - lastGTime < 500) {
             scrollPageTo(0, 0);
@@ -603,7 +613,7 @@ window.addEventListener('keydown', (e) => {
         return;
     }
     if (key === 'G') {
-        e.preventDefault();
+        consumeEvent(e);
         const target = getScrollTarget();
         const maxY = Math.max(
             document.body ? document.body.scrollHeight : 0,
@@ -616,7 +626,7 @@ window.addEventListener('keydown', (e) => {
 
     // Explicit insert mode entry
     if (key === 'i') {
-        e.preventDefault();
+        consumeEvent(e);
         isExplicitInsert = true;
         try { ipcRenderer.sendToHost('guest-input-focus', true); } catch (err) {}
         return;
@@ -625,59 +635,59 @@ window.addEventListener('keydown', (e) => {
     // Browser navigation and actions dispatched to host
     switch (key) {
         case 't':
-            e.preventDefault();
+            consumeEvent(e);
             try { ipcRenderer.sendToHost('normal-mode-action', 'spawn-tab'); } catch (err) {}
             break;
         case 'x':
-            e.preventDefault();
+            consumeEvent(e);
             try { ipcRenderer.sendToHost('normal-mode-action', 'remove-tab'); } catch (err) {}
             break;
         case 'o':
-            e.preventDefault();
+            consumeEvent(e);
             try { ipcRenderer.sendToHost('normal-mode-action', 'toggle-address'); } catch (err) {}
             break;
         case 'r':
-            e.preventDefault();
+            consumeEvent(e);
             try { ipcRenderer.sendToHost('normal-mode-action', 'reload-tab'); } catch (err) {}
             break;
         case 'R':
-            e.preventDefault();
+            consumeEvent(e);
             try { ipcRenderer.sendToHost('normal-mode-action', 'force-reload-tab'); } catch (err) {}
             break;
         case 'H':
-            e.preventDefault();
+            consumeEvent(e);
             try { ipcRenderer.sendToHost('normal-mode-action', 'history-back'); } catch (err) {}
             break;
         case 'L':
-            e.preventDefault();
+            consumeEvent(e);
             try { ipcRenderer.sendToHost('normal-mode-action', 'history-forward'); } catch (err) {}
             break;
         case '/':
-            e.preventDefault();
+            consumeEvent(e);
             try { ipcRenderer.sendToHost('normal-mode-action', 'toggle-find'); } catch (err) {}
             break;
         case 'f':
-            e.preventDefault();
+            consumeEvent(e);
             try { ipcRenderer.sendToHost('normal-mode-action', 'trigger-hints'); } catch (err) {}
             break;
         case 'w':
-            e.preventDefault();
+            consumeEvent(e);
             try { ipcRenderer.sendToHost('normal-mode-action', 'toggle-dashboard'); } catch (err) {}
             break;
         case 's':
-            e.preventDefault();
+            consumeEvent(e);
             try { ipcRenderer.sendToHost('normal-mode-action', 'focus-sidebar'); } catch (err) {}
             break;
         case 'm':
-            e.preventDefault();
+            consumeEvent(e);
             try { ipcRenderer.sendToHost('normal-mode-action', 'toggle-tab-audio-mute'); } catch (err) {}
             break;
         case 'M':
-            e.preventDefault();
+            consumeEvent(e);
             try { ipcRenderer.sendToHost('normal-mode-action', 'toggle-global-audio-mute'); } catch (err) {}
             break;
         case 'y':
-            e.preventDefault();
+            consumeEvent(e);
             try {
                 let currentUrl = window.location.href;
                 if (currentUrl.includes('/assets/pdfjs/viewer.html') && currentUrl.includes('file=')) {

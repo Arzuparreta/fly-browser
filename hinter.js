@@ -56,9 +56,13 @@
     window.toggleHints = function() {
         const existing = document.getElementById('mise-hint-layer');
         if (existing) { 
-            existing.remove(); 
-            if (window.hintKeyListener) {
-                document.removeEventListener('keydown', window.hintKeyListener, true);
+            if (typeof window.hintCleanup === 'function') {
+                window.hintCleanup();
+            } else {
+                existing.remove(); 
+                if (window.hintKeyListener) {
+                    document.removeEventListener('keydown', window.hintKeyListener, true);
+                }
             }
             return; 
         }
@@ -130,7 +134,16 @@
         function cleanup() {
             layer.remove();
             document.removeEventListener('keydown', window.hintKeyListener, true);
+            window.removeEventListener('resize', cleanup, true);
+            window.removeEventListener('scroll', cleanup, true);
+            document.removeEventListener('fullscreenchange', cleanup, true);
+            window.hintCleanup = null;
         }
+
+        window.hintCleanup = cleanup;
+        window.addEventListener('resize', cleanup, { once: true, capture: true });
+        window.addEventListener('scroll', cleanup, { once: true, capture: true });
+        document.addEventListener('fullscreenchange', cleanup, { once: true, capture: true });
 
         function updateBadgeHighlighting() {
             badgeElements.forEach(b => {
@@ -149,6 +162,7 @@
             if (e.key === 'Escape') {
                 e.preventDefault();
                 e.stopPropagation();
+                e.stopImmediatePropagation();
                 cleanup();
                 return;
             }
@@ -156,6 +170,7 @@
             if (e.key === 'Backspace') {
                 e.preventDefault();
                 e.stopPropagation();
+                e.stopImmediatePropagation();
                 if (keysPressed.length > 0) {
                     keysPressed = keysPressed.slice(0, -1);
                     updateBadgeHighlighting();
@@ -167,6 +182,7 @@
             if (charset.includes(key)) {
                 e.preventDefault();
                 e.stopPropagation();
+                e.stopImmediatePropagation();
                 keysPressed += key;
 
                 updateBadgeHighlighting();
@@ -191,6 +207,7 @@
                 // Trap any other non-hint keystroke so it does not trigger underlying page or Vim navigation
                 e.preventDefault();
                 e.stopPropagation();
+                e.stopImmediatePropagation();
             }
         };
 

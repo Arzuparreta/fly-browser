@@ -2,6 +2,8 @@
 
 How signing into Gmail inside an isolated container turned into a chase through Botguard detection, a User-Agent trap, and cookies that kept re-triggering their own rejection.
 
+< *Update, October 2026: A contributor, Arzuparreta, tested this fix and found that part of it never ran. Electron keeps only one listener for each web request event, and the ad blocker's listener replaced the one that rewrote the sign-in flow. The real cause was the User-Agent. With the standardised Chrome User-Agent, Google runs its full Chrome checks, which an embedded app fails. Mise now sends Electron's own User-Agent, without the app name, to accounts.google.com only, and sign-in works. The code below is the first version, kept for the record. The fix is in pull request #19.*
+
 ---
 
 ## 1. The Problem
