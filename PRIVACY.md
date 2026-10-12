@@ -66,7 +66,7 @@ Mise actively protects your privacy against third-party web trackers:
 
 * **In-Process Request Blocking:** Network requests are filtered locally using Ghostery's block engine to neutralise marketing trackers, ads, and telemetry scripts before packets leave your machine.
 * **Fingerprint Farbling:** Injects subtle, domain-bound mathematical noise into Canvas, WebGL, and Audio API outputs to disrupt passive browser fingerprinting.
-* **Identity Standardisation:** Strips internal Electron and Mise identifiers from user-agent headers and Client Hints, presenting a standardised Linux Chromium profile.
+* **Identity Standardisation:** Strips internal Electron and Mise identifiers from user-agent headers and Client Hints, presenting a standardised Linux Chromium profile. The one exception is Google's sign-in page (`accounts.google.com`), which receives Electron's own User-Agent, because Google refuses sign-in from the standardised profile.
 * **Trusted Domains Bypass:** Explicitly whitelisted domains (e.g. banking portals and payment checkouts) bypass fingerprint farbling to prevent fraud-detection false positives.
 
 ---

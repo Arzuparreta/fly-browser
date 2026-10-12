@@ -34,6 +34,36 @@ const GOOGLE_AUTH_DOMAINS = [
     'youtube.com'
 ];
 
+// Google's sign-in serves Electron a lighter flow that it accepts, but sends the
+// standardised Chrome identity into full Chrome checks that an embedded runtime
+// fails ("This browser or app may not be secure"). Sign-in pages therefore get
+// Electron's own User-Agent instead.
+const GOOGLE_SIGNIN_HOST = 'accounts.google.com';
+let googleSignInUserAgent = '';
+
+// Called by main.js with Electron's default User-Agent, before it is replaced
+function setGoogleSignInUserAgent(defaultUserAgent) {
+    // Drop the app name token, keeping the Chrome and Electron versions
+    googleSignInUserAgent = String(defaultUserAgent || '')
+        .replace(/\(KHTML, like Gecko\) .*?Chrome\//, '(KHTML, like Gecko) Chrome/');
+}
+
+function getGoogleSignInUserAgent(hostname) {
+    return hostname === GOOGLE_SIGNIN_HOST ? googleSignInUserAgent : '';
+}
+
+function isGoogleSignInRequest(details) {
+    const hostOf = (url) => { try { return new URL(url).hostname; } catch (e) { return ''; } };
+    // Navigations are judged by destination; the page URL is still the previous one here
+    if (details.resourceType === 'mainFrame') return hostOf(details.url) === GOOGLE_SIGNIN_HOST;
+    // Everything a sign-in page loads carries the same identity
+    try {
+        return !!details.webContents && hostOf(details.webContents.getURL()) === GOOGLE_SIGNIN_HOST;
+    } catch (e) {
+        return false;
+    }
+}
+
 function isTrustedDomain(hostname) {
     if (!hostname) return false;
     const host = String(hostname).toLowerCase().split(':')[0];
@@ -165,6 +195,12 @@ function hardenSession(targetSession, spellLang = 'en-GB') {
         targetSession.webRequest.onBeforeSendHeaders((details, callback) => {
             let hostname = '';
             try { hostname = new URL(details.url).hostname; } catch (e) {}
+
+            if (googleSignInUserAgent && isGoogleSignInRequest(details)) {
+                const headers = details.requestHeaders || {};
+                headers['User-Agent'] = googleSignInUserAgent;
+                return callback({ requestHeaders: headers });
+            }
 
             // Keep unmodified headers on trusted authentication domains
             if (isTrustedDomain(hostname)) {
@@ -432,6 +468,8 @@ module.exports = {
     isTrustedDomain,
     applySpellcheckerLanguage,
     clearGoogleAuthCookies,
+    setGoogleSignInUserAgent,
+    getGoogleSignInUserAgent,
     mintPdfViewerUrl,
     validatePdfAccess
 };

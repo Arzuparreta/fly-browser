@@ -193,6 +193,9 @@ function initializeEngineSwitches() {
     app.commandLine.appendSwitch('log-level', '3');
     app.commandLine.appendSwitch('disable-speech-api');
 
+    // Google sign-in needs Electron's own identity, see security.js
+    security.setGoogleSignInUserAgent(app.userAgentFallback);
+
     // Standardise baseline User-Agent string across all renderers and network requests
     const realChromeMajor = (process.versions && process.versions.chrome) ? process.versions.chrome.split('.')[0] : '132';
     app.userAgentFallback = `Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/${realChromeMajor}.0.0.0 Safari/537.36`;
@@ -1639,6 +1642,10 @@ function createWindow() {
 
     ipcMain.on('is-trusted-domain', (event, hostname) => {
         event.returnValue = security.isTrustedDomain(hostname);
+    });
+
+    ipcMain.on('get-google-signin-user-agent', (event, hostname) => {
+        event.returnValue = security.getGoogleSignInUserAgent(hostname);
     });
 
     userContent.initializeUserContent(CONFIG_DIR, mainWindow);
