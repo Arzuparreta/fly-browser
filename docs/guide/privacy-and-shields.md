@@ -28,7 +28,7 @@ For volatile browsing sessions where no trace should remain:
 
 Mise actively protects against passive browser fingerprinting:
 
-- **User Agent Standardisation**: Strips internal Electron and Mise application tokens from HTTP headers and JavaScript `navigator` properties (`userAgent`, `appVersion`, and `userAgentData` client hints), matching a clean Chromium release.
+- **User Agent Standardisation**: Strips internal Electron and Mise application tokens from HTTP headers and JavaScript `navigator` properties (`userAgent`, `appVersion`, and `userAgentData` client hints), matching a clean Chromium release. The one exception is Google's sign-in page (`accounts.google.com`), which receives Electron's own User-Agent, because Google refuses sign-in from the standardised profile.
 - **Canvas & WebGL Farbling**: Applies subtle, imperceptible noise to Canvas data exports (`toDataURL`, `toBlob`, `getImageData`) and rotates WebGL extension order. Fingerprinting auditors such as EFF Cover Your Tracks recognise this as a randomised, non-trackable fingerprint.
 - **Hardware Profile Masking**: Standardises `hardwareConcurrency` (8 cores), `deviceMemory` (8 GB), and WebGL unmasked vendor/renderer to a common Brave/Chromium baseline to blend into large anonymity pools.
 - **Trusted Domains Exemption**: Any domain added to Trusted Sites automatically bypasses farbling, ensuring sensitive fraud-detection checks (like banking) see consistent device metrics.

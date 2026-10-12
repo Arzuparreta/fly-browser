@@ -321,6 +321,20 @@ if (!isTrustedSite) {
     }
 }
 
+// Match the Electron identity sent in headers on Google's sign-in pages
+try {
+    if (window.location.hostname.endsWith('.google.com')) {
+        const signInUserAgent = ipcRenderer.sendSync('get-google-signin-user-agent', window.location.hostname);
+        if (signInUserAgent) {
+            webFrame.executeJavaScript(`(function() {
+                const ua = ${JSON.stringify(signInUserAgent)};
+                Object.defineProperty(navigator, 'userAgent', { get: () => ua, configurable: true });
+                Object.defineProperty(navigator, 'appVersion', { get: () => ua.replace(/^Mozilla\\//, ''), configurable: true });
+            })();`);
+        }
+    }
+} catch (e) {}
+
 // Recursively resolve active element across shadow DOM and frame boundaries
 function getDeepActiveElement() {
     let el = document.activeElement;

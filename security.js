@@ -34,6 +34,36 @@ const GOOGLE_AUTH_DOMAINS = [
     'youtube.com'
 ];
 
+// Google's sign-in serves Electron a lighter flow that it accepts, but sends the
+// standardised Chrome identity into full Chrome checks that an embedded runtime
+// fails ("This browser or app may not be secure"). Sign-in pages therefore get
+// Electron's own User-Agent instead.
+const GOOGLE_SIGNIN_HOST = 'accounts.google.com';
+let googleSignInUserAgent = '';
+
+// Called by main.js with Electron's default User-Agent, before it is replaced
+function setGoogleSignInUserAgent(defaultUserAgent) {
+    // Drop the app name token, keeping the Chrome and Electron versions
+    googleSignInUserAgent = String(defaultUserAgent || '')
+        .replace(/\(KHTML, like Gecko\) .*?Chrome\//, '(KHTML, like Gecko) Chrome/');
+}
+
+function getGoogleSignInUserAgent(hostname) {
+    return hostname === GOOGLE_SIGNIN_HOST ? googleSignInUserAgent : '';
+}
+
+function isGoogleSignInRequest(details) {
+    const hostOf = (url) => { try { return new URL(url).hostname; } catch (e) { return ''; } };
+    // Navigations are judged by destination; the page URL is still the previous one here
+    if (details.resourceType === 'mainFrame') return hostOf(details.url) === GOOGLE_SIGNIN_HOST;
+    // Everything a sign-in page loads carries the same identity
+    try {
+        return !!details.webContents && hostOf(details.webContents.getURL()) === GOOGLE_SIGNIN_HOST;
+    } catch (e) {
+        return false;
+    }
+}
+
 function isTrustedDomain(hostname) {
     if (!hostname) return false;
     const host = String(hostname).toLowerCase().split(':')[0];
@@ -151,17 +181,7 @@ function hardenSession(targetSession, spellLang = 'en-GB') {
         return true;
     });
 
-    // Route Google authentication requests through the WebLite sign-in flow
-    if (targetSession.webRequest && typeof targetSession.webRequest.onBeforeRequest === 'function') {
-        targetSession.webRequest.onBeforeRequest({ urls: ['*://accounts.google.com/*'] }, (details, callback) => {
-            const url = details.url || '';
-            if (url.includes('flowName=GlifWebSignIn')) {
-                const redirectedUrl = url.replaceAll('flowName=GlifWebSignIn', 'flowName=WebLiteSignIn');
-                return callback({ redirectURL: redirectedUrl });
-            }
-            callback({});
-        });
-    }
+    attachNetworkHandlers(targetSession);
 
     const cleanUserAgent = (ua) => {
         return (ua || '')
@@ -175,6 +195,12 @@ function hardenSession(targetSession, spellLang = 'en-GB') {
         targetSession.webRequest.onBeforeSendHeaders((details, callback) => {
             let hostname = '';
             try { hostname = new URL(details.url).hostname; } catch (e) {}
+
+            if (googleSignInUserAgent && isGoogleSignInRequest(details)) {
+                const headers = details.requestHeaders || {};
+                headers['User-Agent'] = googleSignInUserAgent;
+                return callback({ requestHeaders: headers });
+            }
 
             // Keep unmodified headers on trusted authentication domains
             if (isTrustedDomain(hostname)) {
@@ -197,34 +223,52 @@ function hardenSession(targetSession, spellLang = 'en-GB') {
             callback({ requestHeaders: headers });
         });
     }
+}
 
-    // Intercept main frame navigation to PDF documents and route to built-in viewer
-    if (targetSession.webRequest && typeof targetSession.webRequest.onHeadersReceived === 'function') {
-        targetSession.webRequest.onHeadersReceived((details, callback) => {
-            if (details.resourceType === 'main_frame' && details.url) {
-                const viewerPrefix = 'file://' + path.join(__dirname, 'assets', 'pdfjs', 'viewer.html');
-                if (!details.url.startsWith(viewerPrefix)) {
-                    const headers = details.responseHeaders || {};
-                    let isPdf = false;
-                    for (const [headerKey, headerVal] of Object.entries(headers)) {
-                        if (headerKey.toLowerCase() === 'content-type') {
-                            const valStr = Array.isArray(headerVal) ? headerVal.join(' ') : String(headerVal);
-                            const lowerVal = valStr.toLowerCase();
-                            if (lowerVal.includes('application/pdf') || lowerVal.includes('application/x-pdf')) {
-                                isPdf = true;
-                                break;
-                            }
+// Electron keeps a single listener per webRequest event, so the ad-blocker's
+// onBeforeRequest and onHeadersReceived would replace ours. Register one
+// listener for each that runs Mise's rules first, then hands over to the blocker.
+function attachNetworkHandlers(targetSession) {
+    if (!targetSession.webRequest) return;
+
+    const blockingEnabled = () => blockerInstance && blockerInstance.isBlockingEnabled(targetSession);
+
+    targetSession.webRequest.onBeforeRequest({ urls: ['<all_urls>'] }, (details, callback) => {
+        // Route Google authentication requests through the WebLite sign-in flow
+        const url = details.url || '';
+        if (url.includes('flowName=GlifWebSignIn') && /^https?:\/\/accounts\.google\.com\//i.test(url)) {
+            return callback({ redirectURL: url.replaceAll('flowName=GlifWebSignIn', 'flowName=WebLiteSignIn') });
+        }
+        if (blockingEnabled()) return blockerInstance.onBeforeRequest(details, callback);
+        callback({});
+    });
+
+    targetSession.webRequest.onHeadersReceived({ urls: ['<all_urls>'] }, (details, callback) => {
+        // Intercept main frame navigation to PDF documents and route to built-in viewer
+        if (details.resourceType === 'main_frame' && details.url) {
+            const viewerPrefix = 'file://' + path.join(__dirname, 'assets', 'pdfjs', 'viewer.html');
+            if (!details.url.startsWith(viewerPrefix)) {
+                const headers = details.responseHeaders || {};
+                let isPdf = false;
+                for (const [headerKey, headerVal] of Object.entries(headers)) {
+                    if (headerKey.toLowerCase() === 'content-type') {
+                        const valStr = Array.isArray(headerVal) ? headerVal.join(' ') : String(headerVal);
+                        const lowerVal = valStr.toLowerCase();
+                        if (lowerVal.includes('application/pdf') || lowerVal.includes('application/x-pdf')) {
+                            isPdf = true;
+                            break;
                         }
                     }
-                    if (isPdf) {
-                        const viewerUrl = mintPdfViewerUrl(details.url);
-                        return callback({ redirectURL: viewerUrl });
-                    }
+                }
+                if (isPdf) {
+                    const viewerUrl = mintPdfViewerUrl(details.url);
+                    return callback({ redirectURL: viewerUrl });
                 }
             }
-            callback({ responseHeaders: details.responseHeaders });
-        });
-    }
+        }
+        if (blockingEnabled()) return blockerInstance.onHeadersReceived(details, callback);
+        callback({ responseHeaders: details.responseHeaders });
+    });
 }
 
 async function applyTrustedDomainExceptions() {
@@ -309,6 +353,7 @@ async function initialiseAdblocker(targetSession) {
             });
         }
         blockerInstance.enableBlockingInSession(targetSession);
+        attachNetworkHandlers(targetSession);
         ipcInitialized = true;
     } catch (err) {
         console.error('Failed to attach network filters to session:', err);
@@ -423,6 +468,8 @@ module.exports = {
     isTrustedDomain,
     applySpellcheckerLanguage,
     clearGoogleAuthCookies,
+    setGoogleSignInUserAgent,
+    getGoogleSignInUserAgent,
     mintPdfViewerUrl,
     validatePdfAccess
 };
