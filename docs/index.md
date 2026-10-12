@@ -52,6 +52,7 @@ Most modern web browsers consume gigabytes of memory, leak telemetry continuousl
 ::: tip ARCHITECTURAL PILLARS
 * **Memory Conservation:** Idle tabs detach from DOM memory. Twenty tabs take the RAM footprint of two.
 * **Complete Isolation:** Separate workspace containers keep cookies, caches, and logins entirely segregated.
+* **Crash Resilience:** Atomic file writes, rolling backup journals, and safe startup hibernation prevent data loss and crash loops.
 * **Transparent Storage:** Configuration, notes, history, and keybinds live in human-readable files under `~/.config/mise-browser/`.
 * **Zero Cloud Dependence:** No remote telemetry, no forced account sync, and zero phone-home profiling.
 :::
@@ -105,6 +106,7 @@ Mise combines the battle-tested rendering speed of Chromium and Electron with cu
 * **Ghostery Network Engine:** Local request filtering without third-party extension overhead.
 * **safeStorage Encryption:** Linux `libsecret`, macOS Keychain, and Windows DPAPI hardware-backed encryption for persistent cookies.
 * **inotify Live Reloading:** Instant injection and live reloading of local `.user.js` and `.user.css` user customisations.
+* **Atomic Session Recovery:** Atomic POSIX file swaps and rolling backup journals protect session state against sudden kernel panics or power outages.
 * **Debounced Persistence:** Asynchronous disk flushing to prevent main-process stutter on single-page web applications.
 
 ---

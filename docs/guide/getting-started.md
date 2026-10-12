@@ -11,6 +11,7 @@ Typical desktop browsers consume gigabytes of memory across dozens of background
 - **Keyboard First**: Every single feature, tab switch, link click, and setting can be reached without touching a mouse.
 - **Resource Respect**: Idle tabs hibernate and detach completely from memory, keeping fanless systems cool and responsive.
 - **Strict Privacy Isolation**: Workspaces operate in isolated container partitions. Work and personal profiles never leak cookies or storage.
+- **Crash & Session Resilience**: Atomic disk writes, rolling backup journals, and clean-exit sentinels protect active workspaces against power cuts or sudden terminations.
 - **Air-Gapped Security**: Untrusted scripts and shell commands are never blindly executed; they pass through clipboard verification.
 - **Distro & Shell Agnostic**: Fully integrated with Arch Linux and native terminal emulators while functioning seamlessly across all environments.
 

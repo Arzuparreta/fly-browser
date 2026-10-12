@@ -53,6 +53,39 @@ When you launch Mise Browser with dozens of tabs across multiple workspaces:
 
 ---
 
+## Crash & Unexpected Shutdown Recovery
+
+Hibernation handles memory pressure gracefully during normal browsing, but Mise also includes comprehensive crash resilience to protect your work if the system loses power, the Linux kernel invokes the Out-Of-Memory (OOM) killer, or Electron is force-quit:
+
+### 1. Atomic Disk Writes & Rolling Journal
+Sessions are never saved via naive synchronous file overwrites. When writing to disk:
+- Mise first writes the complete session payload to a temporary file (`session.json.tmp`).
+- The existing valid session file is rotated into a rolling backup journal (`session.json.bak`).
+- Mise performs an atomic POSIX rename (`session.json.tmp` to `session.json`).
+
+Because the rename operation is atomic at the filesystem level, power failures or process terminations can never produce a corrupted or half-written session file. If the primary file is ever damaged or missing, Mise automatically falls back to `session.json.bak` and restores your workspaces without data loss.
+
+### 2. Clean-Exit Sentinel Tracking
+A dedicated lifecycle sentinel (`session_sentinel.json`) tracks whether the browser exited cleanly:
+- On startup, Mise marks the sentinel as active (`clean_exit: false`).
+- On graceful shutdown (such as closing the window or quitting via shortcut), the sentinel is updated to `clean_exit: true`.
+- If Mise launches and detects `clean_exit === false`, it recognises that the previous session ended abruptly and automatically engages crash recovery mode.
+
+### 3. OOM Loop Prevention
+When recovering from an unexpected termination, Mise automatically enforces hibernation across **all background tabs in all workspaces**:
+- Even if multiple tabs were actively loaded before the crash, only the single active tab of your current workspace is mounted into memory.
+- All other tabs load in dormant sleep state with their titles, URLs, favicons, scroll offsets, and Dark Reader flags intact.
+- This ensures that recovering a session with dozens of tabs never triggers an immediate secondary memory spike or crash loop on fanless hardware.
+
+### 4. Unobtrusive Notification
+Consistent with Mise's uncluttered canvas philosophy, crash recovery does not obstruct your screen with modal dialogues or alert boxes. A calm, non-intrusive status bar notification briefly appears at the bottom of the window:
+
+```text
+Session restored after unexpected shutdown
+```
+
+---
+
 ## Configuring the Sleep Timeout
 
 You can customise how quickly tabs hibernate using either the in-browser Preferences overlay or the native top menu bar:

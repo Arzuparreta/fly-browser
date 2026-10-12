@@ -88,9 +88,9 @@ Maps internal browser actions to custom keystroke combinations. See the [Keyboar
 
 ---
 
-## 3. Session State (`session.json`)
+## 3. Session State (`session.json`, `session.json.bak`, `session_sentinel.json`)
 
-Maintains persistent workspaces, URLs, titles, and sleeping tab scroll offsets:
+Maintains persistent workspaces, URLs, titles, Dark Reader preferences, and sleeping tab scroll offsets across restarts:
 
 ```json
 {
@@ -117,9 +117,19 @@ Maintains persistent workspaces, URLs, titles, and sleeping tab scroll offsets:
                 "hibernatedAt": 1727299000000
             }
         ]
+    },
+    "tab_dark_reader": {
+        "Work": [true],
+        "Personal": [false]
     }
 }
 ```
+
+### Session Files & Atomic Resilience
+
+- **`session.json`**: The primary session state file. To prevent data corruption during sudden system shutdowns or power cuts, Mise writes updates to a temporary file (`session.json.tmp`) and swaps it via an atomic POSIX rename operation.
+- **`session.json.bak`**: A rolling backup journal automatically updated before every primary session flush. If `session.json` is missing or corrupted, Mise automatically recovers the previous state from this journal.
+- **`session_sentinel.json`**: A lifecycle sentinel file recording whether the previous browser process terminated cleanly (`"clean_exit": true`). If an abrupt crash, kill signal, or power failure occurs, the sentinel detects `clean_exit: false` on startup, engages crash recovery mode, forces background tabs to sleep to avert memory spikes, and displays a status bar notice.
 
 ---
 
