@@ -101,6 +101,43 @@ const root = path.resolve(__dirname, '..');
         await page.locator('#WideAddressBar').waitFor({state: 'visible'});
         await waitGuest(() => application.evaluate(({webContents}, id) => !webContents.fromId(id).isLoading(), sourceId));
         assert.equal(await page.evaluate(() => document.activeElement.id), 'WideAddressBar');
+        await page.keyboard.press('Escape');
+        // Pointer history navigation releases sidebar focus; keyboard activation keeps it.
+        const historyReady = path => waitGuest(() => page.evaluate(path => {
+            const view = [...document.querySelectorAll('webview')].find(view => view.getClientRects().length);
+            return !view.isLoading() && view.getURL().endsWith(path);
+        }, path));
+        await page.evaluate(async url => {
+            const view = [...document.querySelectorAll('webview')].find(view => view.getClientRects().length);
+            await view.loadURL(url + '/history-first');
+            await view.loadURL(url + '/history-second');
+        }, fixture);
+        for (const [button, destination] of [['back-btn', '/history-first'], ['forward-btn', '/history-second']]) {
+            await page.mouse.move(10, 100);
+            await page.locator('#' + button).click();
+            await historyReady(destination);
+            assert.equal((await snapshot()).host, 'WEBVIEW', 'Pointer history navigation must return page focus');
+            // Use host content for pointer exit; guest entry is covered by the overlay suite.
+            await page.mouse.move(500, await page.evaluate(() => innerHeight - 10));
+            await page.waitForFunction(() => document.getElementById('Sidebar').getBoundingClientRect().width <= 37);
+            assert.equal(await page.locator('#' + button).evaluate(button => button.matches(':focus')), false);
+        }
+        for (const [button, destination, key] of [['back-btn', '/history-first', 'Enter'], ['forward-btn', '/history-second', 'Space']]) {
+            await page.locator('#' + button).focus();
+            await page.locator('#' + button).press(key);
+            await historyReady(destination);
+            assert.equal((await snapshot()).hostId, button, 'Keyboard history navigation must retain button focus');
+            await page.waitForFunction(() => document.getElementById('Sidebar').getBoundingClientRect().width >= 259);
+        }
+        await page.keyboard.press('Control+Shift+z');
+        await page.waitForFunction(() => document.body.classList.contains('sidebar-pinned'));
+        await page.locator('#back-btn').click();
+        await historyReady('/history-first');
+        await page.mouse.move(500, await page.evaluate(() => innerHeight - 10));
+        assert.equal((await snapshot()).host, 'WEBVIEW');
+        assert(await page.locator('#Sidebar').evaluate(sidebar => sidebar.getBoundingClientRect().width >= 259));
+        await page.keyboard.press('Control+Shift+z');
+        await page.waitForFunction(() => document.body.classList.contains('sidebar-auto-collapse'));
         assert.deepEqual(errors, []);
         console.log('Search navigation focus and hint activation passed.');
     } finally {
