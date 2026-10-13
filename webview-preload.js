@@ -686,6 +686,10 @@ window.addEventListener('keydown', (e) => {
             consumeEvent(e);
             try { ipcRenderer.sendToHost('normal-mode-action', 'toggle-global-audio-mute'); } catch (err) {}
             break;
+        case 'p':
+            consumeEvent(e);
+            try { ipcRenderer.sendToHost('normal-mode-action', 'toggle-pin-tab'); } catch (err) {}
+            break;
         case 'y':
             consumeEvent(e);
             try {

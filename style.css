@@ -385,6 +385,7 @@ body.sidebar-auto-collapse #Sidebar:not(:hover):not(.expanded):not(:focus-within
 body.sidebar-auto-collapse #Sidebar:not(:hover):not(.expanded):not(:focus-within) #TabList li .tab-title,
 body.sidebar-auto-collapse #Sidebar:not(:hover):not(.expanded):not(:focus-within) #TabList li .tab-sleep-badge,
 body.sidebar-auto-collapse #Sidebar:not(:hover):not(.expanded):not(:focus-within) #TabList li .tab-media-badge,
+body.sidebar-auto-collapse #Sidebar:not(:hover):not(.expanded):not(:focus-within) #TabList li .tab-pin-badge,
 body.sidebar-auto-collapse #Sidebar:not(:hover):not(.expanded):not(:focus-within) #TabList li .tab-shield-btn {
     display: none !important;
 }
@@ -440,11 +441,27 @@ body.sidebar-auto-collapse #Sidebar:not(:hover):not(.expanded):not(:focus-within
     padding: 1px;
 }
 
+.tab-pin-dot {
+    display: none;
+    position: absolute;
+    top: -3px;
+    left: -3px;
+    font-size: 7px;
+    color: #e0af68;
+    background: var(--bg-sidebar);
+    border-radius: 50%;
+    padding: 1px;
+}
+
 body.sidebar-auto-collapse #Sidebar:not(:hover):not(.expanded):not(:focus-within) #TabList li.tab-sleeping .tab-sleep-dot {
     display: block;
 }
 
 body.sidebar-auto-collapse #Sidebar:not(:hover):not(.expanded):not(:focus-within) #TabList li .tab-audio-dot {
+    display: block;
+}
+
+body.sidebar-auto-collapse #Sidebar:not(:hover):not(.expanded):not(:focus-within) #TabList li.tab-pinned .tab-pin-dot {
     display: block;
 }
 
@@ -2160,6 +2177,36 @@ body.zen-mode #right-content {
 .tab-media-badge.is-muted:hover {
     opacity: 1;
     background: rgba(247, 118, 142, 0.15);
+}
+
+.tab-pin-badge {
+    font-size: 0.8em;
+    margin-left: 6px;
+    padding: 2px 4px;
+    border-radius: 4px;
+    opacity: 0.85;
+    user-select: none;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+    color: #e0af68;
+    transition: opacity 0.15s ease, background 0.15s ease, color 0.15s ease;
+}
+
+.tab-pin-badge:hover {
+    opacity: 1;
+    background: rgba(224, 175, 104, 0.15);
+}
+
+#TabList li.tab-pinned {
+    background: rgba(224, 175, 104, 0.08);
+    border-color: rgba(224, 175, 104, 0.25);
+}
+
+#TabList li.tab-pinned.selected {
+    background: rgba(122, 162, 247, 0.2);
+    border-color: var(--accent);
 }
 
 /* Share Modal Overlay */

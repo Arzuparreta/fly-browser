@@ -10,6 +10,7 @@ export const state = {
     tabActivityTimestamps: {},
     tabMediaAudible: {},
     tabAudioMuted: {},
+    tabPinned: {},
     tabFavicons: {},
     tabHistory: {},
     tabDarkReaderStates: {},

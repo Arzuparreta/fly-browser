@@ -358,6 +358,8 @@ export async function openUrlInSplit(url) {
     state.tabActivityTimestamps[currentWS][newTargetIdx] = Date.now();
     if (!state.tabMediaAudible[currentWS]) state.tabMediaAudible[currentWS] = [];
     state.tabMediaAudible[currentWS][newTargetIdx] = false;
+    if (!state.tabPinned[currentWS]) state.tabPinned[currentWS] = [];
+    state.tabPinned[currentWS][newTargetIdx] = false;
 
     split.enabled = true;
     split.mode = split.mode || 'vertical';

@@ -17,17 +17,19 @@ export function applyCSSThemeToView() {
     // Intentionally no-op to preserve native website themes
 }
 
-function getLiveTabIndex(webview, wsName, fallbackIdx) {
+function getLiveTabIndex(webview, wsName) {
     const views = state.activeViewsCache[wsName];
     if (Array.isArray(views)) {
         const liveIdx = views.indexOf(webview);
         if (liveIdx !== -1) return liveIdx;
     }
-    return fallbackIdx;
+    return -1;
 }
 
 export function createWebView(url, currentWS, idx) {
+    if (!state.activeViewsCache[currentWS]) state.activeViewsCache[currentWS] = [];
     const webview = document.createElement('webview');
+    state.activeViewsCache[currentWS][idx] = webview;
     webview.setAttribute('preload', window.miseAPI.getWebviewPreloadPath());
     webview.setAttribute('allowpopups', '');
     
@@ -183,6 +185,8 @@ export function createWebView(url, currentWS, idx) {
         window.miseAPI.saveSession(state.sessionState);
         
         const newTargetIdx = state.sessionState.workspaces[currentWS].length - 1;
+        if (!state.tabPinned[currentWS]) state.tabPinned[currentWS] = [];
+        state.tabPinned[currentWS][newTargetIdx] = false;
         if (inheritsDarkReader) {
             if (!state.tabDarkReaderStates) state.tabDarkReaderStates = {};
             if (!state.tabDarkReaderStates[currentWS]) state.tabDarkReaderStates[currentWS] = [];
@@ -450,6 +454,9 @@ export function handleNormalModeAction(action, extra, webview, currentWS, idx) {
             break;
         case 'toggle-global-audio-mute':
             toggleGlobalAudioMute();
+            break;
+        case 'toggle-pin-tab':
+            togglePinActiveTab();
             break;
     }
 }
@@ -732,9 +739,11 @@ export function renderWorkspaceUI(targetTabToFocus = null) {
         const li = document.createElement('li');
         const isInitiallySelected = (idx === (targetTabToFocus !== null ? targetTabToFocus : 0));
         li.setAttribute('tabindex', isInitiallySelected ? '0' : '-1');
+        const isPinned = !!state.tabPinned?.[currentWS]?.[idx];
         li.className = 'tab-item';
         li.title = `${cachedTitle}\n${url}`;
         if (isSleeping) li.classList.add('tab-sleeping');
+        if (isPinned) li.classList.add('tab-pinned');
 
         // Favicon wrapper
         const favWrapper = document.createElement('div');
@@ -757,10 +766,16 @@ export function renderWorkspaceUI(targetTabToFocus = null) {
         audioDot.title = 'Playing audio';
         audioDot.innerHTML = '<i class="fa-solid fa-volume-high"></i>';
 
+        const pinDot = document.createElement('span');
+        pinDot.className = 'tab-pin-dot';
+        pinDot.title = 'Pinned tab';
+        pinDot.innerHTML = '<i class="fa-solid fa-thumbtack"></i>';
+
         favWrapper.appendChild(favImg);
         favWrapper.appendChild(favFallback);
         if (isSleeping) favWrapper.appendChild(sleepDot);
         if (state.tabMediaAudible[currentWS]?.[idx]) favWrapper.appendChild(audioDot);
+        if (isPinned) favWrapper.appendChild(pinDot);
 
         const initialFav = cachedFavicon || getFaviconUrl(url);
         if (initialFav) {
@@ -793,6 +808,18 @@ export function renderWorkspaceUI(targetTabToFocus = null) {
             li.appendChild(sleepBadge);
         }
 
+        if (isPinned) {
+            const pinBadge = document.createElement('span');
+            pinBadge.className = 'tab-pin-badge';
+            pinBadge.title = 'Pinned tab (click to unpin)';
+            pinBadge.innerHTML = '<i class="fa-solid fa-thumbtack"></i>';
+            pinBadge.addEventListener('click', (e) => {
+                e.stopPropagation();
+                togglePinTab(currentWS, idx);
+            });
+            li.appendChild(pinBadge);
+        }
+
         const isAudible = !!state.tabMediaAudible[currentWS]?.[idx];
         const isMuted = !!state.tabAudioMuted[currentWS]?.[idx];
 
@@ -814,7 +841,7 @@ export function renderWorkspaceUI(targetTabToFocus = null) {
         li.appendChild(shieldBtn);
         
         li.addEventListener('click', (e) => {
-            if (e.target.closest('.tab-shield-btn') || e.target.closest('.tab-media-badge')) return;
+            if (e.target.closest('.tab-shield-btn') || e.target.closest('.tab-media-badge') || e.target.closest('.tab-pin-badge')) return;
             if (state.dashboardActive && typeof window.toggleDashboardView === 'function') {
                 window.toggleDashboardView();
             }
@@ -960,6 +987,8 @@ export async function spawnNewBlankTab() {
     state.tabActivityTimestamps[currentWS][newTargetIdx] = Date.now();
     if (!state.tabMediaAudible[currentWS]) state.tabMediaAudible[currentWS] = [];
     state.tabMediaAudible[currentWS][newTargetIdx] = false;
+    if (!state.tabPinned[currentWS]) state.tabPinned[currentWS] = [];
+    state.tabPinned[currentWS][newTargetIdx] = false;
 
     renderWorkspaceUI(newTargetIdx);
     if (typeof window.displayAddressOverlay === 'function') {
@@ -1005,6 +1034,8 @@ export function spawnTabWithUrl(url) {
     state.tabActivityTimestamps[currentWS][newTargetIdx] = Date.now();
     if (!state.tabMediaAudible[currentWS]) state.tabMediaAudible[currentWS] = [];
     state.tabMediaAudible[currentWS][newTargetIdx] = false;
+    if (!state.tabPinned[currentWS]) state.tabPinned[currentWS] = [];
+    state.tabPinned[currentWS][newTargetIdx] = false;
 
     renderWorkspaceUI(newTargetIdx);
 }
@@ -1016,6 +1047,12 @@ export function handleTabRemoval() {
         const [type, wsName, idx] = currentItem.payload;
         
         if (type === 'tab') {
+            if (state.tabPinned?.[wsName]?.[idx]) {
+                if (typeof setTargetUrl === 'function') {
+                    setTargetUrl('Tab is pinned. Unpin before closing.', 3000);
+                }
+                return;
+            }
             if (state.sessionState.workspaces[wsName].length > 1) {
                 state.sessionState.workspaces[wsName].splice(idx, 1);
                 if (state.activeViewsCache[wsName] && state.activeViewsCache[wsName][idx]) {
@@ -1034,6 +1071,8 @@ export function handleTabRemoval() {
                 if (state.tabDarkReaderStates?.[wsName]) state.tabDarkReaderStates[wsName].splice(idx, 1);
                 if (state.tabFavicons?.[wsName]) state.tabFavicons[wsName].splice(idx, 1);
                 if (state.sessionState.tab_favicons?.[wsName]) state.sessionState.tab_favicons[wsName].splice(idx, 1);
+                if (state.tabPinned?.[wsName]) state.tabPinned[wsName].splice(idx, 1);
+                if (state.sessionState.tab_pinned?.[wsName]) state.sessionState.tab_pinned[wsName].splice(idx, 1);
                 if (state.tabHistory && Array.isArray(state.tabHistory[wsName])) {
                     state.tabHistory[wsName] = state.tabHistory[wsName]
                         .filter(hIdx => hIdx !== idx)
@@ -1041,6 +1080,7 @@ export function handleTabRemoval() {
                 }
 
                 state.sessionState.tab_dark_reader = state.tabDarkReaderStates;
+                state.sessionState.tab_pinned = state.tabPinned;
                 window.miseAPI.saveSession(state.sessionState);
                 renderWorkspaceUI();
                 if (typeof window.buildDashboardTree === 'function') {
@@ -1066,6 +1106,8 @@ export function handleTabRemoval() {
                 delete state.tabFavicons?.[wsName];
                 delete state.tabDarkReaderStates?.[wsName];
                 delete state.tabHistory?.[wsName];
+                delete state.tabPinned?.[wsName];
+                if (state.sessionState.tab_pinned?.[wsName]) delete state.sessionState.tab_pinned[wsName];
                 if (state.sessionState.tab_titles?.[wsName]) delete state.sessionState.tab_titles[wsName];
                 if (state.sessionState.tab_sleep_states?.[wsName]) delete state.sessionState.tab_sleep_states[wsName];
                 if (state.sessionState.tab_favicons?.[wsName]) delete state.sessionState.tab_favicons[wsName];
@@ -1089,6 +1131,13 @@ export function handleTabRemoval() {
     const tabs = state.sessionState.workspaces[currentWS] || [];
     if (tabs.length === 0) return;
 
+    if (state.tabPinned?.[currentWS]?.[currentIdx]) {
+        if (typeof setTargetUrl === 'function') {
+            setTargetUrl('Tab is pinned. Unpin before closing.', 3000);
+        }
+        return;
+    }
+
     tabs.splice(currentIdx, 1);
     handleTabRemovalInSplit(currentIdx);
     if (state.activeViewsCache[currentWS] && state.activeViewsCache[currentWS][currentIdx]) {
@@ -1107,8 +1156,11 @@ export function handleTabRemoval() {
     if (state.sessionState.tab_sleep_states?.[currentWS]) state.sessionState.tab_sleep_states[currentWS].splice(currentIdx, 1);
     if (state.tabDarkReaderStates?.[currentWS]) state.tabDarkReaderStates[currentWS].splice(currentIdx, 1);
     if (state.sessionState.tab_favicons?.[currentWS]) state.sessionState.tab_favicons[currentWS].splice(currentIdx, 1);
+    if (state.tabPinned?.[currentWS]) state.tabPinned[currentWS].splice(currentIdx, 1);
+    if (state.sessionState.tab_pinned?.[currentWS]) state.sessionState.tab_pinned[currentWS].splice(currentIdx, 1);
 
     state.sessionState.tab_dark_reader = state.tabDarkReaderStates;
+    state.sessionState.tab_pinned = state.tabPinned;
     window.miseAPI.saveSession(state.sessionState);
     window.miseAllowWebviewFocus = true;
 
@@ -1281,6 +1333,115 @@ export function toggleGlobalAudioMute() {
     const statusMsg = targetMuted ? 'Muted audio globally across all tabs' : 'Unmuted audio globally across all tabs';
     if (typeof setTargetUrl === 'function') {
         setTargetUrl(statusMsg, 2500);
+    }
+}
+
+export function moveTabState(ws, fromIdx, toIdx) {
+    if (fromIdx === toIdx) return;
+    const totalTabs = state.sessionState.workspaces[ws]?.length || 0;
+    if (totalTabs === 0) return;
+    if (fromIdx < 0 || fromIdx >= totalTabs || toIdx < 0 || toIdx >= totalTabs) return;
+
+    const movedArrays = new Set();
+
+    function moveInArray(arr, defaultVal = null) {
+        if (!Array.isArray(arr) || movedArrays.has(arr)) return;
+        movedArrays.add(arr);
+
+        while (arr.length < totalTabs) {
+            arr.push(defaultVal);
+        }
+
+        const [item] = arr.splice(fromIdx, 1);
+        arr.splice(toIdx, 0, item);
+    }
+
+    moveInArray(state.sessionState.workspaces[ws], '');
+    moveInArray(state.activeViewsCache[ws], null);
+    moveInArray(state.activeTitlesCache[ws], 'Loading...');
+    moveInArray(state.tabSleepStates[ws], null);
+    moveInArray(state.tabActivityTimestamps[ws], 0);
+    moveInArray(state.tabMediaAudible[ws], false);
+    moveInArray(state.tabAudioMuted[ws], false);
+    if (state.tabFavicons) moveInArray(state.tabFavicons[ws], null);
+    if (state.tabDarkReaderStates) moveInArray(state.tabDarkReaderStates[ws], false);
+    if (state.tabPinned) moveInArray(state.tabPinned[ws], false);
+
+    if (state.sessionState.tab_titles) moveInArray(state.sessionState.tab_titles[ws], 'Loading...');
+    if (state.sessionState.tab_sleep_states) moveInArray(state.sessionState.tab_sleep_states[ws], null);
+    if (state.sessionState.tab_favicons) moveInArray(state.sessionState.tab_favicons[ws], null);
+    if (state.sessionState.tab_pinned) moveInArray(state.sessionState.tab_pinned[ws], false);
+
+    state.sessionState.tab_titles = state.activeTitlesCache;
+    state.sessionState.tab_sleep_states = state.tabSleepStates;
+    state.sessionState.tab_favicons = state.tabFavicons;
+    state.sessionState.tab_pinned = state.tabPinned;
+
+    if (state.tabHistory && Array.isArray(state.tabHistory[ws])) {
+        state.tabHistory[ws] = state.tabHistory[ws].map(hIdx => {
+            if (hIdx === fromIdx) return toIdx;
+            if (fromIdx < toIdx && hIdx > fromIdx && hIdx <= toIdx) return hIdx - 1;
+            if (fromIdx > toIdx && hIdx >= toIdx && hIdx < fromIdx) return hIdx + 1;
+            return hIdx;
+        });
+    }
+
+    if (isSplitActive(ws)) {
+        const split = getSplitState(ws);
+        if (split) {
+            const remap = (idx) => {
+                if (idx === fromIdx) return toIdx;
+                if (fromIdx < toIdx && idx > fromIdx && idx <= toIdx) return idx - 1;
+                if (fromIdx > toIdx && idx >= toIdx && idx < fromIdx) return idx + 1;
+                return idx;
+            };
+            split.primaryIdx = remap(split.primaryIdx);
+            split.secondaryIdx = remap(split.secondaryIdx);
+        }
+    }
+}
+
+export function togglePinTab(workspaceId, tabIdx) {
+    const ws = workspaceId || state.sessionState.current_workspace;
+    const urls = state.sessionState.workspaces[ws] || [];
+    if (tabIdx < 0 || tabIdx >= urls.length) return;
+
+    if (!state.tabPinned[ws]) state.tabPinned[ws] = [];
+    while (state.tabPinned[ws].length < urls.length) {
+        state.tabPinned[ws].push(false);
+    }
+
+    const wasPinned = !!state.tabPinned[ws][tabIdx];
+    const isNowPinned = !wasPinned;
+
+    const remainingPinnedCount = state.tabPinned[ws].filter((p, i) => p && i !== tabIdx).length;
+    const targetIdx = remainingPinnedCount;
+
+    state.tabPinned[ws][tabIdx] = isNowPinned;
+    if (tabIdx !== targetIdx) {
+        moveTabState(ws, tabIdx, targetIdx);
+    }
+
+    if (!state.sessionState.tab_pinned) state.sessionState.tab_pinned = {};
+    state.sessionState.tab_pinned[ws] = [...state.tabPinned[ws]];
+    window.miseAPI.saveSession(state.sessionState);
+
+    renderWorkspaceUI(targetIdx);
+
+    const title = state.activeTitlesCache[ws]?.[targetIdx] || 'Tab';
+    const statusMsg = isNowPinned ? `Pinned tab: ${title}` : `Unpinned tab: ${title}`;
+    if (typeof setTargetUrl === 'function') {
+        setTargetUrl(statusMsg, 2500);
+    }
+}
+
+export function togglePinActiveTab() {
+    const currentWS = state.sessionState.current_workspace;
+    const activeListItem = document.querySelector('#TabList li.selected');
+    if (!activeListItem) return;
+    const tabIdx = Array.from(document.querySelectorAll('#TabList li')).indexOf(activeListItem);
+    if (tabIdx >= 0) {
+        togglePinTab(currentWS, tabIdx);
     }
 }
 
@@ -1567,6 +1728,9 @@ export async function hibernateInactiveTabs() {
                 if (i === activeIdx) continue;
                 if (splitActive && (i === split.primaryIdx || i === split.secondaryIdx)) continue;
             }
+            if (state.tabPinned?.[wsName]?.[i]) {
+                continue;
+            }
             if (state.tabSleepStates[wsName] && state.tabSleepStates[wsName][i]) {
                 continue;
             }
@@ -1619,6 +1783,9 @@ export function initializeTabSleepManager() {
                     if (wsName === currentWS && !state.dashboardActive) {
                         if (i === activeIdx) continue;
                         if (splitActive && (i === split.primaryIdx || i === split.secondaryIdx)) continue;
+                    }
+                    if (state.tabPinned?.[wsName]?.[i]) {
+                        continue;
                     }
                     if (state.tabSleepStates[wsName] && state.tabSleepStates[wsName][i]) {
                         continue;

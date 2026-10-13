@@ -35,6 +35,7 @@ All keyboard shortcuts in Mise Browser are fully customisable via `~/.config/mis
 | **Ctrl + Shift + S** | `toggle-split` | Toggles dual split view (1x2 side by side comparison) |
 | **Ctrl + O** | `switch-split-focus` | Cycles keyboard focus between split pane 1 and pane 2 |
 | **Ctrl + \\** | `swap-split-panes` | Swaps the positions of pane 1 and pane 2 |
+| **Ctrl + Shift + X** / **F4** | `toggle-pin-tab` | Pins or unpins the active tab (anchored at top, closure-protected) |
 
 ### Web Interaction & Power Tools
 
@@ -76,6 +77,7 @@ When viewing web content without an active text field or prompt, Mise operates i
 | `e` | Toggle Native Reader View |
 | `m` | Toggle audio mute on active tab |
 | `M` | Toggle audio mute globally across all tabs |
+| `p` | Toggle pinned status on active tab |
 | `w` | Open Workspace Dashboard |
 | `s` | Focus sidebar tab list |
 | `y` | Copy current page URL to clipboard |

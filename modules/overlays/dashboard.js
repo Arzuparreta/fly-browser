@@ -1,6 +1,6 @@
 import { state } from '../state.js';
 import { focusActiveWebview, getWorkspacePartition } from '../utils.js';
-import { renderWorkspaceUI, switchTabFocus, spawnTabWithUrl, spawnNewBlankTab, handleTabRemoval } from '../webview.js';
+import { renderWorkspaceUI, switchTabFocus, spawnTabWithUrl, spawnNewBlankTab, handleTabRemoval, moveTabState } from '../webview.js';
 
 export function toggleDashboardView() {
     if (state.paletteActive && typeof window.toggleCommandPaletteView === 'function') {
@@ -58,6 +58,18 @@ export function renameWorkspace(oldName, newName) {
         state.tabMediaAudible[trimmed] = state.tabMediaAudible[oldName];
         delete state.tabMediaAudible[oldName];
     }
+    if (state.tabPinned[oldName]) {
+        state.tabPinned[trimmed] = state.tabPinned[oldName];
+        delete state.tabPinned[oldName];
+    }
+    if (state.tabAudioMuted[oldName]) {
+        state.tabAudioMuted[trimmed] = state.tabAudioMuted[oldName];
+        delete state.tabAudioMuted[oldName];
+    }
+    if (state.sessionState.tab_pinned?.[oldName]) {
+        state.sessionState.tab_pinned[trimmed] = state.sessionState.tab_pinned[oldName];
+        delete state.sessionState.tab_pinned[oldName];
+    }
     if (state.sessionState.tab_titles?.[oldName]) {
         state.sessionState.tab_titles[trimmed] = state.sessionState.tab_titles[oldName];
         delete state.sessionState.tab_titles[oldName];
@@ -93,6 +105,9 @@ export function deleteWorkspace(wsName) {
     delete state.tabSleepStates[wsName];
     delete state.tabActivityTimestamps[wsName];
     delete state.tabMediaAudible[wsName];
+    delete state.tabPinned[wsName];
+    delete state.tabAudioMuted[wsName];
+    if (state.sessionState.tab_pinned?.[wsName]) delete state.sessionState.tab_pinned[wsName];
     if (state.sessionState.tab_titles?.[wsName]) delete state.sessionState.tab_titles[wsName];
     if (state.sessionState.tab_sleep_states?.[wsName]) delete state.sessionState.tab_sleep_states[wsName];
     delete state.sessionState.workspaces[wsName];
@@ -270,8 +285,19 @@ export function buildDashboardTree() {
                     if (!state.tabMediaAudible[targetWS]) state.tabMediaAudible[targetWS] = [];
                     state.tabMediaAudible[targetWS].push(movedMedia);
                 }
+                if (state.tabPinned[sourceWS]) {
+                    const [movedPinned] = state.tabPinned[sourceWS].splice(sourceIdx, 1);
+                    if (!state.tabPinned[targetWS]) state.tabPinned[targetWS] = [];
+                    state.tabPinned[targetWS].push(movedPinned);
+                }
+                if (state.tabAudioMuted[sourceWS]) {
+                    const [movedMuted] = state.tabAudioMuted[sourceWS].splice(sourceIdx, 1);
+                    if (!state.tabAudioMuted[targetWS]) state.tabAudioMuted[targetWS] = [];
+                    state.tabAudioMuted[targetWS].push(movedMuted);
+                }
                 state.sessionState.tab_titles = state.activeTitlesCache;
                 state.sessionState.tab_sleep_states = state.tabSleepStates;
+                state.sessionState.tab_pinned = state.tabPinned;
 
                 window.miseAPI.saveSession(state.sessionState);
                 renderWorkspaceUI();
@@ -289,8 +315,10 @@ export function buildDashboardTree() {
             tabItem.className = 'dashboard-tab-item';
             const cachedTitle = (state.activeTitlesCache[wsName] && state.activeTitlesCache[wsName][idx]) || url;
             const isSleeping = state.tabSleepStates[wsName] && state.tabSleepStates[wsName][idx];
+            const isPinned = !!state.tabPinned?.[wsName]?.[idx];
+            const pinBadge = isPinned ? ' 📌' : '';
             const sleepBadge = isSleeping ? ' 🌙' : '';
-            tabItem.textContent = `- ${cachedTitle}${sleepBadge}`;
+            tabItem.textContent = `- ${cachedTitle}${pinBadge}${sleepBadge}`;
             
             tabItem.setAttribute('draggable', 'true');
 
@@ -312,13 +340,20 @@ export function buildDashboardTree() {
 
                     if (sourceWS === targetWS && sourceIdx === idx) return;
 
-                    const [movedUrl] = state.sessionState.workspaces[sourceWS].splice(sourceIdx, 1);
-                    
                     let targetIdx = idx;
                     if (sourceWS === targetWS && sourceIdx < idx) {
                         targetIdx--;
                     }
-                    
+
+                    if (sourceWS === targetWS) {
+                        moveTabState(sourceWS, sourceIdx, targetIdx);
+                        window.miseAPI.saveSession(state.sessionState);
+                        renderWorkspaceUI();
+                        buildDashboardTree();
+                        return;
+                    }
+
+                    const [movedUrl] = state.sessionState.workspaces[sourceWS].splice(sourceIdx, 1);
                     if (!state.sessionState.workspaces[targetWS]) {
                         state.sessionState.workspaces[targetWS] = [];
                     }
@@ -359,8 +394,19 @@ export function buildDashboardTree() {
                         if (!state.tabMediaAudible[targetWS]) state.tabMediaAudible[targetWS] = [];
                         state.tabMediaAudible[targetWS].splice(targetIdx, 0, movedMedia);
                     }
+                    if (state.tabPinned[sourceWS]) {
+                        const [movedPinned] = state.tabPinned[sourceWS].splice(sourceIdx, 1);
+                        if (!state.tabPinned[targetWS]) state.tabPinned[targetWS] = [];
+                        state.tabPinned[targetWS].splice(targetIdx, 0, movedPinned);
+                    }
+                    if (state.tabAudioMuted[sourceWS]) {
+                        const [movedMuted] = state.tabAudioMuted[sourceWS].splice(sourceIdx, 1);
+                        if (!state.tabAudioMuted[targetWS]) state.tabAudioMuted[targetWS] = [];
+                        state.tabAudioMuted[targetWS].splice(targetIdx, 0, movedMuted);
+                    }
                     state.sessionState.tab_titles = state.activeTitlesCache;
                     state.sessionState.tab_sleep_states = state.tabSleepStates;
+                    state.sessionState.tab_pinned = state.tabPinned;
 
                     window.miseAPI.saveSession(state.sessionState);
                     renderWorkspaceUI();

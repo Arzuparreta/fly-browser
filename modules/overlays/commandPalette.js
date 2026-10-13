@@ -165,6 +165,19 @@ export const COMMAND_DEFINITIONS = [
         action: () => handleTabRemoval()
     },
     {
+        id: 'toggle-pin-tab',
+        title: 'Pin / Unpin Active Tab',
+        desc: 'Pin essential tab to the top of workspace or unpin it',
+        details: 'Pinned tabs stay anchored at the top of the tab list, are protected from accidental closure, and are exempted from automatic memory hibernation.',
+        tip: 'Use Ctrl+Shift+X or F4 to toggle pin status on the current tab.',
+        category: 'Tabs & Navigation',
+        icon: 'fa-solid fa-thumbtack',
+        actionId: 'toggle-pin-tab',
+        shortcut: 'Ctrl+Shift+X / F4',
+        keywords: ['pin', 'unpin', 'sticky', 'essential', 'lock', 'tab'],
+        action: () => window.togglePinActiveTab && window.togglePinActiveTab()
+    },
+    {
         id: 'mute-tab',
         title: 'Mute / Unmute Active Tab',
         desc: 'Toggle audio output for the active tab without pausing media',

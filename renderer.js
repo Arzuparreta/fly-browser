@@ -26,6 +26,8 @@ import {
     toggleTabAudioMute,
     toggleActiveTabAudioMute,
     toggleGlobalAudioMute,
+    togglePinTab,
+    togglePinActiveTab,
     initializeTabSleepManager,
     hibernateInactiveTabs,
     wakeTab,
@@ -174,6 +176,8 @@ window.toggleGlobalMediaPlayback = toggleGlobalMediaPlayback;
 window.toggleTabAudioMute = toggleTabAudioMute;
 window.toggleActiveTabAudioMute = toggleActiveTabAudioMute;
 window.toggleGlobalAudioMute = toggleGlobalAudioMute;
+window.togglePinTab = togglePinTab;
+window.togglePinActiveTab = togglePinActiveTab;
 window.toggleSplitView = toggleSplitView;
 window.cycleSplitOrientation = cycleSplitOrientation;
 window.switchSplitFocus = switchSplitFocus;
@@ -325,6 +329,9 @@ async function initializeBrowser() {
     }
     if (state.sessionState.tab_dark_reader) {
         state.tabDarkReaderStates = { ...state.sessionState.tab_dark_reader };
+    }
+    if (state.sessionState.tab_pinned) {
+        state.tabPinned = { ...state.sessionState.tab_pinned };
     }
 
     if (state.sessionState.tab_sleep_states && !isCrashRecovery) {
@@ -604,6 +611,7 @@ function setupEventListeners() {
             case 'toggle-global-media': toggleGlobalMediaPlayback(); break;
             case 'toggle-tab-audio-mute': toggleActiveTabAudioMute(); break;
             case 'toggle-global-audio-mute': toggleGlobalAudioMute(); break;
+            case 'toggle-pin-tab': togglePinActiveTab(); break;
             case 'toggle-split': toggleSplitView(); break;
             case 'switch-split-focus': switchSplitFocus(); break;
             case 'swap-split-panes': swapSplitPanes(); break;

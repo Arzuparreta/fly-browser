@@ -40,6 +40,7 @@ The Command Centre gives you rapid, searchable access to all Mise operations, in
 | **Find In Page** | `Ctrl+Shift+F` / `F3` | `toggle-find` | In-page text search overlay across active webview content. |
 | **Reload Active Tab** | `Ctrl+R` / `F5` | `reload-active-tab` | Refreshes current webview document while preserving session state. |
 | **Close Current Tab** | `Ctrl+X` | `remove-tab` | Disposes of active webview and reclaims allocated V8 heap memory. |
+| **Pin / Unpin Active Tab** | `Ctrl+Shift+X` / `F4` | `toggle-pin-tab` | Pins essential tab to the top of the workspace or unpins it. |
 | **Mute / Unmute Active Tab** | — | — | Toggles Chromium audio output for the active tab without pausing playback. |
 | **Reset Tab Zoom Level** | — | — | Restores webview zoom factor back to 100% default. |
 | **Focus Sidebar Tab List** | `Ctrl+S` | `focus-sidebar` | Moves keyboard focus directly into the vertical tab list. |
