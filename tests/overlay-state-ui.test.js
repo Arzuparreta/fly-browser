@@ -107,6 +107,50 @@ const root = path.resolve(__dirname, '..');
         await page.mouse.move(10, 100);
         await page.waitForFunction(() => document.getElementById('Sidebar').getBoundingClientRect().width >= 259);
         assert(await sidebarAboveContent(), 'The expanded sidebar must remain above the live webview');
+        const checkPin = async pinned => {
+            await page.waitForFunction(pinned => {
+                const button = document.getElementById('pin-sidebar-btn');
+                return document.body.classList.contains('sidebar-pinned') === pinned &&
+                    button.classList.contains('pin-active') === pinned &&
+                    button.getAttribute('aria-pressed') === String(pinned);
+            }, pinned);
+            await page.waitForFunction(async pinned => (await window.miseAPI.getBrowserSettings()).sidebar_auto_collapse === !pinned, pinned);
+        };
+        const moveToContent = async () => {
+            // A host content target gives CDP a real pointer exit from the sidebar.
+            const bottom = await page.evaluate(() => innerHeight - 10);
+            await page.mouse.move(500, bottom);
+        };
+        const checkPinRoutes = async () => {
+            await moveToContent();
+            await page.keyboard.press('Control+Shift+z');
+            await checkPin(true);
+            await page.waitForFunction(() => document.getElementById('right-content').getBoundingClientRect().left >= 259);
+            await page.locator('#pin-sidebar-btn').click();
+            await checkPin(false);
+            await page.waitForFunction(() => getComputedStyle(document.getElementById('pin-sidebar-btn')).backgroundColor === 'rgba(0, 0, 0, 0)');
+            await moveToContent();
+            await page.waitForFunction(() => document.getElementById('Sidebar').getBoundingClientRect().width <= 37);
+            await page.mouse.move(10, 100);
+            await page.locator('#pin-sidebar-btn').click();
+            await checkPin(true);
+            await moveToContent();
+            await page.keyboard.press('Control+Shift+z');
+            await checkPin(false);
+            await page.waitForFunction(() => document.getElementById('Sidebar').getBoundingClientRect().width <= 37);
+            // Temporary keyboard focus expansion must not survive an unpin.
+            await page.keyboard.press('Control+s');
+            await page.keyboard.press('Control+Shift+z'); await checkPin(true);
+            await page.keyboard.press('Control+Shift+z'); await checkPin(false);
+            await page.waitForFunction(() => document.getElementById('Sidebar').getBoundingClientRect().width <= 37);
+            await page.evaluate(() => window.executeBrowserAction('toggle-sidebar-pin'));
+            await checkPin(true);
+            await page.evaluate(() => window.toggleSidebarExpansion());
+            await checkPin(false);
+        };
+        await checkPinRoutes();
+        await page.mouse.move(10, 100);
+        await page.waitForFunction(() => document.getElementById('Sidebar').getBoundingClientRect().width >= 259);
         // Window exits must not collapse the sidebar, even at the outermost pixel.
         const sidebarWidth = () => page.locator('#Sidebar').evaluate(sidebar => sidebar.getBoundingClientRect().width);
         for (const x of [-1, 0, -1, 0, -1]) {
@@ -150,14 +194,7 @@ const root = path.resolve(__dirname, '..');
         await page.locator('#WorkspaceLabel').click();
         await focused('DashboardOverlay'); await page.keyboard.press('Escape');
         await page.mouse.move(500, 400);
-        await page.keyboard.press('Control+Shift+z');
-        await page.waitForFunction(() => document.getElementById('Sidebar').classList.contains('expanded'));
-        assert(await sidebarAboveContent(), 'Keyboard expansion must also remain above content');
-        await page.keyboard.press('Control+Shift+z');
-        await page.evaluate(() => window.applySidebarMode(false));
-        await page.waitForFunction(() => document.getElementById('right-content').getBoundingClientRect().left >= 259);
-        assert(await sidebarAboveContent());
-        await page.evaluate(() => window.applySidebarMode(true));
+        await checkPinRoutes();
         assert.deepEqual(errors, []);
         console.log('Live overlay cancellation, focus, pairwise transitions, child dialog and editable page checks passed.');
     } finally {

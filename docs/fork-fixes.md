@@ -120,3 +120,15 @@ Final validation: `npm test`, the complete live Electron UI suite, documentation
 Validation uses Electron on Linux/X11 with a disposable home/profile. Guest entry is injected through Electron's `sendInputEvent`, since host CDP mouse movement does not route into the separate guest surface; a host-only test initially timed out there. Run `npm test`, the complete `npm run test:keyboard-ui`, `npm run docs:build`, modified JavaScript syntax checks and `git diff --check`. Native compositor edge handling on Wayland and other operating systems remains unverified.
 
 Final validation: all listed checks passed, including the Electron recorder and editable-page checks. No validation failures remain at submission.
+
+## Unified sidebar pin and expansion · 13 October 2026
+
+| ID | Original behaviour | Fix | Validation |
+| :--- | :--- | :--- | :--- |
+| UX-09 | Inherited shortcut and button paths used different states: Ctrl+Shift+Z toggled temporary `expanded`, while the button toggled persistent pinning. The shortcut never updated the pin highlight. Unpinning retained button focus and could retain temporary expansion, so leaving the sidebar did not collapse it; generic hover/focus styling also resembled a selected pin. | Both action ids and the legacy expansion API use the same pin toggle. One mode setter synchronises layout, highlight, `aria-pressed` and Preferences, clears temporary expansion and releases sidebar focus on unpinning. Pin highlight reflects pin state; keyboard focus has a separate outline. Remove the duplicate Zen palette entry and unused hiding implementation, preserving existing shortcut ids. Save only the changed setting through the backend merge, avoiding stale full-config writes. | Electron regressions alternate shortcuts and clicks, check highlight removal under the pointer, persistence, contraction without content clicks, temporary keyboard expansion and compatibility aliases, with a live page and an empty workspace. Palette tests verify one entry with compatible ids. |
+
+Validation uses Linux/X11 Electron with disposable homes/profiles. Required checks: `npm test`, Electron recorder and editable-page tests, sidebar/overlay regressions, documentation build, modified JavaScript syntax and `git diff --check`. Default chords and guest grammar remain unchanged; the generated keyboard reference reflects pin/unpin semantics. Wayland and other operating systems remain unverified.
+
+During implementation, an initial UI launch exposed an alias initialisation error, corrected by using a hoisted function export. The first pin regression attempts required adjustment for guest pointer injection and CSS transition completion. A concurrent UI rerun also timed out at the existing share-overlay cancellation check; the isolated run passed. The catalogue coverage assertion was updated to recognise a single palette entry exposing compatible ids. Final validation results are recorded below.
+
+Final validation: `npm test`, the complete `npm run test:keyboard-ui` suite, documentation build, modified JavaScript syntax and `git diff --check` passed. No validation failures remain at submission.
