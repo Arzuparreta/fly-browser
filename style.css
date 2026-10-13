@@ -524,6 +524,8 @@ body.sidebar-auto-collapse #Sidebar:not(:hover):not(.expanded):not(:focus-within
 #right-content {
     flex-grow: 1;
     position: relative;
+    /* Keep page and overlay layers below the expanding sidebar. */
+    z-index: 0;
     display: flex;
     flex-direction: column;
     background-color: var(--bg-main);
