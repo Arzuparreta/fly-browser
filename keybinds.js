@@ -44,7 +44,7 @@ const ACTION_METADATA = {
     'toggle-dashboard': { label: 'Toggle Workspace Dashboard', category: 'Navigation & Workspaces' },
     'reload-active-tab': { label: 'Reload Active Tab', category: 'Navigation & Workspaces' },
     'remove-tab': { label: 'Close Current Tab', category: 'Navigation & Workspaces' },
-    'focus-sidebar': { label: 'Focus Sidebar Tab List', category: 'Navigation & Workspaces' },
+    'focus-sidebar': { label: 'Toggle Sidebar Focus', category: 'Navigation & Workspaces' },
     'focus-nav-buttons': { label: 'Focus Navigation Buttons', category: 'Navigation & Workspaces' },
     'focus-webview': { label: 'Focus Active Webview', category: 'Navigation & Workspaces' },
     'trigger-hints': { label: 'Toggle Link Hints Overlay', category: 'Web Interaction' },

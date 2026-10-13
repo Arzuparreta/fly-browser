@@ -220,25 +220,16 @@ window.testCleanGoogleSignIn = testCleanGoogleSignIn;
 
 export function focusSidebar() {
     const activeEl = document.activeElement;
-    const isInsideTabList = activeEl && (activeEl.closest('#TabList') || activeEl.id === 'TabList');
-    const isInsideNavAction = activeEl && activeEl.closest('.nav-action-layout');
-    const isInsideBottomLayout = activeEl && activeEl.closest('.bottom-theme-layout');
-
-    if (isInsideTabList) {
-        const backBtn = document.getElementById('back-btn') || document.getElementById('toggle-nav-btn');
-        if (backBtn) backBtn.focus();
-    } else if (isInsideNavAction || isInsideBottomLayout) {
-        const selectedTab = document.querySelector('#TabList li.selected') || document.querySelector('#TabList li');
-        if (selectedTab) selectedTab.focus();
-    } else {
-        const selectedTab = document.querySelector('#TabList li.selected') || document.querySelector('#TabList li');
-        if (selectedTab) {
-            selectedTab.focus();
-        } else {
-            const navBtn = document.getElementById('back-btn') || document.getElementById('toggle-nav-btn');
-            if (navBtn) navBtn.focus();
-        }
+    const sidebar = document.getElementById('Sidebar');
+    if (sidebar?.contains(activeEl)) {
+        sidebar.classList.remove('expanded', 'pointer-inside');
+        activeEl.blur();
+        focusActiveWebview();
+        return;
     }
+    const selectedTab = document.querySelector('#TabList li.selected') || document.querySelector('#TabList li');
+    const target = selectedTab || document.getElementById('back-btn') || document.getElementById('toggle-nav-btn');
+    target?.focus();
 }
 
 export function displayUpdateNotification(updateInfo) {
@@ -540,7 +531,10 @@ function setupEventListeners() {
     const sidebar = document.getElementById('Sidebar');
     // Retain hover on window exit; host or guest entry clears it over content.
     document.addEventListener('mouseover', (event) => {
-        sidebar.classList.toggle('pointer-inside', sidebar.contains(event.target));
+        const inside = sidebar.contains(event.target);
+        // Internal pointer transitions must not undo keyboard contraction.
+        if (inside && sidebar.contains(event.relatedTarget)) return;
+        sidebar.classList.toggle('pointer-inside', inside);
     });
 
     document.getElementById('reader-view-btn')?.addEventListener('click', toggleReaderViewOnActiveTab);
