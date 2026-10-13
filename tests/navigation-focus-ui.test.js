@@ -14,7 +14,7 @@ const root = path.resolve(__dirname, '..');
         const url = new URL(request.url, 'http://localhost');
         const send = () => {
             response.setHeader('Content-Type', 'text/html');
-            response.end('<!doctype html><title>Search results</title><input id="search"><a href="/result">First result</a><a href="/another">Second result</a>');
+            response.end('<!doctype html><title>Search results</title><input id="search" style="margin-left:260px"><a href="/result">First result</a><a href="/another">Second result</a>');
         };
         setTimeout(send, url.searchParams.get('q') === 'slow' ? 300 : 0);
     });
@@ -73,7 +73,7 @@ const root = path.resolve(__dirname, '..');
             await page.keyboard.press('Escape');
         }
         // Text editing remains local to the page; f is never made a global browser key.
-        await page.locator('webview:visible').click({position: {x: 20, y: 20}});
+        await page.locator('webview:visible').click({position: {x: 280, y: 20}});
         await page.keyboard.type('ff');
         const typed = await page.evaluate(() => [...document.querySelectorAll('webview')].find(view => view.getClientRects().length).executeJavaScript('document.getElementById("search").value'));
         assert.equal(typed, 'ff'); assert(!(await snapshot()).guest.hints);

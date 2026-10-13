@@ -649,6 +649,7 @@ window.addEventListener('keydown', e => {
     if (document.getElementById('mise-hint-layer')) { pendingStroke = ''; return; }
     const inEditable = isEventInEditable(e);
     if (e.key === 'Escape') {
+        ipcRenderer.sendToHost('guest-escape');
         pendingStroke = '';
         const reader = document.getElementById('mise-reader-overlay');
         if (reader) {

@@ -1,5 +1,31 @@
+let surfaces = {};
+let transitioning = false;
+
+export const isOverlayTransition = () => transitioning;
+
+export function hasActiveOverlay() {
+    return Object.values(surfaces).some(surface => surface.active()) || !!document.querySelector('dialog[open]');
+}
+
+// Every opening path, including buttons and palette actions, uses the same exits.
+export function prepareOverlay(id) {
+    transitioning = true;
+    try {
+        for (const [otherId, surface] of Object.entries(surfaces)) {
+            if (otherId !== id && surface.active()) surface.close();
+        }
+    } finally { transitioning = false; }
+}
+
 // Keep Tab within the visible overlay while preserving each control's native behaviour.
-export function initialiseOverlayFocus() {
+export function initialiseOverlayFocus(registeredSurfaces = {}) {
+    surfaces = registeredSurfaces;
+    window.addEventListener('keydown', event => {
+        if (event.key !== 'Escape' || event.defaultPrevented || event.isComposing || document.querySelector('dialog[open]')) return;
+        const entry = Object.entries(surfaces).find(([id, surface]) => surface.active() && document.getElementById(id)?.contains(document.activeElement));
+        if (!entry) return;
+        event.preventDefault(); event.stopImmediatePropagation(); entry[1].close();
+    });
     const ids = ['PreferencesOverlay', 'CommandPaletteOverlay', 'DashboardOverlay', 'BookmarksOverlay', 'HistoryOverlay', 'NotesOverlay', 'DiagnosticsOverlay', 'ShareModalOverlay'];
     window.addEventListener('keydown', event => {
         if (event.key !== 'Tab' || document.querySelector('dialog[open]')) return;

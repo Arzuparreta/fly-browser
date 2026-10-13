@@ -1,3 +1,4 @@
+import { prepareOverlay } from '../focus.js';
 import { initialiseKeyboardEditor } from '../keyboardSettings.js';
 import { state } from '../state.js';
 import { focusActiveWebview, getActiveWebview, isTargetScript, isDarkMode, escapeHtml } from '../utils.js';
@@ -730,6 +731,7 @@ function getRecentCommands() {
 }
 
 let preferencesActive = false;
+let paletteRequest = 0;
 
 export async function syncPreferencesUI() {
     if (!window.miseAPI || typeof window.miseAPI.getBrowserSettings !== 'function') return;
@@ -1005,12 +1007,11 @@ export async function togglePreferencesView() {
     preferencesActive = !preferencesActive;
     state.preferencesActive = preferencesActive;
     if (preferencesActive) {
-        if (state.paletteActive) toggleCommandPaletteView();
-        if (state.dashboardActive) document.getElementById('DashboardOverlay').style.display = 'none';
+        prepareOverlay('PreferencesOverlay');
 
         overlay.style.display = 'block';
-        await syncPreferencesUI();
         overlay.focus();
+        await syncPreferencesUI();
     } else {
         overlay.style.display = 'none';
         returnFocusToWebview();
@@ -1021,6 +1022,7 @@ let activeCategoryFilter = 'all';
 
 export function closeCommandPalette() {
     if (!state.paletteActive) return;
+    paletteRequest++;
     state.paletteActive = false;
     const overlay = document.getElementById('CommandPaletteOverlay');
     if (overlay) overlay.style.display = 'none';
@@ -1032,14 +1034,17 @@ export async function openCommandPalette(category = 'all') {
     const input = document.getElementById('PaletteInput');
     if (!overlay || !input) return;
 
-    if (preferencesActive) togglePreferencesView();
-    if (state.dashboardActive) {
-        state.dashboardActive = false;
-        const dash = document.getElementById('DashboardOverlay');
-        if (dash) dash.style.display = 'none';
-    }
+    const request = ++paletteRequest;
+    state.paletteActive = true;
+    prepareOverlay('CommandPaletteOverlay');
+    overlay.style.display = 'flex';
+    input.value = '';
+    activeCategoryFilter = category;
+    filterPaletteCommands('');
+    input.focus();
     await loadDynamicKeybinds();
     await prepareExtensionPaletteCommands();
+    if (!state.paletteActive || request !== paletteRequest) return;
 
     activeCategoryFilter = category;
     const filterContainer = document.getElementById('PaletteCategoryFilters');
@@ -1049,11 +1054,7 @@ export async function openCommandPalette(category = 'all') {
         });
     }
 
-    state.paletteActive = true;
-    overlay.style.display = 'flex';
-    input.value = '';
-    filterPaletteCommands('');
-    input.focus();
+    filterPaletteCommands(input.value);
 }
 
 export async function toggleCommandPaletteView() {

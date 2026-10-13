@@ -1,3 +1,4 @@
+import { prepareOverlay } from '../focus.js';
 import { state } from '../state.js';
 import { escapeHtml, focusActiveWebview } from '../utils.js';
 import { renderWorkspaceUI, switchTabFocus, spawnTabWithUrl, spawnNewBlankTab, handleTabRemoval } from '../webview.js';
@@ -8,19 +9,7 @@ export function toggleHistoryOverlay() {
     
     state.historyActive = !state.historyActive;
     if (state.historyActive) {
-        if (state.paletteActive && typeof window.toggleCommandPaletteView === 'function') {
-            window.toggleCommandPaletteView();
-        }
-        if (state.helpActive && typeof window.toggleHelpMenuWindow === 'function') {
-            window.toggleHelpMenuWindow();
-        }
-        if (state.dashboardActive && typeof window.toggleDashboardView === 'function') {
-            window.toggleDashboardView();
-        }
-        if (state.bookmarksActive && typeof window.toggleBookmarksOverlay === 'function') {
-            window.toggleBookmarksOverlay();
-        }
-
+        prepareOverlay('HistoryOverlay');
         overlay.style.display = 'flex';
         input.value = '';
         input.focus();

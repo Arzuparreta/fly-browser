@@ -1,26 +1,22 @@
+import { prepareOverlay } from '../focus.js';
 import { transferTab } from '../tabTransfer.js';
 import { state } from '../state.js';
 import { focusActiveWebview, getWorkspacePartition } from '../utils.js';
 import { renderWorkspaceUI, switchTabFocus, spawnTabWithUrl, spawnNewBlankTab, handleTabRemoval, moveTabState } from '../webview.js';
 
 export function toggleDashboardView() {
-    if (state.paletteActive && typeof window.toggleCommandPaletteView === 'function') {
-        window.toggleCommandPaletteView();
-    }
-    if (state.preferencesActive && typeof window.togglePreferencesView === 'function') {
-        window.togglePreferencesView();
-    }
-    
     const overlay = document.getElementById('DashboardOverlay');
     state.dashboardActive = !state.dashboardActive;
 
     if (state.dashboardActive) {
+        prepareOverlay('DashboardOverlay');
         buildDashboardTree();
         overlay.style.display = 'flex';
         overlay.focus();
         const allWebviews = document.getElementById('webview-container').querySelectorAll('webview');
         allWebviews.forEach((wv) => wv.style.display = 'none');
     } else {
+        document.getElementById('WorkspaceInputBox').style.display = 'none';
         overlay.style.display = 'none';
         const activeListItem = document.querySelector('#TabList li.selected');
         const currentIdx = activeListItem ? Array.from(document.querySelectorAll('#TabList li')).indexOf(activeListItem) : 0;
@@ -176,8 +172,10 @@ export function buildDashboardTree() {
                 if (ie.key === 'Enter') {
                     submitRename();
                 } else if (ie.key === 'Escape') {
+                    ie.preventDefault();
                     saved = true;
                     buildDashboardTree();
+                    document.getElementById('DashboardOverlay').focus();
                 }
             });
 
@@ -372,6 +370,7 @@ export function showWorkspaceInputDialog() {
     const container = document.getElementById('WorkspaceInputBox');
     const input = document.getElementById('NewWorkspaceTitleInput');
     if (container && input) {
+        if (!state.dashboardActive) toggleDashboardView();
         container.style.display = 'flex';
         input.value = '';
         input.focus();
@@ -380,7 +379,8 @@ export function showWorkspaceInputDialog() {
 
 export function hideWorkspaceInputDialog() {
     document.getElementById('WorkspaceInputBox').style.display = 'none';
-    document.getElementById('DashboardOverlay').focus();
+    if (state.dashboardActive) document.getElementById('DashboardOverlay').focus();
+    else focusActiveWebview();
 }
 
 export function processWorkspaceCreation() {

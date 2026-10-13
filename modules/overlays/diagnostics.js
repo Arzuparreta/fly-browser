@@ -1,3 +1,4 @@
+import { prepareOverlay } from '../focus.js';
 // modules/overlays/diagnostics.js
 // Client-side controller for the privacy-first Diagnostics and System Health Overlay
 // Designed to keep all diagnostic metrics local, auditable, and off by default
@@ -92,16 +93,10 @@ export async function toggleDiagnosticsView() {
     state.diagnosticsActive = !state.diagnosticsActive;
 
     if (state.diagnosticsActive) {
-        // Dismiss conflicting overlays
-        if (state.paletteActive && window.closeCommandPalette) window.closeCommandPalette();
-        if (state.dashboardActive && window.toggleDashboardView) window.toggleDashboardView();
-        if (state.bookmarksActive && window.toggleBookmarksOverlay) window.toggleBookmarksOverlay();
-        if (state.historyActive && window.toggleHistoryOverlay) window.toggleHistoryOverlay();
-        if (state.preferencesActive && window.togglePreferencesView) window.togglePreferencesView();
-
+        prepareOverlay('DiagnosticsOverlay');
         overlay.style.display = 'flex';
-        await refreshDiagnosticsData();
         overlay.focus();
+        await refreshDiagnosticsData();
     } else {
         overlay.style.display = 'none';
         returnFocusToWebview();

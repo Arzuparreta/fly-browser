@@ -1,3 +1,4 @@
+import { prepareOverlay } from './focus.js';
 import { state } from './state.js';
 import { escapeHtml, focusActiveWebview, getActiveWebview, isPdfUrl, getPdfViewerUrl } from './utils.js';
 import { renderWorkspaceUI, switchTabFocus, spawnTabWithUrl, spawnNewBlankTab, handleTabRemoval, wakeTab } from './webview.js';
@@ -88,6 +89,7 @@ export function displayAddressOverlay() {
         focusActiveWebview();
     } else {
         const currentWS = state.sessionState.current_workspace;
+        prepareOverlay('WideAddressBar');
         const activeListItem = document.querySelector('#TabList li.selected');
         if (activeListItem) {
             const currentIdx = Array.from(document.querySelectorAll('#TabList li')).indexOf(activeListItem);
@@ -99,6 +101,7 @@ export function displayAddressOverlay() {
         addressBar.style.display = 'block';
         
         requestAnimationFrame(() => {
+            if (addressBar.style.display !== 'block') return;
             addressBar.focus();
             addressBar.select();
         });
@@ -125,6 +128,7 @@ export async function handleNavigation(input) {
 
         hideSuggestions();
         document.getElementById('WideAddressBar').style.display = 'none';
+        focusActiveWebview();
         return;
     }
 
@@ -298,7 +302,7 @@ export function setupAddressBarAutocomplete() {
             }
         });
 
-        renderSuggestions(matches);
+        if (addressBar.style.display === 'block' && addressBar.value.trim() === query) renderSuggestions(matches);
     });
 
     addressBar.addEventListener('keydown', (e) => {
