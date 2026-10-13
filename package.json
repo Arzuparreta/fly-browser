@@ -6,7 +6,7 @@
   "license": "GPL-3.0-or-later",
   "scripts": {
     "start": "electron . --log-level=3",
-    "test": "node tests/auth-security.test.js && node tests/audio-controls.test.js && node tests/pinned-tabs.test.js && node tests/config-writes.test.js",
+    "test": "node tests/auth-security.test.js && node tests/audio-controls.test.js && node tests/pinned-tabs.test.js && node tests/config-writes.test.js && node tests/extensions.test.js",
     "docs:dev": "vitepress dev docs",
     "docs:build": "vitepress build docs",
     "docs:preview": "vitepress preview docs",
@@ -94,7 +94,8 @@
     "vitepress": "^1.6.4"
   },
   "dependencies": {
-    "@ghostery/adblocker-electron": "^2.18.2"
+    "@ghostery/adblocker-electron": "^2.18.2",
+    "electron-chrome-extensions": "4.9.0"
   },
   "overrides": {
     "vite": "^6.4.3",

@@ -115,6 +115,7 @@
                                 <button type="button" class="palette-filter-chip" data-category="Performance & Memory">Performance</button>
                                 <button type="button" class="palette-filter-chip" data-category="Tools & Notes">Tools & Notes</button>
                                 <button type="button" class="palette-filter-chip" data-category="User Scripts & Styles">Scripts & Styles</button>
+                                <button type="button" class="palette-filter-chip" data-category="Extensions">Extensions</button>
                                 <button type="button" class="palette-filter-chip" data-category="Preferences & System">Preferences</button>
                             </div>
                         </div>
@@ -450,6 +451,44 @@
                                 </div>
                             </section>
                 
+                            <!-- Opt-in Chrome Extensions Section -->
+                            <section class="settings-section" id="ExtensionsSettingsSection">
+                                <h2>Extensions (Experimental, Off by Default)</h2>
+                                <div class="setting-item">
+                                    <div class="setting-info">
+                                        <span class="setting-label">Enable Chrome Extensions</span>
+                                        <span class="setting-desc">Loads unpacked extensions only in the workspaces you tick below, only while those workspaces have live tabs. Once every tab in a workspace is closed or hibernated its extensions unload after <span id="ExtensionsGraceSeconds">60</span> seconds. Never active in private browsing. While disabled nothing extension related runs.</span>
+                                    </div>
+                                    <label class="toggle-switch">
+                                        <input type="checkbox" id="setting-extensions-toggle">
+                                        <span class="toggle-slider"></span>
+                                    </label>
+                                </div>
+
+                                <div class="setting-item setting-item-stacked">
+                                    <div class="setting-info">
+                                        <span class="setting-label">Installed Extensions</span>
+                                        <span class="setting-desc">One unpacked extension per folder in <code id="ExtensionsDirectoryPath">~/.config/mise-browser/extensions</code>. Each workspace keeps its own extension settings and storage, just like cookies. Extensions can read every page they match, so only install code you trust.</span>
+                                    </div>
+                                    <div id="ExtensionsInstalledList" class="extensions-list"></div>
+                                </div>
+
+                                <div class="setting-item setting-item-stacked">
+                                    <div class="setting-info">
+                                        <span class="setting-label">Live Resource Usage</span>
+                                        <span class="setting-desc">What extensions cost right now, measured locally. Refreshes when Preferences opens or on demand.</span>
+                                    </div>
+                                    <div id="ExtensionsRuntimeSummary" class="extensions-runtime"></div>
+                                </div>
+
+                                <div style="display: flex; justify-content: flex-end; align-items: center; gap: 10px; flex-wrap: wrap;">
+                                    <span id="ExtensionsSettingsNote" class="settings-save-note"></span>
+                                    <button id="setting-extensions-refresh-btn" class="settings-action-btn">Refresh Usage</button>
+                                    <button id="setting-extensions-reload-btn" class="settings-action-btn">Reload Extensions</button>
+                                    <button id="setting-extensions-open-dir-btn" class="settings-action-btn">Open Extensions Folder</button>
+                                </div>
+                            </section>
+
                             <!-- Diagnostics & System Health Section -->
                             <section class="settings-section">
                                 <div style="display: flex; justify-content: space-between; align-items: center; border-bottom: 1px dashed var(--border); padding-bottom: 8px;">
@@ -706,6 +745,7 @@
                     <span id="StatusBarUrl" class="status-target-url" title="Link Target Preview"></span>
                 </div>
                 <div class="status-bar-right">
+                    <span id="StatusBarExtensions" class="status-extensions" hidden></span>
                     <span id="StatusBarSecurity" class="status-badge status-badge-security security-neutral" title="Connection Security State">
                         <i class="fa-solid fa-circle-minus"></i>
                         <span class="status-badge-text">BLANK</span>

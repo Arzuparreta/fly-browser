@@ -5,6 +5,7 @@ import { state } from './state.js';
 import { getWorkspacePartition } from './utils.js';
 import { isSplitActive, getSplitState } from './splitView.js';
 import { updateDarkReaderButtonUI, isWebviewDarkReaderActive } from './darkReader.js';
+import { notifyActiveView } from './extensions.js';
 
 let statusBarEl = null;
 let modeBadgeEl = null;
@@ -280,6 +281,7 @@ export function updateStatusBarFromActiveView() {
     const activeWv = state.activeViewsCache[currentWS]?.[currentIdx];
     updateDarkReaderButtonUI(isWebviewDarkReaderActive(activeWv));
     updateReaderViewButtonUI(!!(activeWv && activeWv.__miseReaderActive));
+    notifyActiveView(activeWv, currentWS);
 }
 
 export function updateReaderViewButtonUI(enabled) {
