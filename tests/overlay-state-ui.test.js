@@ -189,6 +189,13 @@ const root = path.resolve(__dirname, '..');
         assert(await sidebarWidth() >= 259, 'The empty-workspace sidebar must also remain expanded outside the window');
         await page.mouse.move(500, 400);
         await page.waitForFunction(() => document.getElementById('Sidebar').getBoundingClientRect().width <= 37);
+        for (const button of ['back-btn', 'forward-btn']) {
+            await page.mouse.move(10, 100);
+            await page.locator('#' + button).click();
+            assert.equal(await page.locator('#' + button).evaluate(button => button.matches(':focus')), false);
+            await page.mouse.move(500, 400);
+            await page.waitForFunction(() => document.getElementById('Sidebar').getBoundingClientRect().width <= 37);
+        }
         await page.mouse.move(10, 100);
         await page.waitForFunction(() => document.getElementById('Sidebar').getBoundingClientRect().width >= 259);
         await page.locator('#WorkspaceLabel').click();

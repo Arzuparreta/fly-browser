@@ -132,3 +132,15 @@ Validation uses Linux/X11 Electron with disposable homes/profiles. Required chec
 During implementation, an initial UI launch exposed an alias initialisation error, corrected by using a hoisted function export. The first pin regression attempts required adjustment for guest pointer injection and CSS transition completion. A concurrent UI rerun also timed out at the existing share-overlay cancellation check; the isolated run passed. The catalogue coverage assertion was updated to recognise a single palette entry exposing compatible ids. Final validation results are recorded below.
 
 Final validation: `npm test`, the complete `npm run test:keyboard-ui` suite, documentation build, modified JavaScript syntax and `git diff --check` passed. No validation failures remain at submission.
+
+## Sidebar history button focus · 13 October 2026
+
+| ID | Original behaviour | Fix | Validation |
+| :--- | :--- | :--- | :--- |
+| UX-10 | Inherited back/forward click handlers left focus on the sidebar button. Its focus highlight resembled a persistent selection, and `:focus-within` prevented the unpinned sidebar from collapsing when the pointer returned to content. | Pointer activation releases button focus and returns focus to the active page. Keyboard activation retains button focus and sidebar expansion. Empty workspaces release button focus even without a page to focus; pinning continues to keep the sidebar open. | The live Electron regression fails before the fix because a pointer back action leaves the button focused. It covers back/forward history destinations, contraction after host content entry, Enter/Space focus retention, pinned layout and empty workspaces. The existing overlay regression covers guest pointer entry. |
+
+Validation uses Linux/X11 Electron with disposable homes/profiles. Required checks include `npm test`, the full Electron keyboard/recorder/editable-page and overlay suites, documentation build, modified JavaScript syntax and `git diff --check`. Default bindings and generated grammar/reference are unchanged and drift-checked. Wayland and other operating systems remain unverified.
+
+Initial UI runs timed out in guest pointer injection immediately after history navigation and failed existing hint checks, including during concurrent execution. The history regression now exits through real host content and runs after the existing navigation scenarios; the overlay suite independently checks trusted guest entry. The final sequential full suite passed.
+
+Final validation: `npm test`, the complete `npm run test:keyboard-ui` suite, documentation build, modified JavaScript syntax and `git diff --check` passed. No validation failures remain at submission.

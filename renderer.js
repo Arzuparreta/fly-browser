@@ -552,8 +552,16 @@ function setupEventListeners() {
         e.preventDefault();
         cycleSplitOrientation();
     });
-    document.getElementById('back-btn').addEventListener('click', navigateFrameBack);
-    document.getElementById('forward-btn').addEventListener('click', navigateFrameForward);
+    for (const [id, navigate] of [['back-btn', navigateFrameBack], ['forward-btn', navigateFrameForward]]) {
+        document.getElementById(id).addEventListener('click', (event) => {
+            navigate();
+            // Pointer clicks return to the page; keyboard clicks keep the control focused.
+            if (event.detail > 0) {
+                event.currentTarget.blur();
+                focusActiveWebview();
+            }
+        });
+    }
     document.getElementById('menu-btn').addEventListener('click', toggleDashboardView);
 
     document.getElementById('WelcomeNewTabBtn')?.addEventListener('click', spawnNewBlankTab);
