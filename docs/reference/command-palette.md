@@ -74,6 +74,9 @@ The Command Centre gives you rapid, searchable access to all Mise operations, in
 | Command Title | Shortcut | Action ID | Description |
 | :--- | :--- | :--- | :--- |
 | **Toggle Quick Notes** | `Ctrl+N` | `toggle-notes` | Markdown scratchpad saved locally to `~/.config/mise-browser/notes.md`. |
+| **Export Article to Quick Notes** | `Ctrl+Shift+E` | `export-reader-to-notes` | Appends active distilled Reader View article or page clipping to `notes.md`. |
+| **Export Article to External Note App** | - | `export-reader-to-external` | Saves clipping as standalone Markdown note and opens in preferred note app. |
+| **Open Quick Notes in External Application** | - | `open-notes-external` | Opens `notes.md` in configured external note app or system default editor. |
 | **Bookmarks & Quickmarks Manager** | `Ctrl+Shift+B` | `toggle-bookmarks` | Ledger manager for saved bookmarks and single-key quickmarks. |
 | **Bookmark Current Page** | `Ctrl+Shift+A` | `add-bookmark` | Saves current webpage title and URL into bookmarks collection. |
 | **Set Quickmark** | `Ctrl+Shift+Q` | `set-quickmark` | Binds active webpage to an instant single-key navigation shortcut. |

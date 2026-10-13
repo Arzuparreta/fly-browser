@@ -10,6 +10,14 @@ window.addEventListener('mise-reader-closed', () => {
     try { ipcRenderer.sendToHost('reader-view-toggled', { active: false }); } catch (err) {}
 });
 
+window.addEventListener('mise-reader-export-notes', (e) => {
+    try { ipcRenderer.sendToHost('reader-export-notes', e.detail); } catch (err) {}
+});
+
+window.addEventListener('mise-reader-export-external', (e) => {
+    try { ipcRenderer.sendToHost('reader-export-external', e.detail); } catch (err) {}
+});
+
 // Expose minimal, secure GM bridge for userscript execution
 try {
     if (contextBridge && typeof contextBridge.exposeInMainWorld === 'function') {
@@ -528,8 +536,11 @@ window.addEventListener('keydown', (e) => {
             e.preventDefault();
             e.stopPropagation();
             e.stopImmediatePropagation();
+            try { ipcRenderer.sendToHost('guest-input-focus', false); } catch (err) {}
+            return;
         }
         try { ipcRenderer.sendToHost('guest-input-focus', false); } catch (err) {}
+        try { ipcRenderer.sendToHost('normal-mode-action', 'escape'); } catch (err) {}
         return;
     }
 

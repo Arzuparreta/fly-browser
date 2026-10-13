@@ -24,6 +24,7 @@ export const state = {
     globalPrivateModeActive: false,
     notesActive: false,
     isEditingNotes: false,
+    isNotesExpanded: false,
     bookmarksActive: false,
     diagnosticsActive: false,
     awaitingQuickmarkKey: false,

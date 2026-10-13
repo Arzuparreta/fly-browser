@@ -6,7 +6,7 @@
   "license": "GPL-3.0-or-later",
   "scripts": {
     "start": "electron . --log-level=3",
-    "test": "node tests/auth-security.test.js && node tests/audio-controls.test.js && node tests/pinned-tabs.test.js",
+    "test": "node tests/auth-security.test.js && node tests/audio-controls.test.js && node tests/pinned-tabs.test.js && node tests/notes-reader-export.test.js",
     "docs:dev": "vitepress dev docs",
     "docs:build": "vitepress build docs",
     "docs:preview": "vitepress preview docs",

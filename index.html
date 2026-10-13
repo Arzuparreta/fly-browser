@@ -275,6 +275,18 @@
                                 </div>
                             </section>
                 
+                            <!-- Notes & External Tools Section -->
+                            <section class="settings-section">
+                                <h2>Notes & External Tools</h2>
+                                <div class="setting-item">
+                                    <div class="setting-info">
+                                        <span class="setting-label">External Note-Taking Application / Command</span>
+                                        <span class="setting-desc">Command or executable used to open notes and clippings (e.g. <code>obsidian</code>, <code>logseq</code>, <code>code</code>, <code>nvim</code>, <code>typora</code>). Leave empty to use system default Markdown editor.</span>
+                                    </div>
+                                    <input type="text" id="setting-notes-command" class="settings-input" placeholder="e.g. obsidian or code" style="background: var(--bg-main); color: var(--text); border: 1px solid var(--border); border-radius: 4px; padding: 6px 12px; font-size: 13px; width: 220px;" spellcheck="false" autocomplete="off">
+                                </div>
+                            </section>
+                
                             <!-- Appearance & Visual Theme Section -->
                             <section class="settings-section">
                                 <h2>Appearance & Visual Theme</h2>
@@ -737,17 +749,25 @@
     </div>
 
 	<!-- Notes Taking Overlay -->
-    <div id="NotesOverlay" class="overlay-container" style="display: none;">
-        <div id="NotesContent" class="overlay-card">
+    <div id="NotesOverlay" class="overlay-container" style="display: none;" tabindex="-1">
+        <div id="NotesContent" class="overlay-card" tabindex="-1">
             <div class="notes-header">
-                <span>Quick Notes (~/.config/mise-browser/notes.md)</span>
-                <div>
-                    <button id="ToggleEditNotesBtn" class="notes-mode-btn">Edit</button>
-                    <span id="CloseNotesBtn" class="close-btn">&times;</span>
+                <div class="notes-header-title">
+                    <i class="fa-regular fa-note-sticky"></i>
+                    <span>Quick Notes</span>
+                    <span class="notes-file-hint">(~/.config/mise-browser/notes.md)</span>
+                    <span id="NotesWordCount" class="notes-word-count">0 words</span>
+                </div>
+                <div class="notes-header-actions">
+                    <span class="notes-key-hint">Esc to close · e to edit</span>
+                    <button id="ToggleEditNotesBtn" class="notes-mode-btn" title="Toggle Edit / Preview"><i class="fa-solid fa-pen-to-square"></i> Edit</button>
+                    <button id="ToggleExpandNotesBtn" class="notes-mode-btn" title="Toggle Fullscreen / Expanded View"><i class="fa-solid fa-expand"></i></button>
+                    <button id="OpenExternalNotesBtn" class="notes-mode-btn" title="Open in External App"><i class="fa-solid fa-arrow-up-right-from-square"></i> External</button>
+                    <span id="CloseNotesBtn" class="close-btn" title="Close (Esc)">&times;</span>
                 </div>
             </div>
             <textarea id="NotesTextArea" style="display: none;" placeholder="Type markdown notes..."></textarea>
-            <div id="NotesMarkdownView" class="markdown-body"></div>
+            <div id="NotesMarkdownView" class="markdown-body" tabindex="0"></div>
         </div>
     </div>
 

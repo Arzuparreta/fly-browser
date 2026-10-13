@@ -36,7 +36,8 @@ const DEFAULT_KEYBINDS = {
     'swap-split-panes': 'Ctrl+\\',
     'toggle-dark-reader': 'Ctrl+D',
     'toggle-reader-view': 'F9',
-    'toggle-pin-tab': ['Ctrl+Shift+X', 'F4']
+    'toggle-pin-tab': ['Ctrl+Shift+X', 'F4'],
+    'export-reader-to-notes': 'Ctrl+Shift+E'
 };
 
 const ACTION_METADATA = {
@@ -74,7 +75,10 @@ const ACTION_METADATA = {
     'swap-split-panes': { label: 'Swap Split Panes (Left / Right)', category: 'Navigation & Workspaces' },
     'toggle-dark-reader': { label: 'Toggle Dark Reader on Active Tab', category: 'Web Interaction' },
     'toggle-reader-view': { label: 'Toggle Reader View on Active Tab', category: 'Web Interaction' },
-    'toggle-pin-tab': { label: 'Pin / Unpin Active Tab', category: 'Navigation & Workspaces' }
+    'toggle-pin-tab': { label: 'Pin / Unpin Active Tab', category: 'Navigation & Workspaces' },
+    'export-reader-to-notes': { label: 'Export Reader View to Quick Notes', category: 'Web Interaction' },
+    'export-reader-to-external': { label: 'Export Reader View to External App', category: 'Web Interaction' },
+    'open-notes-external': { label: 'Open Quick Notes in External Application', category: 'Web Interaction' }
 };
 
 let activeKeybinds = { ...DEFAULT_KEYBINDS };

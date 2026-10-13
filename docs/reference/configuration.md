@@ -79,6 +79,7 @@ Controls hardware switches, process limits, privacy whitelists, and search prefe
   - **`sidebar_opacity`**: Sidebar background translucency percentage (40% to 100%) with backdrop blur glass effect.
   - **`overlay_opacity`**: Modal and overlay translucency percentage (50% to 100%) for Command Palette, Notes, and Preferences.
 - **`trusted_domains`**: Array of domains exempted from tracker blocking and fingerprint spoofing.
+- **`external_notes_command`**: Optional command or executable used to open notes and clippings (e.g. `obsidian`, `logseq`, `code`, `nvim`). When empty, uses system default Markdown handler.
 
 ---
 
@@ -140,6 +141,7 @@ Maintains persistent workspaces, URLs, titles, Dark Reader preferences, and slee
 
 ---
 
-## 5. Quick Notes (`notes.md`)
+## 5. Quick Notes (`notes.md`) & Clippings
 
-A standard Markdown file storing everything typed into the Quick Notes overlay (**Ctrl + N**). You can edit this file directly using your favourite text editor.
+- **`notes.md`**: A standard Markdown file storing everything typed into the Quick Notes overlay (**Ctrl + N**) or exported from Reader View (**Ctrl + Shift + E**). You can edit this file directly or open it from the overlay in your favourite external editor (Obsidian, Logseq, Neovim, VS Code).
+- **`clippings/`**: Dedicated directory storing standalone exported Markdown clippings and distilled articles saved for external note tools.

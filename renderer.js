@@ -33,7 +33,9 @@ import {
     wakeTab,
     wakeAllTabsInWorkspace,
     reapplyActiveUserStyles,
-    toggleReaderViewOnActiveTab
+    toggleReaderViewOnActiveTab,
+    exportActiveTabToNotes,
+    exportActiveTabToExternal
 } from './modules/webview.js';
 
 import { 
@@ -78,7 +80,10 @@ import {
     parseMarkdownToHtml, 
     renderNotesView, 
     toggleNotesOverlay, 
-    setupNotesListeners 
+    setupNotesListeners,
+    toggleExpandNotesOverlay,
+    openNotesInExternalApp,
+    appendSelectionToNotes
 } from './modules/overlays/notes.js';
 
 import { 
@@ -145,6 +150,11 @@ window.displayAddressOverlay = displayAddressOverlay;
 window.triggerLinkHints = triggerLinkHints;
 window.toggleInPageSearch = toggleInPageSearch;
 window.toggleNotesOverlay = toggleNotesOverlay;
+window.toggleExpandNotesOverlay = toggleExpandNotesOverlay;
+window.openNotesInExternalApp = openNotesInExternalApp;
+window.appendSelectionToNotes = appendSelectionToNotes;
+window.exportActiveTabToNotes = exportActiveTabToNotes;
+window.exportActiveTabToExternal = exportActiveTabToExternal;
 window.toggleDownloadShelf = toggleDownloadShelf;
 window.toggleStatusBar = toggleStatusBar;
 window.toggleClock = toggleClock;
@@ -600,6 +610,10 @@ function setupEventListeners() {
             case 'toggle-devtools': toggleActiveDevTools(); break;
             case 'toggle-bookmarks': toggleBookmarksOverlay(); break;
             case 'toggle-notes': toggleNotesOverlay(); break;
+            case 'save-selection-to-notes': appendSelectionToNotes(args[0]); break;
+            case 'export-reader-to-notes': exportActiveTabToNotes(); break;
+            case 'export-reader-to-external': exportActiveTabToExternal(); break;
+            case 'open-notes-external': openNotesInExternalApp(); break;
             case 'toggle-downloads': toggleDownloadShelf(); break;
             case 'toggle-find': toggleInPageSearch(); break;
             case 'remove-tab': handleTabRemoval(); break;
