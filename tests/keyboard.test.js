@@ -201,7 +201,13 @@ for (const command of commands) {
     command.action(); assert.equal(paletteDispatched.pop(), id, 'Palette execution must use canonical dispatch');
     assert(rawActions[id] || rendererSource.includes(`case '${id}':`) || mainSource.includes(`action === '${id}'`) || /^tab-[1-9]$/.test(id), `Action ${id} must have a concrete handler`);
 }
-assert.equal(new Set(commands.map(command => command.actionId || command.id)).size, Object.keys(keybinds.ACTION_METADATA).length, 'Every catalogue action must be discoverable');
+const discoverableActions = new Set(commands.flatMap(command => [command.id, command.actionId].filter(Boolean)));
+for (const id of Object.keys(keybinds.ACTION_METADATA)) {
+    assert(discoverableActions.has(id), `Catalogue action ${id}, including compatibility aliases, must be discoverable`);
+}
+assert.equal(commands.filter(command => ['toggle-sidebar-pin', 'toggle-zen-mode'].includes(command.id)).length, 1, 'Sidebar aliases must share one palette entry');
+vm.runInContext("commandRegistry['toggle-sidebar-pin']()", paletteContext);
+assert.equal(paletteDispatched.pop(), 'toggle-zen-mode', 'The legacy pin palette id must use the expansion action');
 console.log('Every palette and binding action shares canonical dispatch and has a handler.');
 const keyboardHandlers = {}, keyboardEvents = {}, bridgeActions = [];
 let saveCalls = 0;

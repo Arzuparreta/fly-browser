@@ -54,7 +54,7 @@ const ACTION_METADATA = {
     'toggle-find': { label: 'Find In Page', category: 'Web Interaction' },
     'toggle-devtools': { label: 'Toggle Active Webview DevTools', category: 'Web Interaction' },
     'toggle-notes': { label: 'Open Quick Notes Overlay', category: 'Navigation & Workspaces' },
-    'toggle-zen-mode': { label: 'Toggle Sidebar Expansion (Expand/Collapse)', category: 'Navigation & Workspaces' },
+    'toggle-zen-mode': { label: 'Toggle Sidebar Expansion (Pin / Unpin)', category: 'Navigation & Workspaces' },
     'set-quickmark': { label: 'Set Quickmark', category: 'Web Interaction' },
     'jump-quickmark': { label: 'Jump to Quickmark', category: 'Web Interaction' },
     'add-bookmark': { label: 'Add Current Page to Bookmarks', category: 'Web Interaction' },

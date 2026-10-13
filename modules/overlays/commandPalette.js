@@ -232,7 +232,8 @@ export const COMMAND_DEFINITIONS = [
     },
     {
         id: 'toggle-sidebar-pin',
-        title: 'Toggle Auto-Collapse Sidebar (Pin / Unpin)',
+        actionId: 'toggle-zen-mode',
+        title: 'Toggle Sidebar Expansion (Pin / Unpin)',
         desc: 'Pin sidebar open or auto-shrink to 36px strip expanding on hover',
         details: 'Configures auto-collapse behaviour: when unpinned, the sidebar shrinks to 36px and slides out smoothly when your cursor hovers nearby.',
         tip: 'Unpin for an immersive browsing canvas that leaves controls within easy reach.',
@@ -241,18 +242,6 @@ export const COMMAND_DEFINITIONS = [
         keywords: ['pin', 'lock', 'unpin', 'autohide', 'strip'],
         action: () => window.toggleSidebarPin && window.toggleSidebarPin()
     },
-    {
-        id: 'toggle-zen-mode',
-        title: 'Toggle Zen Mode (Hide Sidebar)',
-        desc: 'Maximise screen real estate by completely hiding the sidebar',
-        details: 'Hides all peripheral navigation chrome and sidebars, delivering an edge-to-edge reading viewport.',
-        tip: 'Pair Zen mode with Link Hints for distraction-free, mouse-free research.',
-        category: 'Tabs & Navigation',
-        icon: 'fa-solid fa-eye-slash',
-        keywords: ['zen', 'fullscreen', 'distraction', 'hide'],
-        action: () => window.toggleZenMode && window.toggleZenMode()
-    },
-
     // Split View
     {
         id: 'toggle-split-vertical',
@@ -664,7 +653,7 @@ COMMAND_DEFINITIONS.forEach(cmd => {
 window.miseAPI.getActionMetadata().then(metadata => {
     for (const command of COMMAND_DEFINITIONS) command.category = metadata[command.actionId || command.id]?.category || command.category;
     for (const [id, info] of Object.entries(metadata)) {
-        if (COMMAND_DEFINITIONS.some(command => (command.actionId || command.id) === id)) continue;
+        if (COMMAND_DEFINITIONS.some(command => command.id === id || command.actionId === id)) continue;
         const command = {id, actionId: id, title: info.label, desc: info.category,
             details: info.label, tip: 'Customise this action in Keyboard controls.', category: info.category,
             icon: 'fa-solid fa-keyboard', keywords: [id, info.label],

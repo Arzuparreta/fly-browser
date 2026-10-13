@@ -52,7 +52,7 @@ Existing legacy profiles retain their explicit assignments, including empty and 
 | Toggle Dual-Split View (Side-by-Side) | `Ctrl+Shift+S` | Unassigned |
 | Toggle Floating Address Bar | `Ctrl+L` | `o` |
 | Toggle Live Clock & Date Display | Unassigned | Unassigned |
-| Toggle Sidebar Expansion (Expand/Collapse) | `Ctrl+Shift+Z` | Unassigned |
+| Toggle Sidebar Expansion (Pin / Unpin) | `Ctrl+Shift+Z` | Unassigned |
 | Toggle Status & Mode Bar | `Ctrl+/` | Unassigned |
 | Toggle Workspace Dashboard | `Ctrl+Shift+W` | `w` |
 | Go to page bottom | Unassigned | `Shift+G` |

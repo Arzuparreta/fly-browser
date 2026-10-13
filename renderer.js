@@ -167,8 +167,7 @@ window.cycleClockFormat = cycleClockFormat;
 window.togglePassthroughMode = togglePassthroughMode;
 window.recalculateStatusMode = recalculateMode;
 window.updateStatusBarFromActiveView = updateStatusBarFromActiveView;
-window.toggleZenMode = toggleZenMode;
-window.toggleSidebarExpansion = toggleSidebarExpansion;
+window.toggleSidebarExpansion = toggleSidebarPin;
 window.toggleSidebarPin = toggleSidebarPin;
 window.applySidebarMode = applySidebarMode;
 window.toggleInterfaceTheme = toggleInterfaceTheme;
@@ -630,7 +629,8 @@ function setupEventListeners() {
             case 'toggle-downloads': toggleDownloadShelf(); break;
             case 'toggle-find': toggleInPageSearch(); break;
             case 'remove-tab': handleTabRemoval(); break;
-            case 'toggle-zen-mode': toggleSidebarExpansion(); break;
+            case 'toggle-zen-mode':
+            case 'toggle-sidebar-pin': toggleSidebarPin(); break;
             case 'toggle-sidebar-collapse-mode': applySidebarMode(args[0]); break;
             case 'set-quickmark': promptQuickmark('set'); break;
             case 'jump-quickmark': promptQuickmark('jump'); break;
@@ -1275,47 +1275,36 @@ function toggleActiveDevTools() {
     }
 }
 
-function toggleZenMode() {
-    document.body.classList.toggle('zen-mode');
-}
-
 export function applySidebarMode(autoCollapse) {
     const body = document.body;
-    const pinBtn = document.getElementById('pin-sidebar-btn');
-    if (autoCollapse) {
-        body.classList.remove('sidebar-pinned');
-        body.classList.add('sidebar-auto-collapse');
-        if (pinBtn) pinBtn.classList.remove('pin-active');
-    } else {
-        body.classList.remove('sidebar-auto-collapse');
-        body.classList.add('sidebar-pinned');
-        if (pinBtn) pinBtn.classList.add('pin-active');
-        const sidebar = document.getElementById('Sidebar');
-        if (sidebar) sidebar.classList.remove('expanded');
-    }
-}
-
-export function toggleSidebarExpansion() {
     const sidebar = document.getElementById('Sidebar');
-    if (!sidebar) return;
-    sidebar.classList.toggle('expanded');
-    if (sidebar.classList.contains('expanded')) {
-        const selectedTab = document.querySelector('#TabList li.selected');
-        if (selectedTab) selectedTab.focus();
-    } else {
+    const pinBtn = document.getElementById('pin-sidebar-btn');
+    body.classList.toggle('sidebar-pinned', !autoCollapse);
+    body.classList.toggle('sidebar-auto-collapse', autoCollapse);
+    sidebar?.classList.remove('expanded');
+    if (pinBtn) {
+        pinBtn.classList.toggle('pin-active', !autoCollapse);
+        pinBtn.setAttribute('aria-pressed', String(!autoCollapse));
+    }
+    const setting = document.getElementById('setting-sidebar-collapse-toggle');
+    if (setting) setting.checked = autoCollapse;
+    // A pin click must not leave focus holding the unpinned sidebar open.
+    if (autoCollapse && sidebar?.contains(document.activeElement)) {
+        document.activeElement.blur();
         focusActiveWebview();
     }
 }
+
+// Preserve callers of the old expansion action without a second state toggle.
+export {toggleSidebarPin as toggleSidebarExpansion};
 
 export async function toggleSidebarPin() {
     const isCurrentlyPinned = document.body.classList.contains('sidebar-pinned');
     const newAutoCollapse = isCurrentlyPinned;
     applySidebarMode(newAutoCollapse);
-    if (window.miseAPI && typeof window.miseAPI.getBrowserSettings === 'function') {
+    if (window.miseAPI && typeof window.miseAPI.updateBrowserSettings === 'function') {
         try {
-            const cfg = (await window.miseAPI.getBrowserSettings()) || {};
-            cfg.sidebar_auto_collapse = newAutoCollapse;
-            await window.miseAPI.updateBrowserSettings(cfg);
+            await window.miseAPI.updateBrowserSettings({sidebar_auto_collapse: newAutoCollapse});
         } catch (e) {}
     }
 }

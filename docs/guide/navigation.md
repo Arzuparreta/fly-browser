@@ -88,8 +88,8 @@ To dedicate maximum horizontal screen real estate to web content, Mise features 
 
 * **Compact 36px Strip**: In its default collapsed state, the sidebar shrinks to a 36px icon bar displaying only your workspace badge and crisp tab favicons.
 * **Smooth Flyout on Hover**: Moving your mouse pointer over the 36px strip smoothly expands the sidebar to 260px as an overlay flyout with drop shadow. Because this expands as an overlay, the active webview never resizes, preventing GPU lag and page reflows on fanless hardware.
-* **Shortcut Expansion**: Press **Ctrl + Shift + Z** to toggle sidebar expansion, or press **Ctrl + S** to focus the sidebar and expand it immediately for arrow-key navigation. Pressing **Escape** or **Ctrl + W** collapses the sidebar smoothly back to the 36px strip.
-* **Pinning**: Click the pin icon button at the bottom of the sidebar, toggle **Auto-Collapse Sidebar** in Preferences (**Ctrl + H**), or run **Pin / Unpin Sidebar** in the Command Palette to pin the sidebar permanently open at 260px.
+* **Shortcut Expansion**: Press **Ctrl + Shift + Z** to pin or unpin the sidebar, using the same state as the pin button. Unpinning clears temporary expansion and sidebar focus; the sidebar shrinks to its 36px strip once the pointer leaves. Press **Ctrl + S** to expand the unpinned sidebar for keyboard navigation. Pressing **Escape** returns focus to the page.
+* **Pinning**: Click the pin icon button at the bottom of the sidebar, toggle **Auto-Collapse Sidebar** in Preferences (**Ctrl + H**), or run **Toggle Sidebar Expansion (Pin / Unpin)** in the Command Palette to pin the sidebar permanently open at 260px.
 
 ***
 
