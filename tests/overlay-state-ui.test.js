@@ -26,6 +26,35 @@ const root = path.resolve(__dirname, '..');
             ['Control+Shift+h', 'HistoryOverlay'], ['Control+n', 'NotesOverlay']
         ];
         const focused = id => page.waitForFunction(id => {const root = document.getElementById(id); return root === document.activeElement || root.contains(document.activeElement);}, id, {timeout: 5000}).catch(async error => {console.log('Focus failure', id, errors, await page.evaluate(() => ({focus: document.activeElement.id, visible: [...document.querySelectorAll('[id$=Overlay], #WideAddressBar')].filter(el => el.getClientRects().length).map(el => el.id)}))); throw error;});
+        const checkSidebarShortcut = async (pinned = false) => {
+            await page.mouse.move(500, 400);
+            await page.evaluate(() => document.activeElement.blur());
+            for (const target of ['#TabList li.selected', '#back-btn', '#theme-toggle-btn']) {
+                if (await page.locator(target).count() === 0) continue;
+                await page.keyboard.press('Alt+s');
+                await page.waitForFunction(() => document.getElementById('Sidebar').contains(document.activeElement));
+                await page.waitForFunction(() => document.getElementById('Sidebar').getBoundingClientRect().width >= 259);
+                await page.locator(target).focus();
+                await page.keyboard.press('Alt+s');
+                await page.waitForFunction(() => !document.getElementById('Sidebar').contains(document.activeElement), null, {timeout: 5000});
+                if (await page.locator('webview:visible').count()) {
+                    await page.waitForFunction(() => document.activeElement.tagName === 'WEBVIEW');
+                }
+                await page.waitForFunction(pinned => {
+                    const width = document.getElementById('Sidebar').getBoundingClientRect().width;
+                    return pinned ? width >= 259 : width <= 37;
+                }, pinned);
+                assert.equal(await page.evaluate(() => document.body.classList.contains('sidebar-pinned')), pinned);
+            }
+            if (!pinned) {
+                await page.mouse.move(10, 100);
+                await page.keyboard.press('Alt+s');
+                await page.waitForFunction(() => document.getElementById('Sidebar').contains(document.activeElement));
+                await page.keyboard.press('Alt+s');
+                await page.waitForFunction(() => document.getElementById('Sidebar').getBoundingClientRect().width <= 37);
+            }
+        };
+        await checkSidebarShortcut();
         // Open from the sidebar, then cancel from the input and from another chrome control.
         await page.locator('#TabList li.selected').focus();
         await page.keyboard.press('Control+l'); await focused('WideAddressBar');
@@ -84,6 +113,10 @@ const root = path.resolve(__dirname, '..');
         await waitGuest(state => state.focus && state.active === 'editable');
         await page.keyboard.type('ff');
         await waitGuest(state => state.value === 'ff');
+        await page.keyboard.press('Alt+s');
+        await page.waitForFunction(() => document.getElementById('Sidebar').contains(document.activeElement));
+        await page.keyboard.press('Alt+s');
+        await waitGuest(state => state.focus && state.active === 'editable' && state.value === 'ff');
         await page.keyboard.press('Escape'); await page.keyboard.press('f');
         await waitGuest(state => state.hints);
         await page.keyboard.press('Escape');
@@ -125,6 +158,7 @@ const root = path.resolve(__dirname, '..');
             await moveToContent();
             await page.keyboard.press('Control+Shift+z');
             await checkPin(true);
+            await checkSidebarShortcut(true);
             await page.waitForFunction(() => document.getElementById('right-content').getBoundingClientRect().left >= 259);
             await page.locator('#pin-sidebar-btn').click();
             await checkPin(false);
@@ -139,7 +173,7 @@ const root = path.resolve(__dirname, '..');
             await checkPin(false);
             await page.waitForFunction(() => document.getElementById('Sidebar').getBoundingClientRect().width <= 37);
             // Temporary keyboard focus expansion must not survive an unpin.
-            await page.keyboard.press('Control+s');
+            await page.keyboard.press('Alt+s');
             await page.keyboard.press('Control+Shift+z'); await checkPin(true);
             await page.keyboard.press('Control+Shift+z'); await checkPin(false);
             await page.waitForFunction(() => document.getElementById('Sidebar').getBoundingClientRect().width <= 37);
@@ -201,6 +235,7 @@ const root = path.resolve(__dirname, '..');
         await page.locator('#WorkspaceLabel').click();
         await focused('DashboardOverlay'); await page.keyboard.press('Escape');
         await page.mouse.move(500, 400);
+        await checkSidebarShortcut();
         await checkPinRoutes();
         assert.deepEqual(errors, []);
         console.log('Live overlay cancellation, focus, pairwise transitions, child dialog and editable page checks passed.');

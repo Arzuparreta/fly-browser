@@ -144,3 +144,15 @@ Validation uses Linux/X11 Electron with disposable homes/profiles. Required chec
 Initial UI runs timed out in guest pointer injection immediately after history navigation and failed existing hint checks, including during concurrent execution. The history regression now exits through real host content and runs after the existing navigation scenarios; the overlay suite independently checks trusted guest entry. The final sequential full suite passed.
 
 Final validation: `npm test`, the complete `npm run test:keyboard-ui` suite, documentation build, modified JavaScript syntax and `git diff --check` passed. No validation failures remain at submission.
+
+## Sidebar shortcut focus toggle · 13 October 2026
+
+| ID | Original behaviour | Fix | Validation |
+| :--- | :--- | :--- | :--- |
+| UX-11 | The inherited sidebar focus action (Alt+S in new profiles) cycled between the tab list and navigation controls. Focus remained inside the sidebar, so a second press never collapsed it. | Keep the action id and bindings, but toggle focus between the sidebar and the active page. Running it from any sidebar control clears temporary and retained pointer expansion, releases focus even in empty workspaces, and returns focus to the active guest when available. Persistent pinning remains unchanged. Ignore pointer transitions between sidebar children so contraction cannot immediately restore retained hover. Update the catalogue, palette description and generated keyboard reference. | The live Electron regression fails before the fix on the second Alt+S press. It checks repeated presses from the tab list, navigation and bottom controls, retained pointer expansion, pinned and empty workspaces. The full keyboard suite covers recording and editable-page input; the sidebar regression also checks returning to a focused text field without changing its text. |
+
+Validation uses Linux/X11 Electron with disposable homes/profiles. Default chords and guest grammar remain unchanged and are drift-checked. Pinning deliberately keeps the sidebar visible; subsequent pointer entry can expand it again. Wayland and other operating systems remain unverified.
+
+An initial post-fix hover regression exposed internal mouseover events restoring expansion during contraction. Restricting retained pointer updates to sidebar boundary transitions fixes it; the isolated overlay suite then passed.
+
+Final validation: `npm test`, the complete `npm run test:keyboard-ui` suite, documentation build, modified JavaScript syntax and `git diff --check` passed. No validation failures remain at submission.

@@ -17,6 +17,8 @@ Mise has a small custom Vim-style controller, not the Vimium extension. Browser 
 
 Escape and Tab are reserved for cancellation and focus navigation. Native control keys such as arrows, Enter, Space and Delete remain contextual UI behaviour. Sidebar letters no longer form a hidden second set of hard-coded browser actions. Tab stays within visible overlays; arrow keys navigate tab lists, dashboard selections and bookmark columns.
 
+Alt+S (sidebar focus) opens and focuses the tab list; pressing it again from any sidebar control returns focus to the active page and collapses an unpinned sidebar, including retained pointer expansion. In an empty workspace it releases sidebar focus. Pinning remains unchanged: a pinned sidebar stays open. Custom bindings and the NORMAL-mode S action use the same behaviour.
+
 Opening address/search, find, dashboard, preferences, palette, bookmarks, history, notes or diagnostics closes the previous browser panel. Escape closes the current panel and returns focus to the page; pressing its opening shortcut again also closes it. Ctrl+L can be cancelled even after focus moves to another browser control. In the dashboard, Escape first cancels workspace creation or renaming, then closes the dashboard. The binding recorder and native dialogs keep their own cancellation. Notes keep edits on closing; delayed data loads cannot reopen closed panels or take focus from a newer panel. Sharing accepts Escape from its controls and embedded page, except in page passthrough mode.
 
 Browser chords also work when an iframe has focus. Vim-style page keys and hint discovery are confined to the main document and its open shadow roots; embedded frames retain their native keyboard navigation. Closed shadow roots cannot be inspected. Operating-system shortcuts may be intercepted before Electron receives them.
@@ -34,7 +36,6 @@ Existing legacy profiles retain their explicit assignments, including empty and 
 | Cycle Clock Format (Date & Time / Time / Seconds) | Unassigned | Unassigned |
 | Focus Active Webview | `Alt+W` | Unassigned |
 | Focus Navigation Buttons | `Alt+N` | Unassigned |
-| Focus Sidebar Tab List | `Alt+S` | `s` |
 | Go back | `Alt+ArrowLeft` | `Shift+H` |
 | Go forward | `Alt+ArrowRight` | `Shift+L` |
 | New Blank Tab | `Ctrl+T` | `t` |
@@ -53,6 +54,7 @@ Existing legacy profiles retain their explicit assignments, including empty and 
 | Toggle Floating Address Bar | `Ctrl+L` | `o` |
 | Toggle Live Clock & Date Display | Unassigned | Unassigned |
 | Toggle Sidebar Expansion (Pin / Unpin) | `Ctrl+Shift+Z` | Unassigned |
+| Toggle Sidebar Focus | `Alt+S` | `s` |
 | Toggle Status & Mode Bar | `Ctrl+/` | Unassigned |
 | Toggle Workspace Dashboard | `Ctrl+Shift+W` | `w` |
 | Go to page bottom | Unassigned | `Shift+G` |

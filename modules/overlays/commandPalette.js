@@ -190,9 +190,9 @@ export const COMMAND_DEFINITIONS = [
     },
     {
         id: 'focus-sidebar',
-        title: 'Focus Sidebar Tab List',
-        desc: 'Move keyboard focus directly into vertical tabs list',
-        details: 'Shifts keyboard focus to the vertical tab sidebar, enabling arrow-key navigation, tab selection, and workspace switching.',
+        title: 'Toggle Sidebar Focus',
+        desc: 'Move focus between the sidebar and the active page',
+        details: 'Opens and focuses the tab list. Run again from any sidebar control to return to the page and collapse an unpinned sidebar. A pinned sidebar stays open.',
         tip: 'Use the binding shown here, or customise this action in Keyboard controls.',
         category: 'Tabs & Navigation',
         icon: 'fa-solid fa-bars',
