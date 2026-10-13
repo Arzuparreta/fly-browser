@@ -110,3 +110,13 @@ Implementation and validation: [PR #5](https://github.com/Arzuparreta/Mise-brows
 Validation uses Linux/X11 Electron with a disposable home/profile. Run `npm test`, the complete `npm run test:keyboard-ui`, `npm run docs:build` and `git diff --check`; default bindings and generated grammar/reference remain unchanged and drift-checked. An initial full UI rerun also timed out in the pre-existing rename cancellation check; the isolated rerun passed, and that check now waits for the rename input to receive focus before sending Escape. Native compositor behaviour on Wayland and other operating systems is not verified by this pass.
 
 Final validation: `npm test`, the complete live Electron UI suite, documentation build and whitespace checks passed. Screenshot inspection confirms the full sidebar paints above the empty-workspace content.
+
+## Sidebar retention at window edges · 13 October 2026
+
+| ID | Original behaviour | Fix | Validation |
+| :--- | :--- | :--- | :--- |
+| UX-08 | The inherited sidebar used CSS `:hover` for expansion. Electron losing pointer hover outside the window immediately collapsed it, and alternating between the outer left pixel and the window caused repeated expansion and contraction. | Retain pointer presence until the mouse enters another part of the window. All sidebar layout and control selectors use the same retained class; keyboard expansion, focus and pinning remain independent. Guest preload reports trusted document entry once per entry, so returning directly into an embedded page clears retention too. No timers, polling, movement listeners or dependencies are added. | The live Electron regression fails before the fix at the left-edge exit. It checks repeated crossings between x = -1 and x = 0, top/bottom exits, direct guest re-entry, empty-workspace exit/re-entry, keyboard expansion and pinned layout. |
+
+Validation uses Electron on Linux/X11 with a disposable home/profile. Guest entry is injected through Electron's `sendInputEvent`, since host CDP mouse movement does not route into the separate guest surface; a host-only test initially timed out there. Run `npm test`, the complete `npm run test:keyboard-ui`, `npm run docs:build`, modified JavaScript syntax checks and `git diff --check`. Native compositor edge handling on Wayland and other operating systems remains unverified.
+
+Final validation: all listed checks passed, including the Electron recorder and editable-page checks. No validation failures remain at submission.

@@ -340,7 +340,9 @@ export function createWebView(url, currentWS, idx) {
         const liveIdx = getLiveTabIndex(webview, currentWS, idx);
         if (liveIdx < 0) return;
 
-        if (e.channel === 'guest-input-focus') {
+        if (e.channel === 'guest-pointer-enter') {
+            if (webview.getClientRects().length) document.getElementById('Sidebar').classList.remove('pointer-inside');
+        } else if (e.channel === 'guest-input-focus') {
             handleGuestInputFocus(!!e.args[0], currentWS, liveIdx);
         } else if (e.channel === 'guest-hints-state') {
             handleGuestHintsState(!!e.args[0], currentWS, liveIdx);

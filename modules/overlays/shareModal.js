@@ -64,6 +64,7 @@ export function openTransientShareModal(targetUrl) {
     activeClose = closeModal;
     webview.addEventListener('ipc-message', event => {
         if (event.channel === 'guest-escape') closeModal();
+        if (event.channel === 'guest-pointer-enter') document.getElementById('Sidebar').classList.remove('pointer-inside');
     });
     window.addEventListener('keydown', handleEsc);
 }

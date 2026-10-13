@@ -75,8 +75,8 @@ body.sidebar-auto-collapse #right-content {
     transition: margin-left 0.22s cubic-bezier(0.2, 0, 0, 1), width 0.22s cubic-bezier(0.2, 0, 0, 1);
 }
 
-/* Smooth expansion on hover, focus-within, or when expanded via shortcut */
-body.sidebar-auto-collapse #Sidebar:hover,
+/* Smooth expansion on retained pointer presence, focus, or the shortcut */
+body.sidebar-auto-collapse #Sidebar.pointer-inside,
 body.sidebar-auto-collapse #Sidebar.expanded,
 body.sidebar-auto-collapse #Sidebar:focus-within {
     width: 260px;
@@ -120,7 +120,7 @@ body.sidebar-pinned #right-content {
     transition: opacity 0.22s ease;
 }
 
-body.sidebar-auto-collapse #Sidebar:not(:hover):not(.expanded):not(:focus-within)::before {
+body.sidebar-auto-collapse #Sidebar:not(.pointer-inside):not(.expanded):not(:focus-within)::before {
     opacity: 0;
 }
 
@@ -189,7 +189,7 @@ body.sidebar-auto-collapse #Sidebar:not(:hover):not(.expanded):not(:focus-within
 }
 
 /* Auto-collapse adaptation for 36px strip */
-body.sidebar-auto-collapse #Sidebar:not(:hover):not(.expanded):not(:focus-within) .window-controls {
+body.sidebar-auto-collapse #Sidebar:not(.pointer-inside):not(.expanded):not(:focus-within) .window-controls {
     flex-direction: column;
     padding: 2px 0 6px 0;
     margin-bottom: 6px;
@@ -197,18 +197,18 @@ body.sidebar-auto-collapse #Sidebar:not(:hover):not(.expanded):not(:focus-within
     gap: 4px;
 }
 
-body.sidebar-auto-collapse #Sidebar:not(:hover):not(.expanded):not(:focus-within) .window-controls-brand {
+body.sidebar-auto-collapse #Sidebar:not(.pointer-inside):not(.expanded):not(:focus-within) .window-controls-brand {
     display: none;
 }
 
-body.sidebar-auto-collapse #Sidebar:not(:hover):not(.expanded):not(:focus-within) .window-controls-actions {
+body.sidebar-auto-collapse #Sidebar:not(.pointer-inside):not(.expanded):not(:focus-within) .window-controls-actions {
     flex-direction: column;
     gap: 4px;
     width: 100%;
     align-items: center;
 }
 
-body.sidebar-auto-collapse #Sidebar:not(:hover):not(.expanded):not(:focus-within) .win-btn {
+body.sidebar-auto-collapse #Sidebar:not(.pointer-inside):not(.expanded):not(:focus-within) .win-btn {
     width: 26px;
     height: 22px;
     font-size: 10px;
@@ -264,7 +264,7 @@ body.sidebar-auto-collapse #Sidebar:not(:hover):not(.expanded):not(:focus-within
     transition: opacity 0.18s ease, max-width 0.18s ease;
 }
 
-body.sidebar-auto-collapse #Sidebar:hover #WorkspaceLabel,
+body.sidebar-auto-collapse #Sidebar.pointer-inside #WorkspaceLabel,
 body.sidebar-auto-collapse #Sidebar.expanded #WorkspaceLabel,
 body.sidebar-auto-collapse #Sidebar:focus-within #WorkspaceLabel,
 body.sidebar-pinned #WorkspaceLabel {
@@ -273,7 +273,7 @@ body.sidebar-pinned #WorkspaceLabel {
     display: inline-block;
 }
 
-body.sidebar-auto-collapse #Sidebar:hover #WorkspaceBadge,
+body.sidebar-auto-collapse #Sidebar.pointer-inside #WorkspaceBadge,
 body.sidebar-auto-collapse #Sidebar.expanded #WorkspaceBadge,
 body.sidebar-auto-collapse #Sidebar:focus-within #WorkspaceBadge,
 body.sidebar-pinned #WorkspaceBadge {
@@ -293,7 +293,7 @@ body.sidebar-pinned #WorkspaceBadge {
     margin: 0;
 }
 
-body.sidebar-auto-collapse #Sidebar:hover .nav-action-layout,
+body.sidebar-auto-collapse #Sidebar.pointer-inside .nav-action-layout,
 body.sidebar-auto-collapse #Sidebar.expanded .nav-action-layout,
 body.sidebar-auto-collapse #Sidebar:focus-within .nav-action-layout,
 body.sidebar-pinned .nav-action-layout {
@@ -373,7 +373,7 @@ body.sidebar-pinned .nav-action-layout {
 }
 
 /* Collapsed tab appearance in 36px strip */
-body.sidebar-auto-collapse #Sidebar:not(:hover):not(.expanded):not(:focus-within) #TabList li {
+body.sidebar-auto-collapse #Sidebar:not(.pointer-inside):not(.expanded):not(:focus-within) #TabList li {
     width: 28px;
     height: 28px;
     padding: 0;
@@ -382,11 +382,11 @@ body.sidebar-auto-collapse #Sidebar:not(:hover):not(.expanded):not(:focus-within
     border-radius: 6px;
 }
 
-body.sidebar-auto-collapse #Sidebar:not(:hover):not(.expanded):not(:focus-within) #TabList li .tab-title,
-body.sidebar-auto-collapse #Sidebar:not(:hover):not(.expanded):not(:focus-within) #TabList li .tab-sleep-badge,
-body.sidebar-auto-collapse #Sidebar:not(:hover):not(.expanded):not(:focus-within) #TabList li .tab-media-badge,
-body.sidebar-auto-collapse #Sidebar:not(:hover):not(.expanded):not(:focus-within) #TabList li .tab-pin-badge,
-body.sidebar-auto-collapse #Sidebar:not(:hover):not(.expanded):not(:focus-within) #TabList li .tab-shield-btn {
+body.sidebar-auto-collapse #Sidebar:not(.pointer-inside):not(.expanded):not(:focus-within) #TabList li .tab-title,
+body.sidebar-auto-collapse #Sidebar:not(.pointer-inside):not(.expanded):not(:focus-within) #TabList li .tab-sleep-badge,
+body.sidebar-auto-collapse #Sidebar:not(.pointer-inside):not(.expanded):not(:focus-within) #TabList li .tab-media-badge,
+body.sidebar-auto-collapse #Sidebar:not(.pointer-inside):not(.expanded):not(:focus-within) #TabList li .tab-pin-badge,
+body.sidebar-auto-collapse #Sidebar:not(.pointer-inside):not(.expanded):not(:focus-within) #TabList li .tab-shield-btn {
     display: none !important;
 }
 
@@ -453,15 +453,15 @@ body.sidebar-auto-collapse #Sidebar:not(:hover):not(.expanded):not(:focus-within
     padding: 1px;
 }
 
-body.sidebar-auto-collapse #Sidebar:not(:hover):not(.expanded):not(:focus-within) #TabList li.tab-sleeping .tab-sleep-dot {
+body.sidebar-auto-collapse #Sidebar:not(.pointer-inside):not(.expanded):not(:focus-within) #TabList li.tab-sleeping .tab-sleep-dot {
     display: block;
 }
 
-body.sidebar-auto-collapse #Sidebar:not(:hover):not(.expanded):not(:focus-within) #TabList li .tab-audio-dot {
+body.sidebar-auto-collapse #Sidebar:not(.pointer-inside):not(.expanded):not(:focus-within) #TabList li .tab-audio-dot {
     display: block;
 }
 
-body.sidebar-auto-collapse #Sidebar:not(:hover):not(.expanded):not(:focus-within) #TabList li.tab-pinned .tab-pin-dot {
+body.sidebar-auto-collapse #Sidebar:not(.pointer-inside):not(.expanded):not(:focus-within) #TabList li.tab-pinned .tab-pin-dot {
     display: block;
 }
 
@@ -496,7 +496,7 @@ body.sidebar-auto-collapse #Sidebar:not(:hover):not(.expanded):not(:focus-within
     transition: padding 0.18s ease;
 }
 
-body.sidebar-auto-collapse #Sidebar:not(:hover):not(.expanded):not(:focus-within) .bottom-theme-layout {
+body.sidebar-auto-collapse #Sidebar:not(.pointer-inside):not(.expanded):not(:focus-within) .bottom-theme-layout {
     flex-direction: column;
     gap: 6px;
     border-top: none;
@@ -505,7 +505,7 @@ body.sidebar-auto-collapse #Sidebar:not(:hover):not(.expanded):not(:focus-within
     justify-content: center;
 }
 
-body.sidebar-auto-collapse #Sidebar:not(:hover):not(.expanded):not(:focus-within) .bottom-theme-layout button:not(#pin-sidebar-btn) {
+body.sidebar-auto-collapse #Sidebar:not(.pointer-inside):not(.expanded):not(:focus-within) .bottom-theme-layout button:not(#pin-sidebar-btn) {
     display: none;
 }
 
@@ -3076,7 +3076,7 @@ body.light-mode .download-action-btn:hover {
     margin-left: auto;
 }
 
-body.sidebar-auto-collapse #Sidebar:not(:hover):not(.expanded):not(:focus-within) #SidebarClock {
+body.sidebar-auto-collapse #Sidebar:not(.pointer-inside):not(.expanded):not(:focus-within) #SidebarClock {
     display: none !important;
 }
 
