@@ -1,114 +1,155 @@
-# Keyboard Shortcuts Reference
+# Keyboard controls
 
-All keyboard shortcuts in Mise Browser are fully customisable via `~/.config/mise-browser/keybinds.json`.
+Open **Preferences → Keyboard controls**, or press **Ctrl+,** with a new profile. Search by action, category or binding. Choose **Browser shortcuts** or **Page keys (NORMAL mode)**. Each action supports up to eight bindings.
 
----
+Select a binding to change it, **Add binding** to record another, or × to remove it. The recorder reports conflicts and offers an explicit reassignment with the affected action names. Select **Record a two-key sequence** for page sequences. Tab moves around the recorder; Escape cancels it.
 
-## Default Shortcut Bindings
+**Save bindings** validates and applies changes to every open tab immediately. **Discard changes** restores the saved profile. **Reset** restores one action; **Restore this section** restores the selected section. Import stages a profile for review; export includes the current draft. No restart or configuration-file editing is needed.
 
-![Mise Browser Help and Shortcuts Reference](/screenshots/preferences-4.webp)
+## Modes and text input
 
-### Navigation & Workspaces
+Mise has a small custom Vim-style controller, not the Vimium extension. Browser shortcuts work in text fields as well as elsewhere. Page keys only run in NORMAL mode, outside editable fields, explicit INSERT mode and link hints. Open shadow roots and composed input events are checked before consuming page keys. IME composition, dead keys and AltGr are left alone.
 
-| Shortcut | Action | Description |
+- **NORMAL:** page keys are available. Defaults include hjkl scrolling, d/u for half-page scrolling, gg for the top, and Shift+G for the bottom.
+- **INSERT:** focus a text field or use the configured insert action. Escape leaves insert mode.
+- **PASSTHROUGH:** all page keys and browser shortcuts go to the page except the configured passthrough toggle. Keep at least one browser binding for this toggle so you can return. The default is Shift+Escape.
+- **Hints:** the custom hint overlay consumes its label alphabet, Backspace and Escape. Browser shortcuts retain precedence. Disabled and inert controls are excluded. Hint letters are temporary labels, not action bindings.
+
+Escape and Tab are reserved for cancellation and focus navigation. Native control keys such as arrows, Enter, Space and Delete remain contextual UI behaviour. Sidebar letters no longer form a hidden second set of hard-coded browser actions. Tab stays within visible overlays; arrow keys navigate tab lists, dashboard selections and bookmark columns.
+
+Browser chords also work when an iframe has focus. Vim-style page keys and hint discovery are confined to the main document and its open shadow roots; embedded frames retain their native keyboard navigation. Closed shadow roots cannot be inspected. Operating-system shortcuts may be intercepted before Electron receives them.
+
+## Default bindings
+
+Existing legacy profiles retain their explicit assignments, including empty and alternate bindings. Newly introduced defaults never take over a legacy shortcut. The table below describes new-profile defaults and is generated from the action catalogue.
+
+| Action | Browser shortcuts | Page keys |
 | :--- | :--- | :--- |
-| **F1** | `toggle-menu-bar` | Toggles the Mise Settings and Menu Bar |
-| **Ctrl + T** | `spawn-tab` | Opens a new blank tab (defaults to configured search engine) |
-| **Ctrl + L** | `toggle-address` | Opens the floating address bar overlay |
-| **Ctrl + X** | `remove-tab` | Closes the currently active tab or selected dashboard node |
-| **Ctrl + Shift + W** | `toggle-dashboard` | Opens the Workspace Dashboard tree overlay |
-| **Ctrl + Shift + F** / **F3** | `toggle-find` | In-page text search overlay across active webview content |
-| **Ctrl + R** / **F5** | `reload-active-tab` | Reloads the active tab |
-| **Ctrl + S** | `focus-sidebar` | Moves focus to the vertical tab sidebar (cycles between tabs and navigation buttons) |
-| **Ctrl + Shift + N** | `focus-nav-buttons` | Moves focus directly to navigation action buttons |
-| **Ctrl + Tab** | `focus-nav-buttons` | Secondary shortcut to focus navigation action buttons |
-| **Ctrl + W** | `focus-webview` | Moves focus directly into the active web page |
-| **Ctrl + Shift + Z** | `toggle-zen-mode` | Toggles sidebar expansion or pin mode |
-| **Ctrl + P** | `toggle-palette` | Opens the Command Palette |
-| **Ctrl + Shift + P** | `toggle-private-mode`| Toggles volatile in-memory private browsing mode |
-| **Ctrl + H** | `toggle-help` | Opens the Preferences and settings overlay |
-| **Ctrl + N** | `toggle-notes` | Opens the Markdown quick-notes overlay |
-| **Ctrl + Shift + B** | `toggle-bookmarks` | Opens the Bookmarks and Quickmarks overlay |
-| **Ctrl + Shift + H** | `toggle-history` | Opens the Actionable History overlay |
-| **Ctrl + Shift + D** | `toggle-downloads` | Toggles the native download shelf |
-| **Ctrl + /** | `toggle-status-bar` | Toggles the bottom status and mode footer bar |
-| **Ctrl + Shift + S** | `toggle-split` | Toggles dual split view (1x2 side by side comparison) |
-| **Ctrl + O** | `switch-split-focus` | Cycles keyboard focus between split pane 1 and pane 2 |
-| **Ctrl + \\** | `swap-split-panes` | Swaps the positions of pane 1 and pane 2 |
-| **Ctrl + Shift + X** / **F4** | `toggle-pin-tab` | Pins or unpins the active tab (anchored at top, closure-protected) |
+| Enter insert mode | Unassigned | `i` |
+| Toggle passthrough mode | `Shift+Escape` | Unassigned |
+| Close Current Tab | `Ctrl+W` | `x` |
+| Create workspace | Unassigned | Unassigned |
+| Cycle Clock Format (Date & Time / Time / Seconds) | Unassigned | Unassigned |
+| Focus Active Webview | `Alt+W` | Unassigned |
+| Focus Navigation Buttons | `Alt+N` | Unassigned |
+| Focus Sidebar Tab List | `Alt+S` | `s` |
+| Go back | `Alt+ArrowLeft` | `Shift+H` |
+| Go forward | `Alt+ArrowRight` | `Shift+L` |
+| New Blank Tab | `Ctrl+T` | `t` |
+| Next workspace | `Alt+PageDown` | Unassigned |
+| Open Bookmarks and Quickmarks | `Ctrl+Shift+B` | Unassigned |
+| Open Quick Notes Overlay | `Ctrl+N` | Unassigned |
+| Pin / Unpin Active Tab | `Ctrl+Shift+X` / `F4` | `p` |
+| Previous workspace | `Alt+PageUp` | Unassigned |
+| Reload Active Tab | `Ctrl+R` / `F5` | `r` |
+| Swap Split Panes (Left / Right) | `Ctrl+\` | Unassigned |
+| Switch Split Pane Focus (Pane 1 / Pane 2) | `Ctrl+O` | Unassigned |
+| Toggle Actionable History | `Ctrl+Shift+H` | Unassigned |
+| Toggle Command Palette | `Ctrl+P` | Unassigned |
+| Toggle Downloads Shelf | `Ctrl+Shift+D` | Unassigned |
+| Toggle Dual-Split View (Side-by-Side) | `Ctrl+Shift+S` | Unassigned |
+| Toggle Floating Address Bar | `Ctrl+L` | `o` |
+| Toggle Live Clock & Date Display | Unassigned | Unassigned |
+| Toggle Sidebar Expansion (Expand/Collapse) | `Ctrl+Shift+Z` | Unassigned |
+| Toggle Status & Mode Bar | `Ctrl+/` | Unassigned |
+| Toggle Workspace Dashboard | `Ctrl+Shift+W` | `w` |
+| Go to page bottom | Unassigned | `Shift+G` |
+| Go to page top | Unassigned | `g g` |
+| Scroll down | Unassigned | `j` |
+| Scroll half a page down | Unassigned | `d` |
+| Scroll half a page up | Unassigned | `u` |
+| Scroll left | Unassigned | `h` |
+| Scroll right | Unassigned | `l` |
+| Scroll up | Unassigned | `k` |
+| Hibernate Inactive Tabs | Unassigned | Unassigned |
+| Wake All Tabs in Workspace | Unassigned | Unassigned |
+| Check for Updates | Unassigned | Unassigned |
+| Open Diagnostics & Health Hub | Unassigned | Unassigned |
+| Test Clean Google Sign-In Flow | Unassigned | Unassigned |
+| Toggle Colour Theme (Dark / Light) | Unassigned | Unassigned |
+| Toggle Diagnostics Recording (In-Memory) | Unassigned | Unassigned |
+| Toggle Window Controls (Minimise, Maximise, Close) | Unassigned | Unassigned |
+| Close Split View | Unassigned | Unassigned |
+| Cycle Split View Orientation | Unassigned | Unassigned |
+| Toggle Dual-Split View (Stacked) | Unassigned | Unassigned |
+| Customise keyboard controls | `Ctrl+,` | Unassigned |
+| Open native settings menu | `F1` | Unassigned |
+| Show What's New | Unassigned | Unassigned |
+| Toggle full screen | `F11` | Unassigned |
+| Toggle native menu bar visibility | Unassigned | Unassigned |
+| Toggle Preferences / Help | `Ctrl+H` | Unassigned |
+| Toggle Private Browsing Mode | `Ctrl+Shift+P` | Unassigned |
+| Toggle web notifications | Unassigned | Unassigned |
+| Duplicate active tab | `Ctrl+Shift+K` | Unassigned |
+| Move active tab to another workspace | Unassigned | Unassigned |
+| Move tab left | `Ctrl+Shift+PageUp` | Unassigned |
+| Move tab right | `Ctrl+Shift+PageDown` | Unassigned |
+| Next tab | `Ctrl+Tab` / `Ctrl+PageDown` | Unassigned |
+| Previous tab | `Ctrl+Shift+Tab` / `Ctrl+PageUp` | Unassigned |
+| Reopen last closed tab | `Ctrl+Shift+T` | Unassigned |
+| Select last tab | `Alt+9` | Unassigned |
+| Select tab 1 | `Alt+1` | Unassigned |
+| Select tab 2 | `Alt+2` | Unassigned |
+| Select tab 3 | `Alt+3` | Unassigned |
+| Select tab 4 | `Alt+4` | Unassigned |
+| Select tab 5 | `Alt+5` | Unassigned |
+| Select tab 6 | `Alt+6` | Unassigned |
+| Select tab 7 | `Alt+7` | Unassigned |
+| Select tab 8 | `Alt+8` | Unassigned |
+| Reset Tab Zoom Level | `Ctrl+0` | Unassigned |
+| Toggle Auto-Collapse Sidebar (Pin / Unpin) | Unassigned | Unassigned |
+| Open User Script Storage Directory | Unassigned | Unassigned |
+| Open User Scripts Directory | Unassigned | Unassigned |
+| Open User Styles Directory | Unassigned | Unassigned |
+| Reload User Scripts and Styles | Unassigned | Unassigned |
+| Add Current Page to Bookmarks | `Ctrl+D` | Unassigned |
+| Copy page URL | Unassigned | `y` |
+| Find In Page | `Ctrl+F` / `F3` | `/` |
+| Jump to Quickmark | `Ctrl+J` | Unassigned |
+| Play/Pause Media Playback Globally | `Ctrl+Shift+0` / `F10` | Unassigned |
+| Print active page | Unassigned | Unassigned |
+| Reload without cache | `Ctrl+Shift+R` | `Shift+R` |
+| Set Quickmark | `Ctrl+Shift+Q` | Unassigned |
+| Stop loading | Unassigned | Unassigned |
+| Toggle Active Webview DevTools | `Ctrl+Shift+I` / `F12` | Unassigned |
+| Toggle Audio Mute Globally (All Tabs) | Unassigned | `Shift+M` |
+| Toggle Audio Mute on Active Tab | `Ctrl+Shift+M` / `F8` | `m` |
+| Toggle Dark Reader on Active Tab | `Alt+D` | Unassigned |
+| Toggle Link Hints Overlay | `Alt+F` | `f` |
+| Toggle Reader View on Active Tab | `F9` | `e` |
+| Toggle shields for the active site | Unassigned | Unassigned |
+| Toggle website light or dark theme | Unassigned | Unassigned |
+| Zoom in | `Ctrl+Plus` / `Ctrl+=` | Unassigned |
+| Zoom out | `Ctrl+-` | Unassigned |
 
-### Web Interaction & Power Tools
+## Profile format
 
-| Shortcut | Action | Description |
-| :--- | :--- | :--- |
-| **Ctrl + F** | `trigger-hints` | Toggles Link Hints overlay for mouse-free clicking |
-| **Ctrl + D** | `toggle-dark-reader` | Toggles Dark Reader high-contrast dark theme on active tab |
-| **F9** | `toggle-reader-view` | Toggles Native Reader View (distilled readable article format) |
-| **Ctrl + Shift + Q [key]** | `set-quickmark` | Binds current page URL to any single key |
-| **Ctrl + J [key]** | `jump-quickmark` | Jumps instantly to the URL bound to that key |
-| **Ctrl + Shift + A** | `add-bookmark` | Saves the current tab into `bookmarks.json` |
-| **Ctrl + Shift + 0** | `toggle-global-media` | Plays or pauses media playback globally |
-| **F10** | `toggle-global-media` | Secondary global media play/pause binding |
-| **Ctrl + Shift + M** | `toggle-tab-audio-mute` | Mutes or unmutes audio on active tab |
-| **F8** | `toggle-tab-audio-mute` | Secondary active tab audio mute toggle |
-| **Ctrl + Shift + I** | `toggle-devtools` | Opens Chromium DevTools in a dedicated window |
-| **F12** | `toggle-devtools` | Secondary shortcut for DevTools |
-
----
-
-## Modal Navigation (NORMAL Mode)
-
-When viewing web content without an active text field or prompt, Mise operates in **NORMAL Mode**, allowing Vim-style single-key navigation without modifier chords:
-
-| Key | Description |
-| :--- | :--- |
-| `j` / `k` | Smooth scroll down / up (80px) |
-| `d` / `u` | Half-page smooth scroll down / up |
-| `h` / `l` | Smooth scroll left / right (80px) |
-| `gg` | Jump to top of page |
-| `G` | Jump to bottom of page |
-| `t` | Open new tab |
-| `x` | Close current tab |
-| `o` | Open floating address bar |
-| `r` / `R` | Reload / Force reload current tab |
-| `H` / `L` | History back / History forward |
-| `/` | In-page text search |
-| `f` | Trigger Link Hints overlay |
-| `e` | Toggle Native Reader View |
-| `m` | Toggle audio mute on active tab |
-| `M` | Toggle audio mute globally across all tabs |
-| `p` | Toggle pinned status on active tab |
-| `w` | Open Workspace Dashboard |
-| `s` | Focus sidebar tab list |
-| `y` | Copy current page URL to clipboard |
-| `i` | Enter INSERT mode |
-| `Escape` | Blur active input field and return to NORMAL mode |
-| `Shift + Escape` | Toggle PASSTHROUGH mode (sends raw keys to web applications) |
-
----
-
-## Customising Shortcuts (`keybinds.json`)
-
-Keybindings are decoupled from source code and managed by `keybinds.js`. You can customise any shortcut by editing:
-
-```text
-~/.config/mise-browser/keybinds.json
-```
-
-### Example Custom Configuration
+Bindings remain local in `~/.config/mise-browser/keybinds.json`. Version 2 separates browser and page bindings:
 
 ```json
 {
-  "spawn-tab": "Ctrl+T",
-  "toggle-address": "Ctrl+O",
-  "remove-tab": ["Ctrl+W", "Ctrl+D", "Ctrl+Q"],
-  "focus-sidebar": "Alt+M",
-  "focus-webview": "Alt+B",
-  "trigger-hints": "Ctrl+F",
-  "toggle-zen-mode": "F11"
+  "version": 2,
+  "shortcuts": {"spawn-tab": ["Ctrl+T"], "reload-active-tab": []},
+  "normal": {"page-top": ["G G"], "scroll-down": ["J"]}
 }
 ```
 
-- **Modifiers**: Use `Ctrl`, `Alt`, `Shift`, or `Meta` combined with `+`.
-- **Multiple Bindings**: Assign an array of strings to bind multiple shortcuts to the same action (e.g. `["Ctrl+W", "Ctrl+D"]`).
-- **Reloading**: Customisations apply immediately upon restarting Mise, or automatically when modifying bindings via the internal configuration bridge.
+Omitted actions inherit defaults. An empty array explicitly disables an action in that section. Legacy flat action tables are accepted and migrated on the next successful save. Values use Ctrl, Alt, Shift and Meta; modifiers are normalised, while visible punctuation and the user's keyboard layout are preserved. Use Plus for the plus key. Sequences have two strokes, separated by a space, and a 700 ms interval.
+
+Duplicate assignments, ambiguous sequence prefixes, unknown action IDs and unreachable page bindings are rejected. Saving replaces the file atomically before changing the active map; a failed write leaves the previous file and bindings intact. An invalid file at startup is left untouched, logged and reported in settings, with defaults used for that run.
+
+Closed-tab recovery keeps at most twenty URLs in memory, restores the original workspace when it still exists, and clears its buffer when private mode changes. It does not restore a closed tab's navigation history or persist recovery data.
+
+## Development
+
+The action catalogue and defaults live in `keybinds.js`. `keyboard.js` is the dependency-free grammar used by Node and the renderer. Electron's sandbox cannot require local files, so `scripts/sync-keyboard.js` embeds an identical generated copy in the guest preload. Keep the sandbox and isolation settings enabled.
+
+After changing the grammar or defaults:
+
+```sh
+node scripts/sync-keyboard.js
+node scripts/generate-keybind-docs.js
+npm test
+```
+
+The test suite checks that generated code and this reference have not drifted. Browser and guest maps are compiled only when configuration changes. Ordinary key presses do not write files or fetch bindings over IPC. Two-key prefixes use a precompiled set and a timestamp, with no background timer.

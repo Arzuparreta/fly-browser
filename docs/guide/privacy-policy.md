@@ -97,7 +97,7 @@ Should diagnostic or crash-reporting mechanisms be added in future versions of M
 You maintain complete ownership of your data:
 
 * **Purge History:** Press **Ctrl + Shift + H** to open the Actionable History overlay and delete individual entries or clear all history.
-* **Surgical Cookie Clear:** Use Preferences (**F1** or **Ctrl + H**) to purge cookies for the active domain without affecting unrelated workspaces.
+* **Surgical Cookie Clear:** Use Preferences (**Ctrl + H**) to purge cookies for the active domain without affecting unrelated workspaces.
 * **Full Reset:** Deleting `~/.config/mise-browser/` completely resets the browser to factory defaults.
 
 ---

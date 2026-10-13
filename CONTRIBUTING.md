@@ -69,7 +69,7 @@ Contributions must follow these conventions:
   * Webviews must always maintain `contextIsolation: true`, `nodeIntegration: false`, and sandbox protections.
   * IPC messaging must follow existing whitelists in `preload.js` without exposing direct Node.js handles.
   * File and URL inputs must be vetted to prevent scheme traversal or unsanitised execution.
-* **AI Assistance Policy:** Review the [AI Policy](AI_POLICY.md). All code submitted must be thoroughly verified, tested on physical hardware, and reviewed by the contributor to ensure it works reliably without security regressions or unintended side effects.
+* **Verification:** Changes must be reviewed and validated with relevant tests. State any unverified desktop or platform behaviour clearly.
 
 ***
 

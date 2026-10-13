@@ -335,15 +335,6 @@ export function handleBookmarkKeyNavigation(e) {
         return;
     }
 
-    // Tab key toggles between Quickmarks column and Bookmarks column
-    if (e.key === 'Tab') {
-        e.preventDefault();
-        e.stopPropagation();
-        state.bookmarkActiveColumn = (state.bookmarkActiveColumn === 'quickmarks') ? 'bookmarks' : 'quickmarks';
-        updateBookmarkVisualSelection();
-        return;
-    }
-
     // Column switching with ArrowLeft / ArrowRight
     if (e.key === 'ArrowRight') {
         if (!isSearchFocused || (searchInput && searchInput.selectionStart === searchInput.value.length)) {

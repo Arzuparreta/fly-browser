@@ -73,6 +73,7 @@
         const seenRects = [];
 
         candidates.forEach(el => {
+            if (el.disabled || el.getAttribute('aria-disabled') === 'true' || el.closest('[inert]')) return;
             const rect = el.getBoundingClientRect();
             if (rect.width <= 0 || rect.height <= 0) return;
             
@@ -159,6 +160,8 @@
         }
 
         window.hintKeyListener = function(e) {
+            if (!e.isTrusted || e.isComposing || e.key === 'Dead' || e.key === 'Process' || e.repeat) return;
+            if (e.ctrlKey || e.altKey || e.metaKey) return;
             if (e.key === 'Escape') {
                 e.preventDefault();
                 e.stopPropagation();

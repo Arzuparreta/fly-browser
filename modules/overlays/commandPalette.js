@@ -1,3 +1,4 @@
+import { initialiseKeyboardEditor } from '../keyboardSettings.js';
 import { state } from '../state.js';
 import { focusActiveWebview, getActiveWebview, isTargetScript, isDarkMode, escapeHtml } from '../utils.js';
 import { renderWorkspaceUI, switchTabFocus, spawnTabWithUrl, spawnNewBlankTab, handleTabRemoval, hibernateInactiveTabs, wakeAllTabsInWorkspace } from '../webview.js';
@@ -14,13 +15,12 @@ export const COMMAND_DEFINITIONS = [
     {
         id: 'spawn-tab',
         title: 'New Blank Tab',
-        desc: 'Open a fresh DuckDuckGo tab in active workspace',
+        desc: 'Open a fresh tab using the configured search engine',
         details: 'Creates an isolated Electron webview instance inside the current workspace, initialising with the default search engine whilst respecting your memory configuration.',
-        tip: 'Use Ctrl+T to spawn tabs rapidly without touching the mouse.',
+        tip: 'Use the binding shown here, or customise this action in Keyboard controls.',
         category: 'Tabs & Navigation',
         icon: 'fa-solid fa-plus',
         actionId: 'spawn-tab',
-        shortcut: 'Ctrl+T',
         keywords: ['tab', 'open', 'new', 'create', 'blank'],
         action: () => spawnNewBlankTab()
     },
@@ -33,7 +33,6 @@ export const COMMAND_DEFINITIONS = [
         category: 'Tabs & Navigation',
         icon: 'fa-solid fa-compass',
         actionId: 'toggle-address',
-        shortcut: 'Ctrl+L',
         keywords: ['url', 'address', 'search', 'goto', 'navigate', 'location'],
         action: () => window.displayAddressOverlay && window.displayAddressOverlay()
     },
@@ -42,11 +41,10 @@ export const COMMAND_DEFINITIONS = [
         title: 'Toggle Workspace Dashboard',
         desc: 'Full-page tree view of all workspaces, tabs, and windows',
         details: 'Renders an expansive visual hierarchy of every workspace, active tab, and sleeping webview across the session with bulk management controls.',
-        tip: 'Press Ctrl+Shift+W to audit and reorder your tabs across multi-window sessions.',
+        tip: 'Use the binding shown here, or customise this action in Keyboard controls.',
         category: 'Tabs & Navigation',
         icon: 'fa-solid fa-layer-group',
         actionId: 'toggle-dashboard',
-        shortcut: 'Ctrl+Shift+W',
         keywords: ['workspace', 'tree', 'tabs', 'all', 'overview', 'dashboard'],
         action: () => window.toggleDashboardView && window.toggleDashboardView()
     },
@@ -54,12 +52,11 @@ export const COMMAND_DEFINITIONS = [
         id: 'toggle-history',
         title: 'Toggle Actionable History',
         desc: 'Search, filter by domain, or purge browsing history records',
-        details: 'Opens the searchable history ledger stored locally in SQLite, featuring domain-level filtering and surgical record purging.',
+        details: 'Opens the searchable history ledger stored locally, featuring domain-level filtering and surgical record purging.',
         tip: 'Filter by specific domains to audit past navigation or clear privacy-sensitive sessions.',
         category: 'Tabs & Navigation',
         icon: 'fa-solid fa-clock-rotate-left',
         actionId: 'toggle-history',
-        shortcut: 'Ctrl+Shift+H',
         keywords: ['history', 'recent', 'visited', 'log', 'purge'],
         action: () => window.toggleHistoryOverlay && window.toggleHistoryOverlay()
     },
@@ -68,11 +65,10 @@ export const COMMAND_DEFINITIONS = [
         title: 'Toggle Status & Mode Bar',
         desc: 'Show or hide the bottom status bar displaying mode, target URL, and TLS state',
         details: 'Toggles the 22px footer status bar across the bottom of the content area. Displays real-time link hover targets, TLS encryption state, active container partition, and modal state.',
-        tip: 'Press Ctrl+/ to toggle the status bar on or off at any time.',
+        tip: 'Use the binding shown here, or customise this action in Keyboard controls.',
         category: 'Tabs & Navigation',
         icon: 'fa-solid fa-window-minimize',
         actionId: 'toggle-status-bar',
-        shortcut: 'Ctrl+/',
         keywords: ['status', 'mode', 'bar', 'footer', 'url preview', 'toggle', 'bottom'],
         action: () => window.toggleStatusBar && window.toggleStatusBar()
     },
@@ -114,11 +110,10 @@ export const COMMAND_DEFINITIONS = [
         title: 'Toggle Link Hints Overlay',
         desc: 'Display letter tags over clickable links for mouse-free browsing',
         details: 'Injects minimal letter tags over all actionable elements, hyperlinks, and inputs in the viewport to enable rapid keyboard-only navigation.',
-        tip: 'Press Ctrl+F, type the two-letter tag visible over any link, and follow it immediately.',
+        tip: 'Use the binding shown here, or customise this action in Keyboard controls.',
         category: 'Tabs & Navigation',
         icon: 'fa-solid fa-keyboard',
         actionId: 'trigger-hints',
-        shortcut: 'Ctrl+F',
         keywords: ['hints', 'click', 'links', 'letters', 'vim', 'keyboard'],
         action: () => window.triggerLinkHints && window.triggerLinkHints()
     },
@@ -127,11 +122,10 @@ export const COMMAND_DEFINITIONS = [
         title: 'Find In Page',
         desc: 'Search for text matches within the current active webpage',
         details: 'Invokes the in-page search engine across the active webview frame, highlighting all occurrences with instant keyboard cycling.',
-        tip: 'Press Ctrl+Shift+F or F3 to open in-page search.',
+        tip: 'Use the binding shown here, or customise this action in Keyboard controls.',
         category: 'Tabs & Navigation',
         icon: 'fa-solid fa-magnifying-glass',
         actionId: 'toggle-find',
-        shortcut: ['Ctrl+Shift+F', 'F3'],
         keywords: ['find', 'search', 'page', 'text', 'lookup'],
         action: () => window.toggleInPageSearch && window.toggleInPageSearch()
     },
@@ -140,11 +134,10 @@ export const COMMAND_DEFINITIONS = [
         title: 'Reload Active Tab',
         desc: 'Refresh the current webpage document and user assets',
         details: 'Forces the active webview renderer to re-fetch the current URL whilst preserving your workspace tab state and session cache.',
-        tip: 'Press Ctrl+R or F5 to refresh hung web pages or verify live user script modifications.',
+        tip: 'Use the binding shown here, or customise this action in Keyboard controls.',
         category: 'Tabs & Navigation',
         icon: 'fa-solid fa-arrows-rotate',
         actionId: 'reload-active-tab',
-        shortcut: ['Ctrl+R', 'F5'],
         keywords: ['reload', 'refresh', 'page', 'update'],
         action: () => {
             const wv = getActiveWebview();
@@ -156,11 +149,10 @@ export const COMMAND_DEFINITIONS = [
         title: 'Close Current Tab',
         desc: 'Tear down active webview and focus the adjacent tab',
         details: 'Safely disposes of the active webview frame, releasing allocated V8 heap memory and re-focusing the nearest remaining tab.',
-        tip: 'Use Ctrl+X to prune completed tasks from your workspace.',
+        tip: 'Use the binding shown here, or customise this action in Keyboard controls.',
         category: 'Tabs & Navigation',
         icon: 'fa-solid fa-xmark',
         actionId: 'remove-tab',
-        shortcut: 'Ctrl+X',
         keywords: ['close', 'remove', 'delete', 'tab', 'exit'],
         action: () => handleTabRemoval()
     },
@@ -169,31 +161,12 @@ export const COMMAND_DEFINITIONS = [
         title: 'Pin / Unpin Active Tab',
         desc: 'Pin essential tab to the top of workspace or unpin it',
         details: 'Pinned tabs stay anchored at the top of the tab list, are protected from accidental closure, and are exempted from automatic memory hibernation.',
-        tip: 'Use Ctrl+Shift+X or F4 to toggle pin status on the current tab.',
+        tip: 'Use the binding shown here, or customise this action in Keyboard controls.',
         category: 'Tabs & Navigation',
         icon: 'fa-solid fa-thumbtack',
         actionId: 'toggle-pin-tab',
-        shortcut: 'Ctrl+Shift+X / F4',
         keywords: ['pin', 'unpin', 'sticky', 'essential', 'lock', 'tab'],
         action: () => window.togglePinActiveTab && window.togglePinActiveTab()
-    },
-    {
-        id: 'mute-tab',
-        title: 'Mute / Unmute Active Tab',
-        desc: 'Toggle audio output for the active tab without pausing media',
-        details: 'Instructs the underlying Chromium audio mixer to mute all web audio and video playback streams for the current webview instance.',
-        tip: 'Silence noisy background tabs without losing your playback position.',
-        category: 'Tabs & Navigation',
-        icon: 'fa-solid fa-volume-xmark',
-        keywords: ['audio', 'sound', 'mute', 'silence', 'volume'],
-        action: () => {
-            const currentWS = state.sessionState.current_workspace;
-            const activeListItem = document.querySelector('#TabList li.selected');
-            if (!activeListItem) return;
-            const currentIdx = Array.from(document.querySelectorAll('#TabList li')).indexOf(activeListItem);
-            const activeWv = state.activeViewsCache[currentWS]?.[currentIdx];
-            if (activeWv) activeWv.setAudioMuted(!activeWv.isAudioMuted());
-        }
     },
     {
         id: 'reset-zoom',
@@ -218,11 +191,10 @@ export const COMMAND_DEFINITIONS = [
         title: 'Focus Sidebar Tab List',
         desc: 'Move keyboard focus directly into vertical tabs list',
         details: 'Shifts keyboard focus to the vertical tab sidebar, enabling arrow-key navigation, tab selection, and workspace switching.',
-        tip: 'Use Ctrl+S followed by Up and Down arrows to browse tabs hands-free.',
+        tip: 'Use the binding shown here, or customise this action in Keyboard controls.',
         category: 'Tabs & Navigation',
         icon: 'fa-solid fa-bars',
         actionId: 'focus-sidebar',
-        shortcut: 'Ctrl+S',
         keywords: ['sidebar', 'tabs', 'focus', 'list'],
         action: () => {
             const selectedTab = document.querySelector('#TabList li.selected') || document.querySelector('#TabList li');
@@ -234,11 +206,10 @@ export const COMMAND_DEFINITIONS = [
         title: 'Focus Navigation Buttons',
         desc: 'Cycle focus across Back, Forward, Sidebar, Split, and Menu buttons',
         details: 'Places keyboard focus onto the primary toolbar buttons, allowing navigation using left and right arrow keys.',
-        tip: 'Press Ctrl+Shift+N to jump straight to the Back and Forward navigation cluster.',
+        tip: 'Use the binding shown here, or customise this action in Keyboard controls.',
         category: 'Tabs & Navigation',
         icon: 'fa-solid fa-arrow-right-arrow-left',
         actionId: 'focus-nav-buttons',
-        shortcut: ['Ctrl+Shift+N', 'Ctrl+Tab'],
         keywords: ['buttons', 'back', 'forward', 'top', 'controls'],
         action: () => {
             const btn = document.getElementById('back-btn') || document.getElementById('toggle-nav-btn');
@@ -250,26 +221,12 @@ export const COMMAND_DEFINITIONS = [
         title: 'Focus Active Webview',
         desc: 'Return keyboard and input focus to the active webpage',
         details: 'Transfers OS input focus directly back into the guest webpage document, allowing uninterrupted typing and interaction.',
-        tip: 'Press Ctrl+W at any time to return focus from chrome overlays into the page.',
+        tip: 'Use the binding shown here, or customise this action in Keyboard controls.',
         category: 'Tabs & Navigation',
         icon: 'fa-solid fa-window-restore',
         actionId: 'focus-webview',
-        shortcut: 'Ctrl+W',
         keywords: ['focus', 'webview', 'page', 'content'],
         action: () => returnFocusToWebview()
-    },
-    {
-        id: 'toggle-sidebar-expansion',
-        title: 'Toggle Sidebar (Expand / Collapse)',
-        desc: 'Expand sidebar to show titles or collapse to thin icon strip',
-        details: 'Toggles the tab sidebar width between the full 220px expanded layout with titles and the compact 48px icon strip.',
-        tip: 'Collapse the sidebar when working on small displays or reading long articles.',
-        category: 'Tabs & Navigation',
-        icon: 'fa-solid fa-arrows-left-right',
-        actionId: 'toggle-zen-mode',
-        shortcut: 'Ctrl+Shift+Z',
-        keywords: ['sidebar', 'collapse', 'expand', 'width'],
-        action: () => window.toggleSidebarExpansion && window.toggleSidebarExpansion()
     },
     {
         id: 'toggle-sidebar-pin',
@@ -300,11 +257,10 @@ export const COMMAND_DEFINITIONS = [
         title: 'Toggle Dual-Split View (Side-by-Side)',
         desc: 'Tile two webviews side by side in equal columns for multitasking',
         details: 'Splits the active viewport into two concurrent columns, allowing side-by-side comparison, documentation reading, or multitasking.',
-        tip: 'Press Ctrl+Shift+S to toggle dual-pane layout instantly on widescreen displays.',
+        tip: 'Use the binding shown here, or customise this action in Keyboard controls.',
         category: 'Split View',
         icon: 'fa-solid fa-table-columns',
         actionId: 'toggle-split',
-        shortcut: 'Ctrl+Shift+S',
         keywords: ['split', 'dual', 'side', 'vertical', 'columns', 'multitask'],
         action: () => window.toggleSplitView && window.toggleSplitView('vertical')
     },
@@ -335,11 +291,10 @@ export const COMMAND_DEFINITIONS = [
         title: 'Switch Split Pane Focus',
         desc: 'Move active keyboard and scroll focus to the opposite split pane',
         details: 'Switches the active input target between primary and secondary split panes without needing cursor clicks.',
-        tip: 'Use Ctrl+O to cycle focus smoothly while typing or scrolling.',
+        tip: 'Use the binding shown here, or customise this action in Keyboard controls.',
         category: 'Split View',
         icon: 'fa-solid fa-arrows-split-up-and-left',
         actionId: 'switch-split-focus',
-        shortcut: 'Ctrl+O',
         keywords: ['split', 'focus', 'pane', 'switch', 'alternate'],
         action: () => window.switchSplitFocus && window.switchSplitFocus()
     },
@@ -348,11 +303,10 @@ export const COMMAND_DEFINITIONS = [
         title: 'Swap Split Panes',
         desc: 'Exchange positions of the primary and secondary split panes',
         details: 'Reverses the left/right or top/bottom layout ordering of the active dual panes whilst maintaining their states.',
-        tip: 'Press Ctrl+\\ to flip reading materials to your dominant side.',
+        tip: 'Use the binding shown here, or customise this action in Keyboard controls.',
         category: 'Split View',
         icon: 'fa-solid fa-right-left',
         actionId: 'swap-split-panes',
-        shortcut: 'Ctrl+\\',
         keywords: ['split', 'swap', 'flip', 'reverse', 'exchange'],
         action: () => window.swapSplitPanes && window.swapSplitPanes()
     },
@@ -398,11 +352,10 @@ export const COMMAND_DEFINITIONS = [
         title: 'Toggle Quick Notes',
         desc: 'Open Markdown notes scratchpad saved to ~/.config/mise-browser/notes.md',
         details: 'Opens an integrated Markdown scratchpad backed by an auto-saving plain text file in your user configuration directory.',
-        tip: 'Press Ctrl+N to jot thoughts or snippets without opening external text editors.',
+        tip: 'Use the binding shown here, or customise this action in Keyboard controls.',
         category: 'Tools & Notes',
         icon: 'fa-solid fa-note-sticky',
         actionId: 'toggle-notes',
-        shortcut: 'Ctrl+N',
         keywords: ['notes', 'scratchpad', 'markdown', 'memo', 'write'],
         action: () => window.toggleNotesOverlay && window.toggleNotesOverlay()
     },
@@ -411,11 +364,10 @@ export const COMMAND_DEFINITIONS = [
         title: 'Bookmarks & Quickmarks Manager',
         desc: 'Open bookmarks manager and single-key jump quickmarks',
         details: 'Displays your saved bookmarks ledger and configured quickmarks with real-time filtering, editing, and deletion controls.',
-        tip: 'Press Ctrl+Shift+B to open, or use Ctrl+J followed by a single key to jump to marked sites.',
+        tip: 'Use the binding shown here, or customise this action in Keyboard controls.',
         category: 'Tools & Notes',
         icon: 'fa-solid fa-bookmark',
         actionId: 'toggle-bookmarks',
-        shortcut: 'Ctrl+Shift+B',
         keywords: ['bookmarks', 'quickmarks', 'saved', 'favorites'],
         action: () => toggleBookmarksOverlay()
     },
@@ -424,11 +376,10 @@ export const COMMAND_DEFINITIONS = [
         title: 'Bookmark Current Page',
         desc: 'Save active webpage title and URL into bookmarks collection',
         details: 'Captures the active tab title and canonical URL, storing it in ~/.config/mise-browser/bookmarks.json for instant recall.',
-        tip: 'Press Ctrl+Shift+A to bookmark important reference pages with one keypress.',
+        tip: 'Use the binding shown here, or customise this action in Keyboard controls.',
         category: 'Tools & Notes',
         icon: 'fa-solid fa-star',
         actionId: 'add-bookmark',
-        shortcut: 'Ctrl+Shift+A',
         keywords: ['bookmark', 'save', 'favorite', 'page', 'add'],
         action: () => addCurrentPageToBookmarks()
     },
@@ -437,11 +388,10 @@ export const COMMAND_DEFINITIONS = [
         title: 'Set Quickmark',
         desc: 'Assign active webpage to a single alphanumeric shortcut key',
         details: 'Associates the active URL with a single keyboard character (e.g. g for GitHub), enabling instant one-key navigation.',
-        tip: 'Press Ctrl+Shift+Q, then tap any letter or number key to create an instant jump target.',
+        tip: 'Use the binding shown here, or customise this action in Keyboard controls.',
         category: 'Tools & Notes',
         icon: 'fa-solid fa-bolt-lightning',
         actionId: 'set-quickmark',
-        shortcut: 'Ctrl+Shift+Q',
         keywords: ['quickmark', 'shortcut', 'letter', 'mark', 'set'],
         action: () => promptQuickmark('set')
     },
@@ -450,11 +400,10 @@ export const COMMAND_DEFINITIONS = [
         title: 'Jump to Quickmark',
         desc: 'Navigate instantly to a designated quickmark key',
         details: 'Prompts for a quickmark identifier key and immediately routes the active webview to the associated URL.',
-        tip: 'Press Ctrl+J followed by your assigned character to jump without searching.',
+        tip: 'Use the binding shown here, or customise this action in Keyboard controls.',
         category: 'Tools & Notes',
         icon: 'fa-solid fa-location-arrow',
         actionId: 'jump-quickmark',
-        shortcut: 'Ctrl+J',
         keywords: ['quickmark', 'jump', 'go', 'navigate', 'key'],
         action: () => promptQuickmark('jump')
     },
@@ -463,11 +412,10 @@ export const COMMAND_DEFINITIONS = [
         title: 'Toggle Downloads Shelf',
         desc: 'Slide out bottom downloads drawer with speed and file links',
         details: 'Opens the download shelf showing real-time progress bars, transfer rates, destination paths, and file opening actions.',
-        tip: 'Press Ctrl+Shift+D to track active downloads without switching workspaces.',
+        tip: 'Use the binding shown here, or customise this action in Keyboard controls.',
         category: 'Tools & Notes',
         icon: 'fa-solid fa-download',
         actionId: 'toggle-downloads',
-        shortcut: 'Ctrl+Shift+D',
         keywords: ['downloads', 'files', 'shelf', 'drawer'],
         action: () => window.toggleDownloadShelf && window.toggleDownloadShelf()
     },
@@ -476,11 +424,10 @@ export const COMMAND_DEFINITIONS = [
         title: 'Toggle Active Webview DevTools',
         desc: 'Inspect webpage DOM elements, console logs, and network traffic',
         details: 'Opens Chrome Developer Tools docked or detached for the active webview guest frame to inspect elements and debug scripts.',
-        tip: 'Press F12 or Ctrl+Shift+I to audit network payloads and debug user scripts.',
+        tip: 'Use the binding shown here, or customise this action in Keyboard controls.',
         category: 'Tools & Notes',
         icon: 'fa-solid fa-bug',
         actionId: 'toggle-devtools',
-        shortcut: ['Ctrl+Shift+I', 'F12'],
         keywords: ['devtools', 'inspect', 'console', 'debug', 'elements'],
         action: () => window.toggleActiveDevTools && window.toggleActiveDevTools()
     },
@@ -489,11 +436,10 @@ export const COMMAND_DEFINITIONS = [
         title: 'Toggle Global Media Playback',
         desc: 'Play or pause audio and video streams across all workspaces',
         details: 'Broadcasts a play/pause toggle signal to media elements across all active webviews, allowing background audio control.',
-        tip: 'Press Ctrl+Shift+0 or F10 to pause music or podcasts whilst focusing elsewhere.',
+        tip: 'Use the binding shown here, or customise this action in Keyboard controls.',
         category: 'Tools & Notes',
         icon: 'fa-solid fa-play',
         actionId: 'toggle-global-media',
-        shortcut: ['Ctrl+Shift+0', 'F10'],
         keywords: ['media', 'play', 'pause', 'music', 'video', 'stream'],
         action: () => window.toggleGlobalMediaPlayback && window.toggleGlobalMediaPlayback()
     },
@@ -502,11 +448,10 @@ export const COMMAND_DEFINITIONS = [
         title: 'Toggle Tab Audio Mute',
         desc: 'Mute or unmute audio output for the active tab',
         details: 'Toggles audio mute state for the active tab without pausing video or audio playback.',
-        tip: 'Press Ctrl+Shift+M, F8, or m in NORMAL mode to toggle tab audio mute instantly.',
+        tip: 'Use the binding shown here, or customise this action in Keyboard controls.',
         category: 'Tools & Notes',
         icon: 'fa-solid fa-volume-xmark',
         actionId: 'toggle-tab-audio-mute',
-        shortcut: ['Ctrl+Shift+M', 'F8'],
         keywords: ['mute', 'audio', 'sound', 'volume', 'silence', 'unmute', 'speaker'],
         action: () => window.toggleActiveTabAudioMute && window.toggleActiveTabAudioMute()
     },
@@ -571,28 +516,14 @@ export const COMMAND_DEFINITIONS = [
 
     // Preferences & System
     {
-        id: 'open-preferences',
-        title: 'Open Preferences',
-        desc: 'Configure GPU switches, themes, spellcheck language, and email handler',
-        details: 'Opens the full-page configuration view controlling hardware acceleration, renderer process caps, background throttling, and appearance.',
-        tip: 'Press Ctrl+H to access deep browser tuning and custom keybinding tables.',
-        category: 'Preferences & System',
-        icon: 'fa-solid fa-sliders',
-        actionId: 'toggle-help',
-        shortcut: 'Ctrl+H',
-        keywords: ['preferences', 'settings', 'config', 'gpu', 'theme', 'options'],
-        action: () => togglePreferencesView()
-    },
-    {
         id: 'toggle-private-mode',
         title: 'Toggle Private Browsing Mode',
         desc: 'Switch session partition to in-memory non-persistent storage',
         details: 'Switches the session state to an isolated in-memory partition where cookies, cache, and history are discarded upon exit.',
-        tip: 'Press Ctrl+Shift+P for ephemeral research sessions that leave no trace on disk.',
+        tip: 'Use the binding shown here, or customise this action in Keyboard controls.',
         category: 'Preferences & System',
         icon: 'fa-solid fa-user-secret',
         actionId: 'toggle-private-mode',
-        shortcut: 'Ctrl+Shift+P',
         keywords: ['private', 'incognito', 'privacy', 'partition'],
         action: () => {
             const next = !state.globalPrivateModeActive;
@@ -621,7 +552,7 @@ export const COMMAND_DEFINITIONS = [
         title: 'Toggle Dark Reader on Active Tab',
         desc: 'Invert web page colours into high-contrast dark theme preserving media',
         details: 'Applies zero-dependency GPU-accelerated dark styling to the active tab and split panes.',
-        tip: 'Press Ctrl+D or d in NORMAL mode to toggle Dark Reader instantly.',
+        tip: 'Use the binding shown here, or customise this action in Keyboard controls.',
         category: 'Web Interaction',
         icon: 'fa-solid fa-circle-half-stroke',
         actionId: 'toggle-dark-reader',
@@ -633,7 +564,7 @@ export const COMMAND_DEFINITIONS = [
         title: 'Toggle Reader View on Active Tab',
         desc: 'Distil web article into clean, distraction-free reading layout',
         details: 'Extracts article text, byline, and media using in-engine Mozilla Readability with custom themes and typography.',
-        tip: 'Press F9 or e in NORMAL mode to toggle Reader View instantly.',
+        tip: 'Use the binding shown here, or customise this action in Keyboard controls.',
         category: 'Web Interaction',
         icon: 'fa-solid fa-book-open',
         actionId: 'toggle-reader-view',
@@ -653,14 +584,13 @@ export const COMMAND_DEFINITIONS = [
     },
     {
         id: 'toggle-menu-bar',
-        title: 'Toggle Application Menu Bar',
-        desc: 'Show or hide the native top application window menu bar',
-        details: 'Toggles visibility of the top native window menu bar containing Electron application controls and default accelerators.',
-        tip: 'Press F1 to reveal native menus when troubleshooting or accessing system shortcuts.',
+        title: 'Open Native Settings Menu',
+        desc: 'Open the native browser settings menu',
+        details: 'Opens the native menu containing browser settings and application controls.',
+        tip: 'Use the binding shown here, or customise this action in Keyboard controls.',
         category: 'Preferences & System',
         icon: 'fa-solid fa-window-maximize',
         actionId: 'toggle-menu-bar',
-        shortcut: 'F1',
         keywords: ['menu', 'bar', 'top', 'native', 'window'],
         action: () => window.miseAPI && typeof window.miseAPI.toggleMenuBar === 'function' && window.miseAPI.toggleMenuBar()
     },
@@ -680,7 +610,7 @@ export const COMMAND_DEFINITIONS = [
         title: "Show What's New",
         desc: 'Open release highlights for this version in a new tab',
         details: 'Opens the offline release highlights page covering recent features, performance improvements, and security updates.',
-        tip: 'Close the tab with Ctrl+X when finished reading.',
+        tip: 'Use the binding shown here, or customise this action in Keyboard controls.',
         category: 'Preferences & System',
         icon: 'fa-solid fa-sparkles',
         keywords: ['whats', 'new', 'update', 'changelog', 'release', 'notes', 'version'],
@@ -720,26 +650,55 @@ export const COMMAND_DEFINITIONS = [
 ];
 
 export const commandRegistry = {};
+export const commandActions = {};
 COMMAND_DEFINITIONS.forEach(cmd => {
+    const id = cmd.actionId || cmd.id;
+    commandActions[id] = cmd.action;
+    cmd.action = () => window.miseAPI.executeKeyboardAction(id);
     commandRegistry[cmd.title] = cmd.action;
     commandRegistry[cmd.id] = cmd.action;
 });
 
+window.miseAPI.getActionMetadata().then(metadata => {
+    for (const command of COMMAND_DEFINITIONS) command.category = metadata[command.actionId || command.id]?.category || command.category;
+    for (const [id, info] of Object.entries(metadata)) {
+        if (COMMAND_DEFINITIONS.some(command => (command.actionId || command.id) === id)) continue;
+        const command = {id, actionId: id, title: info.label, desc: info.category,
+            details: info.label, tip: 'Customise this action in Keyboard controls.', category: info.category,
+            icon: 'fa-solid fa-keyboard', keywords: [id, info.label],
+            action: () => window.miseAPI.executeKeyboardAction(id)};
+        COMMAND_DEFINITIONS.push(command);
+        commandRegistry[id] = command.action;
+    }
+    const container = document.getElementById('PaletteCategoryFilters');
+    if (container) {
+        const categories = ['all', ...new Set(COMMAND_DEFINITIONS.map(command => command.category))];
+        container.replaceChildren(...categories.map(category => {
+            const button = document.createElement('button'); button.type = 'button';
+            button.className = 'palette-filter-chip' + (category === 'all' ? ' active' : '');
+            button.dataset.category = category; button.textContent = category === 'all' ? 'All' : category;
+            return button;
+        }));
+    }
+});
+
 let dynamicKeybinds = {};
+let dynamicNormalKeys = {};
+window.miseAPI.onKeyboardConfigChanged(config => { dynamicKeybinds = config.shortcuts; dynamicNormalKeys = config.normal; });
 
 async function loadDynamicKeybinds() {
     if (window.miseAPI && typeof window.miseAPI.getKeybinds === 'function') {
         try {
-            dynamicKeybinds = (await window.miseAPI.getKeybinds()) || {};
+            const config = await window.miseAPI.getKeyboardConfig();
+            dynamicKeybinds = config.shortcuts; dynamicNormalKeys = config.normal;
         } catch (e) {}
     }
 }
 
 function getCommandShortcut(cmd) {
-    if (cmd.actionId && dynamicKeybinds[cmd.actionId]) {
-        return dynamicKeybinds[cmd.actionId];
-    }
-    return cmd.shortcut || '';
+    if (cmd.id === 'terminal-fallback') return 'Enter';
+    const id = cmd.actionId || cmd.id;
+    return [...(dynamicKeybinds[id] || []), ...(dynamicNormalKeys[id] || []).map(key => window.MiseKeyboard.display(key, 'normal') + ' (NORMAL)')];
 }
 
 function formatShortcutBadges(shortcut) {
@@ -821,34 +780,11 @@ export async function syncPreferencesUI() {
 
     syncVisualSettingsInputs(cfg);
 
-    if (window.miseAPI && typeof window.miseAPI.getKeybinds === 'function') {
-        try {
-            const keybinds = await window.miseAPI.getKeybinds();
-            if (keybinds) {
-                document.querySelectorAll('.shortcut-row[data-action]').forEach(row => {
-                    const action = row.getAttribute('data-action');
-                    const binding = keybinds[action];
-                    if (binding) {
-                        const keySpan = row.querySelector('.shortcut-key');
-                        if (keySpan) {
-                            const list = Array.isArray(binding) ? binding : [binding];
-                            const badges = list.map(b => {
-                                let text = b.replace(/\+/g, ' + ');
-                                if (action === 'set-quickmark' || action === 'jump-quickmark') {
-                                    text += ' [key]';
-                                }
-                                return `<kbd class="shortcut-badge">${text}</kbd>`;
-                            });
-                            keySpan.innerHTML = badges.join('<span class="shortcut-sep">/</span>');
-                        }
-                    }
-                });
-            }
-        } catch (err) {}
-    }
+
 }
 
 export function setupPreferencesListeners() {
+    initialiseKeyboardEditor();
     const closeBtn = document.getElementById('CloseSettingsBtn');
     if (closeBtn) {
         closeBtn.onclick = (e) => {
@@ -1063,6 +999,7 @@ export async function togglePreferencesView() {
     if (!overlay) return;
 
     preferencesActive = !preferencesActive;
+    state.preferencesActive = preferencesActive;
     if (preferencesActive) {
         if (state.paletteActive) toggleCommandPaletteView();
         if (state.dashboardActive) document.getElementById('DashboardOverlay').style.display = 'none';
@@ -1435,7 +1372,7 @@ export function executePaletteSelection(rawInputText) {
         }
         if (typeof targetCommand.action === 'function') {
             targetCommand.action();
-            returnFocusToWebview();
+            if (!state.preferencesActive && !state.dashboardActive && !state.notesActive && !state.bookmarksActive && !state.historyActive && !state.diagnosticsActive) returnFocusToWebview();
             return;
         }
         if (typeof targetCommand === 'string' && commandRegistry[targetCommand]) {

@@ -23,6 +23,7 @@ if (!gotSingleInstanceLock) {
 // Require the security config module to isolate filtering and hardening rules
 const security = require('./security');
 const keybinds = require('./keybinds');
+const keyboard = require('./keyboard');
 const userContent = require('./userContent');
 const diagnostics = require('./diagnostics');
 
@@ -1253,20 +1254,45 @@ ipcMain.handle('window-is-maximized', () => {
     return (mainWindow && !mainWindow.isDestroyed()) ? mainWindow.isMaximized() : false;
 });
 
-ipcMain.handle('get-keybinds', async () => {
+const guestPassthrough = new WeakMap();
+const guestRightAlt = new WeakMap();
+function isKeyboardHost(event) {
+    return mainWindow && !mainWindow.isDestroyed() && event.sender === mainWindow.webContents &&
+        event.senderFrame === mainWindow.webContents.mainFrame;
+}
+function broadcastKeyboardConfig() {
+    const config = keybinds.getKeyboardConfig();
+    if (mainWindow && !mainWindow.isDestroyed()) mainWindow.webContents.send('keyboard-config-changed', config);
+    for (const contents of webContents.getAllWebContents()) {
+        if (contents.getType() === 'webview' && !contents.isDestroyed()) contents.send('keyboard-config-changed', config);
+    }
+}
+ipcMain.handle('get-keybinds', event => isKeyboardHost(event) ? keybinds.getKeybinds() : null);
+ipcMain.handle('get-keyboard-config', event => isKeyboardHost(event) ? keybinds.getKeyboardConfig() : null);
+ipcMain.handle('get-keyboard-defaults', event => isKeyboardHost(event) ? keybinds.getDefaults() : null);
+ipcMain.handle('save-keybinds', (event, binds) => {
+    if (!isKeyboardHost(event)) return {ok: false, error: 'Only browser settings can change bindings.'};
+    const result = keybinds.saveKeybinds(CONFIG_DIR, binds);
+    if (result.ok) broadcastKeyboardConfig();
+    return result;
+});
+ipcMain.handle('get-action-metadata', event => isKeyboardHost(event) ? keybinds.getActionMetadata() : null);
+ipcMain.handle('reload-keybinds', event => {
+    if (!isKeyboardHost(event)) return null;
+    keybinds.initializeKeybinds(CONFIG_DIR);
+    broadcastKeyboardConfig();
     return keybinds.getKeybinds();
 });
-
-ipcMain.handle('save-keybinds', async (event, binds) => {
-    return keybinds.saveKeybinds(CONFIG_DIR, binds);
+// This table contains no page data, file paths or privileged API handles.
+ipcMain.on('guest-keyboard-config', event => {
+    event.returnValue = event.sender.getType() === 'webview' ? keybinds.getKeyboardConfig() : null;
 });
-
-ipcMain.handle('get-action-metadata', async () => {
-    return keybinds.getActionMetadata();
+ipcMain.on('guest-keyboard-mode', (event, enabled) => {
+    if (event.sender.getType() === 'webview' && event.senderFrame === event.sender.mainFrame && typeof enabled === 'boolean') guestPassthrough.set(event.sender, enabled);
 });
-
-ipcMain.handle('reload-keybinds', async () => {
-    return keybinds.initializeKeybinds(CONFIG_DIR);
+ipcMain.on('keyboard-action', (event, action) => {
+    if (!isKeyboardHost(event) || typeof action !== 'string' || !Object.hasOwn(keybinds.ACTION_METADATA, action)) return;
+    handleAppAction(action, event.sender);
 });
 
 ipcMain.handle('read-bookmarks', async () => {
@@ -1539,6 +1565,16 @@ function openSettingsMenu() {
 function handleAppAction(action, sourceWebContents) {
     if (!mainWindow || mainWindow.isDestroyed()) return;
 
+    if (action === 'toggle-fullscreen') {
+        mainWindow.setFullScreen(!mainWindow.isFullScreen());
+        return;
+    }
+
+    if (action === 'toggle-native-menu-visibility') {
+        mainWindow.setMenuBarVisibility(!mainWindow.isMenuBarVisible());
+        return;
+    }
+
     if (action === 'toggle-menu-bar') {
         openSettingsMenu();
         return;
@@ -1674,21 +1710,6 @@ function createWindow() {
         }
     });
 
-    ipcMain.on('bubble-webview-key', (event, action) => {
-        if (mainWindow && mainWindow.webContents) {
-            mainWindow.webContents.send('master-shortcut', action);
-        }
-    });
-
-    mainWindow.webContents.on('before-input-event', (event, input) => {
-        if (input.type !== 'keyDown') return;
-
-        const action = keybinds.getActionForInput(input);
-        if (action) {
-            event.preventDefault();
-            handleAppAction(action, mainWindow.webContents);
-        }
-    });
 }
 
 app.on('web-contents-created', (event, webContents) => {
@@ -1896,15 +1917,23 @@ app.on('web-contents-created', (event, webContents) => {
             return { action: 'deny' };
         });
 
-        webContents.on('before-input-event', (inputEvent, input) => {
-            if (input.type !== 'keyDown') return;
-            if (!mainWindow || !mainWindow.webContents) return;
-
-            const action = keybinds.getActionForInput(input);
-            if (action) {
-                inputEvent.preventDefault();
-                handleAppAction(action, webContents);
-            }
+        // Native interception reaches focused iframes as well as the top document.
+        // Bare page keys stay in the preload where editable and hints state is known.
+        webContents.on('before-input-event', (event, input) => {
+            if (input.code === 'AltRight' || input.key === 'AltGraph') guestRightAlt.set(webContents, input.type === 'keyDown');
+            if (guestRightAlt.get(webContents) && input.control && input.alt) return;
+            const action = keybinds.getActionForInput(input, true);
+            if (!action || guestPassthrough.get(webContents) && action !== 'toggle-passthrough') return;
+            event.preventDefault();
+            if (input.isAutoRepeat && !keyboard.repeatable(action)) return;
+            if (action === 'toggle-passthrough') {
+                const enabled = !guestPassthrough.get(webContents);
+                guestPassthrough.set(webContents, enabled);
+                webContents.send('set-passthrough-mode', enabled);
+            } else handleAppAction(action, webContents);
+        });
+        webContents.on('did-start-navigation', (_event, _url, _inPlace, isMainFrame) => {
+            if (isMainFrame && !_inPlace) guestPassthrough.set(webContents, false);
         });
 
         webContents.on('render-process-gone', (event, details) => {

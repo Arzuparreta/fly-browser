@@ -20,7 +20,7 @@ Named after the Czech word for *"mission"*, Mise leverages the Chromium renderin
 * **True Tab Hibernation**: Detaches idle `<webview>` tags completely from the DOM across all workspaces, terminating idle Chromium renderer processes and reducing RAM usage by 60% or more. Live URLs, page titles, and scroll offsets are restored on demand.
 * **Auto-Collapsing Vertical Strip**: The vertical sidebar collapses into a 36px icon strip displaying workspace badges and tab favicons, expanding smoothly as an overlay on hover or via shortcut without triggering webview layout shifts.
 * **Multi-Account Container Partitions**: Each workspace runs in its own isolated Electron persistent partition (`persist:work`, `persist:personal`), preventing cookie cross-contamination across accounts.
-* **Mouse-Free Navigation**: Complete keyboard control via Link Hints, floating address bar with search aliases, and customisable shortcuts in `keybinds.json`.
+* **Mouse-Free Navigation**: Complete keyboard control via Link Hints, floating address bar with search aliases, and customisable browser shortcuts and Vim-style page keys in **Preferences → Keyboard controls** (new-profile default: **Ctrl+,**).
 * **Clipboard-Mediated Terminal Oversight**: High-risk script execution and raw web commands trigger a clipboard-mediated security handshake, sanitising and staging vetted commands to your clipboard for deliberate user review and execution in an external terminal.
 * **Native Privacy & Trusted Sites**: Built-in request interception blocks trackers, telemetry, and advertisements without heavy third-party extensions, while allowing selective whitelisting for trusted banking and shopping services.
 * **Local User Scripts & Styles**: Direct native injection of `.user.js` and `.user.css` files directly from `~/.config/mise-browser/` with inotify watching and live CSS hot-reloading, avoiding the heavy memory overhead of full WebExtensions.
@@ -138,7 +138,6 @@ Active command and script scanning is handled exclusively by [Oversight](https:/
 
 * [Privacy Policy](PRIVACY.md) (Zero telemetry, container isolation, and local data ownership)
 * [Security Policy](SECURITY.md) (Process sandboxing, threat model, and responsible disclosure)
-* [AI Policy](AI_POLICY.md) (Human architecture governance and zero runtime AI integration)
 
 ***
 
@@ -153,3 +152,10 @@ Active command and script scanning is handled exclusively by [Oversight](https:/
 ## Licence
 
 This project is licensed under the terms of the GNU General Public Licence v3.0 (or any later version). See the [LICENSE](LICENSE) file for details.
+
+## Fork engineering records
+
+- [Keyboard coverage review](docs/keyboard-review.md)
+- [Fork fixes ledger](docs/fork-fixes.md)
+
+Every PR records the problems it solves, including defects inherited from upstream.

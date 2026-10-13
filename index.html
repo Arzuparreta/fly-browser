@@ -19,7 +19,7 @@
                 </div>
             </div>
 
-            <div id="WorkspaceHeader" title="Workspace: Click to open Workspace Dashboard (Ctrl+Shift+W)">
+            <div id="WorkspaceHeader" title="Workspace: Click to open Workspace Dashboard">
                 <div id="WorkspaceBadge" class="workspace-badge">1</div>
                 <span id="WorkspaceLabel" class="workspace-label">Workspace 1</span>
             </div>
@@ -28,7 +28,7 @@
                 <button id="back-btn" class="nav-icon-button" title="Go Back"><i class="fa-solid fa-angle-left"></i></button>
                 <button id="forward-btn" class="nav-icon-button" title="Go Forward"><i class="fa-solid fa-angle-right"></i></button>
                 <button id="toggle-nav-btn" class="nav-icon-button" title="New Tab / Navigation"><i class="fa-solid fa-plus"></i></button>
-                <button id="split-toggle-btn" class="nav-icon-button" title="Toggle Split View (Ctrl+Shift+S)"><i class="fa-solid fa-table-columns"></i></button>
+                <button id="split-toggle-btn" class="nav-icon-button" title="Toggle Split View"><i class="fa-solid fa-table-columns"></i></button>
                 <button id="menu-btn" class="nav-icon-button" title="Workspaces Dashboard"><i class="fa-solid fa-bars"></i></button>
             </div>
 
@@ -43,9 +43,9 @@
             </div>
 
             <div class="bottom-theme-layout">
-                <button id="pin-sidebar-btn" class="nav-icon-button" title="Pin / Auto-Collapse Sidebar (Ctrl+Shift+Z)"><i class="fa-solid fa-thumbtack"></i></button>
-                <button id="reader-view-btn" class="nav-icon-button" title="Toggle Reader View (F9 / e)"><i class="fa-solid fa-book-open"></i></button>
-                <button id="dark-reader-btn" class="nav-icon-button" title="Toggle Dark Reader (Ctrl+D / d)"><i class="fa-solid fa-circle-half-stroke"></i></button>
+                <button id="pin-sidebar-btn" class="nav-icon-button" title="Pin / Auto-Collapse Sidebar"><i class="fa-solid fa-thumbtack"></i></button>
+                <button id="reader-view-btn" class="nav-icon-button" title="Toggle Reader View"><i class="fa-solid fa-book-open"></i></button>
+                <button id="dark-reader-btn" class="nav-icon-button" title="Toggle Dark Reader"><i class="fa-solid fa-circle-half-stroke"></i></button>
                 <button id="theme-toggle-btn" class="nav-icon-button" title="Toggle Website Dark/Light Theme"><i class="fa-solid fa-moon"></i></button>
                 <button id="noti-toggle-btn" class="nav-icon-button" title="Toggle Web Notifications"><i class="fa-regular fa-bell"></i></button>
                 <button id="update-indicator-btn" class="nav-icon-button" title="New update available" style="display: none; color: var(--accent);"><i class="fa-solid fa-arrow-up-from-bracket"></i></button>
@@ -85,7 +85,7 @@
                                 <span class="shortcut-desc">Open Quick Notes</span>
                             </div>
                         </div>
-                        <p style="margin-top: 14px; font-size: 12px; color: var(--accent); opacity: 0.85;">Press <kbd style="background: var(--bg-sidebar); border: 1px solid var(--border); padding: 1px 6px; border-radius: 3px; color: var(--text);">F1</kbd> anytime to view all preferences and keybinds.</p>
+                        <p style="margin-top: 14px; font-size: 12px; color: var(--accent); opacity: 0.85;">Open Preferences from the command palette to customise keyboard controls.</p>
                         <div id="WelcomeRuntimeVersions" class="welcome-versions"></div>
                     </div>
                 </div>
@@ -146,6 +146,7 @@
                     <div class="settings-page">
                         <div class="settings-header">
                             <h1 class="settings-title">Preferences</h1>
+                            <button id="OpenKeyboardSettings" type="button" class="settings-action-btn">Keyboard controls</button>
                             <button id="CloseSettingsBtn" class="nav-icon-button" title="Close Preferences"><i class="fa-solid fa-xmark"></i></button>
                         </div>
                 
@@ -489,65 +490,38 @@
                                     <span id="UpdateNotificationText"></span>
                                     <button id="UpdateActionBtn" class="settings-action-btn" style="padding: 4px 10px; font-size: 11px; white-space: nowrap;">Download Release</button>
                                 </div>
-                                <p style="font-size: 12px; color: var(--accent); margin: 6px 0 14px 0;">All keyboard shortcuts can be customised in <code style="color: var(--accent);">~/.config/mise-browser/keybinds.json</code></p>
-                
-                                <div class="reference-category">
-                                    <h3 class="reference-subheading">Navigation & Workspaces</h3>
-                                    <div class="shortcuts-grid">
-                                        <div class="shortcut-row" data-action="toggle-menu-bar"><span class="shortcut-desc">Toggle Mise Settings (Menu Bar)</span><span class="shortcut-key"><kbd class="shortcut-badge">F1</kbd></span></div>
-                                        <div class="shortcut-row" data-action="spawn-tab"><span class="shortcut-desc">New DuckDuckGo Tab</span><span class="shortcut-key"><kbd class="shortcut-badge">Ctrl + T</kbd></span></div>
-                                        <div class="shortcut-row" data-action="toggle-address"><span class="shortcut-desc">Toggle Floating Address Bar</span><span class="shortcut-key"><kbd class="shortcut-badge">Ctrl + L</kbd></span></div>
-                                        <div class="shortcut-row" data-action="remove-tab"><span class="shortcut-desc">Close Current Tab (or Node)</span><span class="shortcut-key"><kbd class="shortcut-badge">Ctrl + X</kbd></span></div>
-                                        <div class="shortcut-row" data-action="toggle-dashboard"><span class="shortcut-desc">Toggle Workspace Dashboard</span><span class="shortcut-key"><kbd class="shortcut-badge">Ctrl + Shift + W</kbd></span></div>
-                                        <div class="shortcut-row" data-action="toggle-find"><span class="shortcut-desc">Find In Page</span><span class="shortcut-key"><kbd class="shortcut-badge">Ctrl + Shift + F</kbd><span class="shortcut-sep">/</span><kbd class="shortcut-badge">F3</kbd></span></div>
-                                        <div class="shortcut-row" data-action="reload-active-tab"><span class="shortcut-desc">Reload Active Tab</span><span class="shortcut-key"><kbd class="shortcut-badge">Ctrl + R</kbd><span class="shortcut-sep">/</span><kbd class="shortcut-badge">F5</kbd></span></div>
-                                        <div class="shortcut-row" data-action="focus-sidebar"><span class="shortcut-desc">Focus Sidebar Tab List</span><span class="shortcut-key"><kbd class="shortcut-badge">Ctrl + S</kbd></span></div>
-                                        <div class="shortcut-row" data-action="focus-webview"><span class="shortcut-desc">Focus Active Webview</span><span class="shortcut-key"><kbd class="shortcut-badge">Ctrl + W</kbd></span></div>
-                                        <div class="shortcut-row"><span class="shortcut-desc">Switch to Selected Sidebar Tab</span><span class="shortcut-key"><kbd class="shortcut-badge">Enter</kbd></span></div>
-                                        <div class="shortcut-row" data-action="toggle-palette"><span class="shortcut-desc">Toggle Command Palette</span><span class="shortcut-key"><kbd class="shortcut-badge">Ctrl + P</kbd></span></div>
-                                        <div class="shortcut-row" data-action="toggle-private-mode"><span class="shortcut-desc">Toggle Private Browsing Mode On/Off</span><span class="shortcut-key"><kbd class="shortcut-badge">Ctrl + Shift + P</kbd></span></div>
-                                        <div class="shortcut-row" data-action="toggle-notes"><span class="shortcut-desc">Open Notes Taking Overlay</span><span class="shortcut-key"><kbd class="shortcut-badge">Ctrl + N</kbd></span></div>
-                                        <div class="shortcut-row" data-action="focus-nav-buttons"><span class="shortcut-desc">Focus Navigation Buttons</span><span class="shortcut-key"><kbd class="shortcut-badge">Ctrl + Shift + N</kbd><span class="shortcut-sep">/</span><kbd class="shortcut-badge">Ctrl + Tab</kbd></span></div>
-                                        <div class="shortcut-row" data-action="toggle-zen-mode"><span class="shortcut-desc">Hide/Unhide Sidebar (Zen Mode)</span><span class="shortcut-key"><kbd class="shortcut-badge">Ctrl + Shift + Z</kbd></span></div>
-                                        <div class="shortcut-row" data-action="toggle-bookmarks"><span class="shortcut-desc">Open Bookmarks and Quickmarks</span><span class="shortcut-key"><kbd class="shortcut-badge">Ctrl + Shift + B</kbd></span></div>
-                                        <div class="shortcut-row" data-action="toggle-history"><span class="shortcut-desc">Toggle Actionable History</span><span class="shortcut-key"><kbd class="shortcut-badge">Ctrl + Shift + H</kbd></span></div>
-                                        <div class="shortcut-row" data-action="toggle-status-bar"><span class="shortcut-desc">Toggle Status & Mode Bar</span><span class="shortcut-key"><kbd class="shortcut-badge">Ctrl + /</kbd></span></div>
-                                        <div class="shortcut-row" data-action="toggle-dark-reader"><span class="shortcut-desc">Toggle Dark Reader on Active Tab</span><span class="shortcut-key"><kbd class="shortcut-badge">Ctrl + D</kbd><span class="shortcut-sep">/</span><kbd class="shortcut-badge">d</kbd></span></div>
-                                        <div class="shortcut-row"><span class="shortcut-desc">Deletes/Removes Bookmarks/Quickmarks When Selected</span><span class="shortcut-key"><kbd class="shortcut-badge">Delete</kbd></span></div>
-                                        <div class="shortcut-row"><span class="shortcut-desc">Select All (text)</span><span class="shortcut-key"><kbd class="shortcut-badge">Ctrl + A</kbd></span></div>
+                                <div id="KeyboardEditor" class="keyboard-editor">
+                                    <h3>Keyboard controls</h3>
+                                    <p>Customise browser shortcuts and Vim-style page keys. Changes apply to every open tab when saved. Page keys work only outside text fields and insert mode. Passthrough sends keys directly to the page.</p>
+                                    <div class="keyboard-toolbar">
+                                        <label>Search actions<input id="KeyboardSearch" type="search" placeholder="Action, category or binding" autocomplete="off"></label>
+                                        <label>Bindings<select id="KeyboardScope"><option value="shortcuts">Browser shortcuts</option><option value="normal">Page keys (NORMAL mode)</option></select></label>
+                                        <label class="keyboard-filter"><input id="KeyboardModified" type="checkbox"> Customised only</label>
                                     </div>
-                                </div>
-
-                                <div class="reference-category">
-                                    <h3 class="reference-subheading">Dual-Split View</h3>
-                                    <div class="shortcuts-grid">
-                                        <div class="shortcut-row" data-action="toggle-split"><span class="shortcut-desc">Toggle Dual-Split View (Side-by-Side)</span><span class="shortcut-key"><kbd class="shortcut-badge">Ctrl + Shift + S</kbd></span></div>
-                                        <div class="shortcut-row" data-action="switch-split-focus"><span class="shortcut-desc">Switch Split Pane Focus (Pane 1 / Pane 2)</span><span class="shortcut-key"><kbd class="shortcut-badge">Ctrl + O</kbd></span></div>
-                                        <div class="shortcut-row" data-action="swap-split-panes"><span class="shortcut-desc">Swap Split Panes (Left / Right)</span><span class="shortcut-key"><kbd class="shortcut-badge">Ctrl + \</kbd></span></div>
+                                    <p id="KeyboardCount"></p>
+                                    <div id="KeyboardRows"></div>
+                                    <div class="keyboard-save-bar">
+                                        <button id="KeyboardSave" type="button" class="settings-action-btn">Save bindings</button>
+                                        <button id="KeyboardDiscard" type="button" class="settings-action-btn">Discard changes</button>
+                                        <button id="KeyboardReset" type="button" class="settings-action-btn">Restore this section</button>
+                                        <button id="KeyboardExport" type="button" class="settings-action-btn">Export bindings</button>
+                                        <label class="settings-action-btn keyboard-import">Import bindings<input id="KeyboardImport" aria-label="Import bindings" type="file" accept=".json,application/json"></label>
+                                        <span id="KeyboardStatus" role="status" aria-live="polite"></span>
                                     </div>
+                                    <p class="keyboard-help">Tab moves between controls; Enter or Space activates them. Escape cancels a recording or closes settings. Escape and Tab remain available for cancelling and moving focus. Browser shortcuts use Ctrl, Alt, Meta or function keys. Page sequences use two keys within 700 ms. System shortcuts may be intercepted by your desktop.</p>
                                 </div>
-                
-                                <div class="reference-category">
-                                    <h3 class="reference-subheading">Web Interaction</h3>
-                                    <div class="shortcuts-grid">
-                                        <div class="shortcut-row" data-action="trigger-hints"><span class="shortcut-desc">Toggle Link Hints Overlay</span><span class="shortcut-key"><kbd class="shortcut-badge">Ctrl + F</kbd></span></div>
-                                        <div class="shortcut-row"><span class="shortcut-desc">Contextual Actions</span><span class="shortcut-key"><kbd class="shortcut-badge">Right Click</kbd></span></div>
-                                        <div class="shortcut-row" data-action="toggle-devtools"><span class="shortcut-desc">Toggle Active Webview DevTools</span><span class="shortcut-key"><kbd class="shortcut-badge">Ctrl + Shift + I</kbd><span class="shortcut-sep">/</span><kbd class="shortcut-badge">F12</kbd></span></div>
-                                        <div class="shortcut-row" data-action="set-quickmark"><span class="shortcut-desc">Set quickmark (e.g. Ctrl + Shift + Q then g for GitHub)</span><span class="shortcut-key"><kbd class="shortcut-badge">Ctrl + Shift + Q [key]</kbd></span></div>
-                                        <div class="shortcut-row" data-action="jump-quickmark"><span class="shortcut-desc">Jump to quickmark</span><span class="shortcut-key"><kbd class="shortcut-badge">Ctrl + J [key]</kbd></span></div>
-                                        <div class="shortcut-row" data-action="add-bookmark"><span class="shortcut-desc">Add bookmark into bookmarks.json</span><span class="shortcut-key"><kbd class="shortcut-badge">Ctrl + Shift + A</kbd></span></div>
-                                        <div class="shortcut-row" data-action="toggle-global-media"><span class="shortcut-desc">Play/Pause video playback globally</span><span class="shortcut-key"><kbd class="shortcut-badge">Ctrl + Shift + 0</kbd><span class="shortcut-sep">/</span><kbd class="shortcut-badge">F10</kbd></span></div>
+                                <dialog id="KeyboardRecorder" class="keyboard-recorder" aria-labelledby="KeyboardRecorderTitle" aria-describedby="KeyboardRecorderHelp">
+                                    <h3 id="KeyboardRecorderTitle">Record binding</h3>
+                                    <p id="KeyboardRecorderHelp">Press your shortcut. Escape cancels.</p>
+                                    <label id="KeyboardSequenceLabel"><input id="KeyboardSequence" type="checkbox"> Record a two-key sequence</label>
+                                    <output id="KeyboardRecorded" tabindex="0" aria-live="polite">Waiting for a key…</output>
+                                    <p id="KeyboardRecordError" role="alert"></p>
+                                    <div class="keyboard-recorder-actions">
+                                        <button id="KeyboardRecordUse" type="button" class="settings-action-btn">Use binding</button>
+                                        <button id="KeyboardRecordReplace" type="button" class="settings-action-btn" hidden>Reassign conflicting binding</button>
+                                        <button id="KeyboardRecordCancel" type="button" class="settings-action-btn">Cancel</button>
                                     </div>
-                                </div>
-                
-                                <div class="reference-category">
-                                    <h3 class="reference-subheading">Sidebar Controls</h3>
-                                    <div class="shortcuts-grid">
-                                        <div class="shortcut-row"><span class="shortcut-desc">Move around top navigation buttons</span><span class="shortcut-key"><kbd class="shortcut-badge">Arrow Keys L/R</kbd></span></div>
-                                        <div class="shortcut-row"><span class="shortcut-desc">Toggle Light/Dark Layout</span><span class="shortcut-key"><kbd class="shortcut-badge">Sun/Moon Icon</kbd></span></div>
-                                        <div class="shortcut-row"><span class="shortcut-desc">Toggle Web Notifications</span><span class="shortcut-key"><kbd class="shortcut-badge">Bell Icon</kbd></span></div>
-                                    </div>
-                                </div>
+                                </dialog>
                 
                                 <div class="reference-category">
                                     <h3 class="reference-subheading">DuckDuckGo Bangs & Search Aliases</h3>
@@ -696,7 +670,7 @@
                 <div id="DownloadShelfItems" class="download-shelf-items"></div>
                 <div class="download-shelf-actions">
                     <button id="ClearDownloadsBtn" class="download-shelf-icon-btn" title="Clear Completed Downloads"><i class="fa-solid fa-broom"></i></button>
-                    <button id="CloseDownloadsBtn" class="download-shelf-icon-btn" title="Close Downloads Shelf (Ctrl+Shift+D)"><i class="fa-solid fa-xmark"></i></button>
+                    <button id="CloseDownloadsBtn" class="download-shelf-icon-btn" title="Close Downloads Shelf"><i class="fa-solid fa-xmark"></i></button>
                 </div>
             </div>
 
@@ -762,6 +736,18 @@
 	    </div>
 	</div>
 	
+    <dialog id="WorkspaceMoveDialog" class="keyboard-recorder" aria-labelledby="WorkspaceMoveTitle">
+        <form id="WorkspaceMoveForm" method="dialog">
+            <h3 id="WorkspaceMoveTitle">Move tab to another workspace</h3>
+            <p>The page reloads in the destination workspace's container.</p>
+            <label>Destination workspace<select id="WorkspaceMoveTarget" required></select></label>
+            <div class="keyboard-recorder-actions">
+                <button type="submit" value="move" class="settings-action-btn">Move tab</button>
+                <button type="submit" value="cancel" class="settings-action-btn">Cancel</button>
+            </div>
+        </form>
+    </dialog>
+    <script src="keyboard.js"></script>
     <script type="module" src="renderer.js"></script>
 </body>
 </html>

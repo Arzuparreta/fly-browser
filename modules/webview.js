@@ -245,6 +245,7 @@ export function createWebView(url, currentWS, idx) {
     });
 
     webview.addEventListener('dom-ready', async () => {
+        webview.__miseKeyboardMode = {};
         webview.style.opacity = '1';
         const liveIdx = getLiveTabIndex(webview, currentWS, idx);
         if (liveIdx < 0) return;
@@ -351,10 +352,12 @@ export function createWebView(url, currentWS, idx) {
                 setTargetUrl(`Reader View: ${data.error}`, 3000);
             } else if (data.active) {
                 const titleStr = data.title ? `: ${data.title.slice(0, 45)}...` : '';
-                setTargetUrl(`Reader View Active (F9 to exit)${titleStr}`, 3000);
+                setTargetUrl(`Reader view active (Escape to exit)${titleStr}`, 3000);
             } else {
                 setTargetUrl('Reader View Closed', 2000);
             }
+        } else if (e.channel === 'keyboard-action') {
+            window.miseAPI.executeKeyboardAction(e.args[0]);
         } else if (e.channel === 'normal-mode-action') {
             const action = e.args[0];
             const extra = e.args[1];
@@ -475,7 +478,7 @@ export async function toggleReaderViewOnActiveTab() {
                 setTargetUrl(`Reader View: ${res.error}`, 3000);
             } else if (res.active) {
                 const titleStr = res.title ? `: ${res.title.slice(0, 45)}...` : '';
-                setTargetUrl(`Reader View Active (F9 or Esc to exit)${titleStr}`, 3500);
+                setTargetUrl(`Reader view active (Escape to exit)${titleStr}`, 3500);
             } else {
                 setTargetUrl('Reader View Closed', 2000);
             }
@@ -944,15 +947,19 @@ export function switchTabFocus(targetIdx) {
         if (!state.tabActivityTimestamps[currentWS]) state.tabActivityTimestamps[currentWS] = [];
         state.tabActivityTimestamps[currentWS][targetIdx] = Date.now();
 
+        const targetView = currentWSViews[targetIdx];
         setTimeout(() => {
+            if (state.sessionState.current_workspace !== currentWS || state.activeViewsCache[currentWS]?.[targetIdx] !== targetView || !targetView.isConnected) return;
+            const selected = document.querySelector('#TabList li.selected');
+            if ([...document.querySelectorAll('#TabList li')].indexOf(selected) !== targetIdx) return;
             const currentFocused = document.activeElement;
             const sidebarHasFocus = document.getElementById('Sidebar').contains(currentFocused);
             const addressBar = document.getElementById('WideAddressBar');
             const addressBarIsActive = addressBar && (addressBar.style.display === 'block' || currentFocused === addressBar);
 
-            if (!sidebarHasFocus && !state.paletteActive && !state.helpActive && !addressBarIsActive) {
+            if (!sidebarHasFocus && !state.paletteActive && !state.helpActive && !state.preferencesActive && !addressBarIsActive) {
                 window.miseAllowWebviewFocus = true;
-                currentWSViews[targetIdx].focus();
+                targetView.focus();
             }
         }, 50);
     }
@@ -1040,6 +1047,25 @@ export function spawnTabWithUrl(url) {
     renderWorkspaceUI(newTargetIdx);
 }
 
+// Closed tabs are kept only in memory and cleared when private mode changes.
+const closedTabs = [];
+function rememberClosedTab(workspace, index) {
+    const url = state.sessionState.workspaces[workspace]?.[index];
+    if (!url) return;
+    closedTabs.push({url, workspace});
+    if (closedTabs.length > 20) closedTabs.shift();
+}
+export function clearClosedTabs() { closedTabs.length = 0; }
+export function reopenClosedTab() {
+    const tab = closedTabs.pop();
+    if (!tab) { setTargetUrl('No closed tabs to reopen', 2000); return; }
+    if (state.sessionState.workspaces[tab.workspace]) {
+        state.sessionState.current_workspace = tab.workspace;
+        renderWorkspaceUI();
+    }
+    spawnTabWithUrl(tab.url);
+}
+
 export function handleTabRemoval() {
     if (state.dashboardActive) {
         const currentItem = state.dashboardItems[state.dashboardSelectionIdx];
@@ -1054,6 +1080,7 @@ export function handleTabRemoval() {
                 return;
             }
             if (state.sessionState.workspaces[wsName].length > 1) {
+                rememberClosedTab(wsName, idx);
                 state.sessionState.workspaces[wsName].splice(idx, 1);
                 if (state.activeViewsCache[wsName] && state.activeViewsCache[wsName][idx]) {
                     state.activeViewsCache[wsName][idx].remove();
@@ -1138,6 +1165,7 @@ export function handleTabRemoval() {
         return;
     }
 
+    rememberClosedTab(currentWS, currentIdx);
     tabs.splice(currentIdx, 1);
     handleTabRemovalInSplit(currentIdx);
     if (state.activeViewsCache[currentWS] && state.activeViewsCache[currentWS][currentIdx]) {

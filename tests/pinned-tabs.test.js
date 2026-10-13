@@ -21,18 +21,12 @@ console.log('Running Mise pinned tabs regression tests...');
     console.log('✓ Tab pin/unpin default keybinds registered');
 }
 
-// 2. Strict Alt modifier guard: ensure no default keybinds use Alt modifier
+// 2. Shipped defaults must remain conflict-free and valid.
 {
-    const defaults = keybinds.DEFAULT_KEYBINDS;
-    for (const [action, binding] of Object.entries(defaults)) {
-        const list = Array.isArray(binding) ? binding : [binding];
-        for (const item of list) {
-            if (!item) continue;
-            assert(!item.toLowerCase().includes('alt'), `Action "${action}" binding "${item}" must not use Alt modifier`);
-        }
-    }
-
-    console.log('✓ Verified no default keybindings use Alt modifier');
+    const keyboard = require('../keyboard');
+    const result = keyboard.validateConfig(keybinds.getDefaults(), keybinds.ACTION_METADATA);
+    assert(result.ok, result.error);
+    console.log('✓ Default bindings are valid and conflict-free');
 }
 
 // 3. Verify action metadata

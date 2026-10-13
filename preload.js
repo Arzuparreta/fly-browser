@@ -35,6 +35,14 @@ contextBridge.exposeInMainWorld('miseAPI', {
     },
     signalRendererReady: () => ipcRenderer.send('renderer-ready'),
     toggleMenuBar: () => ipcRenderer.send('toggle-menu-bar'),
+    executeKeyboardAction: action => ipcRenderer.send('keyboard-action', action),
+    getKeyboardConfig: () => ipcRenderer.invoke('get-keyboard-config'),
+    getKeyboardDefaults: () => ipcRenderer.invoke('get-keyboard-defaults'),
+    onKeyboardConfigChanged: callback => {
+        const handler = (_event, config) => callback(config);
+        ipcRenderer.on('keyboard-config-changed', handler);
+        return () => ipcRenderer.removeListener('keyboard-config-changed', handler);
+    },
     getKeybinds: () => ipcRenderer.invoke('get-keybinds'),
     saveKeybinds: (binds) => ipcRenderer.invoke('save-keybinds', binds),
     getActionMetadata: () => ipcRenderer.invoke('get-action-metadata'),

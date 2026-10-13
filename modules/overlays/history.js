@@ -44,15 +44,16 @@ export function filterHistoryItems(filterText) {
         }
 
         state.historyResults.forEach((item) => {
-            const itemEl = document.createElement('div');
+            const itemEl = document.createElement('button');
+            itemEl.type = 'button';
             itemEl.className = 'history-item';
             
             const safeTitle = escapeHtml(item.title);
             const safeUrl = escapeHtml(item.url);
 
             itemEl.innerHTML = `
-                <div class="history-item-title">${safeTitle}</div>
-                <div class="history-item-url">${safeUrl}</div>
+                <span class="history-item-title">${safeTitle}</span>
+                <span class="history-item-url">${safeUrl}</span>
             `;
 
             itemEl.addEventListener('click', () => {

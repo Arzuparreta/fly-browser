@@ -29,6 +29,14 @@ export function initStatusBar() {
 
     if (!statusBarEl) return;
 
+    for (const badge of [partitionBadgeEl, modeBadgeEl]) {
+        if (!badge) continue;
+        badge.tabIndex = 0; badge.setAttribute('role', 'button');
+        badge.addEventListener('keydown', event => {
+            if (event.key === 'Enter' || event.key === ' ') { event.preventDefault(); badge.click(); }
+        });
+    }
+
     // Attach click handler on partition badge to open Workspace Dashboard
     if (partitionBadgeEl) {
         partitionBadgeEl.addEventListener('click', () => {
@@ -203,13 +211,15 @@ export function togglePassthroughMode(force) {
     const currentIdx = activeListItem ? Array.from(document.querySelectorAll('#TabList li')).indexOf(activeListItem) : 0;
     const activeWv = state.activeViewsCache[currentWS]?.[currentIdx];
     if (activeWv && typeof activeWv.send === 'function') {
+        activeWv.__miseKeyboardMode ||= {};
+        activeWv.__miseKeyboardMode.passthrough = isPassthroughModeActive;
         try {
             activeWv.send('set-passthrough-mode', isPassthroughModeActive);
         } catch (err) {}
     }
 
     if (isPassthroughModeActive) {
-        setTargetUrl('PASSTHROUGH mode enabled (Shift+Escape to return)', 2500);
+        setTargetUrl(window.describeKeyboardAction?.('toggle-passthrough', 'Passthrough mode enabled; toggle to return') || 'Passthrough mode enabled', 2500);
     } else {
         setTargetUrl('NORMAL mode restored', 1500);
     }
@@ -217,6 +227,8 @@ export function togglePassthroughMode(force) {
 }
 
 export function handleGuestPassthroughState(isActive, wsName, tabIdx) {
+    const view = state.activeViewsCache[wsName]?.[tabIdx];
+    if (view) { view.__miseKeyboardMode ||= {}; view.__miseKeyboardMode.passthrough = !!isActive; }
     const currentWS = state.sessionState.current_workspace;
     const activeListItem = document.querySelector('#TabList li.selected');
     const currentIdx = activeListItem ? Array.from(document.querySelectorAll('#TabList li')).indexOf(activeListItem) : 0;
@@ -225,7 +237,7 @@ export function handleGuestPassthroughState(isActive, wsName, tabIdx) {
         isPassthroughModeActive = !!isActive;
         recalculateMode();
         if (isPassthroughModeActive) {
-            setTargetUrl('PASSTHROUGH mode enabled (Shift+Escape to return)', 2500);
+            setTargetUrl(window.describeKeyboardAction?.('toggle-passthrough', 'Passthrough mode enabled; toggle to return') || 'Passthrough mode enabled', 2500);
         } else {
             setTargetUrl('NORMAL mode restored', 1500);
         }
@@ -237,6 +249,8 @@ export function isPassthroughActive() {
 }
 
 export function handleGuestInputFocus(isFocused, wsName, tabIdx) {
+    const view = state.activeViewsCache[wsName]?.[tabIdx];
+    if (view) { view.__miseKeyboardMode ||= {}; view.__miseKeyboardMode.input = !!isFocused; }
     const currentWS = state.sessionState.current_workspace;
     const activeListItem = document.querySelector('#TabList li.selected');
     const currentIdx = activeListItem ? Array.from(document.querySelectorAll('#TabList li')).indexOf(activeListItem) : 0;
@@ -248,6 +262,8 @@ export function handleGuestInputFocus(isFocused, wsName, tabIdx) {
 }
 
 export function handleGuestHintsState(isActive, wsName, tabIdx) {
+    const view = state.activeViewsCache[wsName]?.[tabIdx];
+    if (view) { view.__miseKeyboardMode ||= {}; view.__miseKeyboardMode.hints = !!isActive; }
     const currentWS = state.sessionState.current_workspace;
     const activeListItem = document.querySelector('#TabList li.selected');
     const currentIdx = activeListItem ? Array.from(document.querySelectorAll('#TabList li')).indexOf(activeListItem) : 0;
@@ -263,12 +279,6 @@ export function updateStatusBarFromActiveView() {
     const isPrivate = !!state.globalPrivateModeActive;
     updatePartitionBadge(currentWS, isPrivate);
 
-    // Reset guest input focus and passthrough state on tab or workspace switch
-    isGuestInputFocused = false;
-    isHintsModeActive = false;
-    isPassthroughModeActive = false;
-    recalculateMode();
-
     const activeListItem = document.querySelector('#TabList li.selected');
     const currentIdx = activeListItem ? Array.from(document.querySelectorAll('#TabList li')).indexOf(activeListItem) : 0;
     const urls = state.sessionState.workspaces[currentWS] || [];
@@ -278,6 +288,11 @@ export function updateStatusBarFromActiveView() {
     setTargetUrl('');
 
     const activeWv = state.activeViewsCache[currentWS]?.[currentIdx];
+    const mode = activeWv?.__miseKeyboardMode || {};
+    isGuestInputFocused = !!mode.input;
+    isHintsModeActive = !!mode.hints;
+    isPassthroughModeActive = !!mode.passthrough;
+    recalculateMode();
     updateDarkReaderButtonUI(isWebviewDarkReaderActive(activeWv));
     updateReaderViewButtonUI(!!(activeWv && activeWv.__miseReaderActive));
 }
@@ -287,10 +302,10 @@ export function updateReaderViewButtonUI(enabled) {
     if (!btn) return;
     if (enabled) {
         btn.classList.add('active');
-        btn.title = 'Toggle Reader View (Active - F9 / e)';
+        btn.title = window.describeKeyboardAction?.('toggle-reader-view', 'Reader view active') || 'Reader view active';
     } else {
         btn.classList.remove('active');
-        btn.title = 'Toggle Reader View (F9 / e)';
+        btn.title = window.describeKeyboardAction?.('toggle-reader-view', 'Toggle reader view') || 'Toggle reader view';
     }
 }
 

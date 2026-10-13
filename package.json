@@ -6,14 +6,15 @@
   "license": "GPL-3.0-or-later",
   "scripts": {
     "start": "electron . --log-level=3",
-    "test": "node tests/auth-security.test.js && node tests/audio-controls.test.js && node tests/pinned-tabs.test.js && node tests/config-writes.test.js",
+    "test": "node tests/auth-security.test.js && node tests/audio-controls.test.js && node tests/pinned-tabs.test.js && node tests/config-writes.test.js && node tests/keyboard.test.js && node scripts/sync-keyboard.js --check && node scripts/generate-keybind-docs.js --check",
     "docs:dev": "vitepress dev docs",
     "docs:build": "vitepress build docs",
     "docs:preview": "vitepress preview docs",
     "install-desktop": "mkdir -p ~/.local/share/applications ~/.local/share/icons/hicolor/{48x48,128x128,256x256}/apps && cp mise.desktop ~/.local/share/applications/ && cp assets/icons/Mise-logo48.png ~/.local/share/icons/hicolor/48x48/apps/mise.png && cp assets/icons/Mise-logo128.png ~/.local/share/icons/hicolor/128x128/apps/mise.png && cp assets/icons/Mise-logo256.png ~/.local/share/icons/hicolor/256x256/apps/mise.png && update-desktop-database ~/.local/share/applications && gtk-update-icon-cache -f -t ~/.local/share/icons/hicolor",
     "dist": "electron-builder",
     "dist:linux": "electron-builder --linux",
-    "dist:dir": "electron-builder --dir"
+    "dist:dir": "electron-builder --dir",
+    "test:keyboard-ui": "node tests/keyboard-ui.test.js"
   },
   "build": {
     "appId": "io.github.rakosn1cek.mise-browser",
@@ -39,7 +40,8 @@
       "renderer.js",
       "modules/**/*",
       "assets/**/*",
-      "package.json"
+      "package.json",
+      "keyboard.js"
     ],
     "linux": {
       "target": [

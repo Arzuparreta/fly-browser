@@ -114,10 +114,10 @@ export function updateDarkReaderButtonUI(enabled) {
     if (!btn) return;
     if (enabled) {
         btn.classList.add('active');
-        btn.title = 'Toggle Dark Reader (Active - Ctrl+D / d)';
+        btn.title = window.describeKeyboardAction?.('toggle-dark-reader', 'Dark Reader active') || 'Dark Reader active';
     } else {
         btn.classList.remove('active');
-        btn.title = 'Toggle Dark Reader (Ctrl+D / d)';
+        btn.title = window.describeKeyboardAction?.('toggle-dark-reader', 'Toggle Dark Reader') || 'Toggle Dark Reader';
     }
 }
 

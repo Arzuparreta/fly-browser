@@ -84,7 +84,7 @@ Controls hardware switches, process limits, privacy whitelists, and search prefe
 
 ## 2. Keybindings Map (`keybinds.json`)
 
-Maps internal browser actions to custom keystroke combinations. See the [Keyboard Shortcuts Reference](/reference/keybinds) for the complete list of action names.
+Version 2 stores separate `shortcuts` and `normal` tables for browser chords and Vim-style page keys. Use **Preferences → Keyboard controls** to record, validate and save bindings without editing the file. See the [Keyboard Shortcuts Reference](/reference/keybinds) for the complete list of action names.
 
 ---
 

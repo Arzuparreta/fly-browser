@@ -1,0 +1,74 @@
+const fs = require('node:fs');
+const path = require('node:path');
+const keybinds = require('../keybinds');
+const keyboard = require('../keyboard');
+const config = keyboard.validateConfig(keybinds.getDefaults(), keybinds.ACTION_METADATA).config;
+const format = (values, scope) => values.length ? values.map(value => '`' + keyboard.display(value, scope).replace(/\|/g, '&#124;') + '`').join(' / ') : 'Unassigned';
+let document = `# Keyboard controls
+
+Open **Preferences → Keyboard controls**, or press **Ctrl+,** with a new profile. Search by action, category or binding. Choose **Browser shortcuts** or **Page keys (NORMAL mode)**. Each action supports up to eight bindings.
+
+Select a binding to change it, **Add binding** to record another, or × to remove it. The recorder reports conflicts and offers an explicit reassignment with the affected action names. Select **Record a two-key sequence** for page sequences. Tab moves around the recorder; Escape cancels it.
+
+**Save bindings** validates and applies changes to every open tab immediately. **Discard changes** restores the saved profile. **Reset** restores one action; **Restore this section** restores the selected section. Import stages a profile for review; export includes the current draft. No restart or configuration-file editing is needed.
+
+## Modes and text input
+
+Mise has a small custom Vim-style controller, not the Vimium extension. Browser shortcuts work in text fields as well as elsewhere. Page keys only run in NORMAL mode, outside editable fields, explicit INSERT mode and link hints. Open shadow roots and composed input events are checked before consuming page keys. IME composition, dead keys and AltGr are left alone.
+
+- **NORMAL:** page keys are available. Defaults include hjkl scrolling, d/u for half-page scrolling, gg for the top, and Shift+G for the bottom.
+- **INSERT:** focus a text field or use the configured insert action. Escape leaves insert mode.
+- **PASSTHROUGH:** all page keys and browser shortcuts go to the page except the configured passthrough toggle. Keep at least one browser binding for this toggle so you can return. The default is Shift+Escape.
+- **Hints:** the custom hint overlay consumes its label alphabet, Backspace and Escape. Browser shortcuts retain precedence. Disabled and inert controls are excluded. Hint letters are temporary labels, not action bindings.
+
+Escape and Tab are reserved for cancellation and focus navigation. Native control keys such as arrows, Enter, Space and Delete remain contextual UI behaviour. Sidebar letters no longer form a hidden second set of hard-coded browser actions. Tab stays within visible overlays; arrow keys navigate tab lists, dashboard selections and bookmark columns.
+
+Browser chords also work when an iframe has focus. Vim-style page keys and hint discovery are confined to the main document and its open shadow roots; embedded frames retain their native keyboard navigation. Closed shadow roots cannot be inspected. Operating-system shortcuts may be intercepted before Electron receives them.
+
+## Default bindings
+
+Existing legacy profiles retain their explicit assignments, including empty and alternate bindings. Newly introduced defaults never take over a legacy shortcut. The table below describes new-profile defaults and is generated from the action catalogue.
+
+| Action | Browser shortcuts | Page keys |
+| :--- | :--- | :--- |
+`;
+for (const [id, info] of Object.entries(keybinds.ACTION_METADATA).sort((a,b) => a[1].category.localeCompare(b[1].category) || a[1].label.localeCompare(b[1].label))) {
+    document += `| ${info.label} | ${format(config.shortcuts[id])} | ${format(config.normal[id], 'normal')} |\n`;
+}
+document += `
+## Profile format
+
+Bindings remain local in \`~/.config/mise-browser/keybinds.json\`. Version 2 separates browser and page bindings:
+
+\`\`\`json
+{
+  "version": 2,
+  "shortcuts": {"spawn-tab": ["Ctrl+T"], "reload-active-tab": []},
+  "normal": {"page-top": ["G G"], "scroll-down": ["J"]}
+}
+\`\`\`
+
+Omitted actions inherit defaults. An empty array explicitly disables an action in that section. Legacy flat action tables are accepted and migrated on the next successful save. Values use Ctrl, Alt, Shift and Meta; modifiers are normalised, while visible punctuation and the user's keyboard layout are preserved. Use Plus for the plus key. Sequences have two strokes, separated by a space, and a 700 ms interval.
+
+Duplicate assignments, ambiguous sequence prefixes, unknown action IDs and unreachable page bindings are rejected. Saving replaces the file atomically before changing the active map; a failed write leaves the previous file and bindings intact. An invalid file at startup is left untouched, logged and reported in settings, with defaults used for that run.
+
+Closed-tab recovery keeps at most twenty URLs in memory, restores the original workspace when it still exists, and clears its buffer when private mode changes. It does not restore a closed tab's navigation history or persist recovery data.
+
+## Development
+
+The action catalogue and defaults live in \`keybinds.js\`. \`keyboard.js\` is the dependency-free grammar used by Node and the renderer. Electron's sandbox cannot require local files, so \`scripts/sync-keyboard.js\` embeds an identical generated copy in the guest preload. Keep the sandbox and isolation settings enabled.
+
+After changing the grammar or defaults:
+
+\`\`\`sh
+node scripts/sync-keyboard.js
+node scripts/generate-keybind-docs.js
+npm test
+\`\`\`
+
+The test suite checks that generated code and this reference have not drifted. Browser and guest maps are compiled only when configuration changes. Ordinary key presses do not write files or fetch bindings over IPC. Two-key prefixes use a precompiled set and a timestamp, with no background timer.
+`;
+const file = path.join(__dirname, '..', 'docs/reference/keybinds.md');
+if (process.argv.includes('--check')) {
+    if (fs.readFileSync(file, 'utf8') !== document) throw new Error('Run node scripts/generate-keybind-docs.js after changing bindings');
+} else fs.writeFileSync(file, document);

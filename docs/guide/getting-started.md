@@ -38,6 +38,8 @@ Once launched, Mise presents a clean, distraction-free window:
 
 - Press **Ctrl + L** to open the floating address bar and navigate to any site.
 - Press **Ctrl + T** to open a new tab.
-- Press **Ctrl + F** to activate the Link Hints overlay and navigate links using your keyboard.
+- Press **Alt + F** (or **f** in NORMAL mode) to activate the Link Hints overlay and navigate links using your keyboard.
 - Press **Ctrl + P** to bring up the Command Palette for quick access to all browser functions.
-- Press **F1** or **Ctrl + H** to view Preferences and customise settings.
+- Press **Ctrl + H** to view Preferences and customise settings.
+
+These are new-profile defaults. Open **Preferences → Keyboard controls** (default **Ctrl+,**) to choose your browser and page bindings. See the [keyboard reference](/reference/keybinds).

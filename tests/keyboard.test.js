@@ -1,0 +1,251 @@
+const assert = require('node:assert/strict');
+const fs = require('node:fs');
+const os = require('node:os');
+const path = require('node:path');
+const vm = require('node:vm');
+const keyboard = require('../keyboard');
+const keybinds = require('../keybinds');
+const clone = value => JSON.parse(JSON.stringify(value));
+const defaults = keyboard.validateConfig(keybinds.getDefaults(), keybinds.ACTION_METADATA).config;
+assert(defaults, 'Every shipped default must be valid and conflict-free');
+
+assert.equal(keyboard.normalise('control+shift+a'), 'Ctrl+Shift+A');
+assert.equal(keyboard.normalise('Meta+Ctrl+return'), 'Ctrl+Meta+Enter');
+assert.equal(keyboard.normalise('Ctrl++'), 'Ctrl+Plus');
+assert.equal(keyboard.normalise('Ctrl+Shift+Plus'), 'Ctrl+Plus');
+assert.equal(keyboard.normalise('Ctrl+A+B'), '');
+assert.equal(keyboard.normalise('Ctrl+Ctrl+A'), '');
+assert.equal(keyboard.eventCombo({key: '+', ctrlKey: true, shiftKey: true}), 'Ctrl+Plus');
+assert.equal(keyboard.eventCombo({key: ')', code: 'Digit0', ctrlKey: true, shiftKey: true}), 'Ctrl+Shift+0');
+assert.equal(keyboard.eventCombo({key: 'ñ', code: 'Semicolon', ctrlKey: true}), 'Ctrl+Ñ');
+assert.equal(keyboard.eventCombo({key: 'Dead', ctrlKey: true}), '');
+assert.equal(keyboard.eventCombo({key: 'a', isComposing: true}), '');
+assert.equal(keyboard.eventCombo({key: '@', ctrlKey: true, altKey: true, getModifierState: key => key === 'AltGraph'}), '');
+
+for (const mutate of [
+    config => { config.shortcuts['spawn-tab'] = 'Ctrl+W'; },
+    config => { config.normal['scroll-up'] = 'G'; },
+    config => { config.normal['spawn-tab'] = 'Ctrl+T'; },
+    config => { config.shortcuts['spawn-tab'] = 'A'; },
+    config => { config.normal['scroll-down'] = 'Escape'; },
+    config => { config.shortcuts.fake = 'Ctrl+A'; },
+    config => { config.shortcuts['spawn-tab'] = [42]; }
+]) {
+    const config = clone(defaults); mutate(config);
+    assert.equal(keyboard.validateConfig(config, keybinds.ACTION_METADATA).ok, false);
+}
+
+const directory = fs.mkdtempSync(path.join(os.tmpdir(), 'mise-keyboard-test-'));
+try {
+    fs.writeFileSync(path.join(directory, 'keybinds.json'), JSON.stringify({
+        'focus-webview': 'Ctrl+W', 'remove-tab': 'Ctrl+X', 'focus-nav-buttons': ['Ctrl+Tab', 'Ctrl+Shift+N'],
+        'reload-active-tab': '', 'trigger-hints': ['Ctrl+F']
+    }));
+    keybinds.initializeKeybinds(directory);
+    assert.deepEqual(keybinds.getKeybinds()['focus-webview'], ['Ctrl+W']);
+    assert.deepEqual(keybinds.getKeybinds()['reload-active-tab'], []);
+    assert(!keybinds.getKeybinds()['next-tab'].includes('Ctrl+Tab'), 'New defaults cannot steal legacy bindings');
+    assert(!keybinds.getKeybinds()['toggle-find'].includes('Ctrl+F'));
+    assert.equal(keybinds.saveKeybinds(directory, defaults).ok, true);
+    const disabled = clone(defaults); disabled.shortcuts['reload-active-tab'] = [];
+    disabled.normal['scroll-down'] = ['Z', 'ArrowDown'];
+    assert.equal(keybinds.saveKeybinds(directory, disabled).ok, true);
+    keybinds.initializeKeybinds(directory);
+    assert.deepEqual(keybinds.getKeyboardConfig(), disabled);
+    const snapshot = fs.readFileSync(path.join(directory, 'keybinds.json'), 'utf8');
+    const before = keybinds.getKeyboardConfig();
+    const rename = fs.renameSync;
+    try {
+        fs.renameSync = () => { throw new Error('Simulated write failure'); };
+        assert.equal(keybinds.saveKeybinds(directory, defaults).ok, false);
+    } finally { fs.renameSync = rename; }
+    assert.deepEqual(keybinds.getKeyboardConfig(), before);
+    assert.equal(fs.readFileSync(path.join(directory, 'keybinds.json'), 'utf8'), snapshot);
+    assert.equal(fs.existsSync(path.join(directory, 'keybinds.json.tmp')), false);
+    for (const invalid of [null, [], {version: 3}, {version: 2, shortcuts: []}]) assert.equal(keybinds.saveKeybinds(directory, invalid).ok, false);
+    const returned = keybinds.getKeybinds(); returned['spawn-tab'].push('Ctrl+B');
+    assert(!keybinds.getKeybinds()['spawn-tab'].includes('Ctrl+B'), 'Callers cannot mutate active bindings');
+    assert.equal(keybinds.getActionForInput({type: 'keyDown', key: 'w', control: true, isAutoRepeat: true}), null);
+} finally { fs.rmSync(directory, {recursive: true, force: true}); }
+
+// Exercise the actual sandboxed guest handler, including the embedded shared grammar.
+const source = fs.readFileSync(path.join(__dirname, '..', 'webview-preload.js'), 'utf8');
+const handlers = {}, messages = [], scrolls = [];
+let editable = false, hints = false, time = 1000, blurred = 0;
+const context = {
+    module: {exports: {}}, Date: {now: () => time},
+    ipcRenderer: {send: () => {}, sendSync: () => clone(defaults), on: (name, callback) => { handlers[name] = callback; }, sendToHost: (...args) => messages.push(args)},
+    window: {innerHeight: 800, addEventListener: (name, callback) => { handlers[name] = callback; }},
+    document: {getElementById: id => id === 'mise-hint-layer' && hints ? {} : null,
+        documentElement: {scrollHeight: 9000}, activeElement: {blur: () => blurred++}},
+    isEventInEditable: () => editable, getDeepActiveElement: () => ({blur: () => blurred++}),
+    getScrollTarget: () => ({clientHeight: 800, scrollHeight: 9000}),
+    scrollPageBy: (x, y) => scrolls.push([x, y]), scrollPageTo: (x, y) => scrolls.push(['to', x, y])
+};
+vm.createContext(context);
+vm.runInContext(source.slice(0, source.indexOf('// END GENERATED KEYBOARD CORE')), context);
+assert(context.MiseKeyboard, 'The grammar must be global in the sandbox even when module exists');
+vm.runInContext(source.slice(source.indexOf('let isPassthroughMode'), source.indexOf('// Host passthrough mode synchronisation')), context);
+vm.runInContext(source.slice(source.indexOf('const localPageActions')), context);
+function press(key, extra = {}) {
+    const event = {key, isTrusted: true, preventDefault() {this.consumed = true;}, stopPropagation() {}, stopImmediatePropagation() {}, ...extra};
+    handlers.keydown(event); return event;
+}
+assert(press('d').consumed); assert.deepEqual(scrolls.pop(), [0, 400]);
+assert(press('g').consumed); time += 200; press('g'); assert.deepEqual(scrolls.pop(), ['to', 0, 0]);
+press('g'); time += 800; press('g'); assert.equal(scrolls.length, 0, 'Expired sequence must not execute');
+handlers.blur(); press('g'); press('y'); press('g'); assert.equal(scrolls.length, 0, 'Unrelated key clears a sequence');
+handlers.blur(); editable = true; assert(!press('j').consumed); assert(press('f', {ctrlKey: true}).consumed);
+assert.deepEqual(messages.pop(), ['keyboard-action', 'toggle-find']);
+press('Escape'); assert.equal(blurred, 2); editable = false;
+hints = true; assert(!press('j').consumed); assert(!press('Escape').consumed); hints = false;
+press('Escape', {shiftKey: true}); assert(!press('w', {ctrlKey: true}).consumed);
+press('Escape', {shiftKey: true}); assert(press('w', {ctrlKey: true}).consumed);
+press('i'); assert(!press('j').consumed); press('Escape'); assert(press('j').consumed); scrolls.length = 0;
+assert(!press('j', {isComposing: true}).consumed); assert(!press('j', {isTrusted: false}).consumed);
+const custom = clone(defaults); custom.normal['scroll-down'] = ['Z']; custom.shortcuts['toggle-reader-view'] = [];
+handlers['keyboard-config-changed']({}, custom);
+assert(!press('j').consumed); assert(press('z').consumed); assert.deepEqual(scrolls.pop(), [0, 80]);
+assert(!press('F9').consumed, 'Removing F9 must remove all handlers for F9');
+press('x', {repeat: true}); assert.notEqual(messages.at(-1)?.[1], 'remove-tab');
+console.log('Keyboard grammar, migration, transactional writes and guest modal controls passed.');
+
+// Native guest chords work across frames, suppress destructive repeats and honour passthrough.
+keybinds.initializeKeybinds(path.join(os.tmpdir(), 'mise-nonexistent-keyboard-profile'));
+const mainSource = fs.readFileSync(path.join(__dirname, '..', 'main.js'), 'utf8');
+const nativeHandlers = {}, nativeActions = [], nativeMessages = [];
+const contents = {on: (name, callback) => { nativeHandlers[name] = callback; }, send: (...args) => nativeMessages.push(args)};
+const nativeContext = {keybinds, keyboard, webContents: contents, guestPassthrough: new WeakMap(), guestRightAlt: new WeakMap(), handleAppAction: action => nativeActions.push(action)};
+vm.createContext(nativeContext);
+vm.runInContext(mainSource.slice(mainSource.indexOf('        // Native interception'), mainSource.indexOf("        webContents.on('render-process-gone'")), nativeContext);
+function nativePress(key, extra = {}) {
+    const event = {preventDefault() { this.consumed = true; }};
+    nativeHandlers['before-input-event'](event, {type: 'keyDown', key, ...extra});
+    return event;
+}
+assert(nativePress('w', {control: true}).consumed);
+assert.equal(nativeActions.pop(), 'remove-tab');
+assert(nativePress('w', {control: true, isAutoRepeat: true}).consumed);
+assert.equal(nativeActions.length, 0);
+assert(nativePress('Escape', {shift: true}).consumed);
+assert.deepEqual(nativeMessages.pop(), ['set-passthrough-mode', true]);
+assert(!nativePress('w', {control: true}).consumed);
+assert(nativePress('Escape', {shift: true}).consumed);
+assert(nativePress('w', {control: true}).consumed);
+assert(!nativePress('w', {control: true, isComposing: true}).consumed);
+assert(!nativePress('j').consumed, 'Native interception must never consume bare page keys');
+console.log('Native guest chord and passthrough routing passed.');
+const statusSource = fs.readFileSync(path.join(__dirname, '..', 'modules/statusBar.js'), 'utf8').replace(/^import .*;\n/gm, '').replace(/export /g, '');
+const tabA = {}, tabB = {}, listA = {}, listB = {};
+let selectedList = listA;
+const statusContext = {
+    state: {sessionState: {current_workspace: 'A', workspaces: {A: ['https://example.org', 'https://example.com']}}, activeViewsCache: {A: [tabA, tabB]}},
+    window: {}, document: {getElementById: () => null, querySelector: () => selectedList, querySelectorAll: () => [listA, listB]},
+    isSplitActive: () => false, getWorkspacePartition: () => 'A', updateDarkReaderButtonUI: () => {}, isWebviewDarkReaderActive: () => false
+};
+vm.createContext(statusContext); vm.runInContext(statusSource, statusContext);
+statusContext.handleGuestPassthroughState(true, 'A', 0);
+assert.equal(statusContext.getMode(), 'PASSTHROUGH');
+selectedList = listB; statusContext.updateStatusBarFromActiveView();
+assert.equal(statusContext.getMode(), 'NORMAL');
+selectedList = listA; statusContext.updateStatusBarFromActiveView();
+assert.equal(statusContext.getMode(), 'PASSTHROUGH', 'Switching back must restore the actual guest mode');
+statusContext.handleGuestPassthroughState(false, 'A', 0);
+statusContext.handleGuestInputFocus(true, 'A', 0);
+selectedList = listB; statusContext.updateStatusBarFromActiveView();
+selectedList = listA; statusContext.updateStatusBarFromActiveView();
+assert.equal(statusContext.getMode(), 'INSERT');
+console.log('Guest mode indicators survive tab switches.');
+const transferSource = fs.readFileSync(path.join(__dirname, '..', 'modules/tabTransfer.js'), 'utf8').replace('export ', '');
+const transferContext = {}; vm.createContext(transferContext); vm.runInContext(transferSource, transferContext);
+let removedView = 0;
+const titles = {A: ['One', 'Two'], B: ['Pinned']};
+const pinned = {A: [false, false], B: [true]};
+const moving = {
+    sessionState: {workspaces: {A: ['one', 'two'], B: ['pinned']}, tab_titles: titles, tab_pinned: pinned},
+    activeViewsCache: {A: [null, {remove: () => removedView++}], B: [{remove() {}}]},
+    activeTitlesCache: titles, tabPinned: pinned,
+    tabAudioMuted: {A: [false, true], B: [false]}, tabFavicons: {A: ['icon1', 'icon2'], B: ['iconB']},
+    tabHistory: {A: [0, 1], B: [0]}, splitStates: {A: {primaryIdx: 0, secondaryIdx: 1}}
+};
+assert.equal(transferContext.transferTab(moving, 'A', 1, 'B', 0), 1, 'Unpinned tab cannot be inserted before pinned tabs');
+assert.equal(removedView, 1, 'The moved webview must be destroyed, never reused in another container');
+assert.equal(JSON.stringify(moving.sessionState.workspaces), JSON.stringify({A: ['one'], B: ['pinned', 'two']}));
+assert.equal(JSON.stringify(titles), JSON.stringify({A: ['One'], B: ['Pinned', 'Two']}));
+assert.equal(JSON.stringify(pinned), JSON.stringify({A: [false], B: [true, false]}));
+assert.equal(moving.tabAudioMuted.B[1], true);
+assert.equal(moving.tabFavicons.B[1], 'icon2');
+assert.equal(moving.activeViewsCache.B[1], null);
+assert.equal(moving.splitStates.A, undefined);
+assert.strictEqual(moving.sessionState.tab_titles, moving.activeTitlesCache, 'Persistent aliases must not move twice');
+assert.strictEqual(moving.sessionState.tab_favicons, moving.tabFavicons);
+const transferSnapshot = JSON.stringify(moving);
+assert.equal(transferContext.transferTab(moving, 'A', 99, 'B'), null);
+assert.equal(transferContext.transferTab(moving, 'A', 0, '__proto__'), null);
+assert.equal(JSON.stringify(moving), transferSnapshot);
+console.log('Workspace transfers preserve metadata, pin order and container isolation.');
+const paletteSource = fs.readFileSync(path.join(__dirname, '..', 'modules/overlays/commandPalette.js'), 'utf8').replace(/^import .*;\n/gm, '').replace(/export /g, '');
+const paletteDispatched = [];
+const paletteContext = {
+    window: {miseAPI: {getActionMetadata: () => ({then: callback => callback(keybinds.ACTION_METADATA)}),
+        onKeyboardConfigChanged: () => {}, executeKeyboardAction: action => paletteDispatched.push(action)}},
+    document: {readyState: 'loading', addEventListener: () => {}, getElementById: () => null}
+};
+vm.createContext(paletteContext); vm.runInContext(paletteSource, paletteContext);
+const commands = vm.runInContext('COMMAND_DEFINITIONS', paletteContext);
+const rawActions = vm.runInContext('commandActions', paletteContext);
+const rendererSource = fs.readFileSync(path.join(__dirname, '..', 'renderer.js'), 'utf8');
+for (const command of commands) {
+    const id = command.actionId || command.id;
+    assert(Object.hasOwn(keybinds.ACTION_METADATA, id), `Palette action ${id} must be in the catalogue`);
+    command.action(); assert.equal(paletteDispatched.pop(), id, 'Palette execution must use canonical dispatch');
+    assert(rawActions[id] || rendererSource.includes(`case '${id}':`) || mainSource.includes(`action === '${id}'`) || /^tab-[1-9]$/.test(id), `Action ${id} must have a concrete handler`);
+}
+assert.equal(new Set(commands.map(command => command.actionId || command.id)).size, Object.keys(keybinds.ACTION_METADATA).length, 'Every catalogue action must be discoverable');
+console.log('Every palette and binding action shares canonical dispatch and has a handler.');
+const keyboardHandlers = {}, keyboardEvents = {}, bridgeActions = [];
+let saveCalls = 0;
+const frame = {}, chrome = {mainFrame: frame, send() {}};
+const bridgeContext = {mainWindow: {isDestroyed: () => false, webContents: chrome},
+    ipcMain: {handle: (name, callback) => {keyboardHandlers[name] = callback;}, on: (name, callback) => {keyboardEvents[name] = callback;}},
+    keybinds: {...keybinds, saveKeybinds: () => { saveCalls++; return {ok: true}; }},
+    webContents: {getAllWebContents: () => []}, CONFIG_DIR: 'unused', handleAppAction: action => bridgeActions.push(action)
+};
+vm.createContext(bridgeContext);
+vm.runInContext(mainSource.slice(mainSource.indexOf('const guestPassthrough'), mainSource.indexOf("ipcMain.handle('read-bookmarks'")), bridgeContext);
+const guestEvent = {sender: {getType: () => 'webview'}, senderFrame: {}};
+const nestedEvent = {sender: chrome, senderFrame: {}};
+assert.equal(keyboardHandlers['save-keybinds'](guestEvent, defaults).ok, false);
+assert.equal(keyboardHandlers['save-keybinds'](nestedEvent, defaults).ok, false);
+assert.equal(saveCalls, 0);
+const hostEvent = {sender: chrome, senderFrame: frame};
+assert.equal(keyboardHandlers['save-keybinds'](hostEvent, defaults).ok, true);
+assert.equal(saveCalls, 1);
+keyboardEvents['keyboard-action'](guestEvent, 'spawn-tab');
+keyboardEvents['keyboard-action'](nestedEvent, 'spawn-tab');
+keyboardEvents['keyboard-action'](hostEvent, 'made-up-action');
+keyboardEvents['keyboard-action'](hostEvent, {toString: null});
+keyboardEvents['keyboard-action'](hostEvent, null);
+assert.equal(bridgeActions.length, 0);
+keyboardEvents['keyboard-action'](hostEvent, 'spawn-tab');
+assert.deepEqual(bridgeActions, ['spawn-tab']);
+console.log('Guests and nested frames cannot mutate bindings or use host action dispatch.');
+// Right Alt with Control is AltGr on many layouts and must not activate a user's Ctrl+Alt binding.
+nativeContext.keybinds = {...keybinds, getActionForInput: (input, includeRepeat) => input.key === 'b' && input.control && input.alt ? 'spawn-tab' : keybinds.getActionForInput(input, includeRepeat)};
+nativePress('AltGraph', {code: 'AltRight', control: true, alt: true});
+assert(!nativePress('b', {control: true, alt: true}).consumed);
+nativePress('AltGraph', {type: 'keyUp', code: 'AltRight'});
+assert(nativePress('b', {control: true, alt: true}).consumed);
+assert.equal(nativeActions.pop(), 'spawn-tab');
+nativeContext.keybinds = keybinds;
+const invalidDirectory = fs.mkdtempSync(path.join(os.tmpdir(), 'mise-invalid-keyboard-'));
+const invalidFile = path.join(invalidDirectory, 'keybinds.json');
+fs.writeFileSync(invalidFile, '{');
+const logError = console.error;
+try {
+    console.error = () => {};
+    keybinds.initializeKeybinds(invalidDirectory);
+    assert(keybinds.getKeyboardConfig().warning);
+    assert.equal(fs.readFileSync(invalidFile, 'utf8'), '{');
+} finally { console.error = logError; fs.rmSync(invalidDirectory, {recursive: true, force: true}); }
+console.log('Native AltGr and invalid-profile recovery checks passed.');

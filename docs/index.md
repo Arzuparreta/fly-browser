@@ -30,7 +30,7 @@ features:
   - title: Multi-Account Containers
     details: Every workspace runs inside an isolated persistent Chromium partition. Run multiple corporate and personal logins simultaneously with zero cookie cross-contamination.
   - title: Mouse-Free Navigation
-    details: Full Vim-inspired link hints (f), quickmark speed-dial (go), floating omnibar, and granular shortcut remapping in keybinds.json.
+    details: Full Vim-inspired link hints (f), customisable quickmark actions, floating omnibar, and browser and page-key customisation in Preferences.
   - title: Native Privacy Shields
     details: Built-in Ghostery request filtering stops trackers, cryptominers, and analytics at the network layer. Trusted domains bypass fingerprint farbling on banking portals.
   - title: Clipboard-Mediated Oversight
@@ -38,7 +38,7 @@ features:
   - title: User Scripts & Styles Engine
     details: Native injection of local .user.js and .user.css files without extension overhead. Automatic file watching and live hot-reloading keep workflows fluid.
   - title: Markdown Scratchpad & Tools
-    details: Instant Markdown quick notes (Alt + N), actionable history overlay (Ctrl + Shift + H), and structured bookmarks built right into the interface.
+    details: Instant Markdown quick notes (Ctrl + N), actionable history overlay (Ctrl + Shift + H), and structured bookmarks built right into the interface.
   - title: Distro-Agnostic & Zero Telemetry
     details: Distro-agnostic AppImage, Deb, RPM, and Arch packaging. Zero telemetry, zero usage tracking, and anonymous GitHub release notifications for effortless updates.
 ---
@@ -73,7 +73,7 @@ Keep your hands on the home row. Every major workflow is reachable via concise, 
 | `Ctrl + Shift + H` | History Overlay | Search, reopen, or purge visited history records |
 | `Alt + N` | Scratchpad | Open Markdown quick-notes scratchpad |
 | `Ctrl + Shift + P` | Private Window | Open zero-trace volatile browsing container |
-| `F1` / `Ctrl + H` | Preferences | Adjust hardware flags, sleep timeouts, and site shields |
+| `Ctrl + H` | Preferences | Adjust hardware flags, sleep timeouts, and site shields |
 
 ---
 

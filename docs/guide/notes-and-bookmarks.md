@@ -26,7 +26,8 @@ Mise includes an integrated scratchpad overlay for taking notes alongside your r
 The Bookmarks overlay allows you to manage saved links with full keyboard navigation:
 
 - Press **Ctrl + Shift + B** to toggle the Bookmarks Manager.
-- **Add Bookmark**: Press **Ctrl + Shift + A** while viewing any page to save the current URL into your bookmarks collection.
+- **Add Bookmark**: Press **Ctrl + D** while viewing any page to save the current URL into your bookmarks collection.
+- **Move Between Columns**: Use Left/Right arrows to select quickmarks or bookmarks. Tab moves between controls.
 - **Fuzzy Search**: Start typing inside the overlay to filter bookmarks dynamically.
 - **Open Bookmark**: Use the arrow keys to highlight a bookmark and press **Enter** to open it.
 - **Delete Bookmark**: Highlight a bookmark and press **Delete** to remove it from your collection.

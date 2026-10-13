@@ -47,7 +47,7 @@ Mise resolves this through the **Trusted Sites** architecture:
   - **Shield Active (Half Shield)**: Full protection, tracker blocking, and strict isolation are active.
   - **Shield Down (Full Shield)**: The domain is in your Trusted Sites list. Fraud detection signals are kept intact to ensure seamless logins and payment processing.
 - **One-Click Whitelisting**: Click the shield icon in any sidebar tab to toggle trust status for that domain immediately. Mise updates your configuration and reloads the tab.
-- **Managing Trusted Domains**: In Preferences (**F1** or **Ctrl + H**), open the **Trusted Sites** text area. Enter one domain per line (e.g. `amazon.co.uk`, `accounts.google.com`). All subdomains are covered automatically without requiring a browser restart.
+- **Managing Trusted Domains**: In Preferences (**Ctrl + H**), open the **Trusted Sites** text area. Enter one domain per line (e.g. `amazon.co.uk`, `accounts.google.com`). All subdomains are covered automatically without requiring a browser restart.
 
 ---
 
@@ -55,6 +55,6 @@ Mise resolves this through the **Trusted Sites** architecture:
 
 When debugging web applications or purging lingering sessions:
 
-1. Open **Preferences** (**F1** or **Ctrl + H**) and navigate to **Privacy & Protection**.
+1. Open **Preferences** (**Ctrl + H**) and navigate to **Privacy & Protection**.
 2. **Clear Site Cookies**: Surgically deletes cookies specifically matching the active tab's domain without logging you out of unrelated sites in other tabs.
 3. **Clear Cache**: Flushes the local Chromium disk and memory cache.

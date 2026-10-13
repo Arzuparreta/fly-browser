@@ -1,3 +1,5 @@
+import { openWorkspaceMoveDialog } from './modules/tabActions.js';
+import { initialiseOverlayFocus } from './modules/focus.js';
 import { state } from './modules/state.js';
 import { 
     isDarkMode, 
@@ -16,6 +18,9 @@ import {
 import { 
     renderWorkspaceUI, 
     switchTabFocus, 
+    moveTabState,
+    reopenClosedTab,
+    clearClosedTabs,
     spawnNewBlankTab, 
     spawnTabWithUrl, 
     handleTabRemoval, 
@@ -50,6 +55,7 @@ import {
 
 import { 
     commandRegistry, 
+    commandActions,
     toggleCommandPaletteView, 
     closeCommandPalette,
     togglePreferencesView,
@@ -584,7 +590,7 @@ function setupEventListeners() {
         }
     });
 
-    window.miseAPI.onMasterShortcut((action, ...args) => {
+    window.executeBrowserAction = (action, ...args) => {
         switch (action) {
             case 'spawn-tab': spawnNewBlankTab(); break;
             case 'spawn-tab-with-url': spawnTabWithUrl(args[0]); break;
@@ -639,6 +645,12 @@ function setupEventListeners() {
             case 'trigger-hints': triggerLinkHints(); break;
             case 'toggle-palette': toggleCommandPaletteView(); break;
             case 'toggle-help': togglePreferencesView(); break;
+            case 'open-keyboard-settings':
+                (async () => {
+                    if (!state.preferencesActive) await togglePreferencesView();
+                    document.getElementById('KeyboardEditor').scrollIntoView({block: 'start'});
+                    document.getElementById('KeyboardSearch').focus({preventScroll: true});
+                })(); break;
             case 'toggle-history': toggleHistoryOverlay(); break;
             case 'toggle-status-bar': toggleStatusBar(); break;
             case 'toggle-clock': toggleClock(); break;
@@ -654,13 +666,141 @@ function setupEventListeners() {
             case 'go-forward':
             case 'go-forward-signal': navigateFrameForward(); break;
             case 'toggle-private-mode': {
+                clearClosedTabs();
                 state.globalPrivateModeActive = args[0];
                 handlePrivateBrowsingStateShift(state.globalPrivateModeActive);
                 break;
             }
             case 'hibernate-inactive-tabs': hibernateInactiveTabs(); break;
+            case 'move-tab-to-workspace': openWorkspaceMoveDialog(); break;
+            case 'reopen-closed-tab': reopenClosedTab(); break;
+            case 'move-tab-left': case 'move-tab-right': {
+                const items = [...document.querySelectorAll('#TabList li')];
+                const index = items.findIndex(item => item.classList.contains('selected'));
+                const target = index + (action === 'move-tab-left' ? -1 : 1);
+                const workspace = state.sessionState.current_workspace;
+                if (target >= 0 && target < items.length && !!state.tabPinned[workspace]?.[index] === !!state.tabPinned[workspace]?.[target]) {
+                    moveTabState(workspace, index, target);
+                    renderWorkspaceUI(target);
+                    window.miseAPI.saveSession(state.sessionState);
+                }
+                break;
+            }
+            case 'print-page': getActiveWebview()?.print(); break;
+            case 'toggle-notifications': document.getElementById('noti-toggle-btn').click(); break;
+            case 'toggle-webview-theme': toggleWebviewTheme(); break;
+            case 'toggle-site-shields': document.querySelector('#TabList li.selected .tab-shield-btn')?.click(); break;
+            case 'force-reload-tab': getActiveWebview()?.reloadIgnoringCache(); break;
+            case 'stop-loading': getActiveWebview()?.stop(); break;
+            case 'zoom-in':
+            case 'zoom-out': {
+                const view = getActiveWebview();
+                if (view) view.setZoomLevel(Math.max(-5, Math.min(5, view.getZoomLevel() + (action === 'zoom-in' ? 0.5 : -0.5))));
+                break;
+            }
+            case 'yank-url': {
+                const view = getActiveWebview();
+                if (view) {
+                    let url = view.getURL();
+                    try {
+                        const parsed = new URL(url);
+                        if (parsed.protocol === 'file:' && parsed.pathname.endsWith('/assets/pdfjs/viewer.html')) url = parsed.searchParams.get('file') || url;
+                    } catch (_) {}
+                    navigator.clipboard.writeText(url).then(() => setTargetUrl('Page URL copied', 2000)).catch(() => setTargetUrl('Could not copy the page URL', 2000));
+                }
+                break;
+            }
+            case 'next-tab':
+            case 'previous-tab': {
+                const items = [...document.querySelectorAll('#TabList li')];
+                if (items.length) {
+                    const index = items.findIndex(item => item.classList.contains('selected'));
+                    switchTabFocus((index + (action === 'next-tab' ? 1 : -1) + items.length) % items.length);
+                }
+                break;
+            }
+            case 'duplicate-tab': {
+                const view = getActiveWebview();
+                if (view) spawnTabWithUrl(view.getURL());
+                break;
+            }
+            case 'next-workspace':
+            case 'previous-workspace': {
+                const names = Object.keys(state.sessionState.workspaces);
+                const index = names.indexOf(state.sessionState.current_workspace);
+                if (names.length) {
+                    state.sessionState.current_workspace = names[(index + (action === 'next-workspace' ? 1 : -1) + names.length) % names.length];
+                    renderWorkspaceUI(0);
+                    window.miseAPI.saveSession(state.sessionState);
+                }
+                break;
+            }
+            case 'new-workspace':
+                if (!state.dashboardActive) toggleDashboardView();
+                showWorkspaceInputDialog(); break;
+            case 'toggle-passthrough': togglePassthroughMode(); break;
+            case 'scroll-down': case 'scroll-up': case 'scroll-left': case 'scroll-right':
+            case 'half-page-down': case 'half-page-up': case 'page-top': case 'page-bottom': case 'enter-insert':
+                getActiveWebview()?.send('keyboard-local-action', action); break;
+            default: {
+                if (/^tab-[1-9]$/.test(action)) {
+                    const count = document.querySelectorAll('#TabList li').length;
+                    const index = Number(action.slice(4));
+                    if (count) switchTabFocus(index === 9 ? count - 1 : Math.min(index - 1, count - 1));
+                } else {
+                    commandActions[action]?.();
+                }
+            }
         }
-    });
+    };
+    window.miseAPI.onMasterShortcut(window.executeBrowserAction);
+    initialiseOverlayFocus();
+    for (const id of ['WorkspaceHeader', 'SidebarClock', 'WelcomeNewTabBtn', 'WelcomeBookmarksBtn', 'WelcomePaletteBtn', 'WelcomeNotesBtn']) {
+        const control = document.getElementById(id);
+        if (!control) continue;
+        control.tabIndex = 0;
+        control.setAttribute('role', 'button');
+        control.addEventListener('keydown', event => {
+            if (event.key === 'Enter' || event.key === ' ') { event.preventDefault(); control.click(); }
+        });
+    }
+
+    let browserKeys = new Map();
+    const applyKeyboardConfig = config => {
+        browserKeys = window.MiseKeyboard.compile(config.shortcuts);
+        window.describeKeyboardAction = (action, label) => {
+            const chords = config.shortcuts[action] || [];
+            const pageKeys = config.normal[action] || [];
+            const bindings = [...chords, ...pageKeys.map(key => `${window.MiseKeyboard.display(key, 'normal')} in NORMAL mode`)];
+            return label + (bindings.length ? ` (${bindings.join(' / ')})` : ' (unassigned)');
+        };
+        const controls = {'WorkspaceHeader': ['toggle-dashboard', 'Workspace dashboard'],
+            'split-toggle-btn': ['toggle-split', 'Toggle split view'], 'pin-sidebar-btn': ['toggle-zen-mode', 'Toggle sidebar expansion'],
+            'reader-view-btn': ['toggle-reader-view', 'Toggle reader view'], 'dark-reader-btn': ['toggle-dark-reader', 'Toggle Dark Reader'],
+            'back-btn': ['go-back', 'Go back'], 'forward-btn': ['go-forward', 'Go forward'],
+            'toggle-nav-btn': ['spawn-tab', 'New tab'], 'noti-toggle-btn': ['toggle-notifications', 'Toggle web notifications']};
+        for (const [id, [action, label]] of Object.entries(controls)) {
+            const control = document.getElementById(id);
+            if (control) control.title = window.describeKeyboardAction(action, label);
+        }
+        const welcome = {WelcomeNewTabBtn: 'spawn-tab', WelcomeBookmarksBtn: 'toggle-bookmarks', WelcomePaletteBtn: 'toggle-palette', WelcomeNotesBtn: 'toggle-notes'};
+        for (const [id, action] of Object.entries(welcome)) {
+            const badge = document.getElementById(id)?.querySelector('.shortcut-key');
+            if (badge) badge.textContent = config.shortcuts[action]?.join(' / ') || 'Unassigned';
+        }
+    };
+    window.miseAPI.getKeyboardConfig().then(applyKeyboardConfig);
+    window.miseAPI.onKeyboardConfigChanged(applyKeyboardConfig);
+    window.addEventListener('keydown', event => {
+        if (document.querySelector('dialog[open]') || !event.isTrusted || event.isComposing || event.defaultPrevented || state.awaitingQuickmarkKey) return;
+        if (event.key === 'Escape' && state.preferencesActive) {
+            event.preventDefault(); event.stopImmediatePropagation(); togglePreferencesView(); return;
+        }
+        const action = browserKeys.get(window.MiseKeyboard.eventCombo(event));
+        if (!action) return;
+        event.preventDefault(); event.stopImmediatePropagation();
+        if (!event.repeat || window.MiseKeyboard.repeatable(action)) window.miseAPI.executeKeyboardAction(action);
+    }, true);
 
     const paletteInput = document.getElementById('PaletteInput');
     paletteInput.addEventListener('input', (e) => {
@@ -688,11 +828,11 @@ function setupEventListeners() {
                 e.preventDefault();
                 const prevIdx = (idx - 1 + topNavIds.length) % topNavIds.length;
                 document.getElementById(topNavIds[prevIdx]).focus();
-            } else if (e.key === 'ArrowDown' || (e.key === 'Tab' && !e.shiftKey)) {
+            } else if (e.key === 'ArrowDown') {
                 e.preventDefault();
                 const selectedTab = document.querySelector('#TabList li.selected') || document.querySelector('#TabList li');
                 if (selectedTab) selectedTab.focus();
-            } else if (e.key === 'ArrowUp' || (e.key === 'Tab' && e.shiftKey)) {
+            } else if (e.key === 'ArrowUp') {
                 e.preventDefault();
                 const notiBtn = document.getElementById('noti-toggle-btn') || document.getElementById('pin-sidebar-btn');
                 if (notiBtn) notiBtn.focus();
@@ -712,15 +852,15 @@ function setupEventListeners() {
 
         btn.addEventListener('keydown', (e) => {
             if (state.dashboardActive || state.bookmarksActive || state.paletteActive || state.preferencesActive || state.historyActive || state.notesActive) return;
-            if (e.key === 'ArrowRight' || (e.key === 'Tab' && !e.shiftKey && idx < bottomButtons.length - 1)) {
+            if (e.key === 'ArrowRight') {
                 e.preventDefault();
                 const nextBtn = document.getElementById(bottomButtons[idx + 1]);
                 if (nextBtn) nextBtn.focus();
-            } else if (e.key === 'ArrowLeft' || (e.key === 'Tab' && e.shiftKey && idx > 0)) {
+            } else if (e.key === 'ArrowLeft') {
                 e.preventDefault();
                 const prevBtn = document.getElementById(bottomButtons[idx - 1]);
                 if (prevBtn) prevBtn.focus();
-            } else if (e.key === 'ArrowUp' || (e.key === 'Tab' && e.shiftKey && idx === 0)) {
+            } else if (e.key === 'ArrowUp') {
                 e.preventDefault();
                 const selectedTab = document.querySelector('#TabList li.selected') || document.querySelector('#TabList li');
                 if (selectedTab) {
@@ -729,10 +869,6 @@ function setupEventListeners() {
                     const backBtn = document.getElementById('back-btn');
                     if (backBtn) backBtn.focus();
                 }
-            } else if (e.key === 'Tab' && !e.shiftKey && idx === bottomButtons.length - 1) {
-                e.preventDefault();
-                const backBtn = document.getElementById('back-btn');
-                if (backBtn) backBtn.focus();
             } else if (e.key === 'Escape') {
                 e.preventDefault();
                 const sidebar = document.getElementById('Sidebar');
@@ -753,23 +889,14 @@ function setupEventListeners() {
             return;
         }
 
-        if (e.key === 'Tab') {
-            e.preventDefault();
-            if (e.shiftKey) {
-                const backBtn = document.getElementById('back-btn') || document.getElementById('toggle-nav-btn');
-                if (backBtn) backBtn.focus();
-            } else {
-                const pinBtn = document.getElementById('pin-sidebar-btn');
-                if (pinBtn) pinBtn.focus();
-            }
-            return;
-        }
-
+        if (e.target.tagName === 'BUTTON' && (e.key === 'Enter' || e.key === ' ')) return;
+        if (e.key === 'Enter' && e.target.tagName === 'LI') { e.preventDefault(); e.target.click(); focusActiveWebview(); return; }
+        if (e.key === 'Delete' && e.target.tagName === 'LI') { e.preventDefault(); handleTabRemoval(); return; }
         const tabItems = Array.from(document.querySelectorAll('#TabList li'));
         const activeListItem = document.querySelector('#TabList li.selected');
         let currentIdx = tabItems.indexOf(activeListItem);
 
-        if (e.key === 'ArrowDown' || e.key === 'j') {
+        if (e.key === 'ArrowDown') {
             e.preventDefault();
             if (currentIdx < tabItems.length - 1) {
                 currentIdx++;
@@ -779,7 +906,7 @@ function setupEventListeners() {
                 const pinBtn = document.getElementById('pin-sidebar-btn');
                 if (pinBtn) pinBtn.focus();
             }
-        } else if (e.key === 'ArrowUp' || e.key === 'k') {
+        } else if (e.key === 'ArrowUp') {
             e.preventDefault();
             if (currentIdx > 0) {
                 currentIdx--;
@@ -789,43 +916,17 @@ function setupEventListeners() {
                 const backBtn = document.getElementById('back-btn') || document.getElementById('toggle-nav-btn');
                 if (backBtn) backBtn.focus();
             }
-        } else if (e.key === 'ArrowLeft' || e.key === 'h') {
+        } else if (e.key === 'ArrowLeft') {
             e.preventDefault();
             const backBtn = document.getElementById('back-btn') || document.getElementById('toggle-nav-btn');
             if (backBtn) backBtn.focus();
-        } else if (e.key === 'ArrowRight' || e.key === 'l' || e.key === 'i') {
+        } else if (e.key === 'ArrowRight') {
             e.preventDefault();
             focusActiveWebview();
-        } else if (e.key === 't') {
-            e.preventDefault();
-            spawnNewBlankTab();
-        } else if (e.key === 'x') {
-            e.preventDefault();
-            handleTabRemoval();
-        } else if (e.key === 'o') {
-            e.preventDefault();
-            displayAddressOverlay();
-        } else if (e.key === 'w') {
-            e.preventDefault();
-            toggleDashboardView();
-        } else if (e.key === 'y') {
-            e.preventDefault();
-            const currentWS = state.sessionState.current_workspace;
-            const urls = state.sessionState.workspaces[currentWS] || [];
-            const activeUrl = urls[currentIdx] || '';
-            if (activeUrl) {
-                navigator.clipboard.writeText(activeUrl).catch(() => {});
-                setTargetUrl(`Yanked URL to clipboard: ${activeUrl}`, 2500);
-            }
         }
+
     });
 
-    window.addEventListener('keydown', (e) => {
-        if (e.shiftKey && e.key === 'Escape') {
-            e.preventDefault();
-            togglePassthroughMode();
-        }
-    });
 
     const findInput = document.getElementById('FindInput');
     if (findInput) {
@@ -844,10 +945,7 @@ function setupEventListeners() {
 
         findInput.addEventListener('keydown', (e) => {
             const activeWv = getActiveWebview();
-            const isCtrl = e.control || e.metaKey;
-            const key = e.key.toLowerCase();
-
-            if (e.key === 'Escape' || (isCtrl && key === 's')) {
+            if (e.key === 'Escape') {
                 e.preventDefault();
                 toggleInPageSearch();
             } else if (e.key === 'Enter') {

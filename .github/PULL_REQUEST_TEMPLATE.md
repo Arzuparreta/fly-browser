@@ -1,6 +1,9 @@
 ## Description
 <!-- Provide a clear, concise summary of the changes proposed in this Pull Request. -->
 
+## Fork fixes
+<!-- List every problem solved by this PR, including inherited upstream defects. Link the relevant entries in docs/fork-fixes.md. State the original behaviour, the resulting behaviour and validation. Keep new capabilities and unresolved limitations clear. -->
+
 ## Related Issues
 <!-- Link to any related issues (e.g. Fixes #123, Closes #456). -->
 
@@ -17,4 +20,4 @@
 - [ ] JavaScript syntax validated across modified files (`node -c <file>`)
 - [ ] Documentation compiled without errors (`npm run docs:build`)
 - [ ] Follows UK English spelling in code comments and documentation
-- [ ] Complies with project [AI Policy](AI_POLICY.md) and [Security Policy](SECURITY.md)
+- [ ] Follows the project [Security Policy](SECURITY.md)
