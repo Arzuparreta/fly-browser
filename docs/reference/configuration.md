@@ -23,6 +23,11 @@ Controls hardware switches, process limits, privacy whitelists, and search prefe
     "show_window_controls": false,
     "email_handler": "system",
     "search_engine": "https://duckduckgo.com/?q=%s",
+    "custom_search_aliases": {
+        "aur": "https://aur.archlinux.org/packages?K=%s",
+        "nix": "https://search.nixos.org/packages?query=%s",
+        "mdn": "https://developer.mozilla.org/en-US/search?q=%s"
+    },
     "spellchecker_language": "en-GB",
     "theme": "dark",
     "webview_theme": "dark",
@@ -80,6 +85,7 @@ Controls hardware switches, process limits, privacy whitelists, and search prefe
   - **`overlay_opacity`**: Modal and overlay translucency percentage (50% to 100%) for Command Palette, Notes, and Preferences.
 - **`trusted_domains`**: Array of domains exempted from tracker blocking and fingerprint spoofing.
 - **`external_notes_command`**: Optional command or executable used to open notes and clippings (e.g. `obsidian`, `logseq`, `code`, `nvim`). When empty, uses system default Markdown handler.
+- **`custom_search_aliases`**: Key-value map of custom search prefixes and URL templates (with `%s` query placeholder). Typing `<alias> <query>` in the address bar (such as `aur hyprland` or `gh mise`) bypasses fallback engines and routes queries straight to the destination. Users can configure, override, or extend default built-ins directly in Preferences.
 
 ---
 

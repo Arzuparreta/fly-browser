@@ -105,6 +105,7 @@ const DEFAULT_CONFIG = {
     enable_diagnostics: false,
     show_window_controls: false,
     external_notes_command: '',
+    custom_search_aliases: {},
     last_seen_version: null
 };
 

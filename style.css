@@ -3859,5 +3859,79 @@ i.spinning {
     font-size: 11px;
 }
 
+/* Custom Search Aliases in Preferences */
+.search-aliases-container {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    max-height: 180px;
+    overflow-y: auto;
+    padding: 8px;
+    background: var(--bg-main);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+}
+
+.search-alias-item {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 6px 10px;
+    background: var(--bg-sidebar);
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    font-size: 13px;
+}
+
+.search-alias-badge {
+    font-family: 'JetBrains Mono', 'Fira Code', monospace;
+    font-weight: 700;
+    color: var(--accent);
+    background: rgba(122, 162, 247, 0.12);
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    padding: 2px 8px;
+    font-size: 12px;
+    min-width: 38px;
+    text-align: center;
+}
+
+.search-alias-url {
+    flex: 1;
+    font-family: 'JetBrains Mono', 'Fira Code', monospace;
+    font-size: 12px;
+    color: var(--text);
+    opacity: 0.85;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.search-alias-delete-btn {
+    background: transparent;
+    border: none;
+    color: var(--text);
+    opacity: 0.6;
+    cursor: pointer;
+    padding: 4px 6px;
+    border-radius: 4px;
+    transition: all 0.15s ease;
+}
+
+.search-alias-delete-btn:hover {
+    color: #f7768e;
+    opacity: 1;
+    background: rgba(247, 118, 142, 0.1);
+}
+
+.search-alias-empty-hint {
+    font-size: 12px;
+    color: var(--text);
+    opacity: 0.6;
+    padding: 8px 10px;
+    font-style: italic;
+    text-align: center;
+}
+
 
 

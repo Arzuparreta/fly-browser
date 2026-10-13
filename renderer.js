@@ -97,7 +97,7 @@ import {
 } from './modules/navigation.js';
 
 import { openTransientShareModal } from './modules/overlays/shareModal.js';
-import { initSearchEnginePreference } from './modules/overlays/searchEngine.js';
+import { initSearchEnginePreference, renderSearchAliasesUI } from './modules/overlays/searchEngine.js';
 import { initDownloadShelf, toggleDownloadShelf } from './modules/downloads.js';
 import { 
     toggleSplitView, 
@@ -153,6 +153,7 @@ window.toggleNotesOverlay = toggleNotesOverlay;
 window.toggleExpandNotesOverlay = toggleExpandNotesOverlay;
 window.openNotesInExternalApp = openNotesInExternalApp;
 window.appendSelectionToNotes = appendSelectionToNotes;
+window.renderSearchAliasesUI = renderSearchAliasesUI;
 window.exportActiveTabToNotes = exportActiveTabToNotes;
 window.exportActiveTabToExternal = exportActiveTabToExternal;
 window.toggleDownloadShelf = toggleDownloadShelf;

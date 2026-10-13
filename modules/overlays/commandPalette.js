@@ -3,6 +3,7 @@ import { focusActiveWebview, getActiveWebview, isTargetScript, isDarkMode, escap
 import { renderWorkspaceUI, switchTabFocus, spawnTabWithUrl, spawnNewBlankTab, handleTabRemoval, hibernateInactiveTabs, wakeAllTabsInWorkspace } from '../webview.js';
 import { toggleBookmarksOverlay, promptQuickmark, addCurrentPageToBookmarks } from './bookmarks.js';
 import { syncVisualSettingsInputs, setupVisualSettingsListeners } from '../theme.js';
+import { renderSearchAliasesUI } from './searchEngine.js';
 
 function returnFocusToWebview() {
     window.miseAllowWebviewFocus = true;
@@ -852,6 +853,11 @@ export async function syncPreferencesUI() {
             if (notesCmdField) {
                 notesCmdField.value = cfg.external_notes_command || '';
             }
+
+            if (cfg.custom_search_aliases && typeof cfg.custom_search_aliases === 'object') {
+                state.customSearchAliases = { ...cfg.custom_search_aliases };
+            }
+            renderSearchAliasesUI();
         }
     } catch (err) {}
 
@@ -940,7 +946,8 @@ export function setupPreferencesListeners() {
                 email_handler: emailSelect ? emailSelect.value : 'system',
                 spellchecker_language: spellSelect ? spellSelect.value : 'en-GB',
                 show_window_controls: windowControlsToggle ? windowControlsToggle.checked : false,
-                external_notes_command: notesCmdField ? notesCmdField.value.trim() : ''
+                external_notes_command: notesCmdField ? notesCmdField.value.trim() : '',
+                custom_search_aliases: state.customSearchAliases || {}
             };
 
             if (window.miseAPI && typeof window.miseAPI.saveBrowserSettings === 'function') {

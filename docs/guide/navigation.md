@@ -46,6 +46,38 @@ Popular bangs display rich destination badges in the autocomplete dropdown. You 
 
 ---
 
+## Custom Search Aliases & Shorthand Bangs
+
+In addition to DuckDuckGo bangs, Mise includes native search engine prefixes that execute instantly without redirect delays. Prefix any query with an alias in the floating address bar (**Ctrl + L**):
+
+* `g <query>`: Google
+* `ddg <query>`: DuckDuckGo
+* `yt <query>`: YouTube
+* `gh <query>`: GitHub
+* `a <query>`: ArchWiki
+* `aur <query>`: Arch User Repository
+* `pkg <query>`: Arch Linux Packages
+* `so <query>`: Stack Overflow
+* `r <query>`: Reddit
+* `sp <query>`: Startpage
+* `b <query>`: Brave Search
+* `k <query>`: Kagi
+
+### User-Customised Search Engines
+You can add your own search engines or override existing shortcuts directly in Preferences (**Ctrl + H**) or inside `~/.config/mise-browser/config.json`:
+
+```json
+"custom_search_aliases": {
+    "aur": "https://aur.archlinux.org/packages?K=%s",
+    "nix": "https://search.nixos.org/packages?query=%s",
+    "mdn": "https://developer.mozilla.org/en-US/search?q=%s"
+}
+```
+
+Any custom alias is recognised immediately in the address bar and displays an interactive suggestion badge in the autocomplete dropdown.
+
+---
+
 ## Live Address Bar Calculator
 
 The address bar includes a built-in mathematical expression evaluator that runs completely locally without external network requests:

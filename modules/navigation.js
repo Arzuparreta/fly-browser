@@ -1,7 +1,7 @@
 import { state } from './state.js';
 import { escapeHtml, focusActiveWebview, getActiveWebview, isPdfUrl, getPdfViewerUrl } from './utils.js';
 import { renderWorkspaceUI, switchTabFocus, spawnTabWithUrl, spawnNewBlankTab, handleTabRemoval, wakeTab } from './webview.js';
-import { formatSearchUrl } from './overlays/searchEngine.js';
+import { formatSearchUrl, resolveSearchAliasUrl, getEffectiveSearchAliases } from './overlays/searchEngine.js';
 import { evaluateMathExpression } from './calculator.js';
 import { setTargetUrl } from './statusBar.js';
 
@@ -152,28 +152,15 @@ export async function handleNavigation(input) {
     }
 
     const parts = trimmedInput.split(' ');
-    const alias = parts[0].toLowerCase();
-    const query = parts.slice(1).join(' ');
+    const aliasCandidate = parts[0].toLowerCase();
+    const aliasQuery = parts.slice(1).join(' ').trim();
 
-    const aliases = {
-        'g': 'https://www.google.com/search?q=',
-        'yt': 'https://www.youtube.com/results?search_query=',
-        'a': 'https://wiki.archlinux.org/index.php?search=',
-        'gh': 'https://github.com/search?q=',
-        'ddg': 'https://duckduckgo.com/?q=',
-        'pkg': 'https://archlinux.org/packages/?q=',
-        'so': 'https://stackoverflow.com/search?q=',
-        'r': 'https://www.reddit.com/search/?q=',
-        'sp': 'https://www.startpage.com/sp/search?query=',
-        'b': 'https://search.brave.com/search?q=',
-        'k': 'https://kagi.com/search?q='
-    };
+    let targetUrl = null;
+    if (aliasQuery) {
+        targetUrl = resolveSearchAliasUrl(aliasCandidate, aliasQuery, state.customSearchAliases);
+    }
 
-    let targetUrl;
-
-    if (aliases[alias] && query) {
-        targetUrl = aliases[alias] + encodeURIComponent(query);
-    } else {
+    if (!targetUrl) {
         targetUrl = trimmedInput;
         if (trimmedInput.startsWith('/') || trimmedInput.startsWith('file://')) {
             targetUrl = trimmedInput.startsWith('/') ? 'file://' + trimmedInput : trimmedInput;
@@ -262,14 +249,27 @@ export function setupAddressBarAutocomplete() {
             });
         }
 
-        if (query.toLowerCase().startsWith('ws ')) {
-            const wsQuery = query.slice(3).toLowerCase();
-            const matchingWorkspaces = Object.keys(state.sessionState.workspaces)
-                .filter(ws => ws.toLowerCase().includes(wsQuery))
-                .map(ws => ({ title: `Switch to Workspace: ${ws}`, value: `ws:${ws}`, type: 'Workspace' }));
+        // 3. Search Alias detection (built-in + custom)
+        const queryParts = query.split(' ');
+        const aliasCandidate = queryParts[0].toLowerCase();
+        const aliasSearch = queryParts.slice(1).join(' ').trim();
+        const effectiveAliases = getEffectiveSearchAliases(state.customSearchAliases);
+        const aliasEntry = effectiveAliases[aliasCandidate];
 
-            renderSuggestions(matchingWorkspaces);
-            return;
+        if (aliasEntry) {
+            const aliasTitle = aliasSearch
+                ? `Search ${aliasEntry.name}: "${aliasSearch}" (${aliasCandidate})`
+                : `Search ${aliasEntry.name} (${aliasCandidate})`;
+            const resolvedUrl = aliasSearch
+                ? resolveSearchAliasUrl(aliasCandidate, aliasSearch, state.customSearchAliases)
+                : (aliasEntry.url.includes('%s') ? aliasEntry.url.replace('%s', '') : aliasEntry.url);
+
+            matches.push({
+                title: aliasTitle,
+                value: resolvedUrl || query,
+                type: 'Search',
+                isAlias: true
+            });
         }
 
         Object.keys(state.sessionState.workspaces).forEach(wsName => {

@@ -267,6 +267,22 @@
 								        <option value="https://kagi.com/search?q=%s">Kagi</option>
 								    </select>
 								</div>
+
+								<!-- Custom Search Engine Aliases Section -->
+								<div class="setting-item" style="flex-direction: column; align-items: stretch; gap: 8px;">
+								    <div class="setting-info" style="margin-bottom: 4px;">
+								        <span class="setting-label">Custom Search Aliases & Bangs</span>
+								        <span class="setting-desc">Define shorthand prefixes (e.g. <code>aur</code>, <code>gh</code>, <code>nix</code>) to route queries from the address bar. Use <code>%s</code> for the query placeholder.</span>
+								    </div>
+								    <div id="SearchAliasesList" class="search-aliases-container"></div>
+								    <div class="search-alias-add-row" style="display: flex; gap: 8px; margin-top: 4px;">
+								        <input type="text" id="new-alias-key" class="settings-input" placeholder="Alias (e.g. aur)" style="width: 110px; background: var(--bg-main); color: var(--text); border: 1px solid var(--border); border-radius: 4px; padding: 6px 10px; font-size: 13px;" spellcheck="false" autocomplete="off">
+								        <input type="text" id="new-alias-url" class="settings-input" placeholder="Search URL with %s (e.g. https://aur.archlinux.org/packages?K=%s)" style="flex: 1; background: var(--bg-main); color: var(--text); border: 1px solid var(--border); border-radius: 4px; padding: 6px 10px; font-size: 13px;" spellcheck="false" autocomplete="off">
+								        <button id="add-search-alias-btn" type="button" class="settings-action-btn" style="background: var(--accent); color: var(--bg-main); font-weight: 600; padding: 6px 14px; border-radius: 4px; border: none; cursor: pointer; white-space: nowrap;">
+								            Add Alias
+								        </button>
+								    </div>
+								</div>
 				                              
                                 <div style="display: flex; justify-content: flex-end; margin-top: 10px;">
                                     <button id="setting-save-config-btn" class="settings-action-btn" style="background-color: var(--accent); color: var(--bg-main); font-weight: bold; padding: 8px 16px; border-radius: 4px; border: none; cursor: pointer;">

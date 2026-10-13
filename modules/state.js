@@ -38,6 +38,7 @@ export const state = {
     historyResults: [],
     addressSuggestions: [],
     addressSelectionIdx: -1,
+    customSearchAliases: {},
     
     // Bookmarks and Quickmarks State
     quickmarks: {},
