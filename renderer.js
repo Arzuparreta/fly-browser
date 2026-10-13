@@ -538,6 +538,12 @@ async function initializeBrowser() {
 }
 
 function setupEventListeners() {
+    const sidebar = document.getElementById('Sidebar');
+    // Retain hover on window exit; host or guest entry clears it over content.
+    document.addEventListener('mouseover', (event) => {
+        sidebar.classList.toggle('pointer-inside', sidebar.contains(event.target));
+    });
+
     document.getElementById('reader-view-btn')?.addEventListener('click', toggleReaderViewOnActiveTab);
     document.getElementById('dark-reader-btn')?.addEventListener('click', toggleDarkReaderOnActiveTab);
     document.getElementById('theme-toggle-btn').addEventListener('click', toggleWebviewTheme);

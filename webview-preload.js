@@ -113,6 +113,11 @@
 
 const { ipcRenderer, webFrame, contextBridge } = require('electron');
 
+// Guest pointer events do not reach the host document.
+document.addEventListener('mouseenter', (event) => {
+    if (event.isTrusted) ipcRenderer.sendToHost('guest-pointer-enter');
+});
+
 ipcRenderer.on('toggle-reader-view', () => {
     try { ipcRenderer.sendToHost('normal-mode-action', 'toggle-reader-view'); } catch (err) {}
 });

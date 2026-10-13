@@ -107,6 +107,31 @@ const root = path.resolve(__dirname, '..');
         await page.mouse.move(10, 100);
         await page.waitForFunction(() => document.getElementById('Sidebar').getBoundingClientRect().width >= 259);
         assert(await sidebarAboveContent(), 'The expanded sidebar must remain above the live webview');
+        // Window exits must not collapse the sidebar, even at the outermost pixel.
+        const sidebarWidth = () => page.locator('#Sidebar').evaluate(sidebar => sidebar.getBoundingClientRect().width);
+        for (const x of [-1, 0, -1, 0, -1]) {
+            await page.mouse.move(x, 100);
+            await page.waitForTimeout(250);
+            assert(await sidebarWidth() >= 259, 'Leaving the left window edge must retain expansion');
+        }
+        await page.mouse.move(500, 100);
+        // Host CDP pointer injection does not route into Electron's guest surface.
+        const guestId = await page.locator('webview:visible').evaluate(view => view.getWebContentsId());
+        await application.evaluate(({webContents}, id) => {
+            const guest = webContents.fromId(id);
+            guest.sendInputEvent({type: 'mouseLeave', x: -1, y: 100});
+            guest.sendInputEvent({type: 'mouseMove', x: 500, y: 100});
+        }, guestId);
+        await page.waitForFunction(() => document.getElementById('Sidebar').getBoundingClientRect().width <= 37, null, {timeout: 5000});
+        await page.mouse.move(10, 100);
+        await page.waitForFunction(() => document.getElementById('Sidebar').getBoundingClientRect().width >= 259);
+        const windowHeight = await page.evaluate(() => innerHeight);
+        for (const point of [{x: 10, y: -1}, {x: 10, y: windowHeight}]) {
+            await page.mouse.move(point.x, point.y);
+            await page.waitForTimeout(250);
+            assert(await sidebarWidth() >= 259, 'Leaving the top or bottom window edge must retain expansion');
+            await page.mouse.move(10, 100);
+        }
         await page.evaluate(() => window.executeBrowserAction('new-workspace'));
         await page.locator('#NewWorkspaceTitleInput').fill('Empty sidebar fixture');
         await page.locator('#NewWorkspaceTitleInput').press('Enter');
@@ -115,6 +140,13 @@ const root = path.resolve(__dirname, '..');
         await page.waitForFunction(() => document.getElementById('Sidebar').getBoundingClientRect().width >= 259);
         assert(await sidebarAboveContent(), 'The expanded sidebar must paint and receive clicks above the empty workspace');
         if (process.env.MISE_SIDEBAR_SCREENSHOT) await page.screenshot({path: process.env.MISE_SIDEBAR_SCREENSHOT});
+        await page.mouse.move(-1, 100);
+        await page.waitForTimeout(250);
+        assert(await sidebarWidth() >= 259, 'The empty-workspace sidebar must also remain expanded outside the window');
+        await page.mouse.move(500, 400);
+        await page.waitForFunction(() => document.getElementById('Sidebar').getBoundingClientRect().width <= 37);
+        await page.mouse.move(10, 100);
+        await page.waitForFunction(() => document.getElementById('Sidebar').getBoundingClientRect().width >= 259);
         await page.locator('#WorkspaceLabel').click();
         await focused('DashboardOverlay'); await page.keyboard.press('Escape');
         await page.mouse.move(500, 400);
