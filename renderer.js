@@ -1,5 +1,5 @@
 import { openWorkspaceMoveDialog } from './modules/tabActions.js';
-import { initialiseOverlayFocus } from './modules/focus.js';
+import { initialiseOverlayFocus, prepareOverlay } from './modules/focus.js';
 import { state } from './modules/state.js';
 import { 
     isDarkMode, 
@@ -98,7 +98,7 @@ import {
     hideSuggestions 
 } from './modules/navigation.js';
 
-import { openTransientShareModal } from './modules/overlays/shareModal.js';
+import { openTransientShareModal, closeTransientShareModal } from './modules/overlays/shareModal.js';
 import { initSearchEnginePreference } from './modules/overlays/searchEngine.js';
 import { initDownloadShelf, toggleDownloadShelf } from './modules/downloads.js';
 import {
@@ -570,9 +570,13 @@ function setupEventListeners() {
     
     document.getElementById('NewWorkspaceTitleInput').addEventListener('keydown', (e) => {
         if (e.key === 'Enter') processWorkspaceCreation();
-        else if (e.key === 'Escape') hideWorkspaceInputDialog();
+        else if (e.key === 'Escape') { e.preventDefault(); e.stopPropagation(); hideWorkspaceInputDialog(); }
     });
     
+    document.getElementById('WorkspaceInputBox').addEventListener('keydown', event => {
+        if (event.key === 'Escape') { event.preventDefault(); event.stopPropagation(); hideWorkspaceInputDialog(); }
+    });
+
     const addressBar = document.getElementById('WideAddressBar');
     addressBar.addEventListener('keydown', (e) => {
         if (e.key === 'Enter') {
@@ -770,7 +774,18 @@ function setupEventListeners() {
         }
     };
     window.miseAPI.onMasterShortcut(window.executeBrowserAction);
-    initialiseOverlayFocus();
+    initialiseOverlayFocus({
+        WideAddressBar: {active: () => addressBar.style.display === 'block', close: displayAddressOverlay},
+        FindBarOverlay: {active: () => findActive, close: toggleInPageSearch},
+        DashboardOverlay: {active: () => state.dashboardActive, close: toggleDashboardView},
+        PreferencesOverlay: {active: () => state.preferencesActive, close: togglePreferencesView},
+        CommandPaletteOverlay: {active: () => state.paletteActive, close: toggleCommandPaletteView},
+        BookmarksOverlay: {active: () => state.bookmarksActive, close: toggleBookmarksOverlay},
+        HistoryOverlay: {active: () => state.historyActive, close: toggleHistoryOverlay},
+        NotesOverlay: {active: () => state.notesActive, close: toggleNotesOverlay},
+        DiagnosticsOverlay: {active: () => state.diagnosticsActive, close: toggleDiagnosticsView},
+        ShareModalOverlay: {active: () => document.getElementById('ShareModalOverlay').style.display === 'flex', close: closeTransientShareModal}
+    });
     for (const id of ['WorkspaceHeader', 'SidebarClock', 'WelcomeNewTabBtn', 'WelcomeBookmarksBtn', 'WelcomePaletteBtn', 'WelcomeNotesBtn']) {
         const control = document.getElementById(id);
         if (!control) continue;
@@ -809,6 +824,9 @@ function setupEventListeners() {
     window.miseAPI.onKeyboardConfigChanged(applyKeyboardConfig);
     window.addEventListener('keydown', event => {
         if (document.querySelector('dialog[open]') || !event.isTrusted || event.isComposing || event.defaultPrevented || state.awaitingQuickmarkKey) return;
+        if (event.key === 'Escape' && addressBar.style.display === 'block') {
+            event.preventDefault(); event.stopImmediatePropagation(); displayAddressOverlay(); return;
+        }
         if (event.key === 'Escape' && state.preferencesActive) {
             event.preventDefault(); event.stopImmediatePropagation(); togglePreferencesView(); return;
         }
@@ -1007,7 +1025,7 @@ function setupEventListeners() {
             if (state.dashboardActive || state.paletteActive || state.preferencesActive || state.bookmarksActive || state.historyActive || state.notesActive || state.diagnosticsActive) return;
             
             const overlayIds = [
-                'PaletteInput', 'PaletteList', 'PreferencesOverlay',
+                'WideAddressBar', 'AddressSuggestions', 'PaletteInput', 'PaletteList', 'PreferencesOverlay',
                 'BookmarksOverlay', 'BookmarkSearchInput', 'HistoryOverlay',
                 'HistorySearchInput', 'NotesOverlay', 'NotesTextArea',
                 'DashboardOverlay', 'ShareModalOverlay', 'FindBarOverlay',
@@ -1221,10 +1239,12 @@ function toggleInPageSearch() {
     findActive = !findActive;
     
     if (findActive) {
+        prepareOverlay('FindBarOverlay');
         overlay.style.display = 'flex';
         input.value = '';
         count.textContent = '';
         setTimeout(() => {
+            if (!findActive) return;
             input.focus();
             input.select();
         }, 20);

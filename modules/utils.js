@@ -1,3 +1,4 @@
+import { isOverlayTransition } from './focus.js';
 import { state } from './state.js';
 
 // Returns true if the browser interface is currently in dark mode
@@ -44,6 +45,7 @@ export function getActiveWebview() {
 }
 
 export function focusActiveWebview() {
+    if (isOverlayTransition()) return;
     const currentWS = state.sessionState.current_workspace;
     const activeListItem = document.querySelector('#TabList li.selected');
     if (activeListItem) {

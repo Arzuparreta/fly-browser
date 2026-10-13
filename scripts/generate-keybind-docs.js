@@ -23,6 +23,8 @@ Mise has a small custom Vim-style controller, not the Vimium extension. Browser 
 
 Escape and Tab are reserved for cancellation and focus navigation. Native control keys such as arrows, Enter, Space and Delete remain contextual UI behaviour. Sidebar letters no longer form a hidden second set of hard-coded browser actions. Tab stays within visible overlays; arrow keys navigate tab lists, dashboard selections and bookmark columns.
 
+Opening address/search, find, dashboard, preferences, palette, bookmarks, history, notes or diagnostics closes the previous browser panel. Escape closes the current panel and returns focus to the page; pressing its opening shortcut again also closes it. Ctrl+L can be cancelled even after focus moves to another browser control. In the dashboard, Escape first cancels workspace creation or renaming, then closes the dashboard. The binding recorder and native dialogs keep their own cancellation. Notes keep edits on closing; delayed data loads cannot reopen closed panels or take focus from a newer panel. Sharing accepts Escape from its controls and embedded page, except in page passthrough mode.
+
 Browser chords also work when an iframe has focus. Vim-style page keys and hint discovery are confined to the main document and its open shadow roots; embedded frames retain their native keyboard navigation. Closed shadow roots cannot be inspected. Operating-system shortcuts may be intercepted before Electron receives them.
 
 ## Default bindings

@@ -1,3 +1,4 @@
+import { hasActiveOverlay } from './focus.js';
 import { state } from './state.js';
 import { getActiveWebview, focusActiveWebview, getWorkspacePartition, isDarkMode, isPdfUrl, getPdfViewerUrl, extractOriginalUrl, isTargetPrivateDomain } from './utils.js';
 import { loadWebviewSource } from './extensions.js';
@@ -958,7 +959,7 @@ export function switchTabFocus(targetIdx) {
             const addressBar = document.getElementById('WideAddressBar');
             const addressBarIsActive = addressBar && (addressBar.style.display === 'block' || currentFocused === addressBar);
 
-            if (!sidebarHasFocus && !state.paletteActive && !state.helpActive && !state.preferencesActive && !addressBarIsActive) {
+            if (!sidebarHasFocus && !hasActiveOverlay() && !addressBarIsActive) {
                 window.miseAllowWebviewFocus = true;
                 targetView.focus();
             }

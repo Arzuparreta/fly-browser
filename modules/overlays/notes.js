@@ -1,7 +1,11 @@
+import { prepareOverlay } from '../focus.js';
 import { state } from '../state.js';
 import { escapeHtml, focusActiveWebview } from '../utils.js';
 
 let notesSaveTimeout = null;
+let notesRequest = 0;
+let notesLoaded = false;
+let notesEdited = false;
 
 // Simple inline markdown parser helper
 export function parseMarkdownToHtml(text) {
@@ -37,12 +41,12 @@ export function renderNotesView() {
         textarea.style.display = 'block';
         mdView.style.display = 'none';
         if (editBtn) editBtn.textContent = 'Preview';
-        setTimeout(() => textarea.focus(), 50);
+        setTimeout(() => { if (state.notesActive && state.isEditingNotes) textarea.focus(); }, 50);
     } else {
         mdView.innerHTML = parseMarkdownToHtml(textarea.value);
         textarea.style.display = 'none';
         mdView.style.display = 'block';
-        if (editBtn) editBtn.textContent = 'Edit';
+        if (editBtn) { editBtn.textContent = 'Edit'; if (state.notesActive) editBtn.focus(); }
     }
 }
 
@@ -52,40 +56,31 @@ export function toggleNotesOverlay() {
 
     if (!overlay || !textarea) return;
 
+    const request = ++notesRequest;
     state.notesActive = !state.notesActive;
 
     if (state.notesActive) {
-        if (state.paletteActive && typeof window.toggleCommandPaletteView === 'function') {
-            window.toggleCommandPaletteView();
-        }
-        if (state.helpActive && typeof window.toggleHelpMenuWindow === 'function') {
-            window.toggleHelpMenuWindow();
-        }
-        if (state.dashboardActive && typeof window.toggleDashboardView === 'function') {
-            window.toggleDashboardView();
-        }
-        if (state.historyActive && typeof window.toggleHistoryOverlay === 'function') {
-            window.toggleHistoryOverlay();
-        }
-        if (state.bookmarksActive && typeof window.toggleBookmarksOverlay === 'function') {
-            window.toggleBookmarksOverlay();
-        }
-
+        prepareOverlay('NotesOverlay');
+        notesLoaded = false;
+        notesEdited = false;
+        overlay.style.display = 'flex';
+        document.getElementById('CloseNotesBtn')?.focus();
         if (window.miseAPI && typeof window.miseAPI.readNotes === 'function') {
             window.miseAPI.readNotes().then((content) => {
+                if (!state.notesActive || request !== notesRequest || notesEdited) return;
+                notesLoaded = true;
                 textarea.value = content || '';
                 state.isEditingNotes = false;
                 renderNotesView();
-                overlay.style.display = 'flex';
             }).catch((err) => {
                 console.error("Failed to load notes:", err);
-                overlay.style.display = 'flex';
             });
         } else {
             overlay.style.display = 'flex';
         }
     } else {
-        if (window.miseAPI && typeof window.miseAPI.saveNotes === 'function') {
+        clearTimeout(notesSaveTimeout);
+        if (notesLoaded && window.miseAPI && typeof window.miseAPI.saveNotes === 'function') {
             window.miseAPI.saveNotes(textarea.value);
         }
         overlay.style.display = 'none';
@@ -107,10 +102,13 @@ export function setupNotesListeners() {
 
     if (textarea) {
         textarea.addEventListener('input', (e) => {
+            notesLoaded = true;
+            notesEdited = true;
+            const content = e.target.value;
             clearTimeout(notesSaveTimeout);
             notesSaveTimeout = setTimeout(() => {
                 if (window.miseAPI && typeof window.miseAPI.saveNotes === 'function') {
-                    window.miseAPI.saveNotes(e.target.value);
+                    window.miseAPI.saveNotes(content);
                 }
             }, 300);
         });
@@ -118,6 +116,7 @@ export function setupNotesListeners() {
         textarea.addEventListener('keydown', (e) => {
             if (e.key === 'Escape') {
                 e.preventDefault();
+                e.stopPropagation();
                 toggleNotesOverlay();
             }
         });
