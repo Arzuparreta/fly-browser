@@ -69,3 +69,11 @@ Merged `fork/feat/opt-in-extensions` into `personal`, preserving the personalise
 Compatibility limits remain documented in [Extensions](guide/extensions.md#compatibility): declarative network rules, blocking webRequest, install events, side panels, native messaging and sync are limited or unsupported. Arbitrary third-party extensions have not been exhaustively verified by this merge.
 
 The broader Electron navigation-focus suite passes three Ctrl+L search/hint cycles but times out twice at the slow-navigation, Preferences-close hint check (`tests/navigation-focus-ui.test.js:92`). That scenario remains an unresolved verification limit of this integration; the complete UI suite is not reported as passing.
+
+## Automatic personal work log · 13 October 2026
+
+| ID | Original problem | Result | Validation |
+| :--- | :--- | :--- | :--- |
+| WF-01 | Completed work could stop after a local commit or reach personal directly without a PR entry. | Repository instructions now require an automatic commit, fork push, PR against personal and merge for every completed task, followed by returning the checkout to personal. Validation failures remain explicitly recorded. | Reviewed the instructions against the owner's standing authorisation and exercised this workflow with its own documentation PR. |
+
+The extensions integration at `1e71460` was already present on `fork/personal` before this workflow update. This PR records that integration retrospectively through EXT-01 and EXT-02 above; its code was already merged and cannot produce a new diff against personal.
