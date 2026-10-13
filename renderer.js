@@ -573,8 +573,10 @@ function setupEventListeners() {
                 handleNavigation(addressBar.value.trim());
             }
         } else if (e.key === 'Escape') {
+            e.preventDefault();
             addressBar.style.display = 'none';
             hideSuggestions();
+            focusActiveWebview();
         }
     });
 

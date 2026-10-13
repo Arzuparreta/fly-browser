@@ -46,3 +46,13 @@ New capabilities include a bounded, in-memory closed-tab URL buffer, direct keyb
 | :--- | :--- | :--- | :--- |
 | KB-21 | Upstream AI-development rules prevented completing commits and pushes in the fork, contrary to the fork owner's working process. | Removed both AI Policy documents and their README, contribution, PR-template and documentation-navigation references. Fork instructions now follow the owner's authorised workflow. Browser security and privacy requirements remain in place. | Reference search, documentation build and explicit owner authorisation to commit, push, create a PR and merge. |
 | KB-22 | The fork had release and documentation workflows but no pull-request verification for browser changes. | Added a least-privilege verification workflow for pull requests and main/personal pushes, covering regression tests, generated-file drift, syntax and documentation builds. | Local checks plus the GitHub Actions verification run before merge. |
+
+## Address-bar search focus · 13 October 2026
+
+Implementation and validation: [PR #2](https://github.com/Arzuparreta/Mise-browser/pull/2), targeting the fork's `personal` branch.
+
+| ID | Original problem | Result | Validation |
+| :--- | :--- | :--- | :--- |
+| KB-23 | Submitting a search with Ctrl+L changed the guest URL and hid the address input without returning host focus to the webview. The host active element could remain BODY, so page-only f never reached the guest even with the hint engine ready. Cancelling or toggling the bar closed had the same missing handoff. | Return focus to the selected webview after submitting navigation or closing the address bar. Keep bare page bindings scoped to the guest and preserve text-field behaviour. No load-completion autofocus, timer or new key interception is added. | A disposable Electron search fixture fails before the fix with host BODY and no hints, then passes three consecutive searches with host WEBVIEW and visible hints. Additional checks cover Escape/Ctrl+L close, ordinary f typing, slow navigation while Preferences is open, and a background result after switching tabs. Unit tests cover the search route and waking a guest. |
+
+The test substitutes a local search endpoint for DuckDuckGo to exercise the browser's exact Ctrl+L search path reproducibly. It does not claim exhaustive verification of DuckDuckGo's live page variants.

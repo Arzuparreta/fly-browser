@@ -77,6 +77,7 @@ function applyTargetUrl(targetUrl) {
     hideSuggestions();
     const addressBar = document.getElementById('WideAddressBar');
     if (addressBar) addressBar.style.display = 'none';
+    focusActiveWebview();
 }
 
 export function displayAddressOverlay() {
@@ -84,6 +85,7 @@ export function displayAddressOverlay() {
     if (addressBar.style.display === 'block') {
         addressBar.style.display = 'none';
         hideSuggestions();
+        focusActiveWebview();
     } else {
         const currentWS = state.sessionState.current_workspace;
         const activeListItem = document.querySelector('#TabList li.selected');

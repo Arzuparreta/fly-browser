@@ -6,7 +6,7 @@
   "license": "GPL-3.0-or-later",
   "scripts": {
     "start": "electron . --log-level=3",
-    "test": "node tests/auth-security.test.js && node tests/audio-controls.test.js && node tests/pinned-tabs.test.js && node tests/config-writes.test.js && node tests/keyboard.test.js && node scripts/sync-keyboard.js --check && node scripts/generate-keybind-docs.js --check",
+    "test": "node tests/auth-security.test.js && node tests/audio-controls.test.js && node tests/pinned-tabs.test.js && node tests/config-writes.test.js && node tests/keyboard.test.js && node scripts/sync-keyboard.js --check && node scripts/generate-keybind-docs.js --check && node tests/navigation-focus.test.js",
     "docs:dev": "vitepress dev docs",
     "docs:build": "vitepress build docs",
     "docs:preview": "vitepress preview docs",
@@ -14,7 +14,7 @@
     "dist": "electron-builder",
     "dist:linux": "electron-builder --linux",
     "dist:dir": "electron-builder --dir",
-    "test:keyboard-ui": "node tests/keyboard-ui.test.js"
+    "test:keyboard-ui": "node tests/keyboard-ui.test.js && node tests/navigation-focus-ui.test.js"
   },
   "build": {
     "appId": "io.github.rakosn1cek.mise-browser",

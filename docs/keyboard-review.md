@@ -6,7 +6,7 @@ Reviewed the action catalogue, renderer keyboard listeners, sandboxed guest prel
 
 | Surface | Keyboard route | Personalisation and safeguards |
 | :--- | :--- | :--- |
-| Address/search | Address action, native text editing, arrow/Enter suggestions, Escape | Assignable action; native field keys retain their meaning. |
+| Address/search | Address action, native text editing, arrow/Enter suggestions, Escape | Assignable action; submitting or closing the address bar returns focus to the selected guest, while native field keys retain their meaning. |
 | Tabs | New/close/duplicate/reopen, next/previous, numbered selection, reorder, pin, mute | All assignable; repeats suppressed for destructive actions; pin boundary maintained. |
 | Workspaces | Dashboard, create, previous/next, destination chooser; native rename/delete buttons | Assignable actions and native controls; transfers reload in the destination container. |
 | Page navigation | Back/forward, reload/force reload/stop, scroll directions/half pages/top/bottom | Browser and page bindings; editable/shadow-root checks; compiled sequence prefixes. |
