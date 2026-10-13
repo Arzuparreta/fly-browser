@@ -53,6 +53,7 @@ All keyboard shortcuts in Mise Browser are fully customisable via `~/.config/mis
 | **F8** | `toggle-tab-audio-mute` | Secondary active tab audio mute toggle |
 | **Ctrl + Shift + I** | `toggle-devtools` | Opens Chromium DevTools in a dedicated window |
 | **F12** | `toggle-devtools` | Secondary shortcut for DevTools |
+| *(unbound)* | `open-extension-actions` | Opens the Command Palette on the Extensions category (popups, extension commands, options). Unbound so pages keep the key; add it to `keybinds.json`, e.g. `"open-extension-actions": "Ctrl+E"` |
 
 ---
 

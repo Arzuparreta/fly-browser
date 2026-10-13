@@ -79,6 +79,9 @@ Controls hardware switches, process limits, privacy whitelists, and search prefe
   - **`sidebar_opacity`**: Sidebar background translucency percentage (40% to 100%) with backdrop blur glass effect.
   - **`overlay_opacity`**: Modal and overlay translucency percentage (50% to 100%) for Command Palette, Notes, and Preferences.
 - **`trusted_domains`**: Array of domains exempted from tracker blocking and fingerprint spoofing.
+- **`extensions_enabled`**: Master switch for [opt-in Chrome extensions](/guide/extensions). `false` by default; while `false` nothing extension related runs.
+- **`extensions_by_workspace`**: Map of workspace name to the extension folders (inside `~/.config/mise-browser/extensions/`) allowed to run there, e.g. `{ "Work": ["darkreader"] }`. Workspaces not listed load nothing.
+- **`extensions_unload_grace_seconds`**: How long a workspace keeps its extensions loaded after its last live tab closes or hibernates (default `60`).
 
 ---
 

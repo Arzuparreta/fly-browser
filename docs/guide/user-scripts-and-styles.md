@@ -52,6 +52,10 @@ By handling core browser mechanics in the engine and letting users drop in
 clean `.user.js` and `.user.css` files, Mise delivers the exact customisations
 users want while maintaining a near-zero idle resource footprint.
 
+::: info WHEN A USERSCRIPT IS NOT ENOUGH
+For the rare extension with no userscript equivalent, Mise offers [opt-in Chrome extensions](/guide/extensions): disabled by default, enabled per workspace, and unloaded automatically when that workspace goes idle. Userscripts remain the recommended path.
+:::
+
 ::: tip COMMUNITY SCRIPTS & STYLES
 Looking for tested customisations like Amazon Dark Mode, Tokyo Night Wikipedia, or YouTube distraction filters? Explore the [Community Scripts Directory](/guide/community-scripts) and the official [Mise-community-scripts repository](https://github.com/Rakosn1cek/Mise-community-scripts).
 :::
