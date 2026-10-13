@@ -4,6 +4,7 @@ import { focusActiveWebview, getActiveWebview, isTargetScript, isDarkMode, escap
 import { renderWorkspaceUI, switchTabFocus, spawnTabWithUrl, spawnNewBlankTab, handleTabRemoval, hibernateInactiveTabs, wakeAllTabsInWorkspace } from '../webview.js';
 import { toggleBookmarksOverlay, promptQuickmark, addCurrentPageToBookmarks } from './bookmarks.js';
 import { syncVisualSettingsInputs, setupVisualSettingsListeners } from '../theme.js';
+import { getExtensionPaletteCommands, prepareExtensionPaletteCommands, syncExtensionsPreferences, setupExtensionsPreferencesListeners } from '../extensions.js';
 
 function returnFocusToWebview() {
     window.miseAllowWebviewFocus = true;
@@ -779,6 +780,7 @@ export async function syncPreferencesUI() {
     if (privateToggle) privateToggle.checked = !!state.globalPrivateModeActive;
 
     syncVisualSettingsInputs(cfg);
+    syncExtensionsPreferences();
 
 
 }
@@ -992,6 +994,8 @@ export function setupPreferencesListeners() {
             }
         };
     }
+
+    setupExtensionsPreferencesListeners();
 }
 
 export async function togglePreferencesView() {
@@ -1023,7 +1027,7 @@ export function closeCommandPalette() {
     returnFocusToWebview();
 }
 
-export async function openCommandPalette() {
+export async function openCommandPalette(category = 'all') {
     const overlay = document.getElementById('CommandPaletteOverlay');
     const input = document.getElementById('PaletteInput');
     if (!overlay || !input) return;
@@ -1035,12 +1039,13 @@ export async function openCommandPalette() {
         if (dash) dash.style.display = 'none';
     }
     await loadDynamicKeybinds();
+    await prepareExtensionPaletteCommands();
 
-    activeCategoryFilter = 'all';
+    activeCategoryFilter = category;
     const filterContainer = document.getElementById('PaletteCategoryFilters');
     if (filterContainer) {
         filterContainer.querySelectorAll('.palette-filter-chip').forEach(chip => {
-            chip.classList.toggle('active', chip.dataset.category === 'all');
+            chip.classList.toggle('active', chip.dataset.category === category);
         });
     }
 
@@ -1165,9 +1170,10 @@ export function filterPaletteCommands(filterText) {
     
     listContainer.innerHTML = '';
     
+    const allCommands = COMMAND_DEFINITIONS.concat(getExtensionPaletteCommands());
     const candidateCommands = (activeCategoryFilter === 'all')
-        ? COMMAND_DEFINITIONS
-        : COMMAND_DEFINITIONS.filter(cmd => cmd.category === activeCategoryFilter);
+        ? allCommands
+        : allCommands.filter(cmd => cmd.category === activeCategoryFilter);
 
     let matches = [];
     if (!search) {

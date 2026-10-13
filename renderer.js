@@ -57,6 +57,7 @@ import {
     commandRegistry, 
     commandActions,
     toggleCommandPaletteView, 
+    openCommandPalette,
     closeCommandPalette,
     togglePreferencesView,
     filterPaletteCommands, 
@@ -100,6 +101,13 @@ import {
 import { openTransientShareModal } from './modules/overlays/shareModal.js';
 import { initSearchEnginePreference } from './modules/overlays/searchEngine.js';
 import { initDownloadShelf, toggleDownloadShelf } from './modules/downloads.js';
+import {
+    setExtensionsConfig,
+    handleExtensionSelectTab,
+    handleExtensionCloseTab,
+    refreshStatusBarActions,
+    closeExtensionPopup
+} from './modules/extensions.js';
 import { 
     toggleSplitView, 
     cycleSplitOrientation, 
@@ -397,6 +405,7 @@ async function initializeBrowser() {
             const cfg = await window.miseAPI.getBrowserSettings();
             if (cfg) {
                 initialCfg = cfg;
+                setExtensionsConfig(cfg);
                 if (cfg.theme) savedTheme = cfg.theme;
                 if (typeof cfg.sidebar_auto_collapse === 'boolean') {
                     sidebarAutoCollapse = cfg.sidebar_auto_collapse;
@@ -753,6 +762,11 @@ function setupEventListeners() {
                     commandActions[action]?.();
                 }
             }
+            case 'open-extension-actions': openCommandPalette('Extensions'); break;
+            case 'extension-select-tab': handleExtensionSelectTab(args[0]); break;
+            case 'extension-close-tab': handleExtensionCloseTab(args[0]); break;
+            case 'extensions-actions-updated': refreshStatusBarActions(); break;
+            case 'close-extension-popup': closeExtensionPopup(); break;
         }
     };
     window.miseAPI.onMasterShortcut(window.executeBrowserAction);

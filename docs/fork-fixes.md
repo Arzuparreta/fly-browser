@@ -56,3 +56,16 @@ Implementation and validation: [PR #2](https://github.com/Arzuparreta/Mise-brows
 | KB-23 | Submitting a search with Ctrl+L changed the guest URL and hid the address input without returning host focus to the webview. The host active element could remain BODY, so page-only f never reached the guest even with the hint engine ready. Cancelling or toggling the bar closed had the same missing handoff. | Return focus to the selected webview after submitting navigation or closing the address bar. Keep bare page bindings scoped to the guest and preserve text-field behaviour. No load-completion autofocus, timer or new key interception is added. | A disposable Electron search fixture fails before the fix with host BODY and no hints, then passes three consecutive searches with host WEBVIEW and visible hints. Additional checks cover Escape/Ctrl+L close, ordinary f typing, slow navigation while Preferences is open, and a background result after switching tabs. Unit tests cover the search route and waking a guest. |
 
 The test substitutes a local search endpoint for DuckDuckGo to exercise the browser's exact Ctrl+L search path reproducibly. It does not claim exhaustive verification of DuckDuckGo's live page variants.
+
+## Opt-in extensions integration · 13 October 2026
+
+Merged `fork/feat/opt-in-extensions` into `personal`, preserving the personalised keyboard catalogue and address-bar focus fixes.
+
+| ID | Original problem | Result | Validation |
+| :--- | :--- | :--- | :--- |
+| EXT-01 | The browser could not load user-installed Chrome extensions. | Optional unpacked extensions are scoped to opted-in workspaces, loaded lazily, excluded from private mode and unloaded after a grace period. Preferences, status actions, popups and palette commands expose their controls. | Extension tests cover manifest validation, IDs, background types, path boundaries, workspace gating, private mode and lazy loading. |
+| EXT-02 | The extensions branch predates personalised keyboard controls; merging its documentation and test runner would discard current behaviour or leave incompatible test expectations. | Retain both test suites, both renderer dispatch paths and both stylesheets. Register extension actions in the canonical catalogue without a default binding, regenerate the keyboard reference and correct the extensions guide's Dark Reader shortcut. Update isolated test fixtures for the extension notification import and unassigned-binding representation. | `npm test`, generated-file checks, JavaScript syntax, documentation build and whitespace checks; disposable Electron recorder and editable-page checks pass. |
+
+Compatibility limits remain documented in [Extensions](guide/extensions.md#compatibility): declarative network rules, blocking webRequest, install events, side panels, native messaging and sync are limited or unsupported. Arbitrary third-party extensions have not been exhaustively verified by this merge.
+
+The broader Electron navigation-focus suite passes three Ctrl+L search/hint cycles but times out twice at the slow-navigation, Preferences-close hint check (`tests/navigation-focus-ui.test.js:92`). That scenario remains an unresolved verification limit of this integration; the complete UI suite is not reported as passing.

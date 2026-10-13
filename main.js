@@ -25,6 +25,7 @@ const security = require('./security');
 const keybinds = require('./keybinds');
 const keyboard = require('./keyboard');
 const userContent = require('./userContent');
+const extensions = require('./extensions');
 const diagnostics = require('./diagnostics');
 
 // NATIVE CONFIG UTILITIES
@@ -105,7 +106,11 @@ const DEFAULT_CONFIG = {
     theme_colors: { ...DEFAULT_THEME_COLORS },
     enable_diagnostics: false,
     show_window_controls: false,
-    last_seen_version: null
+    last_seen_version: null,
+    // Opt-in Chrome extensions, see extensions.js and docs/guide/extensions.md
+    extensions_enabled: false,
+    extensions_by_workspace: {},
+    extensions_unload_grace_seconds: 60
 };
 
 // Writes to a temporary file and renames it over config.json. A plain write truncates
@@ -310,7 +315,7 @@ function scheduleHistoryFlush() {
 }
 
 function logVisit(title, url) {
-    if (!url || url === 'about:blank' || url.startsWith('file://')) return;
+    if (!url || url === 'about:blank' || url.startsWith('file://') || url.startsWith('chrome-extension://')) return;
 
     const history = getHistoryCache();
     if (history.length > 0 && history[0].url === url) return;
@@ -1701,13 +1706,27 @@ function createWindow() {
     });
 
     userContent.initializeUserContent(CONFIG_DIR, mainWindow);
+    extensions.initializeExtensions({
+        configDir: CONFIG_DIR,
+        getConfig: loadBrowserConfig,
+        getMainWindow: () => mainWindow,
+        getWorkspacePartition,
+        logEvent: (level, category, message) => diagnostics.logEvent(level, category, message)
+    });
 
+    let attachingWebviewSrc = '';
     mainWindow.webContents.on('will-attach-webview', (event, webPreferences, params) => {
         security.hardenWebviewPreferences(webPreferences);
         const partitionStr = (webPreferences && webPreferences.partition) || (params && params.partition);
         if (partitionStr) {
             configureAndHardenSession(session.fromPartition(partitionStr));
         }
+        attachingWebviewSrc = (params && params.src) || '';
+    });
+
+    mainWindow.webContents.on('did-attach-webview', (event, guestContents) => {
+        extensions.handleWebviewAttached(guestContents, attachingWebviewSrc);
+        attachingWebviewSrc = '';
     });
 
 }
@@ -1818,6 +1837,12 @@ app.on('web-contents-created', (event, webContents) => {
                 }));
             }
         
+            const extensionItems = extensions.getContextMenuItems(webContents, params);
+            if (extensionItems.length > 0) {
+                menu.append(new MenuItem({ type: 'separator' }));
+                extensionItems.forEach(item => menu.append(item));
+            }
+
             menu.append(new MenuItem({ type: 'separator' }));
         
             const shareSubmenu = new Menu();

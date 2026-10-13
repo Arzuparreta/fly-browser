@@ -72,7 +72,9 @@ const ACTION_METADATA = {
     'swap-split-panes': { label: 'Swap Split Panes (Left / Right)', category: 'Navigation & Workspaces' },
     'toggle-dark-reader': { label: 'Toggle Dark Reader on Active Tab', category: 'Web Interaction' },
     'toggle-reader-view': { label: 'Toggle Reader View on Active Tab', category: 'Web Interaction' },
-    'toggle-pin-tab': { label: 'Pin / Unpin Active Tab', category: 'Navigation & Workspaces' }
+    'toggle-pin-tab': { label: 'Pin / Unpin Active Tab', category: 'Navigation & Workspaces' },
+    // Unbound by default so the key stays free for pages; add it to keybinds.json to use it
+    'open-extension-actions': { label: 'Open Extension Actions (Popups, Commands, Options)', category: 'Web Interaction' }
 };
 
 Object.assign(ACTION_METADATA, {

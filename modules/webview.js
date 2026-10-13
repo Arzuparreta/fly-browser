@@ -1,5 +1,6 @@
 import { state } from './state.js';
 import { getActiveWebview, focusActiveWebview, getWorkspacePartition, isDarkMode, isPdfUrl, getPdfViewerUrl, extractOriginalUrl, isTargetPrivateDomain } from './utils.js';
+import { loadWebviewSource } from './extensions.js';
 import { isSplitActive, applySplitLayout, handleSplitTabSelection, handleTabRemovalInSplit, getSplitState } from './splitView.js';
 import { 
     setTargetUrl, 
@@ -40,7 +41,7 @@ export function createWebView(url, currentWS, idx) {
     }
     
     const initialSrc = isPdfUrl(url) ? getPdfViewerUrl(url) : url;
-    webview.setAttribute('src', initialSrc);
+    loadWebviewSource(webview, currentWS, initialSrc);
 
     webview.addEventListener('will-navigate', (e) => {
         webview.__miseNavigationEpoch = (webview.__miseNavigationEpoch || 0) + 1;

@@ -1,0 +1,546 @@
+// Renderer side of opt-in Chrome extension support. See extensions.js in the main
+// process for the lifecycle. With extensions disabled, every entry point here
+// returns after a single property check.
+
+import { state } from './state.js';
+import { getWorkspacePartition, escapeHtml } from './utils.js';
+import { setTargetUrl } from './statusBar.js';
+import { spawnTabWithUrl, switchTabFocus, handleTabRemoval } from './webview.js';
+
+const ENSURE_TIMEOUT_MS = 1500;
+const POPUP_MIN = { width: 200, height: 60 };
+const POPUP_MAX = { width: 800, height: 600 };
+const POPUP_MEASURE_DELAYS_MS = [0, 150, 400, 900, 1800];
+
+const BACKGROUND_LABELS = {
+    none: { text: 'No background', cls: 'ext-kind-light', title: 'Content scripts only. No process of its own.' },
+    worker: { text: 'Service worker', cls: 'ext-kind-normal', title: 'Runs a process only while handling events. Chromium stops it after about 30 seconds idle.' },
+    event: { text: 'Event page', cls: 'ext-kind-normal', title: 'MV2 event page. Loaded on demand.' },
+    persistent: { text: 'Persistent', cls: 'ext-kind-heavy', title: 'MV2 background page that keeps a process alive for as long as it is loaded.' }
+};
+
+let installedCache = [];
+let popupState = null;
+
+// CONFIG STATE
+
+export function setExtensionsConfig(cfg) {
+    state.extensions = {
+        enabled: !!(cfg && cfg.extensions_enabled === true),
+        byWorkspace: (cfg && cfg.extensions_by_workspace) || {}
+    };
+}
+
+export function workspaceHasExtensions(workspace) {
+    const ext = state.extensions;
+    if (!ext || !ext.enabled) return false;
+    const list = ext.byWorkspace[workspace];
+    return Array.isArray(list) && list.length > 0;
+}
+
+function currentPartition() {
+    return getWorkspacePartition(state.sessionState.current_workspace);
+}
+
+function isPersistentPartition(partition) {
+    return typeof partition === 'string' && partition.startsWith('persist:');
+}
+
+// TAB LIFECYCLE HOOKS
+
+// Sets the webview source once the workspace's extensions are loaded, so content
+// scripts declared for document_start apply to the first navigation. Without
+// extensions for this workspace the source is set synchronously, as before.
+export function loadWebviewSource(webview, workspace, src) {
+    const partition = webview.getAttribute('partition');
+    if (!isPersistentPartition(partition) || !workspaceHasExtensions(workspace)) {
+        webview.setAttribute('src', src);
+        return;
+    }
+
+    let done = false;
+    const finish = () => {
+        if (done) return;
+        done = true;
+        webview.setAttribute('src', src);
+    };
+    setTimeout(finish, ENSURE_TIMEOUT_MS);
+    window.miseAPI.extensionsEnsure(workspace, partition).then(finish, finish);
+}
+
+// Called whenever the active view changes so chrome.tabs.query({ active: true })
+// and the status bar reflect the tab the user is looking at.
+export function notifyActiveView(webview, workspace) {
+    if (!workspaceHasExtensions(workspace)) {
+        if (state.extensions && state.extensions.enabled) {
+            hideStatusBarActions();
+            try { window.miseAPI.extensionsTabFocused(0); } catch (e) {}
+        }
+        return;
+    }
+    if (webview) {
+        const send = () => {
+            try { window.miseAPI.extensionsTabFocused(webview.getWebContentsId()); } catch (e) {}
+            refreshStatusBarActions();
+        };
+        try {
+            webview.getWebContentsId();
+            send();
+        } catch (e) {
+            webview.addEventListener('did-attach', send, { once: true });
+        }
+    } else {
+        refreshStatusBarActions();
+    }
+}
+
+function findTabByWebContentsId(wcId) {
+    for (const [ws, views] of Object.entries(state.activeViewsCache || {})) {
+        if (!Array.isArray(views)) continue;
+        for (let i = 0; i < views.length; i++) {
+            const wv = views[i];
+            if (!wv) continue;
+            try {
+                if (wv.getWebContentsId() === wcId) return { ws, idx: i };
+            } catch (e) {}
+        }
+    }
+    return null;
+}
+
+export function handleExtensionSelectTab(wcId) {
+    const target = findTabByWebContentsId(wcId);
+    if (!target || target.ws !== state.sessionState.current_workspace) return;
+    const selected = document.querySelector('#TabList li.selected');
+    const currentIdx = selected ? Array.from(document.querySelectorAll('#TabList li')).indexOf(selected) : -1;
+    if (currentIdx !== target.idx) switchTabFocus(target.idx);
+}
+
+export function handleExtensionCloseTab(wcId) {
+    const target = findTabByWebContentsId(wcId);
+    if (!target || target.ws !== state.sessionState.current_workspace) return;
+    switchTabFocus(target.idx);
+    handleTabRemoval();
+}
+
+// After a settings change, workspaces with live tabs load or drop extensions now
+// instead of waiting for their next new tab.
+async function ensureLiveWorkspaces() {
+    const jobs = [];
+    for (const [ws, views] of Object.entries(state.activeViewsCache || {})) {
+        if (!workspaceHasExtensions(ws)) continue;
+        if (!Array.isArray(views) || !views.some(Boolean)) continue;
+        jobs.push(window.miseAPI.extensionsEnsure(ws, getWorkspacePartition(ws)).catch(() => {}));
+    }
+    await Promise.all(jobs);
+}
+
+// STATUS BAR
+
+function hideStatusBarActions() {
+    const bar = document.getElementById('StatusBarExtensions');
+    if (bar) {
+        bar.hidden = true;
+        bar.innerHTML = '';
+    }
+}
+
+async function ensureInstalledCache() {
+    if (installedCache.length) return installedCache;
+    try {
+        const res = await window.miseAPI.extensionsGetState({ scan: true });
+        installedCache = (res && res.installed) || [];
+    } catch (e) {}
+    return installedCache;
+}
+
+export async function refreshStatusBarActions() {
+    const bar = document.getElementById('StatusBarExtensions');
+    if (!bar) return;
+    const workspace = state.sessionState.current_workspace;
+    if (!workspaceHasExtensions(workspace)) {
+        hideStatusBarActions();
+        return;
+    }
+
+    let actions = [];
+    try { actions = (await window.miseAPI.extensionsGetActions(currentPartition())) || []; } catch (e) {}
+    const installed = await ensureInstalledCache();
+    const visible = actions.filter(a => installed.find(i => i.id === a.id && i.hasAction));
+
+    if (!visible.length) {
+        hideStatusBarActions();
+        return;
+    }
+
+    bar.innerHTML = visible.map(action => {
+        const info = installed.find(i => i.id === action.id) || {};
+        const icon = info.icon
+            ? `<img src="${info.icon}" alt="">`
+            : '<i class="fa-solid fa-puzzle-piece"></i>';
+        const badge = action.badgeText
+            ? `<span class="status-extension-badge"${action.badgeColor ? ` style="background:${escapeHtml(String(action.badgeColor))}"` : ''}>${escapeHtml(String(action.badgeText))}</span>`
+            : '';
+        return `<button type="button" class="status-extension-btn" data-extension-id="${escapeHtml(action.id)}" title="${escapeHtml(action.title || info.name || '')}">${icon}${badge}</button>`;
+    }).join('');
+    bar.hidden = false;
+
+    bar.querySelectorAll('.status-extension-btn').forEach(btn => {
+        btn.onclick = () => activateExtension(btn.dataset.extensionId, btn.getBoundingClientRect());
+    });
+}
+
+// POPUPS
+
+export function closeExtensionPopup() {
+    if (!popupState) return;
+    const { overlay } = popupState;
+    popupState = null;
+    try { overlay.remove(); } catch (e) {}
+}
+
+function placePopup(container, anchorRect) {
+    const statusBar = document.getElementById('StatusBar');
+    const barHeight = statusBar && statusBar.offsetParent !== null ? statusBar.offsetHeight : 0;
+    container.style.bottom = `${barHeight + 8}px`;
+    if (anchorRect) {
+        const right = Math.max(8, window.innerWidth - anchorRect.right);
+        container.style.right = `${right}px`;
+    } else {
+        container.style.right = '12px';
+    }
+}
+
+async function measurePopup(webview) {
+    if (!popupState || popupState.webview !== webview) return;
+    try {
+        const [w, h] = await webview.executeJavaScript('[document.documentElement.scrollWidth, document.documentElement.scrollHeight]');
+        const width = Math.min(POPUP_MAX.width, Math.max(POPUP_MIN.width, Number(w) || 0));
+        const height = Math.min(POPUP_MAX.height, Math.max(POPUP_MIN.height, Number(h) || 0));
+        webview.style.width = `${width}px`;
+        webview.style.height = `${height}px`;
+    } catch (e) {}
+}
+
+function showPopup(url, partition, anchorRect) {
+    closeExtensionPopup();
+
+    const overlay = document.createElement('div');
+    overlay.id = 'ExtensionPopupOverlay';
+    const container = document.createElement('div');
+    container.className = 'extension-popup';
+    const webview = document.createElement('webview');
+    webview.setAttribute('partition', partition);
+    webview.style.width = `${POPUP_MIN.width}px`;
+    webview.style.height = `${POPUP_MIN.height}px`;
+
+    overlay.addEventListener('mousedown', (e) => {
+        if (e.target === overlay) closeExtensionPopup();
+    });
+    webview.addEventListener('close', closeExtensionPopup);
+    webview.addEventListener('did-finish-load', () => {
+        POPUP_MEASURE_DELAYS_MS.forEach(delay => setTimeout(() => measurePopup(webview), delay));
+        window.miseAllowWebviewFocus = true;
+        webview.focus();
+    });
+
+    // src is set before attaching so the main process can tell the popup from a tab
+    webview.setAttribute('src', url);
+    container.appendChild(webview);
+    overlay.appendChild(container);
+    placePopup(container, anchorRect);
+    document.body.appendChild(overlay);
+    popupState = { overlay, webview };
+}
+
+export async function activateExtension(extensionId, anchorRect = null) {
+    const partition = currentPartition();
+    let res = null;
+    try { res = await window.miseAPI.extensionsActivate(extensionId, partition); } catch (e) {}
+    if (!res || res.error) {
+        showStatusNote((res && res.error) || 'Extension is not available in this workspace.');
+        return;
+    }
+    if (res.kind === 'popup') showPopup(res.url, res.partition, anchorRect);
+    setTimeout(refreshStatusBarActions, 300);
+}
+
+function showStatusNote(text) {
+    setTargetUrl(text, 3000);
+}
+
+// COMMAND PALETTE
+
+// Awaited when the palette opens so per-extension entries are present on first use
+export async function prepareExtensionPaletteCommands() {
+    if (!workspaceHasExtensions(state.sessionState.current_workspace)) return;
+    await ensureInstalledCache();
+}
+
+export function getExtensionPaletteCommands() {
+    const commands = [{
+        id: 'extensions-open-settings',
+        title: 'Extension Settings',
+        desc: 'Enable Chrome extensions per workspace and see what they cost',
+        details: 'Opens the Extensions section in Preferences. Extensions are off by default, load only in the workspaces you choose and unload when those workspaces go idle.',
+        tip: 'Unpacked extensions live in ~/.config/mise-browser/extensions/, one folder each.',
+        category: 'Extensions',
+        icon: 'fa-solid fa-puzzle-piece',
+        keywords: ['extensions', 'addons', 'chrome', 'plugins', 'settings'],
+        action: () => openExtensionsPreferences()
+    }];
+
+    if (!state.extensions || !state.extensions.enabled) return commands;
+
+    commands.push({
+        id: 'extensions-open-dir',
+        title: 'Open Extensions Directory',
+        desc: 'Browse ~/.config/mise-browser/extensions in file manager',
+        details: 'Each unpacked extension goes in its own folder with its manifest.json at the top level.',
+        tip: 'Run "Reload Extensions" after updating an extension on disk.',
+        category: 'Extensions',
+        icon: 'fa-solid fa-folder-open',
+        keywords: ['extensions', 'folder', 'directory', 'unpacked'],
+        action: () => window.miseAPI.extensionsOpenDir()
+    }, {
+        id: 'extensions-reload',
+        title: 'Reload Extensions',
+        desc: 'Re-read extension code from disk in every workspace using it',
+        details: 'Unloads and reloads extensions in workspaces with live tabs. Pages that already ran the old content scripts need a reload.',
+        tip: 'Use this after replacing an extension folder with a newer version.',
+        category: 'Extensions',
+        icon: 'fa-solid fa-rotate',
+        keywords: ['extensions', 'reload', 'refresh', 'update'],
+        action: async () => {
+            installedCache = [];
+            const res = await window.miseAPI.extensionsReload();
+            showStatusNote(res && res.affectedTabs ? `Extensions reloaded. Reload ${res.affectedTabs} open tab(s) to refresh content scripts.` : 'Extensions reloaded.');
+            refreshStatusBarActions();
+        }
+    });
+
+    const workspace = state.sessionState.current_workspace;
+    if (!workspaceHasExtensions(workspace)) return commands;
+    const enabledFolders = state.extensions.byWorkspace[workspace] || [];
+
+    for (const info of installedCache.filter(i => enabledFolders.includes(i.folder))) {
+        if (info.hasAction) {
+            commands.push({
+                id: `extension-activate-${info.id}`,
+                title: `${info.name}: ${info.hasPopup ? 'Open Popup' : 'Run Action'}`,
+                desc: info.hasPopup ? 'Open the extension popup for the active tab' : 'Trigger the extension button for the active tab',
+                details: `${info.name} ${info.version}`,
+                tip: 'Press Esc or click outside the popup to close it.',
+                category: 'Extensions',
+                icon: 'fa-solid fa-puzzle-piece',
+                keywords: ['extension', 'popup', info.name.toLowerCase()],
+                action: () => activateExtension(info.id)
+            });
+        }
+        for (const cmd of info.commands || []) {
+            commands.push({
+                id: `extension-command-${info.id}-${cmd.name}`,
+                title: `${info.name}: ${cmd.description}`,
+                desc: 'Extension keyboard command, dispatched to the active tab',
+                details: `Sends chrome.commands.onCommand("${cmd.name}") to ${info.name}.`,
+                tip: 'Bind it to a key through the extension if it supports custom shortcuts.',
+                category: 'Extensions',
+                icon: 'fa-solid fa-keyboard',
+                keywords: ['extension', 'command', info.name.toLowerCase(), cmd.name.toLowerCase()],
+                action: async () => {
+                    const ok = await window.miseAPI.extensionsRunCommand(info.id, currentPartition(), cmd.name);
+                    if (!ok) showStatusNote(`${info.name} is not loaded in this workspace yet.`);
+                }
+            });
+        }
+        if (info.optionsPage) {
+            commands.push({
+                id: `extension-options-${info.id}`,
+                title: `${info.name}: Options`,
+                desc: 'Open the extension options page in a new tab',
+                details: 'Options are stored per workspace, like everything else the extension saves.',
+                tip: 'The options tab counts as a live tab and keeps the extension loaded while open.',
+                category: 'Extensions',
+                icon: 'fa-solid fa-gear',
+                keywords: ['extension', 'options', 'settings', info.name.toLowerCase()],
+                action: () => openExtensionOptions(info)
+            });
+        }
+    }
+    return commands;
+}
+
+function openExtensionOptions(info) {
+    const page = String(info.optionsPage || '').replace(/^\//, '');
+    if (!page) return;
+    spawnTabWithUrl(`chrome-extension://${info.id}/${page}`);
+}
+
+// PREFERENCES
+
+function openExtensionsPreferences() {
+    const overlay = document.getElementById('PreferencesOverlay');
+    const isOpen = overlay && overlay.style.display !== 'none';
+    if (!isOpen && typeof window.togglePreferencesView === 'function') {
+        window.togglePreferencesView();
+    }
+    setTimeout(() => {
+        const section = document.getElementById('ExtensionsSettingsSection');
+        if (section) section.scrollIntoView({ block: 'start' });
+    }, 50);
+}
+
+function formatMb(value) {
+    return typeof value === 'number' ? `${value.toFixed(1)} MB` : '';
+}
+
+function renderRuntimeSummary(runtime) {
+    const target = document.getElementById('ExtensionsRuntimeSummary');
+    if (!target) return;
+    if (!runtime) {
+        target.innerHTML = '';
+        return;
+    }
+    const rows = runtime.workspaces.map(ws => {
+        const stateLabel = ws.state === 'grace' ? 'unloading soon' : ws.state;
+        const loaded = ws.loaded.map(l => {
+            const parts = [escapeHtml(l.name || l.folder)];
+            if (l.backgroundPageMb !== undefined) parts.push(`background page ${formatMb(l.backgroundPageMb)}`);
+            if (l.workerRunning) parts.push('service worker running');
+            return parts.join(' · ');
+        }).join('<br>') || 'Nothing loaded';
+        return `<div class="ext-runtime-row"><span class="ext-runtime-ws">${escapeHtml(ws.workspace)}</span><span class="ext-runtime-state ext-state-${escapeHtml(ws.state)}">${escapeHtml(stateLabel)}</span><span class="ext-runtime-tabs">${ws.liveTabs} live tab(s)</span><div class="ext-runtime-loaded">${loaded}</div></div>`;
+    }).join('');
+
+    const m = runtime.metrics;
+    const totals = m
+        ? `<div class="ext-runtime-totals">Mise total: <strong>${formatMb(m.totalMb)}</strong> · extension service workers: ${m.serviceWorkerProcesses} running, ${formatMb(m.serviceWorkerMb)} <span class="ext-runtime-method">(${escapeHtml(m.method)})</span></div>`
+        : '';
+    target.innerHTML = totals + (rows || '<div class="ext-runtime-empty">No workspace has loaded extensions since Mise started.</div>');
+}
+
+function renderInstalledList(res) {
+    const list = document.getElementById('ExtensionsInstalledList');
+    if (!list) return;
+    const workspaces = Object.keys(state.sessionState.workspaces || {});
+    if (!res.installed.length) {
+        list.innerHTML = `<div class="ext-empty">No extensions found. Put each unpacked extension in its own folder inside <code>${escapeHtml(res.directory)}</code>.</div>`;
+        return;
+    }
+
+    list.innerHTML = res.installed.map(info => {
+        if (info.error) {
+            return `<div class="ext-card ext-card-error"><div class="ext-card-head"><span class="ext-name">${escapeHtml(info.folder)}</span></div><div class="ext-warning">${escapeHtml(info.error)}</div></div>`;
+        }
+        const kind = BACKGROUND_LABELS[info.background] || BACKGROUND_LABELS.none;
+        const icon = info.icon ? `<img class="ext-icon" src="${info.icon}" alt="">` : '<i class="fa-solid fa-puzzle-piece ext-icon"></i>';
+        const warnings = (info.warnings || []).map(w => `<div class="ext-warning"><i class="fa-solid fa-triangle-exclamation"></i> ${escapeHtml(w)}</div>`).join('');
+        const chips = workspaces.map(ws => {
+            const checked = Array.isArray(res.byWorkspace[ws]) && res.byWorkspace[ws].includes(info.folder);
+            return `<label class="ext-ws-chip"><input type="checkbox" data-folder="${escapeHtml(info.folder)}" data-workspace="${escapeHtml(ws)}"${checked ? ' checked' : ''}${res.enabled ? '' : ' disabled'}> ${escapeHtml(ws)}</label>`;
+        }).join('');
+        const options = info.optionsPage ? `<button type="button" class="settings-action-btn ext-options-btn" data-folder="${escapeHtml(info.folder)}">Options</button>` : '';
+        return `<div class="ext-card">
+            <div class="ext-card-head">${icon}<span class="ext-name">${escapeHtml(info.name)}</span><span class="ext-version">${escapeHtml(info.version)} · MV${escapeHtml(String(info.manifestVersion || '?'))}</span><span class="ext-kind ${kind.cls}" title="${escapeHtml(kind.title)}">${kind.text}</span>${options}</div>
+            ${warnings}
+            <div class="ext-ws-chips"><span class="ext-ws-label">Active in:</span>${chips}</div>
+        </div>`;
+    }).join('');
+
+    list.querySelectorAll('input[type="checkbox"][data-folder]').forEach(box => {
+        box.onchange = () => saveWorkspaceSelection(box.dataset.workspace, box.dataset.folder, box.checked);
+    });
+    list.querySelectorAll('.ext-options-btn').forEach(btn => {
+        btn.onclick = () => {
+            const info = res.installed.find(i => i.folder === btn.dataset.folder);
+            if (!info) return;
+            const enabledHere = workspaceHasExtensions(state.sessionState.current_workspace) &&
+                (state.extensions.byWorkspace[state.sessionState.current_workspace] || []).includes(info.folder);
+            if (!enabledHere) {
+                setPreferencesNote('Enable this extension for the current workspace to open its options.');
+                return;
+            }
+            if (typeof window.togglePreferencesView === 'function') window.togglePreferencesView();
+            openExtensionOptions(info);
+        };
+    });
+}
+
+function setPreferencesNote(text) {
+    const note = document.getElementById('ExtensionsSettingsNote');
+    if (!note) return;
+    note.textContent = text;
+    note.classList.add('visible');
+    setTimeout(() => note.classList.remove('visible'), 4000);
+}
+
+export async function syncExtensionsPreferences() {
+    const toggle = document.getElementById('setting-extensions-toggle');
+    if (!toggle || !window.miseAPI || typeof window.miseAPI.extensionsGetState !== 'function') return;
+    let res;
+    try { res = await window.miseAPI.extensionsGetState({ scan: true, metrics: true }); } catch (e) { return; }
+    if (!res) return;
+
+    toggle.checked = !!res.enabled;
+    installedCache = res.installed || [];
+    const dirLabel = document.getElementById('ExtensionsDirectoryPath');
+    if (dirLabel) dirLabel.textContent = res.directory;
+    const grace = document.getElementById('ExtensionsGraceSeconds');
+    if (grace) grace.textContent = String(res.graceSeconds);
+
+    renderInstalledList(res);
+    renderRuntimeSummary(res.enabled ? res.runtime : null);
+}
+
+async function persistConfig(patch) {
+    const current = (await window.miseAPI.getBrowserSettings()) || {};
+    const merged = { ...current, ...patch };
+    await window.miseAPI.updateBrowserSettings(merged);
+    setExtensionsConfig(merged);
+    await window.miseAPI.extensionsApplyConfig();
+    await ensureLiveWorkspaces();
+}
+
+async function saveWorkspaceSelection(workspace, folder, enabled) {
+    const current = (await window.miseAPI.getBrowserSettings()) || {};
+    const map = { ...(current.extensions_by_workspace || {}) };
+    const list = new Set(Array.isArray(map[workspace]) ? map[workspace] : []);
+    if (enabled) list.add(folder); else list.delete(folder);
+    if (list.size) map[workspace] = [...list]; else delete map[workspace];
+
+    await persistConfig({ extensions_by_workspace: map });
+    setPreferencesNote(enabled
+        ? 'Saved. Already open tabs in that workspace need a reload for content scripts.'
+        : 'Saved. Unloaded from that workspace.');
+    await syncExtensionsPreferences();
+    refreshStatusBarActions();
+}
+
+export function setupExtensionsPreferencesListeners() {
+    const toggle = document.getElementById('setting-extensions-toggle');
+    if (toggle) {
+        toggle.onchange = async () => {
+            await persistConfig({ extensions_enabled: toggle.checked });
+            setPreferencesNote(toggle.checked
+                ? 'Extensions enabled. Choose the workspaces each one may run in.'
+                : 'Extensions disabled and unloaded everywhere. Open tabs keep injected scripts until reloaded.');
+            await syncExtensionsPreferences();
+            refreshStatusBarActions();
+        };
+    }
+    const openDir = document.getElementById('setting-extensions-open-dir-btn');
+    if (openDir) openDir.onclick = () => window.miseAPI.extensionsOpenDir();
+    const reload = document.getElementById('setting-extensions-reload-btn');
+    if (reload) {
+        reload.onclick = async () => {
+            installedCache = [];
+            const res = await window.miseAPI.extensionsReload();
+            setPreferencesNote(res && res.affectedTabs
+                ? `Reloaded. Reload ${res.affectedTabs} open tab(s) to refresh content scripts.`
+                : 'Reloaded.');
+            await syncExtensionsPreferences();
+        };
+    }
+    const refresh = document.getElementById('setting-extensions-refresh-btn');
+    if (refresh) refresh.onclick = () => syncExtensionsPreferences();
+}

@@ -106,6 +106,7 @@ Existing legacy profiles retain their explicit assignments, including empty and 
 | Copy page URL | Unassigned | `y` |
 | Find In Page | `Ctrl+F` / `F3` | `/` |
 | Jump to Quickmark | `Ctrl+J` | Unassigned |
+| Open Extension Actions (Popups, Commands, Options) | Unassigned | Unassigned |
 | Play/Pause Media Playback Globally | `Ctrl+Shift+0` / `F10` | Unassigned |
 | Print active page | Unassigned | Unassigned |
 | Reload without cache | `Ctrl+Shift+R` | `Shift+R` |

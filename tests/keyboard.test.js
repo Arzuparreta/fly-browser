@@ -141,7 +141,7 @@ let selectedList = listA;
 const statusContext = {
     state: {sessionState: {current_workspace: 'A', workspaces: {A: ['https://example.org', 'https://example.com']}}, activeViewsCache: {A: [tabA, tabB]}},
     window: {}, document: {getElementById: () => null, querySelector: () => selectedList, querySelectorAll: () => [listA, listB]},
-    isSplitActive: () => false, getWorkspacePartition: () => 'A', updateDarkReaderButtonUI: () => {}, isWebviewDarkReaderActive: () => false
+    notifyActiveView: () => {}, isSplitActive: () => false, getWorkspacePartition: () => 'A', updateDarkReaderButtonUI: () => {}, isWebviewDarkReaderActive: () => false
 };
 vm.createContext(statusContext); vm.runInContext(statusSource, statusContext);
 statusContext.handleGuestPassthroughState(true, 'A', 0);

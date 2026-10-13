@@ -3807,3 +3807,211 @@ i.spinning {
 #WorkspaceMoveForm { display: grid; gap: 18px; }
 #WorkspaceMoveForm label { display: grid; gap: 8px; }
 #WorkspaceMoveTarget { padding: 8px; color: var(--text); background: var(--bg-sidebar); border: 1px solid var(--border); }
+/* Opt-in Chrome extensions: status bar actions, popup and Preferences section */
+.status-extensions {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+}
+
+.status-extensions[hidden] {
+    display: none;
+}
+
+.status-extension-btn {
+    position: relative;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 18px;
+    height: 16px;
+    padding: 0;
+    border: none;
+    background: transparent;
+    color: var(--text);
+    cursor: pointer;
+    opacity: 0.85;
+}
+
+.status-extension-btn:hover,
+.status-extension-btn:focus-visible {
+    opacity: 1;
+    outline: 1px solid var(--accent);
+    border-radius: 3px;
+}
+
+.status-extension-btn img {
+    width: 14px;
+    height: 14px;
+}
+
+.status-extension-badge {
+    position: absolute;
+    right: -4px;
+    top: -5px;
+    min-width: 10px;
+    padding: 0 2px;
+    border-radius: 6px;
+    background: var(--accent);
+    color: var(--bg-main);
+    font-size: 8px;
+    font-weight: 700;
+    line-height: 10px;
+    text-align: center;
+}
+
+#ExtensionPopupOverlay {
+    position: fixed;
+    inset: 0;
+    z-index: 9000;
+    background: transparent;
+}
+
+.extension-popup {
+    position: absolute;
+    display: flex;
+    border: 1px solid var(--accent);
+    border-radius: 6px;
+    overflow: hidden;
+    background: #ffffff;
+    box-shadow: 0 8px 24px rgba(0, 0, 0, 0.45);
+}
+
+.extension-popup webview {
+    display: flex;
+}
+
+.extensions-list {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+}
+
+.ext-empty,
+.ext-runtime-empty {
+    font-size: 12px;
+    opacity: 0.75;
+}
+
+.ext-card {
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    padding: 8px 10px;
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+}
+
+.ext-card-error {
+    border-color: #f7768e;
+}
+
+.ext-card-head {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    flex-wrap: wrap;
+}
+
+.ext-icon {
+    width: 18px;
+    height: 18px;
+}
+
+.ext-name {
+    font-weight: 600;
+    font-size: 13px;
+}
+
+.ext-version {
+    font-size: 11px;
+    opacity: 0.65;
+}
+
+.ext-kind {
+    font-size: 10px;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.4px;
+    padding: 1px 6px;
+    border-radius: 3px;
+    border: 1px solid currentColor;
+}
+
+.ext-kind-light { color: #9ece6a; }
+.ext-kind-normal { color: var(--accent); }
+.ext-kind-heavy { color: #e0af68; }
+
+.ext-options-btn {
+    margin-left: auto;
+}
+
+.ext-warning {
+    font-size: 11px;
+    color: #e0af68;
+}
+
+.ext-ws-chips {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 6px;
+    font-size: 12px;
+}
+
+.ext-ws-label {
+    opacity: 0.7;
+}
+
+.ext-ws-chip {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    padding: 2px 6px;
+    border: 1px solid var(--border);
+    border-radius: 3px;
+    cursor: pointer;
+}
+
+.extensions-runtime {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    font-size: 12px;
+}
+
+.ext-runtime-totals {
+    opacity: 0.9;
+}
+
+.ext-runtime-method {
+    opacity: 0.6;
+}
+
+.ext-runtime-row {
+    display: grid;
+    grid-template-columns: minmax(80px, auto) auto auto;
+    gap: 2px 10px;
+    padding: 6px 8px;
+    border: 1px dashed var(--border);
+    border-radius: 4px;
+}
+
+.ext-runtime-ws {
+    font-weight: 600;
+}
+
+.ext-runtime-state {
+    text-transform: uppercase;
+    font-size: 10px;
+    font-weight: 700;
+}
+
+.ext-state-active { color: #9ece6a; }
+.ext-state-grace { color: #e0af68; }
+.ext-state-unloaded { opacity: 0.6; }
+
+.ext-runtime-loaded {
+    grid-column: 1 / -1;
+    opacity: 0.85;
+}
