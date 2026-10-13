@@ -107,11 +107,21 @@ const DEFAULT_CONFIG = {
     last_seen_version: null
 };
 
+// Writes to a temporary file and renames it over config.json. A plain write truncates
+// the file first, so a concurrent loadBrowserConfig could read it empty, fall back to
+// DEFAULT_CONFIG and have the next save persist those defaults over the user's settings.
+// Synchronous on purpose: saves never interleave, so no update can be lost either.
+function writeConfigFile(cfg) {
+    const tmpPath = `${CONFIG_PATH}.${process.pid}.tmp`;
+    fs.writeFileSync(tmpPath, JSON.stringify(cfg, null, 4), 'utf-8');
+    fs.renameSync(tmpPath, CONFIG_PATH);
+}
+
 function loadBrowserConfig() {
     try {
         if (!fs.existsSync(CONFIG_DIR)) fs.mkdirSync(CONFIG_DIR, { recursive: true });
         if (!fs.existsSync(CONFIG_PATH)) {
-            fs.writeFileSync(CONFIG_PATH, JSON.stringify(DEFAULT_CONFIG, null, 4), 'utf-8');
+            writeConfigFile(DEFAULT_CONFIG);
             return { ...DEFAULT_CONFIG };
         }
         const parsed = JSON.parse(fs.readFileSync(CONFIG_PATH, 'utf-8'));
@@ -136,7 +146,7 @@ keybinds.initializeKeybinds(CONFIG_DIR);
 function saveBrowserConfig(cfg) {
     try {
         const merged = { ...loadBrowserConfig(), ...cfg };
-        fs.writeFileSync(CONFIG_PATH, JSON.stringify(merged, null, 4), 'utf-8');
+        writeConfigFile(merged);
         app.relaunch();
         app.exit(0);
     } catch (e) {}
@@ -1330,7 +1340,7 @@ ipcMain.handle('update-browser-settings', async (event, newCfg) => {
         if (!fs.existsSync(CONFIG_DIR)) fs.mkdirSync(CONFIG_DIR, { recursive: true });
         const existing = loadBrowserConfig();
         const merged = { ...existing, ...newCfg };
-        await fs.promises.writeFile(CONFIG_PATH, JSON.stringify(merged, null, 4), 'utf-8');
+        writeConfigFile(merged);
         if (Array.isArray(merged.trusted_domains)) {
             security.setTrustedDomains(merged.trusted_domains);
         }
@@ -1361,7 +1371,7 @@ ipcMain.handle('set-diagnostics-enabled', async (event, enabled) => {
         const cfg = loadBrowserConfig();
         cfg.enable_diagnostics = !!enabled;
         if (!fs.existsSync(CONFIG_DIR)) fs.mkdirSync(CONFIG_DIR, { recursive: true });
-        await fs.promises.writeFile(CONFIG_PATH, JSON.stringify(cfg, null, 4), 'utf-8');
+        writeConfigFile(cfg);
     } catch (e) {}
     return true;
 });
@@ -1455,7 +1465,7 @@ function buildSettingsSubmenu(cfg) {
                 click: () => {
                     cfg.tab_sleep_timeout_minutes = opt.minutes;
                     if (!fs.existsSync(CONFIG_DIR)) fs.mkdirSync(CONFIG_DIR, { recursive: true });
-                    fs.writeFileSync(CONFIG_PATH, JSON.stringify(cfg, null, 4), 'utf-8');
+                    writeConfigFile(cfg);
                 }
             }))
         },
@@ -1467,7 +1477,7 @@ function buildSettingsSubmenu(cfg) {
             click: (menuItem) => {
                 cfg.sidebar_auto_collapse = menuItem.checked;
                 if (!fs.existsSync(CONFIG_DIR)) fs.mkdirSync(CONFIG_DIR, { recursive: true });
-                fs.writeFileSync(CONFIG_PATH, JSON.stringify(cfg, null, 4), 'utf-8');
+                writeConfigFile(cfg);
                 if (mainWindow && !mainWindow.isDestroyed()) {
                     mainWindow.webContents.send('master-shortcut', 'toggle-sidebar-collapse-mode', menuItem.checked);
                 }
@@ -1480,7 +1490,7 @@ function buildSettingsSubmenu(cfg) {
             click: (menuItem) => {
                 cfg.show_window_controls = menuItem.checked;
                 if (!fs.existsSync(CONFIG_DIR)) fs.mkdirSync(CONFIG_DIR, { recursive: true });
-                fs.writeFileSync(CONFIG_PATH, JSON.stringify(cfg, null, 4), 'utf-8');
+                writeConfigFile(cfg);
                 if (mainWindow && !mainWindow.isDestroyed()) {
                     mainWindow.webContents.send('master-shortcut', 'toggle-window-controls', menuItem.checked);
                 }
