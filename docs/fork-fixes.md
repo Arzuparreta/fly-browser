@@ -101,6 +101,8 @@ Validation results for this pass: `npm test`, the complete `npm run test:keyboar
 
 ## Sidebar stacking above browser content · 13 October 2026
 
+Implementation and validation: [PR #5](https://github.com/Arzuparreta/Mise-browser/pull/5), targeting the fork's `personal` branch.
+
 | ID | Original behaviour | Fix | Validation |
 | :--- | :--- | :--- | :--- |
 | UX-07 | The auto-collapsing sidebar expanded to 260 px, but the empty-workspace panel (`z-index: 100`) and other content layers could paint above the sidebar (`z-index: 90`). Only its 36 px strip remained visible and its expanded controls could not receive clicks. This was inherited CSS behaviour. | The positioned right-content panel now establishes its own stacking context at `z-index: 0`. Content and overlay layers stay inside that context, below the sidebar, while retaining their ordering within the panel. | The live Electron regression fails before the fix on the expanded sidebar hit target. After the fix it checks hover expansion over a live guest and an empty workspace, clicks the workspace label, checks keyboard expansion and pinned layout, and verifies an expanded-sidebar screenshot. |
