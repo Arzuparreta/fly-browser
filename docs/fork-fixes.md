@@ -80,6 +80,8 @@ The extensions integration at `1e71460` was already present on `fork/personal` b
 
 ## Browser panel states and cancellation · 13 October 2026
 
+Implementation and validation: [PR #4](https://github.com/Arzuparreta/Mise-browser/pull/4), targeting the fork's `personal` branch.
+
 This pass fixes inherited UI defects and gaps left in the fork's keyboard work. No default binding changes or new dependencies are introduced.
 
 | ID | Original behaviour | Fix | Validation |
