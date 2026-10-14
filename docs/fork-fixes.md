@@ -2,6 +2,8 @@
 
 ## Sign-in popups and self-closing tabs · 14 October 2026
 
+Implementation/work-log: [fly-browser PR #7](https://github.com/Arzuparreta/fly-browser/pull/7).
+
 | ID | Original behaviour | Fix | Validation |
 | --- | --- | --- | --- |
 | <a id="nav-02"></a>NAV-02 | Inherited defect: every `window.open` was denied and its URL reopened as an ordinary tab. A popup sign-in therefore lost its opener. On claude.ai, "Continue with Google" received `null` from `window.open`; Google accepted the account, but its `gsi/transform` callback could not post the result back, so the flow stopped on a blank tab and claude.ai reported "There was an error logging you in". Any OAuth or payment flow that uses a popup was affected. | A scripted popup (`window.open` with window features, an http(s) or blank URL and no `noopener`/`noreferrer`) opens as a child window of Fly. It keeps its opener and the workspace session, uses the tab preload so Google's sign-in sees the same identity as in a tab, opens its own popups the same way and closes with the close-tab shortcut. Links, background links, plain `window.open` and `noopener` requests still open as tabs. | Unit checks classify popups, tabs, `noopener`/`noreferrer`, local and script URLs. A disposable-profile Electron regression opens a popup that redirects to a callback; the callback reads the opener's cookie, posts it back and closes. It also checks Ctrl+W on a popup, and that links, plain `window.open` and `noopener` still open saved tabs, with no renderer errors. On the original code the popup is `null`. A disposable profile on the live claude.ai login opened Google's 500×550 sign-in popup with an opener, no extra tab, and the Electron sign-in User-Agent in both headers and `navigator`. |
