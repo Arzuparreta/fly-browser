@@ -57,8 +57,8 @@ body:
     id: mise_version
     attributes:
       label: Mise Browser Version
-      description: Found in the Preferences overlay (F1) or package.json (e.g. v0.14.0 or git main).
-      placeholder: "e.g. v0.14.0"
+      description: Found in the Preferences overlay (F1) or package.json (e.g. v0.15.0 or git main).
+      placeholder: "e.g. v0.15.0"
     validations:
       required: true
 

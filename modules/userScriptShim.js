@@ -283,7 +283,7 @@ export function buildUserScriptWrapper(item) {
             runAt: __gm_meta__.runAt || 'document-end'
         },
         scriptHandler: 'Mise Browser',
-        version: '0.14.0'
+        version: '0.15.0'
     };
 
     var unsafeWindow = window;

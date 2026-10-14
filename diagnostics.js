@@ -144,7 +144,7 @@ function getLogs() {
  * Aggregates runtime, hardware, process memory, and sanitised logs.
  */
 async function gatherSystemDiagnostics(sessionStats = {}) {
-    let pkg = { version: '0.14.0' };
+    let pkg = { version: '0.15.0' };
     try {
         pkg = require('./package.json');
     } catch (e) {}
@@ -198,7 +198,7 @@ async function gatherSystemDiagnostics(sessionStats = {}) {
         diagnosticsEnabled,
         application: {
             name: 'Mise Browser',
-            version: pkg.version || '0.14.0',
+            version: pkg.version || '0.15.0',
             electron: process.versions.electron,
             chrome: process.versions.chrome,
             node: process.versions.node,
