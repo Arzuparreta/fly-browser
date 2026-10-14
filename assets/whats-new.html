@@ -223,69 +223,43 @@
                 </a>
             </div>
             <h1>What's New in Fly</h1>
-            <p class="subtitle">Mise is now Fly: an independent browser with its own look, uBlock Origin ready to switch on, a larger interface size and a round of reliability fixes. Its first release.</p>
+            <p class="subtitle">Fly now lands in your launcher however you install it: from the AUR on Arch, or as an AppImage that adds itself to your menu, sets itself as the default browser and updates in place. Quick Notes has been removed.</p>
         </header>
 
         <section class="feature-card">
-            <h2 class="feature-title">Mise Is Now Fly</h2>
+            <h2 class="feature-title">In Your Launcher, Like Any Browser</h2>
             <p class="feature-desc">
-                Fly continues Mise as an independent project: a small, minimal browser with full keyboard control and a polished experience for mouse users.
+                Rofi, Wofi, Fuzzel and desktop menus now list Fly without any manual setup.
             </p>
             <ul class="feature-points">
-                <li>Your Mise profile in <kbd>~/.config/mise-browser</kbd> moves to <kbd>~/.config/fly-browser</kbd> on first launch, with tabs, notes, bookmarks and settings intact. An existing Fly profile is never overwritten.</li>
-                <li>Update checks, issue reports and links now point to Fly's own repository.</li>
-                <li>Releases are versioned automatically from what each change does to someone upgrading, so the number tells you what to expect.</li>
+                <li>On Arch, CachyOS and other Arch-based systems, install <kbd>fly-browser-bin</kbd> from the AUR. It brings the desktop entry and icons and updates with the rest of your system.</li>
+                <li>Started from an AppImage, Fly offers once to add itself to your applications menu. The entry follows the file if you move it or replace it with a newer release, and removing it takes away only what Fly added.</li>
+                <li>Preferences (<kbd>F1</kbd>) → About → Desktop integration adds or removes the entry and makes Fly your default browser, so links from other applications open here.</li>
             </ul>
         </section>
 
         <section class="feature-card">
-            <h2 class="feature-title">A New Look</h2>
+            <h2 class="feature-title">AppImage Updates in Place</h2>
             <p class="feature-desc">
-                A calmer, more legible interface, with its fonts and icons bundled locally.
+                When a new release is out, an AppImage no longer sends you to download it by hand.
             </p>
             <ul class="feature-points">
-                <li>New palette, IBM Plex Sans and Mono, and a text-only FLY wordmark in the sidebar, in expanded and compact modes.</li>
-                <li>Tab rows show each page's domain and state; status cells summarise the current page at a glance.</li>
-                <li>A local new tab page searches with your configured engine and shows real snapshots of the sites you visit.</li>
-                <li>Preferences, Reader View, the PDF viewer and these release notes share the same design. Backdrop blur is gone.</li>
+                <li>The update notice offers <kbd>Update and restart</kbd>: Fly downloads the new AppImage, checks it against the release's checksum, replaces the old file and restarts into the new version.</li>
+                <li>If anything fails, the old AppImage is left as it was and the notice links to the release page instead.</li>
+                <li>This works from this release onwards: the next update is the first that arrives this way.</li>
             </ul>
         </section>
 
         <section class="feature-card">
-            <h2 class="feature-title">uBlock Origin, Ready When You Are</h2>
+            <h2 class="feature-title">Quick Notes Removed</h2>
             <p class="feature-desc">
-                Extension support stays off by default. Turn it on and uBlock Origin is already installed.
+                Fly no longer has a notes feature.
             </p>
             <ul class="feature-points">
-                <li>The official uBlock Origin release is bundled and loads in every workspace without a saved extension selection.</li>
-                <li>Enabled and Remove choices for each extension now persist across restarts and updates.</li>
-                <li>The built-in Dark Reader toggle has been removed; Dark Reader can still be installed as an extension.</li>
-            </ul>
-        </section>
-
-        <section class="feature-card">
-            <h2 class="feature-title">Large Interface Size</h2>
-            <p class="feature-desc">
-                For small or high-density displays where the compact interface is hard to read.
-            </p>
-            <ul class="feature-points">
-                <li>Preferences (<kbd>F1</kbd>) → Appearance offers Normal (100%) and Large (125%). The change applies immediately and survives restarts.</li>
-                <li>Website zoom stays independent for each tab and is preserved when you switch sizes.</li>
-            </ul>
-        </section>
-
-        <section class="feature-card">
-            <h2 class="feature-title">Fixes</h2>
-            <p class="feature-desc">
-                Problems carried over from Mise that no longer get in your way.
-            </p>
-            <ul class="feature-points">
-                <li>Sign-in popups (such as "Continue with Google") keep their connection to the page that opened them, so popup logins complete.</li>
-                <li>A page that closes itself now closes its tab, instead of leaving a blank tab that ignored the keyboard.</li>
-                <li>Searching from the address bar works in a workspace with no open tabs.</li>
-                <li>Closing the terminal Fly was started from no longer opens a "JavaScript error in the main process" dialog.</li>
-                <li>A failed start no longer blocks every later launch.</li>
-                <li><kbd>launch.sh</kbd> sets up a fresh clone, refreshes dependencies after a pull and stays attached to the terminal.</li>
+                <li>The notes overlay, Reader View export, "Save to Notes" and the external editor integration are gone, and <kbd>Ctrl + N</kbd> and <kbd>Ctrl + Shift + E</kbd> are free.</li>
+                <li>Your existing <kbd>~/.config/fly-browser/notes.md</kbd> and any <kbd>clippings/</kbd> stay on disk untouched; open them in any editor.</li>
+                <li>Shortcuts you had bound to the removed actions are dropped on load, and the rest of your keyboard profile is kept.</li>
+                <li>The welcome screen's fourth card now opens the Workspace Dashboard.</li>
             </ul>
         </section>
 
