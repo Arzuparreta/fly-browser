@@ -92,15 +92,21 @@ Before opening a pull request:
 
 ## 6. Submitting Pull Requests
 
-1. Branch from `main`. Everything lands on `main` through a pull request; nothing is committed to it directly. Branches named `release/v*` are reserved for version bumps.
+Opening a pull request by hand is the normal path, and it needs one thing: **an impact label**. Add it from the Labels box while creating the pull request, or right after:
 
-2. Keep changes small and focused, and give the pull request a title that says what it does for someone using Fly.
+| Label | Use it when |
+| --- | --- |
+| `impact:patch` | it fixes something (the usual one) |
+| `impact:minor` | it adds something new |
+| `impact:major` | people must do something by hand after upgrading |
+| `impact:none` | nobody using Fly would notice (docs, CI, tests) |
 
-3. Add exactly one impact label, which decides the next version number: `impact:major` (upgrading needs manual action), `impact:minor` (new capability), `impact:patch` (a fix) or `impact:none` (nothing a user could observe). CI fails without one. If you cannot set labels, say in the description which one fits. See [Versioning and releases](docs/releasing.md).
+That label is how the next version number is chosen; see [Versioning and releases](docs/releasing.md). The template's sections are there to help, not required. Nothing else is asked of you:
 
-4. Never edit a version number by hand: releases set it.
-
-5. Fill in the [pull request template](.github/PULL_REQUEST_TEMPLATE.md) and let the checks finish.
+* Any branch name works except `release/v*`, which is reserved for version bumps.
+* Merge with whichever button you like (squash or merge commit).
+* CI runs `npm test` only. A missing label shows a red `impact_label` check until you add one; nothing blocks merging.
+* Never edit a version number by hand: releases set it.
 
 ***
 

@@ -32,10 +32,15 @@
   with `scripts/release.js` (see `docs/releasing.md`, or `/release`).
 - The PR description says what changed and why, how it was validated and what
   remains unverified or limited. Report failures and gaps honestly.
-- Run `npm test` and `git diff --check` before pushing. Keep keyboard defaults,
+- Run `npm test` and `git diff --check` before pushing (and `npm run docs:build` when docs change). Keep keyboard defaults,
   the generated guest grammar and the keyboard reference in sync. For keyboard
   UX changes, verify the recorder and editable-page behaviour in Electron with
   a disposable profile.
+- The owner also opens pull requests by hand, and that must stay effortless:
+  one impact label is the only requirement. Keep CI light (`npm test` only),
+  and do not add required checks, branch rulesets, mandatory PR template
+  sections or workflows that act on ordinary pull requests without asking
+  the owner first. Whitespace and the documentation build are local checks.
 - `docs/fork-fixes.md` is a closed historical ledger of the work done before
   releases began. Do not add to it; the pull request and the release notes
   generated from it are the record now.
