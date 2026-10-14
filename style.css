@@ -64,7 +64,7 @@ body.sidebar-auto-collapse #Sidebar {
     bottom: 0;
     height: 100vh;
     z-index: 90;
-    padding: 6px 3px;
+    padding: 6px 3px 42px;
     overflow-x: hidden;
     overflow-y: hidden;
 }
@@ -82,7 +82,7 @@ body.sidebar-auto-collapse #Sidebar:focus-within {
     width: 260px;
     min-width: 260px;
     max-width: 260px;
-    padding: 10px;
+    padding: 10px 10px 42px;
     box-shadow: 6px 0 28px rgba(0, 0, 0, 0.65);
     overflow-y: auto;
 }
@@ -93,7 +93,7 @@ body.sidebar-pinned #Sidebar {
     width: 260px;
     min-width: 260px;
     max-width: 260px;
-    padding: 10px;
+    padding: 10px 10px 42px;
     box-shadow: none;
     overflow-y: auto;
 }
@@ -485,28 +485,44 @@ body.sidebar-auto-collapse #Sidebar:not(.pointer-inside):not(.expanded):not(:foc
     border-color: var(--accent);
 }
 
+/* Fixed footer geometry keeps the pin centred in the 36px collapsed strip. */
+#Sidebar {
+    padding-bottom: 42px;
+    overflow-x: hidden;
+}
+
 .bottom-theme-layout {
+    position: absolute;
+    left: 0;
+    bottom: 6px;
+    width: 259px;
     display: flex;
-    gap: 8px;
-    padding-top: 8px;
+    padding: 8px 4px 0;
     border-top: 1px solid var(--border);
-    margin-top: auto;
     align-items: center;
-    justify-content: flex-start;
-    transition: padding 0.18s ease;
+    justify-content: space-between;
+}
+
+.bottom-theme-layout button {
+    flex-shrink: 0;
+}
+
+#update-indicator-btn {
+    position: absolute;
+    right: 4px;
+    bottom: 42px;
 }
 
 body.sidebar-auto-collapse #Sidebar:not(.pointer-inside):not(.expanded):not(:focus-within) .bottom-theme-layout {
-    flex-direction: column;
-    gap: 6px;
-    border-top: none;
-    padding-top: 4px;
-    align-items: center;
-    justify-content: center;
+    border-top-color: transparent;
 }
 
 body.sidebar-auto-collapse #Sidebar:not(.pointer-inside):not(.expanded):not(:focus-within) .bottom-theme-layout button:not(#pin-sidebar-btn) {
-    display: none;
+    visibility: hidden;
+}
+
+body.sidebar-auto-collapse #Sidebar:not(.pointer-inside):not(.expanded):not(:focus-within) #update-indicator-btn {
+    visibility: hidden;
 }
 
 #pin-sidebar-btn:focus-visible {

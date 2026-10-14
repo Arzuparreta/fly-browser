@@ -170,3 +170,12 @@ Initial live runs timed out in the workspace-transfer check and in the new tab-s
 The sequential UI run passed the keyboard/recorder/editable-page and numbered shortcut checks, then timed out clicking the existing navigation suite back button because sidebar elements intercepted the pointer. Navigation and overlay checks are rerun separately to distinguish fixture behaviour from the dispatcher change.
 
 Final validation: `npm test`, documentation build, modified JavaScript syntax and `git diff --check` passed. The keyboard UI suite passed with recorder, editable-page and numbered shortcut checks. Navigation and overlay UI suites passed on the isolated rerun; the earlier sequential navigation pointer timeout remains recorded above.
+
+
+## Sidebar footer settings and alignment · 14 October 2026
+
+| ID | Original behaviour | Fix | Validation |
+| :--- | :--- | :--- | :--- |
+| UX-12 | The inherited footer had five left-aligned controls, no settings access and changing pin coordinates between collapsed and expanded layouts. An update indicator could alter the row layout. | Add a settings button using the existing preferences action and configured shortcut tooltip; include it in arrow-key navigation. Centre six equally spaced controls across the sidebar, keeping the pin centred in the collapsed strip at a fixed bottom position. Reserve footer space and prevent horizontal scrolling; show update availability above the row. | Disposable-profile Electron regression checks all six centres and equal spacing, identical pin coordinates when collapsed, expanded and pinned, arrow navigation and Enter opening settings, and a visible update indicator without displacement. |
+
+Validation: `npm test`, `node -c renderer.js`, `git diff --check`, documentation build, `tests/sidebar-footer-ui.test.js` and the live keyboard editor suite (including recorder and editable-page behaviour) passed on Linux/X11. Default bindings, generated guest grammar and keyboard reference remain unchanged and drift-checked. An initial footer check exposed horizontal scrolling shifting the pinned footer by 15px; suppressing horizontal overflow resolved it and the rerun passed. Wayland and other operating systems remain unverified.
