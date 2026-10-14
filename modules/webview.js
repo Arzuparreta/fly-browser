@@ -362,7 +362,9 @@ export function createWebView(url, currentWS, idx) {
                 setTargetUrl('Reader View Closed', 2000);
             }
         } else if (e.channel === 'keyboard-action') {
-            window.dispatchKeyboardAction(e.args[0]);
+            // Finish the guest input event before an action can destroy its own webview.
+            const action = e.args[0];
+            setTimeout(() => window.dispatchKeyboardAction(action), 0);
         } else if (e.channel === 'reader-export-notes') {
             exportArticleToNotes(e.args[0]);
         } else if (e.channel === 'reader-export-external') {

@@ -17,6 +17,7 @@ const root = path.resolve(__dirname, '..');
  try {
   app = await _electron.launch({executablePath: root+'/node_modules/electron/dist/electron', args: ['--no-sandbox', '--disable-gpu', `--ozone-platform=${process.env.MISE_TEST_OZONE_PLATFORM || 'x11'}`, wrapper], timeout: 30000});
   const page = await app.firstWindow();
+  page.setDefaultTimeout(10000);
   const errors=[]; page.on('pageerror',error=>errors.push(error.message));
   await page.waitForFunction(() => !!window.executeBrowserAction && document.getElementById('KeyboardStatus').textContent === 'All changes saved');
   assert.equal(await page.locator('#TabList li').count(), 1, 'The fixture must not open its bootstrap or release notes as extra tabs');
