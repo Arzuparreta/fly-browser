@@ -492,12 +492,9 @@ function isEditableElement(el) {
     if (role === 'textbox' || role === 'searchbox' || role === 'combobox') {
         return true;
     }
-    if (tag.includes('-') && (tag.includes('SEARCH') || tag.includes('INPUT') || tag.includes('TEXT') || tag.includes('FIELD') || tag.includes('EDITOR') || tag.includes('COMPOSER'))) {
-        return true;
-    }
     if (typeof el.closest === 'function') {
         const parentEditable = el.closest('[contenteditable="true"], input, textarea, [role="textbox"], [role="searchbox"]');
-        if (parentEditable) return true;
+        if (parentEditable && parentEditable !== el) return isEditableElement(parentEditable);
     }
     return false;
 }

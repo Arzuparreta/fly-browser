@@ -1,21 +1,21 @@
 # Keyboard controls
 
-Open **Preferences → Keyboard controls**, or press **Ctrl+,** with a new profile. Search by action, category or binding. Choose **Browser shortcuts** or **Page keys (NORMAL mode)**. Each action supports up to eight bindings.
+Open **Preferences → Keyboard controls**, or press **Ctrl+,** with a new profile. Search by action, category or binding. Each action shows two expandable menus, **Browser shortcuts** and **Page keys (when not typing)**, with both sets of bindings visible in their summaries. Expand either menu to edit it. Search and the customised filter check both groups. Each group supports up to eight bindings per action.
 
 Select a binding to change it, **Add binding** to record another, or × to remove it. The recorder reports conflicts and offers an explicit reassignment with the affected action names. Select **Record a two-key sequence** for page sequences. Tab moves around the recorder; Escape cancels it.
 
-**Save bindings** validates and applies changes to every open tab immediately. **Discard changes** restores the saved profile. **Reset** restores one action; **Restore this section** restores the selected section. Import stages a profile for review; export includes the current draft. No restart or configuration-file editing is needed.
+**Save bindings** validates and applies changes to every open tab immediately. **Discard changes** restores the saved profile. **Reset** restores one action; **Restore browser shortcuts** and **Restore page keys** restore their respective groups. Import stages a profile for review; export includes the current draft. No restart or configuration-file editing is needed.
 
 ## Modes and text input
 
-Mise has a small custom Vim-style controller, not the Vimium extension. Browser shortcuts work in text fields as well as elsewhere. Page keys only run in NORMAL mode, outside editable fields, explicit INSERT mode and link hints. Open shadow roots and composed input events are checked before consuming page keys. IME composition, dead keys and AltGr are left alone.
+Mise has a small custom Vim-style controller, not the Vimium extension. Browser shortcuts work in text fields as well as elsewhere. Page keys only run in NORMAL mode, outside editable fields, explicit INSERT mode and link hints. Open shadow roots and composed input events are checked before consuming page keys. Custom element names do not imply editing; actual inputs, contenteditable regions and textbox/searchbox/combobox roles protect text entry. IME composition, dead keys and AltGr are left alone.
 
 - **NORMAL:** page keys are available. Defaults include hjkl scrolling, d/u for half-page scrolling, gg for the top, and Shift+G for the bottom.
 - **INSERT:** focus a text field or use the configured insert action. Escape leaves insert mode.
 - **PASSTHROUGH:** all page keys and browser shortcuts go to the page except the configured passthrough toggle. Keep at least one browser binding for this toggle so you can return. The default is Shift+Escape.
 - **Hints:** the custom hint overlay consumes its label alphabet, Backspace and Escape. Browser shortcuts retain precedence. Disabled and inert controls are excluded. Hint letters are temporary labels, not action bindings.
 
-Escape and Tab are reserved for cancellation and focus navigation. Native control keys such as arrows, Enter, Space and Delete remain contextual UI behaviour. Sidebar letters no longer form a hidden second set of hard-coded browser actions. Tab stays within visible overlays; arrow keys navigate tab lists, dashboard selections and bookmark columns.
+Escape and Tab are reserved for cancellation and focus navigation. Native control keys such as arrows, Enter, Space and Delete remain contextual UI behaviour. Configured page keys also work from non-editable browser navigation controls and the empty workspace, outside browser panels. They use the same saved assignments as the page; there is no hidden set of sidebar shortcuts. Tab stays within visible overlays; arrow keys navigate tab lists, dashboard selections and bookmark columns.
 
 Alt+S (sidebar focus) opens and focuses the tab list; pressing it again from any sidebar control returns focus to the active page and collapses an unpinned sidebar, including retained pointer expansion. In an empty workspace it releases sidebar focus. Pinning remains unchanged: a pinned sidebar stays open. Custom bindings and the NORMAL-mode S action use the same behaviour.
 

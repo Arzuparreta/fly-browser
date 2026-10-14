@@ -4,7 +4,8 @@ let saved, draft, defaults, metadata, recording, busy = false;
 const el = id => document.getElementById(id);
 const status = text => { el('KeyboardStatus').textContent = text; };
 const dirty = () => JSON.stringify(draft) !== JSON.stringify(saved);
-const scope = () => el('KeyboardScope').value;
+const sections = {shortcuts: 'Browser shortcuts', normal: 'Page keys (when not typing)'};
+const expanded = new Set();
 
 function refreshButtons() {
     const validation = keyboard.validateConfig(draft, metadata);
@@ -15,54 +16,66 @@ function refreshButtons() {
 }
 function render() {
     if (!draft) return;
-    const section = scope();
     const query = el('KeyboardSearch').value.toLowerCase().trim();
     const modifiedOnly = el('KeyboardModified').checked;
     const rows = el('KeyboardRows');
     rows.replaceChildren();
     let count = 0;
     for (const [id, info] of Object.entries(metadata).sort((a, b) => a[1].category.localeCompare(b[1].category) || a[1].label.localeCompare(b[1].label))) {
-        const binds = draft[section][id] || [];
-        const modified = JSON.stringify(binds) !== JSON.stringify(defaults[section][id] || []);
-        if (modifiedOnly && !modified || query && !`${info.label} ${info.category} ${id} ${binds.join(' ')}`.toLowerCase().includes(query)) continue;
+        const modified = Object.keys(sections).some(section => JSON.stringify(draft[section][id]) !== JSON.stringify(defaults[section][id]));
+        const allBindings = Object.keys(sections).flatMap(section => (draft[section][id] || []).map(binding => keyboard.display(binding, section)));
+        if (modifiedOnly && !modified || query && !`${info.label} ${info.category} ${id} ${allBindings.join(' ')}`.toLowerCase().includes(query)) continue;
         count++;
         const row = document.createElement('div'); row.className = 'keyboard-row';
         const description = document.createElement('div');
         const label = document.createElement('strong'); label.textContent = info.label;
         const category = document.createElement('small'); category.textContent = info.category + (modified ? ' · Customised' : '');
         description.append(label, category);
-        const controls = document.createElement('div'); controls.className = 'keyboard-bindings';
-        binds.forEach((binding, index) => {
-            const group = document.createElement('span'); group.className = 'keyboard-binding';
-            const change = document.createElement('button'); change.type = 'button'; change.textContent = keyboard.display(binding, section);
-            change.setAttribute('aria-label', `Change ${keyboard.display(binding, section)} for ${info.label}`);
-            change.onclick = () => record(id, index);
-            const remove = document.createElement('button'); remove.type = 'button'; remove.textContent = '×';
-            remove.setAttribute('aria-label', `Remove ${keyboard.display(binding, section)} from ${info.label}`);
-            remove.onclick = () => { draft[section][id].splice(index, 1); render(); focusAction(id); };
-            group.append(change, remove); controls.append(group);
-        });
-        if (!binds.length) { const text = document.createElement('span'); text.className = 'keyboard-unbound'; text.textContent = 'Unassigned'; controls.append(text); }
-        const add = document.createElement('button'); add.type = 'button'; add.textContent = 'Add binding';
-        add.dataset.keyboardAction = id; add.setAttribute('aria-label', `Add binding for ${info.label}`);
-        add.disabled = binds.length >= 8; add.onclick = () => record(id, null);
-        const reset = document.createElement('button'); reset.type = 'button'; reset.textContent = 'Reset'; reset.disabled = !modified;
-        reset.setAttribute('aria-label', `Reset bindings for ${info.label}`);
-        reset.onclick = () => { draft[section][id] = [...defaults[section][id]]; render(); focusAction(id); };
-        controls.append(add, reset); row.append(description, controls); rows.append(row);
+        const menus = document.createElement('div'); menus.className = 'keyboard-menus';
+        for (const [section, title] of Object.entries(sections)) {
+            const binds = draft[section][id] || [];
+            const modified = JSON.stringify(binds) !== JSON.stringify(defaults[section][id] || []);
+            const menu = document.createElement('details'); menu.dataset.keyboardSection = section;
+            const menuKey = `${id}:${section}`; menu.open = expanded.has(menuKey);
+            menu.ontoggle = () => { if (!menu.isConnected) return; if (menu.open) expanded.add(menuKey); else expanded.delete(menuKey); };
+            const summary = document.createElement('summary');
+            summary.textContent = `${title}: ${binds.length ? binds.map(binding => keyboard.display(binding, section)).join(' / ') : 'Unassigned'}`;
+            const help = document.createElement('p'); help.className = 'keyboard-help';
+            help.textContent = section === 'shortcuts' ? 'Works while typing too.' : 'Works outside editable fields, INSERT mode, hints and passthrough. Browser panels keep their own controls.';
+            const controls = document.createElement('div'); controls.className = 'keyboard-bindings';
+            binds.forEach((binding, index) => {
+                const group = document.createElement('span'); group.className = 'keyboard-binding';
+                const change = document.createElement('button'); change.type = 'button'; change.textContent = keyboard.display(binding, section);
+                change.setAttribute('aria-label', `Change ${keyboard.display(binding, section)} for ${info.label}`);
+                change.onclick = () => record(id, index, section);
+                const remove = document.createElement('button'); remove.type = 'button'; remove.textContent = '×';
+                remove.setAttribute('aria-label', `Remove ${keyboard.display(binding, section)} from ${info.label}`);
+                remove.onclick = () => { draft[section][id].splice(index, 1); render(); focusAction(id, section); };
+                group.append(change, remove); controls.append(group);
+            });
+            if (!binds.length) { const text = document.createElement('span'); text.className = 'keyboard-unbound'; text.textContent = 'Unassigned'; controls.append(text); }
+            const add = document.createElement('button'); add.type = 'button'; add.textContent = 'Add binding';
+            add.dataset.keyboardAction = id; add.dataset.keyboardScope = section; add.setAttribute('aria-label', `Add binding for ${info.label}`);
+            add.disabled = binds.length >= 8; add.onclick = () => record(id, null, section);
+            const reset = document.createElement('button'); reset.type = 'button'; reset.textContent = 'Reset'; reset.disabled = !modified;
+            reset.setAttribute('aria-label', `Reset bindings for ${info.label}`);
+            reset.onclick = () => { draft[section][id] = [...defaults[section][id]]; render(); focusAction(id, section); };
+            controls.append(add, reset); menu.append(summary, help, controls); menus.append(menu);
+        }
+        row.append(description, menus); rows.append(row);
     }
     el('KeyboardCount').textContent = `${count} ${count === 1 ? 'action' : 'actions'}`;
     if (!count) { const empty = document.createElement('p'); empty.textContent = 'No matching actions. Try another search or show all actions.'; rows.append(empty); }
     refreshButtons();
 }
-function focusAction(id) {
-    const button = [...el('KeyboardRows').querySelectorAll('[data-keyboard-action]')].find(button => button.dataset.keyboardAction === id);
+function focusAction(id, section) {
+    const button = [...el('KeyboardRows').querySelectorAll('[data-keyboard-action]')].find(button => button.dataset.keyboardAction === id && button.dataset.keyboardScope === section);
     if (button && !button.disabled) button.focus(); else el('KeyboardSearch').focus({preventScroll: true});
 }
-function record(id, index) {
-    recording = {id, index, section: scope(), strokes: [], returnFocus: document.activeElement};
-    el('KeyboardRecorderTitle').textContent = `Record: ${metadata[id].label}`;
-    el('KeyboardSequenceLabel').hidden = scope() !== 'normal';
+function record(id, index, section) {
+    recording = {id, index, section, strokes: [], returnFocus: document.activeElement};
+    el('KeyboardRecorderTitle').textContent = `Record ${sections[section]}: ${metadata[id].label}`;
+    el('KeyboardSequenceLabel').hidden = section !== 'normal';
     el('KeyboardSequence').checked = false;
     el('KeyboardRecorded').textContent = 'Waiting for a key…';
     el('KeyboardRecordError').textContent = '';
@@ -94,9 +107,9 @@ function candidate(reassign = false) {
 function finishRecord(reassign) {
     const result = candidate(reassign);
     if (!result.ok) { el('KeyboardRecordError').textContent = result.error; return; }
-    const id = recording.id;
+    const {id, section} = recording;
     draft = result.config;
-    el('KeyboardRecorder').close(); recording = null; render(); focusAction(id);
+    el('KeyboardRecorder').close(); recording = null; render(); focusAction(id, section);
 }
 function cancelRecord() {
     const focus = recording?.returnFocus;
@@ -109,12 +122,10 @@ export async function initialiseKeyboardEditor() {
         draft = clone(saved);
         render();
     } catch (_) { status('Could not load keyboard settings. Reopen the browser to try again.'); return; }
-    el('OpenKeyboardSettings').onclick = () => { el('KeyboardEditor').scrollIntoView({block: 'start'}); el('KeyboardSearch').focus({preventScroll: true}); };
     el('KeyboardSearch').oninput = render;
-    el('KeyboardScope').onchange = render;
     el('KeyboardModified').onchange = render;
     el('KeyboardDiscard').onclick = () => { el('KeyboardSearch').focus({preventScroll: true}); draft = clone(saved); render(); };
-    el('KeyboardReset').onclick = () => { draft[scope()] = clone(defaults[scope()]); render(); };
+    for (const section of Object.keys(sections)) el(section === 'shortcuts' ? 'KeyboardResetShortcuts' : 'KeyboardResetNormal').onclick = () => { draft[section] = clone(defaults[section]); render(); };
     el('KeyboardSave').onclick = async () => {
         if (busy) return;
         el('KeyboardSearch').focus({preventScroll: true});

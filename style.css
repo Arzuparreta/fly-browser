@@ -4028,3 +4028,10 @@ i.spinning {
     grid-column: 1 / -1;
     opacity: 0.85;
 }
+
+.keyboard-menus { display: grid; gap: 8px; width: min(100%, 440px); flex-shrink: 0; }
+.keyboard-menus details { border: 1px solid var(--border); border-radius: 6px; padding: 8px 10px; }
+.keyboard-menus summary { cursor: pointer; overflow-wrap: anywhere; }
+.keyboard-menus .keyboard-bindings { justify-content: start; }
+.keyboard-menus .keyboard-help { margin: 8px 0; }
+.keyboard-menus summary:focus-visible { outline: 2px solid var(--accent); outline-offset: 3px; }
