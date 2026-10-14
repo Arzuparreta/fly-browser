@@ -5,7 +5,9 @@ name: Release
 #
 # `workflow_dispatch` is how release-tag.yml starts it: that workflow tags the
 # merged version bump with `GITHUB_TOKEN`, whose pushes start nothing. A
-# dispatch on anything but the matching tag fails `verify`.
+# dispatch on a branch is a dry run: it builds every package and keeps them as
+# workflow artefacts, but publishes nothing. Use it to test packaging changes
+# before they reach a release: `gh workflow run release.yml --ref <branch>`.
 on:
   push:
     tags: ['v*']
@@ -31,11 +33,13 @@ jobs:
       - name: Tag matches the declared version
         run: |
           declared="$(node scripts/version-sync.js --print)"
-          if [ "$GITHUB_REF_TYPE" != tag ] || [ "v$declared" != "$GITHUB_REF_NAME" ]; then
-            echo "::error::Release was started on $GITHUB_REF_NAME, but the tree declares v$declared."
+          node scripts/version-sync.js --check
+          if [ "$GITHUB_REF_TYPE" != tag ]; then
+            echo "::notice::Dry run on $GITHUB_REF_NAME: packages are built and kept as artefacts, nothing is published."
+          elif [ "v$declared" != "$GITHUB_REF_NAME" ]; then
+            echo "::error::$GITHUB_REF_NAME was pushed, but the tree declares v$declared."
             exit 1
           fi
-          node scripts/version-sync.js --check
 
   build:
     name: Build (${{ matrix.platform }})
@@ -50,7 +54,7 @@ jobs:
             command: npx electron-builder --linux AppImage tar.gz --x64
           - os: macos-latest
             platform: macos
-            command: npx electron-builder --mac dmg zip
+            command: npx electron-builder --mac dmg zip --arm64 --x64
           - os: windows-latest
             platform: windows
             command: npx electron-builder --win nsis portable --x64
@@ -79,11 +83,12 @@ jobs:
             dist/*.zip
             dist/*.exe
           if-no-files-found: error
-          retention-days: 1
+          retention-days: 3
 
   publish:
     name: Publish release
     needs: build
+    if: github.ref_type == 'tag'
     runs-on: ubuntu-latest
     permissions:
       contents: write

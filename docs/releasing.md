@@ -65,4 +65,15 @@ In Claude Code, `/release` runs these steps and waits between them.
 
 ## What a tag builds
 
-`release.yml` checks the tag against `package.json`, builds the Linux AppImage and tarball, the macOS disk image and zip, and the Windows installer and portable executable, and publishes one GitHub Release with all of them, a `SHA256SUMS.txt` and notes generated from the merged pull requests, grouped by impact. The packages are unsigned.
+`release.yml` checks the tag against `package.json`, builds every package and publishes one GitHub Release with all of them, a `SHA256SUMS.txt` and notes generated from the merged pull requests, grouped by impact. The packages are unsigned.
+
+| Platform | Packages |
+| --- | --- |
+| Linux x64 | `Fly-X.Y.Z-x86_64.AppImage`, `Fly-X.Y.Z-x64.tar.gz` |
+| macOS Apple Silicon | `Fly-X.Y.Z-arm64.dmg`, `Fly-X.Y.Z-arm64.zip` |
+| macOS Intel | `Fly-X.Y.Z-x64.dmg`, `Fly-X.Y.Z-x64.zip` |
+| Windows x64 | `Fly-Setup-X.Y.Z.exe`, `Fly-X.Y.Z-portable.exe` |
+
+Names carry no spaces, because GitHub renames uploaded files that have them and `SHA256SUMS.txt` would no longer match.
+
+To test a packaging change before it reaches a release, run the workflow on its branch: `gh workflow run release.yml --ref <branch>`. It builds every package and keeps them as workflow artefacts for three days, and publishes nothing.

@@ -36,3 +36,9 @@ for y in range(128):
 grain.save(OUT / 'paper-grain.png')
 # Pillow's append_images preserves the manually drawn small sizes.
 Image.open(OUT/'icon-256.png').save(ROOT/'build/icon.ico', sizes=[(n,n) for n in (16,24,32,48,64,128,256)], append_images=[Image.open(OUT/f'pixel-{n}.png') for n in (16,24,32)]+[Image.open(OUT/f'icon-{n}.png') for n in (48,64,128)])
+# Linux packages need one PNG per hicolor size: a lone 1024 px icon is not in
+# the theme's size list, so menus and AppImage launchers fall back to a generic one.
+(ROOT/'build/icons').mkdir(exist_ok=True)
+for n in (16, 24, 32, 48, 64, 128, 256, 512):
+    source = OUT/(f'pixel-{n}.png' if n <= 32 else f'icon-{n}.png')
+    (ROOT/f'build/icons/{n}x{n}.png').write_bytes(source.read_bytes())

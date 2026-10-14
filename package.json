@@ -52,13 +52,14 @@
       "adblocker-worker.js",
       "extension-api.preload.js"
     ],
+    "artifactName": "Fly-${version}-${arch}.${ext}",
     "linux": {
       "target": [
         "AppImage",
         "tar.gz"
       ],
       "category": "Network;WebBrowser",
-      "icon": "build/icon.png"
+      "icon": "build/icons"
     },
     "mac": {
       "target": [
@@ -89,7 +90,11 @@
       ],
       "icon": "build/icon.ico"
     },
+    "portable": {
+      "artifactName": "Fly-${version}-portable.${ext}"
+    },
     "nsis": {
+      "artifactName": "Fly-Setup-${version}.${ext}",
       "oneClick": false,
       "allowToChangeInstallationDirectory": true,
       "createDesktopShortcut": true,
