@@ -4,17 +4,17 @@ const path = require('node:path');
 const vm = require('node:vm');
 const source = file => fs.readFileSync(path.join(__dirname, '..', file), 'utf8').replace(/^import .*;\n/gm, '').replace(/^export /gm, '');
 const handlers = {};
-const roots = {HistoryOverlay: {contains: element => element === 'history'}, NotesOverlay: {contains: element => element === 'notes'}};
+const roots = {HistoryOverlay: {contains: element => element === 'history'}, BookmarksOverlay: {contains: element => element === 'bookmarks'}};
 const context = {setTimeout: callback => callback(), window: {addEventListener: (type, callback, capture) => {if (!capture) handlers[type] = callback;}}, document: {querySelector: () => null, getElementById: id => roots[id], activeElement: 'history'}};
 vm.createContext(context); vm.runInContext(source('modules/focus.js') + '\nthis.isOverlayTransition = isOverlayTransition;', context);
-let history = true, notes = false;
+let history = true, bookmarks = false;
 context.initialiseOverlayFocus({
     HistoryOverlay: {active: () => history, close: () => {history = false;}},
-    NotesOverlay: {active: () => notes, close: () => {assert(context.isOverlayTransition()); notes = false;}}
+    BookmarksOverlay: {active: () => bookmarks, close: () => {assert(context.isOverlayTransition()); bookmarks = false;}}
 });
 const escape = () => ({key: 'Escape', preventDefault() {this.defaultPrevented = true;}, stopImmediatePropagation() {}});
 const event = escape(); handlers.keydown(event); assert(event.defaultPrevented); assert(!history);
-history = true; notes = true; context.prepareOverlay('HistoryOverlay'); assert(history); assert(!notes); assert(!context.isOverlayTransition());
+history = true; bookmarks = true; context.prepareOverlay('HistoryOverlay'); assert(history); assert(!bookmarks); assert(!context.isOverlayTransition());
 context.document.querySelector = () => ({}); handlers.keydown(escape()); assert(history, 'Native dialogs retain cancellation ownership');
 
 // Pointer-down runs before action handlers, including controls that stop click bubbling.
@@ -40,29 +40,6 @@ for (const down of [pointer(true), pointer(false, true)]) {
 console.log('Shared sidebar pointer policy preserves overlays and native editing.');
 
 (async () => {
-    const elements = {};
-    const events = {}, pending = [], saves = [], timers = [];
-    for (const id of ['NotesOverlay', 'NotesTextArea', 'NotesMarkdownView', 'ToggleEditNotesBtn', 'CloseNotesBtn']) {
-        elements[id] = {style: {}, value: '', focus() {}, addEventListener(type, callback) {events[id + type] = callback;}};
-    }
-    const notesContext = {
-        state: {notesActive: false}, document: {getElementById: id => elements[id]},
-        window: {addEventListener() {}, flyAPI: {readNotes: () => new Promise(resolve => pending.push(resolve)), saveNotes: value => saves.push(value)}},
-        prepareOverlay() {}, focusActiveWebview() {}, escapeHtml: text => text, console,
-        setTimeout: callback => {timers.push(callback);}, clearTimeout() {}
-    };
-    vm.createContext(notesContext); vm.runInContext(source('modules/overlays/notes.js'), notesContext);
-    notesContext.setupNotesListeners();
-    notesContext.toggleNotesOverlay(); notesContext.toggleNotesOverlay();
-    pending.shift()('Existing notes'); await Promise.resolve();
-    assert.equal(elements.NotesOverlay.style.display, 'none'); assert.deepEqual(saves, [], 'Closing before reading must not overwrite existing notes');
-    notesContext.toggleNotesOverlay(); notesContext.toggleNotesOverlay(); notesContext.toggleNotesOverlay();
-    pending.shift()('Stale notes'); await Promise.resolve(); assert.equal(elements.NotesTextArea.value, '');
-    pending.shift()('Fresh notes'); await Promise.resolve(); assert.equal(elements.NotesTextArea.value, 'Fresh notes');
-    notesContext.toggleNotesOverlay(); notesContext.toggleNotesOverlay();
-    elements.NotesTextArea.value = 'Typed while loading'; events.NotesTextAreainput({target: elements.NotesTextArea});
-    pending.shift()('Old disk content'); await Promise.resolve(); assert.equal(elements.NotesTextArea.value, 'Typed while loading');
-    notesContext.toggleNotesOverlay(); assert.equal(saves.at(-1), 'Typed while loading');
     // Exercise the real palette open/close functions with deferred configuration reads.
     const paletteSource = source('modules/overlays/commandPalette.js');
     const palettePending = [], paletteFilters = [];
@@ -103,5 +80,5 @@ console.log('Shared sidebar pointer policy preserves overlays and native editing
     paletteContext.state.paletteMatches = [{id: 'copy', action() {}}];
     paletteContext.executePaletteSelection('copy');
     assert.equal(pageFocus, focusBefore + 1, 'A non-overlay command returns page focus once');
-    console.log('Overlay cancellation ownership, transition focus suppression, delayed notes and palette races passed.');
+    console.log('Overlay cancellation ownership, transition focus suppression and palette races passed.');
 })().catch(error => {console.error(error); process.exitCode = 1;});

@@ -19,7 +19,7 @@ Escape and Tab are reserved for cancellation and focus navigation. Native contro
 
 Alt+S (sidebar focus) opens and focuses the tab list; pressing it again from any sidebar control returns focus to the active page and collapses an unpinned sidebar, including retained pointer expansion. In an empty workspace it releases sidebar focus. Pinning remains unchanged: a pinned sidebar stays open. Custom bindings and the NORMAL-mode S action use the same behaviour. In the tab list, the configured scroll-down/up actions (j/k by default) move the cursor without activating or waking tabs. Enter/Space activate and retain sidebar focus; scroll-right (l) or Right activates and focuses the page. The close and yank actions target the highlighted tab. Fixed arrow/Delete keys retain their native UI roles. Ctrl+1 through Ctrl+8 activate the numbered tab; Ctrl+9 selects the ninth tab, falling back to the last when fewer than nine exist. Bare 1–9 do the same from the sidebar unless assigned as page keys. Existing Alt+1 through Alt+8 shortcuts remain available, and Alt+9 always selects the last tab.
 
-Opening address/search, find, dashboard, preferences, palette, bookmarks, history, notes or diagnostics closes the previous browser panel; the exception is find inside Preferences, which focuses the settings search. Escape closes the current panel and returns focus to the page; pressing its opening shortcut again also closes it. Ctrl+L can be cancelled even after focus moves to another browser control. In the dashboard, Escape first cancels workspace creation or renaming, then closes the dashboard. The binding recorder and native dialogs keep their own cancellation. Notes keep edits on closing; delayed data loads cannot reopen closed panels or take focus from a newer panel. Sharing accepts Escape from its controls and embedded page, except in page passthrough mode.
+Opening address/search, find, dashboard, preferences, palette, bookmarks, history or diagnostics closes the previous browser panel; the exception is find inside Preferences, which focuses the settings search. Escape closes the current panel and returns focus to the page; pressing its opening shortcut again also closes it. Ctrl+L can be cancelled even after focus moves to another browser control. In the dashboard, Escape first cancels workspace creation or renaming, then closes the dashboard. The binding recorder and native dialogs keep their own cancellation. Delayed data loads cannot reopen closed panels or take focus from a newer panel. Sharing accepts Escape from its controls and embedded page, except in page passthrough mode.
 
 ## Preferences
 
@@ -54,7 +54,6 @@ Existing legacy profiles retain their explicit assignments, including empty and 
 | New Blank Tab | `Ctrl+T` | `t` |
 | Next workspace | `Alt+PageDown` | Unassigned |
 | Open Bookmarks and Quickmarks | `Ctrl+Shift+B` | Unassigned |
-| Open Quick Notes Overlay | `Ctrl+N` | Unassigned |
 | Pin / Unpin Active Tab | `Ctrl+Shift+X` / `F4` | `p` |
 | Previous workspace | `Alt+PageUp` | Unassigned |
 | Reload Active Tab | `Ctrl+R` / `F5` | `r` |
@@ -121,12 +120,9 @@ Existing legacy profiles retain their explicit assignments, including empty and 
 | Reload User Scripts and Styles | Unassigned | Unassigned |
 | Add Current Page to Bookmarks | `Ctrl+D` | Unassigned |
 | Copy page URL | Unassigned | `y` |
-| Export Reader View to External App | Unassigned | Unassigned |
-| Export Reader View to Quick Notes | `Ctrl+Shift+E` | Unassigned |
 | Find In Page | `Ctrl+F` / `F3` | `/` |
 | Jump to Quickmark | `Ctrl+J` | Unassigned |
 | Open Extension Actions (Popups, Commands, Options) | Unassigned | Unassigned |
-| Open Quick Notes in External Application | Unassigned | Unassigned |
 | Play/Pause Media Playback Globally | `Ctrl+Shift+0` / `F10` | Unassigned |
 | Print active page | Unassigned | Unassigned |
 | Reload without cache | `Ctrl+Shift+R` | `Shift+R` |

@@ -46,7 +46,7 @@ export function initialiseOverlayFocus(registeredSurfaces = {}) {
         if (!entry) return;
         event.preventDefault(); event.stopImmediatePropagation(); entry[1].close();
     });
-    const ids = ['PreferencesOverlay', 'CommandPaletteOverlay', 'DashboardOverlay', 'BookmarksOverlay', 'HistoryOverlay', 'NotesOverlay', 'DiagnosticsOverlay', 'ShareModalOverlay'];
+    const ids = ['PreferencesOverlay', 'CommandPaletteOverlay', 'DashboardOverlay', 'BookmarksOverlay', 'HistoryOverlay', 'DiagnosticsOverlay', 'ShareModalOverlay'];
     window.addEventListener('keydown', event => {
         if (event.key !== 'Tab' || document.querySelector('dialog[open]')) return;
         const overlays = ids.map(id => document.getElementById(id)).filter(root => root && root.getClientRects().length && getComputedStyle(root).visibility !== 'hidden');

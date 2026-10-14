@@ -46,7 +46,7 @@ export default defineConfig({
           { text: 'Workspaces & Containers', link: '/guide/workspaces-and-containers' },
           { text: 'True Tab Hibernation', link: '/guide/tab-hibernation' },
           { text: 'Privacy & Trusted Sites', link: '/guide/privacy-and-shields' },
-          { text: 'Notes, Bookmarks & Quickmarks', link: '/guide/notes-and-bookmarks' },
+          { text: 'Bookmarks, Quickmarks & History', link: '/guide/bookmarks-and-history' },
           { text: 'Terminal Security & Oversight', link: '/guide/terminal-oversight' },
           { text: 'User Scripts & Styles', link: '/guide/user-scripts-and-styles' },
           { text: 'Community Scripts', link: '/guide/community-scripts' },

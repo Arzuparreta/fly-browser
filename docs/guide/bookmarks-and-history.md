@@ -1,26 +1,6 @@
-# Notes, Bookmarks & Quickmarks
+# Bookmarks, Quickmarks & History
 
-Fly incorporates productivity utilities directly into the browser, saving all data as plain text and JSON files in your local user configuration directory.
-
----
-
-## Markdown Quick Notes (`Ctrl + N`)
-
-![Fly Browser Markdown Quick Notes](/screenshots/notes.webp)
-
-Fly includes an integrated, expansive scratchpad overlay for taking notes alongside your research:
-
-- Press **Ctrl + N** to open or close the Notes overlay.
-- **Expansive Layout & Fullscreen**: Generous, readable dimensions with a dedicated toggle button to expand into a distraction-free full canvas view.
-- **Live Statistics**: Real-time word counter and character display in the header.
-- **Markdown Preview**: Instant toggle between raw Markdown editing and formatted preview, complete with headings, lists, quotes, code blocks, thematic rules, and clickable links.
-- **Instant Persistence**: All notes are automatically saved to:
-  ```text
-  ~/.config/fly-browser/notes.md
-  ```
-- **Export from Reader View (`Ctrl + Shift + E`)**: Distilled Reader View articles and web clippings can be appended straight into Quick Notes with a single click or keyboard shortcut.
-- **Right-Click Text Clipping**: Highlight any text passage on a web page or in a document and right-click to choose **Save to Notes**. The snippet is formatted into a clean Markdown blockquote with source citation and timestamp, and appended directly to `notes.md`.
-- **External Note-Taking Integration**: Click the **External** button in the notes header to open `notes.md` in your preferred desktop note application (Obsidian, Logseq, Neovim, VS Code) or system default Markdown editor. Custom launch commands can be configured in **Preferences → General → Notes & external tools**.
+Fly incorporates productivity utilities directly into the browser, saving all data as plain JSON files in your local user configuration directory.
 
 ---
 

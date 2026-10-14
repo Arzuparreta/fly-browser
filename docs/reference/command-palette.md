@@ -10,7 +10,7 @@ The Command Centre gives you rapid, searchable access to all Fly operations, int
 
 - Press **Ctrl + P** from anywhere in Fly.
 - Type to fuzzy-search commands, shortcuts, and keywords dynamically.
-- Click category filter chips (**All**, **Tabs & Navigation**, **Split View**, **Performance**, **Tools & Notes**, **Scripts & Styles**, **Preferences**) to filter actions instantly.
+- Click category filter chips (**All**, **Tabs & Navigation**, **Split View**, **Performance**, **Tools**, **Scripts & Styles**, **Preferences**) to filter actions instantly.
 - Use **Up** and **Down** arrow keys (or hover with your cursor) to inspect any command.
 - View the right-hand **Feature Inspector** card for in-depth architecture descriptions, default and customised keybindings, and workflow tips.
 - Press **Enter** or click **Execute Action** to run the selected action.
@@ -71,14 +71,10 @@ The shortcuts below are new-profile defaults. The palette shows your saved assig
 | **Hibernate Inactive Tabs** | — | — | Detaches background webviews from DOM to free CPU cycles and RAM. |
 | **Wake All Tabs in Workspace** | — | — | Restores and reconnects all sleeping tabs in the active workspace. |
 
-### Tools & Notes
+### Tools
 
 | Command Title | Shortcut | Action ID | Description |
 | :--- | :--- | :--- | :--- |
-| **Toggle Quick Notes** | `Ctrl+N` | `toggle-notes` | Markdown scratchpad saved locally to `~/.config/fly-browser/notes.md`. |
-| **Export Article to Quick Notes** | `Ctrl+Shift+E` | `export-reader-to-notes` | Appends active distilled Reader View article or page clipping to `notes.md`. |
-| **Export Article to External Note App** | - | `export-reader-to-external` | Saves clipping as standalone Markdown note and opens in preferred note app. |
-| **Open Quick Notes in External Application** | - | `open-notes-external` | Opens `notes.md` in configured external note app or system default editor. |
 | **Bookmarks & Quickmarks Manager** | `Ctrl+Shift+B` | `toggle-bookmarks` | Ledger manager for saved bookmarks and single-key quickmarks. |
 | **Bookmark Current Page** | `Ctrl+D` | `add-bookmark` | Saves current webpage title and URL into bookmarks collection. |
 | **Set Quickmark** | `Ctrl+Shift+Q` | `set-quickmark` | Binds active webpage to an instant single-key navigation shortcut. |

@@ -202,16 +202,6 @@ const root = path.resolve(__dirname, '..');
         console.log('Search keystroke filter and layout (ms, sorted):', searchTimings.map(value => value.toFixed(1)).join(' '));
         assert(searchTimings[7] < 16, 'Search must fit within a frame');
         // Upstream options live in the fork's grouped panes and remain searchable and persistent.
-        await page.locator('#SettingsSearch').fill('external notes');
-        assert(await page.locator('#setting-notes-command').isVisible());
-        assert.deepEqual(await visiblePanes(), ['SettingsPane-general']);
-        await page.locator('#setting-notes-command').fill('code');
-        await page.locator('#setting-notes-command').press('Tab');
-        for (let i = 0; i < 100; i++) {
-            if ((await page.evaluate(() => window.flyAPI.getBrowserSettings())).external_notes_command === 'code') break;
-            await page.waitForTimeout(50);
-        }
-        assert.equal((await page.evaluate(() => window.flyAPI.getBrowserSettings())).external_notes_command, 'code');
         await page.locator('#SettingsSearch').fill('custom search aliases');
         assert(await page.locator('#new-alias-key').isVisible());
         await page.locator('#new-alias-key').fill('fixture');

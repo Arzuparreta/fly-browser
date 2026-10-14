@@ -28,6 +28,8 @@ const root = path.resolve(__dirname, '..');
         const page = await application.firstWindow();
         const errors = []; page.on('pageerror', error => errors.push(error.message));
         await page.waitForFunction(() => !!window.executeBrowserAction);
+        // Navigating while the initial page is still loading aborts it and rejects the navigation.
+        await page.waitForFunction(() => {try {const view = [...document.querySelectorAll('webview')].find(view => view.getClientRects().length); return view?.getWebContentsId() > 0 && !!view.getURL() && !view.isLoading();} catch {return false;}});
         await page.evaluate(async url => {
             await window.flyAPI.updateBrowserSettings({search_engine: url + '/?q=%s'});
             const view = [...document.querySelectorAll('webview')].find(view => view.getClientRects().length);
