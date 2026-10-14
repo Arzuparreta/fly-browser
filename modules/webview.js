@@ -14,6 +14,7 @@ import {
 } from './statusBar.js';
 import { buildUserScriptWrapper } from './userScriptShim.js';
 import { reapplyWebviewDarkReader } from './darkReader.js';
+import { exportArticleToNotes, exportArticleToExternalApp, openNotesInExternalApp } from './overlays/notes.js';
 
 export function applyCSSThemeToView() {
     // Intentionally no-op to preserve native website themes
@@ -362,6 +363,10 @@ export function createWebView(url, currentWS, idx) {
             }
         } else if (e.channel === 'keyboard-action') {
             window.miseAPI.executeKeyboardAction(e.args[0]);
+        } else if (e.channel === 'reader-export-notes') {
+            exportArticleToNotes(e.args[0]);
+        } else if (e.channel === 'reader-export-external') {
+            exportArticleToExternalApp(e.args[0]);
         } else if (e.channel === 'normal-mode-action') {
             const action = e.args[0];
             const extra = e.args[1];
@@ -465,6 +470,26 @@ export function handleNormalModeAction(action, extra, webview, currentWS, idx) {
         case 'toggle-pin-tab':
             togglePinActiveTab();
             break;
+        case 'export-reader-to-notes':
+            exportActiveTabToNotes();
+            break;
+        case 'export-reader-to-external':
+            exportActiveTabToExternal();
+            break;
+        case 'open-notes-external':
+            openNotesInExternalApp();
+            break;
+        case 'escape':
+            if (state.notesActive && typeof window.toggleNotesOverlay === 'function') {
+                window.toggleNotesOverlay();
+            } else if (state.bookmarksActive && typeof window.toggleBookmarksOverlay === 'function') {
+                window.toggleBookmarksOverlay();
+            } else if (state.dashboardActive && typeof window.toggleDashboardView === 'function') {
+                window.toggleDashboardView();
+            } else if (state.historyActive && typeof window.toggleHistoryOverlay === 'function') {
+                window.toggleHistoryOverlay();
+            }
+            break;
     }
 }
 
@@ -489,6 +514,82 @@ export async function toggleReaderViewOnActiveTab() {
         }
     } catch (err) {
         console.error('Failed to execute reader view:', err);
+    }
+}
+
+export async function exportActiveTabToNotes() {
+    const activeWv = getActiveWebview();
+    if (!activeWv || typeof activeWv.executeJavaScript !== 'function') return;
+    try {
+        const extractScript = `(function() {
+            var overlay = document.getElementById('mise-reader-overlay');
+            if (overlay && overlay.shadowRoot) {
+                var title = overlay.shadowRoot.querySelector('.article-title')?.textContent || document.title;
+                var byline = overlay.shadowRoot.querySelector('.article-byline')?.textContent || '';
+                var body = overlay.shadowRoot.querySelector('.article-body')?.innerText || '';
+                var pill = overlay.shadowRoot.querySelector('.article-domain-pill')?.textContent || window.location.hostname;
+                return {
+                    isReader: true,
+                    title: title,
+                    byline: byline,
+                    url: window.location.href,
+                    siteName: pill,
+                    textContent: body
+                };
+            }
+            var selected = window.getSelection() ? window.getSelection().toString() : '';
+            return {
+                isReader: false,
+                title: document.title,
+                url: window.location.href,
+                siteName: window.location.hostname,
+                textContent: selected || ''
+            };
+        })()`;
+        const articleData = await activeWv.executeJavaScript(extractScript, false);
+        if (articleData) {
+            await exportArticleToNotes(articleData);
+        }
+    } catch (err) {
+        console.error('Failed to export tab to notes:', err);
+    }
+}
+
+export async function exportActiveTabToExternal() {
+    const activeWv = getActiveWebview();
+    if (!activeWv || typeof activeWv.executeJavaScript !== 'function') return;
+    try {
+        const extractScript = `(function() {
+            var overlay = document.getElementById('mise-reader-overlay');
+            if (overlay && overlay.shadowRoot) {
+                var title = overlay.shadowRoot.querySelector('.article-title')?.textContent || document.title;
+                var byline = overlay.shadowRoot.querySelector('.article-byline')?.textContent || '';
+                var body = overlay.shadowRoot.querySelector('.article-body')?.innerText || '';
+                var pill = overlay.shadowRoot.querySelector('.article-domain-pill')?.textContent || window.location.hostname;
+                return {
+                    isReader: true,
+                    title: title,
+                    byline: byline,
+                    url: window.location.href,
+                    siteName: pill,
+                    textContent: body
+                };
+            }
+            var selected = window.getSelection() ? window.getSelection().toString() : '';
+            return {
+                isReader: false,
+                title: document.title,
+                url: window.location.href,
+                siteName: window.location.hostname,
+                textContent: selected || ''
+            };
+        })()`;
+        const articleData = await activeWv.executeJavaScript(extractScript, false);
+        if (articleData) {
+            await exportArticleToExternalApp(articleData);
+        }
+    } catch (err) {
+        console.error('Failed to export tab to external app:', err);
     }
 }
 
@@ -900,7 +1001,7 @@ export function renderWorkspaceUI(targetTabToFocus = null) {
 
 let pendingTabFocus = null;
 // The host window blurs when a page takes focus, so a pending programmatic focus is obsolete.
-window.addEventListener('blur', () => { clearTimeout(pendingTabFocus); pendingTabFocus = null; });
+if (typeof window !== 'undefined') window.addEventListener('blur', () => { clearTimeout(pendingTabFocus); pendingTabFocus = null; });
 
 export function switchTabFocus(targetIdx) {
     const tabItems = document.querySelectorAll('#TabList li');

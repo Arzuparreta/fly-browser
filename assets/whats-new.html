@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>What's New in Mise v0.14.0</title>
+    <title>What's New in Mise v0.15.0</title>
     <link rel="icon" type="image/png" href="icons/Mise-logo48.png">
     <style>
         :root {
@@ -220,55 +220,69 @@
                     Full Release on GitHub ↗
                 </a>
             </div>
-            <h1>What's New in Mise v0.14.0</h1>
-            <p class="subtitle">Authentication compatibility, dynamic keyboard layout prioritisation, main-process memory compaction, and desktop window controls.</p>
+            <h1>What's New in Mise v0.15.0</h1>
+            <p class="subtitle">Custom search engine aliases & bangs, expansive quick notes with reader export, pinned tabs, and per-tab audio management.</p>
         </header>
 
         <section class="feature-card">
-            <h2 class="feature-title">Authentication Compatibility & Scriptlet Isolation</h2>
+            <h2 class="feature-title">Custom Search Engine Aliases & Bangs</h2>
             <p class="feature-desc">
-                Streamlined identity authentication across modern service platforms whilst sustaining rigorous tracking protection.
+                Execute targeted queries across search engines, developer documentation, and package repositories straight from the address bar or Command Palette.
             </p>
             <ul class="feature-points">
-                <li>Bypassed intrusive ad-blocker scriptlets on x.com and twitter.com to allow credential verification without false rejections.</li>
-                <li>Standardised baseline Chromium User-Agent fallback to eliminate runtime token leakage across renderers and worker threads.</li>
-                <li>Preserved network-layer ad and tracker blocking without interfering with client integrity verification.</li>
+                <li>Built-in aliases and DuckDuckGo bang syntax: use quick prefixes like <kbd>g</kbd>, <kbd>!ddg</kbd>, <kbd>yt</kbd>, <kbd>gh</kbd>, <kbd>aur</kbd>, <kbd>pkg</kbd>, <kbd>so</kbd>, <kbd>r</kbd>, <kbd>sp</kbd>, <kbd>b</kbd>, and <kbd>k</kbd>.</li>
+                <li>Fully user-customisable search providers: define, edit, or override engine aliases directly in Preferences (<kbd>F1</kbd>) or via <kbd>config.json</kbd>.</li>
+                <li>Live address bar autocomplete with visual badge indicators highlighting the active search provider.</li>
             </ul>
         </section>
 
         <section class="feature-card">
-            <h2 class="feature-title">Dynamic Keyboard Layout Prioritisation</h2>
+            <h2 class="feature-title">Expansive Quick Notes & Reader View Export</h2>
             <p class="feature-desc">
-                First-class ergonomics for Dvorak, AZERTY, and international keyboard configurations.
+                A redesigned Markdown scratchpad optimised for comfortable authoring, web clipping, and knowledge management interoperability.
             </p>
             <ul class="feature-points">
-                <li>Alphabetical shortcuts and command chords now evaluate active layout glyphs rather than raw physical positions.</li>
-                <li>Classic QWERTY scan-code fallbacks remain fully operational for international and non-Latin character sets.</li>
-                <li>Seamless typing and navigation harmony across multilingual desktop environments.</li>
+                <li>Expansive 920px responsive overlay with full canvas toggle (<kbd>f</kbd>) and real-time word and character counters.</li>
+                <li>Export clean distilled articles from Reader View directly into Quick Notes via <kbd>Ctrl + Shift + E</kbd> with YAML frontmatter.</li>
+                <li>Context menu web clipping: highlight any text on a web page, right-click, and select "Save to Notes".</li>
+                <li>Instant launcher buttons to open notes directly inside your favourite external vault editors: Obsidian, Neovim, and Logseq.</li>
             </ul>
         </section>
 
         <section class="feature-card">
-            <h2 class="feature-title">Main-Process V8 Compaction & Uncapped Headroom</h2>
+            <h2 class="feature-title">Pinned Tabs & Accidental Closure Protection</h2>
             <p class="feature-desc">
-                Hardened garbage collection orchestration and lifted renderer memory ceilings.
+                Dock essential communication channels, web applications, and reference documents permanently at the top of your tab strip.
             </p>
             <ul class="feature-points">
-                <li>Restored proactive main-process V8 heap compaction on tab hibernation without exposing runtime flags to untrusted content.</li>
-                <li>Removed the 512 MB renderer heap ceiling, preventing crashes on heavy single-page web applications and large spreadsheets.</li>
-                <li>Refined memory footprint across long-running browser sessions on resource-constrained Linux setups.</li>
+                <li>Toggle pinned state instantly via <kbd>Ctrl + Shift + P</kbd> or Normal mode <kbd>P</kbd>.</li>
+                <li>Pinned tabs remain docked at the top in a compact icon-first format across all workspace navigation.</li>
+                <li>Guard against accidental closure: pinned tabs ignore single-key <kbd>x</kbd> and mass tab closure sweeps.</li>
+                <li>Automatic hibernation exemption ensures pinned tabs remain active in memory for audio playback and real-time alerts.</li>
             </ul>
         </section>
 
         <section class="feature-card">
-            <h2 class="feature-title">Desktop Window Controls & Tab Synchronisation</h2>
+            <h2 class="feature-title">Per-Tab Audio Indicators & Global Mute</h2>
             <p class="feature-desc">
-                Enhanced usability on traditional desktop environments alongside reliable tab state tracking.
+                Granular control over audio-producing web pages with instant visual feedback and dedicated keyboard shortcuts.
             </p>
             <ul class="feature-points">
-                <li>Optional sidebar window controls (minimise, maximise, close) for seamless integration with GNOME, KDE Plasma, and XFCE.</li>
-                <li>Multi-event tab title synchronisation resolving intermittent loading placeholders across asynchronous page transitions.</li>
-                <li>Runtime upgrade to Electron v44.7.0 powered by Chromium 152 and Node.js 24.</li>
+                <li>Dynamic speaker indicators on active tabs displaying subtle audio pulse animations when sound is detected.</li>
+                <li>Clickable speaker badge on tabs to mute or unmute individual webviews with a single click.</li>
+                <li>Per-tab mute toggle via <kbd>Ctrl + Shift + M</kbd>, <kbd>F8</kbd>, or Normal mode <kbd>m</kbd>.</li>
+                <li>Global mute toggle via Normal mode <kbd>M</kbd> or Command Palette to silence all browser tabs instantly.</li>
+            </ul>
+        </section>
+
+        <section class="feature-card">
+            <h2 class="feature-title">Atomic Configuration Writes & Upcoming Roadmap</h2>
+            <p class="feature-desc">
+                Enhanced crash safety and persistent state protection on low-resource and embedded Linux systems.
+            </p>
+            <ul class="feature-points">
+                <li>Atomic configuration writes via temporary file staging and rename swaps eliminate risk of corrupted configuration on abrupt shutdowns.</li>
+                <li>Session Auto-Recovery: slated as the immediate focus for the next release cycle to restore tabs seamlessly after unexpected crashes.</li>
             </ul>
         </section>
 

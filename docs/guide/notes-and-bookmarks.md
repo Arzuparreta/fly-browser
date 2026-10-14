@@ -8,16 +8,19 @@ Mise incorporates productivity utilities directly into the browser, saving all d
 
 ![Mise Browser Markdown Quick Notes](/screenshots/notes.webp)
 
-Mise includes an integrated scratchpad overlay for taking notes alongside your research:
+Mise includes an integrated, expansive scratchpad overlay for taking notes alongside your research:
 
 - Press **Ctrl + N** to open or close the Notes overlay.
-- Supports GitHub Flavored Markdown syntax.
-- **Editing Mode**: Click into the textarea to write notes.
+- **Expansive Layout & Fullscreen**: Generous, readable dimensions with a dedicated toggle button to expand into a distraction-free full canvas view.
+- **Live Statistics**: Real-time word counter and character display in the header.
+- **Markdown Preview**: Instant toggle between raw Markdown editing and formatted preview, complete with headings, lists, quotes, code blocks, thematic rules, and clickable links.
 - **Instant Persistence**: All notes are automatically saved to:
   ```text
   ~/.config/mise-browser/notes.md
   ```
-- Because notes are stored in a standard Markdown file, you can view or edit them outside Mise using Neovim, Obsidian, or any external text editor.
+- **Export from Reader View (`Ctrl + Shift + E`)**: Distilled Reader View articles and web clippings can be appended straight into Quick Notes with a single click or keyboard shortcut.
+- **Right-Click Text Clipping**: Highlight any text passage on a web page or in a document and right-click to choose **Save to Notes**. The snippet is formatted into a clean Markdown blockquote with source citation and timestamp, and appended directly to `notes.md`.
+- **External Note-Taking Integration**: Click the **External** button in the notes header to open `notes.md` in your preferred desktop note application (Obsidian, Logseq, Neovim, VS Code) or system default Markdown editor. Custom launch commands can be configured in **Preferences → General → Notes & external tools**.
 
 ---
 

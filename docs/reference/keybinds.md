@@ -112,9 +112,12 @@ Existing legacy profiles retain their explicit assignments, including empty and 
 | Reload User Scripts and Styles | Unassigned | Unassigned |
 | Add Current Page to Bookmarks | `Ctrl+D` | Unassigned |
 | Copy page URL | Unassigned | `y` |
+| Export Reader View to External App | Unassigned | Unassigned |
+| Export Reader View to Quick Notes | `Ctrl+Shift+E` | Unassigned |
 | Find In Page | `Ctrl+F` / `F3` | `/` |
 | Jump to Quickmark | `Ctrl+J` | Unassigned |
 | Open Extension Actions (Popups, Commands, Options) | Unassigned | Unassigned |
+| Open Quick Notes in External Application | Unassigned | Unassigned |
 | Play/Pause Media Playback Globally | `Ctrl+Shift+0` / `F10` | Unassigned |
 | Print active page | Unassigned | Unassigned |
 | Reload without cache | `Ctrl+Shift+R` | `Shift+R` |

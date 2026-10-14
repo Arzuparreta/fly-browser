@@ -7,6 +7,7 @@ import { renderWorkspaceUI, switchTabFocus, spawnTabWithUrl, spawnNewBlankTab, h
 import { toggleBookmarksOverlay, promptQuickmark, addCurrentPageToBookmarks } from './bookmarks.js';
 import { syncVisualSettingsInputs, setupVisualSettingsListeners } from '../theme.js';
 import { getExtensionPaletteCommands, prepareExtensionPaletteCommands, syncExtensionsPreferences, setupExtensionsPreferencesListeners } from '../extensions.js';
+import { renderSearchAliasesUI } from './searchEngine.js';
 
 function returnFocusToWebview() {
     window.miseAllowWebviewFocus = true;
@@ -350,6 +351,43 @@ export const COMMAND_DEFINITIONS = [
         actionId: 'toggle-notes',
         keywords: ['notes', 'scratchpad', 'markdown', 'memo', 'write'],
         action: () => window.toggleNotesOverlay && window.toggleNotesOverlay()
+    },
+    {
+        id: 'export-reader-to-notes',
+        title: 'Export Article to Quick Notes',
+        desc: 'Append active Reader View article or page clipping to ~/.config/mise-browser/notes.md',
+        details: 'Distills the active article into clean Markdown and appends it to your persistent quick notes file with citation details.',
+        tip: 'Press Ctrl+Shift+E while reading an article to save it to your notes without leaving the page.',
+        category: 'Tools & Notes',
+        icon: 'fa-solid fa-file-export',
+        actionId: 'export-reader-to-notes',
+        shortcut: 'Ctrl+Shift+E',
+        keywords: ['notes', 'export', 'reader', 'article', 'save', 'markdown', 'clipping'],
+        action: () => window.exportActiveTabToNotes && window.exportActiveTabToNotes()
+    },
+    {
+        id: 'export-reader-to-external',
+        title: 'Export Article to External Note App',
+        desc: 'Save active article as standalone Markdown file and open in your preferred notes tool',
+        details: 'Exports the active article into ~/.config/mise-browser/clippings/ and launches your configured external note application (Obsidian, Logseq, Neovim, etc.).',
+        tip: 'Configure your external note command in Preferences to open clippings directly in your favourite editor.',
+        category: 'Tools & Notes',
+        icon: 'fa-solid fa-arrow-up-right-from-square',
+        actionId: 'export-reader-to-external',
+        keywords: ['export', 'external', 'obsidian', 'logseq', 'nvim', 'notes', 'clipping'],
+        action: () => window.exportActiveTabToExternal && window.exportActiveTabToExternal()
+    },
+    {
+        id: 'open-notes-external',
+        title: 'Open Quick Notes in External Application',
+        desc: 'Open ~/.config/mise-browser/notes.md in your preferred notes app or system editor',
+        details: 'Launches your configured external note command or system default Markdown editor with notes.md.',
+        tip: 'Allows editing your notes in Obsidian, Neovim, VS Code, or your desktop Markdown editor.',
+        category: 'Tools & Notes',
+        icon: 'fa-solid fa-arrow-up-right-from-square',
+        actionId: 'open-notes-external',
+        keywords: ['notes', 'external', 'obsidian', 'open', 'editor', 'markdown'],
+        action: () => window.openNotesInExternalApp && window.openNotesInExternalApp()
     },
     {
         id: 'toggle-bookmarks',
@@ -762,6 +800,16 @@ export async function syncPreferencesUI() {
             if (trustedDomainsField) {
                 trustedDomainsField.value = Array.isArray(cfg.trusted_domains) ? cfg.trusted_domains.join('\n') : '';
             }
+
+            const notesCmdField = document.getElementById('setting-notes-command');
+            if (notesCmdField) {
+                notesCmdField.value = cfg.external_notes_command || '';
+            }
+
+            if (cfg.custom_search_aliases && typeof cfg.custom_search_aliases === 'object') {
+                state.customSearchAliases = { ...cfg.custom_search_aliases };
+            }
+            renderSearchAliasesUI();
         }
     } catch (err) {}
 
@@ -819,6 +867,7 @@ export function setupPreferencesListeners() {
             const sidebarToggle = document.getElementById('setting-sidebar-collapse-toggle');
             const spellSelect = document.getElementById('setting-spellchecker-language');
             const windowControlsToggle = document.getElementById('setting-window-controls-toggle');
+            const notesCmdField = document.getElementById('setting-notes-command');
 
             const newCfg = {
                 disable_gpu: gpuToggle ? !gpuToggle.checked : false,
@@ -828,11 +877,24 @@ export function setupPreferencesListeners() {
                 sidebar_auto_collapse: sidebarToggle ? sidebarToggle.checked : true,
                 email_handler: emailSelect ? emailSelect.value : 'system',
                 spellchecker_language: spellSelect ? spellSelect.value : 'en-GB',
-                show_window_controls: windowControlsToggle ? windowControlsToggle.checked : false
+                show_window_controls: windowControlsToggle ? windowControlsToggle.checked : false,
+                external_notes_command: notesCmdField ? notesCmdField.value.trim() : '',
+                custom_search_aliases: state.customSearchAliases || {}
             };
 
             if (window.miseAPI && typeof window.miseAPI.saveBrowserSettings === 'function') {
                 await window.miseAPI.saveBrowserSettings(newCfg);
+            }
+        };
+    }
+
+    const liveNotesCmd = document.getElementById('setting-notes-command');
+    if (liveNotesCmd) {
+        liveNotesCmd.onchange = async () => {
+            if (window.miseAPI && typeof window.miseAPI.getBrowserSettings === 'function') {
+                const cfg = (await window.miseAPI.getBrowserSettings()) || {};
+                cfg.external_notes_command = liveNotesCmd.value.trim();
+                await window.miseAPI.updateBrowserSettings(cfg);
             }
         };
     }

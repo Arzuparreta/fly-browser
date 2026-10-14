@@ -23,6 +23,11 @@ Controls hardware switches, process limits, privacy whitelists, and search prefe
     "show_window_controls": false,
     "email_handler": "system",
     "search_engine": "https://duckduckgo.com/?q=%s",
+    "custom_search_aliases": {
+        "aur": "https://aur.archlinux.org/packages?K=%s",
+        "nix": "https://search.nixos.org/packages?query=%s",
+        "mdn": "https://developer.mozilla.org/en-US/search?q=%s"
+    },
     "spellchecker_language": "en-GB",
     "theme": "dark",
     "webview_theme": "dark",
@@ -82,6 +87,8 @@ Controls hardware switches, process limits, privacy whitelists, and search prefe
 - **`extensions_enabled`**: Master switch for [opt-in Chrome extensions](/guide/extensions). `false` by default; while `false` nothing extension related runs.
 - **`extensions_by_workspace`**: Map of workspace name to the extension folders (inside `~/.config/mise-browser/extensions/`) allowed to run there, e.g. `{ "Work": ["darkreader"] }`. Workspaces not listed load nothing.
 - **`extensions_unload_grace_seconds`**: How long a workspace keeps its extensions loaded after its last live tab closes or hibernates (default `60`).
+- **`external_notes_command`**: Optional command or executable used to open notes and clippings (e.g. `obsidian`, `logseq`, `code`, `nvim`). When empty, uses system default Markdown handler.
+- **`custom_search_aliases`**: Key-value map of custom search prefixes and URL templates (with `%s` query placeholder). Typing `<alias> <query>` in the address bar (such as `aur hyprland` or `gh mise`) bypasses fallback engines and routes queries straight to the destination. Users can configure, override, or extend default built-ins directly in Preferences.
 
 ---
 
@@ -143,6 +150,7 @@ Maintains persistent workspaces, URLs, titles, Dark Reader preferences, and slee
 
 ---
 
-## 5. Quick Notes (`notes.md`)
+## 5. Quick Notes (`notes.md`) & Clippings
 
-A standard Markdown file storing everything typed into the Quick Notes overlay (**Ctrl + N**). You can edit this file directly using your favourite text editor.
+- **`notes.md`**: A standard Markdown file storing everything typed into the Quick Notes overlay (**Ctrl + N**) or exported from Reader View (**Ctrl + Shift + E**). You can edit this file directly or open it from the overlay in your favourite external editor (Obsidian, Logseq, Neovim, VS Code).
+- **`clippings/`**: Dedicated directory storing standalone exported Markdown clippings and distilled articles saved for external note tools.

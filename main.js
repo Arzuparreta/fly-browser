@@ -106,6 +106,8 @@ const DEFAULT_CONFIG = {
     theme_colors: { ...DEFAULT_THEME_COLORS },
     enable_diagnostics: false,
     show_window_controls: false,
+    external_notes_command: '',
+    custom_search_aliases: {},
     last_seen_version: null,
     // Opt-in Chrome extensions, see extensions.js and docs/guide/extensions.md
     extensions_enabled: false,
@@ -877,7 +879,8 @@ ipcMain.handle('open-external', async (event, url) => {
     if (!url || typeof url !== 'string') return false;
     try {
         const parsed = new URL(url);
-        if (parsed.protocol === 'http:' || parsed.protocol === 'https:') {
+        const allowedProtocols = ['http:', 'https:', 'obsidian:', 'logseq:', 'notes:', 'mailto:'];
+        if (allowedProtocols.includes(parsed.protocol)) {
             await shell.openExternal(url);
             return true;
         }
@@ -955,6 +958,69 @@ ipcMain.handle('save-notes', async (event, content) => {
         return true;
     } catch (err) {
         return false;
+    }
+});
+
+ipcMain.handle('open-notes-in-external-app', async (event, customPath) => {
+    try {
+        const cfg = loadBrowserConfig();
+        const targetPath = customPath || NOTES_PATH;
+        if (!fs.existsSync(targetPath)) {
+            if (!fs.existsSync(CONFIG_DIR)) fs.mkdirSync(CONFIG_DIR, { recursive: true });
+            fs.writeFileSync(targetPath, '', 'utf-8');
+        }
+        const cmd = (cfg.external_notes_command || '').trim();
+        if (cmd) {
+            const { spawn } = require('child_process');
+            const tokens = cmd.split(/\s+/);
+            const proc = spawn(tokens[0], [...tokens.slice(1), targetPath], {
+                detached: true,
+                stdio: 'ignore'
+            });
+            proc.unref();
+            return { success: true, app: tokens[0] };
+        } else {
+            const err = await shell.openPath(targetPath);
+            return { success: !err, error: err || null, app: 'system-default' };
+        }
+    } catch (err) {
+        return { success: false, error: err.message };
+    }
+});
+
+ipcMain.handle('export-article-to-external', async (event, { title, markdown }) => {
+    try {
+        const cfg = loadBrowserConfig();
+        const clippingsDir = path.join(CONFIG_DIR, 'clippings');
+        if (!fs.existsSync(clippingsDir)) fs.mkdirSync(clippingsDir, { recursive: true });
+
+        const safeTitle = (title || 'article')
+            .replace(/[^a-zA-Z0-9_\-\u00C0-\u017F ]/g, '')
+            .trim()
+            .replace(/\s+/g, '_')
+            .slice(0, 60) || 'article';
+        const timestamp = Date.now();
+        const filename = `${safeTitle}_${timestamp}.md`;
+        const targetPath = path.join(clippingsDir, filename);
+
+        fs.writeFileSync(targetPath, markdown || '', 'utf-8');
+
+        const cmd = (cfg.external_notes_command || '').trim();
+        if (cmd) {
+            const { spawn } = require('child_process');
+            const tokens = cmd.split(/\s+/);
+            const proc = spawn(tokens[0], [...tokens.slice(1), targetPath], {
+                detached: true,
+                stdio: 'ignore'
+            });
+            proc.unref();
+            return { success: true, path: targetPath, app: tokens[0] };
+        } else {
+            const err = await shell.openPath(targetPath);
+            return { success: !err, error: err || null, path: targetPath, app: 'system-default' };
+        }
+    } catch (err) {
+        return { success: false, error: err.message };
     }
 });
 
@@ -1781,6 +1847,16 @@ app.on('web-contents-created', (event, webContents) => {
                 }
             };
 
+            const saveSelectionToNotes = (selectionText, sourceUrl, pageTitle) => {
+                if (mainWindow && mainWindow.webContents) {
+                    mainWindow.webContents.send('master-shortcut', 'save-selection-to-notes', {
+                        text: selectionText,
+                        url: sourceUrl,
+                        title: pageTitle
+                    });
+                }
+            };
+
             const targetUrl = params.linkURL || params.srcURL || params.pageURL || webContents.getURL();
             const targetText = params.selectionText ? params.selectionText.trim() : webContents.getTitle();
             
@@ -1798,7 +1874,17 @@ app.on('web-contents-created', (event, webContents) => {
             }
         
             if (params.selectionText && params.selectionText.trim() !== '') {
+                const selectedText = params.selectionText.trim();
+                const pageTitle = webContents.getTitle() || 'Web clipping';
+                const currentUrl = params.pageURL || webContents.getURL() || '';
+
                 menu.append(new MenuItem({ label: 'Copy', role: 'copy' }));
+                menu.append(new MenuItem({
+                    label: 'Save to Notes',
+                    click: () => {
+                        saveSelectionToNotes(selectedText, currentUrl, pageTitle);
+                    }
+                }));
             }
             
             if (params.linkURL && params.linkURL.trim() !== '') {
@@ -1836,14 +1922,20 @@ app.on('web-contents-created', (event, webContents) => {
                     }
                 }));
             }
+
+            if (menu.items.length === 0) {
+                menu.append(new MenuItem({ label: 'Back', click: () => { webContents.send('master-shortcut', 'go-back-signal'); } }));
+                menu.append(new MenuItem({ label: 'Forward', click: () => { webContents.send('master-shortcut', 'go-forward-signal'); } }));
+                menu.append(new MenuItem({ label: 'Reload', click: () => { webContents.reload(); } }));
+            }
         
             const extensionItems = extensions.getContextMenuItems(webContents, params);
             if (extensionItems.length > 0) {
-                menu.append(new MenuItem({ type: 'separator' }));
+                if (menu.items.length > 0) menu.append(new MenuItem({ type: 'separator' }));
                 extensionItems.forEach(item => menu.append(item));
             }
 
-            menu.append(new MenuItem({ type: 'separator' }));
+            if (menu.items.length > 0) menu.append(new MenuItem({ type: 'separator' }));
         
             const shareSubmenu = new Menu();
             shareSubmenu.append(new MenuItem({
@@ -1923,12 +2015,6 @@ app.on('web-contents-created', (event, webContents) => {
                 label: 'Share...',
                 submenu: shareSubmenu
             }));
-        
-            if (menu.items.length <= 2) {
-                menu.append(new MenuItem({ label: 'Back', click: () => { webContents.send('master-shortcut', 'go-back-signal'); } }));
-                menu.append(new MenuItem({ label: 'Forward', click: () => { webContents.send('master-shortcut', 'go-forward-signal'); } }));
-                menu.append(new MenuItem({ label: 'Reload', click: () => { webContents.reload(); } }));
-            }
         
             menu.popup({ window: mainWindow });
         });
