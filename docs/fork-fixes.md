@@ -1,5 +1,13 @@
 # Fork fixes ledger
 
+## Address search in an empty workspace · 14 October 2026
+
+| ID | Original behaviour | Fix | Validation |
+| --- | --- | --- | --- |
+| <a id="nav-01"></a>NAV-01 | Inherited address navigation returned immediately when no tab was selected. After closing the last tab, Ctrl+L opened the address bar but Enter did nothing. | Create a tab with the resolved destination when there is no selected tab, using the existing tab creation and session persistence path. Dismiss suggestions and return focus to the page. Existing tabs still navigate in place; search engine preferences, aliases, bangs and direct URLs share the same fallback. | Unit regression covers empty-workspace searches, URLs, aliases and bangs. Disposable-profile Electron regression closes the last tab, submits a configured-engine search and a direct URL through Ctrl+L/Enter, and checks one saved tab, hidden address bar, page focus and no renderer errors. `npm test`, syntax checks and documentation build pass. |
+
+Keyboard defaults, the generated guest grammar and the keyboard reference are unchanged and drift-checked. The disposable-profile keyboard suite passes, including recorder and editable-page behaviour. Desktop coverage is Linux/X11; Wayland and other operating systems remain unverified. An initial empty-workspace fixture used the wrong close action and was interrupted; it now uses the registered action with a bounded loop. A concurrent keyboard run was interrupted, and the first sequential run timed out opening Preferences; the isolated rerun passed with no renderer errors. `git diff --check` passes.
+
 Record every solved problem here, including defects inherited from upstream. Each PR must list its applicable entries in the **Fork fixes** section of the PR template. Add the PR link when one exists; do not mark an unmerged PR as repository truth.
 
 ## Failed startup no longer blocks later launches · 14 October 2026
