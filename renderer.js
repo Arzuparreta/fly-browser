@@ -42,8 +42,6 @@ import {
     wakeAllTabsInWorkspace,
     reapplyActiveUserStyles,
     toggleReaderViewOnActiveTab,
-    exportActiveTabToNotes,
-    exportActiveTabToExternal
 } from './modules/webview.js';
 
 import { 
@@ -86,16 +84,6 @@ import {
     toggleHistoryOverlay, 
     filterHistoryItems 
 } from './modules/overlays/history.js';
-
-import { 
-    parseMarkdownToHtml, 
-    renderNotesView, 
-    toggleNotesOverlay, 
-    setupNotesListeners,
-    toggleExpandNotesOverlay,
-    openNotesInExternalApp,
-    appendSelectionToNotes
-} from './modules/overlays/notes.js';
 
 import { 
     displayAddressOverlay, 
@@ -162,13 +150,7 @@ window.toggleDashboardView = toggleDashboardView;
 window.displayAddressOverlay = displayAddressOverlay;
 window.triggerLinkHints = triggerLinkHints;
 window.toggleInPageSearch = toggleInPageSearch;
-window.toggleNotesOverlay = toggleNotesOverlay;
-window.toggleExpandNotesOverlay = toggleExpandNotesOverlay;
-window.openNotesInExternalApp = openNotesInExternalApp;
-window.appendSelectionToNotes = appendSelectionToNotes;
 window.renderSearchAliasesUI = renderSearchAliasesUI;
-window.exportActiveTabToNotes = exportActiveTabToNotes;
-window.exportActiveTabToExternal = exportActiveTabToExternal;
 window.toggleDownloadShelf = toggleDownloadShelf;
 window.toggleStatusBar = toggleStatusBar;
 window.toggleClock = toggleClock;
@@ -458,7 +440,6 @@ async function initializeBrowser() {
     setupEventListeners();
     renderWorkspaceUI();
     initializeTabSleepManager();
-    setupNotesListeners();
     setupAddressBarAutocomplete();
     setupBookmarkOverlayListeners();
     setupDiagnosticsListeners();
@@ -578,7 +559,7 @@ function setupEventListeners() {
     document.getElementById('WelcomeNewTabBtn')?.addEventListener('click', spawnNewBlankTab);
     document.getElementById('WelcomeBookmarksBtn')?.addEventListener('click', toggleBookmarksOverlay);
     document.getElementById('WelcomePaletteBtn')?.addEventListener('click', toggleCommandPaletteView);
-    document.getElementById('WelcomeNotesBtn')?.addEventListener('click', toggleNotesOverlay);
+    document.getElementById('WelcomeDashboardBtn')?.addEventListener('click', toggleDashboardView);
 
     if (window.flyAPI && typeof window.flyAPI.onUserContentUpdated === 'function') {
         window.flyAPI.onUserContentUpdated((kind) => {
@@ -644,11 +625,6 @@ function setupEventListeners() {
             }
             case 'toggle-devtools': toggleActiveDevTools(); break;
             case 'toggle-bookmarks': toggleBookmarksOverlay(); break;
-            case 'toggle-notes': toggleNotesOverlay(); break;
-            case 'save-selection-to-notes': appendSelectionToNotes(args[0]); break;
-            case 'export-reader-to-notes': exportActiveTabToNotes(); break;
-            case 'export-reader-to-external': exportActiveTabToExternal(); break;
-            case 'open-notes-external': openNotesInExternalApp(); break;
             case 'toggle-downloads': toggleDownloadShelf(); break;
             // Inside Preferences, find searches the settings rather than the page behind them.
             case 'toggle-find': if (state.preferencesActive) focusSettingsSearch(); else toggleInPageSearch(); break;
@@ -822,11 +798,10 @@ function setupEventListeners() {
         CommandPaletteOverlay: {active: () => state.paletteActive, close: toggleCommandPaletteView},
         BookmarksOverlay: {active: () => state.bookmarksActive, close: toggleBookmarksOverlay},
         HistoryOverlay: {active: () => state.historyActive, close: toggleHistoryOverlay},
-        NotesOverlay: {active: () => state.notesActive, close: toggleNotesOverlay},
         DiagnosticsOverlay: {active: () => state.diagnosticsActive, close: toggleDiagnosticsView},
         ShareModalOverlay: {active: () => document.getElementById('ShareModalOverlay').style.display === 'flex', close: closeTransientShareModal}
     });
-    for (const id of ['WorkspaceHeader', 'SidebarClock', 'WelcomeNewTabBtn', 'WelcomeBookmarksBtn', 'WelcomePaletteBtn', 'WelcomeNotesBtn']) {
+    for (const id of ['WorkspaceHeader', 'SidebarClock', 'WelcomeNewTabBtn', 'WelcomeBookmarksBtn', 'WelcomePaletteBtn', 'WelcomeDashboardBtn']) {
         const control = document.getElementById(id);
         if (!control) continue;
         control.tabIndex = 0;
@@ -869,7 +844,7 @@ function setupEventListeners() {
             const control = document.getElementById(id);
             if (control) control.title = window.describeKeyboardAction(action, label);
         }
-        const welcome = {WelcomeNewTabBtn: 'spawn-tab', WelcomeBookmarksBtn: 'toggle-bookmarks', WelcomePaletteBtn: 'toggle-palette', WelcomeNotesBtn: 'toggle-notes'};
+        const welcome = {WelcomeNewTabBtn: 'spawn-tab', WelcomeBookmarksBtn: 'toggle-bookmarks', WelcomePaletteBtn: 'toggle-palette', WelcomeDashboardBtn: 'toggle-dashboard'};
         for (const [id, action] of Object.entries(welcome)) {
             const badge = document.getElementById(id)?.querySelector('.shortcut-key');
             if (badge) badge.textContent = config.shortcuts[action]?.join(' / ') || 'Unassigned';
@@ -980,7 +955,7 @@ function setupEventListeners() {
         if (!btn) return;
 
         btn.addEventListener('keydown', (e) => {
-            if (state.dashboardActive || state.bookmarksActive || state.paletteActive || state.preferencesActive || state.historyActive || state.notesActive) return;
+            if (state.dashboardActive || state.bookmarksActive || state.paletteActive || state.preferencesActive || state.historyActive) return;
             if (e.key === 'ArrowRight') {
                 e.preventDefault();
                 const nextBtn = document.getElementById(bottomButtons[idx + 1]);
@@ -1122,12 +1097,12 @@ function setupEventListeners() {
 
     document.getElementById('Sidebar').addEventListener('focusout', (e) => {
         if (e.relatedTarget && !document.getElementById('Sidebar').contains(e.relatedTarget)) {
-            if (state.dashboardActive || state.paletteActive || state.preferencesActive || state.bookmarksActive || state.historyActive || state.notesActive || state.diagnosticsActive) return;
+            if (state.dashboardActive || state.paletteActive || state.preferencesActive || state.bookmarksActive || state.historyActive || state.diagnosticsActive) return;
             
             const overlayIds = [
                 'WideAddressBar', 'AddressSuggestions', 'PaletteInput', 'PaletteList', 'PreferencesOverlay',
                 'BookmarksOverlay', 'BookmarkSearchInput', 'HistoryOverlay',
-                'HistorySearchInput', 'NotesOverlay', 'NotesTextArea',
+                'HistorySearchInput',
                 'DashboardOverlay', 'ShareModalOverlay', 'FindBarOverlay',
                 'DiagnosticsOverlay'
             ];

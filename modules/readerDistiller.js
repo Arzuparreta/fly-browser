@@ -3290,9 +3290,6 @@ if (typeof module === "object") {
                 '<span class="width-label">' + (prefs.contentWidth.charAt(0).toUpperCase() + prefs.contentWidth.slice(1)) + '</span>' +
             '</button>' +
             '<div class="toolbar-divider"></div>' +
-            '<button class="toolbar-btn export-notes-btn" title="Export Article to Quick Notes (Ctrl+Shift+E)">📝 Notes</button>' +
-            '<button class="toolbar-btn export-external-btn" title="Export Article to External Note App">↗ External</button>' +
-            '<div class="toolbar-divider"></div>' +
             '<button class="toolbar-btn toolbar-close close-btn" title="Close reader view (Escape)">✕</button>';
 
         var container = document.createElement('article');
@@ -3400,50 +3397,6 @@ if (typeof module === "object") {
             widthBtn.querySelector('.width-label').textContent = prefs.contentWidth.charAt(0).toUpperCase() + prefs.contentWidth.slice(1);
             saveReaderPreferences(prefs);
         });
-
-        var exportNotesBtn = toolbar.querySelector('.export-notes-btn');
-        if (exportNotesBtn) {
-            exportNotesBtn.addEventListener('click', function() {
-                try {
-                    window.dispatchEvent(new CustomEvent('fly-reader-export-notes', {
-                        detail: {
-                            title: article.title || document.title || 'Untitled Article',
-                            byline: article.byline || '',
-                            url: baseUri,
-                            siteName: siteHostname,
-                            excerpt: article.excerpt || '',
-                            textContent: article.textContent || ''
-                        }
-                    }));
-                    exportNotesBtn.textContent = '✓ Saved';
-                    setTimeout(function() {
-                        exportNotesBtn.textContent = '📝 Notes';
-                    }, 2000);
-                } catch (e) {}
-            });
-        }
-
-        var exportExtBtn = toolbar.querySelector('.export-external-btn');
-        if (exportExtBtn) {
-            exportExtBtn.addEventListener('click', function() {
-                try {
-                    window.dispatchEvent(new CustomEvent('fly-reader-export-external', {
-                        detail: {
-                            title: article.title || document.title || 'Untitled Article',
-                            byline: article.byline || '',
-                            url: baseUri,
-                            siteName: siteHostname,
-                            excerpt: article.excerpt || '',
-                            textContent: article.textContent || ''
-                        }
-                    }));
-                    exportExtBtn.textContent = '✓ Exported';
-                    setTimeout(function() {
-                        exportExtBtn.textContent = '↗ External';
-                    }, 2000);
-                } catch (e) {}
-            });
-        }
 
         var closeBtn = toolbar.querySelector('.close-btn');
         closeBtn.addEventListener('click', function() {

@@ -24,7 +24,7 @@ Fly wraps the Chromium engine in a lean Electron shell. Every browser action can
 * **Clipboard-Mediated Terminal Oversight**: High-risk script execution and raw web commands trigger a clipboard-mediated security handshake, sanitising and staging vetted commands to your clipboard for deliberate user review and execution in an external terminal.
 * **Native Privacy & Trusted Sites**: Built-in request interception blocks trackers, telemetry, and advertisements without heavy third-party extensions, while allowing selective whitelisting for trusted banking and shopping services.
 * **Local User Scripts & Styles**: Direct native injection of `.user.js` and `.user.css` files directly from `~/.config/fly-browser/` with inotify watching and live CSS hot-reloading, avoiding the heavy memory overhead of full WebExtensions.
-* **Power Tools**: Integrated Markdown notes, bookmarks, quickmarks, actionable history overlay, and a full-page Command Centre.
+* **Power Tools**: Integrated bookmarks, quickmarks, actionable history overlay, and a full-page Command Centre.
 
 ***
 
@@ -36,7 +36,7 @@ Security, isolation, and upstream dependency freshness are foundational principl
 * **Engine Version Verification**: Active Fly, Electron, and Chromium runtime versions are visible in **Preferences → About** (`Ctrl + H`) and the Welcome view.
 * **Strict Process Sandboxing**: Webviews run with `contextIsolation: true`, `nodeIntegration: false`, and Chromium sandboxing enabled, guarded by a minimal IPC whitelist.
 * **Permissions Denied by Default**: Hardware access (camera, microphone, geolocation, and MIDI) is blocked by default.
-* **Local Data Ownership & Zero Password Vault Targets**: Plaintext JSON configuration, notes, and history files are stored locally under user-only permissions (`0600`). Fly deliberately excludes built-in password managers, eliminating browser credential harvesting by infostealer malware. Session cookies are encrypted via host OS keyrings.
+* **Local Data Ownership & Zero Password Vault Targets**: Plaintext JSON configuration and history files are stored locally under user-only permissions (`0600`). Fly deliberately excludes built-in password managers, eliminating browser credential harvesting by infostealer malware. Session cookies are encrypted via host OS keyrings.
 * **Responsible Disclosure**: See the [Security Policy](SECURITY.md) for vulnerability disclosure guidelines via GitHub Security Advisories.
 
 ***

@@ -57,7 +57,7 @@ try {
     assert.equal(keybinds.getActionForInput({type: 'keyDown', key: 'Tab', control: true}), 'next-tab');
     assert.equal(keybinds.getActionForInput({type: 'keyDown', key: 'w', control: true}), 'remove-tab');
     fs.writeFileSync(legacyFile, JSON.stringify({...seeded, 'toggle-dark-reader-domain': 'Alt+Shift+E', 'focus-sidebar': 'Ctrl+M',
-        'toggle-find': ['F3', 'Ctrl+Shift+F'], 'remove-tab': 'Ctrl+Q', 'focus-nav-buttons': 'Ctrl+Tab', 'toggle-notes': ''}));
+        'toggle-find': ['F3', 'Ctrl+Shift+F'], 'remove-tab': 'Ctrl+Q', 'focus-nav-buttons': 'Ctrl+Tab', 'toggle-bookmarks': ''}));
     keybinds.initializeKeybinds(directory);
     const mixed = keybinds.getKeyboardConfig();
     assert.equal(mixed.warning, undefined, 'Seeded values of retired actions do not reject the profile');
@@ -66,7 +66,7 @@ try {
     assert.deepEqual(mixed.shortcuts['remove-tab'], ['Ctrl+Q']);
     assert.deepEqual(mixed.shortcuts['focus-nav-buttons'], ['Ctrl+Tab'], 'A changed seeded value is a user choice');
     assert(!mixed.shortcuts['next-tab'].includes('Ctrl+Tab'));
-    assert.deepEqual(mixed.shortcuts['toggle-notes'], [], 'Disabling a seeded binding is a user choice');
+    assert.deepEqual(mixed.shortcuts['toggle-bookmarks'], [], 'Disabling a seeded binding is a user choice');
 
     // Saves store only changes, so later default improvements still reach the profile.
     const stored = () => JSON.parse(fs.readFileSync(legacyFile, 'utf8'));
@@ -76,17 +76,17 @@ try {
     disabled.normal['scroll-down'] = ['Z', 'ArrowDown'];
     assert.equal(keybinds.saveKeybinds(directory, disabled).ok, true);
     assert.deepEqual(stored(), {version: 2, changesOnly: true, shortcuts: {'reload-active-tab': []}, normal: {'scroll-down': ['Z', 'ArrowDown']}});
-    const previousNotes = keybinds.DEFAULT_KEYBINDS['toggle-notes'];
+    const previousBookmarks = keybinds.DEFAULT_KEYBINDS['toggle-bookmarks'];
     try {
-        keybinds.DEFAULT_KEYBINDS['toggle-notes'] = 'Ctrl+Alt+N';
+        keybinds.DEFAULT_KEYBINDS['toggle-bookmarks'] = 'Ctrl+Alt+B';
         keybinds.initializeKeybinds(directory);
-        assert.deepEqual(keybinds.getKeybinds()['toggle-notes'], ['Ctrl+Alt+N'], 'A changed default reaches a saved profile');
+        assert.deepEqual(keybinds.getKeybinds()['toggle-bookmarks'], ['Ctrl+Alt+B'], 'A changed default reaches a saved profile');
         // Complete tables saved by earlier version 2 releases pinned every default.
         fs.copyFileSync(path.join(__dirname, 'fixtures', 'fork-keybinds-079b538.json'), legacyFile);
         keybinds.initializeKeybinds(directory);
-        assert.deepEqual(keybinds.getKeybinds()['toggle-notes'], ['Ctrl+Alt+N'], 'A changed default reaches a complete-table profile');
-        assert.deepEqual({...keybinds.getKeyboardConfig(), shortcuts: {...keybinds.getKeyboardConfig().shortcuts, 'toggle-notes': defaults.shortcuts['toggle-notes']}}, defaults);
-    } finally { keybinds.DEFAULT_KEYBINDS['toggle-notes'] = previousNotes; }
+        assert.deepEqual(keybinds.getKeybinds()['toggle-bookmarks'], ['Ctrl+Alt+B'], 'A changed default reaches a complete-table profile');
+        assert.deepEqual({...keybinds.getKeyboardConfig(), shortcuts: {...keybinds.getKeyboardConfig().shortcuts, 'toggle-bookmarks': defaults.shortcuts['toggle-bookmarks']}}, defaults);
+    } finally { keybinds.DEFAULT_KEYBINDS['toggle-bookmarks'] = previousBookmarks; }
     const complete = JSON.parse(fs.readFileSync(path.join(__dirname, 'fixtures', 'fork-keybinds-079b538.json'), 'utf8'));
     complete.shortcuts['remove-tab'] = ['Ctrl+Q'];
     complete.shortcuts['focus-nav-buttons'] = ['Ctrl+Shift+N', 'Ctrl+Tab'];
@@ -99,6 +99,12 @@ try {
     fs.writeFileSync(legacyFile, JSON.stringify({version: 2, changesOnly: true, shortcuts: {'focus-nav-buttons': ['Ctrl+Shift+N', 'Ctrl+Tab']}, normal: {}}));
     keybinds.initializeKeybinds(directory);
     assert.equal(keybinds.getActionForInput({type: 'keyDown', key: 'Tab', control: true}), 'focus-nav-buttons');
+    // Bindings for removed actions are dropped instead of rejecting the whole profile.
+    fs.writeFileSync(legacyFile, JSON.stringify({version: 2, changesOnly: true, shortcuts: {'toggle-notes': ['Alt+N'], 'export-reader-to-notes': ['Ctrl+Shift+E'], 'open-notes-external': ['Ctrl+Shift+O'], 'export-reader-to-external': ['Alt+Shift+X'], 'remove-tab': ['Ctrl+Q']}, normal: {}}));
+    keybinds.initializeKeybinds(directory);
+    assert.equal(keybinds.getKeyboardConfig().warning, undefined);
+    assert.deepEqual(keybinds.getKeybinds()['remove-tab'], ['Ctrl+Q']);
+    for (const id of ['toggle-notes', 'export-reader-to-notes', 'open-notes-external', 'export-reader-to-external']) assert(!Object.hasOwn(keybinds.getKeybinds(), id));
     // A choice that collides with a default takes the chord instead of rejecting the whole profile.
     fs.writeFileSync(legacyFile, JSON.stringify({version: 2, changesOnly: true, shortcuts: {'focus-sidebar': ['Ctrl+PageDown']}, normal: {'trigger-hints': ['G'], 'toggle-find': ['J']}}));
     keybinds.initializeKeybinds(directory);

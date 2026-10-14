@@ -37,8 +37,8 @@ features:
     details: Web commands and script executions stage safely onto your system clipboard. External terminal scanning tools like Oversight can inspect actions before execution.
   - title: User Scripts & Styles Engine
     details: Native injection of local .user.js and .user.css files without extension overhead. Automatic file watching and live hot-reloading keep workflows fluid.
-  - title: Markdown Scratchpad & Tools
-    details: Instant Markdown quick notes (Ctrl + N), actionable history overlay (Ctrl + Shift + H), and structured bookmarks built right into the interface.
+  - title: History & Bookmarks
+    details: Actionable history overlay (Ctrl + Shift + H), structured bookmarks and single-key quickmarks built right into the interface.
   - title: Distro-Agnostic & Zero Telemetry
     details: Distro-agnostic AppImage, Deb, RPM, and Arch packaging. Zero telemetry, zero usage tracking, and anonymous GitHub release notifications for effortless updates.
 ---
@@ -53,7 +53,7 @@ Most modern web browsers consume gigabytes of memory and leak telemetry continuo
 * **Memory Conservation:** Idle tabs detach from DOM memory. Twenty tabs take the RAM footprint of two.
 * **Complete Isolation:** Separate workspace containers keep cookies, caches, and logins entirely segregated.
 * **Crash Resilience:** Atomic file writes, rolling backup journals, and safe startup hibernation prevent data loss and crash loops.
-* **Transparent Storage:** Configuration, notes, history, and keybinds live in human-readable files under `~/.config/fly-browser/`.
+* **Transparent Storage:** Configuration, history, and keybinds live in human-readable files under `~/.config/fly-browser/`.
 * **Zero Cloud Dependence:** No remote telemetry, no forced account sync, and zero phone-home profiling.
 :::
 
@@ -71,7 +71,6 @@ Keep your hands on the home row. Every major workflow is reachable via concise, 
 | `Ctrl + 1` to `9` | Workspace Jump | Switch between isolated multi-account containers |
 | `Ctrl + L` / `o` | Omnibar | Open floating address bar with search engine aliases |
 | `Ctrl + Shift + H` | History Overlay | Search, reopen, or purge visited history records |
-| `Alt + N` | Scratchpad | Open Markdown quick-notes scratchpad |
 | `Ctrl + Shift + P` | Private Window | Open zero-trace volatile browsing container |
 | `Ctrl + H` | Preferences | Adjust hardware flags, sleep timeouts, and site shields |
 

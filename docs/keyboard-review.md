@@ -15,7 +15,7 @@ Reviewed the action catalogue, renderer keyboard listeners, sandboxed guest prel
 | Split view | Side-by-side/stacked, orientation, focus, swap, close | Existing distinct palette actions are assignable; native tab selection remains available. |
 | Bookmarks/quickmarks | Open/add/set/jump actions, arrows, Enter/Delete, search, native buttons | Configurable actions; Tab reaches controls rather than switching columns. |
 | History | Open, native result buttons, search, purge and close | Configurable opener; results work with Tab and Enter/Space. |
-| Notes/downloads | Open/toggle actions, editor and native action buttons | Customisable openers, normal text editing and focus containment. |
+| Downloads | Open/toggle actions and native action buttons | Customisable openers and focus containment. |
 | Preferences | Direct keyboard-settings action, vertical section index (↑/↓/Home/End with roving Tab stop), / or find shortcut for settings search, native fields/buttons, Escape (clears search first) | One section shown at a time; search filters all sections in place. Search/filter/record/reassign/reset/import/export/save without text-file editing. Drafts survive closing settings. |
 | System/performance | Full screen, window controls, themes, notifications, clock, diagnostics, hibernate/wake, user-content actions, updates | Distinct existing palette actions are exposed in the binding catalogue. |
 | Embedded frames | Native browser chord interception and native frame navigation | Page-modal keys and hint discovery stay in the main document; security isolation is retained. |

@@ -20,7 +20,6 @@ const DEFAULT_KEYBINDS = {
     'toggle-palette': 'Ctrl+P',
     'toggle-find': ['Ctrl+F', 'F3'],
     'toggle-devtools': ['Ctrl+Shift+I', 'F12'],
-    'toggle-notes': 'Ctrl+N',
     'toggle-zen-mode': 'Ctrl+Shift+Z',
     'set-quickmark': 'Ctrl+Shift+Q',
     'jump-quickmark': 'Ctrl+J',
@@ -36,7 +35,6 @@ const DEFAULT_KEYBINDS = {
     'swap-split-panes': 'Ctrl+\\',
     'toggle-reader-view': 'F9',
     'toggle-pin-tab': ['Ctrl+Shift+X', 'F4'],
-    'export-reader-to-notes': 'Ctrl+Shift+E',
     'jump-to-tab-1': 'Ctrl+1',
     'jump-to-tab-2': 'Ctrl+2',
     'jump-to-tab-3': 'Ctrl+3',
@@ -64,7 +62,6 @@ const ACTION_METADATA = {
     'toggle-palette': { label: 'Toggle Command Palette', category: 'Navigation & Workspaces' },
     'toggle-find': { label: 'Find In Page', category: 'Web Interaction' },
     'toggle-devtools': { label: 'Toggle Active Webview DevTools', category: 'Web Interaction' },
-    'toggle-notes': { label: 'Open Quick Notes Overlay', category: 'Navigation & Workspaces' },
     'toggle-zen-mode': { label: 'Toggle Sidebar Expansion (Pin / Unpin)', category: 'Navigation & Workspaces' },
     'set-quickmark': { label: 'Set Quickmark', category: 'Web Interaction' },
     'jump-quickmark': { label: 'Jump to Quickmark', category: 'Web Interaction' },
@@ -85,9 +82,6 @@ const ACTION_METADATA = {
     'toggle-pin-tab': { label: 'Pin / Unpin Active Tab', category: 'Navigation & Workspaces' },
     // Unbound by default so the key stays free for pages; add it to keybinds.json to use it
     'open-extension-actions': { label: 'Open Extension Actions (Popups, Commands, Options)', category: 'Web Interaction' },
-    'export-reader-to-notes': { label: 'Export Reader View to Quick Notes', category: 'Web Interaction' },
-    'export-reader-to-external': { label: 'Export Reader View to External App', category: 'Web Interaction' },
-    'open-notes-external': { label: 'Open Quick Notes in External Application', category: 'Web Interaction' },
     'jump-to-tab-1': { label: 'Jump to Tab 1', category: 'Navigation & Workspaces' },
     'jump-to-tab-2': { label: 'Jump to Tab 2', category: 'Navigation & Workspaces' },
     'jump-to-tab-3': { label: 'Jump to Tab 3', category: 'Navigation & Workspaces' },
@@ -354,6 +348,8 @@ const listOf = value => value === '' || value === null ? [] : Array.isArray(valu
 const sequence = value => value.trim().split(/\s+/).map(keyboard.normalise).join(' ');
 const combosOf = table => Object.values(table).flatMap(listOf).filter(value => typeof value === 'string').map(sequence);
 const known = (table, id) => Object.hasOwn(table, id) ? table[id] : [];
+// Actions that no longer exist; files written by earlier versions may still list them.
+const RETIRED_ACTIONS = new Set(['toggle-notes', 'export-reader-to-notes', 'export-reader-to-external', 'open-notes-external']);
 // True when an earlier version wrote this value without the user choosing it.
 function storedDefault(scope, id, value, legacy) {
     const values = listOf(value);
@@ -393,7 +389,7 @@ function initialiseCandidate(raw, explicit = false) {
     if (!candidate.shortcuts || !candidate.normal || typeof candidate.shortcuts !== 'object' || typeof candidate.normal !== 'object' || Array.isArray(candidate.shortcuts) || Array.isArray(candidate.normal)) return {ok: false, error: 'Invalid binding tables.'};
     // Files without the changesOnly marker also contain values that earlier versions wrote as defaults.
     const recorded = !explicit && (legacy || candidate.changesOnly !== true);
-    const chosen = scope => Object.fromEntries(Object.entries(candidate[scope]).filter(([id, value]) => !(recorded && storedDefault(scope, id, value, legacy))));
+    const chosen = scope => Object.fromEntries(Object.entries(candidate[scope]).filter(([id, value]) => !RETIRED_ACTIONS.has(id) && !(recorded && storedDefault(scope, id, value, legacy))));
     return withDefaults({shortcuts: chosen('shortcuts'), normal: chosen('normal')});
 }
 function initializeKeybinds(configDir) {

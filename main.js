@@ -45,7 +45,6 @@ const diagnostics = require('./diagnostics');
 // NATIVE CONFIG UTILITIES
 const CONFIG_DIR = path.join(app.getPath('home'), '.config', 'fly-browser');
 const CONFIG_PATH = path.join(CONFIG_DIR, 'config.json');
-const NOTES_PATH = path.join(CONFIG_DIR, 'notes.md');
 const BOOKMARKS_PATH = path.join(CONFIG_DIR, 'bookmarks.json');
 const QUICKMARKS_PATH = path.join(CONFIG_DIR, 'quickmarks.json');
 const sessionPath = path.join(CONFIG_DIR, 'session.json');
@@ -121,7 +120,6 @@ const DEFAULT_CONFIG = {
     theme_colors: { ...DEFAULT_THEME_COLORS },
     enable_diagnostics: false,
     show_window_controls: false,
-    external_notes_command: '',
     custom_search_aliases: {},
     last_seen_version: null,
     // Opt-in Chrome extensions, see extensions.js and docs/guide/extensions.md
@@ -897,7 +895,7 @@ ipcMain.handle('open-external', async (event, url) => {
     if (!url || typeof url !== 'string') return false;
     try {
         const parsed = new URL(url);
-        const allowedProtocols = ['http:', 'https:', 'obsidian:', 'logseq:', 'notes:', 'mailto:'];
+        const allowedProtocols = ['http:', 'https:', 'mailto:'];
         if (allowedProtocols.includes(parsed.protocol)) {
             await shell.openExternal(url);
             return true;
@@ -957,89 +955,6 @@ ipcMain.handle('clear-domain-cookies', async (event, data) => {
 
 ipcMain.handle('get-workspace-partition', (event, name) => {
     return getWorkspacePartition(name);
-});
-
-ipcMain.handle('read-notes', async () => {
-    try {
-        if (!fs.existsSync(CONFIG_DIR)) fs.mkdirSync(CONFIG_DIR, { recursive: true });
-        if (!fs.existsSync(NOTES_PATH)) fs.writeFileSync(NOTES_PATH, '', 'utf-8');
-        return fs.readFileSync(NOTES_PATH, 'utf-8');
-    } catch (err) {
-        return '';
-    }
-});
-
-ipcMain.handle('save-notes', async (event, content) => {
-    try {
-        if (!fs.existsSync(CONFIG_DIR)) fs.mkdirSync(CONFIG_DIR, { recursive: true });
-        fs.writeFileSync(NOTES_PATH, content, 'utf-8');
-        return true;
-    } catch (err) {
-        return false;
-    }
-});
-
-ipcMain.handle('open-notes-in-external-app', async (event, customPath) => {
-    try {
-        const cfg = loadBrowserConfig();
-        const targetPath = customPath || NOTES_PATH;
-        if (!fs.existsSync(targetPath)) {
-            if (!fs.existsSync(CONFIG_DIR)) fs.mkdirSync(CONFIG_DIR, { recursive: true });
-            fs.writeFileSync(targetPath, '', 'utf-8');
-        }
-        const cmd = (cfg.external_notes_command || '').trim();
-        if (cmd) {
-            const { spawn } = require('child_process');
-            const tokens = cmd.split(/\s+/);
-            const proc = spawn(tokens[0], [...tokens.slice(1), targetPath], {
-                detached: true,
-                stdio: 'ignore'
-            });
-            proc.unref();
-            return { success: true, app: tokens[0] };
-        } else {
-            const err = await shell.openPath(targetPath);
-            return { success: !err, error: err || null, app: 'system-default' };
-        }
-    } catch (err) {
-        return { success: false, error: err.message };
-    }
-});
-
-ipcMain.handle('export-article-to-external', async (event, { title, markdown }) => {
-    try {
-        const cfg = loadBrowserConfig();
-        const clippingsDir = path.join(CONFIG_DIR, 'clippings');
-        if (!fs.existsSync(clippingsDir)) fs.mkdirSync(clippingsDir, { recursive: true });
-
-        const safeTitle = (title || 'article')
-            .replace(/[^a-zA-Z0-9_\-\u00C0-\u017F ]/g, '')
-            .trim()
-            .replace(/\s+/g, '_')
-            .slice(0, 60) || 'article';
-        const timestamp = Date.now();
-        const filename = `${safeTitle}_${timestamp}.md`;
-        const targetPath = path.join(clippingsDir, filename);
-
-        fs.writeFileSync(targetPath, markdown || '', 'utf-8');
-
-        const cmd = (cfg.external_notes_command || '').trim();
-        if (cmd) {
-            const { spawn } = require('child_process');
-            const tokens = cmd.split(/\s+/);
-            const proc = spawn(tokens[0], [...tokens.slice(1), targetPath], {
-                detached: true,
-                stdio: 'ignore'
-            });
-            proc.unref();
-            return { success: true, path: targetPath, app: tokens[0] };
-        } else {
-            const err = await shell.openPath(targetPath);
-            return { success: !err, error: err || null, path: targetPath, app: 'system-default' };
-        }
-    } catch (err) {
-        return { success: false, error: err.message };
-    }
 });
 
 ipcMain.on('toggle-active-devtools', () => {
@@ -1952,16 +1867,6 @@ app.on('web-contents-created', (event, webContents) => {
                 }
             };
 
-            const saveSelectionToNotes = (selectionText, sourceUrl, pageTitle) => {
-                if (mainWindow && mainWindow.webContents) {
-                    mainWindow.webContents.send('master-shortcut', 'save-selection-to-notes', {
-                        text: selectionText,
-                        url: sourceUrl,
-                        title: pageTitle
-                    });
-                }
-            };
-
             const targetUrl = params.linkURL || params.srcURL || params.pageURL || webContents.getURL();
             const targetText = params.selectionText ? params.selectionText.trim() : webContents.getTitle();
             
@@ -1979,17 +1884,7 @@ app.on('web-contents-created', (event, webContents) => {
             }
         
             if (params.selectionText && params.selectionText.trim() !== '') {
-                const selectedText = params.selectionText.trim();
-                const pageTitle = webContents.getTitle() || 'Web clipping';
-                const currentUrl = params.pageURL || webContents.getURL() || '';
-
                 menu.append(new MenuItem({ label: 'Copy', role: 'copy' }));
-                menu.append(new MenuItem({
-                    label: 'Save to Notes',
-                    click: () => {
-                        saveSelectionToNotes(selectedText, currentUrl, pageTitle);
-                    }
-                }));
             }
             
             if (params.linkURL && params.linkURL.trim() !== '') {

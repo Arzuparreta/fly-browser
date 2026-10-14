@@ -24,9 +24,9 @@ Typical desktop browsers consume gigabytes of memory across dozens of background
 Fly combines the rendering capabilities of Chromium with Electron and native system utilities:
 
 1. **Main Process (`main.js`)**: Manages window lifecycles, memory pressure monitoring, partition isolation, native configurations, and keybinding translation.
-2. **Renderer Process (`renderer.js`)**: Powers the vertical tab sidebar, overlays, link hints, notes, and user interface.
+2. **Renderer Process (`renderer.js`)**: Powers the vertical tab sidebar, overlays, link hints, and user interface.
 3. **Webview Partitions (`modules/webview.js`)**: Renders individual web pages inside sandboxed `<webview>` tags assigned to specific workspace container partitions.
-4. **Local Configuration (`~/.config/fly-browser/`)**: Human-readable JSON files and Markdown notes stored safely in your home directory.
+4. **Local Configuration (`~/.config/fly-browser/`)**: Human-readable JSON files stored safely in your home directory.
 
 ---
 

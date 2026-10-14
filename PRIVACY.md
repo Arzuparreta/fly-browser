@@ -29,7 +29,6 @@ All data created during your browsing sessions is stored strictly on your local 
 | `history.json` | Browsing history with page titles and visit timestamps | Plaintext JSON |
 | `bookmarks.json` | Saved bookmarks and custom folder trees | Plaintext JSON |
 | `quickmarks.json` | Single-key speed-dial navigation mappings | Plaintext JSON |
-| `notes.md` | Built-in Markdown scratchpad notes | Plaintext Markdown |
 | `keybinds.json` | Customised keyboard shortcut mappings | Plaintext JSON |
 | `user.css` | Optional user stylesheet overrides | Plaintext CSS |
 | `user.js` | Optional user script automation scripts | Plaintext JavaScript |

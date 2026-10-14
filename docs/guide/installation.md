@@ -128,8 +128,7 @@ All runtime configuration and persistent session data are stored locally in stan
 ├── session.json         # Workspaces, open tabs, titles, and scroll offsets
 ├── bookmarks.json       # Saved browser bookmarks
 ├── quickmarks.json      # Single-key jump assignments
-├── history.json         # Actionable history entries
-└── notes.md             # Integrated markdown notes
+└── history.json         # Actionable history entries
 ```
 
 ## Startup diagnostics

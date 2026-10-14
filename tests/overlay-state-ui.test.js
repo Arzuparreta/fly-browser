@@ -19,13 +19,14 @@ const root = path.resolve(__dirname, '..');
         page.setDefaultTimeout(10000);
         const errors = []; page.on('pageerror', error => errors.push(error.message));
         await page.waitForFunction(() => !!window.executeBrowserAction);
-        await page.waitForFunction(() => {try {return [...document.querySelectorAll('webview')].find(view => view.getClientRects().length)?.getWebContentsId() > 0;} catch {return false;}});
+        // Navigating while the initial page is still loading aborts it and rejects the navigation.
+        await page.waitForFunction(() => {try {const view = [...document.querySelectorAll('webview')].find(view => view.getClientRects().length); return view?.getWebContentsId() > 0 && !!view.getURL() && !view.isLoading();} catch {return false;}});
         await page.evaluate(url => [...document.querySelectorAll('webview')].find(view => view.getClientRects().length).loadURL(url), `http://127.0.0.1:${server.address().port}`);
         const surfaces = [
             ['Control+l', 'WideAddressBar'], ['Control+f', 'FindBarOverlay'],
             ['Control+Shift+w', 'DashboardOverlay'], ['Control+h', 'PreferencesOverlay'],
             ['Control+p', 'CommandPaletteOverlay'], ['Control+Shift+b', 'BookmarksOverlay'],
-            ['Control+Shift+h', 'HistoryOverlay'], ['Control+n', 'NotesOverlay']
+            ['Control+Shift+h', 'HistoryOverlay']
         ];
         const focused = id => page.waitForFunction(id => {const root = document.getElementById(id); return root === document.activeElement || root.contains(document.activeElement);}, id, {timeout: 5000}).catch(async error => {console.log('Focus failure', id, errors, await page.evaluate(() => ({focus: document.activeElement.id, visible: [...document.querySelectorAll('[id$=Overlay], #WideAddressBar')].filter(el => el.getClientRects().length).map(el => el.id)}))); throw error;});
         const checkSidebarShortcut = async (pinned = false) => {
@@ -105,11 +106,9 @@ const root = path.resolve(__dirname, '..');
         assert(await page.locator('#DashboardOverlay').isVisible());
         await focused('DashboardOverlay');
         await page.keyboard.press('Escape');
-        await page.keyboard.press('Control+n'); await focused('NotesOverlay');
-        await page.locator('#ToggleEditNotesBtn').click(); await focused('NotesTextArea');
-        await page.keyboard.type('Preserved note'); await page.keyboard.press('Escape');
-        assert(!(await page.locator('#NotesOverlay').isVisible()));
-        assert.equal(await page.evaluate(() => window.flyAPI.readNotes()), 'Preserved note');
+        await page.keyboard.press('Control+Shift+h'); await focused('HistoryOverlay');
+        await page.keyboard.type('fixture'); await page.keyboard.press('Escape');
+        await page.locator('#HistoryOverlay').waitFor({state: 'hidden'});
         // Page text and modal keys still work after the overlay transitions.
         const point = await page.evaluate(() => [...document.querySelectorAll('webview')].find(view => view.getClientRects().length).executeJavaScript('(()=>{const r=document.getElementById("editable").getBoundingClientRect(); return {x:r.x+10,y:r.y+10};})()'));
         await page.locator('webview:visible').click({position: point});

@@ -339,63 +339,14 @@ export const COMMAND_DEFINITIONS = [
         action: () => wakeAllTabsInWorkspace(state.sessionState.current_workspace)
     },
 
-    // Tools & Notes
-    {
-        id: 'toggle-notes',
-        title: 'Toggle Quick Notes',
-        desc: 'Open Markdown notes scratchpad saved to ~/.config/fly-browser/notes.md',
-        details: 'Opens an integrated Markdown scratchpad backed by an auto-saving plain text file in your user configuration directory.',
-        tip: 'Use the binding shown here, or customise this action in Keyboard controls.',
-        category: 'Tools & Notes',
-        icon: 'fa-solid fa-note-sticky',
-        actionId: 'toggle-notes',
-        keywords: ['notes', 'scratchpad', 'markdown', 'memo', 'write'],
-        action: () => window.toggleNotesOverlay && window.toggleNotesOverlay()
-    },
-    {
-        id: 'export-reader-to-notes',
-        title: 'Export Article to Quick Notes',
-        desc: 'Append active Reader View article or page clipping to ~/.config/fly-browser/notes.md',
-        details: 'Distills the active article into clean Markdown and appends it to your persistent quick notes file with citation details.',
-        tip: 'Press Ctrl+Shift+E while reading an article to save it to your notes without leaving the page.',
-        category: 'Tools & Notes',
-        icon: 'fa-solid fa-file-export',
-        actionId: 'export-reader-to-notes',
-        shortcut: 'Ctrl+Shift+E',
-        keywords: ['notes', 'export', 'reader', 'article', 'save', 'markdown', 'clipping'],
-        action: () => window.exportActiveTabToNotes && window.exportActiveTabToNotes()
-    },
-    {
-        id: 'export-reader-to-external',
-        title: 'Export Article to External Note App',
-        desc: 'Save active article as standalone Markdown file and open in your preferred notes tool',
-        details: 'Exports the active article into ~/.config/fly-browser/clippings/ and launches your configured external note application (Obsidian, Logseq, Neovim, etc.).',
-        tip: 'Configure your external note command in Preferences to open clippings directly in your favourite editor.',
-        category: 'Tools & Notes',
-        icon: 'fa-solid fa-arrow-up-right-from-square',
-        actionId: 'export-reader-to-external',
-        keywords: ['export', 'external', 'obsidian', 'logseq', 'nvim', 'notes', 'clipping'],
-        action: () => window.exportActiveTabToExternal && window.exportActiveTabToExternal()
-    },
-    {
-        id: 'open-notes-external',
-        title: 'Open Quick Notes in External Application',
-        desc: 'Open ~/.config/fly-browser/notes.md in your preferred notes app or system editor',
-        details: 'Launches your configured external note command or system default Markdown editor with notes.md.',
-        tip: 'Allows editing your notes in Obsidian, Neovim, VS Code, or your desktop Markdown editor.',
-        category: 'Tools & Notes',
-        icon: 'fa-solid fa-arrow-up-right-from-square',
-        actionId: 'open-notes-external',
-        keywords: ['notes', 'external', 'obsidian', 'open', 'editor', 'markdown'],
-        action: () => window.openNotesInExternalApp && window.openNotesInExternalApp()
-    },
+    // Tools
     {
         id: 'toggle-bookmarks',
         title: 'Bookmarks & Quickmarks Manager',
         desc: 'Open bookmarks manager and single-key jump quickmarks',
         details: 'Displays your saved bookmarks ledger and configured quickmarks with real-time filtering, editing, and deletion controls.',
         tip: 'Use the binding shown here, or customise this action in Keyboard controls.',
-        category: 'Tools & Notes',
+        category: 'Tools',
         icon: 'fa-solid fa-bookmark',
         actionId: 'toggle-bookmarks',
         keywords: ['bookmarks', 'quickmarks', 'saved', 'favorites'],
@@ -407,7 +358,7 @@ export const COMMAND_DEFINITIONS = [
         desc: 'Save active webpage title and URL into bookmarks collection',
         details: 'Captures the active tab title and canonical URL, storing it in ~/.config/fly-browser/bookmarks.json for instant recall.',
         tip: 'Use the binding shown here, or customise this action in Keyboard controls.',
-        category: 'Tools & Notes',
+        category: 'Tools',
         icon: 'fa-solid fa-star',
         actionId: 'add-bookmark',
         keywords: ['bookmark', 'save', 'favorite', 'page', 'add'],
@@ -419,7 +370,7 @@ export const COMMAND_DEFINITIONS = [
         desc: 'Assign active webpage to a single alphanumeric shortcut key',
         details: 'Associates the active URL with a single keyboard character (e.g. g for GitHub), enabling instant one-key navigation.',
         tip: 'Use the binding shown here, or customise this action in Keyboard controls.',
-        category: 'Tools & Notes',
+        category: 'Tools',
         icon: 'fa-solid fa-bolt-lightning',
         actionId: 'set-quickmark',
         keywords: ['quickmark', 'shortcut', 'letter', 'mark', 'set'],
@@ -431,7 +382,7 @@ export const COMMAND_DEFINITIONS = [
         desc: 'Navigate instantly to a designated quickmark key',
         details: 'Prompts for a quickmark identifier key and immediately routes the active webview to the associated URL.',
         tip: 'Use the binding shown here, or customise this action in Keyboard controls.',
-        category: 'Tools & Notes',
+        category: 'Tools',
         icon: 'fa-solid fa-location-arrow',
         actionId: 'jump-quickmark',
         keywords: ['quickmark', 'jump', 'go', 'navigate', 'key'],
@@ -443,7 +394,7 @@ export const COMMAND_DEFINITIONS = [
         desc: 'Slide out bottom downloads drawer with speed and file links',
         details: 'Opens the download shelf showing real-time progress bars, transfer rates, destination paths, and file opening actions.',
         tip: 'Use the binding shown here, or customise this action in Keyboard controls.',
-        category: 'Tools & Notes',
+        category: 'Tools',
         icon: 'fa-solid fa-download',
         actionId: 'toggle-downloads',
         keywords: ['downloads', 'files', 'shelf', 'drawer'],
@@ -455,7 +406,7 @@ export const COMMAND_DEFINITIONS = [
         desc: 'Inspect webpage DOM elements, console logs, and network traffic',
         details: 'Opens Chrome Developer Tools docked or detached for the active webview guest frame to inspect elements and debug scripts.',
         tip: 'Use the binding shown here, or customise this action in Keyboard controls.',
-        category: 'Tools & Notes',
+        category: 'Tools',
         icon: 'fa-solid fa-bug',
         actionId: 'toggle-devtools',
         keywords: ['devtools', 'inspect', 'console', 'debug', 'elements'],
@@ -467,7 +418,7 @@ export const COMMAND_DEFINITIONS = [
         desc: 'Play or pause audio and video streams across all workspaces',
         details: 'Broadcasts a play/pause toggle signal to media elements across all active webviews, allowing background audio control.',
         tip: 'Use the binding shown here, or customise this action in Keyboard controls.',
-        category: 'Tools & Notes',
+        category: 'Tools',
         icon: 'fa-solid fa-play',
         actionId: 'toggle-global-media',
         keywords: ['media', 'play', 'pause', 'music', 'video', 'stream'],
@@ -479,7 +430,7 @@ export const COMMAND_DEFINITIONS = [
         desc: 'Mute or unmute audio output for the active tab',
         details: 'Toggles audio mute state for the active tab without pausing video or audio playback.',
         tip: 'Use the binding shown here, or customise this action in Keyboard controls.',
-        category: 'Tools & Notes',
+        category: 'Tools',
         icon: 'fa-solid fa-volume-xmark',
         actionId: 'toggle-tab-audio-mute',
         keywords: ['mute', 'audio', 'sound', 'volume', 'silence', 'unmute', 'speaker'],
@@ -491,7 +442,7 @@ export const COMMAND_DEFINITIONS = [
         desc: 'Mute or unmute audio output across all tabs and workspaces',
         details: 'Silences all web audio and media output across all open tabs simultaneously.',
         tip: 'Press M in NORMAL mode to toggle global audio mute.',
-        category: 'Tools & Notes',
+        category: 'Tools',
         icon: 'fa-solid fa-volume-xmark',
         actionId: 'toggle-global-audio-mute',
         keywords: ['mute', 'audio', 'sound', 'volume', 'silence', 'global', 'all', 'panictab'],
@@ -792,11 +743,6 @@ export async function syncPreferencesUI() {
                 trustedDomainsField.value = Array.isArray(cfg.trusted_domains) ? cfg.trusted_domains.join('\n') : '';
             }
 
-            const notesCmdField = document.getElementById('setting-notes-command');
-            if (notesCmdField) {
-                notesCmdField.value = cfg.external_notes_command || '';
-            }
-
             if (cfg.custom_search_aliases && typeof cfg.custom_search_aliases === 'object') {
                 state.customSearchAliases = { ...cfg.custom_search_aliases };
             }
@@ -859,7 +805,6 @@ export function setupPreferencesListeners() {
             const sidebarToggle = document.getElementById('setting-sidebar-collapse-toggle');
             const spellSelect = document.getElementById('setting-spellchecker-language');
             const windowControlsToggle = document.getElementById('setting-window-controls-toggle');
-            const notesCmdField = document.getElementById('setting-notes-command');
 
             const newCfg = {
                 disable_gpu: gpuToggle ? !gpuToggle.checked : false,
@@ -870,23 +815,11 @@ export function setupPreferencesListeners() {
                 email_handler: emailSelect ? emailSelect.value : 'system',
                 spellchecker_language: spellSelect ? spellSelect.value : 'en-GB',
                 show_window_controls: windowControlsToggle ? windowControlsToggle.checked : false,
-                external_notes_command: notesCmdField ? notesCmdField.value.trim() : '',
                 custom_search_aliases: state.customSearchAliases || {}
             };
 
             if (window.flyAPI && typeof window.flyAPI.saveBrowserSettings === 'function') {
                 await window.flyAPI.saveBrowserSettings(newCfg);
-            }
-        };
-    }
-
-    const liveNotesCmd = document.getElementById('setting-notes-command');
-    if (liveNotesCmd) {
-        liveNotesCmd.onchange = async () => {
-            if (window.flyAPI && typeof window.flyAPI.getBrowserSettings === 'function') {
-                const cfg = (await window.flyAPI.getBrowserSettings()) || {};
-                cfg.external_notes_command = liveNotesCmd.value.trim();
-                await window.flyAPI.updateBrowserSettings(cfg);
             }
         };
     }
@@ -1435,7 +1368,7 @@ export function executePaletteSelection(rawInputText) {
         }
         if (typeof targetCommand.action === 'function') {
             targetCommand.action();
-            if (!state.preferencesActive && !state.dashboardActive && !state.notesActive && !state.bookmarksActive && !state.historyActive && !state.diagnosticsActive) returnFocusToWebview();
+            if (!state.preferencesActive && !state.dashboardActive && !state.bookmarksActive && !state.historyActive && !state.diagnosticsActive) returnFocusToWebview();
             return;
         }
         if (typeof targetCommand === 'string' && commandRegistry[targetCommand]) {
