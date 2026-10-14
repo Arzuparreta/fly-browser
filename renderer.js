@@ -16,6 +16,7 @@ import {
 import { 
     renderWorkspaceUI, 
     switchTabFocus, 
+    jumpToTabByIndex,
     spawnNewBlankTab, 
     spawnTabWithUrl, 
     handleTabRemoval, 
@@ -627,6 +628,16 @@ function setupEventListeners() {
             case 'toggle-tab-audio-mute': toggleActiveTabAudioMute(); break;
             case 'toggle-global-audio-mute': toggleGlobalAudioMute(); break;
             case 'toggle-pin-tab': togglePinActiveTab(); break;
+            case 'jump-to-tab-1': jumpToTabByIndex(1); break;
+            case 'jump-to-tab-2': jumpToTabByIndex(2); break;
+            case 'jump-to-tab-3': jumpToTabByIndex(3); break;
+            case 'jump-to-tab-4': jumpToTabByIndex(4); break;
+            case 'jump-to-tab-5': jumpToTabByIndex(5); break;
+            case 'jump-to-tab-6': jumpToTabByIndex(6); break;
+            case 'jump-to-tab-7': jumpToTabByIndex(7); break;
+            case 'jump-to-tab-8': jumpToTabByIndex(8); break;
+            case 'jump-to-tab-9': jumpToTabByIndex(9); break;
+            case 'jump-to-tab': jumpToTabByIndex(args[0]); break;
             case 'toggle-split': toggleSplitView(); break;
             case 'switch-split-focus': switchSplitFocus(); break;
             case 'swap-split-panes': swapSplitPanes(); break;
@@ -782,14 +793,16 @@ function setupEventListeners() {
 
         const tabItems = Array.from(document.querySelectorAll('#TabList li'));
         const activeListItem = document.querySelector('#TabList li.selected');
-        let currentIdx = tabItems.indexOf(activeListItem);
+        const focusedListItem = document.activeElement ? document.activeElement.closest('#TabList li') : null;
+        let currentIdx = tabItems.indexOf(focusedListItem || activeListItem);
+        if (currentIdx === -1) currentIdx = 0;
 
         if (e.key === 'ArrowDown' || e.key === 'j') {
             e.preventDefault();
             if (currentIdx < tabItems.length - 1) {
                 currentIdx++;
-                switchTabFocus(currentIdx);
-                document.querySelectorAll('#TabList li')[currentIdx].focus();
+                tabItems.forEach((item, idx) => item.setAttribute('tabindex', idx === currentIdx ? '0' : '-1'));
+                tabItems[currentIdx].focus();
             } else {
                 const pinBtn = document.getElementById('pin-sidebar-btn');
                 if (pinBtn) pinBtn.focus();
@@ -798,11 +811,20 @@ function setupEventListeners() {
             e.preventDefault();
             if (currentIdx > 0) {
                 currentIdx--;
-                switchTabFocus(currentIdx);
-                document.querySelectorAll('#TabList li')[currentIdx].focus();
+                tabItems.forEach((item, idx) => item.setAttribute('tabindex', idx === currentIdx ? '0' : '-1'));
+                tabItems[currentIdx].focus();
             } else {
                 const backBtn = document.getElementById('back-btn') || document.getElementById('toggle-nav-btn');
                 if (backBtn) backBtn.focus();
+            }
+        } else if (e.key === 'Enter' || e.key === ' ') {
+            e.preventDefault();
+            const targetIdx = focusedListItem ? tabItems.indexOf(focusedListItem) : currentIdx;
+            if (targetIdx !== -1) {
+                if (state.dashboardActive && typeof window.toggleDashboardView === 'function') {
+                    window.toggleDashboardView();
+                }
+                switchTabFocus(targetIdx);
             }
         } else if (e.key === 'ArrowLeft' || e.key === 'h') {
             e.preventDefault();
@@ -810,13 +832,28 @@ function setupEventListeners() {
             if (backBtn) backBtn.focus();
         } else if (e.key === 'ArrowRight' || e.key === 'l' || e.key === 'i') {
             e.preventDefault();
+            const targetIdx = focusedListItem ? tabItems.indexOf(focusedListItem) : currentIdx;
+            if (targetIdx !== -1) {
+                switchTabFocus(targetIdx);
+            }
             focusActiveWebview();
+        } else if (!e.ctrlKey && !e.altKey && !e.metaKey && !e.shiftKey && /^[1-9]$/.test(e.key)) {
+            e.preventDefault();
+            const num = parseInt(e.key, 10);
+            jumpToTabByIndex(num);
+            const updatedItems = Array.from(document.querySelectorAll('#TabList li'));
+            const targetIdx = Math.min(num - 1, updatedItems.length - 1);
+            if (targetIdx >= 0 && updatedItems[targetIdx]) {
+                updatedItems.forEach((item, idx) => item.setAttribute('tabindex', idx === targetIdx ? '0' : '-1'));
+                updatedItems[targetIdx].focus();
+            }
         } else if (e.key === 't') {
             e.preventDefault();
             spawnNewBlankTab();
         } else if (e.key === 'x') {
             e.preventDefault();
-            handleTabRemoval();
+            const targetIdx = focusedListItem ? tabItems.indexOf(focusedListItem) : currentIdx;
+            handleTabRemoval(targetIdx !== -1 ? targetIdx : undefined);
         } else if (e.key === 'o') {
             e.preventDefault();
             displayAddressOverlay();
@@ -825,9 +862,10 @@ function setupEventListeners() {
             toggleDashboardView();
         } else if (e.key === 'y') {
             e.preventDefault();
+            const targetIdx = focusedListItem ? tabItems.indexOf(focusedListItem) : currentIdx;
             const currentWS = state.sessionState.current_workspace;
             const urls = state.sessionState.workspaces[currentWS] || [];
-            const activeUrl = urls[currentIdx] || '';
+            const activeUrl = urls[targetIdx] || '';
             if (activeUrl) {
                 navigator.clipboard.writeText(activeUrl).catch(() => {});
                 setTargetUrl(`Yanked URL to clipboard: ${activeUrl}`, 2500);
@@ -836,10 +874,23 @@ function setupEventListeners() {
     });
 
     window.addEventListener('keydown', (e) => {
+        if (e.key === 'Control' && !document.body.classList.contains('show-tab-badges')) {
+            document.body.classList.add('show-tab-badges');
+        }
         if (e.shiftKey && e.key === 'Escape') {
             e.preventDefault();
             togglePassthroughMode();
         }
+    });
+
+    window.addEventListener('keyup', (e) => {
+        if (e.key === 'Control') {
+            document.body.classList.remove('show-tab-badges');
+        }
+    });
+
+    window.addEventListener('blur', () => {
+        document.body.classList.remove('show-tab-badges');
     });
 
     const findInput = document.getElementById('FindInput');

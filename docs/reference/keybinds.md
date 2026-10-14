@@ -36,6 +36,8 @@ All keyboard shortcuts in Mise Browser are fully customisable via `~/.config/mis
 | **Ctrl + O** | `switch-split-focus` | Cycles keyboard focus between split pane 1 and pane 2 |
 | **Ctrl + \\** | `swap-split-panes` | Swaps the positions of pane 1 and pane 2 |
 | **Ctrl + Shift + X** / **F4** | `toggle-pin-tab` | Pins or unpins the active tab (anchored at top, closure-protected) |
+| **Ctrl + 1** - **Ctrl + 8** | `jump-to-tab-1` - `jump-to-tab-8` | Jumps directly to tab 1 through 8 from anywhere |
+| **Ctrl + 9** | `jump-to-tab-9` | Jumps directly to tab 9 (or last tab if fewer than 9 tabs open) |
 
 ### Web Interaction & Power Tools
 
@@ -85,6 +87,20 @@ When viewing web content without an active text field or prompt, Mise operates i
 | `i` | Enter INSERT mode |
 | `Escape` | Blur active input field and return to NORMAL mode |
 | `Shift + Escape` | Toggle PASSTHROUGH mode (sends raw keys to web applications) |
+
+### Sidebar Navigation Mode (`Ctrl + S` or `s`)
+
+When keyboard focus is inside the sidebar tab list:
+
+| Key | Description |
+| :--- | :--- |
+| `1` - `9` | Jump directly to tab 1 through 9 (waking only that specific tab) |
+| `j` / `k` or `↓` / `↑` | Move visual cursor outline through tabs without waking hibernated tabs |
+| `Enter` / `Space` | Activate and wake the highlighted tab under the cursor |
+| `l` / `→` / `i` | Activate the highlighted tab and return keyboard focus to the webview |
+| `x` | Close the tab under the cursor without waking it into memory |
+| `y` | Copy the URL of the tab under the cursor to the clipboard |
+| `Escape` | Dismiss expanded sidebar and return focus to the active webview |
 
 ---
 

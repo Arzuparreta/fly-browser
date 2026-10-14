@@ -37,7 +37,16 @@ const DEFAULT_KEYBINDS = {
     'toggle-dark-reader': 'Ctrl+D',
     'toggle-reader-view': 'F9',
     'toggle-pin-tab': ['Ctrl+Shift+X', 'F4'],
-    'export-reader-to-notes': 'Ctrl+Shift+E'
+    'export-reader-to-notes': 'Ctrl+Shift+E',
+    'jump-to-tab-1': 'Ctrl+1',
+    'jump-to-tab-2': 'Ctrl+2',
+    'jump-to-tab-3': 'Ctrl+3',
+    'jump-to-tab-4': 'Ctrl+4',
+    'jump-to-tab-5': 'Ctrl+5',
+    'jump-to-tab-6': 'Ctrl+6',
+    'jump-to-tab-7': 'Ctrl+7',
+    'jump-to-tab-8': 'Ctrl+8',
+    'jump-to-tab-9': 'Ctrl+9'
 };
 
 const ACTION_METADATA = {
@@ -78,7 +87,16 @@ const ACTION_METADATA = {
     'toggle-pin-tab': { label: 'Pin / Unpin Active Tab', category: 'Navigation & Workspaces' },
     'export-reader-to-notes': { label: 'Export Reader View to Quick Notes', category: 'Web Interaction' },
     'export-reader-to-external': { label: 'Export Reader View to External App', category: 'Web Interaction' },
-    'open-notes-external': { label: 'Open Quick Notes in External Application', category: 'Web Interaction' }
+    'open-notes-external': { label: 'Open Quick Notes in External Application', category: 'Web Interaction' },
+    'jump-to-tab-1': { label: 'Jump to Tab 1', category: 'Navigation & Workspaces' },
+    'jump-to-tab-2': { label: 'Jump to Tab 2', category: 'Navigation & Workspaces' },
+    'jump-to-tab-3': { label: 'Jump to Tab 3', category: 'Navigation & Workspaces' },
+    'jump-to-tab-4': { label: 'Jump to Tab 4', category: 'Navigation & Workspaces' },
+    'jump-to-tab-5': { label: 'Jump to Tab 5', category: 'Navigation & Workspaces' },
+    'jump-to-tab-6': { label: 'Jump to Tab 6', category: 'Navigation & Workspaces' },
+    'jump-to-tab-7': { label: 'Jump to Tab 7', category: 'Navigation & Workspaces' },
+    'jump-to-tab-8': { label: 'Jump to Tab 8', category: 'Navigation & Workspaces' },
+    'jump-to-tab-9': { label: 'Jump to Tab 9 (or Last Tab)', category: 'Navigation & Workspaces' }
 };
 
 let activeKeybinds = { ...DEFAULT_KEYBINDS };
