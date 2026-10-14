@@ -1085,13 +1085,13 @@ export async function openPreferencesPane(pane) {
 
 let activeCategoryFilter = 'all';
 
-export function closeCommandPalette() {
+export function closeCommandPalette(restoreFocus = true) {
     if (!state.paletteActive) return;
     paletteRequest++;
     state.paletteActive = false;
     const overlay = document.getElementById('CommandPaletteOverlay');
     if (overlay) overlay.style.display = 'none';
-    returnFocusToWebview();
+    if (restoreFocus) returnFocusToWebview();
 }
 
 export async function openCommandPalette(category = 'all') {
@@ -1436,7 +1436,7 @@ function executeTerminalFallback(rawInputText) {
 export function executePaletteSelection(rawInputText) {
     const targetCommand = state.paletteMatches[state.paletteSelectionIdx];
     
-    closeCommandPalette();
+    closeCommandPalette(false);
 
     if (targetCommand) {
         if (targetCommand.id !== 'terminal-fallback') {

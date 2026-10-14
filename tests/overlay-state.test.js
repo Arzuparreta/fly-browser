@@ -70,12 +70,12 @@ console.log('Shared sidebar pointer policy preserves overlays and native editing
     const paletteOverlay = {style: {}};
     const paletteContext = {
         state: {paletteActive: false}, document: {getElementById: id => id === 'PaletteInput' ? paletteInput : id === 'CommandPaletteOverlay' ? paletteOverlay : null},
-        prepareOverlay() {}, returnFocusToWebview() {},
+        prepareOverlay() {}, returnFocusToWebview() {pageFocus++;},
         loadDynamicKeybinds: () => new Promise(resolve => palettePending.push(resolve)),
         prepareExtensionPaletteCommands: async () => {}, filterPaletteCommands: query => paletteFilters.push(query)
     };
     vm.createContext(paletteContext);
-    vm.runInContext('let paletteRequest = 0; let activeCategoryFilter = "all";\n' + paletteSource.slice(paletteSource.indexOf('function closeCommandPalette()'), paletteSource.indexOf('function renderPaletteInspector(')), paletteContext);
+    vm.runInContext('let paletteRequest = 0; let activeCategoryFilter = "all";\n' + paletteSource.slice(paletteSource.indexOf('function closeCommandPalette('), paletteSource.indexOf('function renderPaletteInspector(')), paletteContext);
     let opening = paletteContext.openCommandPalette();
     paletteContext.closeCommandPalette(); palettePending.shift()(); await opening;
     assert.equal(paletteOverlay.style.display, 'none'); assert(!paletteContext.state.paletteActive);
@@ -88,5 +88,20 @@ console.log('Shared sidebar pointer policy preserves overlays and native editing
     const previousFilterCount = paletteFilters.length;
     palettePending.shift()(); await staleOpening; assert.equal(paletteFilters.length, previousFilterCount);
     palettePending.shift()(); await opening; assert.equal(paletteFilters.at(-1), 'Current opening');
+    // Selecting an overlay command must not focus a guest between the two panels.
+    vm.runInContext(paletteSource.slice(paletteSource.indexOf('function executePaletteSelection('), paletteSource.indexOf('function setupCommandPaletteOverlayListeners(')), paletteContext);
+    paletteContext.recordRecentCommand = () => {};
+    paletteContext.state.paletteMatches = [{id: 'settings', action() {paletteContext.state.preferencesActive = true;}}];
+    paletteContext.state.paletteSelectionIdx = 0;
+    paletteContext.state.paletteActive = true;
+    const focusBefore = pageFocus;
+    paletteContext.executePaletteSelection('settings');
+    assert.equal(pageFocus, focusBefore, 'An overlay command keeps guest focus untouched');
+    assert(paletteContext.state.preferencesActive);
+    paletteContext.state.preferencesActive = false;
+    paletteContext.state.paletteActive = true;
+    paletteContext.state.paletteMatches = [{id: 'copy', action() {}}];
+    paletteContext.executePaletteSelection('copy');
+    assert.equal(pageFocus, focusBefore + 1, 'A non-overlay command returns page focus once');
     console.log('Overlay cancellation ownership, transition focus suppression, delayed notes and palette races passed.');
 })().catch(error => {console.error(error); process.exitCode = 1;});
