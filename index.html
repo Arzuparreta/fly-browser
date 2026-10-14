@@ -677,7 +677,7 @@
                             <section id="SettingsPane-about" class="settings-pane" role="tabpanel" aria-labelledby="SettingsTab-about" hidden>
                                 <header class="settings-pane-header">
                                     <h2>About</h2>
-                                    <p>Version, release notes and updates.</p>
+                                    <p>Version, release notes, updates and desktop integration.</p>
                                 </header>
 
                                 <div class="settings-group">
@@ -696,6 +696,31 @@
                                     <div id="UpdateNotificationBanner" class="settings-banner" style="display: none;">
                                         <span id="UpdateNotificationText"></span>
                                         <button id="UpdateActionBtn" type="button" class="settings-action-btn primary">Download release</button>
+                                    </div>
+                                </div>
+
+                                <!-- Removed at startup where the platform has nothing to offer. -->
+                                <div id="DesktopIntegrationGroup" class="settings-group">
+                                    <h3>Desktop integration</h3>
+                                    <div class="settings-card">
+                                        <div class="setting-item" data-keywords="applications menu launcher rofi wofi desktop entry appimage shortcut">
+                                            <div class="setting-info">
+                                                <span class="setting-label">Applications menu</span>
+                                                <span id="DesktopEntryStatus" class="setting-desc">Checking…</span>
+                                            </div>
+                                            <div class="setting-actions">
+                                                <button id="DesktopEntryBtn" type="button" class="settings-action-btn" disabled>Add to menu</button>
+                                            </div>
+                                        </div>
+                                        <div class="setting-item" data-keywords="default browser links open system xdg handler">
+                                            <div class="setting-info">
+                                                <span class="setting-label">Default browser</span>
+                                                <span id="DefaultBrowserStatus" class="setting-desc">Checking…</span>
+                                            </div>
+                                            <div class="setting-actions">
+                                                <button id="DefaultBrowserBtn" type="button" class="settings-action-btn" disabled>Make default</button>
+                                            </div>
+                                        </div>
                                     </div>
                                 </div>
                             </section>

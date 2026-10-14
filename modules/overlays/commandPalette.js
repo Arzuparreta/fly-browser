@@ -8,6 +8,7 @@ import { toggleBookmarksOverlay, promptQuickmark, addCurrentPageToBookmarks } fr
 import { syncVisualSettingsInputs, setupVisualSettingsListeners } from '../theme.js';
 import { getExtensionPaletteCommands, prepareExtensionPaletteCommands, syncExtensionsPreferences, setupExtensionsPreferencesListeners } from '../extensions.js';
 import { renderSearchAliasesUI } from './searchEngine.js';
+import { syncDesktopIntegration, setupDesktopIntegrationListeners } from '../desktopIntegration.js';
 
 function returnFocusToWebview() {
     window.flyAllowWebviewFocus = true;
@@ -757,12 +758,14 @@ export async function syncPreferencesUI() {
     if (privateToggle) privateToggle.checked = !!state.globalPrivateModeActive;
 
     syncVisualSettingsInputs(cfg);
+    syncDesktopIntegration();
     // The extensions scan reads the disk and process metrics, so it only runs for its own pane.
     if (currentSettingsPane() === 'extensions') syncExtensionsPreferences();
 }
 
 export function setupPreferencesListeners() {
     initialiseKeyboardEditor();
+    setupDesktopIntegrationListeners();
     initialiseSettingsNav(pane => {
         if (pane === 'keyboard') showKeyboardEditor(); else hideKeyboardEditor();
         if (pane === 'extensions' && preferencesActive) syncExtensionsPreferences();

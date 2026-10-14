@@ -36,7 +36,7 @@ The AppImage runs out of the box on Ubuntu, Debian, Fedora, Arch Linux, openSUSE
 
 The AppImage uses the static AppImage runtime, so it does not need `libfuse2`. It only requires FUSE, which almost every desktop distribution provides through `fuse3`. On systems without FUSE (such as some containers), run it with `--appimage-extract-and-run` instead.
 
-To integrate with desktop menus, you can also place the AppImage in your `~/Applications/` directory or use utilities such as `AppImageLauncher` (version 3 or newer).
+The first time the AppImage starts, Fly offers to add itself to your applications menu, so it appears in Rofi, Wofi, Fuzzel and your desktop's menu like any installed browser. Fly writes the entry and icons under `~/.local/share` and starts the AppImage through a link, `~/.local/share/fly-browser/fly-browser.AppImage`. When you move the file or replace it with a newer release, the next start re-points the link, so the menu keeps working. Nothing is written if you decline. You can add or remove the entry at any time in **Preferences → About → Desktop integration**. Removing it deletes only what Fly added; the AppImage itself is never touched.
 
 ### macOS (DMG & Zip)
 
@@ -55,6 +55,12 @@ To integrate with desktop menus, you can also place the AppImage in your `~/Appl
    - **Portable**: `Fly-<version>-portable.exe` (run directly from any folder, zero installation).
    - **Setup Installer**: `Fly-Setup-<version>.exe` (installs to `%LOCALAPPDATA%` with a Start Menu entry).
 2. **First-Launch Note**: Windows SmartScreen may present a *"Windows protected your PC"* banner on freshly released binaries. Click **More info** followed by **Run anyway**.
+
+---
+
+### Default browser (Linux)
+
+**Preferences → About → Desktop integration → Make default** makes Fly open the links other applications send to the browser. Fly asks `xdg-settings`, which uses your desktop's own setting where it has one. Where it refuses (window managers without a desktop environment, such as i3), Fly writes the same web MIME defaults directly with `xdg-mime`. Both need `xdg-utils`, which almost every desktop installs. When Fly runs from an AppImage that is not in the menu yet, making it the default adds the menu entry first, because the setting refers to it.
 
 ---
 
