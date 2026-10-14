@@ -1,5 +1,5 @@
 import { openWorkspaceMoveDialog } from './modules/tabActions.js';
-import { initialiseOverlayFocus, initialiseSidebarPointerFocus, prepareOverlay } from './modules/focus.js';
+import { initialiseOverlayFocus, initialiseSidebarPointerFocus, prepareOverlay, hasActiveOverlay } from './modules/focus.js';
 import { state } from './modules/state.js';
 import { 
     isDarkMode, 
@@ -758,6 +758,7 @@ function setupEventListeners() {
             case 'toggle-passthrough': togglePassthroughMode(); break;
             case 'scroll-down': case 'scroll-up': case 'scroll-left': case 'scroll-right':
             case 'half-page-down': case 'half-page-up': case 'page-top': case 'page-bottom': case 'enter-insert':
+                if (action === 'enter-insert') focusActiveWebview();
                 getActiveWebview()?.send('keyboard-local-action', action); break;
             default: {
                 if (/^tab-[1-9]$/.test(action)) {
@@ -799,9 +800,15 @@ function setupEventListeners() {
         });
     }
 
-    let browserKeys = new Map();
+    let browserKeys = new Map(), pageKeys = new Map(), pagePrefixes = new Set();
+    let pageStroke = '', pageStrokeTime = 0;
+    window.addEventListener('blur', () => { pageStroke = ''; });
+    window.addEventListener('focusin', () => { pageStroke = ''; });
     const applyKeyboardConfig = config => {
         browserKeys = window.MiseKeyboard.compile(config.shortcuts);
+        pageKeys = window.MiseKeyboard.compile(config.normal);
+        pagePrefixes = new Set([...pageKeys.keys()].filter(key => key.includes(' ')).map(key => key.split(' ')[0]));
+        pageStroke = '';
         window.describeKeyboardAction = (action, label) => {
             const chords = config.shortcuts[action] || [];
             const pageKeys = config.normal[action] || [];
@@ -834,7 +841,26 @@ function setupEventListeners() {
         if (event.key === 'Escape' && state.preferencesActive) {
             event.preventDefault(); event.stopImmediatePropagation(); togglePreferencesView(); return;
         }
-        const action = browserKeys.get(window.MiseKeyboard.eventCombo(event));
+        const combo = window.MiseKeyboard.eventCombo(event);
+        let action = browserKeys.get(combo);
+        if (!action) {
+            // Page bindings also work when browser navigation controls retain focus.
+            const mode = getActiveWebview()?.__miseKeyboardMode || {};
+            const target = event.target;
+            if (!combo || ['Escape', 'Tab', 'Enter', ' ', 'Delete', 'ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight'].includes(event.key) || hasActiveOverlay() || mode.passthrough || mode.input || mode.hints ||
+                target.tagName === 'WEBVIEW' || target.isContentEditable || target.closest('input, textarea, select, [role="textbox"], [role="searchbox"], [role="combobox"]')) {
+                pageStroke = ''; return;
+            }
+            const now = Date.now();
+            action = pageStroke && now - pageStrokeTime < 700 ? pageKeys.get(pageStroke + ' ' + combo) : null;
+            pageStroke = '';
+            action ||= pageKeys.get(combo);
+            if (!action && pagePrefixes.has(combo)) {
+                event.preventDefault(); event.stopImmediatePropagation();
+                if (!event.repeat) { pageStroke = combo; pageStrokeTime = now; }
+                return;
+            }
+        } else pageStroke = '';
         if (!action) return;
         event.preventDefault(); event.stopImmediatePropagation();
         if (!event.repeat || window.MiseKeyboard.repeatable(action)) window.miseAPI.executeKeyboardAction(action);

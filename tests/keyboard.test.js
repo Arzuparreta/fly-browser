@@ -68,6 +68,18 @@ try {
     assert.equal(keybinds.getActionForInput({type: 'keyDown', key: 'w', control: true, isAutoRepeat: true}), null);
 } finally { fs.rmSync(directory, {recursive: true, force: true}); }
 
+// Custom component names do not imply editing, but real semantics still protect input.
+const editableSource = fs.readFileSync(path.join(__dirname, '..', 'webview-preload.js'), 'utf8');
+const editableContext = {};
+vm.createContext(editableContext);
+vm.runInContext(editableSource.slice(editableSource.indexOf('function isEditableElement'), editableSource.indexOf('// Deep inspection helper')), editableContext);
+const element = (tagName, options = {}) => ({nodeType: 1, tagName, getAttribute: () => '', closest: () => null, ...options});
+assert.equal(editableContext.isEditableElement(element('NEWS-TEXT')), false);
+assert.equal(editableContext.isEditableElement(element('INPUT', {type: 'checkbox'})), false);
+assert.equal(editableContext.isEditableElement(element('INPUT', {type: 'text'})), true);
+assert.equal(editableContext.isEditableElement(element('CUSTOM-EDITOR', {getAttribute: () => 'textbox'})), true);
+assert.equal(editableContext.isEditableElement(element('DIV', {isContentEditable: true})), true);
+
 // Exercise the actual sandboxed guest handler, including the embedded shared grammar.
 const source = fs.readFileSync(path.join(__dirname, '..', 'webview-preload.js'), 'utf8');
 const handlers = {}, messages = [], scrolls = [];

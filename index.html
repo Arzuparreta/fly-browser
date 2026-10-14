@@ -148,7 +148,6 @@
                     <div class="settings-page">
                         <div class="settings-header">
                             <h1 class="settings-title">Preferences</h1>
-                            <button id="OpenKeyboardSettings" type="button" class="settings-action-btn">Keyboard controls</button>
                             <button id="CloseSettingsBtn" class="nav-icon-button" title="Close Preferences"><i class="fa-solid fa-xmark"></i></button>
                         </div>
                 
@@ -532,10 +531,9 @@
                                 </div>
                                 <div id="KeyboardEditor" class="keyboard-editor">
                                     <h3>Keyboard controls</h3>
-                                    <p>Customise browser shortcuts and Vim-style page keys. Changes apply to every open tab when saved. Page keys work only outside text fields and insert mode. Passthrough sends keys directly to the page.</p>
+                                    <p>Each action shows both kinds of binding below. Expand either menu to change it. Changes apply to every open tab when saved. Page keys work only outside text fields and insert mode. Passthrough sends keys directly to the page.</p>
                                     <div class="keyboard-toolbar">
                                         <label>Search actions<input id="KeyboardSearch" type="search" placeholder="Action, category or binding" autocomplete="off"></label>
-                                        <label>Bindings<select id="KeyboardScope"><option value="shortcuts">Browser shortcuts</option><option value="normal">Page keys (NORMAL mode)</option></select></label>
                                         <label class="keyboard-filter"><input id="KeyboardModified" type="checkbox"> Customised only</label>
                                     </div>
                                     <p id="KeyboardCount"></p>
@@ -543,7 +541,8 @@
                                     <div class="keyboard-save-bar">
                                         <button id="KeyboardSave" type="button" class="settings-action-btn">Save bindings</button>
                                         <button id="KeyboardDiscard" type="button" class="settings-action-btn">Discard changes</button>
-                                        <button id="KeyboardReset" type="button" class="settings-action-btn">Restore this section</button>
+                                        <button id="KeyboardResetShortcuts" type="button" class="settings-action-btn">Restore browser shortcuts</button>
+                                        <button id="KeyboardResetNormal" type="button" class="settings-action-btn">Restore page keys</button>
                                         <button id="KeyboardExport" type="button" class="settings-action-btn">Export bindings</button>
                                         <label class="settings-action-btn keyboard-import">Import bindings<input id="KeyboardImport" aria-label="Import bindings" type="file" accept=".json,application/json"></label>
                                         <span id="KeyboardStatus" role="status" aria-live="polite"></span>
