@@ -4,6 +4,14 @@ Deep dives into the most challenging bugs, feature failures, and architectural l
 
 Each chronicle follows the development anatomy: **Problem** → **Attempted Solution** → **The Bug / Fail** → **The Architectural Fix**.
 
+### [The Awakening Cascade: How Naive Tab Traversal Defeated Tab Hibernation](./tab-traversal-awakening-cascade.md)
+
+How linear keyboard navigation secretly allocated hundreds of megabytes of RAM, why scrolling past sleeping tabs broke process isolation, and how decoupled roving cursors and direct random-access tab jumping restored true memory efficiency.
+
+`Memory Optimisation` · `Keyboard Ergonomics` · `State Architecture` · `Tab Hibernation` · `Electron`
+
+---
+
 ### [The Dark Reader Dilemma: Taming Navigation Amnesia, Picture Inversion, and Blend Mode Blackouts](./dark-reader-navigation-persistence.md)
 
 How transient Chromium frames wiped injected stylesheets on redirect, why responsive picture tags and blend modes turned product photos into black voids, and how lifecycle-aware state restored seamless dark mode.
