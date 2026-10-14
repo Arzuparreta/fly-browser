@@ -99,7 +99,7 @@ The shortcuts below are new-profile defaults. The palette shows your saved assig
 
 | Command Title | Shortcut | Action ID | Description |
 | :--- | :--- | :--- | :--- |
-| **Open Preferences** | `Ctrl+H` | `toggle-help` | Full-page settings view with a section index: General, Appearance, Keyboard, Privacy & security, Extensions, Performance, Diagnostics and About. |
+| **Open Preferences** | `Ctrl+H` | `toggle-help` | Full-page settings view with a section index (General, Appearance, Keyboard, Privacy & security, Extensions, Performance, Diagnostics, About) and a search across every section. |
 | **Toggle Private Browsing Mode** | `Ctrl+Shift+P` | `toggle-private-mode` | Switches session to in-memory non-persistent partition. |
 | **Test Clean Google Sign-In Flow** | Unassigned | `test-google-signin` | Launches Google Sign-In in a clean, volatile scratch partition to audit authentication health. |
 | **Toggle Colour Theme (Dark / Light)** | — | — | Swaps UI styling and webview shader inversion between dark and light. |

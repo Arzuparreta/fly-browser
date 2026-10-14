@@ -73,6 +73,15 @@ const root = path.resolve(__dirname, '..');
         for (const [sourceKey, source] of surfaces) {
             for (const [destinationKey, destination] of surfaces) {
                 if (source === destination) continue;
+                // Find inside Preferences searches the settings and keeps Preferences open.
+                if (source === 'PreferencesOverlay' && destination === 'FindBarOverlay') {
+                    await page.keyboard.press(sourceKey); await focused(source);
+                    await page.keyboard.press(destinationKey);
+                    await page.waitForFunction(() => document.activeElement.id === 'SettingsSearch');
+                    assert(!(await page.locator('#FindBarOverlay').isVisible()));
+                    await page.keyboard.press('Escape'); await page.locator('#PreferencesOverlay').waitFor({state: 'hidden'});
+                    continue;
+                }
                 await page.keyboard.press(sourceKey); await focused(source);
                 await page.keyboard.press(destinationKey); await focused(destination);
                 await page.locator('#' + source).waitFor({state: 'hidden'});

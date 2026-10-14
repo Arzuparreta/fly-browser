@@ -1,6 +1,6 @@
 import { hasActiveOverlay } from './focus.js';
 import { state } from './state.js';
-import { getActiveWebview, focusActiveWebview, getWorkspacePartition, isDarkMode, isPdfUrl, getPdfViewerUrl, extractOriginalUrl, isTargetPrivateDomain } from './utils.js';
+import { getActiveWebview, focusActiveWebview, removeWebview, getWorkspacePartition, isDarkMode, isPdfUrl, getPdfViewerUrl, extractOriginalUrl, isTargetPrivateDomain } from './utils.js';
 import { loadWebviewSource } from './extensions.js';
 import { isSplitActive, applySplitLayout, handleSplitTabSelection, handleTabRemovalInSplit, getSplitState } from './splitView.js';
 import { 
@@ -898,6 +898,10 @@ export function renderWorkspaceUI(targetTabToFocus = null) {
     }
 }
 
+let pendingTabFocus = null;
+// The host window blurs when a page takes focus, so a pending programmatic focus is obsolete.
+window.addEventListener('blur', () => { clearTimeout(pendingTabFocus); pendingTabFocus = null; });
+
 export function switchTabFocus(targetIdx) {
     const tabItems = document.querySelectorAll('#TabList li');
     const currentWS = state.sessionState.current_workspace;
@@ -952,7 +956,12 @@ export function switchTabFocus(targetIdx) {
         state.tabActivityTimestamps[currentWS][targetIdx] = Date.now();
 
         const targetView = currentWSViews[targetIdx];
-        setTimeout(() => {
+        clearTimeout(pendingTabFocus);
+        pendingTabFocus = setTimeout(() => {
+            pendingTabFocus = null;
+            // A click inside a page already moved focus there; a second focus request racing it
+            // leaves Chromium routing keys to the host while the page looks focused.
+            if (document.activeElement === targetView) return;
             if (state.sessionState.current_workspace !== currentWS || state.activeViewsCache[currentWS]?.[targetIdx] !== targetView || !targetView.isConnected) return;
             const selected = document.querySelector('#TabList li.selected');
             if ([...document.querySelectorAll('#TabList li')].indexOf(selected) !== targetIdx) return;
@@ -1087,7 +1096,7 @@ export function handleTabRemoval() {
                 rememberClosedTab(wsName, idx);
                 state.sessionState.workspaces[wsName].splice(idx, 1);
                 if (state.activeViewsCache[wsName] && state.activeViewsCache[wsName][idx]) {
-                    state.activeViewsCache[wsName][idx].remove();
+                    removeWebview(state.activeViewsCache[wsName][idx]);
                     state.activeViewsCache[wsName].splice(idx, 1);
                 } else if (state.activeViewsCache[wsName]) {
                     state.activeViewsCache[wsName].splice(idx, 1);
@@ -1126,7 +1135,7 @@ export function handleTabRemoval() {
                     state.sessionState.current_workspace = fallbackWS;
                 }
                 if (state.activeViewsCache[wsName]) {
-                    state.activeViewsCache[wsName].forEach(wv => { if (wv) wv.remove(); });
+                    state.activeViewsCache[wsName].forEach(removeWebview);
                     delete state.activeViewsCache[wsName];
                 }
                 delete state.activeTitlesCache[wsName];
@@ -1173,7 +1182,7 @@ export function handleTabRemoval() {
     tabs.splice(currentIdx, 1);
     handleTabRemovalInSplit(currentIdx);
     if (state.activeViewsCache[currentWS] && state.activeViewsCache[currentWS][currentIdx]) {
-        state.activeViewsCache[currentWS][currentIdx].remove();
+        removeWebview(state.activeViewsCache[currentWS][currentIdx]);
         state.activeViewsCache[currentWS].splice(currentIdx, 1);
     } else if (state.activeViewsCache[currentWS]) {
         state.activeViewsCache[currentWS].splice(currentIdx, 1);
@@ -1718,7 +1727,7 @@ export async function hibernateTab(currentWS, idx) {
         } catch (err) {}
 
         try {
-            webview.remove();
+            removeWebview(webview);
         } catch (err) {}
         state.activeViewsCache[currentWS][idx] = null;
     }

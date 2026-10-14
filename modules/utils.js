@@ -57,6 +57,14 @@ export function focusActiveWebview() {
     }
 }
 
+// Removing a focused guest leaves Chromium routing keys to it, so later clicks and
+// focus() on another webview never receive typing. Release focus first.
+export function removeWebview(view) {
+    if (!view) return;
+    if (document.activeElement === view) view.blur();
+    view.remove();
+}
+
 // Generates a filesystem-safe persistent container partition string for a workspace
 export function getWorkspacePartition(workspaceName) {
     if (!workspaceName) return 'persist:default';

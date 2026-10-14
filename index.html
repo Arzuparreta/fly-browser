@@ -151,6 +151,10 @@
                                 <h1 class="settings-title">Preferences</h1>
                                 <button id="CloseSettingsBtn" type="button" class="nav-icon-button" title="Close Preferences (Esc)" aria-label="Close Preferences"><i class="fa-solid fa-xmark"></i></button>
                             </div>
+                            <label class="settings-search">
+                                <i class="fa-solid fa-magnifying-glass" aria-hidden="true"></i>
+                                <input id="SettingsSearch" type="search" placeholder="Search settings" aria-label="Search settings" aria-controls="SettingsContent" aria-keyshortcuts="/" autocomplete="off" spellcheck="false">
+                            </label>
                             <div id="SettingsIndex" class="settings-index" role="tablist" aria-orientation="vertical" aria-label="Preferences sections">
                                 <button type="button" role="tab" title="General" id="SettingsTab-general" data-pane="general" aria-controls="SettingsPane-general"><i class="fa-solid fa-sliders" aria-hidden="true"></i><span>General</span></button>
                                 <button type="button" role="tab" title="Appearance" id="SettingsTab-appearance" data-pane="appearance" aria-controls="SettingsPane-appearance"><i class="fa-solid fa-palette" aria-hidden="true"></i><span>Appearance</span></button>
@@ -161,10 +165,11 @@
                                 <button type="button" role="tab" title="Diagnostics" id="SettingsTab-diagnostics" data-pane="diagnostics" aria-controls="SettingsPane-diagnostics"><i class="fa-solid fa-stethoscope" aria-hidden="true"></i><span>Diagnostics</span></button>
                                 <button type="button" role="tab" title="About" id="SettingsTab-about" data-pane="about" aria-controls="SettingsPane-about"><i class="fa-solid fa-circle-info" aria-hidden="true"></i><span>About</span></button>
                             </div>
-                            <p class="settings-nav-hint"><kbd>↑</kbd><kbd>↓</kbd> Sections · <kbd>Esc</kbd> Close</p>
+                            <p class="settings-nav-hint"><span><kbd>/</kbd> Search</span><span><kbd>↑</kbd><kbd>↓</kbd> Sections</span><span><kbd>Esc</kbd> Close</span></p>
                         </nav>
 
                         <div id="SettingsContent" class="settings-content">
+                            <p id="SettingsSearchStatus" class="settings-search-status" role="status" aria-live="polite"></p>
                             <!-- General -->
                             <section id="SettingsPane-general" class="settings-pane" role="tabpanel" aria-labelledby="SettingsTab-general" hidden>
                                 <header class="settings-pane-header">
@@ -175,7 +180,7 @@
                                 <div class="settings-group">
                                     <h3>Search &amp; sharing</h3>
                                     <div class="settings-card">
-                                        <div class="setting-item">
+                                        <div class="setting-item" data-keywords="address bar omnibox query provider">
                                             <div class="setting-info">
                                                 <label class="setting-label" for="SearchEngineSelect">Default search engine</label>
                                                 <span class="setting-desc">Used for address bar text that is not a URL.</span>
@@ -188,7 +193,7 @@
                                                 <option value="https://kagi.com/search?q=%s">Kagi</option>
                                             </select>
                                         </div>
-                                        <div class="setting-item">
+                                        <div class="setting-item" data-keywords="mail share mailto webmail">
                                             <div class="setting-info">
                                                 <label class="setting-label" for="setting-email-handler">Email handler</label>
                                                 <span class="setting-desc">Native mail client or a webmail compose page for sharing links.</span>
@@ -202,7 +207,7 @@
                                                 <option value="https://app.fastmail.com/mail/compose?subject=%s&body=%b">Fastmail</option>
                                             </select>
                                         </div>
-                                        <div class="setting-item">
+                                        <div class="setting-item" data-keywords="spelling spell check dictionary language">
                                             <div class="setting-info">
                                                 <label class="setting-label" for="setting-spellchecker-language">Spellchecker language</label>
                                                 <span class="setting-desc">Dictionary used in text fields.</span>
@@ -267,7 +272,7 @@
                                 <div class="settings-group">
                                     <h3>Theme</h3>
                                     <div class="settings-card">
-                                        <div class="setting-item">
+                                        <div class="setting-item" data-keywords="theme mode light dark night colour color">
                                             <div class="setting-info">
                                                 <label class="setting-label" for="setting-theme-toggle">Dark theme</label>
                                                 <span class="setting-desc">Tokyo Night when on, light theme when off.</span>
@@ -277,7 +282,7 @@
                                                 <span class="toggle-slider"></span>
                                             </label>
                                         </div>
-                                        <div class="setting-item">
+                                        <div class="setting-item" data-keywords="colour color highlight swatch">
                                             <div class="setting-info">
                                                 <label class="setting-label" for="setting-accent-color-text">Accent colour</label>
                                                 <span class="setting-desc">Active tabs, buttons, borders and indicators.</span>
@@ -298,7 +303,7 @@
                                                 <input type="text" id="setting-accent-color-text" class="theme-color-text" value="#7aa2f7" maxlength="7" spellcheck="false">
                                             </div>
                                         </div>
-                                        <div class="setting-item">
+                                        <div class="setting-item" data-keywords="colour color background">
                                             <div class="setting-info">
                                                 <label class="setting-label" for="setting-bg-sidebar-text">Sidebar background</label>
                                                 <span class="setting-desc">Vertical tab bar.</span>
@@ -308,7 +313,7 @@
                                                 <input type="text" id="setting-bg-sidebar-text" class="theme-color-text" value="#16161e" maxlength="7" spellcheck="false">
                                             </div>
                                         </div>
-                                        <div class="setting-item">
+                                        <div class="setting-item" data-keywords="colour color background">
                                             <div class="setting-info">
                                                 <label class="setting-label" for="setting-bg-main-text">Canvas background</label>
                                                 <span class="setting-desc">Overlays, frames and empty space.</span>
@@ -318,7 +323,7 @@
                                                 <input type="text" id="setting-bg-main-text" class="theme-color-text" value="#1a1b26" maxlength="7" spellcheck="false">
                                             </div>
                                         </div>
-                                        <div class="setting-item">
+                                        <div class="setting-item" data-keywords="colour color font foreground">
                                             <div class="setting-info">
                                                 <label class="setting-label" for="setting-text-color-text">Text and icons</label>
                                                 <span class="setting-desc">Foreground across the browser interface.</span>
@@ -328,7 +333,7 @@
                                                 <input type="text" id="setting-text-color-text" class="theme-color-text" value="#c0caf5" maxlength="7" spellcheck="false">
                                             </div>
                                         </div>
-                                        <div class="setting-item">
+                                        <div class="setting-item" data-keywords="transparency translucent blur glass">
                                             <div class="setting-info">
                                                 <label class="setting-label" for="setting-sidebar-opacity-slider">Sidebar opacity</label>
                                                 <span class="setting-desc">Lower values show a blurred, translucent sidebar.</span>
@@ -338,7 +343,7 @@
                                                 <span id="setting-sidebar-opacity-val" class="slider-val-badge">100%</span>
                                             </div>
                                         </div>
-                                        <div class="setting-item">
+                                        <div class="setting-item" data-keywords="transparency translucent blur glass modal">
                                             <div class="setting-info">
                                                 <label class="setting-label" for="setting-overlay-opacity-slider">Overlay opacity</label>
                                                 <span class="setting-desc">Command Palette, Quick Notes and Preferences.</span>
@@ -357,7 +362,7 @@
                                 <div class="settings-group">
                                     <h3>Interface</h3>
                                     <div class="settings-card">
-                                        <div class="setting-item">
+                                        <div class="setting-item" data-keywords="pin expand strip compact tabs">
                                             <div class="setting-info">
                                                 <label class="setting-label" for="setting-sidebar-collapse-toggle">Auto-collapse sidebar</label>
                                                 <span class="setting-desc">Shrinks the sidebar to a 36px icon strip that expands on hover or shortcut.</span>
@@ -367,7 +372,7 @@
                                                 <span class="toggle-slider"></span>
                                             </label>
                                         </div>
-                                        <div class="setting-item">
+                                        <div class="setting-item" data-keywords="footer mode indicator tls">
                                             <div class="setting-info">
                                                 <label class="setting-label" for="setting-status-bar-toggle">Status and mode bar</label>
                                                 <span class="setting-desc">Mode indicator, link previews and TLS state at the bottom.</span>
@@ -377,7 +382,7 @@
                                                 <span class="toggle-slider"></span>
                                             </label>
                                         </div>
-                                        <div class="setting-item">
+                                        <div class="setting-item" data-keywords="time date">
                                             <div class="setting-info">
                                                 <label class="setting-label" for="setting-clock-toggle">Clock and date</label>
                                                 <span class="setting-desc">Shown in the status bar and sidebar for full screen browsing.</span>
@@ -387,7 +392,7 @@
                                                 <span class="toggle-slider"></span>
                                             </label>
                                         </div>
-                                        <div class="setting-item">
+                                        <div class="setting-item" data-keywords="titlebar decorations minimise maximise close">
                                             <div class="setting-info">
                                                 <label class="setting-label" for="setting-window-controls-toggle">Window controls</label>
                                                 <span class="setting-desc">Minimise, maximise and close buttons for desktops without native decorations.</span>
@@ -403,6 +408,18 @@
 
                             <!-- Keyboard: long list, so it has its own pane with sticky search and save bars -->
                             <section id="SettingsPane-keyboard" class="settings-pane settings-pane-wide" role="tabpanel" aria-labelledby="SettingsTab-keyboard" hidden>
+                                <div class="settings-search-only">
+                                    <header class="settings-pane-header"><h2>Keyboard</h2></header>
+                                    <div class="settings-card">
+                                        <div class="setting-item">
+                                            <div class="setting-info">
+                                                <span id="SettingsKeyboardMatches" class="setting-label"></span>
+                                                <span class="setting-desc">Bindings are edited in the Keyboard section.</span>
+                                            </div>
+                                            <button id="SettingsKeyboardShow" type="button" class="settings-action-btn">Show in Keyboard</button>
+                                        </div>
+                                    </div>
+                                </div>
                                 <div id="KeyboardEditor" class="keyboard-editor">
                                     <header class="settings-pane-header">
                                         <h2>Keyboard</h2>
@@ -438,7 +455,7 @@
                                 <div class="settings-group">
                                     <h3>Browsing</h3>
                                     <div class="settings-card">
-                                        <div class="setting-item">
+                                        <div class="setting-item" data-keywords="incognito private session">
                                             <div class="setting-info">
                                                 <label class="setting-label" for="setting-private-toggle">Global private browsing</label>
                                                 <span class="setting-desc">Isolates navigation in an in-memory session partition.</span>
@@ -448,7 +465,7 @@
                                                 <span class="toggle-slider"></span>
                                             </label>
                                         </div>
-                                        <div class="setting-item">
+                                        <div class="setting-item" data-keywords="cookies cache clear delete data">
                                             <div class="setting-info">
                                                 <span class="setting-label">Active site data</span>
                                                 <span class="setting-desc">Clear cookies for the current domain or the session cache.</span>
@@ -464,7 +481,7 @@
                                 <div class="settings-group">
                                     <h3>Trusted sites</h3>
                                     <div class="settings-card">
-                                        <div class="setting-item setting-item-stacked">
+                                        <div class="setting-item setting-item-stacked" data-keywords="trusted sites whitelist allowlist bank shopping shields fingerprint tracker">
                                             <div class="setting-info">
                                                 <label class="setting-label" for="setting-trusted-domains">Banking and shopping exceptions</label>
                                                 <span class="setting-desc">Listed sites skip fingerprint randomisation, tracker blocking and permission blocking, which banks and checkouts treat as fraud signals. Every other site keeps full protection. One domain per line; subdomains are included. Applies immediately.</span>
@@ -489,7 +506,7 @@
 
                                     <div class="settings-group">
                                         <div class="settings-card">
-                                            <div class="setting-item">
+                                            <div class="setting-item" data-keywords="addons plugins chrome extensions">
                                                 <div class="setting-info">
                                                     <label class="setting-label" for="setting-extensions-toggle">Enable Chrome extensions</label>
                                                     <span class="setting-desc">Loads only in the workspaces you tick below and only while they have live tabs. Unloads <span id="ExtensionsGraceSeconds">60</span> seconds after a workspace's last tab closes or hibernates. Never active in private browsing; while disabled nothing extension related runs.</span>
@@ -533,7 +550,7 @@
                                 <div class="settings-group">
                                     <h3>Memory</h3>
                                     <div class="settings-card">
-                                        <div class="setting-item">
+                                        <div class="setting-item" data-keywords="sleep hibernate hibernation memory ram idle unload">
                                             <div class="setting-info">
                                                 <label class="setting-label" for="setting-sleep-timeout">Tab hibernation</label>
                                                 <span class="setting-desc">Unloads idle background tabs, keeping URL, title and scroll position. Applies immediately.</span>
@@ -552,7 +569,7 @@
                                 <div class="settings-group">
                                     <h3>Engine <span class="settings-tag">Restart required</span></h3>
                                     <div class="settings-card">
-                                        <div class="setting-item">
+                                        <div class="setting-item" data-keywords="graphics hardware acceleration video restart">
                                             <div class="setting-info">
                                                 <label class="setting-label" for="setting-gpu-toggle">Hardware GPU acceleration</label>
                                                 <span class="setting-desc">Hardware video decoding and rasterisation.</span>
@@ -562,7 +579,7 @@
                                                 <span class="toggle-slider"></span>
                                             </label>
                                         </div>
-                                        <div class="setting-item">
+                                        <div class="setting-item" data-keywords="battery cpu background restart">
                                             <div class="setting-info">
                                                 <label class="setting-label" for="setting-throttling-toggle">Background throttling</label>
                                                 <span class="setting-desc">Slows timers in inactive tabs to save CPU and battery.</span>
@@ -572,7 +589,7 @@
                                                 <span class="toggle-slider"></span>
                                             </label>
                                         </div>
-                                        <div class="setting-item">
+                                        <div class="setting-item" data-keywords="memory ram cpu processes restart">
                                             <div class="setting-info">
                                                 <label class="setting-label" for="setting-process-limit">Renderer process limit</label>
                                                 <span class="setting-desc">Hard cap on Chromium renderer processes.</span>
@@ -601,7 +618,7 @@
 
                                 <div class="settings-group">
                                     <div class="settings-card">
-                                        <div class="setting-item">
+                                        <div class="setting-item" data-keywords="logs errors crashes debug troubleshooting">
                                             <div class="setting-info">
                                                 <label class="setting-label" for="setting-diagnostics-toggle">Local diagnostics recording</label>
                                                 <span class="setting-desc">Keeps an in-memory ring buffer of runtime errors, renderer crashes and health logs for troubleshooting. Off by default; data stays in RAM only.</span>
@@ -627,7 +644,7 @@
 
                                 <div class="settings-group">
                                     <div class="settings-card">
-                                        <div class="setting-item">
+                                        <div class="setting-item" data-keywords="version update release changelog whats new">
                                             <div class="setting-info">
                                                 <span class="setting-label">Mise Browser</span>
                                                 <span id="MiseVersionBadge" class="setting-desc settings-version">Mise Browser</span>
