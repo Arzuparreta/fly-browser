@@ -1,5 +1,6 @@
 const { _electron } = require(process.env.MISE_PLAYWRIGHT_MODULE || 'playwright');
 const fs = require('node:fs');
+const createElectronFixture = require('./electron-fixture');
 const os = require('node:os');
 const path = require('node:path');
 const http = require('node:http');
@@ -8,8 +9,8 @@ const root = path.resolve(__dirname, '..');
 // Closing a tab with a page key and clicking straight into the next page's field must not lose typing.
 (async () => {
     const temporary = fs.mkdtempSync(path.join(os.tmpdir(), 'mise-tab-close-typing-'));
-    const entry = path.join(temporary, 'start.cjs');
-    fs.writeFileSync(entry, `const {app}=require('electron'); app.setAppPath(${JSON.stringify(root)}); app.setPath('home',${JSON.stringify(temporary)}); app.setPath('userData',${JSON.stringify(path.join(temporary, 'data'))}); require(${JSON.stringify(path.join(root, 'main.js'))});`);
+    const entry = createElectronFixture(root, temporary);
+
     const server = http.createServer((_request, response) => response.end('<!doctype html><input id="text" style="margin-left:260px"><news-text tabindex="0" id="noneditable">Article</news-text><div style="height:2000px"></div>'));
     await new Promise(resolve => server.listen(0, '127.0.0.1', resolve));
     const fixture = `http://127.0.0.1:${server.address().port}`;

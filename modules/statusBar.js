@@ -12,6 +12,8 @@ let modeBadgeEl = null;
 let targetUrlEl = null;
 let securityBadgeEl = null;
 let partitionBadgeEl = null;
+let lastSecurityUrl = Symbol('uninitialised');
+let lastPartitionKey = null;
 
 let isStatusBarEnabled = true;
 let isGuestInputFocused = false;
@@ -112,7 +114,8 @@ export function setTargetUrl(url, timeoutMs = 0) {
 
 export function updateSecurityStatus(url) {
     if (!securityBadgeEl) securityBadgeEl = document.getElementById('StatusBarSecurity');
-    if (!securityBadgeEl) return;
+    if (!securityBadgeEl || lastSecurityUrl === url) return;
+    lastSecurityUrl = url;
 
     if (!url || url === 'about:blank') {
         securityBadgeEl.innerHTML = '<i class="fa-solid fa-circle-minus"></i><span class="status-badge-text">BLANK</span>';
@@ -152,14 +155,19 @@ export function updatePartitionBadge(workspaceName, isPrivate) {
     if (!partitionBadgeEl) partitionBadgeEl = document.getElementById('StatusBarPartition');
     if (!partitionBadgeEl) return;
 
-    if (isPrivate || state.globalPrivateModeActive) {
+    const privateProfile = isPrivate || state.globalPrivateModeActive;
+    const ws = privateProfile ? null : workspaceName || state.sessionState.current_workspace || 'Workspace 1';
+    const key = privateProfile ? 'private' : `workspace:${ws}`;
+    if (key === lastPartitionKey) return;
+    lastPartitionKey = key;
+
+    if (privateProfile) {
         partitionBadgeEl.innerHTML = '<i class="fa-solid fa-user-secret"></i><span class="status-badge-text">Private Profile</span>';
         partitionBadgeEl.className = 'status-badge status-badge-partition partition-private';
         partitionBadgeEl.title = 'Partition: MisePrivateProfile (Click to manage workspaces)';
         return;
     }
 
-    const ws = workspaceName || state.sessionState.current_workspace || 'Workspace 1';
     const partitionStr = getWorkspacePartition(ws);
     partitionBadgeEl.innerHTML = `<i class="fa-solid fa-box-archive"></i><span class="status-badge-text">${ws}</span>`;
     partitionBadgeEl.className = 'status-badge status-badge-partition partition-container';

@@ -1,0 +1,113 @@
+{
+  "date": "2026-10-14T11:45:15.281Z",
+  "rounds": 5,
+  "sources": [
+    {
+      "root": "/tmp/mise-performance-upstream-current",
+      "sourceSha256": "6e1ea2386b18b9c7c29fd4ffc77f2f3c9d1ee43f92718ae6963bf2c2f02daff8",
+      "electron": "44.7.0"
+    },
+    {
+      "root": "/mnt/storage/Git-projects-storage/Mise-browser",
+      "sourceSha256": "818f89c00b149a7ceffd4a1266d0af1533e1959ac038458bc1ee08eb3f0e712e",
+      "electron": "44.7.0"
+    }
+  ],
+  "display": ":0",
+  "displayDescription": "Physical X11/i3 workspace 4, 1600x1000 floating window",
+  "gpu": true,
+  "emptyFilterCache": true,
+  "peakSampling": "100 ms from Electron connection until protected guest readiness; sampled PSS, not a guaranteed allocation peak",
+  "samples": [
+    {
+      "root": "/tmp/mise-performance-upstream-current",
+      "round": 0,
+      "localReadyMs": 431.94033799999994,
+      "protectedReadyMs": 1280.812678,
+      "filterFetches": 45,
+      "peakPssMiB": 554.75,
+      "memorySamples": 11
+    },
+    {
+      "root": "/mnt/storage/Git-projects-storage/Mise-browser",
+      "round": 0,
+      "localReadyMs": 400.00279699999965,
+      "protectedReadyMs": 1105.857114,
+      "filterFetches": 15,
+      "peakPssMiB": 427.0986328125,
+      "memorySamples": 10
+    },
+    {
+      "root": "/mnt/storage/Git-projects-storage/Mise-browser",
+      "round": 1,
+      "localReadyMs": 387.673217,
+      "protectedReadyMs": 1100.2059740000004,
+      "filterFetches": 15,
+      "peakPssMiB": 428.5595703125,
+      "memorySamples": 10
+    },
+    {
+      "root": "/tmp/mise-performance-upstream-current",
+      "round": 1,
+      "localReadyMs": 413.2618680000005,
+      "protectedReadyMs": 1707.7088880000001,
+      "filterFetches": 45,
+      "peakPssMiB": 580.3359375,
+      "memorySamples": 15
+    },
+    {
+      "root": "/tmp/mise-performance-upstream-current",
+      "round": 2,
+      "localReadyMs": 410.9607159999996,
+      "protectedReadyMs": 1719.0815039999998,
+      "filterFetches": 45,
+      "peakPssMiB": 618.9912109375,
+      "memorySamples": 15
+    },
+    {
+      "root": "/mnt/storage/Git-projects-storage/Mise-browser",
+      "round": 2,
+      "localReadyMs": 388.6187890000001,
+      "protectedReadyMs": 1109.1198829999994,
+      "filterFetches": 15,
+      "peakPssMiB": 430.470703125,
+      "memorySamples": 10
+    },
+    {
+      "root": "/mnt/storage/Git-projects-storage/Mise-browser",
+      "round": 3,
+      "localReadyMs": 376.18566999999894,
+      "protectedReadyMs": 1070.9702070000003,
+      "filterFetches": 15,
+      "peakPssMiB": 452.6337890625,
+      "memorySamples": 9
+    },
+    {
+      "root": "/tmp/mise-performance-upstream-current",
+      "round": 3,
+      "localReadyMs": 421.0390759999991,
+      "protectedReadyMs": 1263.2205680000006,
+      "filterFetches": 45,
+      "peakPssMiB": 505.19921875,
+      "memorySamples": 11
+    },
+    {
+      "root": "/tmp/mise-performance-upstream-current",
+      "round": 4,
+      "localReadyMs": 416.1989050000011,
+      "protectedReadyMs": 1758.0056139999997,
+      "filterFetches": 45,
+      "peakPssMiB": 626.34375,
+      "memorySamples": 16
+    },
+    {
+      "root": "/mnt/storage/Git-projects-storage/Mise-browser",
+      "round": 4,
+      "localReadyMs": 404.89464399999997,
+      "protectedReadyMs": 1083.831967,
+      "filterFetches": 15,
+      "peakPssMiB": 444.26953125,
+      "memorySamples": 10
+    }
+  ]
+}

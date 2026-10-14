@@ -1,5 +1,6 @@
 const { _electron } = require(process.env.MISE_PLAYWRIGHT_MODULE || 'playwright');
 const fs = require('node:fs');
+const createElectronFixture = require('./electron-fixture');
 const os = require('node:os');
 const path = require('node:path');
 const http = require('node:http');
@@ -7,14 +8,15 @@ const assert = require('node:assert/strict');
 const root = path.resolve(__dirname, '..');
 (async () => {
     const temporary = fs.mkdtempSync(path.join(os.tmpdir(), 'mise-overlay-state-'));
-    const entry = path.join(temporary, 'start.cjs');
-    fs.writeFileSync(entry, `const {app}=require('electron'); app.setAppPath(${JSON.stringify(root)}); app.setPath('home',${JSON.stringify(temporary)}); app.setPath('userData',${JSON.stringify(path.join(temporary, 'data'))}); require(${JSON.stringify(path.join(root, 'main.js'))});`);
+    const entry = createElectronFixture(root, temporary);
+
     const server = http.createServer((_request, response) => response.end('<!doctype html><title>Overlay fixture</title><input id="editable" style="margin-left:260px"><button>Hint target</button>'));
     await new Promise(resolve => server.listen(0, '127.0.0.1', resolve));
     let application;
     try {
         application = await _electron.launch({executablePath: path.join(root, 'node_modules/electron/dist/electron'), args: ['--no-sandbox', '--disable-gpu', `--ozone-platform=${process.env.MISE_TEST_OZONE_PLATFORM || 'x11'}`, entry]});
         const page = await application.firstWindow();
+        page.setDefaultTimeout(10000);
         const errors = []; page.on('pageerror', error => errors.push(error.message));
         await page.waitForFunction(() => !!window.executeBrowserAction);
         await page.waitForFunction(() => {try {return [...document.querySelectorAll('webview')].find(view => view.getClientRects().length)?.getWebContentsId() > 0;} catch {return false;}});
@@ -140,6 +142,17 @@ const root = path.resolve(__dirname, '..');
         await focused('ShareModalOverlay'); await page.keyboard.press('Escape');
         await page.locator('#ShareModalOverlay').waitFor({state: 'hidden'});
         await page.evaluate(url => window.executeBrowserAction('open-transient-share', url), fixture);
+        // The host overlay can appear before its new guest has a document or input router.
+        for (let attempt = 0; ; attempt++) {
+            const ready = await page.evaluate(() => {
+                const view = document.querySelector('#ShareModalWebviewContainer webview');
+                return !view.isLoading() && view.executeJavaScript('!!document.getElementById("editable")');
+            }).catch(() => false);
+            if (ready) break;
+            if (attempt === 250) throw new Error('Share guest did not load the fixture');
+            await page.waitForTimeout(20);
+        }
+        await page.evaluate(() => document.querySelector('#ShareModalWebviewContainer webview').executeJavaScript('new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve)))'));
         await page.locator('#ShareModalWebviewContainer webview').click({position: {x: 280, y: 20}});
         await page.keyboard.press('Escape'); await page.locator('#ShareModalOverlay').waitFor({state: 'hidden'});
         await page.waitForFunction(() => document.activeElement.tagName === 'WEBVIEW');

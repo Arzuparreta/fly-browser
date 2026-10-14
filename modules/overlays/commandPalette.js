@@ -1,5 +1,5 @@
 import { prepareOverlay } from '../focus.js';
-import { initialiseKeyboardEditor } from '../keyboardSettings.js';
+import { initialiseKeyboardEditor, showKeyboardEditor, hideKeyboardEditor } from '../keyboardSettings.js';
 import { initialiseSettingsNav, showSettingsPane, currentSettingsPane, clearSettingsSearch } from '../settingsNav.js';
 import { state } from '../state.js';
 import { focusActiveWebview, getActiveWebview, isTargetScript, isDarkMode, escapeHtml } from '../utils.js';
@@ -684,7 +684,7 @@ export const commandActions = {};
 COMMAND_DEFINITIONS.forEach(cmd => {
     const id = cmd.actionId || cmd.id;
     commandActions[id] = cmd.action;
-    cmd.action = () => window.miseAPI.executeKeyboardAction(id);
+    cmd.action = () => window.dispatchKeyboardAction(id);
     commandRegistry[cmd.title] = cmd.action;
     commandRegistry[cmd.id] = cmd.action;
 });
@@ -696,7 +696,7 @@ window.miseAPI.getActionMetadata().then(metadata => {
         const command = {id, actionId: id, title: info.label, desc: info.category,
             details: info.label, tip: 'Customise this action in Keyboard controls.', category: info.category,
             icon: 'fa-solid fa-keyboard', keywords: [id, info.label],
-            action: () => window.miseAPI.executeKeyboardAction(id)};
+            action: () => window.dispatchKeyboardAction(id)};
         COMMAND_DEFINITIONS.push(command);
         commandRegistry[id] = command.action;
     }
@@ -827,6 +827,7 @@ export async function syncPreferencesUI() {
 export function setupPreferencesListeners() {
     initialiseKeyboardEditor();
     initialiseSettingsNav(pane => {
+        if (pane === 'keyboard') showKeyboardEditor(); else hideKeyboardEditor();
         if (pane === 'extensions' && preferencesActive) syncExtensionsPreferences();
     });
     const closeBtn = document.getElementById('CloseSettingsBtn');
@@ -1064,11 +1065,13 @@ export async function togglePreferencesView() {
         prepareOverlay('PreferencesOverlay');
 
         overlay.style.display = 'block';
+        if (currentSettingsPane() === 'keyboard') showKeyboardEditor();
         const tab = document.querySelector('#SettingsIndex [aria-selected="true"]');
         (tab || overlay).focus({preventScroll: true});
         await syncPreferencesUI();
     } else {
         overlay.style.display = 'none';
+        hideKeyboardEditor();
         clearSettingsSearch();
         returnFocusToWebview();
     }
@@ -1082,13 +1085,13 @@ export async function openPreferencesPane(pane) {
 
 let activeCategoryFilter = 'all';
 
-export function closeCommandPalette() {
+export function closeCommandPalette(restoreFocus = true) {
     if (!state.paletteActive) return;
     paletteRequest++;
     state.paletteActive = false;
     const overlay = document.getElementById('CommandPaletteOverlay');
     if (overlay) overlay.style.display = 'none';
-    returnFocusToWebview();
+    if (restoreFocus) returnFocusToWebview();
 }
 
 export async function openCommandPalette(category = 'all') {
@@ -1433,7 +1436,7 @@ function executeTerminalFallback(rawInputText) {
 export function executePaletteSelection(rawInputText) {
     const targetCommand = state.paletteMatches[state.paletteSelectionIdx];
     
-    closeCommandPalette();
+    closeCommandPalette(false);
 
     if (targetCommand) {
         if (targetCommand.id !== 'terminal-fallback') {

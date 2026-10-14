@@ -122,6 +122,23 @@ assert(!press('F9').consumed, 'Removing F9 must remove all handlers for F9');
 press('x', {repeat: true}); assert.notEqual(messages.at(-1)?.[1], 'remove-tab');
 console.log('Keyboard grammar, migration, transactional writes and guest modal controls passed.');
 
+// Ordinary page mutations must not send cross-process hints notifications.
+let hintLayer = false, mutationCallback;
+const hintMessages = [];
+const hintContext = {
+    document: {documentElement: {}, getElementById: () => hintLayer ? {} : null},
+    ipcRenderer: {sendToHost: (...args) => hintMessages.push(args)},
+    MutationObserver: class {constructor(callback) {mutationCallback = callback;} observe() {}}
+};
+vm.createContext(hintContext);
+vm.runInContext(source.slice(source.indexOf('// Guest hints tracking'), source.indexOf('// Scroll target detection')), hintContext);
+for (let i = 0; i < 100; i++) mutationCallback();
+assert.equal(hintMessages.length, 0);
+hintLayer = true; mutationCallback(); mutationCallback();
+hintLayer = false; mutationCallback(); mutationCallback();
+assert.deepEqual(hintMessages, [['guest-hints-state', true], ['guest-hints-state', false]]);
+console.log('Hints IPC only reports real state transitions.');
+
 // Native guest chords work across frames, suppress destructive repeats and honour passthrough.
 keybinds.initializeKeybinds(path.join(os.tmpdir(), 'mise-nonexistent-keyboard-profile'));
 const mainSource = fs.readFileSync(path.join(__dirname, '..', 'main.js'), 'utf8');
@@ -152,7 +169,7 @@ const tabA = {}, tabB = {}, listA = {}, listB = {};
 let selectedList = listA;
 const statusContext = {
     state: {sessionState: {current_workspace: 'A', workspaces: {A: ['https://example.org', 'https://example.com']}}, activeViewsCache: {A: [tabA, tabB]}},
-    window: {}, document: {getElementById: () => null, querySelector: () => selectedList, querySelectorAll: () => [listA, listB]},
+    URL, window: {}, document: {getElementById: () => null, querySelector: () => selectedList, querySelectorAll: () => [listA, listB]},
     notifyActiveView: () => {}, isSplitActive: () => false, getWorkspacePartition: () => 'A', updateDarkReaderButtonUI: () => {}, isWebviewDarkReaderActive: () => false
 };
 vm.createContext(statusContext); vm.runInContext(statusSource, statusContext);
@@ -168,6 +185,29 @@ selectedList = listB; statusContext.updateStatusBarFromActiveView();
 selectedList = listA; statusContext.updateStatusBarFromActiveView();
 assert.equal(statusContext.getMode(), 'INSERT');
 console.log('Guest mode indicators survive tab switches.');
+// Repeated status refreshes must preserve badge children when their values match.
+const badgeWrites = {StatusBarSecurity: 0, StatusBarPartition: 0};
+const badges = Object.fromEntries(Object.keys(badgeWrites).map(id => {
+    let html = '';
+    return [id, {get innerHTML() {return html;}, set innerHTML(value) {html = value; badgeWrites[id]++;}}];
+}));
+statusContext.document.getElementById = id => badges[id] || null;
+statusContext.updateSecurityStatus('https://example.org');
+statusContext.updateSecurityStatus('https://example.org');
+assert.equal(badgeWrites.StatusBarSecurity, 1);
+statusContext.updateSecurityStatus('about:blank');
+assert.equal(badgeWrites.StatusBarSecurity, 2);
+assert.match(badges.StatusBarSecurity.innerHTML, /BLANK/);
+statusContext.updatePartitionBadge('A', false);
+statusContext.updatePartitionBadge('A', false);
+assert.equal(badgeWrites.StatusBarPartition, 1);
+statusContext.updatePartitionBadge('B', false);
+assert.equal(badgeWrites.StatusBarPartition, 2);
+statusContext.updatePartitionBadge('B', true);
+assert.match(badges.StatusBarPartition.innerHTML, /Private Profile/);
+statusContext.updatePartitionBadge('B', false);
+assert.equal(badgeWrites.StatusBarPartition, 4, 'Returning from private mode must refresh the container');
+console.log('Status refreshes preserve unchanged badges and update URL/workspace/private changes.');
 const transferSource = fs.readFileSync(path.join(__dirname, '..', 'modules/tabTransfer.js'), 'utf8').replace('export ', '');
 const transferContext = {}; vm.createContext(transferContext); vm.runInContext(transferSource, transferContext);
 let removedView = 0;
@@ -205,8 +245,18 @@ const paletteContext = {
 };
 vm.createContext(paletteContext); vm.runInContext(paletteSource, paletteContext);
 const commands = vm.runInContext('COMMAND_DEFINITIONS', paletteContext);
+paletteContext.window.dispatchKeyboardAction = action => paletteDispatched.push(action);
 const rawActions = vm.runInContext('commandActions', paletteContext);
 const rendererSource = fs.readFileSync(path.join(__dirname, '..', 'renderer.js'), 'utf8');
+{
+    const local = [], native = [];
+    const route = rendererSource.slice(rendererSource.indexOf('    let keyboardActions ='), rendererSource.indexOf('    let pageStroke ='));
+    const context = {Set, actionNames: Object.keys(keybinds.ACTION_METADATA), window: {executeBrowserAction: action => local.push(action), miseAPI: {executeKeyboardAction: action => native.push(action)}}};
+    vm.runInNewContext(route + '; keyboardActions = new Set(actionNames); window.dispatchKeyboardAction("toggle-help"); window.dispatchKeyboardAction("trigger-hints"); window.dispatchKeyboardAction("toggle-private-mode"); window.dispatchKeyboardAction("toggle-fullscreen"); window.dispatchKeyboardAction("__proto__"); window.dispatchKeyboardAction("unknown");', context);
+    assert.deepEqual(local, ['toggle-help', 'trigger-hints']);
+    assert.deepEqual(native, ['toggle-private-mode', 'toggle-fullscreen']);
+}
+
 // Execute the renderer dispatcher to catch fallthrough between unrelated actions.
 const selectedTabs = [], fallbackActions = [], openedPalettes = [];
 let tabCount = 3;

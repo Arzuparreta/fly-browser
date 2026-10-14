@@ -568,18 +568,22 @@ document.addEventListener('focusout', () => {
 
 // Guest hints tracking for Hints mode indicator
 try {
+    let lastHintsActive = false;
     const notifyHintsState = () => {
         const active = !!document.getElementById('mise-hint-layer');
+        if (active === lastHintsActive) return;
+        lastHintsActive = active;
         try { ipcRenderer.sendToHost('guest-hints-state', active); } catch (err) {}
     };
 
     const attachHintObserver = () => {
-        if (!document.body) return;
+        if (!document.documentElement) return;
         const observer = new MutationObserver(notifyHintsState);
-        observer.observe(document.body, { childList: true });
+        // The hinter mounts its layer directly under the document element.
+        observer.observe(document.documentElement, { childList: true });
     };
 
-    if (document.body) {
+    if (document.documentElement) {
         attachHintObserver();
     } else {
         document.addEventListener('DOMContentLoaded', attachHintObserver);

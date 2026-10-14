@@ -1,6 +1,6 @@
 import { state } from '../state.js';
 import { prepareOverlay } from '../focus.js';
-import { getWorkspacePartition, focusActiveWebview } from '../utils.js';
+import { getWorkspacePartition, focusActiveWebview, removeWebview } from '../utils.js';
 
 let activeClose = null;
 
@@ -42,6 +42,7 @@ export function openTransientShareModal(targetUrl) {
 
     const closeModal = () => {
         overlay.style.display = 'none';
+        removeWebview(webview);
         container.innerHTML = '';
         window.removeEventListener('keydown', handleEsc);
         activeClose = null;
@@ -63,7 +64,7 @@ export function openTransientShareModal(targetUrl) {
 
     activeClose = closeModal;
     webview.addEventListener('ipc-message', event => {
-        if (event.channel === 'guest-escape') closeModal();
+        if (event.channel === 'guest-escape') setTimeout(closeModal, 0);
         if (event.channel === 'guest-pointer-enter') document.getElementById('Sidebar').classList.remove('pointer-inside');
     });
     window.addEventListener('keydown', handleEsc);

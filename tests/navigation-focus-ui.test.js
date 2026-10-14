@@ -1,5 +1,6 @@
 const { _electron } = require(process.env.MISE_PLAYWRIGHT_MODULE || 'playwright');
 const fs = require('node:fs');
+const createElectronFixture = require('./electron-fixture');
 const os = require('node:os');
 const path = require('node:path');
 const http = require('node:http');
@@ -8,13 +9,13 @@ const root = path.resolve(__dirname, '..');
 
 (async () => {
     const temporary = fs.mkdtempSync(path.join(os.tmpdir(), 'mise-navigation-focus-'));
-    const entry = path.join(temporary, 'start.cjs');
-    fs.writeFileSync(entry, `const {app}=require('electron'); app.setAppPath(${JSON.stringify(root)}); app.setPath('home',${JSON.stringify(temporary)}); app.setPath('userData',${JSON.stringify(path.join(temporary, 'data'))}); require(${JSON.stringify(path.join(root, 'main.js'))});`);
+    const entry = createElectronFixture(root, temporary);
+
     const server = http.createServer((request, response) => {
         const url = new URL(request.url, 'http://localhost');
         const send = () => {
             response.setHeader('Content-Type', 'text/html');
-            response.end('<!doctype html><title>Search results</title><input id="search" style="margin-left:260px"><a href="/result">First result</a><a href="/another">Second result</a>');
+            response.end('<!doctype html><title>Search results</title><input id="search" style="margin-left:260px;width:30vw"><a href="/result">First result</a><a href="/another">Second result</a>');
         };
         setTimeout(send, url.searchParams.get('q') === 'slow' ? 300 : 0);
     });
@@ -44,10 +45,14 @@ const root = path.resolve(__dirname, '..');
             }
             throw new Error('Timed out waiting for guest state');
         };
-        const ready = query => waitGuest(() => page.evaluate(async query => {
-            const view = [...document.querySelectorAll('webview')].find(view => view.getClientRects().length);
-            return !view.isLoading() && view.getURL().includes(`q=${query}`) && await view.executeJavaScript('typeof window.toggleHints === "function"');
-        }, query));
+        const painted = () => page.evaluate(() => document.querySelector('webview').executeJavaScript('new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve)))'));
+        const ready = async query => {
+            await waitGuest(() => page.evaluate(async query => {
+                const view = [...document.querySelectorAll('webview')].find(view => view.getClientRects().length);
+                return !view.isLoading() && view.getURL().includes(`q=${query}`) && await view.executeJavaScript('typeof window.toggleHints === "function"');
+            }, query));
+            await painted();
+        };
         for (const query of ['first', 'second', 'third']) {
             await page.locator('#menu-btn').focus();
             await page.keyboard.press('Control+l');
@@ -60,6 +65,13 @@ const root = path.resolve(__dirname, '..');
             const after = await snapshot();
             console.log('Search focus', {query, before, after});
             assert(after.guest.hints, 'Ctrl+L search results must accept f without clicking the guest');
+            assert(await page.evaluate(() => document.querySelector('webview').executeJavaScript('window.dispatchEvent(new Event("resize")); !!document.getElementById("mise-hint-layer")')), 'A redundant resize must retain hints laid out at the current viewport');
+            if (query === 'third') {
+                const bounds = await application.evaluate(({BrowserWindow}) => BrowserWindow.getAllWindows()[0].getBounds());
+                await application.evaluate(({BrowserWindow}, bounds) => BrowserWindow.getAllWindows()[0].setBounds({...bounds, width: bounds.width - 100}), bounds);
+                await waitGuest(async () => !(await snapshot()).guest.hints);
+                await application.evaluate(({BrowserWindow}, bounds) => BrowserWindow.getAllWindows()[0].setBounds(bounds), bounds);
+            }
             await page.keyboard.press('Escape');
         }
         // Cancelling or toggling the address bar closed must also return page controls.
@@ -90,6 +102,7 @@ const root = path.resolve(__dirname, '..');
         await page.keyboard.press('Escape');
         // Host and guest focus return asynchronously; keys sent before that reach the host.
         await waitGuest(async () => { const state = await snapshot(); return state.host === 'WEBVIEW' && state.guest.focused; });
+        await painted();
         await page.keyboard.press('f');
         await waitGuest(async () => (await snapshot()).guest.hints);
         await page.keyboard.press('Escape');
