@@ -26,6 +26,8 @@ contextBridge.exposeInMainWorld('miseAPI', {
     setNativeTheme: (mode) => ipcRenderer.send('set-native-theme', mode),
     readNotes: () => ipcRenderer.invoke('read-notes'),
     saveNotes: (content) => ipcRenderer.invoke('save-notes', content),
+    openNotesInExternalApp: (customPath) => ipcRenderer.invoke('open-notes-in-external-app', customPath),
+    exportArticleToExternal: (data) => ipcRenderer.invoke('export-article-to-external', data),
     readBookmarks: () => ipcRenderer.invoke('read-bookmarks'),
     saveBookmarks: (data) => ipcRenderer.invoke('save-bookmarks', data),
     readQuickmarks: () => ipcRenderer.invoke('read-quickmarks'),

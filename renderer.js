@@ -40,7 +40,9 @@ import {
     wakeTab,
     wakeAllTabsInWorkspace,
     reapplyActiveUserStyles,
-    toggleReaderViewOnActiveTab
+    toggleReaderViewOnActiveTab,
+    exportActiveTabToNotes,
+    exportActiveTabToExternal
 } from './modules/webview.js';
 
 import { 
@@ -88,7 +90,10 @@ import {
     parseMarkdownToHtml, 
     renderNotesView, 
     toggleNotesOverlay, 
-    setupNotesListeners 
+    setupNotesListeners,
+    toggleExpandNotesOverlay,
+    openNotesInExternalApp,
+    appendSelectionToNotes
 } from './modules/overlays/notes.js';
 
 import { 
@@ -102,7 +107,7 @@ import {
 } from './modules/navigation.js';
 
 import { openTransientShareModal, closeTransientShareModal } from './modules/overlays/shareModal.js';
-import { initSearchEnginePreference } from './modules/overlays/searchEngine.js';
+import { initSearchEnginePreference, renderSearchAliasesUI } from './modules/overlays/searchEngine.js';
 import { initDownloadShelf, toggleDownloadShelf } from './modules/downloads.js';
 import {
     setExtensionsConfig,
@@ -162,6 +167,12 @@ window.displayAddressOverlay = displayAddressOverlay;
 window.triggerLinkHints = triggerLinkHints;
 window.toggleInPageSearch = toggleInPageSearch;
 window.toggleNotesOverlay = toggleNotesOverlay;
+window.toggleExpandNotesOverlay = toggleExpandNotesOverlay;
+window.openNotesInExternalApp = openNotesInExternalApp;
+window.appendSelectionToNotes = appendSelectionToNotes;
+window.renderSearchAliasesUI = renderSearchAliasesUI;
+window.exportActiveTabToNotes = exportActiveTabToNotes;
+window.exportActiveTabToExternal = exportActiveTabToExternal;
 window.toggleDownloadShelf = toggleDownloadShelf;
 window.toggleStatusBar = toggleStatusBar;
 window.toggleClock = toggleClock;
@@ -622,6 +633,10 @@ function setupEventListeners() {
             case 'toggle-devtools': toggleActiveDevTools(); break;
             case 'toggle-bookmarks': toggleBookmarksOverlay(); break;
             case 'toggle-notes': toggleNotesOverlay(); break;
+            case 'save-selection-to-notes': appendSelectionToNotes(args[0]); break;
+            case 'export-reader-to-notes': exportActiveTabToNotes(); break;
+            case 'export-reader-to-external': exportActiveTabToExternal(); break;
+            case 'open-notes-external': openNotesInExternalApp(); break;
             case 'toggle-downloads': toggleDownloadShelf(); break;
             // Inside Preferences, find searches the settings rather than the page behind them.
             case 'toggle-find': if (state.preferencesActive) focusSettingsSearch(); else toggleInPageSearch(); break;

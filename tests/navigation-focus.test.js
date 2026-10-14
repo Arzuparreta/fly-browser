@@ -3,13 +3,14 @@ const fs = require('node:fs');
 const path = require('node:path');
 const vm = require('node:vm');
 const source = fs.readFileSync(path.join(__dirname, '..', 'modules/navigation.js'), 'utf8').replace(/^import .*;\n/gm, '').replace(/^export /gm, '');
+const { resolveSearchAliasUrl } = require('../modules/overlays/searchEngine.js');
 const events = [], address = {style: {display: 'block'}, focus() {}, select() {}};
 const selected = {};
 const state = {sessionState: {current_workspace: 'A', workspaces: {A: ['old']}}, activeViewsCache: {A: []}};
 const view = {setAttribute: (name, value) => events.push(['navigate', name, value])};
 state.activeViewsCache.A[0] = view;
 const context = {
-    prepareOverlay: () => {}, state, document: {getElementById: id => id === 'WideAddressBar' ? address : null, querySelector: () => selected, querySelectorAll: () => [selected]},
+    resolveSearchAliasUrl, prepareOverlay: () => {}, state, document: {getElementById: id => id === 'WideAddressBar' ? address : null, querySelector: () => selected, querySelectorAll: () => [selected]},
     window: {miseAPI: {saveSession: () => events.push(['save']), getBrowserSettings: async () => ({search_engine: 'https://duckduckgo.com/?q=%s'})}},
     focusActiveWebview: () => {assert.equal(address.style.display, 'none'); events.push(['focus', state.activeViewsCache.A[0]]);},
     wakeTab: () => {state.activeViewsCache.A[0] = view; events.push(['wake']);},

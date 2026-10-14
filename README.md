@@ -9,7 +9,7 @@
 Named after the Czech word for *"mission"*, Mise leverages the Chromium rendering engine wrapped inside a streamlined Electron framework to minimise system overhead while delivering a fast, isolated web experience without mouse dependency.
 
 📖 **Official Documentation**: [https://rakosn1cek.github.io/Mise-browser/](https://rakosn1cek.github.io/Mise-browser/)  
-📦 **Download Packages (v0.14.0)**: [GitHub Releases](https://github.com/Rakosn1cek/Mise-browser/releases/latest) • [Direct Package Links](#downloads)
+📦 **Download Packages (v0.15.0)**: [GitHub Releases](https://github.com/Rakosn1cek/Mise-browser/releases/latest) • [Direct Package Links](#downloads)
 
 ![Mise Browser Dual-Split View](docs/public/screenshots/split-view.webp)
 
@@ -45,23 +45,23 @@ Security, isolation, and upstream dependency freshness are foundational principl
 
 Pre-built standalone binaries and packages are compiled and published for Linux, macOS, and Windows with each release.
 
-> **Latest Release**: [**v0.14.0**](https://github.com/Rakosn1cek/Mise-browser/releases/latest) • [All Releases & Release Notes](https://github.com/Rakosn1cek/Mise-browser/releases)
+> **Latest Release**: [**v0.15.0**](https://github.com/Rakosn1cek/Mise-browser/releases/latest) • [All Releases & Release Notes](https://github.com/Rakosn1cek/Mise-browser/releases)
 
 | Platform | Format | Architecture | Direct Download | Notes |
 | :--- | :--- | :--- | :--- | :--- |
-| **Linux** | AppImage | x64 | [Mise.Browser-0.14.0.AppImage](https://github.com/Rakosn1cek/Mise-browser/releases/download/v0.14.0/Mise.Browser-0.14.0.AppImage) | Portable executable (`chmod +x` and run) |
-| **Linux** | tar.gz | x64 | [mise-browser-0.14.0.tar.gz](https://github.com/Rakosn1cek/Mise-browser/releases/download/v0.14.0/mise-browser-0.14.0.tar.gz) | Standalone tarball archive |
-| **macOS** | DMG | Apple Silicon (arm64) | [Mise.Browser-0.14.0-arm64.dmg](https://github.com/Rakosn1cek/Mise-browser/releases/download/v0.14.0/Mise.Browser-0.14.0-arm64.dmg) | Drag and drop installer |
-| **macOS** | ZIP | Apple Silicon (arm64) | [Mise.Browser-0.14.0-arm64-mac.zip](https://github.com/Rakosn1cek/Mise-browser/releases/download/v0.14.0/Mise.Browser-0.14.0-arm64-mac.zip) | Standalone application bundle |
-| **Windows** | Setup EXE | x64 | [Mise.Browser.Setup.0.14.0.exe](https://github.com/Rakosn1cek/Mise-browser/releases/download/v0.14.0/Mise.Browser.Setup.0.14.0.exe) | NSIS desktop installer |
-| **Windows** | Portable EXE | x64 | [Mise.Browser.0.14.0.exe](https://github.com/Rakosn1cek/Mise-browser/releases/download/v0.14.0/Mise.Browser.0.14.0.exe) | Portable binary without installation |
-| **Integrity** | Checksums | All | [SHA256SUMS.txt](https://github.com/Rakosn1cek/Mise-browser/releases/download/v0.14.0/SHA256SUMS.txt) | Cryptographic SHA-256 hash list |
+| **Linux** | AppImage | x64 | [Mise.Browser-0.15.0.AppImage](https://github.com/Rakosn1cek/Mise-browser/releases/download/v0.15.0/Mise.Browser-0.15.0.AppImage) | Portable executable (`chmod +x` and run) |
+| **Linux** | tar.gz | x64 | [mise-browser-0.15.0.tar.gz](https://github.com/Rakosn1cek/Mise-browser/releases/download/v0.15.0/mise-browser-0.15.0.tar.gz) | Standalone tarball archive |
+| **macOS** | DMG | Apple Silicon (arm64) | [Mise.Browser-0.15.0-arm64.dmg](https://github.com/Rakosn1cek/Mise-browser/releases/download/v0.15.0/Mise.Browser-0.15.0-arm64.dmg) | Drag and drop installer |
+| **macOS** | ZIP | Apple Silicon (arm64) | [Mise.Browser-0.15.0-arm64-mac.zip](https://github.com/Rakosn1cek/Mise-browser/releases/download/v0.15.0/Mise.Browser-0.15.0-arm64-mac.zip) | Standalone application bundle |
+| **Windows** | Setup EXE | x64 | [Mise.Browser.Setup.0.15.0.exe](https://github.com/Rakosn1cek/Mise-browser/releases/download/v0.15.0/Mise.Browser.Setup.0.15.0.exe) | NSIS desktop installer |
+| **Windows** | Portable EXE | x64 | [Mise.Browser.0.15.0.exe](https://github.com/Rakosn1cek/Mise-browser/releases/download/v0.15.0/Mise.Browser.0.15.0.exe) | Portable binary without installation |
+| **Integrity** | Checksums | All | [SHA256SUMS.txt](https://github.com/Rakosn1cek/Mise-browser/releases/download/v0.15.0/SHA256SUMS.txt) | Cryptographic SHA-256 hash list |
 
 ### Quick Run (Linux AppImage)
 
 ```bash
-chmod +x Mise.Browser-0.14.0.AppImage
-./Mise.Browser-0.14.0.AppImage
+chmod +x Mise.Browser-0.15.0.AppImage
+./Mise.Browser-0.15.0.AppImage
 ```
 
 No `libfuse2` is needed. On systems without FUSE, run it with `--appimage-extract-and-run`.

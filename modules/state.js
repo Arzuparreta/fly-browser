@@ -24,6 +24,7 @@ export const state = {
     globalPrivateModeActive: false,
     notesActive: false,
     isEditingNotes: false,
+    isNotesExpanded: false,
     bookmarksActive: false,
     diagnosticsActive: false,
     awaitingQuickmarkKey: false,
@@ -37,6 +38,7 @@ export const state = {
     historyResults: [],
     addressSuggestions: [],
     addressSelectionIdx: -1,
+    customSearchAliases: {},
     
     // Bookmarks and Quickmarks State
     quickmarks: {},

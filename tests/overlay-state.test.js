@@ -47,7 +47,7 @@ console.log('Shared sidebar pointer policy preserves overlays and native editing
     }
     const notesContext = {
         state: {notesActive: false}, document: {getElementById: id => elements[id]},
-        window: {miseAPI: {readNotes: () => new Promise(resolve => pending.push(resolve)), saveNotes: value => saves.push(value)}},
+        window: {addEventListener() {}, miseAPI: {readNotes: () => new Promise(resolve => pending.push(resolve)), saveNotes: value => saves.push(value)}},
         prepareOverlay() {}, focusActiveWebview() {}, escapeHtml: text => text, console,
         setTimeout: callback => {timers.push(callback);}, clearTimeout() {}
     };

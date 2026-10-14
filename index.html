@@ -232,6 +232,36 @@
                                 </div>
 
                                 <div class="settings-group">
+                                    <h3>Custom search aliases</h3>
+                                    <div class="settings-card">
+                                        <div class="setting-item search-alias-setting" data-keywords="search aliases bangs prefixes aur gh nix">
+                                            <div class="setting-info">
+                                                <span class="setting-label">Search aliases &amp; bangs</span>
+                                                <span class="setting-desc">Route address bar queries with a prefix such as aur or gh. Use %s in the search URL for the query.</span>
+                                            </div>
+                                            <div id="SearchAliasesList" class="search-aliases-container"></div>
+                                            <div class="search-alias-add-row">
+                                                <input type="text" id="new-alias-key" class="settings-input" aria-label="Search alias" placeholder="Alias (e.g. aur)" spellcheck="false" autocomplete="off">
+                                                <input type="text" id="new-alias-url" class="settings-input" aria-label="Search URL" placeholder="Search URL with %s" spellcheck="false" autocomplete="off">
+                                                <button id="add-search-alias-btn" type="button" class="settings-action-btn">Add alias</button>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+                                <div class="settings-group">
+                                    <h3>Notes &amp; external tools</h3>
+                                    <div class="settings-card">
+                                        <div class="setting-item" data-keywords="notes external editor clippings obsidian logseq nvim">
+                                            <div class="setting-info">
+                                                <label class="setting-label" for="setting-notes-command">External notes command</label>
+                                                <span class="setting-desc">Open notes and clippings with an editor such as obsidian, logseq, code or nvim. Leave empty to use the system Markdown editor.</span>
+                                            </div>
+                                            <input type="text" id="setting-notes-command" class="settings-input" placeholder="e.g. obsidian or code" spellcheck="false" autocomplete="off">
+                                        </div>
+                                    </div>
+                                </div>
+
+                                <div class="settings-group">
                                     <h3>Address bar aliases</h3>
                                     <div class="aliases-grid">
                                         <div class="alias-card"><span class="alias-prefix">!w</span><span class="alias-target">Wikipedia</span></div>
@@ -833,17 +863,25 @@
     </div>
 
 	<!-- Notes Taking Overlay -->
-    <div id="NotesOverlay" class="overlay-container" style="display: none;">
-        <div id="NotesContent" class="overlay-card">
+    <div id="NotesOverlay" class="overlay-container" style="display: none;" tabindex="-1">
+        <div id="NotesContent" class="overlay-card" tabindex="-1">
             <div class="notes-header">
-                <span>Quick Notes (~/.config/mise-browser/notes.md)</span>
-                <div>
-                    <button id="ToggleEditNotesBtn" class="notes-mode-btn">Edit</button>
-                    <span id="CloseNotesBtn" class="close-btn">&times;</span>
+                <div class="notes-header-title">
+                    <i class="fa-regular fa-note-sticky"></i>
+                    <span>Quick Notes</span>
+                    <span class="notes-file-hint">(~/.config/mise-browser/notes.md)</span>
+                    <span id="NotesWordCount" class="notes-word-count">0 words</span>
+                </div>
+                <div class="notes-header-actions">
+                    <span class="notes-key-hint">Esc to close · e to edit</span>
+                    <button id="ToggleEditNotesBtn" class="notes-mode-btn" title="Toggle Edit / Preview"><i class="fa-solid fa-pen-to-square"></i> Edit</button>
+                    <button id="ToggleExpandNotesBtn" class="notes-mode-btn" title="Toggle Fullscreen / Expanded View"><i class="fa-solid fa-expand"></i></button>
+                    <button id="OpenExternalNotesBtn" class="notes-mode-btn" title="Open in External App"><i class="fa-solid fa-arrow-up-right-from-square"></i> External</button>
+                    <span id="CloseNotesBtn" class="close-btn" title="Close (Esc)">&times;</span>
                 </div>
             </div>
             <textarea id="NotesTextArea" style="display: none;" placeholder="Type markdown notes..."></textarea>
-            <div id="NotesMarkdownView" class="markdown-body"></div>
+            <div id="NotesMarkdownView" class="markdown-body" tabindex="0"></div>
         </div>
     </div>
 
