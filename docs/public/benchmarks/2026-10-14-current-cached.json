@@ -1,0 +1,1756 @@
+{
+  "sources": [
+    {
+      "root": "/tmp/mise-performance-upstream-current",
+      "sourceSha256": "6e1ea2386b18b9c7c29fd4ffc77f2f3c9d1ee43f92718ae6963bf2c2f02daff8",
+      "electron": "44.7.0"
+    },
+    {
+      "root": "/mnt/storage/Git-projects-storage/Mise-browser",
+      "sourceSha256": "93124578518cdd9d140e381e962ca090f3cf4d2b750cfcd0f1762c539dfe81a3",
+      "electron": "44.7.0"
+    }
+  ],
+  "environment": {
+    "date": "2026-10-14T10:37:42.271Z",
+    "node": "v26.11.1",
+    "platform": "7.2.9-2-cachyos",
+    "cpu": "AMD Ryzen 7 5800X 8-Core Processor",
+    "memoryGiB": 31.261398315429688,
+    "idleMs": 5000,
+    "rounds": 3,
+    "seededFilterCache": true,
+    "filterCacheSha256": "e98d2e8f5abe49a0b80e10c05afad66bc0de312158ecdff1564d190df4e7bc26",
+    "gpu": false
+  },
+  "samples": [
+    {
+      "root": "/tmp/mise-performance-upstream-current",
+      "round": 0,
+      "readyMs": 643.827085,
+      "idleCpuMs": 30,
+      "idleCpuPercent": 0.5951752566581154,
+      "settled": {
+        "pssMiB": 365.9560546875,
+        "ticks": 146,
+        "processes": 7,
+        "members": [
+          {
+            "type": "browser",
+            "pssMiB": 216.7705078125
+          },
+          {
+            "type": "zygote",
+            "pssMiB": 9.548828125
+          },
+          {
+            "type": "zygote",
+            "pssMiB": 8.0068359375
+          },
+          {
+            "type": "gpu-process",
+            "pssMiB": 31.412109375
+          },
+          {
+            "type": "utility",
+            "pssMiB": 20.123046875
+          },
+          {
+            "type": "renderer",
+            "pssMiB": 52.3818359375
+          },
+          {
+            "type": "renderer",
+            "pssMiB": 27.712890625
+          }
+        ]
+      },
+      "idle": {
+        "pssMiB": 341.2109375,
+        "ticks": 149,
+        "processes": 7,
+        "members": [
+          {
+            "type": "browser",
+            "pssMiB": 217.4892578125
+          },
+          {
+            "type": "zygote",
+            "pssMiB": 9.544921875
+          },
+          {
+            "type": "zygote",
+            "pssMiB": 8.0048828125
+          },
+          {
+            "type": "gpu-process",
+            "pssMiB": 19.1767578125
+          },
+          {
+            "type": "utility",
+            "pssMiB": 20.111328125
+          },
+          {
+            "type": "renderer",
+            "pssMiB": 39.53125
+          },
+          {
+            "type": "renderer",
+            "pssMiB": 27.3525390625
+          }
+        ]
+      },
+      "hostHeapMiB": 4.051975250244141,
+      "dom": {
+        "documents": 6,
+        "nodes": 2192,
+        "jsEventListeners": 179
+      },
+      "preferences": {
+        "1": [
+          22.599999994039536,
+          4,
+          3.5,
+          4,
+          4.299999982118607,
+          4,
+          4.100000023841858,
+          4.0999999940395355,
+          4.199999988079071,
+          4.0999999940395355,
+          4,
+          4.200000017881393
+        ],
+        "6": [
+          21.099999994039536,
+          19.5,
+          21.099999994039536,
+          20.899999976158142,
+          21.5,
+          21.5,
+          21.5,
+          21.900000005960464,
+          19.30000001192093,
+          21.099999994039536,
+          20.700000017881393,
+          20.599999994039536
+        ]
+      },
+      "mutationMs": 587.2999999821186,
+      "hintsMessages": 150,
+      "hintsTransitions": 0,
+      "messagesBefore": {
+        "set-native-theme": 1,
+        "renderer-ready": 1
+      },
+      "messagesAfter": {
+        "set-native-theme": 1,
+        "renderer-ready": 1
+      },
+      "tabs": {
+        "createMs": [
+          4.800000011920929,
+          4.4000000059604645,
+          4.699999988079071,
+          4.4000000059604645,
+          4.299999982118607
+        ],
+        "switchMs": [
+          0.699999988079071,
+          0.5999999940395355,
+          0.5999999940395355,
+          0.5999999940395355,
+          0.5999999940395355,
+          0.6000000238418579,
+          0.5999999940395355,
+          0.5,
+          0.5,
+          0.699999988079071,
+          0.5,
+          0.5999999940395355,
+          0.5999999940395355,
+          0.7000000178813934,
+          0.5999999940395355,
+          0.5999999940395355,
+          0.5,
+          0.699999988079071,
+          0.5999999940395355,
+          0.6000000238418579
+        ]
+      },
+      "slowSwitchMs": [
+        3.300000011920929,
+        2.899999976158142,
+        2.899999976158142,
+        3.5999999940395355,
+        2.5,
+        3.5,
+        2.800000011920929,
+        3,
+        3.9000000059604645,
+        2.5999999940395355,
+        3,
+        4.200000017881393,
+        2.5999999940395355,
+        3,
+        2.899999976158142,
+        2.300000011920929,
+        2.9000000059604645,
+        2.7999999821186066,
+        3.399999976158142,
+        3.0999999940395355
+      ],
+      "live": {
+        "pssMiB": 501.8994140625,
+        "ticks": 452,
+        "processes": 12,
+        "members": [
+          {
+            "type": "browser",
+            "pssMiB": 221.83203125
+          },
+          {
+            "type": "zygote",
+            "pssMiB": 9.189453125
+          },
+          {
+            "type": "zygote",
+            "pssMiB": 5.658203125
+          },
+          {
+            "type": "gpu-process",
+            "pssMiB": 25.044921875
+          },
+          {
+            "type": "utility",
+            "pssMiB": 19.64453125
+          },
+          {
+            "type": "renderer",
+            "pssMiB": 104.556640625
+          },
+          {
+            "type": "renderer",
+            "pssMiB": 20.955078125
+          },
+          {
+            "type": "renderer",
+            "pssMiB": 19.025390625
+          },
+          {
+            "type": "renderer",
+            "pssMiB": 18.9814453125
+          },
+          {
+            "type": "renderer",
+            "pssMiB": 19.009765625
+          },
+          {
+            "type": "renderer",
+            "pssMiB": 19.001953125
+          },
+          {
+            "type": "renderer",
+            "pssMiB": 19
+          }
+        ]
+      },
+      "sleeping": {
+        "pssMiB": 378.220703125,
+        "ticks": 603,
+        "processes": 7,
+        "members": [
+          {
+            "type": "browser",
+            "pssMiB": 177.62109375
+          },
+          {
+            "type": "zygote",
+            "pssMiB": 9.5439453125
+          },
+          {
+            "type": "zygote",
+            "pssMiB": 8.025390625
+          },
+          {
+            "type": "gpu-process",
+            "pssMiB": 22.28125
+          },
+          {
+            "type": "utility",
+            "pssMiB": 20.6669921875
+          },
+          {
+            "type": "renderer",
+            "pssMiB": 113.341796875
+          },
+          {
+            "type": "renderer",
+            "pssMiB": 26.740234375
+          }
+        ]
+      },
+      "views": 1,
+      "filterFetches": 0,
+      "gpuFeatureStatus": {
+        "2d_canvas": "disabled_software",
+        "direct_rendering_display_compositor": "disabled_off_ok",
+        "gpu_compositing": "disabled_software",
+        "multiple_raster_threads": "disabled_off",
+        "opengl": "disabled_off",
+        "rasterization": "disabled_software",
+        "raw_draw": "disabled_off_ok",
+        "skia_graphite": "disabled_off",
+        "trees_in_viz": "disabled_off",
+        "video_decode": "disabled_software",
+        "video_encode": "disabled_software",
+        "vulkan": "disabled_off",
+        "webgl": "disabled_off",
+        "webgpu": "disabled_off",
+        "webgpu_on_vk_via_gl_interop": "disabled_off",
+        "webnn": "disabled_off"
+      },
+      "heavyExtensionModule": false
+    },
+    {
+      "root": "/mnt/storage/Git-projects-storage/Mise-browser",
+      "round": 0,
+      "readyMs": 625.9624050000002,
+      "idleCpuMs": 30,
+      "idleCpuPercent": 0.5953024851156038,
+      "settled": {
+        "pssMiB": 338.013671875,
+        "ticks": 140,
+        "processes": 7,
+        "members": [
+          {
+            "type": "browser",
+            "pssMiB": 182.177734375
+          },
+          {
+            "type": "zygote",
+            "pssMiB": 9.6416015625
+          },
+          {
+            "type": "zygote",
+            "pssMiB": 8.1123046875
+          },
+          {
+            "type": "gpu-process",
+            "pssMiB": 31.498046875
+          },
+          {
+            "type": "utility",
+            "pssMiB": 19.9609375
+          },
+          {
+            "type": "renderer",
+            "pssMiB": 56.296875
+          },
+          {
+            "type": "renderer",
+            "pssMiB": 30.326171875
+          }
+        ]
+      },
+      "idle": {
+        "pssMiB": 316.3388671875,
+        "ticks": 143,
+        "processes": 7,
+        "members": [
+          {
+            "type": "browser",
+            "pssMiB": 183.2353515625
+          },
+          {
+            "type": "zygote",
+            "pssMiB": 9.6416015625
+          },
+          {
+            "type": "zygote",
+            "pssMiB": 8.1103515625
+          },
+          {
+            "type": "gpu-process",
+            "pssMiB": 20.6259765625
+          },
+          {
+            "type": "utility",
+            "pssMiB": 19.95703125
+          },
+          {
+            "type": "renderer",
+            "pssMiB": 44.673828125
+          },
+          {
+            "type": "renderer",
+            "pssMiB": 30.0947265625
+          }
+        ]
+      },
+      "hostHeapMiB": 4.774143218994141,
+      "dom": {
+        "documents": 6,
+        "nodes": 2279,
+        "jsEventListeners": 221
+      },
+      "preferences": {
+        "1": [
+          14.199999988079071,
+          1.800000011920929,
+          2.0999999940395355,
+          2,
+          1.800000011920929,
+          2,
+          1.699999988079071,
+          1.9000000059604645,
+          1.9000000059604645,
+          1.9000000059604645,
+          1.899999976158142,
+          1.7000000178813934
+        ],
+        "6": [
+          12.099999994039536,
+          9,
+          10.300000011920929,
+          10.700000017881393,
+          9.200000017881393,
+          10.099999994039536,
+          9.900000005960464,
+          10.799999982118607,
+          10.599999994039536,
+          11.199999988079071,
+          9.199999988079071,
+          8.699999988079071
+        ]
+      },
+      "mutationMs": 586.1999999880791,
+      "hintsMessages": 0,
+      "hintsTransitions": 2,
+      "messagesBefore": {
+        "set-native-theme": 1,
+        "renderer-ready": 1
+      },
+      "messagesAfter": {
+        "set-native-theme": 1,
+        "renderer-ready": 1
+      },
+      "tabs": {
+        "createMs": [
+          4.0999999940395355,
+          4.0999999940395355,
+          4.200000017881393,
+          4.699999988079071,
+          4.5
+        ],
+        "switchMs": [
+          0.5,
+          0.5999999940395355,
+          0.5,
+          0.5,
+          0.5,
+          0.5999999940395355,
+          0.6000000238418579,
+          0.5999999940395355,
+          0.5999999940395355,
+          0.5,
+          0.6000000238418579,
+          0.4000000059604645,
+          0.5,
+          0.4000000059604645,
+          0.5,
+          0.5999999940395355,
+          0.5,
+          0.5,
+          0.5999999940395355,
+          0.5
+        ]
+      },
+      "slowSwitchMs": [
+        2.7000000178813934,
+        2,
+        2,
+        3,
+        3.699999988079071,
+        2.7000000178813934,
+        3.2000000178813934,
+        3.699999988079071,
+        2,
+        2.7999999821186066,
+        2.4000000059604645,
+        2.9000000059604645,
+        3.0999999940395355,
+        2,
+        2.7999999821186066,
+        2.5,
+        3.9000000059604645,
+        2.5,
+        3.199999988079071,
+        2.5999999940395355
+      ],
+      "live": {
+        "pssMiB": 449.8115234375,
+        "ticks": 355,
+        "processes": 12,
+        "members": [
+          {
+            "type": "browser",
+            "pssMiB": 186.2099609375
+          },
+          {
+            "type": "zygote",
+            "pssMiB": 9.30078125
+          },
+          {
+            "type": "zygote",
+            "pssMiB": 5.7216796875
+          },
+          {
+            "type": "gpu-process",
+            "pssMiB": 25.88671875
+          },
+          {
+            "type": "utility",
+            "pssMiB": 19.466796875
+          },
+          {
+            "type": "renderer",
+            "pssMiB": 71.8076171875
+          },
+          {
+            "type": "renderer",
+            "pssMiB": 23.1796875
+          },
+          {
+            "type": "renderer",
+            "pssMiB": 21.6474609375
+          },
+          {
+            "type": "renderer",
+            "pssMiB": 21.6240234375
+          },
+          {
+            "type": "renderer",
+            "pssMiB": 21.6953125
+          },
+          {
+            "type": "renderer",
+            "pssMiB": 21.634765625
+          },
+          {
+            "type": "renderer",
+            "pssMiB": 21.63671875
+          }
+        ]
+      },
+      "sleeping": {
+        "pssMiB": 338.009765625,
+        "ticks": 518,
+        "processes": 7,
+        "members": [
+          {
+            "type": "browser",
+            "pssMiB": 168.00390625
+          },
+          {
+            "type": "zygote",
+            "pssMiB": 9.6416015625
+          },
+          {
+            "type": "zygote",
+            "pssMiB": 8.1142578125
+          },
+          {
+            "type": "gpu-process",
+            "pssMiB": 23.19140625
+          },
+          {
+            "type": "utility",
+            "pssMiB": 20.4990234375
+          },
+          {
+            "type": "renderer",
+            "pssMiB": 79.095703125
+          },
+          {
+            "type": "renderer",
+            "pssMiB": 29.4638671875
+          }
+        ]
+      },
+      "views": 1,
+      "filterFetches": 0,
+      "gpuFeatureStatus": {
+        "2d_canvas": "disabled_software",
+        "direct_rendering_display_compositor": "disabled_off_ok",
+        "gpu_compositing": "disabled_software",
+        "multiple_raster_threads": "disabled_off",
+        "opengl": "disabled_off",
+        "rasterization": "disabled_software",
+        "raw_draw": "disabled_off_ok",
+        "skia_graphite": "disabled_off",
+        "trees_in_viz": "disabled_off",
+        "video_decode": "disabled_software",
+        "video_encode": "disabled_software",
+        "vulkan": "disabled_off",
+        "webgl": "disabled_off",
+        "webgpu": "disabled_off",
+        "webgpu_on_vk_via_gl_interop": "disabled_off",
+        "webnn": "disabled_off"
+      },
+      "heavyExtensionModule": false
+    },
+    {
+      "root": "/mnt/storage/Git-projects-storage/Mise-browser",
+      "round": 1,
+      "readyMs": 596.149728999997,
+      "idleCpuMs": 30,
+      "idleCpuPercent": 0.5952698715469806,
+      "settled": {
+        "pssMiB": 335.9658203125,
+        "ticks": 138,
+        "processes": 7,
+        "members": [
+          {
+            "type": "browser",
+            "pssMiB": 184.314453125
+          },
+          {
+            "type": "zygote",
+            "pssMiB": 9.642578125
+          },
+          {
+            "type": "zygote",
+            "pssMiB": 8.142578125
+          },
+          {
+            "type": "gpu-process",
+            "pssMiB": 31.994140625
+          },
+          {
+            "type": "utility",
+            "pssMiB": 19.87109375
+          },
+          {
+            "type": "renderer",
+            "pssMiB": 54.078125
+          },
+          {
+            "type": "renderer",
+            "pssMiB": 27.9228515625
+          }
+        ]
+      },
+      "idle": {
+        "pssMiB": 313.5498046875,
+        "ticks": 141,
+        "processes": 7,
+        "members": [
+          {
+            "type": "browser",
+            "pssMiB": 185.3359375
+          },
+          {
+            "type": "zygote",
+            "pssMiB": 9.640625
+          },
+          {
+            "type": "zygote",
+            "pssMiB": 8.142578125
+          },
+          {
+            "type": "gpu-process",
+            "pssMiB": 20.8251953125
+          },
+          {
+            "type": "utility",
+            "pssMiB": 19.859375
+          },
+          {
+            "type": "renderer",
+            "pssMiB": 42.060546875
+          },
+          {
+            "type": "renderer",
+            "pssMiB": 27.685546875
+          }
+        ]
+      },
+      "hostHeapMiB": 5.105155944824219,
+      "dom": {
+        "documents": 6,
+        "nodes": 2279,
+        "jsEventListeners": 221
+      },
+      "preferences": {
+        "1": [
+          14,
+          1.4000000059604645,
+          2,
+          2,
+          1.9000000059604645,
+          1.800000011920929,
+          2.0999999940395355,
+          1.9000000059604645,
+          1.9000000059604645,
+          1.7999999821186066,
+          2,
+          1.7000000178813934
+        ],
+        "6": [
+          11.5,
+          8.800000011920929,
+          10.699999988079071,
+          8.5,
+          9.099999994039536,
+          9.200000017881393,
+          8.699999988079071,
+          10.799999982118607,
+          8.700000017881393,
+          9.099999994039536,
+          11,
+          9.400000005960464
+        ]
+      },
+      "mutationMs": 588.5999999940395,
+      "hintsMessages": 0,
+      "hintsTransitions": 2,
+      "messagesBefore": {
+        "set-native-theme": 1,
+        "renderer-ready": 1
+      },
+      "messagesAfter": {
+        "set-native-theme": 1,
+        "renderer-ready": 1
+      },
+      "tabs": {
+        "createMs": [
+          4.4000000059604645,
+          4.299999982118607,
+          4.0999999940395355,
+          4.200000017881393,
+          4.300000011920929
+        ],
+        "switchMs": [
+          0.5,
+          0.5999999940395355,
+          0.5,
+          0.5,
+          0.5999999940395355,
+          0.5,
+          0.5,
+          0.5999999940395355,
+          0.4000000059604645,
+          0.6000000238418579,
+          0.4000000059604645,
+          0.4000000059604645,
+          0.5,
+          0.5999999940395355,
+          0.5999999940395355,
+          0.5999999940395355,
+          0.5,
+          0.5999999940395355,
+          0.4000000059604645,
+          0.5
+        ]
+      },
+      "slowSwitchMs": [
+        3.0999999940395355,
+        2.300000011920929,
+        2.5,
+        2.5999999940395355,
+        2.199999988079071,
+        2.0999999940395355,
+        2.399999976158142,
+        2.199999988079071,
+        2.800000011920929,
+        3.399999976158142,
+        3.2000000178813934,
+        3.5999999940395355,
+        2.199999988079071,
+        2.699999988079071,
+        2.4000000059604645,
+        2.5,
+        3,
+        2.899999976158142,
+        2.899999976158142,
+        2.5
+      ],
+      "live": {
+        "pssMiB": 438.2783203125,
+        "ticks": 347,
+        "processes": 12,
+        "members": [
+          {
+            "type": "browser",
+            "pssMiB": 188.82421875
+          },
+          {
+            "type": "zygote",
+            "pssMiB": 9.3056640625
+          },
+          {
+            "type": "zygote",
+            "pssMiB": 5.76171875
+          },
+          {
+            "type": "gpu-process",
+            "pssMiB": 26.11328125
+          },
+          {
+            "type": "utility",
+            "pssMiB": 19.4365234375
+          },
+          {
+            "type": "renderer",
+            "pssMiB": 69.90234375
+          },
+          {
+            "type": "renderer",
+            "pssMiB": 21.046875
+          },
+          {
+            "type": "renderer",
+            "pssMiB": 19.59765625
+          },
+          {
+            "type": "renderer",
+            "pssMiB": 19.580078125
+          },
+          {
+            "type": "renderer",
+            "pssMiB": 19.5771484375
+          },
+          {
+            "type": "renderer",
+            "pssMiB": 19.578125
+          },
+          {
+            "type": "renderer",
+            "pssMiB": 19.5546875
+          }
+        ]
+      },
+      "sleeping": {
+        "pssMiB": 336.3017578125,
+        "ticks": 510,
+        "processes": 7,
+        "members": [
+          {
+            "type": "browser",
+            "pssMiB": 169.884765625
+          },
+          {
+            "type": "zygote",
+            "pssMiB": 9.6416015625
+          },
+          {
+            "type": "zygote",
+            "pssMiB": 8.16015625
+          },
+          {
+            "type": "gpu-process",
+            "pssMiB": 23.404296875
+          },
+          {
+            "type": "utility",
+            "pssMiB": 20.4169921875
+          },
+          {
+            "type": "renderer",
+            "pssMiB": 77.6240234375
+          },
+          {
+            "type": "renderer",
+            "pssMiB": 27.169921875
+          }
+        ]
+      },
+      "views": 1,
+      "filterFetches": 0,
+      "gpuFeatureStatus": {
+        "2d_canvas": "disabled_software",
+        "direct_rendering_display_compositor": "disabled_off_ok",
+        "gpu_compositing": "disabled_software",
+        "multiple_raster_threads": "disabled_off",
+        "opengl": "disabled_off",
+        "rasterization": "disabled_software",
+        "raw_draw": "disabled_off_ok",
+        "skia_graphite": "disabled_off",
+        "trees_in_viz": "disabled_off",
+        "video_decode": "disabled_software",
+        "video_encode": "disabled_software",
+        "vulkan": "disabled_off",
+        "webgl": "disabled_off",
+        "webgpu": "disabled_off",
+        "webgpu_on_vk_via_gl_interop": "disabled_off",
+        "webnn": "disabled_off"
+      },
+      "heavyExtensionModule": false
+    },
+    {
+      "root": "/tmp/mise-performance-upstream-current",
+      "round": 1,
+      "readyMs": 643.8857910000006,
+      "idleCpuMs": 30,
+      "idleCpuPercent": 0.5955838336624506,
+      "settled": {
+        "pssMiB": 359.95703125,
+        "ticks": 150,
+        "processes": 7,
+        "members": [
+          {
+            "type": "browser",
+            "pssMiB": 210.076171875
+          },
+          {
+            "type": "zygote",
+            "pssMiB": 9.5654296875
+          },
+          {
+            "type": "zygote",
+            "pssMiB": 8.0244140625
+          },
+          {
+            "type": "gpu-process",
+            "pssMiB": 29.6650390625
+          },
+          {
+            "type": "utility",
+            "pssMiB": 20.12109375
+          },
+          {
+            "type": "renderer",
+            "pssMiB": 52.9931640625
+          },
+          {
+            "type": "renderer",
+            "pssMiB": 29.51171875
+          }
+        ]
+      },
+      "idle": {
+        "pssMiB": 339.34765625,
+        "ticks": 153,
+        "processes": 7,
+        "members": [
+          {
+            "type": "browser",
+            "pssMiB": 210.818359375
+          },
+          {
+            "type": "zygote",
+            "pssMiB": 9.5634765625
+          },
+          {
+            "type": "zygote",
+            "pssMiB": 8.0234375
+          },
+          {
+            "type": "gpu-process",
+            "pssMiB": 19.3818359375
+          },
+          {
+            "type": "utility",
+            "pssMiB": 20.11328125
+          },
+          {
+            "type": "renderer",
+            "pssMiB": 42.18359375
+          },
+          {
+            "type": "renderer",
+            "pssMiB": 29.263671875
+          }
+        ]
+      },
+      "hostHeapMiB": 4.602169036865234,
+      "dom": {
+        "documents": 6,
+        "nodes": 2192,
+        "jsEventListeners": 179
+      },
+      "preferences": {
+        "1": [
+          19.900000005960464,
+          3.4000000059604645,
+          4.200000017881393,
+          4.100000023841858,
+          3.7999999821186066,
+          3.800000011920929,
+          3.9000000059604645,
+          4.100000023841858,
+          3.899999976158142,
+          3.9000000059604645,
+          4.0999999940395355,
+          4
+        ],
+        "6": [
+          21.599999994039536,
+          21.899999976158142,
+          21.099999994039536,
+          19.900000005960464,
+          19.900000005960464,
+          22.200000017881393,
+          20.200000017881393,
+          19.599999994039536,
+          20.200000017881393,
+          20,
+          20.700000017881393,
+          21
+        ]
+      },
+      "mutationMs": 587,
+      "hintsMessages": 150,
+      "hintsTransitions": 0,
+      "messagesBefore": {
+        "set-native-theme": 1,
+        "renderer-ready": 1
+      },
+      "messagesAfter": {
+        "set-native-theme": 1,
+        "renderer-ready": 1
+      },
+      "tabs": {
+        "createMs": [
+          4.0999999940395355,
+          4.199999988079071,
+          4.300000011920929,
+          4.0999999940395355,
+          4.300000011920929
+        ],
+        "switchMs": [
+          0.7000000178813934,
+          0.5999999940395355,
+          0.5999999940395355,
+          0.5999999940395355,
+          0.5,
+          0.5999999940395355,
+          0.5999999940395355,
+          0.5999999940395355,
+          0.5999999940395355,
+          0.5999999940395355,
+          0.5999999940395355,
+          0.5,
+          0.5999999940395355,
+          0.699999988079071,
+          0.6000000238418579,
+          0.5999999940395355,
+          0.5,
+          0.6000000238418579,
+          0.5999999940395355,
+          0.5999999940395355
+        ]
+      },
+      "slowSwitchMs": [
+        4.699999988079071,
+        3,
+        3,
+        3.2000000178813934,
+        2.300000011920929,
+        2.9000000059604645,
+        3.0999999940395355,
+        2.4000000059604645,
+        2.9000000059604645,
+        3.199999988079071,
+        3,
+        3.800000011920929,
+        3,
+        3.5,
+        2.4000000059604645,
+        3.2000000178813934,
+        2.7999999821186066,
+        3,
+        3.300000011920929,
+        3
+      ],
+      "live": {
+        "pssMiB": 512.99609375,
+        "ticks": 423,
+        "processes": 12,
+        "members": [
+          {
+            "type": "browser",
+            "pssMiB": 215.41796875
+          },
+          {
+            "type": "zygote",
+            "pssMiB": 9.212890625
+          },
+          {
+            "type": "zygote",
+            "pssMiB": 5.666015625
+          },
+          {
+            "type": "gpu-process",
+            "pssMiB": 27.33984375
+          },
+          {
+            "type": "utility",
+            "pssMiB": 19.638671875
+          },
+          {
+            "type": "renderer",
+            "pssMiB": 107.5439453125
+          },
+          {
+            "type": "renderer",
+            "pssMiB": 23.00390625
+          },
+          {
+            "type": "renderer",
+            "pssMiB": 21.04296875
+          },
+          {
+            "type": "renderer",
+            "pssMiB": 21.02734375
+          },
+          {
+            "type": "renderer",
+            "pssMiB": 21.0234375
+          },
+          {
+            "type": "renderer",
+            "pssMiB": 21.0341796875
+          },
+          {
+            "type": "renderer",
+            "pssMiB": 21.044921875
+          }
+        ]
+      },
+      "sleeping": {
+        "pssMiB": 362.3076171875,
+        "ticks": 575,
+        "processes": 7,
+        "members": [
+          {
+            "type": "browser",
+            "pssMiB": 158.068359375
+          },
+          {
+            "type": "zygote",
+            "pssMiB": 9.5625
+          },
+          {
+            "type": "zygote",
+            "pssMiB": 8.041015625
+          },
+          {
+            "type": "gpu-process",
+            "pssMiB": 22.751953125
+          },
+          {
+            "type": "utility",
+            "pssMiB": 20.6689453125
+          },
+          {
+            "type": "renderer",
+            "pssMiB": 114.580078125
+          },
+          {
+            "type": "renderer",
+            "pssMiB": 28.634765625
+          }
+        ]
+      },
+      "views": 1,
+      "filterFetches": 0,
+      "gpuFeatureStatus": {
+        "2d_canvas": "disabled_software",
+        "direct_rendering_display_compositor": "disabled_off_ok",
+        "gpu_compositing": "disabled_software",
+        "multiple_raster_threads": "disabled_off",
+        "opengl": "disabled_off",
+        "rasterization": "disabled_software",
+        "raw_draw": "disabled_off_ok",
+        "skia_graphite": "disabled_off",
+        "trees_in_viz": "disabled_off",
+        "video_decode": "disabled_software",
+        "video_encode": "disabled_software",
+        "vulkan": "disabled_off",
+        "webgl": "disabled_off",
+        "webgpu": "disabled_off",
+        "webgpu_on_vk_via_gl_interop": "disabled_off",
+        "webnn": "disabled_off"
+      },
+      "heavyExtensionModule": false
+    },
+    {
+      "root": "/tmp/mise-performance-upstream-current",
+      "round": 2,
+      "readyMs": 631.5595220000032,
+      "idleCpuMs": 50,
+      "idleCpuPercent": 0.9923606359476131,
+      "settled": {
+        "pssMiB": 360.265625,
+        "ticks": 144,
+        "processes": 7,
+        "members": [
+          {
+            "type": "browser",
+            "pssMiB": 214.353515625
+          },
+          {
+            "type": "zygote",
+            "pssMiB": 9.6162109375
+          },
+          {
+            "type": "zygote",
+            "pssMiB": 8.0830078125
+          },
+          {
+            "type": "gpu-process",
+            "pssMiB": 29.4755859375
+          },
+          {
+            "type": "utility",
+            "pssMiB": 19.875
+          },
+          {
+            "type": "renderer",
+            "pssMiB": 51
+          },
+          {
+            "type": "renderer",
+            "pssMiB": 27.8623046875
+          }
+        ]
+      },
+      "idle": {
+        "pssMiB": 340.5869140625,
+        "ticks": 149,
+        "processes": 7,
+        "members": [
+          {
+            "type": "browser",
+            "pssMiB": 215.03515625
+          },
+          {
+            "type": "zygote",
+            "pssMiB": 9.611328125
+          },
+          {
+            "type": "zygote",
+            "pssMiB": 8.0830078125
+          },
+          {
+            "type": "gpu-process",
+            "pssMiB": 19.6787109375
+          },
+          {
+            "type": "utility",
+            "pssMiB": 19.873046875
+          },
+          {
+            "type": "renderer",
+            "pssMiB": 40.681640625
+          },
+          {
+            "type": "renderer",
+            "pssMiB": 27.6240234375
+          }
+        ]
+      },
+      "hostHeapMiB": 4.573810577392578,
+      "dom": {
+        "documents": 6,
+        "nodes": 2192,
+        "jsEventListeners": 179
+      },
+      "preferences": {
+        "1": [
+          22.69999998807907,
+          3.9000000059604645,
+          4,
+          4.299999982118607,
+          3.7999999821186066,
+          4.199999988079071,
+          4.0999999940395355,
+          4,
+          4.100000023841858,
+          3.4000000059604645,
+          4.0999999940395355,
+          4.200000017881393
+        ],
+        "6": [
+          21.399999976158142,
+          21.400000005960464,
+          20.900000005960464,
+          19.900000005960464,
+          22.099999994039536,
+          20.5,
+          19.299999982118607,
+          19.599999994039536,
+          18.700000017881393,
+          20.600000023841858,
+          21,
+          20.599999994039536
+        ]
+      },
+      "mutationMs": 586.7999999821186,
+      "hintsMessages": 150,
+      "hintsTransitions": 0,
+      "messagesBefore": {
+        "set-native-theme": 1,
+        "renderer-ready": 1
+      },
+      "messagesAfter": {
+        "set-native-theme": 1,
+        "renderer-ready": 1
+      },
+      "tabs": {
+        "createMs": [
+          4.0999999940395355,
+          4.300000011920929,
+          4.300000011920929,
+          4.4000000059604645,
+          4.199999988079071
+        ],
+        "switchMs": [
+          0.6000000238418579,
+          0.699999988079071,
+          0.5999999940395355,
+          0.699999988079071,
+          0.5999999940395355,
+          0.5,
+          0.5999999940395355,
+          0.5999999940395355,
+          0.5999999940395355,
+          0.5,
+          0.5999999940395355,
+          0.6000000238418579,
+          0.5,
+          0.5999999940395355,
+          0.6000000238418579,
+          0.5999999940395355,
+          0.5999999940395355,
+          0.7000000178813934,
+          0.6000000238418579,
+          0.5
+        ]
+      },
+      "slowSwitchMs": [
+        3.4000000059604645,
+        3.0999999940395355,
+        2.5,
+        3.4000000059604645,
+        2.5,
+        3.4000000059604645,
+        3.5999999940395355,
+        2.899999976158142,
+        2.899999976158142,
+        3.899999976158142,
+        3.199999988079071,
+        3,
+        2.7999999821186066,
+        2.9000000059604645,
+        2.699999988079071,
+        2.699999988079071,
+        3,
+        3.0999999940395355,
+        3.5999999940395355,
+        2.9000000059604645
+      ],
+      "live": {
+        "pssMiB": 500.94140625,
+        "ticks": 440,
+        "processes": 12,
+        "members": [
+          {
+            "type": "browser",
+            "pssMiB": 219.26171875
+          },
+          {
+            "type": "zygote",
+            "pssMiB": 9.2587890625
+          },
+          {
+            "type": "zygote",
+            "pssMiB": 5.716796875
+          },
+          {
+            "type": "gpu-process",
+            "pssMiB": 25.564453125
+          },
+          {
+            "type": "utility",
+            "pssMiB": 19.392578125
+          },
+          {
+            "type": "renderer",
+            "pssMiB": 105.091796875
+          },
+          {
+            "type": "renderer",
+            "pssMiB": 21.1669921875
+          },
+          {
+            "type": "renderer",
+            "pssMiB": 19.095703125
+          },
+          {
+            "type": "renderer",
+            "pssMiB": 19.10546875
+          },
+          {
+            "type": "renderer",
+            "pssMiB": 19.083984375
+          },
+          {
+            "type": "renderer",
+            "pssMiB": 19.1220703125
+          },
+          {
+            "type": "renderer",
+            "pssMiB": 19.0810546875
+          }
+        ]
+      },
+      "sleeping": {
+        "pssMiB": 371.3408203125,
+        "ticks": 599,
+        "processes": 7,
+        "members": [
+          {
+            "type": "browser",
+            "pssMiB": 173.361328125
+          },
+          {
+            "type": "zygote",
+            "pssMiB": 9.6103515625
+          },
+          {
+            "type": "zygote",
+            "pssMiB": 8.1044921875
+          },
+          {
+            "type": "gpu-process",
+            "pssMiB": 22.951171875
+          },
+          {
+            "type": "utility",
+            "pssMiB": 20.427734375
+          },
+          {
+            "type": "renderer",
+            "pssMiB": 109.96484375
+          },
+          {
+            "type": "renderer",
+            "pssMiB": 26.9208984375
+          }
+        ]
+      },
+      "views": 1,
+      "filterFetches": 0,
+      "gpuFeatureStatus": {
+        "2d_canvas": "disabled_software",
+        "direct_rendering_display_compositor": "disabled_off_ok",
+        "gpu_compositing": "disabled_software",
+        "multiple_raster_threads": "disabled_off",
+        "opengl": "disabled_off",
+        "rasterization": "disabled_software",
+        "raw_draw": "disabled_off_ok",
+        "skia_graphite": "disabled_off",
+        "trees_in_viz": "disabled_off",
+        "video_decode": "disabled_software",
+        "video_encode": "disabled_software",
+        "vulkan": "disabled_off",
+        "webgl": "disabled_off",
+        "webgpu": "disabled_off",
+        "webgpu_on_vk_via_gl_interop": "disabled_off",
+        "webnn": "disabled_off"
+      },
+      "heavyExtensionModule": false
+    },
+    {
+      "root": "/mnt/storage/Git-projects-storage/Mise-browser",
+      "round": 2,
+      "readyMs": 647.4327210000047,
+      "idleCpuMs": 40,
+      "idleCpuPercent": 0.7941101670023352,
+      "settled": {
+        "pssMiB": 334.6416015625,
+        "ticks": 143,
+        "processes": 7,
+        "members": [
+          {
+            "type": "browser",
+            "pssMiB": 179.6044921875
+          },
+          {
+            "type": "zygote",
+            "pssMiB": 9.6953125
+          },
+          {
+            "type": "zygote",
+            "pssMiB": 8.0791015625
+          },
+          {
+            "type": "gpu-process",
+            "pssMiB": 31.791015625
+          },
+          {
+            "type": "utility",
+            "pssMiB": 19.8828125
+          },
+          {
+            "type": "renderer",
+            "pssMiB": 55.748046875
+          },
+          {
+            "type": "renderer",
+            "pssMiB": 29.8408203125
+          }
+        ]
+      },
+      "idle": {
+        "pssMiB": 312.9462890625,
+        "ticks": 147,
+        "processes": 7,
+        "members": [
+          {
+            "type": "browser",
+            "pssMiB": 180.6435546875
+          },
+          {
+            "type": "zygote",
+            "pssMiB": 9.6923828125
+          },
+          {
+            "type": "zygote",
+            "pssMiB": 8.078125
+          },
+          {
+            "type": "gpu-process",
+            "pssMiB": 20.986328125
+          },
+          {
+            "type": "utility",
+            "pssMiB": 19.87890625
+          },
+          {
+            "type": "renderer",
+            "pssMiB": 44.060546875
+          },
+          {
+            "type": "renderer",
+            "pssMiB": 29.6064453125
+          }
+        ]
+      },
+      "hostHeapMiB": 4.819572448730469,
+      "dom": {
+        "documents": 6,
+        "nodes": 2279,
+        "jsEventListeners": 221
+      },
+      "preferences": {
+        "1": [
+          13.699999988079071,
+          1.699999988079071,
+          2,
+          1.9000000059604645,
+          2,
+          2.0999999940395355,
+          1.699999988079071,
+          1.800000011920929,
+          1.800000011920929,
+          1.699999988079071,
+          1.9000000059604645,
+          2
+        ],
+        "6": [
+          11.599999994039536,
+          10,
+          10.400000005960464,
+          9.800000011920929,
+          8.599999994039536,
+          9.900000005960464,
+          10,
+          11.400000005960464,
+          9.200000017881393,
+          10.400000005960464,
+          9.099999994039536,
+          9.800000011920929
+        ]
+      },
+      "mutationMs": 586.5999999940395,
+      "hintsMessages": 0,
+      "hintsTransitions": 2,
+      "messagesBefore": {
+        "set-native-theme": 1,
+        "renderer-ready": 1
+      },
+      "messagesAfter": {
+        "set-native-theme": 1,
+        "renderer-ready": 1
+      },
+      "tabs": {
+        "createMs": [
+          4,
+          4.0999999940395355,
+          4.200000017881393,
+          4.4000000059604645,
+          4.200000017881393
+        ],
+        "switchMs": [
+          0.699999988079071,
+          0.5,
+          0.5999999940395355,
+          0.5999999940395355,
+          0.5,
+          0.5,
+          0.5,
+          0.5999999940395355,
+          0.5999999940395355,
+          0.5,
+          0.5,
+          0.5,
+          0.5,
+          0.5,
+          0.6000000238418579,
+          0.5999999940395355,
+          0.5,
+          0.5,
+          0.5,
+          0.5
+        ]
+      },
+      "slowSwitchMs": [
+        3.699999988079071,
+        2.5999999940395355,
+        2.600000023841858,
+        2.100000023841858,
+        3,
+        2.699999988079071,
+        2.5,
+        2.800000011920929,
+        2.4000000059604645,
+        2.800000011920929,
+        2.100000023841858,
+        3.4000000059604645,
+        2.699999988079071,
+        2.2000000178813934,
+        2.5999999940395355,
+        3,
+        2.4000000059604645,
+        2.399999976158142,
+        2.300000011920929,
+        2.2000000178813934
+      ],
+      "live": {
+        "pssMiB": 448.111328125,
+        "ticks": 356,
+        "processes": 12,
+        "members": [
+          {
+            "type": "browser",
+            "pssMiB": 184.78515625
+          },
+          {
+            "type": "zygote",
+            "pssMiB": 9.33203125
+          },
+          {
+            "type": "zygote",
+            "pssMiB": 5.6865234375
+          },
+          {
+            "type": "gpu-process",
+            "pssMiB": 26.2177734375
+          },
+          {
+            "type": "utility",
+            "pssMiB": 19.3681640625
+          },
+          {
+            "type": "renderer",
+            "pssMiB": 71.931640625
+          },
+          {
+            "type": "renderer",
+            "pssMiB": 23.0107421875
+          },
+          {
+            "type": "renderer",
+            "pssMiB": 21.544921875
+          },
+          {
+            "type": "renderer",
+            "pssMiB": 21.5302734375
+          },
+          {
+            "type": "renderer",
+            "pssMiB": 21.541015625
+          },
+          {
+            "type": "renderer",
+            "pssMiB": 21.6279296875
+          },
+          {
+            "type": "renderer",
+            "pssMiB": 21.53515625
+          }
+        ]
+      },
+      "sleeping": {
+        "pssMiB": 328.5537109375,
+        "ticks": 515,
+        "processes": 7,
+        "members": [
+          {
+            "type": "browser",
+            "pssMiB": 158.49609375
+          },
+          {
+            "type": "zygote",
+            "pssMiB": 9.693359375
+          },
+          {
+            "type": "zygote",
+            "pssMiB": 8.0927734375
+          },
+          {
+            "type": "gpu-process",
+            "pssMiB": 23.587890625
+          },
+          {
+            "type": "utility",
+            "pssMiB": 20.4267578125
+          },
+          {
+            "type": "renderer",
+            "pssMiB": 79.177734375
+          },
+          {
+            "type": "renderer",
+            "pssMiB": 29.0791015625
+          }
+        ]
+      },
+      "views": 1,
+      "filterFetches": 0,
+      "gpuFeatureStatus": {
+        "2d_canvas": "disabled_software",
+        "direct_rendering_display_compositor": "disabled_off_ok",
+        "gpu_compositing": "disabled_software",
+        "multiple_raster_threads": "disabled_off",
+        "opengl": "disabled_off",
+        "rasterization": "disabled_software",
+        "raw_draw": "disabled_off_ok",
+        "skia_graphite": "disabled_off",
+        "trees_in_viz": "disabled_off",
+        "video_decode": "disabled_software",
+        "video_encode": "disabled_software",
+        "vulkan": "disabled_off",
+        "webgl": "disabled_off",
+        "webgpu": "disabled_off",
+        "webgpu_on_vk_via_gl_interop": "disabled_off",
+        "webnn": "disabled_off"
+      },
+      "heavyExtensionModule": false
+    }
+  ]
+}

@@ -6,6 +6,20 @@ const status = text => { el('KeyboardStatus').textContent = text; };
 const dirty = () => JSON.stringify(draft) !== JSON.stringify(saved);
 const sections = {shortcuts: 'Browser shortcuts', normal: 'Page keys'};
 const expanded = new Set();
+let editorRequested = false;
+
+// Keep the action catalogue available to search, but build rows only on demand.
+export function showKeyboardEditor() {
+    if (editorRequested) return;
+    editorRequested = true;
+    render();
+}
+
+export function hideKeyboardEditor() {
+    if (!editorRequested) return;
+    editorRequested = false;
+    el('KeyboardRows').replaceChildren();
+}
 
 function refreshButtons() {
     const validation = keyboard.validateConfig(draft, metadata);
@@ -31,7 +45,7 @@ export function filterKeyboardActions(query) {
     render();
 }
 function render() {
-    if (!draft) return;
+    if (!draft || !editorRequested) return;
     const query = el('KeyboardSearch').value.toLowerCase().trim();
     const modifiedOnly = el('KeyboardModified').checked;
     const rows = el('KeyboardRows');
@@ -52,30 +66,40 @@ function render() {
             const modified = JSON.stringify(binds) !== JSON.stringify(defaults[section][id] || []);
             const menu = document.createElement('details'); menu.dataset.keyboardSection = section;
             const menuKey = `${id}:${section}`; menu.open = expanded.has(menuKey);
-            menu.ontoggle = () => { if (!menu.isConnected) return; if (menu.open) expanded.add(menuKey); else expanded.delete(menuKey); };
             const summary = document.createElement('summary');
             summary.textContent = `${title}: ${binds.length ? binds.map(binding => keyboard.display(binding, section)).join(' / ') : 'Unassigned'}`;
-            const help = document.createElement('p'); help.className = 'keyboard-help';
-            help.textContent = section === 'shortcuts' ? 'Works while typing too.' : 'Works outside editable fields, INSERT mode, hints and passthrough. Browser panels keep their own controls.';
-            const controls = document.createElement('div'); controls.className = 'keyboard-bindings';
-            binds.forEach((binding, index) => {
-                const group = document.createElement('span'); group.className = 'keyboard-binding';
-                const change = document.createElement('button'); change.type = 'button'; change.textContent = keyboard.display(binding, section);
-                change.setAttribute('aria-label', `Change ${keyboard.display(binding, section)} for ${info.label}`);
-                change.onclick = () => record(id, index, section);
-                const remove = document.createElement('button'); remove.type = 'button'; remove.textContent = '×';
-                remove.setAttribute('aria-label', `Remove ${keyboard.display(binding, section)} from ${info.label}`);
-                remove.onclick = () => { draft[section][id].splice(index, 1); render(); focusAction(id, section); };
-                group.append(change, remove); controls.append(group);
-            });
-            if (!binds.length) { const text = document.createElement('span'); text.className = 'keyboard-unbound'; text.textContent = 'Unassigned'; controls.append(text); }
-            const add = document.createElement('button'); add.type = 'button'; add.textContent = 'Add binding';
-            add.dataset.keyboardAction = id; add.dataset.keyboardScope = section; add.setAttribute('aria-label', `Add binding for ${info.label}`);
-            add.disabled = binds.length >= 8; add.onclick = () => record(id, null, section);
-            const reset = document.createElement('button'); reset.type = 'button'; reset.textContent = 'Reset'; reset.disabled = !modified;
-            reset.setAttribute('aria-label', `Reset bindings for ${info.label}`);
-            reset.onclick = () => { draft[section][id] = [...defaults[section][id]]; render(); focusAction(id, section); };
-            controls.append(add, reset); menu.append(summary, help, controls); menus.append(menu);
+            menu.append(summary);
+            const populate = () => {
+                if (menu.childElementCount > 1) return;
+                const help = document.createElement('p'); help.className = 'keyboard-help';
+                help.textContent = section === 'shortcuts' ? 'Works while typing too.' : 'Works outside editable fields, INSERT mode, hints and passthrough. Browser panels keep their own controls.';
+                const controls = document.createElement('div'); controls.className = 'keyboard-bindings';
+                binds.forEach((binding, index) => {
+                    const group = document.createElement('span'); group.className = 'keyboard-binding';
+                    const change = document.createElement('button'); change.type = 'button'; change.textContent = keyboard.display(binding, section);
+                    change.setAttribute('aria-label', `Change ${keyboard.display(binding, section)} for ${info.label}`);
+                    change.onclick = () => record(id, index, section);
+                    const remove = document.createElement('button'); remove.type = 'button'; remove.textContent = '×';
+                    remove.setAttribute('aria-label', `Remove ${keyboard.display(binding, section)} from ${info.label}`);
+                    remove.onclick = () => { draft[section][id].splice(index, 1); render(); focusAction(id, section); };
+                    group.append(change, remove); controls.append(group);
+                });
+                if (!binds.length) { const text = document.createElement('span'); text.className = 'keyboard-unbound'; text.textContent = 'Unassigned'; controls.append(text); }
+                const add = document.createElement('button'); add.type = 'button'; add.textContent = 'Add binding';
+                add.dataset.keyboardAction = id; add.dataset.keyboardScope = section; add.setAttribute('aria-label', `Add binding for ${info.label}`);
+                add.disabled = binds.length >= 8; add.onclick = () => record(id, null, section);
+                const reset = document.createElement('button'); reset.type = 'button'; reset.textContent = 'Reset'; reset.disabled = !modified;
+                reset.setAttribute('aria-label', `Reset bindings for ${info.label}`);
+                reset.onclick = () => { draft[section][id] = [...defaults[section][id]]; render(); focusAction(id, section); };
+                controls.append(add, reset); menu.append(help, controls);
+            };
+            if (menu.open) populate();
+            menu.ontoggle = () => {
+                if (!menu.isConnected) return;
+                if (menu.open) { expanded.add(menuKey); populate(); }
+                else { expanded.delete(menuKey); while (menu.childElementCount > 1) menu.lastElementChild.remove(); }
+            };
+            menus.append(menu);
         }
         row.append(description, menus); rows.append(row);
     }
@@ -135,7 +159,7 @@ export async function initialiseKeyboardEditor() {
         [saved, defaults, metadata] = await Promise.all([window.miseAPI.getKeyboardConfig(), window.miseAPI.getKeyboardDefaults(), window.miseAPI.getActionMetadata()]);
         defaults = keyboard.validateConfig(defaults, metadata).config;
         draft = clone(saved);
-        render();
+        if (editorRequested) render(); else refreshButtons();
     } catch (_) { status('Could not load keyboard settings. Reopen the browser to try again.'); return; }
     el('KeyboardSearch').oninput = render;
     el('KeyboardModified').onchange = render;

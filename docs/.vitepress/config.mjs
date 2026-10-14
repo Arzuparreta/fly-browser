@@ -78,7 +78,8 @@ export default defineConfig({
         items: [
           { text: 'Keyboard Shortcuts', link: '/reference/keybinds' },
           { text: 'Command Palette', link: '/reference/command-palette' },
-          { text: 'Configuration Files', link: '/reference/configuration' }
+          { text: 'Configuration Files', link: '/reference/configuration' },
+          { text: 'Fork Performance Audit', link: '/performance-audit' }
         ]
       }
     ],

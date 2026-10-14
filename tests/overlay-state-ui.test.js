@@ -1,5 +1,6 @@
 const { _electron } = require(process.env.MISE_PLAYWRIGHT_MODULE || 'playwright');
 const fs = require('node:fs');
+const createElectronFixture = require('./electron-fixture');
 const os = require('node:os');
 const path = require('node:path');
 const http = require('node:http');
@@ -7,8 +8,8 @@ const assert = require('node:assert/strict');
 const root = path.resolve(__dirname, '..');
 (async () => {
     const temporary = fs.mkdtempSync(path.join(os.tmpdir(), 'mise-overlay-state-'));
-    const entry = path.join(temporary, 'start.cjs');
-    fs.writeFileSync(entry, `const {app}=require('electron'); app.setAppPath(${JSON.stringify(root)}); app.setPath('home',${JSON.stringify(temporary)}); app.setPath('userData',${JSON.stringify(path.join(temporary, 'data'))}); require(${JSON.stringify(path.join(root, 'main.js'))});`);
+    const entry = createElectronFixture(root, temporary);
+
     const server = http.createServer((_request, response) => response.end('<!doctype html><title>Overlay fixture</title><input id="editable" style="margin-left:260px"><button>Hint target</button>'));
     await new Promise(resolve => server.listen(0, '127.0.0.1', resolve));
     let application;

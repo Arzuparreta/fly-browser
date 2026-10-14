@@ -1,8 +1,6 @@
 // modules/clock.js
 // Live clock and date controller for status bar and sidebar widgets
 
-import { state } from './state.js';
-
 let clockTimer = null;
 let currentClockMode = 'datetime'; // 'datetime' | 'time' | 'seconds'
 let isClockEnabled = true;
@@ -39,7 +37,12 @@ export function getClockData(date = new Date()) {
 }
 
 export function updateClockUI() {
+    if (!isClockEnabled) return;
     const data = getClockData();
+
+    const dateText = currentClockMode === 'time' ? '' : data.shortDate;
+    const dateDisplay = currentClockMode === 'time' ? 'none' : 'inline-block';
+    const timeText = currentClockMode === 'seconds' ? data.fullTime : data.shortTime;
 
     // Status bar clock elements
     const statusClockEl = document.getElementById('StatusBarClock');
@@ -47,13 +50,13 @@ export function updateClockUI() {
     const statusTimeEl = document.getElementById('StatusBarClockTime');
 
     if (statusClockEl) {
-        statusClockEl.title = data.tooltip;
+        if (statusClockEl.title !== data.tooltip) statusClockEl.title = data.tooltip;
         if (statusDateEl) {
-            statusDateEl.textContent = (currentClockMode === 'time') ? '' : data.shortDate;
-            statusDateEl.style.display = (currentClockMode === 'time') ? 'none' : 'inline-block';
+            if (statusDateEl.textContent !== dateText) statusDateEl.textContent = dateText;
+            if (statusDateEl.style.display !== dateDisplay) statusDateEl.style.display = dateDisplay;
         }
         if (statusTimeEl) {
-            statusTimeEl.textContent = (currentClockMode === 'seconds') ? data.fullTime : data.shortTime;
+            if (statusTimeEl.textContent !== timeText) statusTimeEl.textContent = timeText;
         }
     }
 
@@ -63,13 +66,13 @@ export function updateClockUI() {
     const sidebarTimeEl = document.getElementById('SidebarClockTime');
 
     if (sidebarClockEl) {
-        sidebarClockEl.title = data.tooltip;
+        if (sidebarClockEl.title !== data.tooltip) sidebarClockEl.title = data.tooltip;
         if (sidebarDateEl) {
-            sidebarDateEl.textContent = (currentClockMode === 'time') ? '' : data.shortDate;
-            sidebarDateEl.style.display = (currentClockMode === 'time') ? 'none' : 'inline-block';
+            if (sidebarDateEl.textContent !== dateText) sidebarDateEl.textContent = dateText;
+            if (sidebarDateEl.style.display !== dateDisplay) sidebarDateEl.style.display = dateDisplay;
         }
         if (sidebarTimeEl) {
-            sidebarTimeEl.textContent = (currentClockMode === 'seconds') ? data.fullTime : data.shortTime;
+            if (sidebarTimeEl.textContent !== timeText) sidebarTimeEl.textContent = timeText;
         }
     }
 }
@@ -102,6 +105,8 @@ export function setClockVisibility(visible) {
     if (sidebarClockEl) {
         sidebarClockEl.style.display = isClockEnabled ? 'flex' : 'none';
     }
+
+    if (isClockEnabled) updateClockUI();
 
     const toggleInput = document.getElementById('setting-clock-toggle');
     if (toggleInput) {

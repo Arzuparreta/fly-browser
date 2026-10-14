@@ -8,6 +8,7 @@ const crypto = require('crypto');
 const { app, ipcMain } = require('electron');
 
 let blockerInstance = null;
+let blockerInitialisation = null;
 let ipcInitialized = false;
 
 // Domains the user has explicitly marked as trusted (e.g. their bank, their
@@ -304,50 +305,42 @@ const GHOSTERY_IPC_CHANNELS = [
     '@ghostery/adblocker/cosmetic-filters'
 ];
 
-async function initialiseAdblocker(targetSession) {
-    if (!blockerInstance) {
-        try {
+// Sessions start together on a clean profile. Share the pending engine build so
+// they cannot download, deserialize and retain separate copies of the filter set.
+function getAdblocker() {
+    if (!blockerInitialisation) {
+        blockerInitialisation = (async () => {
             if (fs.existsSync(CACHE_PATH)) {
                 try {
-                    const buffer = fs.readFileSync(CACHE_PATH);
-                    blockerInstance = ElectronBlocker.deserialize(buffer);
-                } catch (deserializeErr) {
-                    // Cache file is corrupt or engine version mismatched; purge and rebuild
+                    blockerInstance = ElectronBlocker.deserialize(fs.readFileSync(CACHE_PATH));
+                } catch (_) {
                     console.warn('Adblocker cache version mismatch or corrupted file. Rebuilding cache...');
-                    if (fs.existsSync(CACHE_PATH)) {
-                        fs.unlinkSync(CACHE_PATH);
-                    }
-                    blockerInstance = await ElectronBlocker.fromPrebuiltAdsAndTracking();
-                    const buffer = blockerInstance.serialize();
-                    fs.writeFileSync(CACHE_PATH, buffer);
+                    fs.unlinkSync(CACHE_PATH);
                 }
-            } else {
-                blockerInstance = await ElectronBlocker.fromPrebuiltAdsAndTracking();
-                const buffer = blockerInstance.serialize();
-                fs.writeFileSync(CACHE_PATH, buffer);
             }
-        } catch (err) {
-            console.error('Failed to instantiate network filters:', err);
-            return;
-        }
-    }
-
-    try {
-        blockerInstance.updateFromDiff({
-            added: [
-                // '@@||youtube.com/youtubei/v1/log_event',
+            if (!blockerInstance) {
+                blockerInstance = await ElectronBlocker.fromPrebuiltAdsAndTracking();
+                fs.writeFileSync(CACHE_PATH, blockerInstance.serialize());
+            }
+            blockerInstance.updateFromDiff({added: [
                 'youtube.com#@#+js()',
                 'x.com#@#+js()',
                 'twitter.com#@#+js()'
-            ]
+            ]});
+            await applyTrustedDomainExceptions();
+            return blockerInstance;
+        })().catch(err => {
+            blockerInstance = null;
+            blockerInitialisation = null;
+            console.error('Failed to instantiate network filters:', err);
+            return null;
         });
-    } catch (err) {
-        console.warn('Failed to apply adblocker exception rules:', err);
     }
+    return blockerInitialisation;
+}
 
-    // Re-apply any user-configured trusted-domain exceptions (banking,
-    // shopping, etc.) now that the engine instance exists.
-    await applyTrustedDomainExceptions();
+async function initialiseAdblocker(targetSession) {
+    if (!await getAdblocker()) return;
 
     try {
         if (ipcInitialized) {

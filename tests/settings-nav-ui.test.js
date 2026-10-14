@@ -1,22 +1,25 @@
 const { _electron } = require(process.env.MISE_PLAYWRIGHT_MODULE || 'playwright');
 const fs = require('node:fs');
+const createElectronFixture = require('./electron-fixture');
 const os = require('node:os');
 const path = require('node:path');
 const assert = require('node:assert/strict');
 const root = path.resolve(__dirname, '..');
 (async () => {
     const temporary = fs.mkdtempSync(path.join(os.tmpdir(), 'mise-settings-nav-'));
-    const entry = path.join(temporary, 'start.cjs');
-    fs.writeFileSync(entry, `const {app}=require('electron'); app.setAppPath(${JSON.stringify(root)}); app.setPath('home',${JSON.stringify(temporary)}); app.setPath('userData',${JSON.stringify(path.join(temporary, 'data'))}); require(${JSON.stringify(path.join(root, 'main.js'))});`);
+    const entry = createElectronFixture(root, temporary);
+
     let application;
     try {
         application = await _electron.launch({executablePath: path.join(root, 'node_modules/electron/dist/electron'), args: ['--no-sandbox', '--disable-gpu', `--ozone-platform=${process.env.MISE_TEST_OZONE_PLATFORM || 'x11'}`, entry]});
         const page = await application.firstWindow();
         const errors = []; page.on('pageerror', error => errors.push(error.message));
-        await page.waitForFunction(() => !!window.executeBrowserAction && document.querySelectorAll('.keyboard-row').length > 0);
+        await page.waitForFunction(() => !!window.executeBrowserAction && document.getElementById('KeyboardStatus').textContent === 'All changes saved');
         const active = () => page.evaluate(() => document.activeElement.id);
         const visiblePanes = () => page.evaluate(() => [...document.querySelectorAll('.settings-pane')].filter(pane => pane.getClientRects().length).map(pane => pane.id));
         const extensionsPath = () => page.locator('#ExtensionsDirectoryPath').textContent();
+
+        assert.equal(await page.locator('.keyboard-row').count(), 0, 'Hidden keyboard rows must not be built at startup');
 
         // Opening focuses the selected index entry; exactly one pane is laid out.
         await page.locator('#menu-btn').focus();

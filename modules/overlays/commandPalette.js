@@ -1,5 +1,5 @@
 import { prepareOverlay } from '../focus.js';
-import { initialiseKeyboardEditor } from '../keyboardSettings.js';
+import { initialiseKeyboardEditor, showKeyboardEditor, hideKeyboardEditor } from '../keyboardSettings.js';
 import { initialiseSettingsNav, showSettingsPane, currentSettingsPane, clearSettingsSearch } from '../settingsNav.js';
 import { state } from '../state.js';
 import { focusActiveWebview, getActiveWebview, isTargetScript, isDarkMode, escapeHtml } from '../utils.js';
@@ -827,6 +827,7 @@ export async function syncPreferencesUI() {
 export function setupPreferencesListeners() {
     initialiseKeyboardEditor();
     initialiseSettingsNav(pane => {
+        if (pane === 'keyboard') showKeyboardEditor(); else hideKeyboardEditor();
         if (pane === 'extensions' && preferencesActive) syncExtensionsPreferences();
     });
     const closeBtn = document.getElementById('CloseSettingsBtn');
@@ -1064,11 +1065,13 @@ export async function togglePreferencesView() {
         prepareOverlay('PreferencesOverlay');
 
         overlay.style.display = 'block';
+        if (currentSettingsPane() === 'keyboard') showKeyboardEditor();
         const tab = document.querySelector('#SettingsIndex [aria-selected="true"]');
         (tab || overlay).focus({preventScroll: true});
         await syncPreferencesUI();
     } else {
         overlay.style.display = 'none';
+        hideKeyboardEditor();
         clearSettingsSearch();
         returnFocusToWebview();
     }

@@ -1,5 +1,6 @@
 const { _electron } = require(process.env.MISE_PLAYWRIGHT_MODULE || 'playwright');
 const fs = require('node:fs');
+const createElectronFixture = require('./electron-fixture');
 const os = require('node:os');
 const path = require('node:path');
 const http = require('node:http');
@@ -8,8 +9,8 @@ const root = path.resolve(__dirname, '..');
 
 (async () => {
     const temporary = fs.mkdtempSync(path.join(os.tmpdir(), 'mise-navigation-focus-'));
-    const entry = path.join(temporary, 'start.cjs');
-    fs.writeFileSync(entry, `const {app}=require('electron'); app.setAppPath(${JSON.stringify(root)}); app.setPath('home',${JSON.stringify(temporary)}); app.setPath('userData',${JSON.stringify(path.join(temporary, 'data'))}); require(${JSON.stringify(path.join(root, 'main.js'))});`);
+    const entry = createElectronFixture(root, temporary);
+
     const server = http.createServer((request, response) => {
         const url = new URL(request.url, 'http://localhost');
         const send = () => {
