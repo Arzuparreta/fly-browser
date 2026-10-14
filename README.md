@@ -43,7 +43,15 @@ Security, isolation, and upstream dependency freshness are foundational principl
 
 ## Downloads
 
-On Arch Linux and its derivatives, install [`fly-browser-bin`](https://aur.archlinux.org/packages/fly-browser-bin) from the AUR (`paru -S fly-browser-bin`): it adds Fly to your application launcher and updates with the rest of the system.
+On Arch Linux and its derivatives, install the `fly-browser-bin` package from the release's `PKGBUILD`. It adds Fly to your application launcher:
+
+```bash
+mkdir fly-browser-bin && cd fly-browser-bin
+curl -LO https://github.com/Arzuparreta/fly-browser/releases/latest/download/PKGBUILD
+makepkg -si
+```
+
+The package is going to the AUR, where it will update with the rest of the system, as soon as AUR registration reopens.
 
 Every release also publishes Linux (AppImage, tar.gz), macOS and Windows packages with SHA-256 checksums on the [Releases page](https://github.com/Arzuparreta/fly-browser/releases).
 

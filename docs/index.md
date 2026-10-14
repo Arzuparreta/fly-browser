@@ -40,7 +40,7 @@ features:
   - title: History & Bookmarks
     details: Actionable history overlay (Ctrl + Shift + H), structured bookmarks and single-key quickmarks built right into the interface.
   - title: Distro-Agnostic & Zero Telemetry
-    details: An AUR package for Arch and a distro-agnostic AppImage for everything else. Zero telemetry, zero usage tracking, and anonymous GitHub release notifications for effortless updates.
+    details: An Arch package and a distro-agnostic AppImage for everything else. Zero telemetry, zero usage tracking, and anonymous GitHub release notifications for effortless updates.
 ---
 
 ![Fly Browser Dual-Split View](/screenshots/split-view.webp)
@@ -78,10 +78,12 @@ Keep your hands on the home row. Every major workflow is reachable via concise, 
 
 ## Quick Start on Linux
 
-On Arch Linux and its derivatives (CachyOS, EndeavourOS, Manjaro), install it from the AUR:
+On Arch Linux and its derivatives (CachyOS, EndeavourOS, Manjaro), build the `fly-browser-bin` package from the release's `PKGBUILD` (it moves to the AUR once AUR registration reopens):
 
 ```bash
-paru -S fly-browser-bin   # or: yay -S fly-browser-bin
+mkdir fly-browser-bin && cd fly-browser-bin
+curl -LO https://github.com/Arzuparreta/fly-browser/releases/latest/download/PKGBUILD
+makepkg -si
 ```
 
 On any other distribution, download the self-contained AppImage from GitHub Releases and run it:

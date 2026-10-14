@@ -82,9 +82,29 @@ The Linux packages carry the desktop entry and the theme icons in `resources/` (
 
 ## The AUR package
 
-Once a stable release is published, `release.yml` calls `aur.yml`, which writes `fly-browser-bin`'s `PKGBUILD` and `.SRCINFO` with `scripts/aur.js` and pushes them to the AUR. Both are generated from the version in `package.json` and the tarball's line in `SHA256SUMS.txt`, so nothing is edited per release. Release candidates are not published there.
+Once a stable release is published, `release.yml` calls `aur.yml`, which writes `fly-browser-bin`'s `PKGBUILD` and `.SRCINFO` with `scripts/aur.js`, attaches the `PKGBUILD` to the release (so Arch users can `makepkg -si` it without the AUR) and pushes both to the AUR. Both are generated from the version in `package.json` and the tarball's line in `SHA256SUMS.txt`, so nothing is edited per release. Release candidates are not published there.
 
-Pushing needs the `AUR_SSH_PRIVATE_KEY` repository secret, whose public half is registered to the AUR account that maintains the package. Without the secret the job warns and succeeds, so a release is never held back by the AUR.
+Pushing needs the `AUR_SSH_PRIVATE_KEY` repository secret, whose public half is registered to the AUR account that maintains the package, and the `AUR_PUBLISH` repository variable set to `true`. Until the variable is set, the job writes the package, notes that it was not pushed and succeeds, so a release is never held back or marked failed by the AUR. Once it is set, a failed push fails the job, because something has broken.
+
+### Activating the AUR package
+
+The secret is already set; the package goes live once the account exists. AUR registration was paused when this was set up (October 2026); it is announced on aur-general and the Arch news feed when it reopens.
+
+1. Register at <https://aur.archlinux.org/register>.
+2. In **My Account → SSH Public Key**, add the release workflow's key:
+
+   ```
+   ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIMngmlcK3MfT93rjMMQ72gopn2PSJlqginRVwLgWBMws fly-browser release workflow (AUR)
+   ```
+
+3. Turn publishing on and publish the current release:
+
+   ```bash
+   gh variable set AUR_PUBLISH --body true
+   gh workflow run aur.yml -f tag="$(gh release view --json tagName -q .tagName)"
+   ```
+
+The first push creates `fly-browser-bin` on the AUR. If the name has been taken in the meantime, change `PKGNAME` in `scripts/aur.js`. If the key is ever lost, generate a new one with `ssh-keygen -t ed25519`, store the private half with `gh secret set AUR_SSH_PRIVATE_KEY`, and register the public half instead of the one above.
 
 To publish a release again, for example after the secret was added or when only the packaging changed, dispatch the workflow: `gh workflow run aur.yml -f tag=vX.Y.Z`, adding `-f pkgrel=2` (and so on) when the version is already on the AUR.
 
