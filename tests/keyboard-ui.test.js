@@ -22,6 +22,7 @@ const root = path.resolve(__dirname, '..');
   await page.keyboard.press('Control+h');
   await page.locator('#PreferencesOverlay').waitFor({state:'visible'});
   assert.equal(await page.locator('#OpenKeyboardSettings').count(), 0);
+  await page.locator('#SettingsTab-keyboard').click();
   await page.locator('#KeyboardSearch').fill('workspace dashboard');
   assert.equal(await page.locator('.keyboard-row details').count(), 2);
   assert.match(await page.locator('details[data-keyboard-section=shortcuts] summary').textContent(), /Ctrl\+Shift\+W/);
@@ -136,31 +137,40 @@ const root = path.resolve(__dirname, '..');
   await page.evaluate(() => window.executeBrowserAction('open-extension-actions'));
   await page.locator('#CommandPaletteOverlay').waitFor({state:'visible'});
   await page.keyboard.press('Escape');
+  // waitForFunction does not await async predicates, so guest state is polled from here.
+  const until = async (check, message) => {
+   for (let attempt = 0; attempt < 250; attempt++) { if (await check().catch(() => false)) return; await page.waitForTimeout(20); }
+   throw new Error(message);
+  };
+  const activeScript = script => page.evaluate(script => [...document.querySelectorAll('webview')].find(view => view.getClientRects().length).executeJavaScript(script), script);
+  // Clicking a webview moves host focus to it asynchronously; keys sent earlier reach the host body.
+  const clickGuest = async position => {
+   await page.locator('webview:visible').click({position});
+   await page.waitForFunction(() => document.activeElement.tagName === 'WEBVIEW');
+  };
   // Repeated close keys remain available after a tab closes, and on sidebar controls.
   for (let count = 1; count <= 4; count++) {
    await page.evaluate(url => window.executeBrowserAction('spawn-tab-with-url', url), fixture);
    await page.waitForFunction(count => document.querySelectorAll('#TabList li').length === count, count);
-   await page.waitForFunction(async () => {
+   await until(() => page.evaluate(() => {
     const view = [...document.querySelectorAll('webview')].find(view => view.getClientRects().length);
-    return view && !view.isLoading() && await view.executeJavaScript('!!document.getElementById("text")');
-   });
+    return view && !view.isLoading() && view.executeJavaScript('!!document.getElementById("text")');
+   }), 'Fixture tab did not load');
   }
-  const activeScript = script => page.evaluate(script => [...document.querySelectorAll('webview')].find(view => view.getClientRects().length).executeJavaScript(script), script);
   // A custom element containing "text" in its name is not itself a text field.
-  await page.locator('webview:visible').click({position:{x:350,y:350}});
+  await clickGuest({x:350,y:350});
   await activeScript('document.getElementById("noneditable").focus()');
   await page.keyboard.press('x');
   await page.waitForFunction(() => document.querySelectorAll('#TabList li').length === 3);
-  await page.waitForFunction(async () => {
-   const view = [...document.querySelectorAll('webview')].find(view => view.getClientRects().length);
-   return view && await view.executeJavaScript('document.hasFocus()');
-  });
-  await page.locator('webview:visible').click({position:{x:350,y:350}});
-  await page.locator('webview:visible').click({position:{x:280,y:20}});
+  await until(() => activeScript('document.hasFocus()'), 'The next tab did not receive focus');
+  await clickGuest({x:350,y:350});
+  await clickGuest({x:280,y:20});
+  await until(() => activeScript('document.activeElement.id === "text"'), 'The fixture field did not receive focus');
   await page.keyboard.press('x');
+  await until(async () => await activeScript('document.getElementById("text").value') === 'x', 'Typing x must edit the field');
   assert.equal(await page.locator('#TabList li').count(), 3);
-  assert.equal(await activeScript('document.getElementById("text").value'), 'x');
   await page.keyboard.press('Escape');
+  await page.waitForFunction(() => document.getElementById('StatusBarMode').textContent === 'NORMAL');
   await page.keyboard.press('x');
   await page.waitForFunction(() => document.querySelectorAll('#TabList li').length === 2);
   await page.locator('#menu-btn').focus();

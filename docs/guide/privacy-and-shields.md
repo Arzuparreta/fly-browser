@@ -37,7 +37,7 @@ Mise actively protects against passive browser fingerprinting:
 
 ## Trusted Sites (Online Banking & Shopping)
 
-![Privacy and Trusted Sites Configuration](/screenshots/preferences-3.webp)
+![Preferences Privacy and security section with trusted sites](/screenshots/preferences-3.webp)
 
 Modern online banks, Google authentication, and e-commerce sites (such as Amazon or checkout payment gateways) employ sophisticated anti-fraud algorithms. When a browser randomises fingerprints, alters user-agent client hints, or strips verification headers, fraud systems flag the session as suspicious and block logins or payments.
 
@@ -47,7 +47,7 @@ Mise resolves this through the **Trusted Sites** architecture:
   - **Shield Active (Half Shield)**: Full protection, tracker blocking, and strict isolation are active.
   - **Shield Down (Full Shield)**: The domain is in your Trusted Sites list. Fraud detection signals are kept intact to ensure seamless logins and payment processing.
 - **One-Click Whitelisting**: Click the shield icon in any sidebar tab to toggle trust status for that domain immediately. Mise updates your configuration and reloads the tab.
-- **Managing Trusted Domains**: In Preferences (**Ctrl + H**), open the **Trusted Sites** text area. Enter one domain per line (e.g. `amazon.co.uk`, `accounts.google.com`). All subdomains are covered automatically without requiring a browser restart.
+- **Managing Trusted Domains**: In Preferences (**Ctrl + H**), select **Privacy & security** in the section index and use the **Trusted sites** text area. Enter one domain per line (e.g. `amazon.co.uk`, `accounts.google.com`). All subdomains are covered automatically without requiring a browser restart.
 
 ---
 
@@ -55,6 +55,6 @@ Mise resolves this through the **Trusted Sites** architecture:
 
 When debugging web applications or purging lingering sessions:
 
-1. Open **Preferences** (**Ctrl + H**) and navigate to **Privacy & Protection**.
+1. Open **Preferences** (**Ctrl + H**) and select **Privacy & security** in the section index.
 2. **Clear Site Cookies**: Surgically deletes cookies specifically matching the active tab's domain without logging you out of unrelated sites in other tabs.
 3. **Clear Cache**: Flushes the local Chromium disk and memory cache.

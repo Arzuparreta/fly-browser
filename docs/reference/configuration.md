@@ -55,7 +55,7 @@ Controls hardware switches, process limits, privacy whitelists, and search prefe
 
 ### Options Description
 
-![Performance and Hardware Preferences](/screenshots/preferences-1.webp)
+![Preferences Performance section](/screenshots/preferences-1.webp)
 
 - **`disable_gpu`**: Set to `true` to disable hardware GPU acceleration on systems with problematic graphics drivers.
 - **`background_throttling`**: Throttles timers and delays tasks in background tabs to conserve CPU cycles.
@@ -71,7 +71,7 @@ Controls hardware switches, process limits, privacy whitelists, and search prefe
 - **`webview_theme`**: Website native theme preference (`dark` or `light`), toggled via the sidebar theme button.
 - **`theme_colors`**: Custom visual colour palette and opacity settings per theme mode:
 
-![Appearance and Visual Theme Preferences](/screenshots/preferences-2.webp)
+![Preferences Appearance section](/screenshots/preferences-2.webp)
   - **`accent`**: Primary highlight colour for active tabs, borders, and controls (defaults to `#7aa2f7` in dark, `#2b59c3` in light).
   - **`bg_main`**: Base window and modal canvas background colour.
   - **`bg_sidebar`**: Vertical sidebar background colour.
@@ -87,7 +87,7 @@ Controls hardware switches, process limits, privacy whitelists, and search prefe
 
 ## 2. Keybindings Map (`keybinds.json`)
 
-Version 2 stores separate `shortcuts` and `normal` tables for browser chords and Vim-style page keys. Use **Preferences → Keyboard controls** to record, validate and save bindings without editing the file. See the [Keyboard Shortcuts Reference](/reference/keybinds) for the complete list of action names.
+Version 2 stores separate `shortcuts` and `normal` tables for browser chords and Vim-style page keys. Use **Preferences → Keyboard** to record, validate and save bindings without editing the file. See the [Keyboard Shortcuts Reference](/reference/keybinds) for the complete list of action names.
 
 ---
 

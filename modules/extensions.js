@@ -379,15 +379,7 @@ function openExtensionOptions(info) {
 // PREFERENCES
 
 function openExtensionsPreferences() {
-    const overlay = document.getElementById('PreferencesOverlay');
-    const isOpen = overlay && overlay.style.display !== 'none';
-    if (!isOpen && typeof window.togglePreferencesView === 'function') {
-        window.togglePreferencesView();
-    }
-    setTimeout(() => {
-        const section = document.getElementById('ExtensionsSettingsSection');
-        if (section) section.scrollIntoView({ block: 'start' });
-    }, 50);
+    if (typeof window.openPreferencesPane === 'function') window.openPreferencesPane('extensions');
 }
 
 function formatMb(value) {

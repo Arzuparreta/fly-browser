@@ -60,6 +60,7 @@ import {
     openCommandPalette,
     closeCommandPalette,
     togglePreferencesView,
+    openPreferencesPane,
     filterPaletteCommands, 
     updatePaletteVisualSelection, 
     handlePaletteInputNavigation, 
@@ -174,6 +175,7 @@ window.toggleInterfaceTheme = toggleInterfaceTheme;
 window.toggleWebviewTheme = toggleWebviewTheme;
 window.applyThemeVisuals = applyThemeVisuals;
 window.togglePreferencesView = togglePreferencesView;
+window.openPreferencesPane = openPreferencesPane;
 window.toggleHistoryOverlay = toggleHistoryOverlay;
 window.handlePrivateBrowsingStateShift = handlePrivateBrowsingStateShift;
 window.executeSurgicalCookieWipe = executeSurgicalCookieWipe;
@@ -258,11 +260,7 @@ export function displayUpdateNotification(updateInfo) {
     if (sidebarIndicator) {
         sidebarIndicator.style.display = 'inline-flex';
         sidebarIndicator.title = `Mise ${updateInfo.latestVersion} available. Click to review release.`;
-        sidebarIndicator.onclick = () => {
-            if (typeof window.togglePreferencesView === 'function') {
-                window.togglePreferencesView();
-            }
-        };
+        sidebarIndicator.onclick = () => openPreferencesPane('about');
     }
 }
 
@@ -664,8 +662,7 @@ function setupEventListeners() {
             case 'toggle-help': togglePreferencesView(); break;
             case 'open-keyboard-settings':
                 (async () => {
-                    if (!state.preferencesActive) await togglePreferencesView();
-                    document.getElementById('KeyboardEditor').scrollIntoView({block: 'start'});
+                    await openPreferencesPane('keyboard');
                     document.getElementById('KeyboardSearch').focus({preventScroll: true});
                 })(); break;
             case 'toggle-history': toggleHistoryOverlay(); break;

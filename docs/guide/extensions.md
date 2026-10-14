@@ -22,7 +22,7 @@ For the few extensions that have no userscript equivalent, Mise can load **unpac
        ├── manifest.json
        └── ...
    ```
-3. Open **Preferences** (`Ctrl + H`) and scroll to **Extensions**, or run *Extension Settings* from the Command Palette.
+3. Open **Preferences** (`Ctrl + H`) and select **Extensions** in the section index, or run *Extension Settings* from the Command Palette. The installed list and usage figures are scanned only while this section is shown.
 4. Turn on **Enable Chrome Extensions**, then tick the workspaces the extension may run in.
 
 Tabs that were already open in that workspace need a reload before content scripts appear in them. New tabs get the extension immediately.
@@ -53,7 +53,7 @@ Popups render inside the Mise window rather than as separate windows, so they be
 
 ## What It Costs
 
-Preferences shows live numbers for your machine under **Live Resource Usage**. As a rule of thumb, the cost depends on the extension type, which Preferences labels for each extension:
+Preferences shows live numbers for your machine under **Live resource usage**. As a rule of thumb, the cost depends on the extension type, which Preferences labels for each extension:
 
 | Label | What runs | Cost |
 | :--- | :--- | :--- |

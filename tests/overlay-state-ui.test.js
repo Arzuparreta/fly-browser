@@ -147,7 +147,12 @@ const root = path.resolve(__dirname, '..');
                     button.classList.contains('pin-active') === pinned &&
                     button.getAttribute('aria-pressed') === String(pinned);
             }, pinned);
-            await page.waitForFunction(async pinned => (await window.miseAPI.getBrowserSettings()).sidebar_auto_collapse === !pinned, pinned);
+            // waitForFunction does not await async predicates, so the saved setting is polled here.
+            for (let attempt = 0; ; attempt++) {
+                if ((await page.evaluate(() => window.miseAPI.getBrowserSettings())).sidebar_auto_collapse === !pinned) break;
+                if (attempt === 150) throw new Error('Sidebar pin setting was not saved');
+                await page.waitForTimeout(20);
+            }
         };
         const moveToContent = async () => {
             // A host content target gives CDP a real pointer exit from the sidebar.
