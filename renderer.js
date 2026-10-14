@@ -1,5 +1,6 @@
 import { openWorkspaceMoveDialog } from './modules/tabActions.js';
 import { initialiseOverlayFocus, initialiseSidebarPointerFocus, prepareOverlay, hasActiveOverlay } from './modules/focus.js';
+import { focusSettingsSearch } from './modules/settingsNav.js';
 import { state } from './modules/state.js';
 import { 
     isDarkMode, 
@@ -8,6 +9,7 @@ import {
     isTargetScript, 
     getActiveWebview, 
     focusActiveWebview,
+    removeWebview,
     isTargetPrivateDomain 
 } from './modules/utils.js';
 import { 
@@ -621,7 +623,8 @@ function setupEventListeners() {
             case 'toggle-bookmarks': toggleBookmarksOverlay(); break;
             case 'toggle-notes': toggleNotesOverlay(); break;
             case 'toggle-downloads': toggleDownloadShelf(); break;
-            case 'toggle-find': toggleInPageSearch(); break;
+            // Inside Preferences, find searches the settings rather than the page behind them.
+            case 'toggle-find': if (state.preferencesActive) focusSettingsSearch(); else toggleInPageSearch(); break;
             case 'remove-tab': handleTabRemoval(); break;
             case 'toggle-zen-mode':
             case 'toggle-sidebar-pin': toggleSidebarPin(); break;
@@ -831,11 +834,25 @@ function setupEventListeners() {
     window.miseAPI.getKeyboardConfig().then(applyKeyboardConfig);
     window.miseAPI.onKeyboardConfigChanged(applyKeyboardConfig);
     window.addEventListener('keydown', event => {
+        // A key reaching the host body while a page owns focus means Chromium's focus routing
+        // diverged from the DOM. Resync so later keys reach the page. A character typed into a
+        // page field is delivered there; other keys continue below, where the page's reported
+        // mode still protects its text fields.
+        if (event.isTrusted && event.target === document.body && document.activeElement?.tagName === 'WEBVIEW') {
+            const view = document.activeElement;
+            view.blur(); view.focus();
+            if (view.__miseKeyboardMode?.input && !view.__miseKeyboardMode.hints && event.key.length === 1 && !event.ctrlKey && !event.altKey && !event.metaKey && !event.isComposing) {
+                event.preventDefault(); event.stopImmediatePropagation();
+                view.insertText(event.key).catch(() => {});
+                return;
+            }
+        }
         if (document.querySelector('dialog[open]') || !event.isTrusted || event.isComposing || event.defaultPrevented || state.awaitingQuickmarkKey) return;
         if (event.key === 'Escape' && addressBar.style.display === 'block') {
             event.preventDefault(); event.stopImmediatePropagation(); displayAddressOverlay(); return;
         }
-        if (event.key === 'Escape' && state.preferencesActive) {
+        // A non-empty settings search clears itself before Escape closes Preferences.
+        if (event.key === 'Escape' && state.preferencesActive && !(event.target.id === 'SettingsSearch' && event.target.value)) {
             event.preventDefault(); event.stopImmediatePropagation(); togglePreferencesView(); return;
         }
         const combo = window.MiseKeyboard.eventCombo(event);
@@ -1111,7 +1128,7 @@ function handlePrivateBrowsingStateShift(isPrivate) {
     
     const currentWS = state.sessionState.current_workspace;
     if (state.activeViewsCache[currentWS]) {
-        state.activeViewsCache[currentWS].forEach(wv => { if (wv) wv.remove(); });
+        state.activeViewsCache[currentWS].forEach(removeWebview);
         state.activeViewsCache[currentWS] = [];
     }
     

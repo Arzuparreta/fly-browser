@@ -14,6 +14,22 @@ function refreshButtons() {
     if (!validation.ok) status(validation.error);
     else status(dirty() ? 'Unsaved changes' : saved.warning || 'All changes saved');
 }
+function matchesQuery(id, info, query) {
+    if (!query) return true;
+    const allBindings = Object.keys(sections).flatMap(section => (draft[section][id] || []).map(binding => keyboard.display(binding, section)));
+    return `${info.label} ${info.category} ${id} ${allBindings.join(' ')}`.toLowerCase().includes(query);
+}
+// Used by the Preferences search to report matching actions without rendering them.
+export function keyboardMatchCount(query) {
+    if (!draft) return 0;
+    query = query.toLowerCase().trim();
+    return Object.entries(metadata).filter(([id, info]) => matchesQuery(id, info, query)).length;
+}
+export function filterKeyboardActions(query) {
+    el('KeyboardSearch').value = query;
+    el('KeyboardModified').checked = false;
+    render();
+}
 function render() {
     if (!draft) return;
     const query = el('KeyboardSearch').value.toLowerCase().trim();
@@ -23,8 +39,7 @@ function render() {
     let count = 0;
     for (const [id, info] of Object.entries(metadata).sort((a, b) => a[1].category.localeCompare(b[1].category) || a[1].label.localeCompare(b[1].label))) {
         const modified = Object.keys(sections).some(section => JSON.stringify(draft[section][id]) !== JSON.stringify(defaults[section][id]));
-        const allBindings = Object.keys(sections).flatMap(section => (draft[section][id] || []).map(binding => keyboard.display(binding, section)));
-        if (modifiedOnly && !modified || query && !`${info.label} ${info.category} ${id} ${allBindings.join(' ')}`.toLowerCase().includes(query)) continue;
+        if (modifiedOnly && !modified || !matchesQuery(id, info, query)) continue;
         count++;
         const row = document.createElement('div'); row.className = 'keyboard-row';
         const description = document.createElement('div');

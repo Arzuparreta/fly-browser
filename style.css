@@ -1287,6 +1287,93 @@ webview {
     color: var(--text);
 }
 
+/* Settings search: filters every section in place. */
+.settings-search {
+    position: relative;
+    display: flex;
+    align-items: center;
+    margin: 0 2px;
+}
+
+.settings-search i {
+    position: absolute;
+    left: 9px;
+    font-size: 11px;
+    opacity: 0.5;
+    pointer-events: none;
+}
+
+.settings-search input {
+    width: 100%;
+    padding: 6px 8px 6px 27px;
+    background-color: var(--bg-main);
+    color: var(--text);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    outline: none;
+    font: inherit;
+    font-size: 12px;
+    user-select: text;
+}
+
+.settings-search input:focus {
+    border-color: var(--accent);
+}
+
+.settings-index.searching [role="tab"][aria-selected="true"] {
+    background-color: transparent;
+    color: var(--text);
+    font-weight: 400;
+    opacity: 0.78;
+}
+
+.settings-index.searching [role="tab"].no-match {
+    opacity: 0.35;
+}
+
+.settings-index [role="tab"][data-count]::after {
+    content: attr(data-count);
+    margin-left: auto;
+    font-size: 11px;
+    opacity: 0.6;
+}
+
+.settings-search-status {
+    max-width: 760px;
+    margin: 0 auto;
+    font-size: 12px;
+    opacity: 0.65;
+}
+
+.settings-content.searching .settings-search-status {
+    padding-top: 22px;
+}
+
+.settings-content:not(.searching) .settings-search-only,
+.settings-content.searching #KeyboardEditor,
+.settings-content.searching .settings-pane-header p,
+.settings-content [hidden] {
+    display: none !important;
+}
+
+.settings-content.searching .settings-pane {
+    max-width: 760px;
+    padding: 16px 0 4px;
+}
+
+.settings-content.searching .settings-pane-header {
+    margin-bottom: 8px;
+}
+
+.settings-content.searching .settings-pane-header h2 {
+    font-size: 15px;
+}
+
+::highlight(settings-search) {
+    background-color: color-mix(in srgb, var(--accent) 35%, transparent);
+    color: var(--text);
+}
+
 .settings-index {
     display: flex;
     flex-direction: column;
@@ -1330,6 +1417,9 @@ webview {
 }
 
 .settings-nav-hint {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 4px 10px;
     margin-top: auto;
     padding: 0 10px;
     font-size: 11px;
@@ -1445,7 +1535,8 @@ webview {
     padding: 9px 14px;
 }
 
-.setting-item + .setting-item {
+/* Hairlines follow the first visible row, so filtered cards keep clean edges. */
+.setting-item:not([hidden]) ~ .setting-item {
     border-top: 1px solid var(--border);
 }
 
@@ -1610,13 +1701,17 @@ webview {
     outline-offset: 2px;
 }
 
+/* Compact windows: icon index on the left, search across the top. */
 @media (max-width: 760px) {
-    .settings-shell { grid-template-columns: 52px minmax(0, 1fr); }
-    .settings-nav { padding: 14px 6px; }
-    .settings-nav-head { justify-content: center; padding: 0; }
+    .settings-shell { grid-template-columns: 52px minmax(0, 1fr); grid-template-rows: auto minmax(0, 1fr); }
+    .settings-nav { display: contents; }
+    .settings-nav-head, .settings-index { grid-column: 1; background-color: color-mix(in srgb, var(--bg-sidebar) var(--overlay-opacity, 100%), transparent); border-right: 1px solid var(--border); }
+    .settings-nav-head { grid-row: 1; justify-content: center; padding: 10px 0; }
+    .settings-search { grid-column: 2; grid-row: 1; margin: 10px 16px; }
+    .settings-index { grid-row: 2; padding: 6px; overflow-y: auto; }
+    .settings-content { grid-column: 2; grid-row: 2; padding: 0 16px; }
     .settings-title, .settings-nav-hint, .settings-index [role="tab"] span { display: none; }
     .settings-index [role="tab"] { justify-content: center; padding: 9px 0; }
-    .settings-content { padding: 0 16px; }
     .setting-item { flex-wrap: wrap; }
 }
 

@@ -25,7 +25,11 @@ export function transferTab(state, source, index, target, requestedIndex) {
         while (table[source].length < sourceCount) table[source].push(fallback);
         while (table[target].length < targetCount) table[target].push(fallback);
         const [value] = table[source].splice(index, 1);
-        if (field === 'activeViewsCache') value?.remove();
+        if (field === 'activeViewsCache' && value) {
+            // A focused guest must release focus before removal, or keys keep routing to it.
+            if (value.ownerDocument?.activeElement === value) value.blur();
+            value.remove();
+        }
         table[target].splice(destination, 0, field === 'activeViewsCache' ? null : value);
     }
     if (state.tabHistory?.[source]) state.tabHistory[source] = state.tabHistory[source].filter(i => i !== index).map(i => i > index ? i - 1 : i);

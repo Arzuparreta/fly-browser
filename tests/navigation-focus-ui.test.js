@@ -88,6 +88,8 @@ const root = path.resolve(__dirname, '..');
         await ready('slow');
         assert(await page.evaluate(() => document.getElementById('PreferencesOverlay').contains(document.activeElement)));
         await page.keyboard.press('Escape');
+        // Host and guest focus return asynchronously; keys sent before that reach the host.
+        await waitGuest(async () => { const state = await snapshot(); return state.host === 'WEBVIEW' && state.guest.focused; });
         await page.keyboard.press('f');
         await waitGuest(async () => (await snapshot()).guest.hints);
         await page.keyboard.press('Escape');
