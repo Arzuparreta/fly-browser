@@ -18,7 +18,13 @@ Comparison, reproduction, raw measurements, cost map and limits: [performance au
 
 | PERF-07 | Fork packaging defect: main.js requires the local extensions.js module even when extensions are disabled, but the explicit application file list omitted it. Source-tree performance tests did not cover that delivery path. | Include the local runtime module in packaged applications. This changes the package contents, not the measured source-runtime behaviour or extension defaults. | Build a Linux directory package using the installed Electron runtime, inspect its real ASAR contents and launch the packaged binary with a disposable home/config directory. |
 
-No default bindings, generated guest grammar or keyboard reference changes are needed. Optional extensions and visual effects are not enabled by the audit; no personal profile data is used. The measured parity conclusion applies to the documented workloads and platform, not every website or low-end machine.
+The subsequent upstream integration adds its Ctrl+1–9 defaults alongside the existing Alt+1–9 actions; the shared grammar is unchanged and the generated reference is updated. Optional extensions and visual effects are not enabled by the audit; no personal profile data is used. The measured parity conclusion applies to the documented workloads and platform, not every website or low-end machine.
+
+## Upstream navigation integration · 14 October 2026
+
+| ID | Original problem | Result | Validation |
+| :--- | :--- | :--- | :--- |
+| SYNC-03 | Main advanced to 2f8ca5f during the audit. Its tab-list key handler and documentation conflicted with personalised bindings and overlay focus management. Closing a cursor-highlighted sleeping tab could select a different page. Shared live/session metadata arrays were also spliced twice during close, losing sleep/pin entries and waking an unrelated tab. The incoming test prohibited existing Alt bindings and called a removed parser. | Integrate main before submission. Retain direct Ctrl+1–9 jumps and index badges; contextual sidebar actions use saved page assignments and preserve editable controls. Cursor movement never activates a tab. Closing a non-active highlighted tab preserves the active page. Remove each distinct metadata array entry exactly once in both dashboard and normal close paths. Keep Alt+9's last-tab action distinct from Ctrl+9's ninth-or-last action. | Validate the combined defaults and production jump function. Disposable-profile Electron checks sleeping cursor navigation, close-without-wake, activation, both shortcut families and badge cleanup. The full editor/editable-page suite covers the shared dispatch path. Documentation is regenerated from the merged catalogue. |
 
 ## Keyboard control and personalised bindings · 13 October 2026
 

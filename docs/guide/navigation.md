@@ -4,16 +4,16 @@ Mise Browser is built around a keyboard-driven workflow, enabling efficient navi
 
 ---
 
-## Link Hints Overlay (`Ctrl + F`)
+## Link Hints Overlay (`f`)
 
 Link Hints allow you to click any link, button, or input field on a web page using short letter combinations:
 
-1. Press **Ctrl + F** to trigger the hint labels.
+1. Press **f** in NORMAL mode to trigger the hint labels.
 2. Mise injects two-letter tags over every clickable element on the page, using an ergonomic left-hand home-cluster layout: `q, w, e, a, s, d, z, x, c, r, f, v`.
 3. Type the two letters corresponding to your target element:
    - Links navigate immediately.
    - Text inputs and search bars automatically receive focus for immediate typing.
-4. Press **Escape** or press **Ctrl + F** again to dismiss hints without clicking.
+4. Press **Escape** or press **f** again to dismiss hints without clicking.
 
 ---
 
@@ -120,7 +120,7 @@ To dedicate maximum horizontal screen real estate to web content, Mise features 
 
 * **Compact 36px Strip**: In its default collapsed state, the sidebar shrinks to a 36px icon bar displaying only your workspace badge and crisp tab favicons.
 * **Smooth Flyout on Hover**: Moving your mouse pointer over the 36px strip smoothly expands the sidebar to 260px as an overlay flyout with drop shadow. Because this expands as an overlay, the active webview never resizes, preventing GPU lag and page reflows on fanless hardware.
-* **Shortcut Expansion**: Press **Ctrl + Shift + Z** to pin or unpin the sidebar, using the same state as the pin button. Unpinning clears temporary expansion and sidebar focus; the sidebar shrinks to its 36px strip once the pointer leaves. Press **Ctrl + S** to expand the unpinned sidebar for keyboard navigation. Pressing **Escape** returns focus to the page.
+* **Shortcut Expansion**: Press **Ctrl + Shift + Z** to pin or unpin the sidebar, using the same state as the pin button. Unpinning clears temporary expansion and sidebar focus; the sidebar shrinks to its 36px strip once the pointer leaves. Press **Alt + S** to expand the unpinned sidebar for keyboard navigation. Pressing **Escape** returns focus to the page.
 * **Pinning**: Click the pin icon button at the bottom of the sidebar, toggle **Auto-collapse sidebar** in **Preferences → Appearance** (**Ctrl + H**), or run **Toggle Sidebar Expansion (Pin / Unpin)** in the Command Palette to pin the sidebar permanently open at 260px.
 
 ***
@@ -129,9 +129,9 @@ To dedicate maximum horizontal screen real estate to web content, Mise features 
 
 Mise maintains clean separation between sidebar navigation and active web page interaction:
 
-- **Ctrl + S**: Shifts keyboard focus to the vertical tab sidebar, smoothly expanding it. Use the **Up** and **Down** arrow keys (or `j` / `k`) to cycle through open tabs, and press **Enter** to switch to the highlighted tab.
-- **Ctrl + W**: Shifts keyboard focus directly into the active webview, automatically collapsing the sidebar back to the 36px strip.
-- **Ctrl + X**: Closes the currently active tab.
+- **Alt + S**: Shifts keyboard focus to the vertical tab sidebar, smoothly expanding it. Use the **Up** and **Down** arrow keys (or `j` / `k`) to cycle through open tabs, and press **Enter** to switch to the highlighted tab.
+- **Alt + W**: Shifts keyboard focus directly into the active webview, automatically collapsing the sidebar back to the 36px strip.
+- **Ctrl + W**: Closes the currently active tab.
 - **Ctrl + R**: Reloads the active tab.
 
 ***
@@ -150,7 +150,7 @@ Mise Browser provides a Vim-inspired modal navigation engine that frees you from
 | :--- | :--- | :--- |
 | `j` | Scroll Down | Smooth scroll down by 80px |
 | `k` | Scroll Up | Smooth scroll up by 80px |
-| `d` | Dark Reader | Toggles high-contrast dark theme on active tab |
+| `d` | Half Page Down | Scrolls down by half the viewport height |
 | `u` | Half Page Up | Smooth scroll up by half the viewport height |
 | `h` | Scroll Left | Smooth scroll left by 80px |
 | `l` | Scroll Right | Smooth scroll right by 80px |
@@ -174,8 +174,11 @@ Mise Browser provides a Vim-inspired modal navigation engine that frees you from
 
 ***
 
-## Workspace Badges & Favicons
+## Workspace Badges, Tab Jumping & Favicons
 
+* **Direct Tab Jumping**: Press **Ctrl + 1** through **Ctrl + 8** to jump straight to tabs 1 through 8 from anywhere, or **Ctrl + 9** to switch to the ninth tab (the last when fewer than nine exist). **Alt + 9** always selects the last tab. Alternatively, focus the sidebar (**Alt + S** or **s**) and type **1** through **9** to jump immediately without waking intermediate tabs.
+* **Dynamic Tab Number Badges**: Small index badges (`1` to `9`) appear over tab favicons whenever the sidebar has keyboard focus or the `Ctrl` key is held, showing the exact number to jump to.
+* **Non-Disruptive Sidebar Cursor Navigation**: Moving with **j** / **k** or **Down** / **Up** moves the cursor highlight across tabs without waking sleeping tabs into memory. Press **Enter**, **Space**, or **l** / **Right** to activate the highlighted tab.
 * **Workspace Badges**: The top of the strip displays a compact letter or number badge for the current workspace (such as `W1` or `P`). Clicking the workspace badge opens the Workspace Dashboard (**Ctrl + Shift + W**).
 * **Favicons & Indicators**: Each tab renders its website favicon with smart local and remote caching. Sleeping tabs display a subtle moon indicator, while tabs playing audio render a green audio badge.
 

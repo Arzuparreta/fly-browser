@@ -23,6 +23,7 @@ import {
     moveTabState,
     reopenClosedTab,
     clearClosedTabs,
+    jumpToTabByIndex,
     spawnNewBlankTab, 
     spawnTabWithUrl, 
     handleTabRemoval, 
@@ -651,6 +652,16 @@ function setupEventListeners() {
             case 'toggle-tab-audio-mute': toggleActiveTabAudioMute(); break;
             case 'toggle-global-audio-mute': toggleGlobalAudioMute(); break;
             case 'toggle-pin-tab': togglePinActiveTab(); break;
+            case 'jump-to-tab-1': jumpToTabByIndex(1); break;
+            case 'jump-to-tab-2': jumpToTabByIndex(2); break;
+            case 'jump-to-tab-3': jumpToTabByIndex(3); break;
+            case 'jump-to-tab-4': jumpToTabByIndex(4); break;
+            case 'jump-to-tab-5': jumpToTabByIndex(5); break;
+            case 'jump-to-tab-6': jumpToTabByIndex(6); break;
+            case 'jump-to-tab-7': jumpToTabByIndex(7); break;
+            case 'jump-to-tab-8': jumpToTabByIndex(8); break;
+            case 'jump-to-tab-9': jumpToTabByIndex(9); break;
+            case 'jump-to-tab': jumpToTabByIndex(args[0]); break;
             case 'toggle-split': toggleSplitView(); break;
             case 'switch-split-focus': switchSplitFocus(); break;
             case 'swap-split-panes': swapSplitPanes(); break;
@@ -872,6 +883,10 @@ function setupEventListeners() {
         }
         const combo = window.MiseKeyboard.eventCombo(event);
         let action = browserKeys.get(combo);
+        if (!action && !hasActiveOverlay() && !event.target.closest('input, textarea, select, [contenteditable], [role="textbox"], [role="searchbox"], [role="combobox"]') && document.getElementById('TabList').contains(event.target) &&
+            handleSidebarPageAction(pageKeys.get(combo))) {
+            event.preventDefault(); event.stopImmediatePropagation(); return;
+        }
         if (!action) {
             // Page bindings also work when browser navigation controls retain focus.
             const mode = getActiveWebview()?.__miseKeyboardMode || {};
@@ -974,54 +989,59 @@ function setupEventListeners() {
     });
 
     const tabListContainer = document.getElementById('TabList');
-    tabListContainer.addEventListener('keydown', (e) => {
-        if (state.dashboardActive || state.bookmarksActive || state.paletteActive || state.preferencesActive || state.historyActive || state.notesActive) return;
-        if (e.key === 'Escape') {
-            e.preventDefault();
-            const sidebar = document.getElementById('Sidebar');
-            if (sidebar) sidebar.classList.remove('expanded');
+    function handleSidebarPageAction(action) {
+        const item = document.activeElement?.closest('#TabList li');
+        if (!item) return false;
+        const items = [...tabListContainer.querySelectorAll('li')];
+        const index = items.indexOf(item);
+        if (action === 'scroll-down' || action === 'scroll-up') {
+            const next = index + (action === 'scroll-down' ? 1 : -1);
+            if (items[next]) {
+                items.forEach((tab, at) => { tab.tabIndex = at === next ? 0 : -1; });
+                items[next].focus();
+            } else document.getElementById(next < 0 ? 'back-btn' : 'pin-sidebar-btn')?.focus();
+        } else if (action === 'scroll-left') {
+            document.getElementById('back-btn')?.focus();
+        } else if (action === 'scroll-right' || action === 'enter-insert') {
+            switchTabFocus(index);
+            focusActiveWebview();
+        } else if (action === 'remove-tab') {
+            handleTabRemoval(index);
+            const remaining = tabListContainer.querySelectorAll('li');
+            remaining[Math.min(index, remaining.length - 1)]?.focus();
+        } else if (action === 'yank-url') {
+            const url = state.sessionState.workspaces[state.sessionState.current_workspace]?.[index];
+            if (url) { navigator.clipboard.writeText(url).catch(() => {}); setTargetUrl(`Yanked URL to clipboard: ${url}`, 2500); }
+        } else return false;
+        return true;
+    }
+    tabListContainer.addEventListener('keydown', event => {
+        if (hasActiveOverlay() || event.target.closest('input, textarea, select, [contenteditable]')) return;
+        if (event.target.tagName === 'BUTTON' && (event.key === 'Enter' || event.key === ' ')) return;
+        if (event.key === 'Escape') {
+            event.preventDefault();
+            document.getElementById('Sidebar').classList.remove('expanded');
             focusActiveWebview();
             return;
         }
-
-        if (e.target.tagName === 'BUTTON' && (e.key === 'Enter' || e.key === ' ')) return;
-        if (e.key === 'Enter' && e.target.tagName === 'LI') { e.preventDefault(); e.target.click(); focusActiveWebview(); return; }
-        if (e.key === 'Delete' && e.target.tagName === 'LI') { e.preventDefault(); handleTabRemoval(); return; }
-        const tabItems = Array.from(document.querySelectorAll('#TabList li'));
-        const activeListItem = document.querySelector('#TabList li.selected');
-        let currentIdx = tabItems.indexOf(activeListItem);
-
-        if (e.key === 'ArrowDown') {
-            e.preventDefault();
-            if (currentIdx < tabItems.length - 1) {
-                currentIdx++;
-                switchTabFocus(currentIdx);
-                document.querySelectorAll('#TabList li')[currentIdx].focus();
-            } else {
-                const pinBtn = document.getElementById('pin-sidebar-btn');
-                if (pinBtn) pinBtn.focus();
-            }
-        } else if (e.key === 'ArrowUp') {
-            e.preventDefault();
-            if (currentIdx > 0) {
-                currentIdx--;
-                switchTabFocus(currentIdx);
-                document.querySelectorAll('#TabList li')[currentIdx].focus();
-            } else {
-                const backBtn = document.getElementById('back-btn') || document.getElementById('toggle-nav-btn');
-                if (backBtn) backBtn.focus();
-            }
-        } else if (e.key === 'ArrowLeft') {
-            e.preventDefault();
-            const backBtn = document.getElementById('back-btn') || document.getElementById('toggle-nav-btn');
-            if (backBtn) backBtn.focus();
-        } else if (e.key === 'ArrowRight') {
-            e.preventDefault();
-            focusActiveWebview();
+        const item = event.target.closest('li');
+        const items = [...tabListContainer.querySelectorAll('li')];
+        if (!item) return;
+        const index = items.indexOf(item);
+        const structural = {ArrowDown: 'scroll-down', ArrowUp: 'scroll-up', ArrowLeft: 'scroll-left', ArrowRight: 'scroll-right', Delete: 'remove-tab'}[event.key];
+        if (structural && handleSidebarPageAction(structural)) event.preventDefault();
+        else if (event.key === 'Enter' || event.key === ' ') { event.preventDefault(); switchTabFocus(index); }
+        else if (!event.ctrlKey && !event.altKey && !event.metaKey && !event.shiftKey && /^[1-9]$/.test(event.key)) {
+            event.preventDefault(); jumpToTabByIndex(Number(event.key));
         }
-
     });
-
+    window.addEventListener('keydown', event => {
+        if (event.key === 'Control') document.body.classList.add('show-tab-badges');
+    });
+    window.addEventListener('keyup', event => {
+        if (event.key === 'Control') document.body.classList.remove('show-tab-badges');
+    });
+    window.addEventListener('blur', () => document.body.classList.remove('show-tab-badges'));
 
     const findInput = document.getElementById('FindInput');
     if (findInput) {
