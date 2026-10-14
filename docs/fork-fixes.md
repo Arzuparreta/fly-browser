@@ -255,3 +255,14 @@ Upstream commits: `247bb2f` (notes), `392dc04` and `58ea3ca` (the already-presen
 Final validation: `npm test`, documentation build, changed JavaScript syntax checks and `git diff --check` passed. Linux/X11 Electron keyboard suite (including recorder/editable-page checks), overlay, sidebar pointer, Preferences and tab-close typing suites passed. Preferences checks include saving both new options, searching them and a 700px layout. The full UI command stopped twice at `tests/navigation-focus-ui.test.js:94` because hints did not appear after closing Preferences on a slow result. An isolated baseline extracted from unchanged `personal` fails at the same line, so this remains an inherited desktop limitation rather than a passing check. The preceding address-search focus scenarios passed on both revisions.
 
 An initial compact-layout rerun placed the Add alias button beside the hover sidebar, which covered it during pointer activation. Aligning the action at the end of its row keeps it accessible at 700px.
+
+
+## Inline sidebar update notice · 14 October 2026
+
+| ID | Original behaviour | Fix | Validation |
+| --- | --- | --- | --- |
+| UX-20 | The inherited update action was positioned absolutely above the footer, overlapping the date/time badge when a release was available. | Put the clock and update action in one flex row. The clock yields width only when the update button is visible; keep both vertically centred with a gap. Keep the time on one line and truncate a date only when necessary. The clock fills the row again without an update, and the update remains available when the clock is disabled. Preserve footer and pin geometry, collapsed visibility and the About action. | Disposable-profile Electron footer regression checks width recovery, non-overlap, vertical centres, all three clock formats, clock visibility, collapsed/expanded/pinned states and keyboard opening of About. |
+
+Default bindings, guest grammar and the keyboard reference are unchanged and drift-checked. Final validation: `npm test`, the disposable-profile Electron footer regression, the keyboard suite (recorder and editable-page behaviour), documentation build, test syntax and `git diff --check` passed on Linux/X11. Screenshot reviewed with the update beside the clock. Wayland and other operating systems remain unverified.
+
+Initial live runs were interrupted while stalled in setup. Geometry assertions then sampled the clock and its contents in different frames during sidebar expansion, and compared a rounded transition width exactly. The fixture now waits for pinned expansion, samples all rectangles in one frame and allows subpixel rounding when comparing restored width. Final sequential desktop checks pass; no product geometry failure remains.

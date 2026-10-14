@@ -15,6 +15,9 @@ const root = path.resolve(__dirname, '..');
     try {
         application = await _electron.launch({executablePath: path.join(root, 'node_modules/electron/dist/electron'), args: ['--no-sandbox', '--disable-gpu', `--ozone-platform=${process.env.MISE_TEST_OZONE_PLATFORM || 'x11'}`, entry]});
         const page = await application.firstWindow();
+        page.setDefaultTimeout(10000);
+        page.setDefaultNavigationTimeout(10000);
+        await page.bringToFront();
         const errors = []; page.on('pageerror', error => errors.push(error.message));
         await page.waitForFunction(() => !!window.executeBrowserAction);
         await page.waitForFunction(() => {try {return [...document.querySelectorAll('webview')].find(view => view.getClientRects().length)?.getWebContentsId() > 0;} catch {return false;}});
@@ -38,10 +41,48 @@ const root = path.resolve(__dirname, '..');
         await page.keyboard.press('Enter'); await page.locator('#PreferencesOverlay').waitFor({state:'visible'});
         await page.keyboard.press('Escape');
         await page.locator('#pin-sidebar-btn').click();
-        await page.waitForFunction(() => document.body.classList.contains('sidebar-pinned'));
+        await page.waitForFunction(() => document.body.classList.contains('sidebar-pinned') && document.getElementById('Sidebar').offsetWidth === 260);
         const pinned=await rect(); assert.equal(pinned.x,collapsed.x); assert.equal(pinned.y,collapsed.y);
-        await page.evaluate(() => {const b=document.getElementById('update-indicator-btn');b.style.display='inline-flex';});
+        const fullClock = await page.locator('#SidebarClock').boundingBox();
+        await page.evaluate(async () => {
+            const {displayUpdateNotification} = await import('./renderer.js');
+            displayUpdateNotification({updateAvailable: true, currentVersion: '0.15.0', latestVersion: '99.0.0', releaseUrl: 'https://example.invalid/release'});
+        });
         assert.deepEqual(await rect(),pinned);
+        const inlineUpdate = async () => {
+            const {clock, update, time} = await page.evaluate(() => {
+                const rect = id => document.getElementById(id).getBoundingClientRect().toJSON();
+                return {clock: rect('SidebarClock'), update: rect('update-indicator-btn'), time: rect('SidebarClockTime')};
+            });
+            assert(clock.width < fullClock.width, 'The clock yields width to the update action');
+            assert(clock.x + clock.width < update.x, 'Clock and update must not overlap');
+            assert(Math.abs(clock.y + clock.height / 2 - update.y - update.height / 2) < 0.1, 'Both badges share a vertical centre');
+            assert(time.x >= clock.x && time.x + time.width <= clock.x + clock.width, `Time stays inside its badge: ${JSON.stringify({clock, time, update})}`);
+        };
+        for (let i = 0; i < 3; i++) {
+            await inlineUpdate();
+            await page.locator('#SidebarClock').click();
+        }
+        await page.screenshot({path: '/tmp/mise-inline-update.png'});
+        await page.evaluate(async () => {const {setClockVisibility} = await import('./modules/clock.js'); setClockVisibility(false);});
+        assert(await page.locator('#update-indicator-btn').isVisible(), 'Disabling the clock leaves the update action available');
+        await page.evaluate(async () => {const {setClockVisibility} = await import('./modules/clock.js'); setClockVisibility(true);});
+        await inlineUpdate();
+        await page.locator('#update-indicator-btn').focus();
+        await page.keyboard.press('Enter');
+        await page.locator('#PreferencesOverlay').waitFor({state: 'visible'});
+        assert.equal(await page.locator('#SettingsTab-about').getAttribute('aria-selected'), 'true');
+        await page.keyboard.press('Escape');
+        await page.locator('#pin-sidebar-btn').click();
+        await page.mouse.move(500, 400);
+        await page.evaluate(() => document.activeElement.blur());
+        await page.waitForFunction(() => document.getElementById('Sidebar').offsetWidth === 36);
+        assert(!(await page.locator('#update-indicator-btn').isVisible()));
+        await page.locator('#pin-sidebar-btn').focus();
+        await page.waitForFunction(() => document.getElementById('Sidebar').offsetWidth === 260);
+        await inlineUpdate();
+        await page.evaluate(() => {document.getElementById('update-indicator-btn').style.display = 'none';});
+        assert(Math.abs((await page.locator('#SidebarClock').boundingBox()).width - fullClock.width) < 1, 'Without an update the clock regains the full row');
         console.log('Sidebar footer: six equally spaced controls, stable pin, settings keyboard activation and update indicator passed.');
     } finally {
         if (application) await application.close();
