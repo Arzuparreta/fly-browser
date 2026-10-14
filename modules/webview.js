@@ -13,7 +13,6 @@ import {
     updateReaderViewButtonUI
 } from './statusBar.js';
 import { buildUserScriptWrapper } from './userScriptShim.js';
-import { reapplyWebviewDarkReader } from './darkReader.js';
 import { exportArticleToNotes, exportArticleToExternalApp, openNotesInExternalApp } from './overlays/notes.js';
 
 export function applyCSSThemeToView() {
@@ -158,9 +157,6 @@ export function createWebView(url, currentWS, idx) {
                 updateSecurityStatus(cleanUrl);
             }
         }
-        if (webview.__flyDarkReaderEnabled) {
-            reapplyWebviewDarkReader(webview).catch(() => {});
-        }
         webview.executeJavaScript(`
             (function() {
                 try {
@@ -178,7 +174,6 @@ export function createWebView(url, currentWS, idx) {
     webview.addEventListener('new-window', (e) => {
         e.preventDefault();
         const targetUrl = e.url;
-        const inheritsDarkReader = !!webview.__flyDarkReaderEnabled;
         
         if (!state.sessionState.workspaces[currentWS]) {
             state.sessionState.workspaces[currentWS] = [];
@@ -190,11 +185,6 @@ export function createWebView(url, currentWS, idx) {
         const newTargetIdx = state.sessionState.workspaces[currentWS].length - 1;
         if (!state.tabPinned[currentWS]) state.tabPinned[currentWS] = [];
         state.tabPinned[currentWS][newTargetIdx] = false;
-        if (inheritsDarkReader) {
-            if (!state.tabDarkReaderStates) state.tabDarkReaderStates = {};
-            if (!state.tabDarkReaderStates[currentWS]) state.tabDarkReaderStates[currentWS] = [];
-            state.tabDarkReaderStates[currentWS][newTargetIdx] = true;
-        }
         renderWorkspaceUI(newTargetIdx);
     });
 
@@ -276,9 +266,6 @@ export function createWebView(url, currentWS, idx) {
 
         injectMatchingUserContent(webview).catch(() => {});
 
-        if (webview.__flyDarkReaderEnabled) {
-            reapplyWebviewDarkReader(webview).catch(() => {});
-        }
 
         if (state.sessionState.current_workspace === currentWS) {
             const activeListItem = document.querySelector('#TabList li.selected');
@@ -291,9 +278,6 @@ export function createWebView(url, currentWS, idx) {
     });
 
     webview.addEventListener('did-finish-load', () => {
-        if (webview.__flyDarkReaderEnabled && !webview.__flyDarkKey) {
-            reapplyWebviewDarkReader(webview).catch(() => {});
-        }
         try {
             const liveTitle = webview.getTitle();
             if (liveTitle && liveTitle !== 'about:blank') {
@@ -455,11 +439,6 @@ export function handleNormalModeAction(action, extra, webview, currentWS, idx) {
             }
             break;
         }
-        case 'toggle-dark-reader':
-            if (typeof window.toggleDarkReaderOnActiveTab === 'function') {
-                window.toggleDarkReaderOnActiveTab();
-            }
-            break;
         case 'toggle-reader-view':
             toggleReaderViewOnActiveTab();
             break;
@@ -982,9 +961,6 @@ export function renderWorkspaceUI(targetTabToFocus = null) {
             }).catch(() => {});
         } else if (!state.activeViewsCache[currentWS][idx]) {
             const webview = createWebView(url, currentWS, idx);
-            if (state.tabDarkReaderStates?.[currentWS]?.[idx]) {
-                webview.__flyDarkReaderEnabled = true;
-            }
             attachShieldToggleListener(li, webview);
             container.appendChild(webview);
             state.activeViewsCache[currentWS][idx] = webview;
@@ -1224,9 +1200,9 @@ export function reopenClosedTab() {
 function removeTabMetadata(workspace, index) {
     const arrays = new Set([
         state.activeTitlesCache, state.tabSleepStates, state.tabActivityTimestamps,
-        state.tabMediaAudible, state.tabAudioMuted, state.tabDarkReaderStates,
+        state.tabMediaAudible, state.tabAudioMuted,
         state.tabFavicons, state.tabPinned, state.sessionState.tab_titles,
-        state.sessionState.tab_sleep_states, state.sessionState.tab_dark_reader,
+        state.sessionState.tab_sleep_states,
         state.sessionState.tab_favicons, state.sessionState.tab_pinned
     ].map(cache => cache?.[workspace]).filter(Array.isArray));
     for (const array of arrays) array.splice(index, 1);
@@ -1261,7 +1237,6 @@ export function handleTabRemoval(explicitIdx) {
                         .map(hIdx => (hIdx > idx ? hIdx - 1 : hIdx));
                 }
 
-                state.sessionState.tab_dark_reader = state.tabDarkReaderStates;
                 state.sessionState.tab_pinned = state.tabPinned;
                 window.flyAPI.saveSession(state.sessionState);
                 renderWorkspaceUI();
@@ -1286,7 +1261,6 @@ export function handleTabRemoval(explicitIdx) {
                 delete state.tabMediaAudible[wsName];
                 delete state.tabAudioMuted[wsName];
                 delete state.tabFavicons?.[wsName];
-                delete state.tabDarkReaderStates?.[wsName];
                 delete state.tabHistory?.[wsName];
                 delete state.tabPinned?.[wsName];
                 if (state.sessionState.tab_pinned?.[wsName]) delete state.sessionState.tab_pinned[wsName];
@@ -1334,7 +1308,6 @@ export function handleTabRemoval(explicitIdx) {
     }
     removeTabMetadata(currentWS, currentIdx);
 
-    state.sessionState.tab_dark_reader = state.tabDarkReaderStates;
     state.sessionState.tab_pinned = state.tabPinned;
     window.flyAPI.saveSession(state.sessionState);
     window.flyAllowWebviewFocus = true;
@@ -1541,7 +1514,6 @@ export function moveTabState(ws, fromIdx, toIdx) {
     moveInArray(state.tabMediaAudible[ws], false);
     moveInArray(state.tabAudioMuted[ws], false);
     if (state.tabFavicons) moveInArray(state.tabFavicons[ws], null);
-    if (state.tabDarkReaderStates) moveInArray(state.tabDarkReaderStates[ws], false);
     if (state.tabPinned) moveInArray(state.tabPinned[ws], false);
 
     if (state.sessionState.tab_titles) moveInArray(state.sessionState.tab_titles[ws], 'Loading...');
@@ -1719,9 +1691,6 @@ export function wakeTab(currentWS, idx) {
 
     const container = document.getElementById('webview-container');
     const webview = createWebView(targetUrl, currentWS, idx);
-    if (sleepRecord?.darkReader || state.tabDarkReaderStates?.[currentWS]?.[idx]) {
-        webview.__flyDarkReaderEnabled = true;
-    }
 
     if (savedSessionStorage || scrollX > 0 || scrollY > 0) {
         const restoreState = () => {
@@ -1809,13 +1778,8 @@ export async function hibernateTab(currentWS, idx) {
     let finalUrl = urls[idx];
     let finalTitle = state.activeTitlesCache[currentWS]?.[idx] || 'Tab';
     let savedSessionStorage = null;
-    let isDarkReader = false;
 
     if (webview) {
-        isDarkReader = !!webview.__flyDarkReaderEnabled;
-        if (!state.tabDarkReaderStates) state.tabDarkReaderStates = {};
-        if (!state.tabDarkReaderStates[currentWS]) state.tabDarkReaderStates[currentWS] = [];
-        state.tabDarkReaderStates[currentWS][idx] = isDarkReader;
         try {
             const scrollPos = await webview.executeJavaScript(`[window.scrollX || window.pageXOffset || 0, window.scrollY || window.pageYOffset || 0]`);
             if (Array.isArray(scrollPos)) {
@@ -1875,7 +1839,6 @@ export async function hibernateTab(currentWS, idx) {
         scrollX,
         scrollY,
         sessionStorage: savedSessionStorage,
-        darkReader: isDarkReader,
         hibernatedAt: Date.now()
     };
 

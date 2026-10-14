@@ -7,7 +7,7 @@ export function transferTab(state, source, index, target, requestedIndex) {
         ['activeViewsCache', null], ['activeTitlesCache', '', 'tab_titles'],
         ['tabSleepStates', null, 'tab_sleep_states'], ['tabActivityTimestamps', 0],
         ['tabMediaAudible', false], ['tabAudioMuted', false], ['tabPinned', false, 'tab_pinned'],
-        ['tabFavicons', null, 'tab_favicons'], ['tabDarkReaderStates', false, 'tab_dark_reader']
+        ['tabFavicons', null, 'tab_favicons']
     ];
     for (const [field, , persisted] of fields) {
         state[field] ||= persisted && state.sessionState[persisted] || {};

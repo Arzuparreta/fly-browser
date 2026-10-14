@@ -36,7 +36,19 @@ const asar = require('@electron/asar');
         assert.equal((await page.evaluate(() => window.flyAPI.getAppVersion())).version, version);
         assert.equal((await page.evaluate(() => window.flyAPI.getBrowserSettings())).extensions_enabled, false);
         assert.deepEqual(errors, []);
-        console.log('Packaged ASAR, cold filter worker/cache, application startup, version, disabled extensions and disposable paths passed.');
+        const extensionState = await page.evaluate(() => window.flyAPI.extensionsGetState({ scan: true }));
+        assert.deepEqual(extensionState.installed.map(info => info.folder), ['ublock-origin']);
+        assert.equal(extensionState.installed[0].version, '1.75.0');
+        assert(fs.existsSync(path.join(extensionState.directory, 'ublock-origin', 'manifest.json')), 'Bundles must copy out of the packaged ASAR into the profile');
+        assert(asar.extractFile(paths.app, 'extension-api.preload.js').length > 0);
+        const loaded = await page.evaluate(async () => {
+            const cfg = await window.flyAPI.getBrowserSettings();
+            await window.flyAPI.updateBrowserSettings({ ...cfg, extensions_enabled: true });
+            await window.flyAPI.extensionsApplyConfig();
+            return window.flyAPI.extensionsEnsure('Smoke', 'persist:smoke');
+        });
+        assert.equal(loaded.active, true, 'Packaged API preload and bundled extension must load together');
+        console.log('Packaged ASAR, cold filter worker/cache, application startup, version, disabled startup, bundled uBlock copying/loading and disposable paths passed.');
     } finally {
         if (application) await application.close();
         fs.rmSync(temporary, {recursive: true, force: true});

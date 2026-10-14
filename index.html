@@ -48,7 +48,6 @@
             <div class="bottom-theme-layout">
                 <button id="pin-sidebar-btn" class="nav-icon-button" title="Pin / Auto-Collapse Sidebar"><i class="fa-solid fa-thumbtack"></i></button>
                 <button id="reader-view-btn" class="nav-icon-button" title="Toggle Reader View"><i class="fa-solid fa-book-open"></i></button>
-                <button id="dark-reader-btn" class="nav-icon-button" title="Toggle Dark Reader"><i class="fa-solid fa-circle-half-stroke"></i></button>
                 <button id="theme-toggle-btn" class="nav-icon-button" title="Toggle Website Dark/Light Theme"><i class="fa-solid fa-moon"></i></button>
                 <button id="noti-toggle-btn" class="nav-icon-button" title="Toggle Web Notifications"><i class="fa-regular fa-bell"></i></button>
                 <button id="settings-btn" class="nav-icon-button" title="Settings" aria-label="Settings"><i class="fa-solid fa-gear"></i></button>
@@ -534,7 +533,7 @@
                                 <div id="ExtensionsSettingsSection">
                                     <header class="settings-pane-header">
                                         <h2>Extensions <span class="settings-tag">Experimental</span></h2>
-                                        <p>Unpacked Chrome extensions, off by default. Only install code you trust: extensions can read every page they match.</p>
+                                        <p>uBlock Origin included; Chrome extensions are off by default. Only install code you trust: extensions can read every page they match.</p>
                                     </header>
 
                                     <div class="settings-group">
@@ -542,7 +541,7 @@
                                             <div class="setting-item" data-keywords="addons plugins chrome extensions">
                                                 <div class="setting-info">
                                                     <label class="setting-label" for="setting-extensions-toggle">Enable Chrome extensions</label>
-                                                    <span class="setting-desc">Loads only in the workspaces you tick below and only while they have live tabs. Unloads <span id="ExtensionsGraceSeconds">60</span> seconds after a workspace's last tab closes or hibernates. Never active in private browsing; while disabled nothing extension related runs.</span>
+                                                    <span class="setting-desc">Loads only in the workspaces you tick below and only while they have live tabs. Unloads <span id="ExtensionsGraceSeconds">60</span> seconds after a workspace's last tab closes or hibernates. Never active in private browsing; while disabled no extension code runs.</span>
                                                 </div>
                                                 <label class="toggle-switch">
                                                     <input type="checkbox" id="setting-extensions-toggle">
@@ -554,7 +553,7 @@
 
                                     <div class="settings-group">
                                         <h3>Installed</h3>
-                                        <p class="settings-group-desc">One unpacked extension per folder in <code id="ExtensionsDirectoryPath">~/.config/fly-browser/extensions</code>. Each workspace keeps its own extension settings and storage, like cookies.</p>
+                                        <p class="settings-group-desc">Included extensions can be disabled or removed here and stay that way after updates. Install other unpacked extensions in <code id="ExtensionsDirectoryPath">~/.config/fly-browser/extensions</code>. Each workspace keeps its own extension settings and storage, like cookies.</p>
                                         <div id="ExtensionsInstalledList" class="extensions-list"></div>
                                     </div>
 

@@ -10,7 +10,7 @@ Reviewed the action catalogue, renderer keyboard listeners, sandboxed guest prel
 | Tabs | New/close/duplicate/reopen, next/previous, numbered selection, reorder, pin, mute | All assignable; repeats suppressed for destructive actions; pin boundary maintained. |
 | Workspaces | Dashboard, create, previous/next, destination chooser; native rename/delete buttons | Assignable actions and native controls; transfers reload in the destination container. |
 | Page navigation | Back/forward, reload/force reload/stop, scroll directions/half pages/top/bottom | Browser and page bindings; editable/shadow-root checks; compiled sequence prefixes. |
-| Page interaction | Hints, find, reader, Dark Reader, copy URL, zoom, print, site shields | Assignable actions; hint labels and native controls are contextual. PDF URL copying retains the original document URL. |
+| Page interaction | Hints, find, reader, copy URL, zoom, print, site shields | Assignable actions; hint labels and native controls are contextual. PDF URL copying retains the original document URL. |
 | Modes | Insert, Escape cancellation, passthrough/recovery | Assignable entry/toggle; at least one browser recovery chord required. Guest mode is retained per tab. |
 | Split view | Side-by-side/stacked, orientation, focus, swap, close | Existing distinct palette actions are assignable; native tab selection remains available. |
 | Bookmarks/quickmarks | Open/add/set/jump actions, arrows, Enter/Delete, search, native buttons | Configurable actions; Tab reaches controls rather than switching columns. |

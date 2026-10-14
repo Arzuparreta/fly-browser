@@ -135,7 +135,6 @@ Existing legacy profiles retain their explicit assignments, including empty and 
 | Toggle Active Webview DevTools | `Ctrl+Shift+I` / `F12` | Unassigned |
 | Toggle Audio Mute Globally (All Tabs) | Unassigned | `Shift+M` |
 | Toggle Audio Mute on Active Tab | `Ctrl+Shift+M` / `F8` | `m` |
-| Toggle Dark Reader on Active Tab | `Alt+D` | Unassigned |
 | Toggle Link Hints Overlay | `Alt+F` | `f` |
 | Toggle Reader View on Active Tab | `F9` | `e` |
 | Toggle shields for the active site | Unassigned | Unassigned |

@@ -13,7 +13,6 @@ export const state = {
     tabPinned: {},
     tabFavicons: {},
     tabHistory: {},
-    tabDarkReaderStates: {},
     splitStates: {},
     
     // UI Active Flags

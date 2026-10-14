@@ -19,6 +19,9 @@ const ACTION_UPDATE_DEBOUNCE_MS = 250;
 
 let extensionsDir = null;
 let getConfig = () => ({});
+let saveConfig = () => {};
+const bundledDir = path.join(__dirname.endsWith('.asar') ? `${__dirname}.unpacked` : __dirname, 'assets', 'extensions');
+let setNetworkExtensions = () => {};
 let getMainWindow = () => null;
 let partitionForWorkspace = (name) => `persist:${name}`;
 let logEvent = () => {};
@@ -96,7 +99,7 @@ function collectWarnings(manifest) {
         warnings.push('Uses declarativeNetRequest. Electron exposes the API but does not enforce its rules, so they will not apply.');
     }
     if (perms.includes('webRequestBlocking')) {
-        warnings.push('Blocking webRequest listeners are overridden by Fly\'s own network filters.');
+        warnings.push('While loaded, network extensions replace Fly’s native blocker and request header rules.');
     }
     if (perms.includes('nativeMessaging')) {
         warnings.push('Native messaging hosts are not configured for Fly and will probably fail.');
@@ -189,8 +192,11 @@ function isEnabled(cfg) {
 
 function getWorkspaceFolders(cfg, workspace) {
     const map = (cfg && cfg.extensions_by_workspace) || {};
-    const list = Array.isArray(map[workspace]) ? map[workspace] : [];
-    return [...new Set(list.filter(isValidFolderName))];
+    const defaults = Object.entries((cfg && cfg.extensions_bundled) || {})
+        .filter(([, entry]) => entry && !entry.removed).map(([folder]) => folder);
+    const list = Array.isArray(map[workspace]) ? map[workspace] : defaults;
+    const disabled = (cfg && cfg.extensions_disabled) || [];
+    return [...new Set(list.filter(folder => isValidFolderName(folder) && !disabled.includes(folder)))];
 }
 
 function getGraceMs(cfg) {
@@ -204,6 +210,58 @@ function isEligiblePartition(partition) {
     return typeof partition === 'string' && partition.startsWith('persist:');
 }
 
+// Profile-owned copies keep stable identities. Missing copies become durable
+// removal records; upgrades never change enabled state or workspace selections.
+function provisionBundledExtensions(directory, sourceDirectory, cfg) {
+    const records = { ...(cfg.extensions_bundled || {}) };
+    let changed = false;
+    if (!fs.existsSync(sourceDirectory)) return cfg;
+    for (const folder of fs.readdirSync(sourceDirectory)) {
+        if (!isValidFolderName(folder)) continue;
+        const source = path.join(sourceDirectory, folder);
+        if (!fs.existsSync(path.join(source, 'manifest.json'))) continue;
+        const destination = path.join(directory, folder);
+        const previous = records[folder];
+        if (previous && previous.removed) continue;
+        if (previous && !fs.existsSync(destination)) {
+            records[folder] = { ...previous, removed: true };
+            changed = true;
+            continue;
+        }
+        const version = JSON.parse(fs.readFileSync(path.join(source, 'manifest.json'), 'utf8')).version;
+        if (!previous && fs.existsSync(destination)) {
+            records[folder] = { version, managed: false, removed: false };
+            changed = true;
+            continue;
+        }
+        if (previous && (!previous.managed || previous.version === version)) continue;
+        fs.mkdirSync(directory, { recursive: true });
+        const staging = fs.mkdtempSync(path.join(directory, '.bundle-'));
+        const backup = staging + '-previous';
+        try {
+            fs.cpSync(source, staging, { recursive: true });
+            if (fs.existsSync(destination)) fs.renameSync(destination, backup);
+            try { fs.renameSync(staging, destination); } catch (error) {
+                if (fs.existsSync(backup)) fs.renameSync(backup, destination);
+                throw error;
+            }
+            fs.rmSync(backup, { recursive: true, force: true });
+        } finally {
+            fs.rmSync(staging, { recursive: true, force: true });
+        }
+        records[folder] = { version, managed: true, removed: false };
+        changed = true;
+    }
+    return changed ? { ...cfg, extensions_bundled: records } : cfg;
+}
+
+function provisionBundles() {
+    const cfg = getConfig();
+    const next = provisionBundledExtensions(extensionsDir, bundledDir, cfg);
+    if (next !== cfg) saveConfig(next);
+    return next;
+}
+
 // RUNTIME
 
 function electron() {
@@ -211,6 +269,7 @@ function electron() {
 }
 
 function scanExtensions() {
+    provisionBundles();
     if (!extensionsDir || !fs.existsSync(extensionsDir)) return [];
     let entries = [];
     try {
@@ -220,7 +279,9 @@ function scanExtensions() {
     }
     return entries
         .filter(entry => entry.isDirectory() && isValidFolderName(entry.name))
-        .map(entry => describeExtension(entry.name, path.join(extensionsDir, entry.name)))
+        .map(entry => ({ ...describeExtension(entry.name, path.join(extensionsDir, entry.name)),
+            bundled: !!getConfig().extensions_bundled?.[entry.name],
+            enabled: !(getConfig().extensions_disabled || []).includes(entry.name) }))
         .sort((a, b) => String(a.name).localeCompare(String(b.name)));
 }
 
@@ -254,6 +315,20 @@ function createController(workspace, partition) {
         queue: Promise.resolve()
     };
     controllers.set(partition, ctrl);
+    ctrl.session.extensions.on('extension-unloaded', (_event, extension) => {
+        const folder = [...ctrl.loaded].find(([, entry]) => entry.id === extension.id)?.[0];
+        if (!folder) return;
+        // runtime.reload unloads unpacked extensions in Electron without loading
+        // them again. Honour the current profile policy before restoring one.
+        ctrl.loaded.delete(folder);
+        updateNetworkExtensions(ctrl);
+        enqueue(ctrl, () => {
+            const cfg = getConfig();
+            if (isEnabled(cfg) && ctrl.tabs.size > 0) {
+                return syncController(ctrl, getWorkspaceFolders(cfg, ctrl.workspace));
+            }
+        });
+    });
     return ctrl;
 }
 
@@ -287,6 +362,14 @@ function ensureApiLayer(ctrl) {
             sendToRenderer('extension-close-tab', wc.id);
         }
     });
+
+    // Keep the existing API backend, adapting the browser alias and managed storage.
+    for (const script of ctrl.session.getPreloadScripts()) {
+        if (script.id === 'crx-mv2-preload' || script.id === 'crx-mv3-preload') ctrl.session.unregisterPreloadScript(script.id);
+    }
+    for (const type of ['frame', 'service-worker']) {
+        ctrl.session.registerPreloadScript({ id: `fly-extensions-${type}`, type, filePath: path.join(__dirname, 'extension-api.preload.js') });
+    }
 
     const browserAction = ctrl.ece.api && ctrl.ece.api.browserAction;
     if (browserAction && typeof browserAction.onUpdate === 'function') {
@@ -348,8 +431,9 @@ function unloadOne(ctrl, folder) {
         sendToRenderer('close-extension-popup');
         openPopup = null;
     }
-    try { ctrl.session.extensions.removeExtension(entry.id); } catch (e) {}
     ctrl.loaded.delete(folder);
+    try { ctrl.session.extensions.removeExtension(entry.id); } catch (e) {}
+    updateNetworkExtensions(ctrl);
 }
 
 function unloadAll(ctrl, reason) {
@@ -358,6 +442,27 @@ function unloadAll(ctrl, reason) {
     for (const folder of [...ctrl.loaded.keys()]) unloadOne(ctrl, folder);
     logEvent('info', 'extensions', `Unloaded ${count} extension(s) from ${ctrl.workspace} (${reason})`);
     sendToRenderer('extensions-actions-updated');
+}
+
+function updateNetworkExtensions(ctrl) {
+    setNetworkExtensions(ctrl.session, [...ctrl.loaded.values()].some(entry => entry.network));
+}
+
+async function initialiseBackgroundPage(ctrl, extension) {
+    if (extension.manifest.manifest_version !== 2 || classifyBackground(extension.manifest) !== 'persistent') return;
+    const extensionId = extension.id;
+    let page;
+    const deadline = Date.now() + 5000;
+    while (!page && Date.now() < deadline) {
+        page = electron().webContents.getAllWebContents().find(wc =>
+            wc.getType() === 'backgroundPage' && wc.session === ctrl.session &&
+            wc.getURL().startsWith(`chrome-extension://${extensionId}/`));
+        if (!page) await new Promise(resolve => setTimeout(resolve, 25));
+    }
+    if (!page) throw new Error('Extension background page unavailable');
+    const hasApis = () => page.executeJavaScript('!!(globalThis.chrome && chrome.contextMenus && chrome.windows)');
+    if (await hasApis()) return;
+    throw new Error('Extension background APIs unavailable');
 }
 
 async function syncController(ctrl, wanted) {
@@ -375,9 +480,18 @@ async function syncController(ctrl, wanted) {
         const started = Date.now();
         try {
             const ext = await ctrl.session.extensions.loadExtension(extPath, { allowFileAccess: false });
-            ctrl.loaded.set(folder, { id: ext.id, name: ext.name, loadMs: Date.now() - started });
+            const network = (ext.manifest.permissions || []).includes('webRequest');
+            if (network) setNetworkExtensions(ctrl.session, true);
+            try { await initialiseBackgroundPage(ctrl, ext); } catch (error) {
+                ctrl.session.extensions.removeExtension(ext.id);
+                throw error;
+            }
+            ctrl.loaded.set(folder, { id: ext.id, name: ext.name, network, loadMs: Date.now() - started });
+            updateNetworkExtensions(ctrl);
             delete ctrl.errors[folder];
         } catch (err) {
+            unloadOne(ctrl, folder);
+            updateNetworkExtensions(ctrl);
             ctrl.errors[folder] = err && err.message ? err.message : String(err);
             logEvent('warn', 'extensions', `Failed to load ${folder} in ${ctrl.workspace}: ${ctrl.errors[folder]}`);
         }
@@ -401,10 +515,11 @@ function adoptExistingTabs(ctrl) {
 // Called by the renderer right before a tab's src is set, so content scripts that
 // run at document_start are in place for the very first navigation.
 async function ensureForWorkspace(workspace, partition) {
-    const cfg = getConfig();
+    let cfg = getConfig();
     if (!isEnabled(cfg) || !isEligiblePartition(partition)) return { active: false };
     if (partition !== partitionForWorkspace(workspace)) return { active: false };
 
+    cfg = provisionBundles();
     const wanted = getWorkspaceFolders(cfg, workspace);
     let ctrl = controllers.get(partition);
     if (!ctrl && wanted.length === 0) return { active: false };
@@ -562,7 +677,7 @@ function getContextMenuItems(wc, params) {
 // Settings changes apply immediately: workspaces with live tabs sync now, idle ones
 // drop whatever they no longer need.
 async function applyConfig() {
-    const cfg = getConfig();
+    const cfg = isEnabled(getConfig()) ? provisionBundles() : getConfig();
     const jobs = [];
     for (const ctrl of controllers.values()) {
         if (!isEnabled(cfg)) {
@@ -601,6 +716,25 @@ async function reloadAll() {
     }
     await Promise.all(jobs);
     return { affectedTabs };
+}
+
+async function removeExtension(folder) {
+    if (!isValidFolderName(folder)) return { error: 'Invalid extension folder' };
+    const cfg = getConfig();
+    const records = { ...(cfg.extensions_bundled || {}) };
+    if (records[folder]) records[folder] = { ...records[folder], removed: true };
+    const byWorkspace = Object.fromEntries(Object.entries(cfg.extensions_by_workspace || {})
+        .map(([ws, list]) => [ws, Array.isArray(list) ? list.filter(item => item !== folder) : []]));
+    // Persist first so interrupted removals cannot reinstall bundled code.
+    saveConfig({ ...cfg, extensions_bundled: records, extensions_by_workspace: byWorkspace,
+        extensions_disabled: [...new Set([...(cfg.extensions_disabled || []), folder])] });
+    await applyConfig();
+    try {
+        fs.rmSync(path.join(extensionsDir, folder), { recursive: true, force: true });
+        return { removed: true };
+    } catch (error) {
+        return { error: error.message };
+    }
 }
 
 // METRICS
@@ -696,9 +830,12 @@ function initializeExtensions(options) {
     const { ipcMain, shell } = electron();
     extensionsDir = path.join(options.configDir, 'extensions');
     getConfig = options.getConfig;
+    saveConfig = options.saveConfig;
+    setNetworkExtensions = options.setNetworkExtensions || setNetworkExtensions;
     getMainWindow = options.getMainWindow;
     partitionForWorkspace = options.getWorkspacePartition;
     logEvent = options.logEvent || logEvent;
+    if (isEnabled(getConfig())) provisionBundles();
 
     const fromMainWindow = (event) => {
         const win = getMainWindow();
@@ -714,16 +851,20 @@ function initializeExtensions(options) {
     // The renderer asks for the cheap form at startup and the full form only while
     // the Preferences section is open.
     ipcMain.handle('extensions-get-state', guard((options = {}) => {
+        const installed = options.scan ? scanExtensions() : [];
         const cfg = getConfig();
         return {
+            bundled: cfg.extensions_bundled || {},
+            disabled: cfg.extensions_disabled || [],
             enabled: isEnabled(cfg),
             directory: extensionsDir,
             byWorkspace: (cfg && cfg.extensions_by_workspace) || {},
             graceSeconds: getGraceMs(cfg) / 1000,
-            installed: options.scan ? scanExtensions() : [],
+            installed,
             runtime: getRuntimeState(!!options.metrics)
         };
     }));
+    ipcMain.handle('extensions-remove', guard((folder) => removeExtension(String(folder || ''))));
     ipcMain.handle('extensions-apply-config', guard(() => applyConfig()));
     ipcMain.handle('extensions-reload', guard(() => reloadAll()));
     ipcMain.handle('extensions-open-dir', guard(async () => {
@@ -747,5 +888,6 @@ module.exports = {
     isEligiblePartition,
     isValidFolderName,
     getWorkspaceFolders,
-    getGraceMs
+    getGraceMs,
+    provisionBundledExtensions
 };

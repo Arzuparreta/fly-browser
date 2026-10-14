@@ -1,1 +1,5 @@
 docs/public/benchmarks/*.json linguist-generated=true
+
+# Preserve upstream release bytes, including whitespace in filter lists and notices.
+assets/extensions/ublock-origin/** linguist-vendored=true -whitespace
+extension-api.preload.js linguist-generated=true

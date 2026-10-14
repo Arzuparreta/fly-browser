@@ -74,7 +74,7 @@ A dedicated lifecycle sentinel (`session_sentinel.json`) tracks whether the brow
 ### 3. OOM Loop Prevention
 When recovering from an unexpected termination, Fly automatically enforces hibernation across **all background tabs in all workspaces**:
 - Even if multiple tabs were actively loaded before the crash, only the single active tab of your current workspace is mounted into memory.
-- All other tabs load in dormant sleep state with their titles, URLs, favicons, scroll offsets, and Dark Reader flags intact.
+- All other tabs load in dormant sleep state with their titles, URLs, favicons, and scroll offsets intact.
 - This ensures that recovering a session with dozens of tabs never triggers an immediate secondary memory spike or crash loop on fanless hardware.
 
 ### 4. Unobtrusive Notification

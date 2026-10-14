@@ -100,7 +100,7 @@ Version 2 stores separate `shortcuts` and `normal` tables for browser chords and
 
 ## 3. Session State (`session.json`, `session.json.bak`, `session_sentinel.json`)
 
-Maintains persistent workspaces, URLs, titles, Dark Reader preferences, and sleeping tab scroll offsets across restarts:
+Maintains persistent workspaces, URLs, titles and sleeping tab scroll offsets across restarts:
 
 ```json
 {
@@ -127,10 +127,6 @@ Maintains persistent workspaces, URLs, titles, Dark Reader preferences, and slee
                 "hibernatedAt": 1727299000000
             }
         ]
-    },
-    "tab_dark_reader": {
-        "Work": [true],
-        "Personal": [false]
     }
 }
 ```

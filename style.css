@@ -579,8 +579,7 @@ body.sidebar-auto-collapse #Sidebar:not(.pointer-inside):not(.expanded):not(:foc
     background: var(--selected);
 }
 
-#reader-view-btn.active,
-#dark-reader-btn.active {
+#reader-view-btn.active {
     color: var(--accent);
     border-color: var(--accent);
 }
