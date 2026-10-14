@@ -123,9 +123,9 @@
             badge.dataset.code = code;
             badge.style.cssText = `
                 position: fixed; left: ${Math.round(item.rect.left)}px; top: ${Math.round(item.rect.top)}px;
-                background: #2ac3de; color: #1a1b26; padding: 2px 5px; font-size: 12px;
-                line-height: 14px; font-weight: 800; border-radius: 3px; z-index: 2147483647;
-                font-family: monospace; text-transform: uppercase; border: 1px solid #1a1b26;
+                background: #ece6d8; color: #151310; padding: 2px 5px; font-size: 12px;
+                line-height: 14px; font-weight: 800; border-radius: 1px; z-index: 2147483647;
+                font-family: monospace; text-transform: uppercase; border: 1px solid #e0261c;
                 box-shadow: 0 2px 4px rgba(0,0,0,0.4); pointer-events: none; transition: opacity 0.1s ease;
             `;
             layer.appendChild(badge);

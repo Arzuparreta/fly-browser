@@ -4,14 +4,16 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Fly</title>
-    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.2/css/all.min.css">
+    <link rel="stylesheet" href="assets/vendor/fontawesome/css/all.min.css">
+    <link rel="stylesheet" href="assets/fonts/fonts.css">
     <link rel="stylesheet" href="style.css">
 </head>
 <body class="dark-mode">
     <div class="main-container">
         <div id="Sidebar">
+            <div class="fly-brand" aria-label="Fly Browser"><img src="assets/identity/pixel-32.png" alt="" width="32" height="32"><span>FLY</span></div>
             <div id="WindowControls" class="window-controls" style="display: none;">
-                <span class="window-controls-brand"><i class="fa-solid fa-compass"></i> Fly</span>
+                <span class="window-controls-brand"><img src="assets/identity/pixel-24.png" alt=""> FLY</span>
                 <div class="window-controls-actions">
                     <button id="win-min-btn" class="win-btn win-min" title="Minimise"><i class="fa-solid fa-minus"></i></button>
                     <button id="win-max-btn" class="win-btn win-max" title="Maximise"><i class="fa-regular fa-square"></i></button>
@@ -65,7 +67,7 @@
                 <!-- Empty Workspace Welcome View -->
                 <div id="EmptyWorkspaceWelcome" style="display: none;">
                     <div class="welcome-card">
-                        <div class="welcome-logo"><i class="fa-solid fa-compass"></i></div>
+                        <div class="welcome-logo"><img src="assets/identity/icon-128.png" width="96" height="96" alt=""></div>
                         <h1 class="welcome-title">Fly Browser</h1>
                         <h2 class="welcome-subtitle" id="WelcomeWorkspaceName">Workspace</h2>
                         <p class="welcome-desc">This workspace is currently empty. Use the quick actions below or keyboard shortcuts to get started:</p>
@@ -323,8 +325,8 @@
                                     <div class="settings-card">
                                         <div class="setting-item" data-keywords="theme mode light dark night colour color">
                                             <div class="setting-info">
-                                                <label class="setting-label" for="setting-theme-toggle">Dark theme</label>
-                                                <span class="setting-desc">Tokyo Night when on, light theme when off.</span>
+                                                <label class="setting-label" for="setting-theme-toggle">Chasis / Papel</label>
+                                                <span class="setting-desc">Chasis when on, Papel when off.</span>
                                             </div>
                                             <label class="toggle-switch">
                                                 <input type="checkbox" id="setting-theme-toggle">
@@ -336,6 +338,7 @@
                                                 <label class="setting-label" for="setting-accent-color-text">Accent colour</label>
                                                 <span class="setting-desc">Active tabs, buttons, borders and indicators.</span>
                                                 <div class="preset-swatches" id="accent-preset-swatches">
+                                                    <button type="button" class="swatch-btn" data-color="#e0261c" style="background:#e0261c" title="Rojo punto" aria-label="Rojo punto"></button>
                                                     <button type="button" class="swatch-btn" data-color="#7aa2f7" style="background:#7aa2f7" title="Tokyo Blue" aria-label="Tokyo Blue"></button>
                                                     <button type="button" class="swatch-btn" data-color="#7dcfff" style="background:#7dcfff" title="Marine Cyan" aria-label="Marine Cyan"></button>
                                                     <button type="button" class="swatch-btn" data-color="#2ac3de" style="background:#2ac3de" title="Teal Mist" aria-label="Teal Mist"></button>
@@ -348,8 +351,8 @@
                                                 </div>
                                             </div>
                                             <div class="color-picker-group">
-                                                <input type="color" id="setting-accent-color-picker" class="theme-color-input" value="#7aa2f7" aria-label="Pick accent colour">
-                                                <input type="text" id="setting-accent-color-text" class="theme-color-text" value="#7aa2f7" maxlength="7" spellcheck="false">
+                                                <input type="color" id="setting-accent-color-picker" class="theme-color-input" value="#e0261c" aria-label="Pick accent colour">
+                                                <input type="text" id="setting-accent-color-text" class="theme-color-text" value="#e0261c" maxlength="7" spellcheck="false">
                                             </div>
                                         </div>
                                         <div class="setting-item" data-keywords="colour color background">
@@ -358,8 +361,8 @@
                                                 <span class="setting-desc">Vertical tab bar.</span>
                                             </div>
                                             <div class="color-picker-group">
-                                                <input type="color" id="setting-bg-sidebar-picker" class="theme-color-input" value="#16161e" aria-label="Pick sidebar background">
-                                                <input type="text" id="setting-bg-sidebar-text" class="theme-color-text" value="#16161e" maxlength="7" spellcheck="false">
+                                                <input type="color" id="setting-bg-sidebar-picker" class="theme-color-input" value="#0b0b0a" aria-label="Pick sidebar background">
+                                                <input type="text" id="setting-bg-sidebar-text" class="theme-color-text" value="#0b0b0a" maxlength="7" spellcheck="false">
                                             </div>
                                         </div>
                                         <div class="setting-item" data-keywords="colour color background">
@@ -368,8 +371,8 @@
                                                 <span class="setting-desc">Overlays, frames and empty space.</span>
                                             </div>
                                             <div class="color-picker-group">
-                                                <input type="color" id="setting-bg-main-picker" class="theme-color-input" value="#1a1b26" aria-label="Pick canvas background">
-                                                <input type="text" id="setting-bg-main-text" class="theme-color-text" value="#1a1b26" maxlength="7" spellcheck="false">
+                                                <input type="color" id="setting-bg-main-picker" class="theme-color-input" value="#121211" aria-label="Pick canvas background">
+                                                <input type="text" id="setting-bg-main-text" class="theme-color-text" value="#121211" maxlength="7" spellcheck="false">
                                             </div>
                                         </div>
                                         <div class="setting-item" data-keywords="colour color font foreground">
@@ -378,14 +381,14 @@
                                                 <span class="setting-desc">Foreground across the browser interface.</span>
                                             </div>
                                             <div class="color-picker-group">
-                                                <input type="color" id="setting-text-color-picker" class="theme-color-input" value="#c0caf5" aria-label="Pick text and icon colour">
-                                                <input type="text" id="setting-text-color-text" class="theme-color-text" value="#c0caf5" maxlength="7" spellcheck="false">
+                                                <input type="color" id="setting-text-color-picker" class="theme-color-input" value="#e7e1d3" aria-label="Pick text and icon colour">
+                                                <input type="text" id="setting-text-color-text" class="theme-color-text" value="#e7e1d3" maxlength="7" spellcheck="false">
                                             </div>
                                         </div>
                                         <div class="setting-item" data-keywords="transparency translucent blur glass">
                                             <div class="setting-info">
                                                 <label class="setting-label" for="setting-sidebar-opacity-slider">Sidebar opacity</label>
-                                                <span class="setting-desc">Lower values show a blurred, translucent sidebar.</span>
+                                                <span class="setting-desc">Lower values show a translucent sidebar.</span>
                                             </div>
                                             <div class="slider-group">
                                                 <input type="range" id="setting-sidebar-opacity-slider" min="40" max="100" value="100" class="theme-slider">

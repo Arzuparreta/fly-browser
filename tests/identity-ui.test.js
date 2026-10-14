@@ -1,0 +1,67 @@
+const { _electron } = require(process.env.FLY_PLAYWRIGHT_MODULE || 'playwright');
+const assert = require('node:assert/strict');
+const fs = require('node:fs');
+const os = require('node:os');
+const path = require('node:path');
+const http = require('node:http');
+const createElectronFixture = require('./electron-fixture');
+const root = path.resolve(__dirname, '..');
+(async () => {
+    const temporary = fs.mkdtempSync(path.join(os.tmpdir(), 'fly-identity-'));
+    const server = http.createServer((req, res) => res.end('<!doctype html><title>Search result</title><input aria-label="Editable page">'));
+    await new Promise(resolve => server.listen(0, '127.0.0.1', resolve));
+    const fixture = `http://127.0.0.1:${server.address().port}`;
+    let app;
+    try {
+        app = await _electron.launch({executablePath:path.join(root, 'node_modules/electron/dist/electron'), args:['--no-sandbox', '--disable-gpu', '--ozone-platform=x11', createElectronFixture(root, temporary)]});
+        const page = await app.firstWindow();
+        page.setDefaultTimeout(15000);
+        const errors = [];
+        page.on('pageerror', error => errors.push(error.message));
+        await page.waitForFunction(() => !!window.executeBrowserAction);
+        await page.waitForFunction(() => { const view = document.querySelector('webview'); try { return view && !view.isLoading() && view.getURL().endsWith('/assets/new-tab.html'); } catch { return false; } });
+        await page.evaluate(async () => { const {refreshNewTabs} = await import('./modules/newTab.js'); await refreshNewTabs(); });
+        assert.match(await page.evaluate(() => document.querySelector('webview').executeJavaScript('document.getElementById("memory").textContent')), /^\d+ MB$/);
+        assert.equal(await page.evaluate(() => getComputedStyle(document.body).getPropertyValue('--bg-main').trim()), '#121211');
+        assert(await page.evaluate(() => document.fonts.check('16px "IBM Plex Sans"')));
+        assert(await page.evaluate(() => document.fonts.check('16px "Font Awesome 6 Free"')));
+        assert.equal(await page.locator('link[href^="https:"]').count(), 0);
+        await page.evaluate(async () => { if (!document.body.classList.contains('sidebar-pinned')) await window.toggleSidebarPin(); });
+        await page.waitForFunction(() => Math.abs(document.getElementById('Sidebar').getBoundingClientRect().width - 260) < 1);
+        await page.waitForTimeout(300);
+        await page.screenshot({path:'/tmp/fly-identity-chasis.png'});
+        await page.evaluate(async () => {
+            document.body.classList.remove('dark-mode');
+            document.body.classList.add('light-mode');
+            const {applyThemeVisuals} = await import('./modules/theme.js');
+            applyThemeVisuals({});
+        });
+        await page.evaluate(async () => { const {refreshNewTabs} = await import('./modules/newTab.js'); await refreshNewTabs(); });
+        assert(await page.evaluate(() => document.querySelector('webview').executeJavaScript('document.body.classList.contains("light")')));
+        assert(await page.evaluate(() => document.querySelector('webview').executeJavaScript('document.documentElement.scrollWidth <= innerWidth')));
+        await page.screenshot({path:'/tmp/fly-identity-papel.png'});
+        fs.writeFileSync('/tmp/fly-identity-guest.png', Buffer.from(await app.evaluate(async ({webContents}) => { const view = webContents.getAllWebContents().find(w => w.getType() === 'webview'); return (await view.capturePage()).toPNG().toString('base64'); }), 'base64'));
+        // The local new tab honours the configured search engine and saves navigation.
+        await page.evaluate(async fixture => {
+            await window.flyAPI.updateBrowserSettings({search_engine:fixture+'/?q=%s'});
+            const {refreshNewTabs} = await import('./modules/newTab.js'); await refreshNewTabs();
+        }, fixture);
+        assert.equal(await page.evaluate(() => document.querySelector('webview').executeJavaScript('searchTemplate')), fixture+'/?q=%s');
+        await page.evaluate(() => document.querySelector('webview').executeJavaScript('document.getElementById("search").value="fly identity"; document.getElementById("search-form").requestSubmit()'));
+        await page.waitForFunction(fixture => document.querySelector('webview').getURL() === fixture+'/?q=fly%20identity', fixture);
+        await page.waitForFunction(() => document.querySelector('.tab-domain')?.textContent === '127.0.0.1');
+        const session = await page.evaluate(() => window.flyAPI.getSession());
+        assert.equal(session.workspaces[session.current_workspace][0], fixture+'/?q=fly%20identity');
+        // Custom colours survive, while the other theme retains its own defaults.
+        assert.equal(await page.evaluate(async () => {
+            const {getActiveThemeColors} = await import('./modules/theme.js');
+            return getActiveThemeColors({theme_colors:{dark:{accent:'#abcdef'}}}, 'dark').accent;
+        }), '#abcdef');
+        assert.deepEqual(errors, []);
+        console.log('Fly identity: both themes, bundled fonts/icons, local new tab, configured search, session and custom colours pass.');
+    } finally {
+        if (app) await app.close();
+        await new Promise(resolve => server.close(resolve));
+        fs.rmSync(temporary, {recursive:true, force:true});
+    }
+})().catch(error => {console.error(error); process.exitCode=1;});

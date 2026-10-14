@@ -5,7 +5,8 @@ export default defineConfig({
   description: 'Keyboard-first, container-isolated web browser for fanless Linux systems',
   base: '/fly-browser/',
   head: [
-    ['link', { rel: 'icon', href: '/fly-browser/logo.png' }],
+    ['link', { rel: 'stylesheet', href: '/fly-browser/fonts/fonts.css' }],
+    ['link', { rel: 'icon', href: '/fly-browser/favicon.png' }],
     ['meta', { property: 'og:type', content: 'website' }],
     ['meta', { property: 'og:site_name', content: 'Fly Browser' }],
     ['meta', { property: 'og:title', content: 'Fly Browser' }],

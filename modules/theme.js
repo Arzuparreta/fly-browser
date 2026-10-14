@@ -1,20 +1,21 @@
+import { refreshNewTabs } from './newTab.js';
 // modules/theme.js
 // Custom visual palette and opacity controller for Fly Browser
 
 export const DEFAULT_THEME_COLORS = {
     dark: {
-        accent: '#7aa2f7',
-        bg_main: '#1a1b26',
-        bg_sidebar: '#16161e',
-        text: '#c0caf5',
+        accent: '#e0261c',
+        bg_main: '#121211',
+        bg_sidebar: '#0b0b0a',
+        text: '#e7e1d3',
         sidebar_opacity: 100,
         overlay_opacity: 100
     },
     light: {
-        accent: '#2b59c3',
-        bg_main: '#e5e5e5',
-        bg_sidebar: '#d4d4d4',
-        text: '#1a1a1a',
+        accent: '#e0261c',
+        bg_main: '#ece6d8',
+        bg_sidebar: '#e3dccb',
+        text: '#1a1814',
         sidebar_opacity: 100,
         overlay_opacity: 100
     }
@@ -69,6 +70,7 @@ export function applyThemeVisuals(cfg = null, modeOverride = null) {
     setVisualProperty('--overlay-opacity', `${colors.overlay_opacity}%`);
 
     highlightActiveSwatch(colors.accent);
+    refreshNewTabs();
 }
 
 function highlightActiveSwatch(activeAccent) {

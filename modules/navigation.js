@@ -99,7 +99,7 @@ export function displayAddressOverlay() {
         if (activeListItem) {
             const currentIdx = Array.from(document.querySelectorAll('#TabList li')).indexOf(activeListItem);
             if (state.sessionState.workspaces[currentWS] && state.sessionState.workspaces[currentWS][currentIdx]) {
-                addressBar.value = state.sessionState.workspaces[currentWS][currentIdx];
+                addressBar.value = state.sessionState.workspaces[currentWS][currentIdx] === 'about:blank' ? '' : state.sessionState.workspaces[currentWS][currentIdx];
             }
         }
         

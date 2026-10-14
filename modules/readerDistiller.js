@@ -2939,16 +2939,16 @@ if (typeof module === "object") {
         }
 
         .fly-reader-wrapper.theme-dark {
-            --bg-color: #1a1b26;
-            --surface-color: #24283b;
-            --toolbar-bg: rgba(36, 40, 59, 0.88);
-            --text-color: #c0caf5;
-            --text-secondary: #9aa5ce;
-            --text-muted: #565f89;
-            --accent-color: #7aa2f7;
-            --border-color: #2f354d;
-            --code-bg: #16161e;
-            --quote-border: #7aa2f7;
+            --bg-color: #121211;
+            --surface-color: #1b1a18;
+            --toolbar-bg: #1b1a18;
+            --text-color: #e7e1d3;
+            --text-secondary: #8a857a;
+            --text-muted: #8a857a;
+            --accent-color: #e0261c;
+            --border-color: #2b2a27;
+            --code-bg: #0b0b0a;
+            --quote-border: #e0261c;
         }
 
         .fly-reader-wrapper.theme-sepia {
@@ -2965,16 +2965,16 @@ if (typeof module === "object") {
         }
 
         .fly-reader-wrapper.theme-light {
-            --bg-color: #ffffff;
-            --surface-color: #f6f8fa;
-            --toolbar-bg: rgba(246, 248, 250, 0.88);
-            --text-color: #24292f;
-            --text-secondary: #57606a;
-            --text-muted: #8c959f;
-            --accent-color: #0969da;
-            --border-color: #d0d7de;
-            --code-bg: #f6f8fa;
-            --quote-border: #0969da;
+            --bg-color: #ece6d8;
+            --surface-color: #f3eee3;
+            --toolbar-bg: #f3eee3;
+            --text-color: #1a1814;
+            --text-secondary: #7a7365;
+            --text-muted: #7a7365;
+            --accent-color: #2457b8;
+            --border-color: #cfc6b2;
+            --code-bg: #f3eee3;
+            --quote-border: #2457b8;
         }
 
         .fly-reader-wrapper.font-sans {
@@ -3012,8 +3012,6 @@ if (typeof module === "object") {
             border-radius: 9999px;
             background: var(--toolbar-bg);
             border: 1px solid var(--border-color);
-            backdrop-filter: blur(16px);
-            -webkit-backdrop-filter: blur(16px);
             box-shadow: 0 8px 30px rgba(0, 0, 0, 0.2);
             color: var(--text-color);
             user-select: none;
@@ -3263,7 +3261,7 @@ if (typeof module === "object") {
 
         var overlay = document.createElement('div');
         overlay.id = READER_OVERLAY_ID;
-        overlay.style.cssText = 'position: fixed !important; top: 0 !important; left: 0 !important; width: 100vw !important; height: 100vh !important; z-index: 2147483647 !important; margin: 0 !important; padding: 0 !important; border: none !important; display: block !important; overflow-y: auto !important; overflow-x: hidden !important; background-color: ' + (prefs.theme === 'dark' ? '#1a1b26' : (prefs.theme === 'sepia' ? '#f4ecd8' : '#ffffff')) + ';';
+        overlay.style.cssText = 'position: fixed !important; top: 0 !important; left: 0 !important; width: 100vw !important; height: 100vh !important; z-index: 2147483647 !important; margin: 0 !important; padding: 0 !important; border: none !important; display: block !important; overflow-y: auto !important; overflow-x: hidden !important; background-color: ' + (prefs.theme === 'dark' ? '#121211' : (prefs.theme === 'sepia' ? '#f4ecd8' : '#ece6d8')) + ';';
 
         var shadow = overlay.attachShadow({ mode: 'open' });
 
@@ -3360,7 +3358,7 @@ if (typeof module === "object") {
             var nextIdx = (themeOrder.indexOf(prefs.theme) + 1) % themeOrder.length;
             prefs.theme = themeOrder[nextIdx];
             wrapper.className = 'fly-reader-wrapper theme-' + prefs.theme + ' font-' + prefs.fontFamily;
-            overlay.style.backgroundColor = (prefs.theme === 'dark' ? '#1a1b26' : (prefs.theme === 'sepia' ? '#f4ecd8' : '#ffffff'));
+            overlay.style.backgroundColor = (prefs.theme === 'dark' ? '#121211' : (prefs.theme === 'sepia' ? '#f4ecd8' : '#ece6d8'));
             themeBtn.querySelector('.theme-icon').textContent = prefs.theme === 'dark' ? '🌙 Dark' : (prefs.theme === 'sepia' ? '📜 Sepia' : '☀️ Light');
             saveReaderPreferences(prefs);
         });

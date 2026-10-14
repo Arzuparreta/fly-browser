@@ -1,3 +1,4 @@
+import { NEW_TAB_URL, isNewTab, refreshNewTab } from './newTab.js';
 import { hasActiveOverlay } from './focus.js';
 import { state } from './state.js';
 import { getActiveWebview, focusActiveWebview, removeWebview, getWorkspacePartition, isDarkMode, isPdfUrl, getPdfViewerUrl, extractOriginalUrl, isTargetPrivateDomain } from './utils.js';
@@ -41,7 +42,7 @@ export function createWebView(url, currentWS, idx) {
         webview.setAttribute('partition', getWorkspacePartition(currentWS));
     }
     
-    const initialSrc = isPdfUrl(url) ? getPdfViewerUrl(url) : url;
+    const initialSrc = isNewTab(url) ? NEW_TAB_URL : isPdfUrl(url) ? getPdfViewerUrl(url) : url;
     loadWebviewSource(webview, currentWS, initialSrc);
 
     webview.addEventListener('will-navigate', (e) => {
@@ -113,7 +114,7 @@ export function createWebView(url, currentWS, idx) {
         const liveIdx = getLiveTabIndex(webview, currentWS, idx);
         if (liveIdx < 0) return;
 
-        const cleanUrl = extractOriginalUrl(e.url);
+        const cleanUrl = isNewTab(e.url) ? 'about:blank' : extractOriginalUrl(e.url);
         if (state.sessionState.workspaces[currentWS] && state.sessionState.workspaces[currentWS][liveIdx] !== undefined) {
             state.sessionState.workspaces[currentWS][liveIdx] = cleanUrl;
             window.flyAPI.saveSession(state.sessionState);
@@ -122,6 +123,8 @@ export function createWebView(url, currentWS, idx) {
         state.tabActivityTimestamps[currentWS][liveIdx] = Date.now();
         const targetLi = document.querySelectorAll('#TabList li')[liveIdx];
         if (targetLi) {
+            const domain = targetLi.querySelector('.tab-domain');
+            if (domain) { try { domain.textContent = isNewTab(webview.getURL()) ? 'fly / new tab' : new URL(webview.getURL()).hostname || 'local page'; } catch {} }
             const cfg = (await window.flyAPI.getBrowserSettings()) || {};
             updateTabShieldStatus(targetLi, cleanUrl, cfg.trusted_domains || []);
         }
@@ -138,7 +141,7 @@ export function createWebView(url, currentWS, idx) {
         const liveIdx = getLiveTabIndex(webview, currentWS, idx);
         if (liveIdx < 0) return;
 
-        const cleanUrl = extractOriginalUrl(e.url);
+        const cleanUrl = isNewTab(e.url) ? 'about:blank' : extractOriginalUrl(e.url);
         if (state.sessionState.workspaces[currentWS] && state.sessionState.workspaces[currentWS][liveIdx] !== undefined) {
             state.sessionState.workspaces[currentWS][liveIdx] = cleanUrl;
             window.flyAPI.saveSession(state.sessionState);
@@ -147,6 +150,8 @@ export function createWebView(url, currentWS, idx) {
         state.tabActivityTimestamps[currentWS][liveIdx] = Date.now();
         const targetLi = document.querySelectorAll('#TabList li')[liveIdx];
         if (targetLi) {
+            const domain = targetLi.querySelector('.tab-domain');
+            if (domain) { try { domain.textContent = isNewTab(webview.getURL()) ? 'fly / new tab' : new URL(webview.getURL()).hostname || 'local page'; } catch {} }
             const cfg = (await window.flyAPI.getBrowserSettings()) || {};
             updateTabShieldStatus(targetLi, cleanUrl, cfg.trusted_domains || []);
         }
@@ -271,12 +276,15 @@ export function createWebView(url, currentWS, idx) {
 
     webview.addEventListener('dom-ready', async () => {
         webview.__flyKeyboardMode = {};
+        refreshNewTab(webview);
         webview.style.opacity = '1';
         const liveIdx = getLiveTabIndex(webview, currentWS, idx);
         if (liveIdx < 0) return;
 
         const targetLi = document.querySelectorAll('#TabList li')[liveIdx];
         if (targetLi) {
+            const domain = targetLi.querySelector('.tab-domain');
+            if (domain) { try { domain.textContent = isNewTab(webview.getURL()) ? 'fly / new tab' : new URL(webview.getURL()).hostname || 'local page'; } catch {} }
             const cfg = (await window.flyAPI.getBrowserSettings()) || {};
             updateTabShieldStatus(targetLi, webview.getURL(), cfg.trusted_domains || []);
         }
@@ -852,7 +860,7 @@ export function renderWorkspaceUI(targetTabToFocus = null) {
             }
         }
         if (!cachedTitle) {
-            cachedTitle = "Loading...";
+            cachedTitle = isNewTab(url) ? "New tab · Fly" : "Loading...";
         }
         const isSleeping = !!state.tabSleepStates[currentWS][idx];
         const cachedFavicon = state.tabFavicons[currentWS]?.[idx] || null;
@@ -925,7 +933,17 @@ export function renderWorkspaceUI(targetTabToFocus = null) {
         const titleSpan = document.createElement('span');
         titleSpan.className = 'tab-title';
         titleSpan.textContent = cachedTitle.length > 24 ? cachedTitle.slice(0, 24) + "..." : cachedTitle;
-        li.appendChild(titleSpan);
+        const copy = document.createElement('div');
+        copy.className = 'tab-copy';
+        const domain = document.createElement('span');
+        domain.className = 'tab-domain';
+        try { domain.textContent = isNewTab(url) ? 'fly / new tab' : new URL(url).hostname || 'local page'; } catch { domain.textContent = ''; }
+        copy.append(titleSpan, domain);
+        li.appendChild(copy);
+        const flight = document.createElement('span');
+        flight.className = 'tab-flight-state';
+        flight.setAttribute('aria-hidden', 'true');
+        li.appendChild(flight);
 
         if (isSleeping) {
             const sleepBadge = document.createElement('span');
@@ -1068,6 +1086,7 @@ export function switchTabFocus(targetIdx) {
     
     if (!state.dashboardActive && currentWSViews[targetIdx]) {
         currentWSViews[targetIdx].style.display = 'flex';
+        refreshNewTab(currentWSViews[targetIdx]);
         
         if (!state.tabActivityTimestamps[currentWS]) state.tabActivityTimestamps[currentWS] = [];
         state.tabActivityTimestamps[currentWS][targetIdx] = Date.now();
@@ -1133,18 +1152,7 @@ export async function spawnNewBlankTab() {
     const currentWS = state.sessionState.current_workspace;
     if (!state.sessionState.workspaces[currentWS]) state.sessionState.workspaces[currentWS] = [];
 
-    let defaultUrl = 'https://duckduckgo.com';
-    if (window.flyAPI && typeof window.flyAPI.getBrowserSettings === 'function') {
-        try {
-            const cfg = await window.flyAPI.getBrowserSettings();
-            if (cfg && cfg.search_engine) {
-                const parsedUrl = new URL(cfg.search_engine.split('?')[0]);
-                defaultUrl = `${parsedUrl.protocol}//${parsedUrl.host}`;
-            }
-        } catch (err) {
-            defaultUrl = 'https://duckduckgo.com';
-        }
-    }
+    const defaultUrl = 'about:blank';
 
     state.sessionState.workspaces[currentWS].push(defaultUrl);
     window.flyAPI.saveSession(state.sessionState);
