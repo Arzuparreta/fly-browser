@@ -3,12 +3,11 @@
 > A small, minimal alternative to the typical Linux browsers: full keyboard control of the browser, with a polished experience for mouse users.
 
 [![Latest Release](https://img.shields.io/github/v/release/Arzuparreta/fly-browser?logo=github&label=release)](https://github.com/Arzuparreta/fly-browser/releases/latest)
-[![Documentation](https://img.shields.io/badge/docs-GitHub_Pages-blue.svg)](https://arzuparreta.github.io/fly-browser/)
 [![License: GPL v3](https://img.shields.io/badge/License-GPLv3-blue.svg)](LICENSE)
 
 Fly wraps the Chromium engine in a lean Electron shell. Every browser action can be driven from the keyboard, and the interface is being refined so that pointer users get an equally polished experience. It stays small: low memory use, isolated workspaces and no background services.
 
-📖 **Official Documentation**: [https://arzuparreta.github.io/fly-browser/](https://arzuparreta.github.io/fly-browser/)
+📖 **Documentation**: [`docs/`](docs/guide/getting-started.md)
 
 📦 **Packages**: [Releases](https://github.com/Arzuparreta/fly-browser/releases) • [Running from source](#quick-start-running-from-source)
 
@@ -33,7 +32,7 @@ Fly wraps the Chromium engine in a lean Electron shell. Every browser action can
 
 Security, isolation, and upstream dependency freshness are foundational principles for Fly:
 
-* **Twice-Weekly Upstream Tracking**: Fly monitors upstream Electron and Chromium security releases twice weekly. Patches are evaluated, verified, and shipped promptly.
+* **Versions that decide themselves**: Every merged pull request declares its impact, and the next version number is derived from those declarations. See [Versioning and releases](docs/releasing.md).
 * **Engine Version Verification**: Active Fly, Electron, and Chromium runtime versions are visible in **Preferences → About** (`Ctrl + H`) and the Welcome view.
 * **Strict Process Sandboxing**: Webviews run with `contextIsolation: true`, `nodeIntegration: false`, and Chromium sandboxing enabled, guarded by a minimal IPC whitelist.
 * **Permissions Denied by Default**: Hardware access (camera, microphone, geolocation, and MIDI) is blocked by default.
@@ -44,9 +43,9 @@ Security, isolation, and upstream dependency freshness are foundational principl
 
 ## Downloads
 
-No binary packages have been published from this repository yet. Run Fly from source (below). Pushing a version tag runs the release workflow, which publishes Linux, macOS and Windows packages with SHA-256 checksums on the [Releases page](https://github.com/Arzuparreta/fly-browser/releases).
+Each release publishes Linux, macOS and Windows packages with SHA-256 checksums on the [Releases page](https://github.com/Arzuparreta/fly-browser/releases). Until the first one is out, run Fly from source (below).
 
-For platform notes, see the [Installation Guide](https://arzuparreta.github.io/fly-browser/guide/installation).
+For platform notes, see the [Installation Guide](docs/guide/installation.md).
 
 ***
 
@@ -76,16 +75,16 @@ cd fly-browser
 
 ## Documentation
 
-Comprehensive user guides and configuration references are hosted on the GitHub Pages site:
+User guides and configuration references live in [`docs/`](docs/):
 
-* [Getting Started & Philosophy](https://arzuparreta.github.io/fly-browser/guide/getting-started)
-* [Mouse-Free Navigation & Link Hints](https://arzuparreta.github.io/fly-browser/guide/navigation)
-* [Workspaces & Multi-Account Containers](https://arzuparreta.github.io/fly-browser/guide/workspaces-and-containers)
-* [True Tab Hibernation Guide](https://arzuparreta.github.io/fly-browser/guide/tab-hibernation)
-* [Local User Scripts & Styles Guide](https://arzuparreta.github.io/fly-browser/guide/user-scripts-and-styles)
-* [Terminal Security & Oversight Scanner](https://arzuparreta.github.io/fly-browser/guide/terminal-oversight)
-* [Keyboard Shortcuts Reference](https://arzuparreta.github.io/fly-browser/reference/keybinds)
-* [Configuration Files Reference](https://arzuparreta.github.io/fly-browser/reference/configuration)
+* [Getting Started & Philosophy](docs/guide/getting-started.md)
+* [Mouse-Free Navigation & Link Hints](docs/guide/navigation.md)
+* [Workspaces & Multi-Account Containers](docs/guide/workspaces-and-containers.md)
+* [True Tab Hibernation Guide](docs/guide/tab-hibernation.md)
+* [Local User Scripts & Styles Guide](docs/guide/user-scripts-and-styles.md)
+* [Terminal Security & Oversight Scanner](docs/guide/terminal-oversight.md)
+* [Keyboard Shortcuts Reference](docs/reference/keybinds.md)
+* [Configuration Files Reference](docs/reference/configuration.md)
 
 ***
 
@@ -126,7 +125,7 @@ This project is licensed under the terms of the GNU General Public Licence v3.0 
 
 ## Engineering records
 
+- [Versioning and releases](docs/releasing.md)
+- [Contributing](CONTRIBUTING.md)
 - [Keyboard coverage review](docs/keyboard-review.md)
-- [Fork fixes ledger](docs/fork-fixes.md)
-
-Every PR records the problems it solves, including defects inherited from the original Mise code.
+- [Fork fixes ledger](docs/fork-fixes.md) (closed; records the work done before releases began)

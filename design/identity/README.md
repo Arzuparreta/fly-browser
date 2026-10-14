@@ -117,7 +117,6 @@ Fly targets old machines without a dedicated GPU.
 1. **Small icons, 16, 24 and 32 px.** The illustration turns to mush below 48 px. These need a hand drawn pixel art fly that keeps the two red eyes. Until then do not ship 16 to 32 px from the vector.
 2. **Wordmark.** The mockups set `FLY` in Doto; no separate lockup has been drawn.
 3. **Social image and documentation logo** (`docs/public/og-image.png`, `docs/public/logo.png`): not redrawn yet.
-4. **Fork fixes ledger.** The implementation PR should record the identity change and close the placeholder icon limit noted under FLY-01 in `docs/fork-fixes.md`.
 
 ## Regenerating the assets
 

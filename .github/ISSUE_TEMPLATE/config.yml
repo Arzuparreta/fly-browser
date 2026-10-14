@@ -4,5 +4,5 @@ contact_links:
     url: https://github.com/Arzuparreta/fly-browser/security/advisories/new
     about: Report security vulnerabilities privately through GitHub Security Advisories
   - name: Documentation & User Guides
-    url: https://arzuparreta.github.io/fly-browser/
+    url: https://github.com/Arzuparreta/fly-browser/tree/main/docs
     about: Read official guides, keyboard references, and configuration options
