@@ -6,7 +6,7 @@ How linear keyboard navigation secretly allocated hundreds of megabytes of RAM, 
 
 ## 1. The Problem: The Awakening Cascade
 
-One of the defining pillars of Mise Browser is True Tab Hibernation. On a fanless Linux laptop or a resource-constrained development environment running Arch Linux and Hyprland, background Chromium processes can rapidly consume gigabytes of memory and trigger aggressive swap churn. 
+One of the defining pillars of Mise Browser is True Tab Hibernation. On a fanless Linux laptop or a resource-constrained development environment running Arch Linux and Hyprland, background Chromium processes can rapidly consume gigabytes of memory and trigger aggressive swap churn.
 
 In Mise, background tabs hibernate: idle `<webview>` instances are completely detached from the DOM, terminating their underlying Chromium renderer processes and releasing memory until the user explicitly requests them again.
 
@@ -136,7 +136,7 @@ To make the state transition unmistakable, we introduced distinct visual styling
 }
 ```
 
-The user sees a clear dashed outline skimming effortlessly over the tabs. 
+The user sees a clear dashed outline skimming effortlessly over the tabs.
 
 Activation only occurs when the user explicitly commits:
 * **Enter** or **Space**: Wakes and activates the highlighted tab in place.
@@ -148,12 +148,12 @@ Activation only occurs when the user explicitly commits:
 
 ### Step 2: Direct $O(1)$ Tab Jumping
 
-While non-disruptive cursor navigation solved the memory spike of scrolling, moving between distant tabs sequentially still required multiple keystrokes. 
+While non-disruptive cursor navigation solved the memory spike of scrolling, moving between distant tabs sequentially still required multiple keystrokes.
 
 To eliminate mouse usage entirely, we introduced direct random-access tab jumping through two unified mechanisms:
 
 #### A. Universal Browser Shortcuts (`Ctrl + 1` to `Ctrl + 9`)
-Registered centrally in `keybinds.js` and intercepted via `before-input-event` in the main process, `Ctrl + 1` through `Ctrl + 8` jump directly to tabs 1 through 8 from anywhere: inside guest webviews, form inputs, or overlays. 
+Registered centrally in `keybinds.js` and intercepted via `before-input-event` in the main process, `Ctrl + 1` through `Ctrl + 8` jump directly to tabs 1 through 8 from anywhere: inside guest webviews, form inputs, or overlays.
 
 Following standard browser conventions, `Ctrl + 9` intelligently routes to the 9th tab or the final tab if fewer than 9 tabs are open:
 
@@ -243,7 +243,7 @@ The moment you tap `Ctrl + S` or hold `Ctrl`, the tab favicons gracefully dim, a
 
 ## 4. Key Takeaway
 
-In modern software development, we often take linear list navigation for granted. It is easy to treat list focus as a free operation. 
+In modern software development, we often take linear list navigation for granted. It is easy to treat list focus as a free operation.
 
 However, in resource-constrained architectures, **every user action carries a hidden cost model**. When list items represent heavy external resources such as Chromium renderer processes, SQLite handles, or network sockets, cursor traversal must never be conflated with resource instantiation.
 

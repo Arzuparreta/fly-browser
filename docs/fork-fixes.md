@@ -62,6 +62,20 @@ Electron's [native input implementation](https://github.com/electron/electron/bl
 | :--- | :--- | :--- | :--- |
 | <a id="perf-09"></a>PERF-09 | The integrated default-GPU series exposed a cold-start regression: two fork page-ready samples exceeded 1.1 s while main was around 0.4 s. A separate instrumented probe measured a 584 ms synchronous keyboard-table wait while the main thread compiled Ghostery's downloaded lists. | Keep the initial binding snapshot and filtering semantics intact. Fetch the same preset lists/resources with Ghostery's existing retry helpers, compile/serialise them in one temporary Node worker, then exit the worker before deserialising/attaching the shared Electron blocker. Reuse the transferred compiled bytes for the cache file, avoiding a second 6.6 MiB serialisation/allocation in the main process. Valid caches bypass the worker entirely. No new dependency, persistent thread or periodic task. Both helper files are explicitly packaged. | Actual-worker tests compare the full binary against Ghostery's parse/resources recipe, verify blocking/exceptions, termination on success/error and retry. Shared-session/cache/corruption tests remain. Five alternating cold-start pairs measure page readiness, attached filtering and 100 ms sampled full-tree PSS. The real packaged binary must create a cold cache using its packaged worker. |
 
+## Final upstream documentation sync · 14 October 2026
+
+| ID | Original problem | Result | Validation |
+| :--- | :--- | :--- | :--- |
+| <a id="sync-04"></a>SYNC-04 | Main advanced again to 3be7f96 before submission, adding the tab-traversal chronicle and documentation navigation. Its new article contained five trailing-whitespace lines. | Integrate the latest main and preserve the article/index/navigation, trimming only trailing whitespace required by the fork's verification check. Application sources are identical to measured main 2f8ca5f, so this sync does not change the benchmark workload. | The incoming diff contains documentation only; application-source equivalence, documentation build and git diff --check. |
+
+## Audit acceptance and remaining limits
+
+Final application source: 3fe47bb, application hash 818f89c00b149a7ceffd4a1266d0af1533e1959ac038458bc1ee08eb3f0e712e. Upstream 3be7f96 contains the same application source as measured 2f8ca5f; its later changes are documentation only.
+
+Validation: npm test and generated-file checks pass. The complete seven-suite desktop command, footer test and packaged smoke pass on the physical X11 display in i3 workspace 4; recorder/editable-page checks were also rerun after introducing the cold compiler. The final packaged binary creates its real cold filter cache with both compiler modules present. JavaScript syntax and documentation build are checked before submission. Earlier failed/stalled desktop attempts, the interrupted virtual-display attempt and exploratory measurements are recorded as such in the audit rather than counted as successful acceptance runs.
+
+The final comparison has three alternating cached pairs, three default-GPU/empty-cache pairs with 30-second idle windows, and five cold-start/peak-memory pairs. Process counts and hibernation are equivalent; disabled extension compatibility code stays unloaded. Idle CPU and Preferences/switching work improve. Cached PSS and sampled startup peak are lower, but the cold one-tab idle point retains a 7.0 MiB median difference above main; tiny creation timing differences and the static catalogue/handler cost are also explicit. This is not a literal zero-byte claim. Physical low-RAM/ARM hardware, memory pressure, battery, Wayland and other platforms remain unverified. See the [full ranges, raw data and reproduction](./performance-audit.md).
+
 ## Keyboard control and personalised bindings · 13 October 2026
 
 Implementation and validation: [PR #1](https://github.com/Arzuparreta/Mise-browser/pull/1), targeting the fork's `personal` branch. It replaces the separate chord and hard-coded page-key paths with a shared grammar and versioned configuration. The page controller is custom Mise code, not Vimium.

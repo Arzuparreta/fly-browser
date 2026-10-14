@@ -1,6 +1,6 @@
 # Adoption and review guide
 
-This proposal brings the application's changes from the fork's personal branch to upstream 0.15.0, including the newer direct tab-jump/sidebar-cursor work at 2f8ca5f. The goal is a keyboard-accessible browser with editable bindings and discoverable Preferences, while keeping default browsing suitable for limited hardware. The [performance audit](./performance-audit.md) gives reproducible comparisons and explicit limits; the [fix ledger](./fork-fixes.md) separates inherited repairs from new capabilities.
+This proposal brings the application's changes from the fork's personal branch to upstream 0.15.0, including the newer direct tab-jump/sidebar-cursor work at 2f8ca5f and the subsequent documentation sync at 3be7f96. The goal is a keyboard-accessible browser with editable bindings and discoverable Preferences, while keeping default browsing suitable for limited hardware. The [performance audit](./performance-audit.md) gives reproducible comparisons and explicit limits; the [fix ledger](./fork-fixes.md) separates inherited repairs from new capabilities.
 
 ## Review order and ownership
 
