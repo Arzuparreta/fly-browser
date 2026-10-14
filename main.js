@@ -41,6 +41,7 @@ const keyboard = require('./keyboard');
 const userContent = require('./userContent');
 const extensions = require('./extensions');
 const diagnostics = require('./diagnostics');
+const { createDesktopIntegration } = require('./desktopIntegration');
 
 // NATIVE CONFIG UTILITIES
 const CONFIG_DIR = path.join(app.getPath('home'), '.config', 'fly-browser');
@@ -122,6 +123,8 @@ const DEFAULT_CONFIG = {
     show_window_controls: false,
     custom_search_aliases: {},
     last_seen_version: null,
+    // Set once an AppImage start has asked to add Fly to the applications menu.
+    desktop_integration_offered: false,
     // Opt-in Chrome extensions, see extensions.js and docs/guide/extensions.md
     extensions_enabled: false,
     extensions_by_workspace: {},
@@ -890,6 +893,54 @@ async function checkAppUpdates(manual = false) {
 ipcMain.handle('check-for-updates', async (event, manual = false) => {
     return checkAppUpdates(manual);
 });
+
+// Applications menu entry and default browser (Linux). Packaged builds carry the
+// desktop entry and icons in resources/; a source checkout has them at its root.
+const desktopIntegration = createDesktopIntegration({
+    resourcesDir: app.isPackaged ? process.resourcesPath : path.join(__dirname, 'build'),
+    template: (() => {
+        try {
+            return fs.readFileSync(app.isPackaged ? path.join(process.resourcesPath, 'fly-browser.desktop') : path.join(__dirname, 'fly-browser.desktop'), 'utf8');
+        } catch (e) {
+            return '';
+        }
+    })()
+});
+
+async function desktopIntegrationAction(action) {
+    try {
+        return { ok: true, status: await action() };
+    } catch (err) {
+        diagnostics.logEvent('warn', 'desktop', `Desktop integration: ${err.message}`);
+        return { ok: false, error: err.message, status: await desktopIntegration.status().catch(() => ({ supported: false })) };
+    }
+}
+
+ipcMain.handle('desktop-integration-status', () => desktopIntegration.status().catch(() => ({ supported: false })));
+ipcMain.handle('desktop-integration-install', () => desktopIntegrationAction(desktopIntegration.install));
+ipcMain.handle('desktop-integration-remove', () => desktopIntegrationAction(desktopIntegration.remove));
+ipcMain.handle('desktop-integration-make-default', () => desktopIntegrationAction(desktopIntegration.makeDefault));
+
+// Asked once, on the first start of an AppImage that no menu entry launches.
+async function offerDesktopIntegration() {
+    const cfg = loadBrowserConfig();
+    if (cfg.desktop_integration_offered || !desktopIntegration.shouldOffer() || !mainWindow || mainWindow.isDestroyed()) return;
+    writeConfigFile({ ...cfg, desktop_integration_offered: true });
+    const { response, checkboxChecked } = await dialog.showMessageBox(mainWindow, {
+        type: 'question',
+        title: 'Add Fly to your applications',
+        message: 'Add Fly to your applications menu?',
+        detail: 'Fly is running from an AppImage, so Rofi and your desktop menu do not list it yet. Fly can add an entry for this file and keep it working if you move the file or replace it with a newer release.\n\nYou can change this later in Preferences → About.',
+        buttons: ['Add to menu', 'Not now'],
+        defaultId: 0,
+        cancelId: 1,
+        checkboxLabel: 'Also make Fly the default browser',
+        checkboxChecked: false,
+        noLink: true
+    });
+    if (response !== 0) return;
+    await desktopIntegrationAction(checkboxChecked ? desktopIntegration.makeDefault : desktopIntegration.install);
+}
 
 ipcMain.handle('open-external', async (event, url) => {
     if (!url || typeof url !== 'string') return false;
@@ -1694,6 +1745,10 @@ function createWindow() {
             }
         }, 1200);
 
+        setTimeout(() => {
+            offerDesktopIntegration().catch(err => diagnostics.logEvent('warn', 'desktop', `Desktop integration offer failed: ${err.message}`));
+        }, 2500);
+
         // Check for updates in background after startup
         setTimeout(async () => {
             try {
@@ -2104,6 +2159,11 @@ if (gotSingleInstanceLock) {
         diagnostics.initDiagnostics(loadBrowserConfig());
         if (isCrashRecovery) {
             diagnostics.logEvent('warn', 'session', 'Detected previous unclean shutdown or crash, initialising recovery mode');
+        }
+        try {
+            desktopIntegration.refresh();
+        } catch (err) {
+            diagnostics.logEvent('warn', 'desktop', `Could not update the menu entry: ${err.message}`);
         }
         createWindow();
         process.removeListener('uncaughtException', failStartup);

@@ -76,6 +76,10 @@ contextBridge.exposeInMainWorld('flyAPI', {
     getUserContentSummary: () => ipcRenderer.invoke('get-user-content-summary'),
     compactMemory: () => ipcRenderer.invoke('compact-memory'),
     checkForUpdates: (manual) => ipcRenderer.invoke('check-for-updates', manual),
+    getDesktopIntegration: () => ipcRenderer.invoke('desktop-integration-status'),
+    addToApplicationsMenu: () => ipcRenderer.invoke('desktop-integration-install'),
+    removeFromApplicationsMenu: () => ipcRenderer.invoke('desktop-integration-remove'),
+    makeDefaultBrowser: () => ipcRenderer.invoke('desktop-integration-make-default'),
     openExternal: (url) => ipcRenderer.invoke('open-external', url),
     onUpdateAvailable: (callback) => {
         const handler = (event, info) => callback(info);

@@ -3,10 +3,11 @@
   "version": "0.16.1",
   "description": "A small, minimal Linux browser with full keyboard control and a polished experience for mouse users.",
   "main": "main.js",
+  "desktopName": "fly-browser.desktop",
   "license": "GPL-3.0-or-later",
   "scripts": {
     "start": "install-electron && electron . --log-level=3",
-    "test": "node tests/auth-security.test.js && node tests/closed-output.test.js && node tests/adblocker-startup.test.js && node tests/adblocker-build.test.js && node tests/clock.test.js && node tests/audio-controls.test.js && node tests/pinned-tabs.test.js && node tests/search-aliases.test.js && node tests/config-writes.test.js && node tests/profile-migration.test.js && node tests/keyboard.test.js && node scripts/sync-keyboard.js --check && node scripts/generate-keybind-docs.js --check && node tests/navigation-focus.test.js && node tests/overlay-state.test.js && node tests/extensions.test.js && node tests/tab-jump.test.js && node tests/focus-recovery.test.js && node scripts/generate-extension-preload.js --check && node tests/launcher.test.js && node tests/release-tooling.test.js && node tests/aur-package.test.js && node scripts/version-sync.js --check",
+    "test": "node tests/auth-security.test.js && node tests/closed-output.test.js && node tests/adblocker-startup.test.js && node tests/adblocker-build.test.js && node tests/clock.test.js && node tests/audio-controls.test.js && node tests/pinned-tabs.test.js && node tests/search-aliases.test.js && node tests/config-writes.test.js && node tests/profile-migration.test.js && node tests/keyboard.test.js && node scripts/sync-keyboard.js --check && node scripts/generate-keybind-docs.js --check && node tests/navigation-focus.test.js && node tests/overlay-state.test.js && node tests/extensions.test.js && node tests/tab-jump.test.js && node tests/focus-recovery.test.js && node scripts/generate-extension-preload.js --check && node tests/launcher.test.js && node tests/release-tooling.test.js && node tests/aur-package.test.js && node tests/desktop-integration.test.js && node scripts/version-sync.js --check",
     "docs:dev": "vitepress dev docs",
     "docs:build": "vitepress build docs",
     "docs:preview": "vitepress preview docs",
@@ -15,7 +16,7 @@
     "dist": "electron-builder",
     "dist:linux": "electron-builder --linux",
     "dist:dir": "electron-builder --dir",
-    "test:keyboard-ui": "node tests/keyboard-ui.test.js && node tests/empty-search-ui.test.js && node tests/navigation-focus-ui.test.js && node tests/overlay-state-ui.test.js && node tests/sidebar-pointer-focus-ui.test.js && node tests/settings-nav-ui.test.js && node tests/interface-scale-ui.test.js && node tests/tab-close-typing-ui.test.js && node tests/sidebar-cursor-ui.test.js && node tests/legacy-keybinds-ui.test.js && node tests/oauth-popup-ui.test.js && node tests/self-closing-tab-ui.test.js",
+    "test:keyboard-ui": "node tests/desktop-integration-ui.test.js && node tests/keyboard-ui.test.js && node tests/empty-search-ui.test.js && node tests/navigation-focus-ui.test.js && node tests/overlay-state-ui.test.js && node tests/sidebar-pointer-focus-ui.test.js && node tests/settings-nav-ui.test.js && node tests/interface-scale-ui.test.js && node tests/tab-close-typing-ui.test.js && node tests/sidebar-cursor-ui.test.js && node tests/legacy-keybinds-ui.test.js && node tests/oauth-popup-ui.test.js && node tests/self-closing-tab-ui.test.js",
     "test:identity-ui": "node tests/identity-ui.test.js"
   },
   "build": {
@@ -40,6 +41,7 @@
       "closedOutput.js",
       "userContent.js",
       "diagnostics.js",
+      "desktopIntegration.js",
       "index.html",
       "style.css",
       "renderer.js",
@@ -60,6 +62,21 @@
       ],
       "category": "Network;WebBrowser",
       "icon": "build/icons",
+      "syncDesktopName": true,
+      "mimeTypes": [
+        "text/html",
+        "text/xml",
+        "application/xhtml+xml",
+        "x-scheme-handler/http",
+        "x-scheme-handler/https"
+      ],
+      "desktop": {
+        "entry": {
+          "Name": "Fly",
+          "GenericName": "Web Browser",
+          "Keywords": "browser;web;internet;"
+        }
+      },
       "extraResources": [
         {
           "from": "build/icons",
