@@ -212,3 +212,9 @@ Fly includes an in-engine DOM distiller powered by Mozilla Readability to strip 
   * **Reading Width**: Narrow (620px), Medium (760px), or Wide (940px).
 * **Reading Metrics**: Header estimates word count and reading time based on typical reading velocity.
 
+
+## Local new tab
+
+New tabs open a local Fly page with a clock, frequent sites from local history and a specimen illustration. Searches use your configured engine. The address bar retains aliases, bangs and calculator commands; its hint and link hints reflect your current bindings. Private mode does not show history suggestions.
+
+Memory is a process-resident-memory snapshot taken when the tab opens or becomes active; shared pages can be counted by more than one process. Landed tabs are hibernated tabs. Zero telemetry is a policy statement. No tracker count is invented. The clock pauses while the page is hidden.

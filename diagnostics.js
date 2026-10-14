@@ -170,7 +170,7 @@ async function gatherSystemDiagnostics(sessionStats = {}) {
             pid: m.pid,
             type: m.type,
             cpuPercent: Math.round((m.cpu ? m.cpu.percentCPUUsage : 0) * 10) / 10,
-            residentSetKB: m.memory ? m.memory.residentSet : 0
+            residentSetKB: m.memory ? (m.memory.workingSetSize ?? m.memory.residentSet ?? 0) : 0
         }));
     } catch (e) {
         appMetrics = [];

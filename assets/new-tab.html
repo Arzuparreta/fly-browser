@@ -1,0 +1,26 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' data:; connect-src 'none'">
+<title>New tab · Fly</title>
+<link rel="icon" href="identity/pixel-32.png"><link rel="stylesheet" href="fonts/fonts.css"><link rel="stylesheet" href="new-tab.css">
+<script src="new-tab.js" defer></script>
+</head>
+<body>
+<main>
+<section class="navigation" aria-label="New tab">
+<div class="eyebrow">FLY / YOUR NEXT FLIGHT</div>
+<time id="clock" aria-label="Current time"></time><div id="date"></div>
+<form id="search-form"><label class="sr-only" for="search">Search or enter address</label><input id="search" placeholder="Search or enter address" autocomplete="off" spellcheck="false"><button type="submit" aria-label="Go">↗</button></form><p id="address-hint" class="key-hint"></p>
+<div class="eyebrow sites-label">FREQUENT SITES</div><p id="links-hint" class="key-hint"></p><nav id="sites" aria-label="Frequent sites"></nav>
+<p id="empty">Your frequent sites will appear here as you browse.</p>
+</section>
+<figure class="specimen" aria-label="Fly specimen and browser statistics">
+<div class="specimen-number">01 / FLY</div><img id="memory-fly" src="identity/memory-chasis@2x.png" alt="Ink drawing of a fly, fading towards the tail">
+<figcaption class="annotation memory"><span id="memory">—</span><small>MEMORY / SNAPSHOT</small></figcaption>
+<div class="annotation landed"><span id="landed">0</span><small>LANDED TABS</small></div>
+<div class="annotation telemetry"><span>ZERO</span><small>TELEMETRY / BY DESIGN</small></div>
+</figure>
+</main><footer>SMALL FOOTPRINT. OPEN SKIES.</footer>
+</body></html>

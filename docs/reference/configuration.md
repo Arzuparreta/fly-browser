@@ -37,18 +37,18 @@ Controls hardware switches, process limits, privacy whitelists, and search prefe
     "webview_theme": "dark",
     "theme_colors": {
         "dark": {
-            "accent": "#7aa2f7",
-            "bg_main": "#1a1b26",
-            "bg_sidebar": "#16161e",
-            "text": "#c0caf5",
+            "accent": "#e0261c",
+            "bg_main": "#121211",
+            "bg_sidebar": "#0b0b0a",
+            "text": "#e7e1d3",
             "sidebar_opacity": 100,
             "overlay_opacity": 100
         },
         "light": {
-            "accent": "#2b59c3",
-            "bg_main": "#e5e5e5",
-            "bg_sidebar": "#d4d4d4",
-            "text": "#1a1a1a",
+            "accent": "#e0261c",
+            "bg_main": "#ece6d8",
+            "bg_sidebar": "#e3dccb",
+            "text": "#1a1814",
             "sidebar_opacity": 100,
             "overlay_opacity": 100
         }
@@ -81,11 +81,11 @@ Controls hardware switches, process limits, privacy whitelists, and search prefe
 - **`theme_colors`**: Custom visual colour palette and opacity settings per theme mode:
 
 ![Preferences Appearance section](/screenshots/preferences-2.webp)
-  - **`accent`**: Primary highlight colour for active tabs, borders, and controls (defaults to `#7aa2f7` in dark, `#2b59c3` in light).
+  - **`accent`**: Primary highlight colour for active tabs, borders, and controls (defaults to `#e0261c` in dark, `#e0261c` in light).
   - **`bg_main`**: Base window and modal canvas background colour.
   - **`bg_sidebar`**: Vertical sidebar background colour.
   - **`text`**: Primary text and icon foreground colour.
-  - **`sidebar_opacity`**: Sidebar background translucency percentage (40% to 100%) with backdrop blur glass effect.
+  - **`sidebar_opacity`**: Sidebar background translucency percentage (40% to 100%) without backdrop blur.
   - **`overlay_opacity`**: Modal and overlay translucency percentage (50% to 100%) for Command Palette, Notes, and Preferences.
 - **`trusted_domains`**: Array of domains exempted from tracker blocking and fingerprint spoofing.
 - **`extensions_enabled`**: Master switch for [opt-in Chrome extensions](/guide/extensions). `false` by default; while `false` nothing extension related runs.

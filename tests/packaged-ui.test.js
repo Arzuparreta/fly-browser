@@ -24,7 +24,7 @@ const asar = require('@electron/asar');
         assert(paths.data.startsWith(temporary + path.sep), 'Packaged smoke test must use a disposable profile');
         assert(paths.app.endsWith('app.asar'), 'Test must execute the real packaged application');
         assert.match(asar.extractFile(paths.app, 'extensions.js').toString(), /function initializeExtensions/, 'Required local extension runtime must be in the archive');
-        for (const name of ['adblocker-build.js', 'adblocker-worker.js']) assert(asar.extractFile(paths.app, name).length > 0, `${name} must be packaged`);
+        for (const name of ['adblocker-build.js', 'adblocker-worker.js', 'modules/newTab.js', 'assets/new-tab.html', 'assets/new-tab.js', 'assets/fonts/doto-0.woff2', 'assets/identity/memory-papel@2x.png', 'assets/vendor/fontawesome/webfonts/fa-solid-900.woff2']) assert(asar.extractFile(paths.app, name).length > 0, `${name} must be packaged`);
         const cache = path.join(paths.data, 'adblock_cache.bin');
         for (let attempt = 0; !fs.existsSync(cache); attempt++) {
             if (attempt === 600) throw new Error('Packaged cold filter compiler did not create its cache');

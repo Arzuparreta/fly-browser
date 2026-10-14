@@ -1,4 +1,4 @@
-/* viewer.js: Tailored Mozilla PDF.js presentation engine for Mise Browser */
+/* viewer.js: Tailored Mozilla PDF.js presentation engine for Fly Browser */
 
 (function() {
     'use strict';
@@ -49,7 +49,7 @@
     }
 
     const documentName = extractDocumentName(fileUrl);
-    document.title = `${documentName} · Mise PDF`;
+    document.title = `${documentName} · Fly PDF`;
     if (elements.title) {
         elements.title.textContent = documentName;
         elements.title.title = fileUrl || documentName;
@@ -241,7 +241,7 @@
             canvas.style.display = 'block';
             if (placeholder) placeholder.style.display = 'none';
 
-            // Extract and position text layer for selection and Mise find in page
+            // Extract and position text layer for selection and Fly find in page
             try {
                 const textContent = await page.getTextContent();
                 textLayer.innerHTML = '';
