@@ -96,21 +96,12 @@ Ensure you have a terminal emulator installed for the clipboard-mediated termina
    cd fly-browser
    ```
 
-2. Install dependencies:
+2. Launch Fly Browser:
    ```bash
-   npm install
+   ./launch.sh
    ```
 
-3. Launch Fly Browser:
-   ```bash
-   npm start
-   ```
-
-Alternatively, you can run the provided launcher script:
-```bash
-chmod +x launch.sh
-./launch.sh
-```
+The launcher installs the dependencies and the Electron runtime on the first run, and again whenever a pull changes them; later starts are immediate. Alternatively, run `npm install` followed by `npm start`.
 
 ---
 

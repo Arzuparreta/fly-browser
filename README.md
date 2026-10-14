@@ -66,17 +66,11 @@ For developers and contributors running Fly directly from the repository:
 git clone git@github.com:Arzuparreta/fly-browser.git
 cd fly-browser
 
-# Install dependencies
-npm install
-
 # Start the browser
-npm start
-```
-
-On Linux systems, you can also launch directly using the helper script:
-```bash
 ./launch.sh
 ```
+
+`launch.sh` installs the dependencies and the Electron runtime on the first run, and again whenever a pull changes them; later starts are immediate. Alternatively, run `npm install` followed by `npm start`.
 
 ***
 
