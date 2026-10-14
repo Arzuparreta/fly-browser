@@ -4,6 +4,8 @@ Record every solved problem here, including defects inherited from upstream. Eac
 
 ## Fly Browser · 14 October 2026
 
+Implementation/work-log: [fly-browser PR #1](https://github.com/Arzuparreta/fly-browser/pull/1).
+
 Fly is the renamed continuation of Mise. Its own repository is [Arzuparreta/fly-browser](https://github.com/Arzuparreta/fly-browser), which is not a GitHub fork. The repository was created with the complete history of Arzuparreta/Mise-browser at bdea294. Earlier entries in this ledger use the Mise name and link to that repository's pull requests.
 
 | ID | Original problem | Result | Validation |
