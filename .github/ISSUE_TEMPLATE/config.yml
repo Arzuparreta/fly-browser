@@ -1,11 +1,8 @@
 blank_issues_enabled: false
 contact_links:
   - name: Security Vulnerability Disclosure
-    url: https://github.com/Rakosn1cek/Mise-browser/security/advisories/new
+    url: https://github.com/Arzuparreta/Mise-browser/security/advisories/new
     about: Report security vulnerabilities privately through GitHub Security Advisories
   - name: Documentation & User Guides
-    url: https://rakosn1cek.github.io/Mise-browser/
+    url: https://arzuparreta.github.io/Mise-browser/
     about: Read official guides, keyboard references, and configuration options
-  - name: Community Discussions & Questions
-    url: https://github.com/Rakosn1cek/Mise-browser/discussions
-    about: Ask questions, share configuration tips, or discuss general ideas

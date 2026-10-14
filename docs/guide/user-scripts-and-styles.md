@@ -166,7 +166,7 @@ Standard `fetch()` inside a webpage cannot access third-party endpoints because 
 ```javascript
 GM_xmlhttpRequest({
     method: 'GET',
-    url: 'https://api.github.com/repos/rakosn1cek/mise-browser/releases/latest',
+    url: 'https://api.github.com/repos/Arzuparreta/Mise-browser/releases/latest',
     headers: {
         'Accept': 'application/vnd.github.v3+json'
     },

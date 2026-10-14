@@ -17,7 +17,7 @@
     "test:keyboard-ui": "node tests/keyboard-ui.test.js && node tests/navigation-focus-ui.test.js && node tests/overlay-state-ui.test.js && node tests/sidebar-pointer-focus-ui.test.js && node tests/settings-nav-ui.test.js && node tests/tab-close-typing-ui.test.js && node tests/sidebar-cursor-ui.test.js && node tests/legacy-keybinds-ui.test.js"
   },
   "build": {
-    "appId": "io.github.rakosn1cek.mise-browser",
+    "appId": "io.github.arzuparreta.mise-browser",
     "productName": "Mise Browser",
     "directories": {
       "output": "dist",

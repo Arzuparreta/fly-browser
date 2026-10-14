@@ -805,7 +805,7 @@ function fetchLatestRelease() {
     return new Promise((resolve, reject) => {
         const options = {
             hostname: 'api.github.com',
-            path: '/repos/Rakosn1cek/Mise-browser/releases/latest',
+            path: '/repos/Arzuparreta/Mise-browser/releases/latest',
             headers: {
                 'User-Agent': `Mise-Browser/${app.getVersion()}`,
                 'Accept': 'application/vnd.github.v3+json'
@@ -854,7 +854,7 @@ async function checkAppUpdates(manual = false) {
             currentVersion,
             latestVersion: latestTag,
             releaseName: release.name || latestTag,
-            releaseUrl: release.html_url || 'https://github.com/Rakosn1cek/Mise-browser/releases',
+            releaseUrl: release.html_url || 'https://github.com/Arzuparreta/Mise-browser/releases',
             publishedAt: release.published_at,
             releaseNotes: release.body || '',
             checkedAt: Date.now(),

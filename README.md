@@ -2,14 +2,15 @@
 
 > An efficient, keyboard-first, and container-isolated web browser engineered specifically for low-resource and fanless Linux hardware.
 
-[![Latest Release](https://img.shields.io/github/v/release/Rakosn1cek/Mise-browser?logo=github&label=release)](https://github.com/Rakosn1cek/Mise-browser/releases/latest)
-[![Documentation](https://img.shields.io/badge/docs-GitHub_Pages-blue.svg)](https://rakosn1cek.github.io/Mise-browser/)
+[![Latest Release](https://img.shields.io/github/v/release/Arzuparreta/Mise-browser?logo=github&label=release)](https://github.com/Arzuparreta/Mise-browser/releases/latest)
+[![Documentation](https://img.shields.io/badge/docs-GitHub_Pages-blue.svg)](https://arzuparreta.github.io/Mise-browser/)
 [![License: GPL v3](https://img.shields.io/badge/License-GPLv3-blue.svg)](LICENSE)
 
 Named after the Czech word for *"mission"*, Mise leverages the Chromium rendering engine wrapped inside a streamlined Electron framework to minimise system overhead while delivering a fast, isolated web experience without mouse dependency.
 
-📖 **Official Documentation**: [https://rakosn1cek.github.io/Mise-browser/](https://rakosn1cek.github.io/Mise-browser/)  
-📦 **Download Packages (v0.15.0)**: [GitHub Releases](https://github.com/Rakosn1cek/Mise-browser/releases/latest) • [Direct Package Links](#downloads)
+📖 **Official Documentation**: [https://arzuparreta.github.io/Mise-browser/](https://arzuparreta.github.io/Mise-browser/)
+
+📦 **Packages**: [Releases](https://github.com/Arzuparreta/Mise-browser/releases) • [Running from source](#quick-start-running-from-source)
 
 ![Mise Browser Dual-Split View](docs/public/screenshots/split-view.webp)
 
@@ -43,38 +44,9 @@ Security, isolation, and upstream dependency freshness are foundational principl
 
 ## Downloads
 
-Pre-built standalone binaries and packages are compiled and published for Linux, macOS, and Windows with each release.
+No binary packages have been published from this repository yet. Run Mise from source (below). Pushing a version tag runs the release workflow, which publishes Linux, macOS and Windows packages with SHA-256 checksums on the [Releases page](https://github.com/Arzuparreta/Mise-browser/releases).
 
-> **Latest Release**: [**v0.15.0**](https://github.com/Rakosn1cek/Mise-browser/releases/latest) • [All Releases & Release Notes](https://github.com/Rakosn1cek/Mise-browser/releases)
-
-| Platform | Format | Architecture | Direct Download | Notes |
-| :--- | :--- | :--- | :--- | :--- |
-| **Linux** | AppImage | x64 | [Mise.Browser-0.15.0.AppImage](https://github.com/Rakosn1cek/Mise-browser/releases/download/v0.15.0/Mise.Browser-0.15.0.AppImage) | Portable executable (`chmod +x` and run) |
-| **Linux** | tar.gz | x64 | [mise-browser-0.15.0.tar.gz](https://github.com/Rakosn1cek/Mise-browser/releases/download/v0.15.0/mise-browser-0.15.0.tar.gz) | Standalone tarball archive |
-| **macOS** | DMG | Apple Silicon (arm64) | [Mise.Browser-0.15.0-arm64.dmg](https://github.com/Rakosn1cek/Mise-browser/releases/download/v0.15.0/Mise.Browser-0.15.0-arm64.dmg) | Drag and drop installer |
-| **macOS** | ZIP | Apple Silicon (arm64) | [Mise.Browser-0.15.0-arm64-mac.zip](https://github.com/Rakosn1cek/Mise-browser/releases/download/v0.15.0/Mise.Browser-0.15.0-arm64-mac.zip) | Standalone application bundle |
-| **Windows** | Setup EXE | x64 | [Mise.Browser.Setup.0.15.0.exe](https://github.com/Rakosn1cek/Mise-browser/releases/download/v0.15.0/Mise.Browser.Setup.0.15.0.exe) | NSIS desktop installer |
-| **Windows** | Portable EXE | x64 | [Mise.Browser.0.15.0.exe](https://github.com/Rakosn1cek/Mise-browser/releases/download/v0.15.0/Mise.Browser.0.15.0.exe) | Portable binary without installation |
-| **Integrity** | Checksums | All | [SHA256SUMS.txt](https://github.com/Rakosn1cek/Mise-browser/releases/download/v0.15.0/SHA256SUMS.txt) | Cryptographic SHA-256 hash list |
-
-### Quick Run (Linux AppImage)
-
-```bash
-chmod +x Mise.Browser-0.15.0.AppImage
-./Mise.Browser-0.15.0.AppImage
-```
-
-No `libfuse2` is needed. On systems without FUSE, run it with `--appimage-extract-and-run`.
-
-### Verifying Package Integrity
-
-Download `SHA256SUMS.txt` into the same folder as your downloaded package and run:
-
-```bash
-sha256sum -c SHA256SUMS.txt
-```
-
-For full installation guides and platform configurations, visit the [Installation Guide](https://rakosn1cek.github.io/Mise-browser/guide/installation).
+For platform notes, see the [Installation Guide](https://arzuparreta.github.io/Mise-browser/guide/installation).
 
 ***
 
@@ -91,7 +63,7 @@ For developers and contributors running Mise directly from the repository:
 
 ```bash
 # Clone the repository
-git clone git@github.com:Rakosn1cek/Mise-browser.git
+git clone git@github.com:Arzuparreta/Mise-browser.git
 cd Mise-browser
 
 # Install dependencies
@@ -112,14 +84,14 @@ On Linux systems, you can also launch directly using the helper script:
 
 Comprehensive user guides and configuration references are hosted on the GitHub Pages site:
 
-* [Getting Started & Philosophy](https://rakosn1cek.github.io/Mise-browser/guide/getting-started)
-* [Mouse-Free Navigation & Link Hints](https://rakosn1cek.github.io/Mise-browser/guide/navigation)
-* [Workspaces & Multi-Account Containers](https://rakosn1cek.github.io/Mise-browser/guide/workspaces-and-containers)
-* [True Tab Hibernation Guide](https://rakosn1cek.github.io/Mise-browser/guide/tab-hibernation)
-* [Local User Scripts & Styles Guide](https://rakosn1cek.github.io/Mise-browser/guide/user-scripts-and-styles)
-* [Terminal Security & Oversight Scanner](https://rakosn1cek.github.io/Mise-browser/guide/terminal-oversight)
-* [Keyboard Shortcuts Reference](https://rakosn1cek.github.io/Mise-browser/reference/keybinds)
-* [Configuration Files Reference](https://rakosn1cek.github.io/Mise-browser/reference/configuration)
+* [Getting Started & Philosophy](https://arzuparreta.github.io/Mise-browser/guide/getting-started)
+* [Mouse-Free Navigation & Link Hints](https://arzuparreta.github.io/Mise-browser/guide/navigation)
+* [Workspaces & Multi-Account Containers](https://arzuparreta.github.io/Mise-browser/guide/workspaces-and-containers)
+* [True Tab Hibernation Guide](https://arzuparreta.github.io/Mise-browser/guide/tab-hibernation)
+* [Local User Scripts & Styles Guide](https://arzuparreta.github.io/Mise-browser/guide/user-scripts-and-styles)
+* [Terminal Security & Oversight Scanner](https://arzuparreta.github.io/Mise-browser/guide/terminal-oversight)
+* [Keyboard Shortcuts Reference](https://arzuparreta.github.io/Mise-browser/reference/keybinds)
+* [Configuration Files Reference](https://arzuparreta.github.io/Mise-browser/reference/configuration)
 
 ***
 
@@ -141,11 +113,16 @@ Active command and script scanning is handled exclusively by [Oversight](https:/
 
 ***
 
-## Community & Discussion
+## Source & Issues
 
-* [Reddit (r/mise_browser)](https://www.reddit.com/r/mise_browser/)
-* [Mastodon (@misebrowser@mastodon.social)](https://mastodon.social/@misebrowser)
-* [GitHub Discussions](https://github.com/Rakosn1cek/Mise-browser/discussions)
+* [Source repository](https://github.com/Arzuparreta/Mise-browser)
+* [Issues](https://github.com/Arzuparreta/Mise-browser/issues)
+
+***
+
+## Origin
+
+This browser is an independent continuation of [Mise by Rakosn1cek](https://github.com/Rakosn1cek/Mise-browser), developed separately since upstream commit `3be7f96` (0.15.0). It does not track or depend on that repository. Original copyright notices and the GPL-3.0-or-later licence are retained. The optional [Oversight](https://github.com/Rakosn1cek/oversight) scanner and the community scripts collection remain separate external projects.
 
 ***
 
@@ -153,9 +130,9 @@ Active command and script scanning is handled exclusively by [Oversight](https:/
 
 This project is licensed under the terms of the GNU General Public Licence v3.0 (or any later version). See the [LICENSE](LICENSE) file for details.
 
-## Fork engineering records
+## Engineering records
 
 - [Keyboard coverage review](docs/keyboard-review.md)
 - [Fork fixes ledger](docs/fork-fixes.md)
 
-Every PR records the problems it solves, including defects inherited from upstream.
+Every PR records the problems it solves, including defects inherited from the original Mise code.

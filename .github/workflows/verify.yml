@@ -1,9 +1,9 @@
-name: Verify fork changes
+name: Verify changes
 
 on:
   pull_request:
   push:
-    branches: [main, personal]
+    branches: [main]
 
 permissions:
   contents: read

@@ -106,4 +106,4 @@ You maintain complete ownership of your data:
 
 Mise Browser is open source under the GNU General Public Licence v3.0. You are encouraged to inspect, audit, and build the source code directly from GitHub:
 
-* Repository: [https://github.com/Rakosn1cek/Mise-browser](https://github.com/Rakosn1cek/Mise-browser)
+* Repository: [https://github.com/Arzuparreta/Mise-browser](https://github.com/Arzuparreta/Mise-browser)

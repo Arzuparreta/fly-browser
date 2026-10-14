@@ -2,7 +2,7 @@
 <!-- Provide a clear, concise summary of the changes proposed in this Pull Request. -->
 
 ## Fork fixes
-<!-- List every problem solved by this PR, including inherited upstream defects. Link the relevant entries in docs/fork-fixes.md. State the original behaviour, the resulting behaviour and validation. Keep new capabilities and unresolved limitations clear. -->
+<!-- List every problem solved by this PR, including defects inherited from the original Mise code. Link the relevant entries in docs/fork-fixes.md. State the original behaviour, the resulting behaviour and validation. Keep new capabilities and unresolved limitations clear. -->
 
 ## Related Issues
 <!-- Link to any related issues (e.g. Fixes #123, Closes #456). -->
