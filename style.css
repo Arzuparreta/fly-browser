@@ -321,7 +321,7 @@ body.sidebar-pinned .nav-action-layout {
     transition: background-color 0.15s ease, border-color 0.15s ease, color 0.15s ease;
 }
 
-.nav-icon-button:not(#pin-sidebar-btn):hover, .nav-icon-button:not(#pin-sidebar-btn):focus {
+.nav-icon-button:not(#pin-sidebar-btn):hover, .nav-icon-button:not(#pin-sidebar-btn):focus-visible {
     background-color: var(--selected);
     border-color: var(--accent);
 }
@@ -481,7 +481,7 @@ body.sidebar-auto-collapse #Sidebar:not(.pointer-inside):not(.expanded):not(:foc
     background-color: rgba(54, 74, 133, 0.45);
 }
 
-#TabList li:focus {
+#TabList li:focus-visible {
     border-color: var(--accent);
 }
 

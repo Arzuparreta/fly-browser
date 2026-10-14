@@ -7,6 +7,26 @@ export function hasActiveOverlay() {
     return Object.values(surfaces).some(surface => surface.active()) || !!document.querySelector('dialog[open]');
 }
 
+// Pointer actions must not acquire the keyboard focus that holds the sidebar open.
+// Capture also covers dynamic tab controls whose click handlers stop propagation.
+export function initialiseSidebarPointerFocus(sidebar, focusPage) {
+    sidebar.addEventListener('mousedown', event => {
+        const target = event.target;
+        if (target.isContentEditable || target.closest('input, textarea, select')) return;
+        const control = target.closest('button, a[href], [role="button"], [tabindex]');
+        if (!control || !sidebar.contains(control)) return;
+        event.preventDefault();
+        if (sidebar.contains(document.activeElement)) document.activeElement.blur();
+    }, true);
+    sidebar.addEventListener('click', event => {
+        if (event.detail === 0) return;
+        // Run after the action so navigation cannot discard the returned page focus.
+        setTimeout(() => {
+            if (!hasActiveOverlay() && !sidebar.contains(document.activeElement)) focusPage();
+        }, 0);
+    }, true);
+}
+
 // Every opening path, including buttons and palette actions, uses the same exits.
 export function prepareOverlay(id) {
     transitioning = true;
