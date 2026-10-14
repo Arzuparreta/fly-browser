@@ -860,18 +860,19 @@ function setupEventListeners() {
     window.miseAPI.getKeyboardConfig().then(applyKeyboardConfig);
     window.miseAPI.onKeyboardConfigChanged(applyKeyboardConfig);
     window.addEventListener('keydown', event => {
-        // A key reaching the host body while a page owns focus means Chromium's focus routing
-        // diverged from the DOM. Resync so later keys reach the page. A character typed into a
-        // page field is delivered there; other keys continue below, where the page's reported
-        // mode still protects its text fields.
-        if (event.isTrusted && event.target === document.body && document.activeElement?.tagName === 'WEBVIEW') {
+        // Recover a trusted key misrouted to the host while the DOM still focuses a guest.
+        // Send it through the guest's native input path so its own modes/editors decide.
+        if (event.isTrusted && !event.isComposing && !['Dead', 'Process'].includes(event.key) && !event.getModifierState?.('AltGraph') && document.activeElement?.tagName === 'WEBVIEW' && (event.target === document.body || event.target === document.activeElement)) {
             const view = document.activeElement;
+            event.preventDefault(); event.stopImmediatePropagation();
             view.blur(); view.focus();
-            if (view.__miseKeyboardMode?.input && !view.__miseKeyboardMode.hints && event.key.length === 1 && !event.ctrlKey && !event.altKey && !event.metaKey && !event.isComposing) {
-                event.preventDefault(); event.stopImmediatePropagation();
-                view.insertText(event.key).catch(() => {});
-                return;
-            }
+            const modifiers = [['ctrlKey', 'control'], ['altKey', 'alt'], ['shiftKey', 'shift'], ['metaKey', 'meta']].filter(([flag]) => event[flag]).map(([, name]) => name);
+            const keyCode = ({ArrowDown: 'Down', ArrowUp: 'Up', ArrowLeft: 'Left', ArrowRight: 'Right', ' ': 'Space'})[event.key] || (event.key.length === 1 ? event.key.toUpperCase() : event.key);
+            const inputs = [{type: 'keyDown', keyCode, modifiers}];
+            if (event.key.length === 1 && !event.ctrlKey && !event.altKey && !event.metaKey) inputs.push({type: 'char', keyCode: event.key, modifiers});
+            inputs.push({type: 'keyUp', keyCode, modifiers});
+            for (const input of inputs) view.sendInputEvent(input).catch(() => {});
+            return;
         }
         if (document.querySelector('dialog[open]') || !event.isTrusted || event.isComposing || event.defaultPrevented || state.awaitingQuickmarkKey) return;
         if (event.key === 'Escape' && addressBar.style.display === 'block') {

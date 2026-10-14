@@ -4,9 +4,9 @@ Audit date: 14 October 2026. The fork before optimisation is personal at `d4014b
 
 The target is virtually no additional cost during normal browsing, with optional work paid for only when requested. This means no added idle polling or processes, no extension runtime while disabled, preserved tab hibernation and no repeatable material regression in the measured interactions. It does not mean literally zero additional code, DOM nodes or bytes, or a guarantee for untested hardware and websites.
 
-## Final comparison with remote main 2f8ca5f
+## Pre-integration comparison with remote main 2f8ca5f
 
-The final source tree is compared directly with the newer remote main, using three fresh profiles per revision and the same workload. The identical-cache/software-rendering series gives the following medians and per-run ranges:
+The optimised tree before merging the newer tab-navigation changes is compared directly with that remote main, using three fresh profiles per revision and the same workload. The identical-cache/software-rendering series gives the following medians and per-run ranges:
 
 | Metric | Current main 2f8ca5f | Optimised personal |
 | --- | ---: | ---: |
@@ -21,7 +21,7 @@ The final source tree is compared directly with the newer remote main, using thr
 | Tab switching/layout, ms | 0.60 [0.60–0.60] | 0.50 [0.50–0.50] |
 | Tab switching at 6× CPU throttle, ms | 3.00 [2.95–3.00] | 2.60 [2.55–2.75] |
 
-[Current-main cached samples](/benchmarks/2026-10-14-current-cached.json). Median PSS is about 27 MiB lower in this scenario; creation is equivalent, switching is cheaper and Preferences takes less than half the synchronous work. Startup ranges overlap, so the smaller ready-time median is not a universal speedup claim. Process counts and hibernation behaviour remain equivalent. The final GPU/default-settings comparison is recorded next; the original common-base measurements remain below for attribution.
+[Current-main cached samples](/benchmarks/2026-10-14-current-cached.json). Median PSS is about 27 MiB lower in this scenario; creation is equivalent, switching is cheaper and Preferences takes less than half the synchronous work. Startup ranges overlap, so the smaller ready-time median is not a universal speedup claim. Process counts and hibernation behaviour remain equivalent. These historical samples precede the final integration; the original common-base measurements remain below for attribution.
 
 ## Integration-base comparison with identical cached filters
 

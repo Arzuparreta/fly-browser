@@ -9,6 +9,14 @@ if (roots.length !== 2) throw new Error('Supply the upstream and fork source dir
 const rounds = Number(process.env.MISE_BENCH_ROUNDS || 5);
 const output = process.env.MISE_BENCH_OUTPUT || '/tmp/mise-startup.json';
 const samples = [];
+const sources = roots.map(root => {
+    const files = fs.readdirSync(root).filter(name => /\.(js|html|css)$/.test(name));
+    const visit = directory => { for (const entry of fs.readdirSync(path.join(root, directory), {withFileTypes: true})) { const relative = path.join(directory, entry.name); if (entry.isDirectory()) visit(relative); else if (relative.endsWith('.js')) files.push(relative); } };
+    visit('modules');
+    const hash = require('node:crypto').createHash('sha256');
+    for (const file of files.sort()) hash.update(file).update('\0').update(fs.readFileSync(path.join(root, file)));
+    return {root, sourceSha256: hash.digest('hex'), electron: require(path.join(root, 'node_modules/electron/package.json')).version};
+});
 
 (async () => {
     const server = http.createServer((_request, response) => response.end('<!doctype html><title>Startup fixture</title><main id="fixture">Local fixture</main>'));
@@ -55,7 +63,7 @@ require(${JSON.stringify(path.join(root, 'main.js'))});`);
                 const filterFetches = await application.evaluate(() => globalThis.__benchFetches);
                 const sample = {root, round, localReadyMs, protectedReadyMs, filterFetches};
                 samples.push(sample);
-                fs.writeFileSync(output, JSON.stringify({date: new Date().toISOString(), rounds, gpu: true, emptyFilterCache: true, samples}, null, 2) + '\n');
+                fs.writeFileSync(output, JSON.stringify({date: new Date().toISOString(), rounds, sources, gpu: true, emptyFilterCache: true, samples}, null, 2) + '\n');
                 console.log(JSON.stringify(sample));
             } finally {
                 if (application) await application.close();

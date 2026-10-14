@@ -13,8 +13,8 @@ console.log('Running Mise direct tab jumping and cursor navigation regression te
         const action = `jump-to-tab-${i}`;
         assert(defaults[action], `${action} must be present in default keybinds`);
 
-        const bindings = Array.isArray(defaults[action]) 
-            ? defaults[action] 
+        const bindings = Array.isArray(defaults[action])
+            ? defaults[action]
             : [defaults[action]];
 
         assert(bindings.includes(`Ctrl+${i}`), `${action} must include Ctrl+${i}`);
