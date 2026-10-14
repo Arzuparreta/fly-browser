@@ -1,5 +1,8 @@
 name: Verify changes
 
+# Deliberately light: only what means the app is actually broken. A pull
+# request opened by hand should go green with nothing more than its impact
+# label. Whitespace and the documentation build stay local checks.
 on:
   pull_request:
   push:
@@ -13,8 +16,6 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-        with:
-          fetch-depth: 2
       - uses: actions/setup-node@v4
         with:
           node-version: 22
@@ -28,7 +29,3 @@ jobs:
           for file in main.js renderer.js preload.js webview-preload.js keyboard.js keybinds.js; do
             node --check "$file"
           done
-      - name: Build documentation
-        run: npm run docs:build
-      - name: Check whitespace
-        run: git diff --check HEAD^ HEAD

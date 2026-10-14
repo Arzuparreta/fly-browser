@@ -42,6 +42,10 @@ impact:none    nothing a user could observe (docs, CI, tests)
 
 The `impact_label` check rejects a pull request without one. Releasing takes the highest label merged since the last tag and moves the number accordingly: nobody rereads a month of diffs trying to remember whether something was a feature. A pull request merged without a label counts as a patch, and the release plan lists it by name so the claim can be checked.
 
+### Opening a pull request by hand
+
+Add one impact label from the Labels box, and that is all. CI runs `npm test` and nothing more, no check is required to merge, and either merge button works. A pull request merged without a label is not lost: it counts as a patch and is listed by name when the next release is planned. The only reserved branch names are `release/v*`.
+
 ## Cutting a release
 
 ```bash
