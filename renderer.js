@@ -773,6 +773,7 @@ function setupEventListeners() {
                 } else {
                     commandActions[action]?.();
                 }
+                break;
             }
             case 'open-extension-actions': openCommandPalette('Extensions'); break;
             case 'extension-select-tab': handleExtensionSelectTab(args[0]); break;
