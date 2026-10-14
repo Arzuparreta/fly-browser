@@ -1,0 +1,89 @@
+name: AUR
+
+# Publishes `fly-browser-bin` to the AUR for a stable release. release.yml
+# calls it once the GitHub Release exists; dispatch it by hand to publish a
+# release again, with a higher pkgrel when only the packaging changed:
+#
+#   gh workflow run aur.yml -f tag=vX.Y.Z [-f pkgrel=2]
+#
+# It pushes with the AUR_SSH_PRIVATE_KEY secret, a key registered to the AUR
+# account that maintains the package. Without it the job says so and succeeds,
+# so a release is never held back by the AUR.
+on:
+  workflow_call:
+    inputs:
+      tag:
+        type: string
+        required: true
+      pkgrel:
+        type: string
+        default: '1'
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: Release tag (vX.Y.Z)
+        type: string
+        required: true
+      pkgrel:
+        description: Package release, raised when only the packaging changed
+        type: string
+        default: '1'
+
+permissions:
+  contents: read
+
+concurrency:
+  group: aur
+  cancel-in-progress: false
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      # The packaging as it was at the tag, so it describes that release.
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.tag }}
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Write PKGBUILD and .SRCINFO
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ inputs.tag }}
+          PKGREL: ${{ inputs.pkgrel }}
+        run: |
+          gh release download "$TAG" --pattern SHA256SUMS.txt --dir "$RUNNER_TEMP"
+          node scripts/aur.js --tag "$TAG" --pkgrel "$PKGREL" --sums "$RUNNER_TEMP/SHA256SUMS.txt" --out "$RUNNER_TEMP/package"
+          cat "$RUNNER_TEMP/package/PKGBUILD"
+
+      - name: Push to the AUR
+        env:
+          AUR_KEY: ${{ secrets.AUR_SSH_PRIVATE_KEY }}
+          TAG: ${{ inputs.tag }}
+        run: |
+          if [ -z "$AUR_KEY" ]; then
+            echo "::warning::AUR_SSH_PRIVATE_KEY is not set; fly-browser-bin was not published for $TAG."
+            exit 0
+          fi
+          install -d -m 700 ~/.ssh
+          printf '%s\n' "$AUR_KEY" > ~/.ssh/aur
+          chmod 600 ~/.ssh/aur
+          # Published at https://aur.archlinux.org (SHA256:RFzBCUItH9LZS0cKB5UE6ceAYhBD5C8GeOBip8Z11+4).
+          echo 'aur.archlinux.org ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIEuBKrPzbawxA/k2g6NcyV5jmqwJ2s+zpgZGZ7tpLIcN' > ~/.ssh/known_hosts
+          export GIT_SSH_COMMAND="ssh -i $HOME/.ssh/aur -o IdentitiesOnly=yes -o StrictHostKeyChecking=yes"
+
+          git clone ssh://aur@aur.archlinux.org/fly-browser-bin.git "$RUNNER_TEMP/aur"
+          cp "$RUNNER_TEMP/package/PKGBUILD" "$RUNNER_TEMP/package/.SRCINFO" "$RUNNER_TEMP/aur/"
+          cd "$RUNNER_TEMP/aur"
+          git add PKGBUILD .SRCINFO
+          if git diff --cached --quiet; then
+            echo "fly-browser-bin already matches $TAG."
+            exit 0
+          fi
+          git -c user.name="Fly release" -c user.email="41898282+github-actions[bot]@users.noreply.github.com" \
+            commit --quiet --message "Update to $(sed -n 's/^\tpkgver = //p' .SRCINFO)-$(sed -n 's/^\tpkgrel = //p' .SRCINFO)"
+          git push origin HEAD:master
+          echo "::notice::fly-browser-bin published for $TAG."

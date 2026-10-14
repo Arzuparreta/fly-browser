@@ -123,9 +123,23 @@ jobs:
             `SHA256SUMS.txt`. Packages are unsigned: macOS and Windows will warn
             about an unidentified developer.
 
+            On Arch Linux, install `fly-browser-bin` from the AUR instead
+            (`paru -S fly-browser-bin`); it updates with the rest of the system.
+
             Running from source and per-platform notes:
             [Installation](https://github.com/${{ github.repository }}/blob/${{ github.ref_name }}/docs/guide/installation.md).
 
             ---
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+  # Arch users install the release from the AUR. Release candidates stay on
+  # GitHub: pkgver cannot express them.
+  aur:
+    name: Publish to the AUR
+    needs: publish
+    if: github.ref_type == 'tag' && !contains(github.ref_name, '-rc.')
+    uses: ./.github/workflows/aur.yml
+    with:
+      tag: ${{ github.ref_name }}
+    secrets: inherit

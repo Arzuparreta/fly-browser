@@ -1,6 +1,8 @@
 [Desktop Entry]
 Name=Fly
+GenericName=Web Browser
 Comment=Small, minimal web browser with full keyboard control and a polished mouse experience
+Keywords=browser;web;internet;
 Exec=fly-browser %u
 Icon=fly-browser
 Terminal=false

@@ -76,4 +76,14 @@ In Claude Code, `/release` runs these steps and waits between them.
 
 Names carry no spaces, because GitHub renames uploaded files that have them and `SHA256SUMS.txt` would no longer match.
 
+The Linux packages carry the desktop entry and the theme icons in `resources/` (`build.linux.extraResources`), for the AUR package to install.
+
+## The AUR package
+
+Once a stable release is published, `release.yml` calls `aur.yml`, which writes `fly-browser-bin`'s `PKGBUILD` and `.SRCINFO` with `scripts/aur.js` and pushes them to the AUR. Both are generated from the version in `package.json` and the tarball's line in `SHA256SUMS.txt`, so nothing is edited per release. Release candidates are not published there.
+
+Pushing needs the `AUR_SSH_PRIVATE_KEY` repository secret, whose public half is registered to the AUR account that maintains the package. Without the secret the job warns and succeeds, so a release is never held back by the AUR.
+
+To publish a release again, for example after the secret was added or when only the packaging changed, dispatch the workflow: `gh workflow run aur.yml -f tag=vX.Y.Z`, adding `-f pkgrel=2` (and so on) when the version is already on the AUR.
+
 To test a packaging change before it reaches a release, run the workflow on its branch: `gh workflow run release.yml --ref <branch>`. It builds every package and keeps them as workflow artefacts for three days, and publishes nothing.

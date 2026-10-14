@@ -43,7 +43,9 @@ Security, isolation, and upstream dependency freshness are foundational principl
 
 ## Downloads
 
-Each release publishes Linux, macOS and Windows packages with SHA-256 checksums on the [Releases page](https://github.com/Arzuparreta/fly-browser/releases). Until the first one is out, run Fly from source (below).
+On Arch Linux and its derivatives, install [`fly-browser-bin`](https://aur.archlinux.org/packages/fly-browser-bin) from the AUR (`paru -S fly-browser-bin`): it adds Fly to your application launcher and updates with the rest of the system.
+
+Every release also publishes Linux (AppImage, tar.gz), macOS and Windows packages with SHA-256 checksums on the [Releases page](https://github.com/Arzuparreta/fly-browser/releases).
 
 For platform notes, see the [Installation Guide](docs/guide/installation.md).
 
