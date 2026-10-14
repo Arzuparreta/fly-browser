@@ -4,6 +4,8 @@ Record every solved problem here, including defects inherited from upstream. Eac
 
 ## Separation cleanup · 14 October 2026
 
+Implementation/work-log: [fly-browser PR #2](https://github.com/Arzuparreta/fly-browser/pull/2).
+
 | ID | Original problem | Result | Validation |
 | :--- | :--- | :--- | :--- |
 | <a id="fly-02"></a>FLY-02 | The documentation site still published the original author's engineering blog (seven Mise chronicles) under Fly's navigation. The previous repository, Arzuparreta/Mise-browser, was to be deleted, which would lose the work-log pull request descriptions and comments (#1–#21) and break this ledger's links to them. | Remove the blog pages and their navigation and sidebar entries. Before deleting the repository, archive every pull request's title, state, branches, merge commit, description and comments in `history/mise-work-log.md`. Point the ledger's pull request links to that archive. Within the archive, links to deleted branches or rewritten commits point to `main`, and links to merged commits keep their exact revision in fly-browser. The archive lives outside the documentation site. | The documentation build passes without blog routes or dead links. Every archived commit link resolves to an ancestor of `main`, and every `main` file link exists. No branch of the old repository held unique work except the closed upstream proposal branch, a squash of the same changes. The old repository had no releases or issues. |
