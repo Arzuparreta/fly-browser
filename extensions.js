@@ -344,6 +344,20 @@ function withSuppressedSelect(ctrl, fn) {
     try { return fn(); } finally { ctrl.suppressSelect = false; }
 }
 
+// electron-chrome-extensions 4.9 observes a host once per subscribed event.
+// Its destruction callback already removes every event for that host, so one
+// observer is sufficient even after listeners are removed and registered again.
+function deduplicateHostObservers(router) {
+    if (!router || typeof router.observeListenerHost !== 'function') return;
+    const observed = new WeakSet();
+    const observe = router.observeListenerHost;
+    router.observeListenerHost = function(host) {
+        if (observed.has(host)) return;
+        observe.call(this, host);
+        observed.add(host);
+    };
+}
+
 function ensureApiLayer(ctrl) {
     if (ctrl.ece) return ctrl.ece;
     const started = Date.now();
@@ -362,6 +376,8 @@ function ensureApiLayer(ctrl) {
             sendToRenderer('extension-close-tab', wc.id);
         }
     });
+
+    deduplicateHostObservers(ctrl.ece.ctx?.router);
 
     // Keep the existing API backend, adapting the browser alias and managed storage.
     for (const script of ctrl.session.getPreloadScripts()) {
@@ -878,6 +894,7 @@ module.exports = {
     handleWebviewAttached,
     getContextMenuItems,
     // Exported for tests
+    deduplicateHostObservers,
     computeExtensionId,
     classifyBackground,
     collectWarnings,

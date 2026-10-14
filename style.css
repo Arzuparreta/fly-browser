@@ -4559,10 +4559,8 @@ body.light-mode #Sidebar, body.light-mode #StatusBar {
     background-image: url('assets/identity/paper-grain.png');
 }
 body.light-mode #Sidebar::before { background-image: url('assets/identity/engraving-papel@2x.png'); }
-.fly-brand { display: flex; align-items: center; gap: 10px; min-height: 42px; flex-shrink: 0; color: var(--text); font: 900 26px 'Doto', monospace; letter-spacing: .12em; }
-.fly-brand img { image-rendering: pixelated; flex-shrink: 0; }
-.window-controls-brand { font-family: 'Doto', monospace; color: var(--text); }
-.window-controls-brand img { width: 24px; height: 24px; image-rendering: pixelated; }
+.fly-brand { display: flex; align-items: center; min-height: 42px; padding: 0 8px; flex-shrink: 0; color: var(--text); font: 900 26px 'Doto', monospace; letter-spacing: .12em; }
+#WindowControls { justify-content: flex-end; }
 #WorkspaceBadge, #StatusBarMode { font-family: 'Doto', monospace; font-weight: 900; background: var(--cell); color: var(--text); border-radius: 2px; }
 #WorkspaceHeader { background: var(--panel); border: 1px solid var(--border); border-radius: 2px; }
 #StatusBar { background-color: var(--bg-sidebar); font-family: 'IBM Plex Mono', monospace; }
@@ -4579,9 +4577,8 @@ body.light-mode #Sidebar::before { background-image: url('assets/identity/engrav
 .tab-item:has(.tab-media-badge:not(.is-muted)) .tab-flight-state::after { content: 'PLAYING'; }
 .tab-sleeping .tab-title, .tab-sleeping .tab-domain { color: var(--dim); }
 body.sidebar-auto-collapse #Sidebar:not(.pointer-inside):not(.expanded):not(:focus-within) .tab-copy,
-body.sidebar-auto-collapse #Sidebar:not(.pointer-inside):not(.expanded):not(:focus-within) .tab-flight-state,
-body.sidebar-auto-collapse #Sidebar:not(.pointer-inside):not(.expanded):not(:focus-within) .fly-brand span { display: none; }
-body.sidebar-auto-collapse #Sidebar:not(.pointer-inside):not(.expanded):not(:focus-within) .fly-brand img { width: 28px; height: 28px; }
+body.sidebar-auto-collapse #Sidebar:not(.pointer-inside):not(.expanded):not(:focus-within) .tab-flight-state { display: none; }
+body.sidebar-auto-collapse #Sidebar:not(.pointer-inside):not(.expanded):not(:focus-within) .fly-brand { justify-content: center; padding: 0; font-size: 13px; letter-spacing: 0; }
 :focus-visible { outline: 1px solid var(--accent) !important; outline-offset: 3px; }
 #EmptyWorkspaceWelcome { background-image: radial-gradient(var(--border) .7px, transparent .7px); background-size: 16px 16px; }
 .welcome-card { background: var(--bg-main); border-radius: 2px; }

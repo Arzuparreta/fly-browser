@@ -189,3 +189,32 @@ function writeExtension(folder, manifest, files = {}) {
 
 fs.rmSync(tmpRoot, { recursive: true, force: true });
 console.log('All extension support tests passed.');
+
+// One host can subscribe to many extension events without repeated destruction
+// callbacks. Destruction must still remove all of its subscriptions.
+{
+    const { EventEmitter } = require('node:events');
+    const { deduplicateHostObservers } = require('../extensions');
+    const hosts = [new EventEmitter(), new EventEmitter()];
+    const router = {
+        listeners: [],
+        observeListenerHost(host) {
+            host.once('destroyed', () => { this.listeners = this.listeners.filter(entry => entry.host !== host); });
+        }
+    };
+    deduplicateHostObservers(router);
+    for (let index = 0; index < 40; index++) {
+        for (const host of hosts) {
+            router.listeners.push({host, event: index});
+            router.observeListenerHost(host);
+        }
+    }
+    assert.equal(hosts[0].listenerCount('destroyed'), 1);
+    assert.equal(hosts[1].listenerCount('destroyed'), 1);
+    hosts[0].emit('destroyed');
+    assert.equal(router.listeners.length, 40);
+    assert(router.listeners.every(entry => entry.host === hosts[1]));
+    hosts[1].emit('destroyed');
+    assert.equal(router.listeners.length, 0);
+    console.log('Extension hosts share one destruction observer and retain complete cleanup.');
+}

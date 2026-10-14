@@ -131,3 +131,13 @@ All runtime configuration and persistent session data are stored locally in stan
 ├── history.json         # Actionable history entries
 └── notes.md             # Integrated markdown notes
 ```
+
+## Startup diagnostics
+
+`launch.sh` stays in the foreground and returns Electron's exit status. Close Fly to return to the prompt; this prevents late warnings being mixed into the next shell command.
+
+- npm deprecation notices for `inflight`, `rimraf` and `glob` currently come from the development packaging toolchain (`electron-builder`, including its Windows tooling). They are not reports of a leak in a running Fly tab. They remain visible until the upstream dependency chain is replaced; forcing incompatible major versions is not a safe fix.
+- npm's installation policy explicitly allows the pinned esbuild setup script and denies the unused Squirrel Windows installer script. Fly's Windows targets are NSIS and portable; Electron's binary is downloaded separately by `install-electron`.
+- Electron can print `ExtensionLoadWarning` for uBlock's Manifest V2 and permissions. Fly supplies context menus and navigation APIs through its compatibility layer, but does not claim complete Chrome compatibility. These warnings stay visible. The existing blocking test checks actual network and cosmetic filtering.
+- `colorreload-gtk-module` is an optional desktop GTK module. A reference in `~/.config/gtk-3.0/settings.ini` with no installed module produces a GTK warning. Repair the desktop package or remove the stale module entry; it is not a Fly resource.
+- Mesa/GBM errors originate in the graphics stack. Check Diagnostics and reproduce with a disposable profile before changing drivers or GPU settings. Do not remove Electron's sandbox or broadly change system library permissions to silence them.
