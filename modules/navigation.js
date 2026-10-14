@@ -60,7 +60,12 @@ export function extractDdgBang(query) {
 function applyTargetUrl(targetUrl) {
     const currentWS = state.sessionState.current_workspace;
     const activeListItem = document.querySelector('#TabList li.selected');
-    if (!activeListItem) return;
+    if (!activeListItem) {
+        hideSuggestions();
+        spawnTabWithUrl(targetUrl);
+        focusActiveWebview();
+        return;
+    }
 
     const currentIdx = Array.from(document.querySelectorAll('#TabList li')).indexOf(activeListItem);
 
