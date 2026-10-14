@@ -8,6 +8,18 @@ Fly is designed to be efficient, modular, and easy to run across Linux, macOS, a
 
 Official releases and cryptographic checksums are published for every tagged version on the [GitHub Releases page](https://github.com/Arzuparreta/fly-browser/releases).
 
+### Arch Linux and derivatives (AUR)
+
+On Arch Linux, CachyOS, EndeavourOS, Manjaro and other Arch-based systems, install [`fly-browser-bin`](https://aur.archlinux.org/packages/fly-browser-bin) with your AUR helper:
+
+```bash
+paru -S fly-browser-bin   # or: yay -S fly-browser-bin
+```
+
+The package installs Fly to `/opt/fly-browser`, the `fly-browser` command, a desktop entry and icons, so Fly appears in Rofi, Wofi, Fuzzel and every desktop menu. It is updated by each stable release and arrives with your usual system upgrade (`paru -Syu`).
+
+Flags you want on every launch, such as `--ozone-platform=wayland`, go in `~/.config/fly-browser-flags.conf`, one or more per line; `#` starts a comment.
+
 ### Linux (Distro-Agnostic AppImage)
 
 The AppImage runs out of the box on Ubuntu, Debian, Fedora, Arch Linux, openSUSE, and any standard modern Linux distribution without package managers or root privileges.
@@ -67,6 +79,7 @@ Fly includes an integrated, zero-privilege update notification system that check
 - **Automated Check**: Fly queries the GitHub Releases API shortly after startup. When a newer version is published, an update badge appears in the sidebar and opens **Preferences → About**.
 - **Manual Check**: Run **Check for Updates** in the Command Centre (`Ctrl+P`) or click **Check for updates** in **Preferences → About** (`Ctrl+H`).
 - **Applying Updates**:
+  - **AUR package**: Upgrade with your system (`paru -Syu`).
   - **Linux AppImage**: Download the latest `.AppImage` from GitHub Releases and replace your existing file.
   - **macOS / Windows**: Download and run the latest installer or portable executable.
   - **Source Installs**: Run `git pull && npm install` in your repository folder.
