@@ -107,6 +107,28 @@ const root = path.resolve(__dirname, '..');
   await page.waitForFunction(()=>document.getElementById('WorkspaceLabel').textContent === 'Transfer target');
   assert.equal(await page.locator('webview:visible').getAttribute('partition'),'persist:transfer-target');
   assert(await app.evaluate(({webContents},id)=>!webContents.fromId(id),guest),'The old container webview must be destroyed');
+  // Native numbered shortcuts select tabs without opening extension actions.
+  for (let count = 2; count <= 3; count++) {
+   await page.evaluate(() => window.executeBrowserAction('spawn-tab'));
+   await page.waitForFunction(count => document.querySelectorAll('#TabList li').length === count, count);
+  }
+  const tabCount = await page.locator('#TabList li').count();
+  for (let number = 1; number <= 9; number++) {
+   await page.locator('#menu-btn').focus();
+   await page.keyboard.press(`Alt+${number}`);
+   const expected = number === 9 ? tabCount - 1 : Math.min(number - 1, tabCount - 1);
+   await page.waitForFunction(index => [...document.querySelectorAll('#TabList li')].findIndex(tab => tab.classList.contains('selected')) === index, expected);
+   assert(!(await page.locator('#CommandPaletteOverlay').isVisible()), `Alt+${number} must not open the command palette`);
+  }
+  await page.evaluate(() => window.executeBrowserAction('new-workspace'));
+  await page.locator('#NewWorkspaceTitleInput').fill('Empty numbered shortcut fixture');
+  await page.locator('#NewWorkspaceTitleInput').press('Enter');
+  await page.locator('#EmptyWorkspaceWelcome').waitFor({state:'visible'});
+  await page.keyboard.press('Alt+1');
+  assert(!(await page.locator('#CommandPaletteOverlay').isVisible()), 'Numbered shortcuts in an empty workspace must not open the command palette');
+  await page.evaluate(() => window.executeBrowserAction('open-extension-actions'));
+  await page.locator('#CommandPaletteOverlay').waitFor({state:'visible'});
+  await page.keyboard.press('Escape');
   console.log('Live Electron keyboard editor and guest input passed.', {errors,scroll});
   assert.deepEqual(errors,[]);
  } finally { if(app) await app.close(); server.close(); fs.rmSync(temp,{recursive:true,force:true}); }

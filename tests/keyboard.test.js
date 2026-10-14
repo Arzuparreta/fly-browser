@@ -195,6 +195,33 @@ vm.createContext(paletteContext); vm.runInContext(paletteSource, paletteContext)
 const commands = vm.runInContext('COMMAND_DEFINITIONS', paletteContext);
 const rawActions = vm.runInContext('commandActions', paletteContext);
 const rendererSource = fs.readFileSync(path.join(__dirname, '..', 'renderer.js'), 'utf8');
+// Execute the renderer dispatcher to catch fallthrough between unrelated actions.
+const selectedTabs = [], fallbackActions = [], openedPalettes = [];
+let tabCount = 3;
+const dispatchContext = {
+    window: {}, document: {querySelectorAll: () => Array(tabCount).fill({})},
+    switchTabFocus: index => selectedTabs.push(index),
+    commandActions: {'test-fallback': () => fallbackActions.push('test-fallback')},
+    openCommandPalette: query => openedPalettes.push(query)
+};
+vm.createContext(dispatchContext);
+vm.runInContext(rendererSource.slice(rendererSource.indexOf('    window.executeBrowserAction ='), rendererSource.indexOf('    window.miseAPI.onMasterShortcut')), dispatchContext);
+for (const count of [0, 3, 10]) {
+    tabCount = count;
+    for (let number = 1; number <= 9; number++) {
+        dispatchContext.window.executeBrowserAction(`tab-${number}`);
+        assert.deepEqual(openedPalettes, [], 'Numbered tab actions must not open the command palette');
+        if (count) assert.equal(selectedTabs.pop(), number === 9 ? count - 1 : Math.min(number - 1, count - 1));
+        else assert.equal(selectedTabs.length, 0);
+    }
+}
+dispatchContext.window.executeBrowserAction('test-fallback');
+assert.deepEqual(fallbackActions, ['test-fallback']);
+dispatchContext.window.executeBrowserAction('unknown-action');
+assert.deepEqual(openedPalettes, [], 'Fallback and unknown actions must not open the command palette');
+dispatchContext.window.executeBrowserAction('open-extension-actions');
+assert.deepEqual(openedPalettes, ['Extensions'], 'Explicit extension actions must still open the command palette');
+console.log('Tab selection and fallback actions do not fall through into the command palette.');
 for (const command of commands) {
     const id = command.actionId || command.id;
     assert(Object.hasOwn(keybinds.ACTION_METADATA, id), `Palette action ${id} must be in the catalogue`);

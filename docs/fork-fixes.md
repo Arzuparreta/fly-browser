@@ -156,3 +156,17 @@ Validation uses Linux/X11 Electron with disposable homes/profiles. Default chord
 An initial post-fix hover regression exposed internal mouseover events restoring expansion during contraction. Restricting retained pointer updates to sidebar boundary transitions fixes it; the isolated overlay suite then passed.
 
 Final validation: `npm test`, the complete `npm run test:keyboard-ui` suite, documentation build, modified JavaScript syntax and `git diff --check` passed. No validation failures remain at submission.
+
+## Numbered tab shortcut dispatch · 14 October 2026
+
+| ID | Original behaviour | Fix | Validation |
+| :--- | :--- | :--- | :--- |
+| KB-24 | Alt+1 through Alt+9 selected a tab, then unexpectedly opened the Command Centre with the Extensions category. The renderer dispatcher default branch lacked a break before the extension action case, so fallback and unknown actions also opened the palette, including in empty workspaces. | Terminate the default branch after numbered tab selection or fallback dispatch. Preserve explicit extension palette opening, existing bindings, last-tab selection and out-of-range clamping. | The dispatcher regression fails before the fix because tab actions open Extensions. It covers all nine actions with zero, three and ten tabs, fallback and unknown actions, and explicit extension opening. Disposable-profile Electron tests exercise Alt+1 through Alt+9, an empty workspace and explicit extension opening alongside the recorder and editable-page checks. |
+
+Default bindings, guest grammar and the generated keyboard reference are unchanged and drift-checked. Linux/X11 is verified; Wayland and other operating systems remain unverified. The pre-fix regression failure is intentional evidence of the defect.
+
+Initial live runs timed out in the workspace-transfer check and in the new tab-selection fixture. Tab creation now waits for each asynchronous render. An extra extension-category chip assertion was removed because a disabled-extension profile does not provide that chip; explicit palette opening remains checked in Electron and its category argument is checked by the dispatcher regression.
+
+The sequential UI run passed the keyboard/recorder/editable-page and numbered shortcut checks, then timed out clicking the existing navigation suite back button because sidebar elements intercepted the pointer. Navigation and overlay checks are rerun separately to distinguish fixture behaviour from the dispatcher change.
+
+Final validation: `npm test`, documentation build, modified JavaScript syntax and `git diff --check` passed. The keyboard UI suite passed with recorder, editable-page and numbered shortcut checks. Navigation and overlay UI suites passed on the isolated rerun; the earlier sequential navigation pointer timeout remains recorded above.
