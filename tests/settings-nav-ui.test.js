@@ -127,7 +127,7 @@ const root = path.resolve(__dirname, '..');
         await page.locator('#SettingsSearch').fill('clock');
         await page.locator('#SettingsTab-appearance').click();
         assert.deepEqual(await visiblePanes(), ['SettingsPane-appearance']);
-        assert.equal(await page.locator('#SettingsPane-appearance .setting-item:visible').count(), 11);
+        assert.equal(await page.locator('#SettingsPane-appearance .setting-item:visible').count(), 12);
         // Closing clears any search, so reopening starts from the remembered section.
         await page.locator('#SettingsSearch').fill('cookies');
         await page.locator('#CloseSettingsBtn').click();

@@ -406,6 +406,28 @@ async function initializeBrowser() {
         } catch (e) {}
     }
 
+    const interfaceScale = document.getElementById('setting-interface-scale');
+    let savedInterfaceScale = initialCfg?.interface_scale === 'large' ? 'large' : 'normal';
+    interfaceScale.value = savedInterfaceScale;
+    interfaceScale.addEventListener('change', async () => {
+        const status = document.getElementById('interface-scale-status');
+        const value = interfaceScale.value;
+        interfaceScale.disabled = true;
+        status.textContent = '';
+        try {
+            const saved = await window.flyAPI.updateBrowserSettings({ interface_scale: value });
+            if (!saved) throw new Error('Could not save interface scale');
+            savedInterfaceScale = value;
+            status.textContent = 'Saved';
+        } catch {
+            interfaceScale.value = savedInterfaceScale;
+            status.textContent = 'Could not save interface size. Please try again.';
+        } finally {
+            interfaceScale.disabled = false;
+            interfaceScale.focus({ preventScroll: true });
+        }
+    });
+
     applySidebarMode(sidebarAutoCollapse);
 
     const body = document.body;

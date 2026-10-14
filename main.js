@@ -110,6 +110,7 @@ const DEFAULT_CONFIG = {
     search_engine: 'https://duckduckgo.com/?q=%s',
     spellchecker_language: 'en-GB',
     theme: 'dark',
+    interface_scale: 'normal',
     webview_theme: 'dark',
     trusted_domains: ['accounts.google.com'],
     tab_sleep_timeout_minutes: 15,
@@ -152,6 +153,7 @@ function loadBrowserConfig() {
         return {
             ...DEFAULT_CONFIG,
             ...parsed,
+            interface_scale: parsed.interface_scale === 'large' ? 'large' : 'normal',
             spellchecker_language: parsed.spellchecker_language || 'en-GB',
             webview_theme: parsed.webview_theme || 'dark',
             theme_colors: {
@@ -1455,7 +1457,18 @@ ipcMain.handle('update-browser-settings', async (event, newCfg) => {
         if (!fs.existsSync(CONFIG_DIR)) fs.mkdirSync(CONFIG_DIR, { recursive: true });
         const existing = loadBrowserConfig();
         const merged = { ...existing, ...newCfg };
+        merged.interface_scale = merged.interface_scale === 'large' ? 'large' : 'normal';
         writeConfigFile(merged);
+        if (merged.interface_scale !== existing.interface_scale && mainWindow && !mainWindow.isDestroyed()) {
+            // Electron propagates host zoom to attached guests, even in isolated mode.
+            const guests = webContents.getAllWebContents()
+                .filter(contents => contents.getType() === 'webview')
+                .map(contents => [contents, contents.getZoomFactor()]);
+            mainWindow.webContents.setZoomFactor(merged.interface_scale === 'large' ? 1.25 : 1);
+            for (const [contents, factor] of guests) {
+                if (!contents.isDestroyed()) contents.setZoomFactor(factor);
+            }
+        }
         if (Array.isArray(merged.trusted_domains)) {
             security.setTrustedDomains(merged.trusted_domains);
         }
@@ -1688,6 +1701,7 @@ function handleAppAction(action, sourceWebContents) {
 }
 
 function createWindow() {
+    const cfg = loadBrowserConfig();
     mainWindow = new BrowserWindow({
         width: 1600,
         height: 1040,
@@ -1698,11 +1712,12 @@ function createWindow() {
             preload: path.join(__dirname, 'preload.js'),
             contextIsolation: true,
             nodeIntegration: false,
-            webviewTag: true
+            webviewTag: true,
+            zoomMode: 'isolated',
+            zoomFactor: cfg.interface_scale === 'large' ? 1.25 : 1
         }
     });
     
-    const cfg = loadBrowserConfig();
     nativeTheme.themeSource = cfg.webview_theme || 'dark';
     const systemMenu = Menu.buildFromTemplate([
         {
@@ -1803,6 +1818,9 @@ function createWindow() {
     let attachingWebviewSrc = '';
     mainWindow.webContents.on('will-attach-webview', (event, webPreferences, params) => {
         security.hardenWebviewPreferences(webPreferences);
+        // Keep page zoom independent across navigation and interface size changes.
+        webPreferences.zoomFactor = 1;
+        webPreferences.zoomMode = 'isolated';
         const partitionStr = (webPreferences && webPreferences.partition) || (params && params.partition);
         if (partitionStr) {
             configureAndHardenSession(session.fromPartition(partitionStr));
