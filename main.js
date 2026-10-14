@@ -6,6 +6,9 @@ const { exec, spawn, execSync, spawnSync } = require('child_process');
 const v8 = require('v8');
 const vm = require('vm');
 
+// Output written after Fly's terminal closes must not end in an error dialog.
+require('./closedOutput').ignoreClosedOutput();
+
 // Expose GC in Node main process for memory compaction
 try {
     v8.setFlagsFromString(['-', '-', 'expose-gc'].join(''));

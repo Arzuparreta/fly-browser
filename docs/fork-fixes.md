@@ -1,5 +1,13 @@
 # Fork fixes ledger
 
+## Output after the terminal closes · 14 October 2026
+
+| ID | Original behaviour | Fix | Validation |
+| --- | --- | --- | --- |
+| <a id="dev-03"></a>DEV-03 | Inherited defect: Fly's main process writes logs and Node warnings to the terminal it was started from. `launch.sh` leaves Electron running in the background, so the terminal is often closed while Fly keeps running. After that, writing to it fails with `EIO` (or `EPIPE` when output was piped to a reader that has exited). Node reports the first failed write through its callback, but raises the next one as an uncaught exception. A few seconds after start, a routine warning or log line then opened Electron's blocking "A JavaScript error occurred in the main process" dialog with `Error: write EIO`. | `closedOutput.js` adds a permanent error listener to the main process's stdout and stderr before anything else runs, so output that can no longer be delivered is dropped. Errors elsewhere still reach the startup guard from [DEV-02](#dev-02) and Electron's normal handling. Logs written while the terminal is open are unchanged. | `tests/closed-output.test.js` (part of `npm test`) starts a Node process, closes its output pipes and keeps logging: without the guard it exits with the uncaught write error, with the guard it exits cleanly. A disposable profile ran Fly from source in Electron 44.7.2 on a pseudo-terminal that was closed after start-up, then logged and emitted a warning: the original code raised three uncaught `write EIO` exceptions (the dialog in normal use), the fixed code none, with its window still open. A Linux directory package includes the module and starts with a disposable profile. |
+
+Validation: `npm test`, syntax checks of the changed files and `git diff --check` pass. Keyboard defaults, the generated guest grammar and the keyboard reference are unchanged. Linux/X11 only. Remaining limits: output written after the terminal closes is lost; it was never delivered before either. The reported dialog was reproduced in a pseudo-terminal rather than by closing a real terminal window; the failing write and stack trace match the report.
+
 ## Sign-in popups and self-closing tabs · 14 October 2026
 
 Implementation/work-log: [fly-browser PR #7](https://github.com/Arzuparreta/fly-browser/pull/7).
