@@ -18,4 +18,4 @@ fi
 ./node_modules/.bin/install-electron || { echo "Could not download Electron." >&2; exit 1; }
 
 # Use the project's pinned Electron rather than letting npx fetch an arbitrary version.
-"$electron" . --log-level=3 "$@" &
+exec "$electron" . --log-level=3 "$@"

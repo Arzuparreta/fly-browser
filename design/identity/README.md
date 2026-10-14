@@ -132,3 +132,5 @@ SVG export needs only Node. PNG export also needs Playwright with Chromium (`npm
 The application now uses this direction. Runtime PNGs, pixel masters and static grain live in `assets/identity`; local fonts and licences in `assets/fonts`; local Font Awesome 6.4.2 and its licence in `assets/vendor/fontawesome`. Google Fonts supplied the Latin woff2 subsets. Runtime pages make no font or icon CDN requests.
 
 `python3 scripts/build-identity.py` (Pillow) regenerates pixel icons, grain and the Windows ICO. `social.html` is the 1280 × 640 source for `docs/public/og-image.png`; render it with Chromium after local fonts have loaded. The wordmark is FLY set in bundled Doto, with a PNG in `assets/identity`. The documentation logo uses the sticker and its favicon uses the 32-pixel master. See [VIS-01](../../docs/fork-fixes.md#vis-01) for implementation validation and remaining limits.
+
+The owner subsequently simplified the sidebar masthead to the text FLY alone (VIS-02). Pixel icons remain application/favicon assets; the lower sidebar engraving remains.

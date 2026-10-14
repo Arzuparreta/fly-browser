@@ -70,7 +70,7 @@ cd fly-browser
 ./launch.sh
 ```
 
-`launch.sh` installs the dependencies and the Electron runtime on the first run, and again whenever a pull changes them; later starts are immediate. Alternatively, run `npm install` followed by `npm start`.
+`launch.sh` installs the dependencies and the Electron runtime on the first run, and again whenever a pull changes them; later starts are immediate. The launcher stays attached to the terminal so diagnostics and the exit status remain visible. Alternatively, run `npm install` followed by `npm start`.
 
 ***
 
