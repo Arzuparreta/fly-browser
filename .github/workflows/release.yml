@@ -87,7 +87,7 @@ jobs:
         uses: softprops/action-gh-release@v2
         with:
           tag_name: ${{ inputs.tag_name || github.ref_name }}
-          name: Mise Browser ${{ inputs.tag_name || github.ref_name }}
+          name: Fly Browser ${{ inputs.tag_name || github.ref_name }}
           files: release-assets/*
           generate_release_notes: true
           draft: false

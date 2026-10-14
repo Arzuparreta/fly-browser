@@ -1,4 +1,4 @@
-const keyboard = window.MiseKeyboard;
+const keyboard = window.FlyKeyboard;
 const clone = value => JSON.parse(JSON.stringify(value));
 let saved, draft, defaults, metadata, recording, busy = false;
 const el = id => document.getElementById(id);
@@ -156,7 +156,7 @@ function cancelRecord() {
 }
 export async function initialiseKeyboardEditor() {
     try {
-        [saved, defaults, metadata] = await Promise.all([window.miseAPI.getKeyboardConfig(), window.miseAPI.getKeyboardDefaults(), window.miseAPI.getActionMetadata()]);
+        [saved, defaults, metadata] = await Promise.all([window.flyAPI.getKeyboardConfig(), window.flyAPI.getKeyboardDefaults(), window.flyAPI.getActionMetadata()]);
         defaults = keyboard.validateConfig(defaults, metadata).config;
         draft = clone(saved);
         if (editorRequested) render(); else refreshButtons();
@@ -171,7 +171,7 @@ export async function initialiseKeyboardEditor() {
         busy = true; refreshButtons(); status('Saving…');
         const snapshot = clone(draft);
         try {
-            const result = await window.miseAPI.saveKeybinds(snapshot);
+            const result = await window.flyAPI.saveKeybinds(snapshot);
             if (!result.ok) { status(result.error); return; }
             saved = clone(result.config);
             if (JSON.stringify(draft) === JSON.stringify(snapshot)) draft = clone(saved);
@@ -221,7 +221,7 @@ export async function initialiseKeyboardEditor() {
         // Export only changes so that importing later still picks up newer defaults.
         const changes = {version: 2, changesOnly: true, ...keyboard.changesFrom(draft, keyboard.validateConfig(defaults, metadata).config)};
         const url = URL.createObjectURL(new Blob([JSON.stringify(changes, null, 2) + '\n'], {type: 'application/json'}));
-        const link = document.createElement('a'); link.href = url; link.download = 'mise-keybinds.json'; link.click();
+        const link = document.createElement('a'); link.href = url; link.download = 'fly-keybinds.json'; link.click();
         setTimeout(() => URL.revokeObjectURL(url), 1000);
         status('Exported the current bindings, including unsaved changes.');
     };
@@ -230,7 +230,7 @@ export async function initialiseKeyboardEditor() {
         if (!file) return;
         try {
             if (file.size > 65536) throw new Error('The bindings file must be smaller than 64 KB.');
-            const result = await window.miseAPI.resolveKeybinds(JSON.parse(await file.text()));
+            const result = await window.flyAPI.resolveKeybinds(JSON.parse(await file.text()));
             if (!result.ok) throw new Error(result.error);
             draft = result.config; render(); status('Bindings imported. Review them, then save to apply.');
         } catch (error) { status(error.message); }

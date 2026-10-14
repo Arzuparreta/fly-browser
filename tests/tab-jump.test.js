@@ -4,7 +4,7 @@
 const assert = require('assert');
 const keybinds = require('../keybinds.js');
 
-console.log('Running Mise direct tab jumping and cursor navigation regression tests...');
+console.log('Running Fly direct tab jumping and cursor navigation regression tests...');
 
 // 1. Verify jump-to-tab-1 through jump-to-tab-9 keybindings are registered
 {

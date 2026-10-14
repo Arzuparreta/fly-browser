@@ -65,7 +65,7 @@ export function loadWebviewSource(webview, workspace, src) {
         webview.setAttribute('src', src);
     };
     setTimeout(finish, ENSURE_TIMEOUT_MS);
-    window.miseAPI.extensionsEnsure(workspace, partition).then(finish, finish);
+    window.flyAPI.extensionsEnsure(workspace, partition).then(finish, finish);
 }
 
 // Called whenever the active view changes so chrome.tabs.query({ active: true })
@@ -74,13 +74,13 @@ export function notifyActiveView(webview, workspace) {
     if (!workspaceHasExtensions(workspace)) {
         if (state.extensions && state.extensions.enabled) {
             hideStatusBarActions();
-            try { window.miseAPI.extensionsTabFocused(0); } catch (e) {}
+            try { window.flyAPI.extensionsTabFocused(0); } catch (e) {}
         }
         return;
     }
     if (webview) {
         const send = () => {
-            try { window.miseAPI.extensionsTabFocused(webview.getWebContentsId()); } catch (e) {}
+            try { window.flyAPI.extensionsTabFocused(webview.getWebContentsId()); } catch (e) {}
             refreshStatusBarActions();
         };
         try {
@@ -130,7 +130,7 @@ async function ensureLiveWorkspaces() {
     for (const [ws, views] of Object.entries(state.activeViewsCache || {})) {
         if (!workspaceHasExtensions(ws)) continue;
         if (!Array.isArray(views) || !views.some(Boolean)) continue;
-        jobs.push(window.miseAPI.extensionsEnsure(ws, getWorkspacePartition(ws)).catch(() => {}));
+        jobs.push(window.flyAPI.extensionsEnsure(ws, getWorkspacePartition(ws)).catch(() => {}));
     }
     await Promise.all(jobs);
 }
@@ -148,7 +148,7 @@ function hideStatusBarActions() {
 async function ensureInstalledCache() {
     if (installedCache.length) return installedCache;
     try {
-        const res = await window.miseAPI.extensionsGetState({ scan: true });
+        const res = await window.flyAPI.extensionsGetState({ scan: true });
         installedCache = (res && res.installed) || [];
     } catch (e) {}
     return installedCache;
@@ -164,7 +164,7 @@ export async function refreshStatusBarActions() {
     }
 
     let actions = [];
-    try { actions = (await window.miseAPI.extensionsGetActions(currentPartition())) || []; } catch (e) {}
+    try { actions = (await window.flyAPI.extensionsGetActions(currentPartition())) || []; } catch (e) {}
     const installed = await ensureInstalledCache();
     const visible = actions.filter(a => installed.find(i => i.id === a.id && i.hasAction));
 
@@ -240,7 +240,7 @@ function showPopup(url, partition, anchorRect) {
     webview.addEventListener('close', closeExtensionPopup);
     webview.addEventListener('did-finish-load', () => {
         POPUP_MEASURE_DELAYS_MS.forEach(delay => setTimeout(() => measurePopup(webview), delay));
-        window.miseAllowWebviewFocus = true;
+        window.flyAllowWebviewFocus = true;
         webview.focus();
     });
 
@@ -256,7 +256,7 @@ function showPopup(url, partition, anchorRect) {
 export async function activateExtension(extensionId, anchorRect = null) {
     const partition = currentPartition();
     let res = null;
-    try { res = await window.miseAPI.extensionsActivate(extensionId, partition); } catch (e) {}
+    try { res = await window.flyAPI.extensionsActivate(extensionId, partition); } catch (e) {}
     if (!res || res.error) {
         showStatusNote((res && res.error) || 'Extension is not available in this workspace.');
         return;
@@ -283,7 +283,7 @@ export function getExtensionPaletteCommands() {
         title: 'Extension Settings',
         desc: 'Enable Chrome extensions per workspace and see what they cost',
         details: 'Opens the Extensions section in Preferences. Extensions are off by default, load only in the workspaces you choose and unload when those workspaces go idle.',
-        tip: 'Unpacked extensions live in ~/.config/mise-browser/extensions/, one folder each.',
+        tip: 'Unpacked extensions live in ~/.config/fly-browser/extensions/, one folder each.',
         category: 'Extensions',
         icon: 'fa-solid fa-puzzle-piece',
         keywords: ['extensions', 'addons', 'chrome', 'plugins', 'settings'],
@@ -295,13 +295,13 @@ export function getExtensionPaletteCommands() {
     commands.push({
         id: 'extensions-open-dir',
         title: 'Open Extensions Directory',
-        desc: 'Browse ~/.config/mise-browser/extensions in file manager',
+        desc: 'Browse ~/.config/fly-browser/extensions in file manager',
         details: 'Each unpacked extension goes in its own folder with its manifest.json at the top level.',
         tip: 'Run "Reload Extensions" after updating an extension on disk.',
         category: 'Extensions',
         icon: 'fa-solid fa-folder-open',
         keywords: ['extensions', 'folder', 'directory', 'unpacked'],
-        action: () => window.miseAPI.extensionsOpenDir()
+        action: () => window.flyAPI.extensionsOpenDir()
     }, {
         id: 'extensions-reload',
         title: 'Reload Extensions',
@@ -313,7 +313,7 @@ export function getExtensionPaletteCommands() {
         keywords: ['extensions', 'reload', 'refresh', 'update'],
         action: async () => {
             installedCache = [];
-            const res = await window.miseAPI.extensionsReload();
+            const res = await window.flyAPI.extensionsReload();
             showStatusNote(res && res.affectedTabs ? `Extensions reloaded. Reload ${res.affectedTabs} open tab(s) to refresh content scripts.` : 'Extensions reloaded.');
             refreshStatusBarActions();
         }
@@ -348,7 +348,7 @@ export function getExtensionPaletteCommands() {
                 icon: 'fa-solid fa-keyboard',
                 keywords: ['extension', 'command', info.name.toLowerCase(), cmd.name.toLowerCase()],
                 action: async () => {
-                    const ok = await window.miseAPI.extensionsRunCommand(info.id, currentPartition(), cmd.name);
+                    const ok = await window.flyAPI.extensionsRunCommand(info.id, currentPartition(), cmd.name);
                     if (!ok) showStatusNote(`${info.name} is not loaded in this workspace yet.`);
                 }
             });
@@ -406,9 +406,9 @@ function renderRuntimeSummary(runtime) {
 
     const m = runtime.metrics;
     const totals = m
-        ? `<div class="ext-runtime-totals">Mise total: <strong>${formatMb(m.totalMb)}</strong> · extension service workers: ${m.serviceWorkerProcesses} running, ${formatMb(m.serviceWorkerMb)} <span class="ext-runtime-method">(${escapeHtml(m.method)})</span></div>`
+        ? `<div class="ext-runtime-totals">Fly total: <strong>${formatMb(m.totalMb)}</strong> · extension service workers: ${m.serviceWorkerProcesses} running, ${formatMb(m.serviceWorkerMb)} <span class="ext-runtime-method">(${escapeHtml(m.method)})</span></div>`
         : '';
-    target.innerHTML = totals + (rows || '<div class="ext-runtime-empty">No workspace has loaded extensions since Mise started.</div>');
+    target.innerHTML = totals + (rows || '<div class="ext-runtime-empty">No workspace has loaded extensions since Fly started.</div>');
 }
 
 function renderInstalledList(res) {
@@ -468,9 +468,9 @@ function setPreferencesNote(text) {
 
 export async function syncExtensionsPreferences() {
     const toggle = document.getElementById('setting-extensions-toggle');
-    if (!toggle || !window.miseAPI || typeof window.miseAPI.extensionsGetState !== 'function') return;
+    if (!toggle || !window.flyAPI || typeof window.flyAPI.extensionsGetState !== 'function') return;
     let res;
-    try { res = await window.miseAPI.extensionsGetState({ scan: true, metrics: true }); } catch (e) { return; }
+    try { res = await window.flyAPI.extensionsGetState({ scan: true, metrics: true }); } catch (e) { return; }
     if (!res) return;
 
     toggle.checked = !!res.enabled;
@@ -485,16 +485,16 @@ export async function syncExtensionsPreferences() {
 }
 
 async function persistConfig(patch) {
-    const current = (await window.miseAPI.getBrowserSettings()) || {};
+    const current = (await window.flyAPI.getBrowserSettings()) || {};
     const merged = { ...current, ...patch };
-    await window.miseAPI.updateBrowserSettings(merged);
+    await window.flyAPI.updateBrowserSettings(merged);
     setExtensionsConfig(merged);
-    await window.miseAPI.extensionsApplyConfig();
+    await window.flyAPI.extensionsApplyConfig();
     await ensureLiveWorkspaces();
 }
 
 async function saveWorkspaceSelection(workspace, folder, enabled) {
-    const current = (await window.miseAPI.getBrowserSettings()) || {};
+    const current = (await window.flyAPI.getBrowserSettings()) || {};
     const map = { ...(current.extensions_by_workspace || {}) };
     const list = new Set(Array.isArray(map[workspace]) ? map[workspace] : []);
     if (enabled) list.add(folder); else list.delete(folder);
@@ -521,12 +521,12 @@ export function setupExtensionsPreferencesListeners() {
         };
     }
     const openDir = document.getElementById('setting-extensions-open-dir-btn');
-    if (openDir) openDir.onclick = () => window.miseAPI.extensionsOpenDir();
+    if (openDir) openDir.onclick = () => window.flyAPI.extensionsOpenDir();
     const reload = document.getElementById('setting-extensions-reload-btn');
     if (reload) {
         reload.onclick = async () => {
             installedCache = [];
-            const res = await window.miseAPI.extensionsReload();
+            const res = await window.flyAPI.extensionsReload();
             setPreferencesNote(res && res.affectedTabs
                 ? `Reloaded. Reload ${res.affectedTabs} open tab(s) to refresh content scripts.`
                 : 'Reloaded.');

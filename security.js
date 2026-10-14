@@ -1,5 +1,5 @@
 // security.js
-// Decoupled security configuration module for the Mise browser
+// Decoupled security configuration module for the Fly browser
 
 const { ElectronBlocker } = require('@ghostery/adblocker-electron');
 const fs = require('fs');
@@ -21,7 +21,7 @@ let appliedExceptionFilters = [];
 // Define a permanent location for the compiled adblocker cache file
 const userDataDir = (app && typeof app.getPath === 'function')
     ? app.getPath('userData')
-    : path.join(require('os').tmpdir(), 'mise-browser');
+    : path.join(require('os').tmpdir(), 'fly-browser');
 const CACHE_PATH = path.join(userDataDir, 'adblock_cache.bin');
 
 // Infrastructure domains required for Google authentication and bot detection
@@ -189,7 +189,7 @@ function hardenSession(targetSession, spellLang = 'en-GB') {
 
     const cleanUserAgent = (ua) => {
         return (ua || '')
-            .replace(/mise-browser\/[0-9.]+\s*/gi, '')
+            .replace(/fly-browser\/[0-9.]+\s*/gi, '')
             .replace(/Electron\/[0-9.]+\s*/gi, '')
             .replace(/Chrome\/(\d+)\.[\d.]+/i, 'Chrome/$1.0.0.0')
             .trim();
@@ -231,7 +231,7 @@ function hardenSession(targetSession, spellLang = 'en-GB') {
 
 // Electron keeps a single listener per webRequest event, so the ad-blocker's
 // onBeforeRequest and onHeadersReceived would replace ours. Register one
-// listener for each that runs Mise's rules first, then hands over to the blocker.
+// listener for each that runs Fly's rules first, then hands over to the blocker.
 function attachNetworkHandlers(targetSession) {
     if (!targetSession.webRequest) return;
 

@@ -1,4 +1,4 @@
-const {_electron} = require(process.env.MISE_PLAYWRIGHT_MODULE || 'playwright');
+const {_electron} = require(process.env.FLY_PLAYWRIGHT_MODULE || 'playwright');
 const fs = require('node:fs');
 const os = require('node:os');
 const path = require('node:path');
@@ -8,8 +8,8 @@ const asar = require('@electron/asar');
 (async () => {
     const executablePath = process.argv[2];
     if (!executablePath) throw new Error('Supply the packaged Linux executable path.');
-    const temporary = fs.mkdtempSync(path.join(os.tmpdir(), 'mise-packaged-'));
-    const configDir = path.join(temporary, '.config/mise-browser');
+    const temporary = fs.mkdtempSync(path.join(os.tmpdir(), 'fly-packaged-'));
+    const configDir = path.join(temporary, '.config/fly-browser');
     fs.mkdirSync(configDir, {recursive: true});
     const version = require('../package.json').version;
     fs.writeFileSync(path.join(configDir, 'config.json'), JSON.stringify({last_seen_version: version}));
@@ -33,8 +33,8 @@ const asar = require('@electron/asar');
         const page = await application.firstWindow();
         const errors = []; page.on('pageerror', error => errors.push(error.message));
         await page.waitForFunction(() => !!window.executeBrowserAction && document.querySelectorAll('#TabList li').length === 1);
-        assert.equal((await page.evaluate(() => window.miseAPI.getAppVersion())).version, version);
-        assert.equal((await page.evaluate(() => window.miseAPI.getBrowserSettings())).extensions_enabled, false);
+        assert.equal((await page.evaluate(() => window.flyAPI.getAppVersion())).version, version);
+        assert.equal((await page.evaluate(() => window.flyAPI.getBrowserSettings())).extensions_enabled, false);
         assert.deepEqual(errors, []);
         console.log('Packaged ASAR, cold filter worker/cache, application startup, version, disabled extensions and disposable paths passed.');
     } finally {

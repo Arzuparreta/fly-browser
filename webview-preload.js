@@ -2,7 +2,7 @@
 // Shared shortcut grammar for the main process and the settings editor.
 (function (root, factory) {
     if (false) module.exports = factory();
-    else root.MiseKeyboard = factory();
+    else root.FlyKeyboard = factory();
 })(typeof globalThis !== 'undefined' ? globalThis : this, function () {
     const aliases = {control: 'Ctrl', ctrl: 'Ctrl', option: 'Alt', alt: 'Alt', shift: 'Shift',
         cmd: 'Meta', command: 'Meta', super: 'Meta', meta: 'Meta'};
@@ -130,22 +130,22 @@ ipcRenderer.on('toggle-reader-view', () => {
     try { ipcRenderer.sendToHost('normal-mode-action', 'toggle-reader-view'); } catch (err) {}
 });
 
-window.addEventListener('mise-reader-closed', () => {
+window.addEventListener('fly-reader-closed', () => {
     try { ipcRenderer.sendToHost('reader-view-toggled', { active: false }); } catch (err) {}
 });
 
-window.addEventListener('mise-reader-export-notes', (e) => {
+window.addEventListener('fly-reader-export-notes', (e) => {
     try { ipcRenderer.sendToHost('reader-export-notes', e.detail); } catch (err) {}
 });
 
-window.addEventListener('mise-reader-export-external', (e) => {
+window.addEventListener('fly-reader-export-external', (e) => {
     try { ipcRenderer.sendToHost('reader-export-external', e.detail); } catch (err) {}
 });
 
 // Expose minimal, secure GM bridge for userscript execution
 try {
     if (contextBridge && typeof contextBridge.exposeInMainWorld === 'function') {
-        contextBridge.exposeInMainWorld('__miseGMBridge', {
+        contextBridge.exposeInMainWorld('__flyGMBridge', {
             request: (token, details) => ipcRenderer.invoke('gm-xmlhttprequest', { token, details }),
             setStorageValue: (token, scriptId, key, value) => ipcRenderer.invoke('gm-storage-set', { token, scriptId, key, value }),
             deleteStorageValue: (token, scriptId, key) => ipcRenderer.invoke('gm-storage-delete', { token, scriptId, key }),
@@ -168,7 +168,7 @@ try {
     })();
 
     if (isViewerPage && contextBridge && typeof contextBridge.exposeInMainWorld === 'function') {
-        contextBridge.exposeInMainWorld('__misePDFBridge', {
+        contextBridge.exposeInMainWorld('__flyPDFBridge', {
             loadPdfData: (token, url) => ipcRenderer.invoke('read-pdf-data', { token, url }),
             savePdfFile: (token, options) => ipcRenderer.invoke('save-pdf-file', { token, options })
         });
@@ -188,8 +188,8 @@ try {
 if (!isTrustedSite) {
 
     const codeToInject = `(function() {
-        if (window.__miseFingerprintPatchesApplied) return;
-        window.__miseFingerprintPatchesApplied = true;
+        if (window.__flyFingerprintPatchesApplied) return;
+        window.__flyFingerprintPatchesApplied = true;
 
         // Privacy signals
         Object.defineProperty(navigator, 'doNotTrack', { get: () => '1', configurable: true });
@@ -238,7 +238,7 @@ if (!isTrustedSite) {
 
         // User Agent standardisation matching stable browser releases
         const cleanUserAgent = (navigator.userAgent || '')
-            .replace(new RegExp('mise-browser/[0-9.]+\\\\s*', 'gi'), '')
+            .replace(new RegExp('fly-browser/[0-9.]+\\\\s*', 'gi'), '')
             .replace(new RegExp('Electron/[0-9.]+\\\\s*', 'gi'), '')
             .replace(new RegExp('Chrome/(\\\\d+)\\\\.[\\\\d.]+', 'i'), 'Chrome/$1.0.0.0')
             .trim();
@@ -537,15 +537,15 @@ function isEventInEditable(e) {
 let isPassthroughMode = false;
 let isExplicitInsert = false;
 let keyboardConfig = ipcRenderer.sendSync('guest-keyboard-config');
-let globalKeys = MiseKeyboard.compile(keyboardConfig?.shortcuts || {});
-let normalKeys = MiseKeyboard.compile(keyboardConfig?.normal || {});
+let globalKeys = FlyKeyboard.compile(keyboardConfig?.shortcuts || {});
+let normalKeys = FlyKeyboard.compile(keyboardConfig?.normal || {});
 let normalPrefixes = new Set([...normalKeys.keys()].filter(key => key.includes(' ')).map(key => key.split(' ')[0]));
 let pendingStroke = '';
 let pendingTime = 0;
 ipcRenderer.on('keyboard-config-changed', (_event, config) => {
     keyboardConfig = config;
-    globalKeys = MiseKeyboard.compile(config.shortcuts);
-    normalKeys = MiseKeyboard.compile(config.normal);
+    globalKeys = FlyKeyboard.compile(config.shortcuts);
+    normalKeys = FlyKeyboard.compile(config.normal);
     normalPrefixes = new Set([...normalKeys.keys()].filter(key => key.includes(' ')).map(key => key.split(' ')[0]));
     pendingStroke = '';
 });
@@ -578,7 +578,7 @@ document.addEventListener('focusout', () => {
 try {
     let lastHintsActive = false;
     const notifyHintsState = () => {
-        const active = !!document.getElementById('mise-hint-layer');
+        const active = !!document.getElementById('fly-hint-layer');
         if (active === lastHintsActive) return;
         lastHintsActive = active;
         try { ipcRenderer.sendToHost('guest-hints-state', active); } catch (err) {}
@@ -645,7 +645,7 @@ window.addEventListener('keydown', e => {
         pendingStroke = '';
         return;
     }
-    const combo = MiseKeyboard.eventCombo(e);
+    const combo = FlyKeyboard.eventCombo(e);
     const consume = () => { e.preventDefault(); e.stopPropagation(); e.stopImmediatePropagation(); };
     let action = globalKeys.get(combo);
     if (action === 'toggle-passthrough') {
@@ -661,21 +661,21 @@ window.addEventListener('keydown', e => {
     if (isPassthroughMode) return;
     if (action) {
         consume();
-        if (!e.repeat || MiseKeyboard.repeatable(action)) {
+        if (!e.repeat || FlyKeyboard.repeatable(action)) {
             if (localPageActions[action]) localPageActions[action]();
             else ipcRenderer.sendToHost('keyboard-action', action);
         }
         return;
     }
     // Hints own Escape, Backspace and their alphabet while the overlay is visible.
-    if (document.getElementById('mise-hint-layer')) { pendingStroke = ''; return; }
+    if (document.getElementById('fly-hint-layer')) { pendingStroke = ''; return; }
     const inEditable = isEventInEditable(e);
     if (e.key === 'Escape') {
         ipcRenderer.sendToHost('guest-escape');
         pendingStroke = '';
-        const reader = document.getElementById('mise-reader-overlay');
+        const reader = document.getElementById('fly-reader-overlay');
         if (reader) {
-            consume(); window.dispatchEvent(new CustomEvent('mise-reader-close')); reader.remove(); document.documentElement.style.overflow = '';
+            consume(); window.dispatchEvent(new CustomEvent('fly-reader-close')); reader.remove(); document.documentElement.style.overflow = '';
             ipcRenderer.sendToHost('reader-view-toggled', {active: false});
         } else if (inEditable || isExplicitInsert) {
             consume();
@@ -697,7 +697,7 @@ window.addEventListener('keydown', e => {
     }
     if (!action) return;
     consume();
-    if (e.repeat && !MiseKeyboard.repeatable(action)) return;
+    if (e.repeat && !FlyKeyboard.repeatable(action)) return;
     if (localPageActions[action]) localPageActions[action]();
     else ipcRenderer.sendToHost('keyboard-action', action);
 }, true);

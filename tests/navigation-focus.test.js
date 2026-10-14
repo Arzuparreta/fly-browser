@@ -11,7 +11,7 @@ const view = {setAttribute: (name, value) => events.push(['navigate', name, valu
 state.activeViewsCache.A[0] = view;
 const context = {
     resolveSearchAliasUrl, prepareOverlay: () => {}, state, document: {getElementById: id => id === 'WideAddressBar' ? address : null, querySelector: () => selected, querySelectorAll: () => [selected]},
-    window: {miseAPI: {saveSession: () => events.push(['save']), getBrowserSettings: async () => ({search_engine: 'https://duckduckgo.com/?q=%s'})}},
+    window: {flyAPI: {saveSession: () => events.push(['save']), getBrowserSettings: async () => ({search_engine: 'https://duckduckgo.com/?q=%s'})}},
     focusActiveWebview: () => {assert.equal(address.style.display, 'none'); events.push(['focus', state.activeViewsCache.A[0]]);},
     wakeTab: () => {state.activeViewsCache.A[0] = view; events.push(['wake']);},
     isPdfUrl: () => false, evaluateMathExpression: () => null, formatSearchUrl: (query, template) => template.replace('%s', encodeURIComponent(query)),

@@ -1,4 +1,4 @@
-const { _electron } = require(process.env.MISE_PLAYWRIGHT_MODULE || 'playwright');
+const { _electron } = require(process.env.FLY_PLAYWRIGHT_MODULE || 'playwright');
 const fs = require('node:fs');
 const createElectronFixture = require('./electron-fixture');
 const os = require('node:os');
@@ -8,7 +8,7 @@ const assert = require('node:assert/strict');
 const root = path.resolve(__dirname, '..');
 
 (async () => {
-    const temporary = fs.mkdtempSync(path.join(os.tmpdir(), 'mise-navigation-focus-'));
+    const temporary = fs.mkdtempSync(path.join(os.tmpdir(), 'fly-navigation-focus-'));
     const entry = createElectronFixture(root, temporary);
 
     const server = http.createServer((request, response) => {
@@ -24,19 +24,19 @@ const root = path.resolve(__dirname, '..');
     let application;
     try {
         application = await _electron.launch({executablePath: path.join(root, 'node_modules/electron/dist/electron'),
-            args: ['--no-sandbox', '--disable-gpu', `--ozone-platform=${process.env.MISE_TEST_OZONE_PLATFORM || 'x11'}`, entry]});
+            args: ['--no-sandbox', '--disable-gpu', `--ozone-platform=${process.env.FLY_TEST_OZONE_PLATFORM || 'x11'}`, entry]});
         const page = await application.firstWindow();
         const errors = []; page.on('pageerror', error => errors.push(error.message));
         await page.waitForFunction(() => !!window.executeBrowserAction);
         await page.evaluate(async url => {
-            await window.miseAPI.updateBrowserSettings({search_engine: url + '/?q=%s'});
+            await window.flyAPI.updateBrowserSettings({search_engine: url + '/?q=%s'});
             const view = [...document.querySelectorAll('webview')].find(view => view.getClientRects().length);
             await view.loadURL(url);
         }, fixture);
         const snapshot = () => page.evaluate(async () => {
             const view = [...document.querySelectorAll('webview')].find(view => view.getClientRects().length);
             return {host: document.activeElement.tagName, hostId: document.activeElement.id,
-                guest: await view.executeJavaScript('({focused:document.hasFocus(), active:document.activeElement.tagName, hints:!!document.getElementById("mise-hint-layer"), ready:typeof window.toggleHints === "function"})')};
+                guest: await view.executeJavaScript('({focused:document.hasFocus(), active:document.activeElement.tagName, hints:!!document.getElementById("fly-hint-layer"), ready:typeof window.toggleHints === "function"})')};
         });
         const waitGuest = async predicate => {
             for (let attempt = 0; attempt < 150; attempt++) {
@@ -65,7 +65,7 @@ const root = path.resolve(__dirname, '..');
             const after = await snapshot();
             console.log('Search focus', {query, before, after});
             assert(after.guest.hints, 'Ctrl+L search results must accept f without clicking the guest');
-            assert(await page.evaluate(() => document.querySelector('webview').executeJavaScript('window.dispatchEvent(new Event("resize")); !!document.getElementById("mise-hint-layer")')), 'A redundant resize must retain hints laid out at the current viewport');
+            assert(await page.evaluate(() => document.querySelector('webview').executeJavaScript('window.dispatchEvent(new Event("resize")); !!document.getElementById("fly-hint-layer")')), 'A redundant resize must retain hints laid out at the current viewport');
             if (query === 'third') {
                 const bounds = await application.evaluate(({BrowserWindow}) => BrowserWindow.getAllWindows()[0].getBounds());
                 await application.evaluate(({BrowserWindow}, bounds) => BrowserWindow.getAllWindows()[0].setBounds({...bounds, width: bounds.width - 100}), bounds);

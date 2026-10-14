@@ -1,24 +1,24 @@
 {
-  "name": "mise-browser",
+  "name": "fly-browser",
   "version": "0.15.0",
-  "description": "Mise Browser - Electron Edition",
+  "description": "A small, minimal Linux browser with full keyboard control and a polished experience for mouse users.",
   "main": "main.js",
   "license": "GPL-3.0-or-later",
   "scripts": {
     "start": "electron . --log-level=3",
-    "test": "node tests/auth-security.test.js && node tests/adblocker-startup.test.js && node tests/adblocker-build.test.js && node tests/clock.test.js && node tests/audio-controls.test.js && node tests/pinned-tabs.test.js && node tests/notes-reader-export.test.js && node tests/search-aliases.test.js && node tests/config-writes.test.js && node tests/keyboard.test.js && node scripts/sync-keyboard.js --check && node scripts/generate-keybind-docs.js --check && node tests/navigation-focus.test.js && node tests/overlay-state.test.js && node tests/extensions.test.js && node tests/tab-jump.test.js && node tests/focus-recovery.test.js",
+    "test": "node tests/auth-security.test.js && node tests/adblocker-startup.test.js && node tests/adblocker-build.test.js && node tests/clock.test.js && node tests/audio-controls.test.js && node tests/pinned-tabs.test.js && node tests/notes-reader-export.test.js && node tests/search-aliases.test.js && node tests/config-writes.test.js && node tests/profile-migration.test.js && node tests/keyboard.test.js && node scripts/sync-keyboard.js --check && node scripts/generate-keybind-docs.js --check && node tests/navigation-focus.test.js && node tests/overlay-state.test.js && node tests/extensions.test.js && node tests/tab-jump.test.js && node tests/focus-recovery.test.js",
     "docs:dev": "vitepress dev docs",
     "docs:build": "vitepress build docs",
     "docs:preview": "vitepress preview docs",
-    "install-desktop": "mkdir -p ~/.local/share/applications ~/.local/share/icons/hicolor/{48x48,128x128,256x256}/apps && cp mise.desktop ~/.local/share/applications/ && cp assets/icons/Mise-logo48.png ~/.local/share/icons/hicolor/48x48/apps/mise.png && cp assets/icons/Mise-logo128.png ~/.local/share/icons/hicolor/128x128/apps/mise.png && cp assets/icons/Mise-logo256.png ~/.local/share/icons/hicolor/256x256/apps/mise.png && update-desktop-database ~/.local/share/applications && gtk-update-icon-cache -f -t ~/.local/share/icons/hicolor",
+    "install-desktop": "mkdir -p ~/.local/share/applications ~/.local/share/icons/hicolor/{48x48,128x128,256x256}/apps && cp fly-browser.desktop ~/.local/share/applications/ && cp assets/icons/fly-logo48.png ~/.local/share/icons/hicolor/48x48/apps/fly-browser.png && cp assets/icons/fly-logo128.png ~/.local/share/icons/hicolor/128x128/apps/fly-browser.png && cp assets/icons/fly-logo256.png ~/.local/share/icons/hicolor/256x256/apps/fly-browser.png && update-desktop-database ~/.local/share/applications && gtk-update-icon-cache -f -t ~/.local/share/icons/hicolor",
     "dist": "electron-builder",
     "dist:linux": "electron-builder --linux",
     "dist:dir": "electron-builder --dir",
     "test:keyboard-ui": "node tests/keyboard-ui.test.js && node tests/navigation-focus-ui.test.js && node tests/overlay-state-ui.test.js && node tests/sidebar-pointer-focus-ui.test.js && node tests/settings-nav-ui.test.js && node tests/tab-close-typing-ui.test.js && node tests/sidebar-cursor-ui.test.js && node tests/legacy-keybinds-ui.test.js"
   },
   "build": {
-    "appId": "io.github.arzuparreta.mise-browser",
-    "productName": "Mise Browser",
+    "appId": "io.github.arzuparreta.fly-browser",
+    "productName": "Fly Browser",
     "directories": {
       "output": "dist",
       "buildResources": "build"
@@ -34,6 +34,7 @@
       "security.js",
       "keybinds.js",
       "stored-keybind-defaults.json",
+      "profileMigration.js",
       "userContent.js",
       "diagnostics.js",
       "index.html",

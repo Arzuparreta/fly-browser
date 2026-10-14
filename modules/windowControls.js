@@ -20,8 +20,8 @@ export function toggleWindowControls(force) {
     controlsEl.style.display = isWindowControlsEnabled ? 'flex' : 'none';
 
     // Synchronise with settings if API available
-    if (window.miseAPI && typeof window.miseAPI.updateBrowserSettings === 'function') {
-        window.miseAPI.updateBrowserSettings({ show_window_controls: isWindowControlsEnabled }).catch(() => {});
+    if (window.flyAPI && typeof window.flyAPI.updateBrowserSettings === 'function') {
+        window.flyAPI.updateBrowserSettings({ show_window_controls: isWindowControlsEnabled }).catch(() => {});
     }
 
     // Update preferences toggle checkbox if present
@@ -46,8 +46,8 @@ export async function initWindowControls(cfg) {
 
     if (minBtn) {
         minBtn.onclick = () => {
-            if (window.miseAPI && typeof window.miseAPI.minimizeWindow === 'function') {
-                window.miseAPI.minimizeWindow();
+            if (window.flyAPI && typeof window.flyAPI.minimizeWindow === 'function') {
+                window.flyAPI.minimizeWindow();
             }
         };
     }
@@ -66,29 +66,29 @@ export async function initWindowControls(cfg) {
 
     if (maxBtn) {
         maxBtn.onclick = () => {
-            if (window.miseAPI && typeof window.miseAPI.toggleMaximizeWindow === 'function') {
-                window.miseAPI.toggleMaximizeWindow();
+            if (window.flyAPI && typeof window.flyAPI.toggleMaximizeWindow === 'function') {
+                window.flyAPI.toggleMaximizeWindow();
             }
         };
     }
 
     if (closeBtn) {
         closeBtn.onclick = () => {
-            if (window.miseAPI && typeof window.miseAPI.closeWindow === 'function') {
-                window.miseAPI.closeWindow();
+            if (window.flyAPI && typeof window.flyAPI.closeWindow === 'function') {
+                window.flyAPI.closeWindow();
             }
         };
     }
 
-    if (window.miseAPI && typeof window.miseAPI.isWindowMaximized === 'function') {
+    if (window.flyAPI && typeof window.flyAPI.isWindowMaximized === 'function') {
         try {
-            const isMax = await window.miseAPI.isWindowMaximized();
+            const isMax = await window.flyAPI.isWindowMaximized();
             updateMaxIcon(isMax);
         } catch (e) {}
     }
 
-    if (window.miseAPI && typeof window.miseAPI.onWindowMaximizedChange === 'function') {
-        window.miseAPI.onWindowMaximizedChange((isMax) => {
+    if (window.flyAPI && typeof window.flyAPI.onWindowMaximizedChange === 'function') {
+        window.flyAPI.onWindowMaximizedChange((isMax) => {
             updateMaxIcon(isMax);
         });
     }

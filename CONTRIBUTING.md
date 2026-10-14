@@ -1,6 +1,6 @@
-# Contributing to Mise Browser
+# Contributing to Fly Browser
 
-Thank you for your interest in contributing to Mise Browser! Mise is an independent, keyboard-first web browser engineered specifically for low-resource and fanless Linux hardware, featuring container isolation, true tab hibernation, and zero background bloat.
+Thank you for your interest in contributing to Fly Browser! Fly is an independent, keyboard-first web browser engineered specifically for low-resource and fanless Linux hardware, featuring container isolation, true tab hibernation, and zero background bloat.
 
 To preserve the speed, safety, and minimalism of the project, all contributions are expected to adhere to the guidelines set out below.
 
@@ -8,13 +8,13 @@ To preserve the speed, safety, and minimalism of the project, all contributions 
 
 ## 1. Core Principles
 
-Before proposing features or submitting pull requests, please keep Mise's foundational principles in mind:
+Before proposing features or submitting pull requests, please keep Fly's foundational principles in mind:
 
 * **Low Resource Footprint:** Every feature must respect system resources. Background timers, heavy libraries, and persistent memory allocations are strictly avoided.
 * **Keyboard-First Workflow:** Navigation, workspace management, and settings should be fully operable via keyboard shortcuts and modal states (NORMAL, INSERT, PASSTHROUGH).
 * **Minimalist Architecture (KISS):** Keep implementations simple and maintainable. Avoid complex abstractions when straightforward web or Electron primitives suffice.
 * **Minimal Dependencies:** Avoid introducing new external dependencies. If a new dependency is required, discuss it with the maintainer prior to opening a PR.
-* **Strict Privacy & Zero Telemetry:** Mise never collects telemetry, user analytics, or background metrics. User data remains strictly local.
+* **Strict Privacy & Zero Telemetry:** Fly never collects telemetry, user analytics, or background metrics. User data remains strictly local.
 
 ***
 
@@ -25,7 +25,7 @@ Please use the structured GitHub issue forms to report problems:
 * **Bug Reports:** Use the [Bug Report Form](.github/ISSUE_TEMPLATE/bug_report.yml) to report crashes, unexpected behaviour, or UI glitches. Please include your distribution, window manager (e.g. Hyprland, Sway, i3), display server (Wayland or X11), and relevant logs from the Diagnostics Hub.
 * **Website Breakdowns:** If an external site fails due to adblocking shields, Dark Reader colour inversion, or container authentication loops, submit a [Website Compatibility Report](.github/ISSUE_TEMPLATE/site_compatibility.yml).
 * **Feature Proposals:** Submit ideas via the [Feature Request Form](.github/ISSUE_TEMPLATE/feature_request.yml), describing the proposed keyboard workflow and performance considerations.
-* **Security Disclosures:** Do not report vulnerabilities publicly. Please refer to the [Security Policy](SECURITY.md) and disclose privately via [GitHub Security Advisories](https://github.com/Arzuparreta/Mise-browser/security/advisories/new).
+* **Security Disclosures:** Do not report vulnerabilities publicly. Please refer to the [Security Policy](SECURITY.md) and disclose privately via [GitHub Security Advisories](https://github.com/Arzuparreta/fly-browser/security/advisories/new).
 
 ***
 
@@ -41,8 +41,8 @@ Please use the structured GitHub issue forms to report problems:
 
 1. Clone the repository:
    ```bash
-   git clone https://github.com/Arzuparreta/Mise-browser.git
-   cd Mise-browser
+   git clone https://github.com/Arzuparreta/fly-browser.git
+   cd fly-browser
    ```
 
 2. Install development dependencies:
@@ -50,7 +50,7 @@ Please use the structured GitHub issue forms to report problems:
    npm install
    ```
 
-3. Launch Mise Browser in development mode:
+3. Launch Fly Browser in development mode:
    ```bash
    npm start
    ```
@@ -118,4 +118,4 @@ Before submitting a Pull Request, verify that your changes meet quality checks:
 
 ## 7. Community & Questions
 
-For questions, configuration problems or ideas, open an [issue](https://github.com/Arzuparreta/Mise-browser/issues).
+For questions, configuration problems or ideas, open an [issue](https://github.com/Arzuparreta/fly-browser/issues).

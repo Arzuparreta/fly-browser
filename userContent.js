@@ -1,6 +1,6 @@
 // userContent.js
-// Local User-Script and User-Style injection manager for Mise Browser
-// Monitors ~/.config/mise-browser/scripts and ~/.config/mise-browser/styles
+// Local User-Script and User-Style injection manager for Fly Browser
+// Monitors ~/.config/fly-browser/scripts and ~/.config/fly-browser/styles
 // Injects matching .user.js and .user.css on dom-ready without extension runtime overhead
 
 const fs = require('fs');
@@ -15,7 +15,7 @@ try {
     UndiciAgent = require('undici').Agent;
 } catch {}
 
-const defaultBaseDir = path.join(os.homedir(), '.config', 'mise-browser');
+const defaultBaseDir = path.join(os.homedir(), '.config', 'fly-browser');
 let scriptsDir = path.join(defaultBaseDir, 'scripts');
 let stylesDir = path.join(defaultBaseDir, 'styles');
 let storageDir = path.join(defaultBaseDir, 'script-storage');
@@ -831,7 +831,7 @@ function createTemplateFilesIfEmpty() {
 // ==/UserScript==
 
 // Local user script executed automatically on matching pages
-console.log('[Mise UserScript] Active on:', window.location.href);
+console.log('[Fly UserScript] Active on:', window.location.href);
 `;
             fs.writeFileSync(scriptTemplatePath, sampleScript, 'utf8');
         }

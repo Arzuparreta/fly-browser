@@ -1,16 +1,16 @@
 name: Bug Report
-description: Report unexpected behaviour, rendering errors, or crashes in Mise Browser
+description: Report unexpected behaviour, rendering errors, or crashes in Fly Browser
 title: "[Bug]: "
 labels: ["bug"]
 body:
   - type: markdown
     attributes:
       value: |
-        Thank you for helping improve Mise Browser!
+        Thank you for helping improve Fly Browser!
 
         Before submitting, please ensure:
         * You have searched existing issues to confirm this has not already been reported.
-        * For security vulnerabilities, do not file a public issue. Please follow the [Security Policy](https://github.com/Arzuparreta/Mise-browser/blob/main/SECURITY.md).
+        * For security vulnerabilities, do not file a public issue. Please follow the [Security Policy](https://github.com/Arzuparreta/fly-browser/blob/main/SECURITY.md).
         * You can export live system and runtime details using the Diagnostics Hub (Preferences -> Diagnostics, or run `open-diagnostics` in the Command Palette via `Ctrl+P`).
 
   - type: textarea
@@ -28,7 +28,7 @@ body:
       label: Steps to Reproduce
       description: Clear, sequential steps to reproduce the issue.
       placeholder: |
-        1. Launch Mise Browser
+        1. Launch Fly Browser
         2. Navigate to '...'
         3. Switch mode or trigger shortcut '...'
         4. Notice unexpected behaviour
@@ -54,9 +54,9 @@ body:
       required: true
 
   - type: input
-    id: mise_version
+    id: fly_version
     attributes:
-      label: Mise Browser Version
+      label: Fly Browser Version
       description: Found in the Preferences overlay (F1) or package.json (e.g. v0.15.0 or git main).
       placeholder: "e.g. v0.15.0"
     validations:
@@ -106,7 +106,7 @@ body:
     id: install_method
     attributes:
       label: Installation / Execution Method
-      description: How do you run Mise Browser on your machine?
+      description: How do you run Fly Browser on your machine?
       options:
         - Pre-built AppImage (.AppImage)
         - Release tarball (.tar.gz)

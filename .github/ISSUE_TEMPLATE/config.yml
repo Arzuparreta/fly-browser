@@ -1,8 +1,8 @@
 blank_issues_enabled: false
 contact_links:
   - name: Security Vulnerability Disclosure
-    url: https://github.com/Arzuparreta/Mise-browser/security/advisories/new
+    url: https://github.com/Arzuparreta/fly-browser/security/advisories/new
     about: Report security vulnerabilities privately through GitHub Security Advisories
   - name: Documentation & User Guides
-    url: https://arzuparreta.github.io/Mise-browser/
+    url: https://arzuparreta.github.io/fly-browser/
     about: Read official guides, keyboard references, and configuration options

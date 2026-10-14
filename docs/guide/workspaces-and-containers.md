@@ -1,6 +1,6 @@
 # Workspaces & Container Partitions
 
-Mise introduces Firefox Container-style isolation combined with a fluid workspace tree.
+Fly introduces Firefox Container-style isolation combined with a fluid workspace tree.
 
 Traditional browsers store cookies, localStorage, and credentials in a single shared profile, making it difficult to maintain multiple logins to the same service (e.g. personal and work GitHub or Google accounts) without relying on separate windows or private browsing sessions.
 
@@ -8,7 +8,7 @@ Traditional browsers store cookies, localStorage, and credentials in a single sh
 
 ## Multi-Account Container Partitions
 
-In Mise, every workspace is automatically assigned its own dedicated, persistent Electron container partition:
+In Fly, every workspace is automatically assigned its own dedicated, persistent Electron container partition:
 
 - A workspace named `Work` runs inside partition `persist:work`.
 - A workspace named `Personal` runs inside partition `persist:personal`.
@@ -27,7 +27,7 @@ In Mise, every workspace is automatically assigned its own dedicated, persistent
 
 The Workspace Dashboard provides a structural tree view of all open tabs across your entire session:
 
-![Mise Browser Workspace Dashboard](/screenshots/workspace-dashboard.webp)
+![Fly Browser Workspace Dashboard](/screenshots/workspace-dashboard.webp)
 
 - Press **Ctrl + Shift + W** to open or close the Dashboard.
 - **Visual Overview**: Displays every workspace, highlighting the currently active workspace, along with the title and status of every tab.
@@ -46,7 +46,7 @@ The Workspace Dashboard provides a structural tree view of all open tabs across 
 Your workspace layout, active tabs, titles, container assignments, and sleeping states are saved continuously to:
 
 ```text
-~/.config/mise-browser/session.json
+~/.config/fly-browser/session.json
 ```
 
 If the browser closes or restarts, your complete environment is restored exactly as you left it.

@@ -9,9 +9,9 @@ const path = require('path');
 const extensions = require('../extensions.js');
 const keybinds = require('../keybinds.js');
 
-console.log('Running Mise extension support tests...');
+console.log('Running Fly extension support tests...');
 
-const tmpRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'mise-ext-test-'));
+const tmpRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'fly-ext-test-'));
 function writeExtension(folder, manifest, files = {}) {
     const dir = path.join(tmpRoot, folder);
     fs.mkdirSync(dir, { recursive: true });
@@ -37,9 +37,9 @@ function writeExtension(folder, manifest, files = {}) {
 // 2. Unpacked ids follow Chromium's derivation so storage survives restarts
 {
     const { computeExtensionId } = extensions;
-    const a = computeExtensionId('/home/user/.config/mise-browser/extensions/darkreader', {});
-    const b = computeExtensionId('/home/user/.config/mise-browser/extensions/darkreader', {});
-    const moved = computeExtensionId('/home/user/.config/mise-browser/extensions/darkreader-2', {});
+    const a = computeExtensionId('/home/user/.config/fly-browser/extensions/darkreader', {});
+    const b = computeExtensionId('/home/user/.config/fly-browser/extensions/darkreader', {});
+    const moved = computeExtensionId('/home/user/.config/fly-browser/extensions/darkreader-2', {});
     assert.match(a, /^[a-p]{32}$/, 'ids use 32 characters in the a..p range');
     assert.strictEqual(a, b, 'same path gives the same id');
     assert.notStrictEqual(a, moved, 'moving a folder changes the id, which is why the docs warn about renaming');
@@ -49,7 +49,7 @@ function writeExtension(folder, manifest, files = {}) {
     const keyedB = computeExtensionId('/another/place', { key });
     assert.strictEqual(keyedA, keyedB, 'a manifest key pins the id regardless of folder');
 
-    // Electron 44 assigned this id when loading an unpacked extension from this path
+    // Electron 44 assigned this id when loading an unpacked extension from this path (recorded before the Fly rename)
     assert.strictEqual(
         computeExtensionId('/tmp/mise-id-vector/ext', {}),
         'agbidmmoanllbbjofeaokeofbhjccbjh',
@@ -128,7 +128,7 @@ function writeExtension(folder, manifest, files = {}) {
     assert.strictEqual(getGraceMs({ extensions_unload_grace_seconds: -1 }), 60000, 'invalid values fall back to the default');
 
     assert.strictEqual(isEligiblePartition('persist:work'), true);
-    assert.strictEqual(isEligiblePartition('MisePrivateProfile'), false, 'private browsing never loads extensions');
+    assert.strictEqual(isEligiblePartition('FlyPrivateProfile'), false, 'private browsing never loads extensions');
     assert.strictEqual(isValidFolderName('a/b'), false);
     console.log('✓ Config gating, workspace scoping, grace period and private mode exclusion verified');
 }

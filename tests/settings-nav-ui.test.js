@@ -1,4 +1,4 @@
-const { _electron } = require(process.env.MISE_PLAYWRIGHT_MODULE || 'playwright');
+const { _electron } = require(process.env.FLY_PLAYWRIGHT_MODULE || 'playwright');
 const fs = require('node:fs');
 const createElectronFixture = require('./electron-fixture');
 const os = require('node:os');
@@ -6,12 +6,12 @@ const path = require('node:path');
 const assert = require('node:assert/strict');
 const root = path.resolve(__dirname, '..');
 (async () => {
-    const temporary = fs.mkdtempSync(path.join(os.tmpdir(), 'mise-settings-nav-'));
+    const temporary = fs.mkdtempSync(path.join(os.tmpdir(), 'fly-settings-nav-'));
     const entry = createElectronFixture(root, temporary);
 
     let application;
     try {
-        application = await _electron.launch({executablePath: path.join(root, 'node_modules/electron/dist/electron'), args: ['--no-sandbox', '--disable-gpu', `--ozone-platform=${process.env.MISE_TEST_OZONE_PLATFORM || 'x11'}`, entry]});
+        application = await _electron.launch({executablePath: path.join(root, 'node_modules/electron/dist/electron'), args: ['--no-sandbox', '--disable-gpu', `--ozone-platform=${process.env.FLY_TEST_OZONE_PLATFORM || 'x11'}`, entry]});
         const page = await application.firstWindow();
         const errors = []; page.on('pageerror', error => errors.push(error.message));
         await page.waitForFunction(() => !!window.executeBrowserAction && document.getElementById('KeyboardStatus').textContent === 'All changes saved');
@@ -208,26 +208,26 @@ const root = path.resolve(__dirname, '..');
         await page.locator('#setting-notes-command').fill('code');
         await page.locator('#setting-notes-command').press('Tab');
         for (let i = 0; i < 100; i++) {
-            if ((await page.evaluate(() => window.miseAPI.getBrowserSettings())).external_notes_command === 'code') break;
+            if ((await page.evaluate(() => window.flyAPI.getBrowserSettings())).external_notes_command === 'code') break;
             await page.waitForTimeout(50);
         }
-        assert.equal((await page.evaluate(() => window.miseAPI.getBrowserSettings())).external_notes_command, 'code');
+        assert.equal((await page.evaluate(() => window.flyAPI.getBrowserSettings())).external_notes_command, 'code');
         await page.locator('#SettingsSearch').fill('custom search aliases');
         assert(await page.locator('#new-alias-key').isVisible());
         await page.locator('#new-alias-key').fill('fixture');
         await page.locator('#new-alias-url').fill('https://example.invalid/?q=%s');
         await page.locator('#add-search-alias-btn').click();
         for (let i = 0; i < 100; i++) {
-            if ((await page.evaluate(() => window.miseAPI.getBrowserSettings())).custom_search_aliases.fixture) break;
+            if ((await page.evaluate(() => window.flyAPI.getBrowserSettings())).custom_search_aliases.fixture) break;
             await page.waitForTimeout(50);
         }
-        assert.equal((await page.evaluate(() => window.miseAPI.getBrowserSettings())).custom_search_aliases.fixture, 'https://example.invalid/?q=%s');
+        assert.equal((await page.evaluate(() => window.flyAPI.getBrowserSettings())).custom_search_aliases.fixture, 'https://example.invalid/?q=%s');
         assert(await page.locator('.search-alias-badge').filter({hasText: 'fixture'}).isVisible());
         assert.equal(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth), true);
         await page.locator('#SettingsSearch').focus();
         await page.mouse.move(690, 580);
         await page.waitForTimeout(400);
-        await page.screenshot({path: '/tmp/mise-upstream-settings.png'});
+        await page.screenshot({path: '/tmp/fly-upstream-settings.png'});
         assert.deepEqual(errors, []);
         console.log('Preferences index, search, keyboard navigation, single-pane layout, lazy extension scan and entry points passed.');
     } finally {

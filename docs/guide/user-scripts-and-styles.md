@@ -1,6 +1,6 @@
 # Local User Scripts & User Styles
 
-Mise Browser provides built-in support for custom user scripts and user styles, delivering the capabilities of extensions like Greasemonkey, Tampermonkey, and Stylus without the heavy memory footprint of a WebExtension background runtime.
+Fly Browser provides built-in support for custom user scripts and user styles, delivering the capabilities of extensions like Greasemonkey, Tampermonkey, and Stylus without the heavy memory footprint of a WebExtension background runtime.
 
 ---
 
@@ -8,14 +8,14 @@ Mise Browser provides built-in support for custom user scripts and user styles, 
 
 Traditional browser extensions run continuous background service workers and event loops, consuming hundreds of megabytes of RAM even when idle.
 
-Mise replaces this overhead with a filesystem-driven engine:
-* **Zero Extension Runtime**: Scripts and styles are plain text files stored directly in `~/.config/mise-browser/`.
-* **Automatic Ingestion**: Mise injects matching `.user.js` and `.user.css` files into `<webview>` instances when the Document Object Model is ready (`dom-ready`).
+Fly replaces this overhead with a filesystem-driven engine:
+* **Zero Extension Runtime**: Scripts and styles are plain text files stored directly in `~/.config/fly-browser/`.
+* **Automatic Ingestion**: Fly injects matching `.user.js` and `.user.css` files into `<webview>` instances when the Document Object Model is ready (`dom-ready`).
 * **Live Inotify Watching**: Modifications made in your favourite text editor are detected in real time. CSS styles update on the fly without refreshing the page.
 
 ---
 
-## Why Mise Avoids Full WebExtensions
+## Why Fly Avoids Full WebExtensions
 
 Mainstream browsers rely on the WebExtensions API (Manifest V2 and V3). While
 flexible, this architecture creates significant problems on low-resource and
@@ -35,25 +35,25 @@ fanless Linux hardware:
 3. **Supply-Chain Security Risks**:
    Centralised extension stores suffer from a chronic security problem: popular
    extensions are regularly bought by data-collection companies and updated
-   silently with tracking code. Mise enforces a strictly local-only policy.
+   silently with tracking code. Fly enforces a strictly local-only policy.
    Only scripts and styles you explicitly save into your local config directory
    can ever execute.
 
 4. **Native Handling of Core Capabilities**:
    When analysing what users actually install extensions for, four use cases
    dominate:
-   * **Ad & Tracker Blocking**: Handled natively in Mise with network engine
+   * **Ad & Tracker Blocking**: Handled natively in Fly with network engine
      blocking via `@ghostery/adblocker-electron`.
-   * **Tab Suspension**: Handled natively via Mise true tab hibernation.
-   * **Custom Styling**: Handled cleanly via local `~/.config/mise-browser/styles/`.
-   * **Page Script Tweaks**: Handled cleanly via local `~/.config/mise-browser/scripts/`.
+   * **Tab Suspension**: Handled natively via Fly true tab hibernation.
+   * **Custom Styling**: Handled cleanly via local `~/.config/fly-browser/styles/`.
+   * **Page Script Tweaks**: Handled cleanly via local `~/.config/fly-browser/scripts/`.
 
 By handling core browser mechanics in the engine and letting users drop in
-clean `.user.js` and `.user.css` files, Mise delivers the exact customisations
+clean `.user.js` and `.user.css` files, Fly delivers the exact customisations
 users want while maintaining a near-zero idle resource footprint.
 
 ::: info WHEN A USERSCRIPT IS NOT ENOUGH
-For the rare extension with no userscript equivalent, Mise offers [opt-in Chrome extensions](/guide/extensions): disabled by default, enabled per workspace, and unloaded automatically when that workspace goes idle. Userscripts remain the recommended path.
+For the rare extension with no userscript equivalent, Fly offers [opt-in Chrome extensions](/guide/extensions): disabled by default, enabled per workspace, and unloaded automatically when that workspace goes idle. Userscripts remain the recommended path.
 :::
 
 ::: tip COMMUNITY SCRIPTS & STYLES
@@ -67,15 +67,15 @@ Looking for tested customisations like Amazon Dark Mode, Tokyo Night Wikipedia, 
 User content files are placed inside their respective configuration folders:
 
 ```text
-~/.config/mise-browser/scripts/         # Local user scripts (*.user.js or *.js)
-~/.config/mise-browser/styles/          # Local user styles (*.user.css or *.css)
-~/.config/mise-browser/script-storage/  # Persistent JSON stores for GM_setValue
+~/.config/fly-browser/scripts/         # Local user scripts (*.user.js or *.js)
+~/.config/fly-browser/styles/          # Local user styles (*.user.css or *.css)
+~/.config/fly-browser/script-storage/  # Persistent JSON stores for GM_setValue
 ```
 
-Mise automatically creates these directories and populates template examples on startup. You can also open any folder directly from the Command Palette (**Ctrl + P**):
-* `Open User Scripts Directory (~/.config/mise-browser/scripts)`
-* `Open User Styles Directory (~/.config/mise-browser/styles)`
-* `Open User Script Storage Directory (~/.config/mise-browser/script-storage)`
+Fly automatically creates these directories and populates template examples on startup. You can also open any folder directly from the Command Palette (**Ctrl + P**):
+* `Open User Scripts Directory (~/.config/fly-browser/scripts)`
+* `Open User Styles Directory (~/.config/fly-browser/styles)`
+* `Open User Script Storage Directory (~/.config/fly-browser/script-storage)`
 
 ---
 
@@ -98,7 +98,7 @@ Scripts support standard Greasemonkey/Tampermonkey metadata headers:
 // ==/UserScript==
 
 (function() {
-    console.log('Mise user script active on GitHub');
+    console.log('Fly user script active on GitHub');
 })();
 ```
 
@@ -125,7 +125,7 @@ If no `@match` or `@include` is supplied, the script runs across all standard `h
    User scripts run exclusively within the top-level page window context. Scripts do not inject into child `<iframe>` elements or nested subframes.
 
 3. **Script Execution De-duplication**:
-   To prevent scripts from executing multiple times on the same page during rapid redirects, fast re-renders, or racing navigation events, Mise enforces three distinct protection layers:
+   To prevent scripts from executing multiple times on the same page during rapid redirects, fast re-renders, or racing navigation events, Fly enforces three distinct protection layers:
    * **Navigation Epoch Tracking**: Awaited IPC script queries are validated against a monotonic navigation counter. If the page navigates away before the disk query completes, stale results are discarded immediately.
    * **Per-Webview Script ID Registry**: Injected script identifiers are tracked on the webview instance for the lifetime of the active navigation epoch.
    * **In-Page Execution Guards**: A non-enumerable registry on the guest window prevents duplicate execution of the same userscript wrapper within the active document lifecycle.
@@ -134,7 +134,7 @@ If no `@match` or `@include` is supplied, the script runs across all standard `h
 
 ## Supported Userscript APIs (`GM_*` and `GM.*`)
 
-Mise includes a minimal, secure API shim for popular Greasemonkey and Tampermonkey scripts without needing an extension runtime:
+Fly includes a minimal, secure API shim for popular Greasemonkey and Tampermonkey scripts without needing an extension runtime:
 
 | API | Type | Description |
 | :--- | :--- | :--- |
@@ -156,7 +156,7 @@ Mise includes a minimal, secure API shim for popular Greasemonkey and Tampermonk
 
 ### Cross-Origin Requests (`GM_xmlhttpRequest`)
 
-Standard `fetch()` inside a webpage cannot access third-party endpoints because of browser CORS restrictions. Mise routes `GM_xmlhttpRequest` requests through the privileged main process with strict security boundaries:
+Standard `fetch()` inside a webpage cannot access third-party endpoints because of browser CORS restrictions. Fly routes `GM_xmlhttpRequest` requests through the privileged main process with strict security boundaries:
 
 * **`@connect` Host Restriction**: Scripts must declare permitted network destinations via `@connect <host>`. A declared root domain covers its subdomains (e.g. `@connect github.com` allows `api.github.com`), while same-origin requests back to the host webpage are always permitted implicitly.
 * **SSRF Protection**: To prevent Server-Side Request Forgery against private network infrastructure, requests targeting loopback addresses (`127.0.0.0/8`, `::1`, `localhost`), internal subnets (`10.0.0.0/8`, `172.16.0.0/12`, `192.168.0.0/16`), and link-local metadata endpoints (`169.254.0.0/16`) are unconditionally blocked.
@@ -166,13 +166,13 @@ Standard `fetch()` inside a webpage cannot access third-party endpoints because 
 ```javascript
 GM_xmlhttpRequest({
     method: 'GET',
-    url: 'https://api.github.com/repos/Arzuparreta/Mise-browser/releases/latest',
+    url: 'https://api.github.com/repos/Arzuparreta/fly-browser/releases/latest',
     headers: {
         'Accept': 'application/vnd.github.v3+json'
     },
     onload: function(response) {
         const data = JSON.parse(response.responseText);
-        console.log('Latest Mise release:', data.tag_name);
+        console.log('Latest Fly release:', data.tag_name);
     },
     onerror: function(err) {
         console.error('Failed to query release info:', err);
@@ -182,7 +182,7 @@ GM_xmlhttpRequest({
 
 ### Isolated Per-Script Storage
 
-Values saved with `GM_setValue` are stored in isolated JSON files under `~/.config/mise-browser/script-storage/`:
+Values saved with `GM_setValue` are stored in isolated JSON files under `~/.config/fly-browser/script-storage/`:
 
 ```javascript
 // Check stored user preference with fallback default
@@ -214,7 +214,7 @@ body {
 
 ### Stylus / `@-moz-document` Format
 
-Mise parses domain and prefix conditions natively, making userstyles from repositories like userstyles.world work out of the box:
+Fly parses domain and prefix conditions natively, making userstyles from repositories like userstyles.world work out of the box:
 
 ```css
 @-moz-document domain("reddit.com"), domain("old.reddit.com") {
@@ -228,6 +228,6 @@ Mise parses domain and prefix conditions natively, making userstyles from reposi
 
 ## Live Reloading
 
-* When you save changes to any file in `~/.config/mise-browser/styles/`, Mise reloads the stylesheet and hot-swaps the CSS in active tabs immediately.
-* When you modify files in `~/.config/mise-browser/scripts/`, the updated JavaScript is parsed and staged for execution on the next page navigation.
+* When you save changes to any file in `~/.config/fly-browser/styles/`, Fly reloads the stylesheet and hot-swaps the CSS in active tabs immediately.
+* When you modify files in `~/.config/fly-browser/scripts/`, the updated JavaScript is parsed and staged for execution on the next page navigation.
 * Run **Reload User Scripts and Styles** in the Command Palette (**Ctrl + P**) at any time to force an immediate disk re-scan.

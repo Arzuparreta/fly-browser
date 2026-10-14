@@ -21,7 +21,7 @@ export function openWorkspaceMoveDialog() {
         state.sessionState.current_workspace = select.value;
         state.dashboardActive = false;
         document.getElementById('DashboardOverlay').style.display = 'none';
-        window.miseAPI.saveSession(state.sessionState);
+        window.flyAPI.saveSession(state.sessionState);
         renderWorkspaceUI(destination);
         dialog.close();
     };

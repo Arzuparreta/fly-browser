@@ -1,5 +1,5 @@
 // modules/darkReader.js
-// Minimal, zero-dependency Dark Reader engine for Mise Browser (KISS)
+// Minimal, zero-dependency Dark Reader engine for Fly Browser (KISS)
 
 import { state } from './state.js';
 import { getActiveWebview } from './utils.js';
@@ -60,22 +60,22 @@ img {
 `;
 
 export function isWebviewDarkReaderActive(wv) {
-    return !!(wv && wv.__miseDarkReaderEnabled);
+    return !!(wv && wv.__flyDarkReaderEnabled);
 }
 
 export async function setWebviewDarkReader(wv, enable) {
     if (!wv) return false;
-    wv.__miseDarkReaderEnabled = !!enable;
+    wv.__flyDarkReaderEnabled = !!enable;
 
     if (enable) {
         if (typeof wv.insertCSS === 'function') {
             try {
-                if (wv.__miseDarkKey && typeof wv.removeInsertedCSS === 'function') {
-                    try { await wv.removeInsertedCSS(wv.__miseDarkKey); } catch (e) {}
-                    wv.__miseDarkKey = null;
+                if (wv.__flyDarkKey && typeof wv.removeInsertedCSS === 'function') {
+                    try { await wv.removeInsertedCSS(wv.__flyDarkKey); } catch (e) {}
+                    wv.__flyDarkKey = null;
                 }
                 const key = await wv.insertCSS(DARK_READER_CSS);
-                wv.__miseDarkKey = key;
+                wv.__flyDarkKey = key;
                 return true;
             } catch (err) {
                 console.error('Failed to apply Dark Reader CSS:', err);
@@ -84,26 +84,26 @@ export async function setWebviewDarkReader(wv, enable) {
         }
         return false;
     } else {
-        if (wv.__miseDarkKey && typeof wv.removeInsertedCSS === 'function') {
+        if (wv.__flyDarkKey && typeof wv.removeInsertedCSS === 'function') {
             try {
-                await wv.removeInsertedCSS(wv.__miseDarkKey);
+                await wv.removeInsertedCSS(wv.__flyDarkKey);
             } catch (err) {}
-            wv.__miseDarkKey = null;
+            wv.__flyDarkKey = null;
         }
         return false;
     }
 }
 
 export async function reapplyWebviewDarkReader(wv) {
-    if (!wv || !wv.__miseDarkReaderEnabled) return;
+    if (!wv || !wv.__flyDarkReaderEnabled) return;
     if (typeof wv.insertCSS !== 'function') return;
     try {
-        if (wv.__miseDarkKey && typeof wv.removeInsertedCSS === 'function') {
-            try { await wv.removeInsertedCSS(wv.__miseDarkKey); } catch (e) {}
-            wv.__miseDarkKey = null;
+        if (wv.__flyDarkKey && typeof wv.removeInsertedCSS === 'function') {
+            try { await wv.removeInsertedCSS(wv.__flyDarkKey); } catch (e) {}
+            wv.__flyDarkKey = null;
         }
         const key = await wv.insertCSS(DARK_READER_CSS);
-        wv.__miseDarkKey = key;
+        wv.__flyDarkKey = key;
     } catch (err) {
         console.error('Failed to reapply Dark Reader CSS on navigation:', err);
     }
@@ -153,7 +153,7 @@ export async function toggleDarkReaderOnActiveTab() {
     }
 
     state.sessionState.tab_dark_reader = state.tabDarkReaderStates;
-    window.miseAPI.saveSession(state.sessionState);
+    window.flyAPI.saveSession(state.sessionState);
 
     updateDarkReaderButtonUI(willEnable);
     setTargetUrl(willEnable ? 'Dark Reader: On' : 'Dark Reader: Off', 1500);

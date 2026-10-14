@@ -1,14 +1,14 @@
 # Notes, Bookmarks & Quickmarks
 
-Mise incorporates productivity utilities directly into the browser, saving all data as plain text and JSON files in your local user configuration directory.
+Fly incorporates productivity utilities directly into the browser, saving all data as plain text and JSON files in your local user configuration directory.
 
 ---
 
 ## Markdown Quick Notes (`Ctrl + N`)
 
-![Mise Browser Markdown Quick Notes](/screenshots/notes.webp)
+![Fly Browser Markdown Quick Notes](/screenshots/notes.webp)
 
-Mise includes an integrated, expansive scratchpad overlay for taking notes alongside your research:
+Fly includes an integrated, expansive scratchpad overlay for taking notes alongside your research:
 
 - Press **Ctrl + N** to open or close the Notes overlay.
 - **Expansive Layout & Fullscreen**: Generous, readable dimensions with a dedicated toggle button to expand into a distraction-free full canvas view.
@@ -16,7 +16,7 @@ Mise includes an integrated, expansive scratchpad overlay for taking notes along
 - **Markdown Preview**: Instant toggle between raw Markdown editing and formatted preview, complete with headings, lists, quotes, code blocks, thematic rules, and clickable links.
 - **Instant Persistence**: All notes are automatically saved to:
   ```text
-  ~/.config/mise-browser/notes.md
+  ~/.config/fly-browser/notes.md
   ```
 - **Export from Reader View (`Ctrl + Shift + E`)**: Distilled Reader View articles and web clippings can be appended straight into Quick Notes with a single click or keyboard shortcut.
 - **Right-Click Text Clipping**: Highlight any text passage on a web page or in a document and right-click to choose **Save to Notes**. The snippet is formatted into a clean Markdown blockquote with source citation and timestamp, and appended directly to `notes.md`.
@@ -36,7 +36,7 @@ The Bookmarks overlay allows you to manage saved links with full keyboard naviga
 - **Delete Bookmark**: Highlight a bookmark and press **Delete** to remove it from your collection.
 - Bookmarks are stored in:
   ```text
-  ~/.config/mise-browser/bookmarks.json
+  ~/.config/fly-browser/bookmarks.json
   ```
 
 ---
@@ -54,18 +54,18 @@ Quickmarks provide instantaneous, single-key bookmarking inspired by Vim and win
 ### 2. Jumping to a Quickmark
 - From anywhere in the browser, press **Ctrl + J**.
 - Press the assigned letter key (e.g. `g`).
-- Mise instantly navigates your active tab to the bound URL.
+- Fly instantly navigates your active tab to the bound URL.
 
 Quickmarks are saved in:
 ```text
-~/.config/mise-browser/quickmarks.json
+~/.config/fly-browser/quickmarks.json
 ```
 
 ---
 
 ## Actionable History Overlay (`Ctrl + Shift + H`)
 
-![Mise Browser Actionable History Overlay](/screenshots/history.webp)
+![Fly Browser Actionable History Overlay](/screenshots/history.webp)
 
 - Press **Ctrl + Shift + H** to open the History overlay.
 - Search through your browsing history in real time.

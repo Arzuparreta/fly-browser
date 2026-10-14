@@ -1,6 +1,6 @@
 # Mouse-Free Navigation
 
-Mise Browser is built around a keyboard-driven workflow, enabling efficient navigation of complex web pages without reaching for a pointing device.
+Fly Browser is built around a keyboard-driven workflow, enabling efficient navigation of complex web pages without reaching for a pointing device.
 
 ---
 
@@ -9,7 +9,7 @@ Mise Browser is built around a keyboard-driven workflow, enabling efficient navi
 Link Hints allow you to click any link, button, or input field on a web page using short letter combinations:
 
 1. Press **f** in NORMAL mode to trigger the hint labels.
-2. Mise injects letter labels over visible interactive elements on the page, using an ergonomic left-hand home-cluster layout: `q, w, e, a, s, d, z, x, c, r, f, v`.
+2. Fly injects letter labels over visible interactive elements on the page, using an ergonomic left-hand home-cluster layout: `q, w, e, a, s, d, z, x, c, r, f, v`.
 3. Type the label corresponding to your target element (its length depends on the number of targets):
    - Links navigate immediately.
    - Text inputs and search bars automatically receive focus for immediate typing.
@@ -22,9 +22,9 @@ Link Hints allow you to click any link, button, or input field on a web page usi
 Press **Ctrl + L** at any time to open the floating, high-contrast address overlay:
 
 - **Direct Navigation**: Type any full or partial URL and press **Enter**.
-- **Live Search Autocomplete**: As you type, Mise queries your browsing history and active bookmarks live. Use the **Up** and **Down** arrow keys to select a suggestion and press **Enter**.
+- **Live Search Autocomplete**: As you type, Fly queries your browsing history and active bookmarks live. Use the **Up** and **Down** arrow keys to select a suggestion and press **Enter**.
 - **Direct Calculator**: Type any arithmetic expression (e.g. `240 * 1.2`, `15% of 200`, `sqrt(144)`) to compute the answer live in the dropdown. Press **Enter** to copy the answer to your clipboard, or press the **Down Arrow** or **Tab** to put the result into the address bar and continue calculating.
-- **DuckDuckGo Bangs**: Type any DuckDuckGo bang (e.g. `!w Arch Linux`, `!gh MiseBrowser`, `!yt ambient`) to route directly to thousands of external search destinations.
+- **DuckDuckGo Bangs**: Type any DuckDuckGo bang (e.g. `!w Arch Linux`, `!gh FlyBrowser`, `!yt ambient`) to route directly to thousands of external search destinations.
 - **Workspace Switching**: Type `ws` followed by a workspace name (e.g. `ws work`) to switch workspaces instantly from the address bar.
 - Press **Escape** to hide the address bar and return focus directly to the active web page.
 
@@ -34,10 +34,10 @@ Press **Ctrl + L** at any time to open the floating, high-contrast address overl
 
 ![Preferences General section with address bar aliases and calculator](/screenshots/preferences-5.webp)
 
-Mise supports over 13,500 DuckDuckGo bangs directly from the floating address bar. Bangs route queries directly to the target website:
+Fly supports over 13,500 DuckDuckGo bangs directly from the floating address bar. Bangs route queries directly to the target website:
 
 * `!w Arch Linux`: Redirects directly to the Arch Linux article on Wikipedia.
-* `!gh MiseBrowser`: Redirects directly to GitHub repository search.
+* `!gh FlyBrowser`: Redirects directly to GitHub repository search.
 * `!yt lo-fi`: Redirects directly to YouTube video search.
 * `!a NetworkManager`: Redirects directly to the ArchWiki page.
 * `!so promises`: Redirects directly to Stack Overflow.
@@ -48,7 +48,7 @@ Popular bangs display rich destination badges in the autocomplete dropdown. You 
 
 ## Custom Search Aliases & Shorthand Bangs
 
-In addition to DuckDuckGo bangs, Mise includes native search engine prefixes that execute instantly without redirect delays. Prefix any query with an alias in the floating address bar (**Ctrl + L**):
+In addition to DuckDuckGo bangs, Fly includes native search engine prefixes that execute instantly without redirect delays. Prefix any query with an alias in the floating address bar (**Ctrl + L**):
 
 * `g <query>`: Google
 * `ddg <query>`: DuckDuckGo
@@ -64,7 +64,7 @@ In addition to DuckDuckGo bangs, Mise includes native search engine prefixes tha
 * `k <query>`: Kagi
 
 ### User-Customised Search Engines
-You can add your own search engines or override existing shortcuts in **Preferences → General → Custom search aliases** (**Ctrl + H**) or inside `~/.config/mise-browser/config.json`:
+You can add your own search engines or override existing shortcuts in **Preferences → General → Custom search aliases** (**Ctrl + H**) or inside `~/.config/fly-browser/config.json`:
 
 ```json
 "custom_search_aliases": {
@@ -110,13 +110,13 @@ When typing queries into the address bar, prepend shorthand prefixes to route se
 | `b <query>` | Brave Search | `b web standards` |
 | `k <query>` | Kagi Search | `k technical docs` |
 
-If no alias is entered, Mise uses your configured default search engine set in **Preferences → General**. The same section lists these aliases and calculator examples.
+If no alias is entered, Fly uses your configured default search engine set in **Preferences → General**. The same section lists these aliases and calculator examples.
 
 ***
 
 ## Auto-Collapsing Vertical Sidebar (36px Strip)
 
-To dedicate maximum horizontal screen real estate to web content, Mise features an auto-collapsible vertical sidebar:
+To dedicate maximum horizontal screen real estate to web content, Fly features an auto-collapsible vertical sidebar:
 
 * **Compact 36px Strip**: In its default collapsed state, the sidebar shrinks to a 36px icon bar displaying only your workspace badge and crisp tab favicons.
 * **Smooth Flyout on Hover**: Moving your mouse pointer over the 36px strip smoothly expands the sidebar to 260px as an overlay flyout with drop shadow. Because this expands as an overlay, the active webview never resizes, preventing GPU lag and page reflows on fanless hardware.
@@ -127,7 +127,7 @@ To dedicate maximum horizontal screen real estate to web content, Mise features 
 
 ## Sidebar and Webview Focus Management
 
-Mise maintains clean separation between sidebar navigation and active web page interaction:
+Fly maintains clean separation between sidebar navigation and active web page interaction:
 
 - **Alt + S**: Shifts keyboard focus to the vertical tab sidebar, smoothly expanding it. Use the **Up** and **Down** arrow keys (or `j` / `k`) to cycle through open tabs, and press **Enter** to switch to the highlighted tab.
 - **Alt + W**: Shifts keyboard focus directly into the active webview, automatically collapsing the sidebar back to the 36px strip.
@@ -138,7 +138,7 @@ Mise maintains clean separation between sidebar navigation and active web page i
 
 ## Modal Navigation Engine
 
-Mise Browser provides a Vim-inspired modal navigation engine that frees you from chorded modifiers during routine web browsing. The engine distinguishes between three primary operational states:
+Fly Browser provides a Vim-inspired modal navigation engine that frees you from chorded modifiers during routine web browsing. The engine distinguishes between three primary operational states:
 
 1. **NORMAL Mode**: The default state. Home-row keys control page scrolling and browser actions without requiring Ctrl or Alt chords.
 2. **INSERT Mode**: Automatically entered whenever you click or focus a text input, search box, or content-editable field (or press `i` explicitly). Keystrokes pass directly into the field. Pressing **Escape** blurs the field and immediately returns to **NORMAL** mode.
@@ -186,7 +186,7 @@ Mise Browser provides a Vim-inspired modal navigation engine that frees you from
 
 ## Dual Split View (1x2 Side by Side and Stacked)
 
-For comparing documentation, pull requests, or research sources without tiling window manager complexity, Mise includes a built-in dual split view:
+For comparing documentation, pull requests, or research sources without tiling window manager complexity, Fly includes a built-in dual split view:
 
 * **Instant Comparison**: Press **Ctrl + \\** or **Ctrl + Alt + S** (or click the column icon in the sidebar) to split the viewport into two 50% columns side by side.
 * **Orientation Toggle**: Right-click the split icon button or execute **Cycle Split View Orientation** in the Command Palette to switch between side by side (vertical columns) and stacked (horizontal rows).
@@ -200,7 +200,7 @@ For comparing documentation, pull requests, or research sources without tiling w
 
 ## Native Reader View (`F9` / `e`)
 
-Mise includes an in-engine DOM distiller powered by Mozilla Readability to strip ads, sidebars, cookie banners, and visual clutter from articles:
+Fly includes an in-engine DOM distiller powered by Mozilla Readability to strip ads, sidebars, cookie banners, and visual clutter from articles:
 
 * **Instant Distillation**: Press **F9** or press **e** in NORMAL mode to extract the core article, byline, and imagery into a clean reading format.
 * **Isolated Shadow DOM**: The reader view is rendered inside an isolated Shadow DOM container over the active document. Closing Reader View (via **Escape**, **F9**, or the close icon) restores the original web page instantly without reloading or discarding form inputs.

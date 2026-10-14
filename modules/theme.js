@@ -1,5 +1,5 @@
 // modules/theme.js
-// Custom visual palette and opacity controller for Mise Browser
+// Custom visual palette and opacity controller for Fly Browser
 
 export const DEFAULT_THEME_COLORS = {
     dark: {
@@ -84,12 +84,12 @@ function highlightActiveSwatch(activeAccent) {
 }
 
 function persistThemeConfig(mutator) {
-    if (!window.miseAPI || typeof window.miseAPI.getBrowserSettings !== 'function') return;
+    if (!window.flyAPI || typeof window.flyAPI.getBrowserSettings !== 'function') return;
 
     if (saveDebounceTimer) clearTimeout(saveDebounceTimer);
     saveDebounceTimer = setTimeout(async () => {
         try {
-            const cfg = (await window.miseAPI.getBrowserSettings()) || {};
+            const cfg = (await window.flyAPI.getBrowserSettings()) || {};
             if (!cfg.theme_colors) {
                 cfg.theme_colors = {
                     dark: { ...DEFAULT_THEME_COLORS.dark },
@@ -103,7 +103,7 @@ function persistThemeConfig(mutator) {
 
             mutator(cfg.theme_colors[mode], mode, cfg);
             cachedThemeConfig = cfg;
-            await window.miseAPI.updateBrowserSettings(cfg);
+            await window.flyAPI.updateBrowserSettings(cfg);
         } catch (err) {
             console.error('Failed to persist custom visuals:', err);
         }

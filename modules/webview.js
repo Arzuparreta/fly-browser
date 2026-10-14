@@ -33,11 +33,11 @@ export function createWebView(url, currentWS, idx) {
     if (!state.activeViewsCache[currentWS]) state.activeViewsCache[currentWS] = [];
     const webview = document.createElement('webview');
     state.activeViewsCache[currentWS][idx] = webview;
-    webview.setAttribute('preload', window.miseAPI.getWebviewPreloadPath());
+    webview.setAttribute('preload', window.flyAPI.getWebviewPreloadPath());
     webview.setAttribute('allowpopups', '');
     
     if (state.globalPrivateModeActive || isTargetPrivateDomain(url)) {
-        webview.setAttribute('partition', 'MisePrivateProfile');
+        webview.setAttribute('partition', 'FlyPrivateProfile');
     } else {
         webview.setAttribute('partition', getWorkspacePartition(currentWS));
     }
@@ -46,8 +46,8 @@ export function createWebView(url, currentWS, idx) {
     loadWebviewSource(webview, currentWS, initialSrc);
 
     webview.addEventListener('will-navigate', (e) => {
-        webview.__miseNavigationEpoch = (webview.__miseNavigationEpoch || 0) + 1;
-        if (webview.__miseInjectedScriptIds) webview.__miseInjectedScriptIds.clear();
+        webview.__flyNavigationEpoch = (webview.__flyNavigationEpoch || 0) + 1;
+        if (webview.__flyInjectedScriptIds) webview.__flyInjectedScriptIds.clear();
         if (isPdfUrl(e.url)) {
             e.preventDefault();
             webview.setAttribute('src', getPdfViewerUrl(e.url));
@@ -64,7 +64,7 @@ export function createWebView(url, currentWS, idx) {
         if (!state.sessionState.tab_titles) state.sessionState.tab_titles = {};
         if (!state.sessionState.tab_titles[currentWS]) state.sessionState.tab_titles[currentWS] = [];
         state.sessionState.tab_titles[currentWS][liveIdx] = newTitle;
-        window.miseAPI.saveSession(state.sessionState);
+        window.flyAPI.saveSession(state.sessionState);
 
         const targetLi = document.querySelectorAll('#TabList li')[liveIdx];
         if (targetLi && state.sessionState.current_workspace === currentWS) {
@@ -92,7 +92,7 @@ export function createWebView(url, currentWS, idx) {
             if (!state.sessionState.tab_favicons) state.sessionState.tab_favicons = {};
             if (!state.sessionState.tab_favicons[currentWS]) state.sessionState.tab_favicons[currentWS] = [];
             state.sessionState.tab_favicons[currentWS][liveIdx] = iconUrl;
-            window.miseAPI.saveSession(state.sessionState);
+            window.flyAPI.saveSession(state.sessionState);
 
             const targetLi = document.querySelectorAll('#TabList li')[liveIdx];
             if (targetLi && state.sessionState.current_workspace === currentWS) {
@@ -108,22 +108,22 @@ export function createWebView(url, currentWS, idx) {
     });
 
     webview.addEventListener('did-navigate', async (e) => {
-        webview.__miseNavigationEpoch = (webview.__miseNavigationEpoch || 0) + 1;
-        if (webview.__miseInjectedScriptIds) webview.__miseInjectedScriptIds.clear();
-        webview.__miseDarkKey = null;
+        webview.__flyNavigationEpoch = (webview.__flyNavigationEpoch || 0) + 1;
+        if (webview.__flyInjectedScriptIds) webview.__flyInjectedScriptIds.clear();
+        webview.__flyDarkKey = null;
         const liveIdx = getLiveTabIndex(webview, currentWS, idx);
         if (liveIdx < 0) return;
 
         const cleanUrl = extractOriginalUrl(e.url);
         if (state.sessionState.workspaces[currentWS] && state.sessionState.workspaces[currentWS][liveIdx] !== undefined) {
             state.sessionState.workspaces[currentWS][liveIdx] = cleanUrl;
-            window.miseAPI.saveSession(state.sessionState);
+            window.flyAPI.saveSession(state.sessionState);
         }
         if (!state.tabActivityTimestamps[currentWS]) state.tabActivityTimestamps[currentWS] = [];
         state.tabActivityTimestamps[currentWS][liveIdx] = Date.now();
         const targetLi = document.querySelectorAll('#TabList li')[liveIdx];
         if (targetLi) {
-            const cfg = (await window.miseAPI.getBrowserSettings()) || {};
+            const cfg = (await window.flyAPI.getBrowserSettings()) || {};
             updateTabShieldStatus(targetLi, cleanUrl, cfg.trusted_domains || []);
         }
         if (state.sessionState.current_workspace === currentWS) {
@@ -142,13 +142,13 @@ export function createWebView(url, currentWS, idx) {
         const cleanUrl = extractOriginalUrl(e.url);
         if (state.sessionState.workspaces[currentWS] && state.sessionState.workspaces[currentWS][liveIdx] !== undefined) {
             state.sessionState.workspaces[currentWS][liveIdx] = cleanUrl;
-            window.miseAPI.saveSession(state.sessionState);
+            window.flyAPI.saveSession(state.sessionState);
         }
         if (!state.tabActivityTimestamps[currentWS]) state.tabActivityTimestamps[currentWS] = [];
         state.tabActivityTimestamps[currentWS][liveIdx] = Date.now();
         const targetLi = document.querySelectorAll('#TabList li')[liveIdx];
         if (targetLi) {
-            const cfg = (await window.miseAPI.getBrowserSettings()) || {};
+            const cfg = (await window.flyAPI.getBrowserSettings()) || {};
             updateTabShieldStatus(targetLi, cleanUrl, cfg.trusted_domains || []);
         }
         if (state.sessionState.current_workspace === currentWS) {
@@ -158,7 +158,7 @@ export function createWebView(url, currentWS, idx) {
                 updateSecurityStatus(cleanUrl);
             }
         }
-        if (webview.__miseDarkReaderEnabled) {
+        if (webview.__flyDarkReaderEnabled) {
             reapplyWebviewDarkReader(webview).catch(() => {});
         }
         webview.executeJavaScript(`
@@ -178,14 +178,14 @@ export function createWebView(url, currentWS, idx) {
     webview.addEventListener('new-window', (e) => {
         e.preventDefault();
         const targetUrl = e.url;
-        const inheritsDarkReader = !!webview.__miseDarkReaderEnabled;
+        const inheritsDarkReader = !!webview.__flyDarkReaderEnabled;
         
         if (!state.sessionState.workspaces[currentWS]) {
             state.sessionState.workspaces[currentWS] = [];
         }
         
         state.sessionState.workspaces[currentWS].push(targetUrl);
-        window.miseAPI.saveSession(state.sessionState);
+        window.flyAPI.saveSession(state.sessionState);
         
         const newTargetIdx = state.sessionState.workspaces[currentWS].length - 1;
         if (!state.tabPinned[currentWS]) state.tabPinned[currentWS] = [];
@@ -237,8 +237,8 @@ export function createWebView(url, currentWS, idx) {
 
     webview.addEventListener('did-start-loading', () => {
         webview.style.opacity = '1';
-        webview.__miseNavigationEpoch = (webview.__miseNavigationEpoch || 0) + 1;
-        if (webview.__miseInjectedScriptIds) webview.__miseInjectedScriptIds.clear();
+        webview.__flyNavigationEpoch = (webview.__flyNavigationEpoch || 0) + 1;
+        if (webview.__flyInjectedScriptIds) webview.__flyInjectedScriptIds.clear();
         const liveIdx = getLiveTabIndex(webview, currentWS, idx);
         if (liveIdx >= 0) {
             if (!state.tabActivityTimestamps[currentWS]) state.tabActivityTimestamps[currentWS] = [];
@@ -248,14 +248,14 @@ export function createWebView(url, currentWS, idx) {
     });
 
     webview.addEventListener('dom-ready', async () => {
-        webview.__miseKeyboardMode = {};
+        webview.__flyKeyboardMode = {};
         webview.style.opacity = '1';
         const liveIdx = getLiveTabIndex(webview, currentWS, idx);
         if (liveIdx < 0) return;
 
         const targetLi = document.querySelectorAll('#TabList li')[liveIdx];
         if (targetLi) {
-            const cfg = (await window.miseAPI.getBrowserSettings()) || {};
+            const cfg = (await window.flyAPI.getBrowserSettings()) || {};
             updateTabShieldStatus(targetLi, webview.getURL(), cfg.trusted_domains || []);
         }
 
@@ -267,7 +267,7 @@ export function createWebView(url, currentWS, idx) {
         } catch (err) {}
 
         try {
-            const hinterCode = await window.miseAPI.readHinterCode();
+            const hinterCode = await window.flyAPI.readHinterCode();
             if (hinterCode && typeof webview.executeJavaScript === 'function') {
                 const safeExecutionWrapper = `try { ${hinterCode} } catch(e) {}`;
                 webview.executeJavaScript(safeExecutionWrapper, false).catch(() => {});
@@ -276,7 +276,7 @@ export function createWebView(url, currentWS, idx) {
 
         injectMatchingUserContent(webview).catch(() => {});
 
-        if (webview.__miseDarkReaderEnabled) {
+        if (webview.__flyDarkReaderEnabled) {
             reapplyWebviewDarkReader(webview).catch(() => {});
         }
 
@@ -291,7 +291,7 @@ export function createWebView(url, currentWS, idx) {
     });
 
     webview.addEventListener('did-finish-load', () => {
-        if (webview.__miseDarkReaderEnabled && !webview.__miseDarkKey) {
+        if (webview.__flyDarkReaderEnabled && !webview.__flyDarkKey) {
             reapplyWebviewDarkReader(webview).catch(() => {});
         }
         try {
@@ -351,7 +351,7 @@ export function createWebView(url, currentWS, idx) {
             handleGuestPassthroughState(!!e.args[0], currentWS, liveIdx);
         } else if (e.channel === 'reader-view-toggled') {
             const data = e.args[0] || {};
-            webview.__miseReaderActive = !!data.active;
+            webview.__flyReaderActive = !!data.active;
             updateReaderViewButtonUI(!!data.active);
             if (data.error) {
                 setTargetUrl(`Reader View: ${data.error}`, 3000);
@@ -499,11 +499,11 @@ export async function toggleReaderViewOnActiveTab() {
     const activeWv = getActiveWebview();
     if (!activeWv || typeof activeWv.executeJavaScript !== 'function') return;
     try {
-        const readerCode = await window.miseAPI.readReaderCode();
+        const readerCode = await window.flyAPI.readReaderCode();
         if (!readerCode) return;
         const res = await activeWv.executeJavaScript(readerCode, false);
         if (res) {
-            activeWv.__miseReaderActive = !!res.active;
+            activeWv.__flyReaderActive = !!res.active;
             updateReaderViewButtonUI(!!res.active);
             if (res.error) {
                 setTargetUrl(`Reader View: ${res.error}`, 3000);
@@ -524,7 +524,7 @@ export async function exportActiveTabToNotes() {
     if (!activeWv || typeof activeWv.executeJavaScript !== 'function') return;
     try {
         const extractScript = `(function() {
-            var overlay = document.getElementById('mise-reader-overlay');
+            var overlay = document.getElementById('fly-reader-overlay');
             if (overlay && overlay.shadowRoot) {
                 var title = overlay.shadowRoot.querySelector('.article-title')?.textContent || document.title;
                 var byline = overlay.shadowRoot.querySelector('.article-byline')?.textContent || '';
@@ -562,7 +562,7 @@ export async function exportActiveTabToExternal() {
     if (!activeWv || typeof activeWv.executeJavaScript !== 'function') return;
     try {
         const extractScript = `(function() {
-            var overlay = document.getElementById('mise-reader-overlay');
+            var overlay = document.getElementById('fly-reader-overlay');
             if (overlay && overlay.shadowRoot) {
                 var title = overlay.shadowRoot.querySelector('.article-title')?.textContent || document.title;
                 var byline = overlay.shadowRoot.querySelector('.article-byline')?.textContent || '';
@@ -630,24 +630,24 @@ export async function injectMatchingUserContent(webview) {
     if (!webview || typeof webview.getURL !== 'function') return;
     const currentUrl = webview.getURL();
     if (!currentUrl || currentUrl.startsWith('about:') || currentUrl.startsWith('devtools:')) return;
-    if (!window.miseAPI || typeof window.miseAPI.getUserContentForUrl !== 'function') return;
+    if (!window.flyAPI || typeof window.flyAPI.getUserContentForUrl !== 'function') return;
 
-    const navEpoch = webview.__miseNavigationEpoch || 0;
+    const navEpoch = webview.__flyNavigationEpoch || 0;
 
     try {
-        const content = await window.miseAPI.getUserContentForUrl(currentUrl);
+        const content = await window.flyAPI.getUserContentForUrl(currentUrl);
         if (!content) return;
 
         // Abort if page navigated or started loading a new destination while awaiting IPC lookup
-        if (webview.__miseNavigationEpoch !== navEpoch) return;
+        if (webview.__flyNavigationEpoch !== navEpoch) return;
         if (typeof webview.getURL === 'function' && webview.getURL() !== currentUrl) return;
 
-        if (!webview.__miseInjectedCSSKeys) webview.__miseInjectedCSSKeys = [];
-        if (typeof webview.removeInsertedCSS === 'function' && webview.__miseInjectedCSSKeys.length > 0) {
-            for (const key of webview.__miseInjectedCSSKeys) {
+        if (!webview.__flyInjectedCSSKeys) webview.__flyInjectedCSSKeys = [];
+        if (typeof webview.removeInsertedCSS === 'function' && webview.__flyInjectedCSSKeys.length > 0) {
+            for (const key of webview.__flyInjectedCSSKeys) {
                 try { await webview.removeInsertedCSS(key); } catch (e) {}
             }
-            webview.__miseInjectedCSSKeys = [];
+            webview.__flyInjectedCSSKeys = [];
         }
 
         if (Array.isArray(content.styles)) {
@@ -655,24 +655,24 @@ export async function injectMatchingUserContent(webview) {
                 if (item.css && typeof webview.insertCSS === 'function') {
                     try {
                         const key = await webview.insertCSS(item.css);
-                        if (key) webview.__miseInjectedCSSKeys.push(key);
+                        if (key) webview.__flyInjectedCSSKeys.push(key);
                     } catch (e) {}
                 }
             }
         }
 
-        if (!webview.__miseInjectedScriptIds) {
-            webview.__miseInjectedScriptIds = new Set();
+        if (!webview.__flyInjectedScriptIds) {
+            webview.__flyInjectedScriptIds = new Set();
         }
 
         if (Array.isArray(content.scripts)) {
             for (const item of content.scripts) {
                 const scriptId = item.scriptId || item.filename || item.name;
-                if (webview.__miseInjectedScriptIds.has(scriptId)) {
+                if (webview.__flyInjectedScriptIds.has(scriptId)) {
                     continue;
                 }
                 if (item.code && typeof webview.executeJavaScript === 'function') {
-                    webview.__miseInjectedScriptIds.add(scriptId);
+                    webview.__flyInjectedScriptIds.add(scriptId);
                     const scriptWrapper = buildUserScriptWrapper(item);
                     webview.executeJavaScript(scriptWrapper, false).catch(() => {});
                 }
@@ -688,18 +688,18 @@ export async function reapplyActiveUserStyles() {
         if (!wv || typeof wv.getURL !== 'function' || typeof wv.insertCSS !== 'function') continue;
         const currentUrl = wv.getURL();
         if (!currentUrl || currentUrl.startsWith('about:') || currentUrl.startsWith('devtools:')) continue;
-        if (!window.miseAPI || typeof window.miseAPI.getUserContentForUrl !== 'function') continue;
+        if (!window.flyAPI || typeof window.flyAPI.getUserContentForUrl !== 'function') continue;
 
         try {
-            const content = await window.miseAPI.getUserContentForUrl(currentUrl);
+            const content = await window.flyAPI.getUserContentForUrl(currentUrl);
             if (!content) continue;
 
-            if (!wv.__miseInjectedCSSKeys) wv.__miseInjectedCSSKeys = [];
-            if (typeof wv.removeInsertedCSS === 'function' && wv.__miseInjectedCSSKeys.length > 0) {
-                for (const key of wv.__miseInjectedCSSKeys) {
+            if (!wv.__flyInjectedCSSKeys) wv.__flyInjectedCSSKeys = [];
+            if (typeof wv.removeInsertedCSS === 'function' && wv.__flyInjectedCSSKeys.length > 0) {
+                for (const key of wv.__flyInjectedCSSKeys) {
                     try { await wv.removeInsertedCSS(key); } catch (e) {}
                 }
-                wv.__miseInjectedCSSKeys = [];
+                wv.__flyInjectedCSSKeys = [];
             }
 
             if (Array.isArray(content.styles)) {
@@ -707,7 +707,7 @@ export async function reapplyActiveUserStyles() {
                     if (item.css) {
                         try {
                             const key = await wv.insertCSS(item.css);
-                            if (key) wv.__miseInjectedCSSKeys.push(key);
+                            if (key) wv.__flyInjectedCSSKeys.push(key);
                         } catch (e) {}
                     }
                 }
@@ -726,7 +726,7 @@ export function attachShieldToggleListener(tabLi, webview) {
         const host = extractHostname(currentUrl);
         if (!host) return;
 
-        const cfg = (await window.miseAPI.getBrowserSettings()) || {};
+        const cfg = (await window.flyAPI.getBrowserSettings()) || {};
         let domains = Array.isArray(cfg.trusted_domains) ? [...cfg.trusted_domains] : [];
 
         const isTrusted = domains.some(d => host === d || host.endsWith('.' + d));
@@ -738,7 +738,7 @@ export function attachShieldToggleListener(tabLi, webview) {
         }
 
         cfg.trusted_domains = domains;
-        await window.miseAPI.updateBrowserSettings(cfg);
+        await window.flyAPI.updateBrowserSettings(cfg);
 
         updateTabShieldStatus(tabLi, currentUrl, domains);
         webview.reload();
@@ -977,13 +977,13 @@ export function renderWorkspaceUI(targetTabToFocus = null) {
 
         if (isSleeping) {
             state.activeViewsCache[currentWS][idx] = null;
-            window.miseAPI.getBrowserSettings().then(cfg => {
+            window.flyAPI.getBrowserSettings().then(cfg => {
                 updateTabShieldStatus(li, url, cfg?.trusted_domains || []);
             }).catch(() => {});
         } else if (!state.activeViewsCache[currentWS][idx]) {
             const webview = createWebView(url, currentWS, idx);
             if (state.tabDarkReaderStates?.[currentWS]?.[idx]) {
-                webview.__miseDarkReaderEnabled = true;
+                webview.__flyDarkReaderEnabled = true;
             }
             attachShieldToggleListener(li, webview);
             container.appendChild(webview);
@@ -991,7 +991,7 @@ export function renderWorkspaceUI(targetTabToFocus = null) {
         } else {
             const existingWebview = state.activeViewsCache[currentWS][idx];
             attachShieldToggleListener(li, existingWebview);
-            window.miseAPI.getBrowserSettings().then(cfg => {
+            window.flyAPI.getBrowserSettings().then(cfg => {
                 updateTabShieldStatus(li, existingWebview.getURL(), cfg?.trusted_domains || []);
             }).catch(() => {});
         }
@@ -1080,7 +1080,7 @@ export function switchTabFocus(targetIdx) {
             const addressBarIsActive = addressBar && (addressBar.style.display === 'block' || currentFocused === addressBar);
 
             if (!sidebarHasFocus && !hasActiveOverlay() && !addressBarIsActive) {
-                window.miseAllowWebviewFocus = true;
+                window.flyAllowWebviewFocus = true;
                 targetView.focus();
             }
         }, 50);
@@ -1126,9 +1126,9 @@ export async function spawnNewBlankTab() {
     if (!state.sessionState.workspaces[currentWS]) state.sessionState.workspaces[currentWS] = [];
 
     let defaultUrl = 'https://duckduckgo.com';
-    if (window.miseAPI && typeof window.miseAPI.getBrowserSettings === 'function') {
+    if (window.flyAPI && typeof window.flyAPI.getBrowserSettings === 'function') {
         try {
-            const cfg = await window.miseAPI.getBrowserSettings();
+            const cfg = await window.flyAPI.getBrowserSettings();
             if (cfg && cfg.search_engine) {
                 const parsedUrl = new URL(cfg.search_engine.split('?')[0]);
                 defaultUrl = `${parsedUrl.protocol}//${parsedUrl.host}`;
@@ -1139,7 +1139,7 @@ export async function spawnNewBlankTab() {
     }
 
     state.sessionState.workspaces[currentWS].push(defaultUrl);
-    window.miseAPI.saveSession(state.sessionState);
+    window.flyAPI.saveSession(state.sessionState);
     
     const newTargetIdx = state.sessionState.workspaces[currentWS].length - 1;
     if (!state.tabSleepStates[currentWS]) state.tabSleepStates[currentWS] = [];
@@ -1186,7 +1186,7 @@ export function spawnTabWithUrl(url) {
     const currentWS = state.sessionState.current_workspace;
     if (!state.sessionState.workspaces[currentWS]) state.sessionState.workspaces[currentWS] = [];
     state.sessionState.workspaces[currentWS].push(url || "https://duckduckgo.com");
-    window.miseAPI.saveSession(state.sessionState);
+    window.flyAPI.saveSession(state.sessionState);
     
     const newTargetIdx = state.sessionState.workspaces[currentWS].length - 1;
     if (!state.tabSleepStates[currentWS]) state.tabSleepStates[currentWS] = [];
@@ -1263,7 +1263,7 @@ export function handleTabRemoval(explicitIdx) {
 
                 state.sessionState.tab_dark_reader = state.tabDarkReaderStates;
                 state.sessionState.tab_pinned = state.tabPinned;
-                window.miseAPI.saveSession(state.sessionState);
+                window.flyAPI.saveSession(state.sessionState);
                 renderWorkspaceUI();
                 if (typeof window.buildDashboardTree === 'function') {
                     window.buildDashboardTree();
@@ -1295,7 +1295,7 @@ export function handleTabRemoval(explicitIdx) {
                 if (state.sessionState.tab_favicons?.[wsName]) delete state.sessionState.tab_favicons[wsName];
                 delete state.sessionState.workspaces[wsName];
                 
-                window.miseAPI.saveSession(state.sessionState);
+                window.flyAPI.saveSession(state.sessionState);
                 renderWorkspaceUI();
                 if (typeof window.buildDashboardTree === 'function') {
                     window.buildDashboardTree();
@@ -1336,8 +1336,8 @@ export function handleTabRemoval(explicitIdx) {
 
     state.sessionState.tab_dark_reader = state.tabDarkReaderStates;
     state.sessionState.tab_pinned = state.tabPinned;
-    window.miseAPI.saveSession(state.sessionState);
-    window.miseAllowWebviewFocus = true;
+    window.flyAPI.saveSession(state.sessionState);
+    window.flyAllowWebviewFocus = true;
 
     const selectedIdx = tabElements.indexOf(activeListItem);
     let nextTargetIdx = selectedIdx >= 0 && selectedIdx !== currentIdx
@@ -1601,7 +1601,7 @@ export function togglePinTab(workspaceId, tabIdx) {
 
     if (!state.sessionState.tab_pinned) state.sessionState.tab_pinned = {};
     state.sessionState.tab_pinned[ws] = [...state.tabPinned[ws]];
-    window.miseAPI.saveSession(state.sessionState);
+    window.flyAPI.saveSession(state.sessionState);
 
     renderWorkspaceUI(targetIdx);
 
@@ -1720,7 +1720,7 @@ export function wakeTab(currentWS, idx) {
     const container = document.getElementById('webview-container');
     const webview = createWebView(targetUrl, currentWS, idx);
     if (sleepRecord?.darkReader || state.tabDarkReaderStates?.[currentWS]?.[idx]) {
-        webview.__miseDarkReaderEnabled = true;
+        webview.__flyDarkReaderEnabled = true;
     }
 
     if (savedSessionStorage || scrollX > 0 || scrollY > 0) {
@@ -1768,7 +1768,7 @@ export function wakeTab(currentWS, idx) {
     }
 
     state.sessionState.tab_sleep_states = state.tabSleepStates;
-    window.miseAPI.saveSession(state.sessionState);
+    window.flyAPI.saveSession(state.sessionState);
 
     return webview;
 }
@@ -1812,7 +1812,7 @@ export async function hibernateTab(currentWS, idx) {
     let isDarkReader = false;
 
     if (webview) {
-        isDarkReader = !!webview.__miseDarkReaderEnabled;
+        isDarkReader = !!webview.__flyDarkReaderEnabled;
         if (!state.tabDarkReaderStates) state.tabDarkReaderStates = {};
         if (!state.tabDarkReaderStates[currentWS]) state.tabDarkReaderStates[currentWS] = [];
         state.tabDarkReaderStates[currentWS][idx] = isDarkReader;
@@ -1857,8 +1857,8 @@ export async function hibernateTab(currentWS, idx) {
         } catch (err) {}
 
         try {
-            if (window.miseAPI && typeof window.miseAPI.flushSessionStore === 'function') {
-                await window.miseAPI.flushSessionStore({ workspace: currentWS });
+            if (window.flyAPI && typeof window.flyAPI.flushSessionStore === 'function') {
+                await window.flyAPI.flushSessionStore({ workspace: currentWS });
             }
         } catch (err) {}
 
@@ -1885,7 +1885,7 @@ export async function hibernateTab(currentWS, idx) {
 
     state.sessionState.tab_sleep_states = state.tabSleepStates;
     state.sessionState.tab_titles = state.activeTitlesCache;
-    window.miseAPI.saveSession(state.sessionState);
+    window.flyAPI.saveSession(state.sessionState);
 
     return true;
 }
@@ -1918,8 +1918,8 @@ export async function hibernateInactiveTabs() {
         }
     }
 
-    if (window.miseAPI && typeof window.miseAPI.compactMemory === 'function') {
-        window.miseAPI.compactMemory().catch(() => {});
+    if (window.flyAPI && typeof window.flyAPI.compactMemory === 'function') {
+        window.flyAPI.compactMemory().catch(() => {});
     }
 }
 
@@ -1940,7 +1940,7 @@ export function initializeTabSleepManager() {
 
     sleepTimerId = setInterval(async () => {
         try {
-            const cfg = (await window.miseAPI.getBrowserSettings()) || {};
+            const cfg = (await window.flyAPI.getBrowserSettings()) || {};
             const timeoutMinutes = cfg.tab_sleep_timeout_minutes !== undefined ? parseInt(cfg.tab_sleep_timeout_minutes, 10) : 15;
             if (timeoutMinutes <= 0) return;
 

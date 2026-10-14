@@ -164,7 +164,7 @@ export function updatePartitionBadge(workspaceName, isPrivate) {
     if (privateProfile) {
         partitionBadgeEl.innerHTML = '<i class="fa-solid fa-user-secret"></i><span class="status-badge-text">Private Profile</span>';
         partitionBadgeEl.className = 'status-badge status-badge-partition partition-private';
-        partitionBadgeEl.title = 'Partition: MisePrivateProfile (Click to manage workspaces)';
+        partitionBadgeEl.title = 'Partition: FlyPrivateProfile (Click to manage workspaces)';
         return;
     }
 
@@ -220,8 +220,8 @@ export function togglePassthroughMode(force) {
     const currentIdx = activeListItem ? Array.from(document.querySelectorAll('#TabList li')).indexOf(activeListItem) : 0;
     const activeWv = state.activeViewsCache[currentWS]?.[currentIdx];
     if (activeWv && typeof activeWv.send === 'function') {
-        activeWv.__miseKeyboardMode ||= {};
-        activeWv.__miseKeyboardMode.passthrough = isPassthroughModeActive;
+        activeWv.__flyKeyboardMode ||= {};
+        activeWv.__flyKeyboardMode.passthrough = isPassthroughModeActive;
         try {
             activeWv.send('set-passthrough-mode', isPassthroughModeActive);
         } catch (err) {}
@@ -237,7 +237,7 @@ export function togglePassthroughMode(force) {
 
 export function handleGuestPassthroughState(isActive, wsName, tabIdx) {
     const view = state.activeViewsCache[wsName]?.[tabIdx];
-    if (view) { view.__miseKeyboardMode ||= {}; view.__miseKeyboardMode.passthrough = !!isActive; }
+    if (view) { view.__flyKeyboardMode ||= {}; view.__flyKeyboardMode.passthrough = !!isActive; }
     const currentWS = state.sessionState.current_workspace;
     const activeListItem = document.querySelector('#TabList li.selected');
     const currentIdx = activeListItem ? Array.from(document.querySelectorAll('#TabList li')).indexOf(activeListItem) : 0;
@@ -259,7 +259,7 @@ export function isPassthroughActive() {
 
 export function handleGuestInputFocus(isFocused, wsName, tabIdx) {
     const view = state.activeViewsCache[wsName]?.[tabIdx];
-    if (view) { view.__miseKeyboardMode ||= {}; view.__miseKeyboardMode.input = !!isFocused; }
+    if (view) { view.__flyKeyboardMode ||= {}; view.__flyKeyboardMode.input = !!isFocused; }
     const currentWS = state.sessionState.current_workspace;
     const activeListItem = document.querySelector('#TabList li.selected');
     const currentIdx = activeListItem ? Array.from(document.querySelectorAll('#TabList li')).indexOf(activeListItem) : 0;
@@ -272,7 +272,7 @@ export function handleGuestInputFocus(isFocused, wsName, tabIdx) {
 
 export function handleGuestHintsState(isActive, wsName, tabIdx) {
     const view = state.activeViewsCache[wsName]?.[tabIdx];
-    if (view) { view.__miseKeyboardMode ||= {}; view.__miseKeyboardMode.hints = !!isActive; }
+    if (view) { view.__flyKeyboardMode ||= {}; view.__flyKeyboardMode.hints = !!isActive; }
     const currentWS = state.sessionState.current_workspace;
     const activeListItem = document.querySelector('#TabList li.selected');
     const currentIdx = activeListItem ? Array.from(document.querySelectorAll('#TabList li')).indexOf(activeListItem) : 0;
@@ -297,13 +297,13 @@ export function updateStatusBarFromActiveView() {
     setTargetUrl('');
 
     const activeWv = state.activeViewsCache[currentWS]?.[currentIdx];
-    const mode = activeWv?.__miseKeyboardMode || {};
+    const mode = activeWv?.__flyKeyboardMode || {};
     isGuestInputFocused = !!mode.input;
     isHintsModeActive = !!mode.hints;
     isPassthroughModeActive = !!mode.passthrough;
     recalculateMode();
     updateDarkReaderButtonUI(isWebviewDarkReaderActive(activeWv));
-    updateReaderViewButtonUI(!!(activeWv && activeWv.__miseReaderActive));
+    updateReaderViewButtonUI(!!(activeWv && activeWv.__flyReaderActive));
     notifyActiveView(activeWv, currentWS);
 }
 
@@ -332,8 +332,8 @@ export function toggleStatusBar(force) {
     statusBarEl.style.display = isStatusBarEnabled ? 'flex' : 'none';
 
     // Synchronise with settings if API available
-    if (window.miseAPI && typeof window.miseAPI.updateBrowserSettings === 'function') {
-        window.miseAPI.updateBrowserSettings({ show_status_bar: isStatusBarEnabled }).catch(() => {});
+    if (window.flyAPI && typeof window.flyAPI.updateBrowserSettings === 'function') {
+        window.flyAPI.updateBrowserSettings({ show_status_bar: isStatusBarEnabled }).catch(() => {});
     }
 
     // Update preferences toggle checkbox if present

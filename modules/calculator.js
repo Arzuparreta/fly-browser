@@ -1,5 +1,5 @@
 // modules/calculator.js
-// Safe mathematical expression evaluator for Mise Browser address bar
+// Safe mathematical expression evaluator for Fly Browser address bar
 
 function tokenize(expr) {
     if (!expr || typeof expr !== 'string') return null;

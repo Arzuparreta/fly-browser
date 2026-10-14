@@ -1,13 +1,13 @@
 // Optional cold-start probe: distinguish a visible local page from a protected one.
-const {_electron} = require(process.env.MISE_PLAYWRIGHT_MODULE || 'playwright');
+const {_electron} = require(process.env.FLY_PLAYWRIGHT_MODULE || 'playwright');
 const fs = require('node:fs');
 const os = require('node:os');
 const path = require('node:path');
 const http = require('node:http');
 const roots = process.argv.slice(2).map(root => path.resolve(root));
 if (roots.length !== 2) throw new Error('Supply the upstream and fork source directories.');
-const rounds = Number(process.env.MISE_BENCH_ROUNDS || 5);
-const output = process.env.MISE_BENCH_OUTPUT || '/tmp/mise-startup.json';
+const rounds = Number(process.env.FLY_BENCH_ROUNDS || 5);
+const output = process.env.FLY_BENCH_OUTPUT || '/tmp/fly-startup.json';
 const samples = [];
 const sources = roots.map(root => {
     const files = fs.readdirSync(root).filter(name => /\.(js|html|css)$/.test(name));
@@ -36,14 +36,14 @@ function treePss(rootPid) {
     await new Promise(resolve => server.listen(0, '127.0.0.1', resolve));
     try {
         for (let round = 0; round < rounds; round++) for (const root of round % 2 ? [...roots].reverse() : roots) {
-            const temporary = fs.mkdtempSync(path.join(os.tmpdir(), 'mise-startup-'));
-            const configDir = path.join(temporary, '.config/mise-browser');
+            const temporary = fs.mkdtempSync(path.join(os.tmpdir(), 'fly-startup-'));
+            const configDir = path.join(temporary, '.config/fly-browser');
             fs.mkdirSync(configDir, {recursive: true});
             const url = `http://127.0.0.1:${server.address().port}`;
             const version = require(path.join(root, 'package.json')).version;
             fs.writeFileSync(path.join(configDir, 'session.json'), JSON.stringify({current_workspace: 'Bench', workspaces: {Bench: [url]}}));
             fs.writeFileSync(path.join(configDir, 'config.json'), JSON.stringify({last_seen_version: version}));
-            fs.writeFileSync(path.join(temporary, 'package.json'), JSON.stringify({name: 'mise-startup-fixture', version, main: 'main.js'}));
+            fs.writeFileSync(path.join(temporary, 'package.json'), JSON.stringify({name: 'fly-startup-fixture', version, main: 'main.js'}));
             fs.writeFileSync(path.join(temporary, 'main.js'), `const {app}=require('electron');
 app.setAppPath(${JSON.stringify(root)}); app.setPath('home',${JSON.stringify(temporary)}); app.setPath('userData',${JSON.stringify(path.join(temporary, 'data'))});
 app.commandLine.appendSwitch('proxy-server','http://127.0.0.1:9'); app.commandLine.appendSwitch('proxy-bypass-list','<-loopback>;127.0.0.1');
@@ -79,7 +79,7 @@ require(${JSON.stringify(path.join(root, 'main.js'))});`);
                 const filterFetches = await application.evaluate(() => globalThis.__benchFetches);
                 const sample = {root, round, localReadyMs, protectedReadyMs, filterFetches, peakPssMiB, memorySamples};
                 samples.push(sample);
-                fs.writeFileSync(output, JSON.stringify({date: new Date().toISOString(), rounds, sources, display: process.env.DISPLAY || null, displayDescription: process.env.MISE_BENCH_DISPLAY_DESCRIPTION || 'unspecified X11 display', gpu: true, emptyFilterCache: true, peakSampling: '100 ms from Electron connection until protected guest readiness; sampled PSS, not a guaranteed allocation peak', samples}, null, 2) + '\n');
+                fs.writeFileSync(output, JSON.stringify({date: new Date().toISOString(), rounds, sources, display: process.env.DISPLAY || null, displayDescription: process.env.FLY_BENCH_DISPLAY_DESCRIPTION || 'unspecified X11 display', gpu: true, emptyFilterCache: true, peakSampling: '100 ms from Electron connection until protected guest readiness; sampled PSS, not a guaranteed allocation peak', samples}, null, 2) + '\n');
                 console.log(JSON.stringify(sample));
             } finally {
                 clearInterval(memoryTimer);

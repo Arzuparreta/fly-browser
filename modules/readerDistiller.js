@@ -5,12 +5,13 @@
 (function() {
     'use strict';
 
-    var READER_OVERLAY_ID = 'mise-reader-overlay';
+    var READER_OVERLAY_ID = 'fly-reader-overlay';
+    // Storage key kept from before the Fly rename so sites keep their saved reader preferences.
     var PREFS_STORAGE_KEY = '__mise_reader_prefs__';
 
     var existing = document.getElementById(READER_OVERLAY_ID);
     if (existing) {
-        window.dispatchEvent(new CustomEvent('mise-reader-close'));
+        window.dispatchEvent(new CustomEvent('fly-reader-close'));
         existing.remove();
         document.documentElement.style.overflow = '';
         return { active: false };
@@ -2927,7 +2928,7 @@ if (typeof module === "object") {
             padding: 0;
         }
 
-        .mise-reader-wrapper {
+        .fly-reader-wrapper {
             min-height: 100vh;
             width: 100%;
             display: flex;
@@ -2937,7 +2938,7 @@ if (typeof module === "object") {
             padding: 40px 20px 100px 20px;
         }
 
-        .mise-reader-wrapper.theme-dark {
+        .fly-reader-wrapper.theme-dark {
             --bg-color: #1a1b26;
             --surface-color: #24283b;
             --toolbar-bg: rgba(36, 40, 59, 0.88);
@@ -2950,7 +2951,7 @@ if (typeof module === "object") {
             --quote-border: #7aa2f7;
         }
 
-        .mise-reader-wrapper.theme-sepia {
+        .fly-reader-wrapper.theme-sepia {
             --bg-color: #f4ecd8;
             --surface-color: #e9dec4;
             --toolbar-bg: rgba(233, 222, 196, 0.88);
@@ -2963,7 +2964,7 @@ if (typeof module === "object") {
             --quote-border: #8c5332;
         }
 
-        .mise-reader-wrapper.theme-light {
+        .fly-reader-wrapper.theme-light {
             --bg-color: #ffffff;
             --surface-color: #f6f8fa;
             --toolbar-bg: rgba(246, 248, 250, 0.88);
@@ -2976,30 +2977,30 @@ if (typeof module === "object") {
             --quote-border: #0969da;
         }
 
-        .mise-reader-wrapper.font-sans {
+        .fly-reader-wrapper.font-sans {
             font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
         }
 
-        .mise-reader-wrapper.font-serif {
+        .fly-reader-wrapper.font-serif {
             font-family: "Charter", "Bitstream Charter", "Sitka Text", "Cambria", Georgia, serif;
         }
 
-        .mise-reader-wrapper.font-mono {
+        .fly-reader-wrapper.font-mono {
             font-family: "JetBrains Mono", "Fira Code", "Cascadia Code", Consolas, monospace;
         }
 
-        .mise-reader-container {
+        .fly-reader-container {
             width: 100%;
             line-height: 1.75;
             color: var(--text-color);
             transition: max-width 0.2s ease, font-size 0.2s ease;
         }
 
-        .mise-reader-container.width-narrow { max-width: 620px; }
-        .mise-reader-container.width-medium { max-width: 760px; }
-        .mise-reader-container.width-wide { max-width: 960px; }
+        .fly-reader-container.width-narrow { max-width: 620px; }
+        .fly-reader-container.width-medium { max-width: 760px; }
+        .fly-reader-container.width-wide { max-width: 960px; }
 
-        .mise-reader-toolbar {
+        .fly-reader-toolbar {
             position: fixed;
             top: 20px;
             right: 24px;
@@ -3271,10 +3272,10 @@ if (typeof module === "object") {
         shadow.appendChild(styleEl);
 
         var wrapper = document.createElement('div');
-        wrapper.className = 'mise-reader-wrapper theme-' + prefs.theme + ' font-' + prefs.fontFamily;
+        wrapper.className = 'fly-reader-wrapper theme-' + prefs.theme + ' font-' + prefs.fontFamily;
 
         var toolbar = document.createElement('nav');
-        toolbar.className = 'mise-reader-toolbar';
+        toolbar.className = 'fly-reader-toolbar';
         toolbar.setAttribute('aria-label', 'Reader View Controls');
         toolbar.innerHTML = 
             '<button class="toolbar-btn theme-toggle-btn" title="Cycle Theme (Dark, Sepia, Light)">' +
@@ -3297,7 +3298,7 @@ if (typeof module === "object") {
             '<button class="toolbar-btn toolbar-close close-btn" title="Close reader view (Escape)">✕</button>';
 
         var container = document.createElement('article');
-        container.className = 'mise-reader-container width-' + prefs.contentWidth;
+        container.className = 'fly-reader-container width-' + prefs.contentWidth;
         container.style.fontSize = prefs.fontSize + 'px';
 
         var header = document.createElement('header');
@@ -3338,8 +3339,8 @@ if (typeof module === "object") {
             if (el) el.remove();
             document.documentElement.style.overflow = '';
             window.removeEventListener('keydown', onKeyDown, true);
-            window.removeEventListener('mise-reader-close', closeReader);
-            try { window.dispatchEvent(new CustomEvent('mise-reader-closed')); } catch (e) {}
+            window.removeEventListener('fly-reader-close', closeReader);
+            try { window.dispatchEvent(new CustomEvent('fly-reader-closed')); } catch (e) {}
         }
 
         function onKeyDown(e) {
@@ -3350,7 +3351,7 @@ if (typeof module === "object") {
             }
         }
         window.addEventListener('keydown', onKeyDown, true);
-        window.addEventListener('mise-reader-close', closeReader);
+        window.addEventListener('fly-reader-close', closeReader);
 
         // Toolbar Events
         var themeBtn = toolbar.querySelector('.theme-toggle-btn');
@@ -3358,7 +3359,7 @@ if (typeof module === "object") {
             var themeOrder = ['dark', 'sepia', 'light'];
             var nextIdx = (themeOrder.indexOf(prefs.theme) + 1) % themeOrder.length;
             prefs.theme = themeOrder[nextIdx];
-            wrapper.className = 'mise-reader-wrapper theme-' + prefs.theme + ' font-' + prefs.fontFamily;
+            wrapper.className = 'fly-reader-wrapper theme-' + prefs.theme + ' font-' + prefs.fontFamily;
             overlay.style.backgroundColor = (prefs.theme === 'dark' ? '#1a1b26' : (prefs.theme === 'sepia' ? '#f4ecd8' : '#ffffff'));
             themeBtn.querySelector('.theme-icon').textContent = prefs.theme === 'dark' ? '🌙 Dark' : (prefs.theme === 'sepia' ? '📜 Sepia' : '☀️ Light');
             saveReaderPreferences(prefs);
@@ -3369,7 +3370,7 @@ if (typeof module === "object") {
             var fontOrder = ['sans', 'serif', 'mono'];
             var nextIdx = (fontOrder.indexOf(prefs.fontFamily) + 1) % fontOrder.length;
             prefs.fontFamily = fontOrder[nextIdx];
-            wrapper.className = 'mise-reader-wrapper theme-' + prefs.theme + ' font-' + prefs.fontFamily;
+            wrapper.className = 'fly-reader-wrapper theme-' + prefs.theme + ' font-' + prefs.fontFamily;
             fontBtn.querySelector('.font-icon').textContent = prefs.fontFamily === 'serif' ? 'Serif' : (prefs.fontFamily === 'mono' ? 'Mono' : 'Sans');
             saveReaderPreferences(prefs);
         });
@@ -3397,7 +3398,7 @@ if (typeof module === "object") {
             var widthOrder = ['medium', 'wide', 'narrow'];
             var nextIdx = (widthOrder.indexOf(prefs.contentWidth) + 1) % widthOrder.length;
             prefs.contentWidth = widthOrder[nextIdx];
-            container.className = 'mise-reader-container width-' + prefs.contentWidth;
+            container.className = 'fly-reader-container width-' + prefs.contentWidth;
             widthBtn.querySelector('.width-label').textContent = prefs.contentWidth.charAt(0).toUpperCase() + prefs.contentWidth.slice(1);
             saveReaderPreferences(prefs);
         });
@@ -3406,7 +3407,7 @@ if (typeof module === "object") {
         if (exportNotesBtn) {
             exportNotesBtn.addEventListener('click', function() {
                 try {
-                    window.dispatchEvent(new CustomEvent('mise-reader-export-notes', {
+                    window.dispatchEvent(new CustomEvent('fly-reader-export-notes', {
                         detail: {
                             title: article.title || document.title || 'Untitled Article',
                             byline: article.byline || '',
@@ -3428,7 +3429,7 @@ if (typeof module === "object") {
         if (exportExtBtn) {
             exportExtBtn.addEventListener('click', function() {
                 try {
-                    window.dispatchEvent(new CustomEvent('mise-reader-export-external', {
+                    window.dispatchEvent(new CustomEvent('fly-reader-export-external', {
                         detail: {
                             title: article.title || document.title || 'Untitled Article',
                             byline: article.byline || '',

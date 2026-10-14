@@ -54,7 +54,7 @@
     }
 
     window.toggleHints = function() {
-        const existing = document.getElementById('mise-hint-layer');
+        const existing = document.getElementById('fly-hint-layer');
         if (existing) { 
             if (typeof window.hintCleanup === 'function') {
                 window.hintCleanup();
@@ -105,7 +105,7 @@
         if (visible.length === 0) return;
 
         const layer = document.createElement('div');
-        layer.id = 'mise-hint-layer';
+        layer.id = 'fly-hint-layer';
         layer.style.cssText = 'position: fixed; top: 0; left: 0; width: 100vw; height: 100vh; pointer-events: none; z-index: 2147483647;';
         document.documentElement.appendChild(layer);
 

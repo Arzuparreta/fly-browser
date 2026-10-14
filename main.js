@@ -14,6 +14,9 @@ try {
     // Ignore if flag modification is not supported
 }
 
+// Carry an existing Mise profile over before anything opens the Fly profile directory.
+require('./profileMigration').migrateProfile(path.join(app.getPath('home'), '.config'));
+
 // Single instance lock to prevent duplicate windows when opening external links
 const gotSingleInstanceLock = app.requestSingleInstanceLock();
 if (!gotSingleInstanceLock) {
@@ -29,7 +32,7 @@ const extensions = require('./extensions');
 const diagnostics = require('./diagnostics');
 
 // NATIVE CONFIG UTILITIES
-const CONFIG_DIR = path.join(app.getPath('home'), '.config', 'mise-browser');
+const CONFIG_DIR = path.join(app.getPath('home'), '.config', 'fly-browser');
 const CONFIG_PATH = path.join(CONFIG_DIR, 'config.json');
 const NOTES_PATH = path.join(CONFIG_DIR, 'notes.md');
 const BOOKMARKS_PATH = path.join(CONFIG_DIR, 'bookmarks.json');
@@ -341,7 +344,7 @@ function sendSystemNotification(title, body) {
     const notification = new Notification({
         title: title,
         body: body,
-        icon: path.join(__dirname, 'assets', 'icons', 'Mise-logo256.png'),
+        icon: path.join(__dirname, 'assets', 'icons', 'fly-logo256.png'),
         urgency: 'low',
         silent: true
     });
@@ -363,11 +366,11 @@ function getSessionForContext(context) {
         return session.fromPartition(context);
     }
     if (context && typeof context === 'object') {
-        if (context.isPrivate) return session.fromPartition('MisePrivateProfile');
+        if (context.isPrivate) return session.fromPartition('FlyPrivateProfile');
         if (context.partition) return session.fromPartition(context.partition);
         if (context.workspace) return session.fromPartition(getWorkspacePartition(context.workspace));
     }
-    if (context === true) return session.fromPartition('MisePrivateProfile');
+    if (context === true) return session.fromPartition('FlyPrivateProfile');
     return session.defaultSession;
 }
 
@@ -737,7 +740,7 @@ ipcMain.handle('open-download', async (event, filePath) => {
     if (!filePath || typeof filePath !== 'string') return false;
     try {
         if (!fs.existsSync(filePath)) {
-            sendSystemNotification('Mise Download', 'File not found at destination path.');
+            sendSystemNotification('Fly Download', 'File not found at destination path.');
             return false;
         }
         let targetPath = filePath;
@@ -753,7 +756,7 @@ ipcMain.handle('reveal-download', async (event, filePath) => {
     if (!filePath || typeof filePath !== 'string') return false;
     try {
         if (!fs.existsSync(filePath)) {
-            sendSystemNotification('Mise Download', 'File not found at destination path.');
+            sendSystemNotification('Fly Download', 'File not found at destination path.');
             return false;
         }
         return revealInFileManager(filePath);
@@ -805,9 +808,9 @@ function fetchLatestRelease() {
     return new Promise((resolve, reject) => {
         const options = {
             hostname: 'api.github.com',
-            path: '/repos/Arzuparreta/Mise-browser/releases/latest',
+            path: '/repos/Arzuparreta/fly-browser/releases/latest',
             headers: {
-                'User-Agent': `Mise-Browser/${app.getVersion()}`,
+                'User-Agent': `Fly-Browser/${app.getVersion()}`,
                 'Accept': 'application/vnd.github.v3+json'
             },
             timeout: 10000
@@ -854,7 +857,7 @@ async function checkAppUpdates(manual = false) {
             currentVersion,
             latestVersion: latestTag,
             releaseName: release.name || latestTag,
-            releaseUrl: release.html_url || 'https://github.com/Arzuparreta/Mise-browser/releases',
+            releaseUrl: release.html_url || 'https://github.com/Arzuparreta/fly-browser/releases',
             publishedAt: release.published_at,
             releaseNotes: release.body || '',
             checkedAt: Date.now(),
@@ -909,10 +912,10 @@ ipcMain.handle('clear-active-cache', async (event, context) => {
         await targetSession.clearStorageData({
             storages: ['cachestorage', 'serviceworkers', 'shadercache']
         });
-        sendSystemNotification('Mise Browser', 'Cache and storage cleared successfully.');
+        sendSystemNotification('Fly Browser', 'Cache and storage cleared successfully.');
         return true;
     } catch (err) {
-        sendSystemNotification('Mise Error', `Cache clear failed: ${err.message}`);
+        sendSystemNotification('Fly Error', `Cache clear failed: ${err.message}`);
         return false;
     }
 });
@@ -929,10 +932,10 @@ ipcMain.handle('clear-domain-cookies', async (event, data) => {
             await targetSession.cookies.remove(`${protocol}${domain}${cookie.path}`, cookie.name);
         }
 
-        sendSystemNotification('Mise Browser', `Cookies cleared for ${parsed.hostname}`);
+        sendSystemNotification('Fly Browser', `Cookies cleared for ${parsed.hostname}`);
         return true;
     } catch (err) {
-        sendSystemNotification('Mise Error', `Cookie wipe failed: ${err.message}`);
+        sendSystemNotification('Fly Error', `Cookie wipe failed: ${err.message}`);
         return false;
     }
 });
@@ -1675,7 +1678,7 @@ function createWindow() {
     mainWindow = new BrowserWindow({
         width: 1600,
         height: 1040,
-        icon: path.join(__dirname, 'assets', 'icons', 'Mise-logo256.png'),
+        icon: path.join(__dirname, 'assets', 'icons', 'fly-logo256.png'),
         frame: true,
         autoHideMenuBar: false,
         webPreferences: {
@@ -1690,7 +1693,7 @@ function createWindow() {
     nativeTheme.themeSource = cfg.webview_theme || 'dark';
     const systemMenu = Menu.buildFromTemplate([
         {
-            label: 'Mise Settings',
+            label: 'Fly Settings',
             submenu: buildSettingsSubmenu(cfg)
         }
     ]);
@@ -1699,7 +1702,7 @@ function createWindow() {
     
     // Configure default and volatile private sessions
     configureAndHardenSession(session.defaultSession);
-    configureAndHardenSession(session.fromPartition('MisePrivateProfile'));
+    configureAndHardenSession(session.fromPartition('FlyPrivateProfile'));
 
     // Configure active workspace partition; other partitions configure lazily on demand
     try {
@@ -1768,7 +1771,7 @@ function createWindow() {
     });
 
     ipcMain.handle('clear-google-auth-cookies', async (event, partitionName) => {
-        const targetSession = partitionName ? session.fromPartition(partitionName) : session.fromPartition('MisePrivateProfile');
+        const targetSession = partitionName ? session.fromPartition(partitionName) : session.fromPartition('FlyPrivateProfile');
         await security.clearGoogleAuthCookies(targetSession);
         return true;
     });

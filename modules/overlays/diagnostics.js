@@ -15,7 +15,7 @@ let logSearchQuery = '';
  * Return keyboard focus to active webview when closing overlay.
  */
 function returnFocusToWebview() {
-    window.miseAllowWebviewFocus = true;
+    window.flyAllowWebviewFocus = true;
     focusActiveWebview();
 }
 
@@ -70,11 +70,11 @@ function gatherCurrentSessionStats() {
  * Fetches fresh diagnostic metrics from main process.
  */
 export async function refreshDiagnosticsData() {
-    if (!window.miseAPI || typeof window.miseAPI.getSystemDiagnostics !== 'function') return null;
+    if (!window.flyAPI || typeof window.flyAPI.getSystemDiagnostics !== 'function') return null;
 
     try {
         const sessionStats = gatherCurrentSessionStats();
-        cachedDiagnostics = await window.miseAPI.getSystemDiagnostics(sessionStats);
+        cachedDiagnostics = await window.flyAPI.getSystemDiagnostics(sessionStats);
         renderDiagnosticsUI(cachedDiagnostics);
         return cachedDiagnostics;
     } catch (err) {
@@ -118,18 +118,18 @@ export function closeDiagnosticsView() {
  * Toggles in-memory diagnostic recording status on or off.
  */
 export async function toggleDiagnosticsRecording(forcedState = null) {
-    if (!window.miseAPI || typeof window.miseAPI.getBrowserSettings !== 'function') return;
+    if (!window.flyAPI || typeof window.flyAPI.getBrowserSettings !== 'function') return;
 
     try {
-        const cfg = (await window.miseAPI.getBrowserSettings()) || {};
+        const cfg = (await window.flyAPI.getBrowserSettings()) || {};
         const nextState = forcedState !== null ? !!forcedState : !cfg.enable_diagnostics;
 
         cfg.enable_diagnostics = nextState;
-        if (typeof window.miseAPI.updateBrowserSettings === 'function') {
-            await window.miseAPI.updateBrowserSettings(cfg);
+        if (typeof window.flyAPI.updateBrowserSettings === 'function') {
+            await window.flyAPI.updateBrowserSettings(cfg);
         }
-        if (typeof window.miseAPI.setDiagnosticsEnabled === 'function') {
-            await window.miseAPI.setDiagnosticsEnabled(nextState);
+        if (typeof window.flyAPI.setDiagnosticsEnabled === 'function') {
+            await window.flyAPI.setDiagnosticsEnabled(nextState);
         }
 
         // Keep Preferences overlay toggle switch in sync
@@ -208,7 +208,7 @@ function renderSystemPane(data) {
             <div class="diag-card">
                 <div class="diag-card-title"><i class="fa-solid fa-cube"></i> Application Runtimes</div>
                 <div class="diag-kv-list">
-                    <div class="diag-kv-row"><span class="diag-k">Mise Browser</span><span class="diag-v">v${escapeHtml(app.version)}</span></div>
+                    <div class="diag-kv-row"><span class="diag-k">Fly Browser</span><span class="diag-v">v${escapeHtml(app.version)}</span></div>
                     <div class="diag-kv-row"><span class="diag-k">Electron Core</span><span class="diag-v">v${escapeHtml(app.electron)}</span></div>
                     <div class="diag-kv-row"><span class="diag-k">Chromium Engine</span><span class="diag-v">v${escapeHtml(app.chrome)}</span></div>
                     <div class="diag-kv-row"><span class="diag-k">Node.js Runtime</span><span class="diag-v">v${escapeHtml(app.node)}</span></div>
@@ -326,8 +326,8 @@ function renderProcessesPane(data) {
     const compactBtn = document.getElementById('diag-compact-memory-btn');
     if (compactBtn) {
         compactBtn.onclick = async () => {
-            if (window.miseAPI && typeof window.miseAPI.compactMemory === 'function') {
-                await window.miseAPI.compactMemory();
+            if (window.flyAPI && typeof window.flyAPI.compactMemory === 'function') {
+                await window.flyAPI.compactMemory();
                 compactBtn.innerHTML = '<i class="fa-solid fa-check"></i> Compacted!';
                 setTimeout(() => refreshDiagnosticsData(), 800);
             }
@@ -389,7 +389,7 @@ function renderLogsPane(data) {
             <div class="diag-empty-logs-warning">
                 <i class="fa-solid fa-shield-halved" style="font-size: 32px; color: var(--accent); margin-bottom: 8px;"></i>
                 <h3>Diagnostic Recording is Currently Disabled</h3>
-                <p>Mise Browser enforces strict zero-telemetry by default. Enable recording to capture runtime errors and warnings in volatile RAM.</p>
+                <p>Fly Browser enforces strict zero-telemetry by default. Enable recording to capture runtime errors and warnings in volatile RAM.</p>
                 <button type="button" id="diag-enable-now-btn" class="diag-btn-action primary" style="margin-top: 10px;">
                     Enable Diagnostics Recording
                 </button>
@@ -429,8 +429,8 @@ function renderLogsPane(data) {
     const clearBtn = document.getElementById('diag-clear-logs-btn');
     if (clearBtn) {
         clearBtn.onclick = async () => {
-            if (window.miseAPI && typeof window.miseAPI.clearDiagnosticsLogs === 'function') {
-                await window.miseAPI.clearDiagnosticsLogs();
+            if (window.flyAPI && typeof window.flyAPI.clearDiagnosticsLogs === 'function') {
+                await window.flyAPI.clearDiagnosticsLogs();
                 await refreshDiagnosticsData();
             }
         };
@@ -459,12 +459,12 @@ function buildMarkdownIssueReport(data) {
     const logs = data.logs || [];
 
     const lines = [];
-    lines.push('### Mise Browser Diagnostic Report');
+    lines.push('### Fly Browser Diagnostic Report');
     lines.push(`_Generated: ${data.timestamp || new Date().toISOString()}_`);
     lines.push('_Privacy status: 100% local, scrubbed of user paths, auth tokens, and private IPs._\n');
 
     lines.push('#### 1. Software Environment');
-    lines.push(`- **Mise Version**: v${app.version || '0.15.0'}`);
+    lines.push(`- **Fly Version**: v${app.version || '0.15.0'}`);
     lines.push(`- **Electron**: v${app.electron || 'unknown'}`);
     lines.push(`- **Chromium**: v${app.chrome || 'unknown'}`);
     lines.push(`- **Node.js**: v${app.node || 'unknown'}`);
@@ -563,7 +563,7 @@ function renderReportPane(data) {
                 const url = URL.createObjectURL(blob);
                 const a = document.createElement('a');
                 a.href = url;
-                a.download = `mise-diagnostics-${new Date().toISOString().replace(/[:.]/g, '-')}.json`;
+                a.download = `fly-diagnostics-${new Date().toISOString().replace(/[:.]/g, '-')}.json`;
                 document.body.appendChild(a);
                 a.click();
                 document.body.removeChild(a);
@@ -577,9 +577,9 @@ function renderReportPane(data) {
     const githubBtn = document.getElementById('diag-open-github-btn');
     if (githubBtn) {
         githubBtn.onclick = () => {
-            const url = 'https://github.com/Arzuparreta/Mise-browser/issues/new';
-            if (window.miseAPI && typeof window.miseAPI.openExternal === 'function') {
-                window.miseAPI.openExternal(url);
+            const url = 'https://github.com/Arzuparreta/fly-browser/issues/new';
+            if (window.flyAPI && typeof window.flyAPI.openExternal === 'function') {
+                window.flyAPI.openExternal(url);
             } else if (window.spawnTabWithUrl) {
                 window.spawnTabWithUrl(url);
             }

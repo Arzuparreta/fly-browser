@@ -1,4 +1,4 @@
-const { _electron } = require(process.env.MISE_PLAYWRIGHT_MODULE || 'playwright');
+const { _electron } = require(process.env.FLY_PLAYWRIGHT_MODULE || 'playwright');
 const fs = require('node:fs');
 const createElectronFixture = require('./electron-fixture');
 const os = require('node:os');
@@ -7,14 +7,14 @@ const http = require('node:http');
 const assert = require('node:assert/strict');
 const root = path.resolve(__dirname, '..');
 (async () => {
-    const temporary = fs.mkdtempSync(path.join(os.tmpdir(), 'mise-sidebar-pointer-'));
+    const temporary = fs.mkdtempSync(path.join(os.tmpdir(), 'fly-sidebar-pointer-'));
     const entry = createElectronFixture(root, temporary);
 
     const server = http.createServer((_request, response) => response.end('<!doctype html><title>Overlay fixture</title><input id="editable" style="margin-left:260px"><button>Hint target</button>'));
     await new Promise(resolve => server.listen(0, '127.0.0.1', resolve));
     let application;
     try {
-        application = await _electron.launch({executablePath: path.join(root, 'node_modules/electron/dist/electron'), args: ['--no-sandbox', '--disable-gpu', `--ozone-platform=${process.env.MISE_TEST_OZONE_PLATFORM || 'x11'}`, entry]});
+        application = await _electron.launch({executablePath: path.join(root, 'node_modules/electron/dist/electron'), args: ['--no-sandbox', '--disable-gpu', `--ozone-platform=${process.env.FLY_TEST_OZONE_PLATFORM || 'x11'}`, entry]});
         const page = await application.firstWindow();
         const errors = []; page.on('pageerror', error => errors.push(error.message));
         await page.waitForFunction(() => !!window.executeBrowserAction);

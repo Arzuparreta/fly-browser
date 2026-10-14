@@ -1,4 +1,4 @@
-const { _electron } = require(process.env.MISE_PLAYWRIGHT_MODULE || 'playwright');
+const { _electron } = require(process.env.FLY_PLAYWRIGHT_MODULE || 'playwright');
 const fs = require('node:fs');
 const createElectronFixture = require('./electron-fixture');
 const os = require('node:os');
@@ -7,7 +7,7 @@ const http = require('node:http');
 const assert = require('node:assert/strict');
 const root = path.resolve(__dirname, '..');
 (async () => {
- const temp = fs.mkdtempSync(path.join(os.tmpdir(), 'mise-live-'));
+ const temp = fs.mkdtempSync(path.join(os.tmpdir(), 'fly-live-'));
  const wrapper = createElectronFixture(root, temp);
 
  const server = http.createServer((req,res) => {res.end(req.url === '/frame' ? '<!doctype html><input id="framed">' : '<!doctype html><title>Keyboard fixture</title><input id="text" style="margin-left:260px"><news-text tabindex="0" id="noneditable">Article</news-text><iframe src="/frame" style="display:block"></iframe><div style="height:9000px">Scroll test</div><button id="target">Hint target</button>');});
@@ -15,13 +15,13 @@ const root = path.resolve(__dirname, '..');
  const fixture = `http://127.0.0.1:${server.address().port}`;
  let app;
  try {
-  app = await _electron.launch({executablePath: root+'/node_modules/electron/dist/electron', args: ['--no-sandbox', '--disable-gpu', `--ozone-platform=${process.env.MISE_TEST_OZONE_PLATFORM || 'x11'}`, wrapper], timeout: 30000});
+  app = await _electron.launch({executablePath: root+'/node_modules/electron/dist/electron', args: ['--no-sandbox', '--disable-gpu', `--ozone-platform=${process.env.FLY_TEST_OZONE_PLATFORM || 'x11'}`, wrapper], timeout: 30000});
   const page = await app.firstWindow();
   page.setDefaultTimeout(10000);
   const errors=[]; page.on('pageerror',error=>errors.push(error.message));
   await page.waitForFunction(() => !!window.executeBrowserAction && document.getElementById('KeyboardStatus').textContent === 'All changes saved');
   assert.equal(await page.locator('#TabList li').count(), 1, 'The fixture must not open its bootstrap or release notes as extra tabs');
-  assert.equal((await page.evaluate(() => window.miseAPI.getAppVersion())).version, require('../package.json').version);
+  assert.equal((await page.evaluate(() => window.flyAPI.getAppVersion())).version, require('../package.json').version);
   assert(await page.evaluate(() => {
     window.updateStatusBarFromActiveView();
     const partition = document.getElementById('StatusBarPartition').firstElementChild;
@@ -53,7 +53,7 @@ const root = path.resolve(__dirname, '..');
   await page.locator('#KeyboardRecordUse').click();
   await page.locator('#KeyboardSave').click();
   await page.locator('#KeyboardStatus').filter({hasText:'saved and applied'}).waitFor();
-  const config=await page.evaluate(()=>window.miseAPI.getKeyboardConfig());
+  const config=await page.evaluate(()=>window.flyAPI.getKeyboardConfig());
   assert(config.shortcuts['spawn-tab'].includes('Ctrl+Alt+B'));
   await page.locator('#KeyboardSearch').fill('scroll down');
   await page.locator('details[data-keyboard-section=normal] summary').click();
@@ -61,7 +61,7 @@ const root = path.resolve(__dirname, '..');
   await page.keyboard.press('z'); await page.locator('#KeyboardRecordUse').click();
   await page.locator('#KeyboardSave').click();
   await page.locator('#KeyboardStatus').filter({hasText:'saved and applied'}).waitFor();
-  if (process.env.MISE_KEYBOARD_SCREENSHOT) await page.screenshot({path:process.env.MISE_KEYBOARD_SCREENSHOT});
+  if (process.env.FLY_KEYBOARD_SCREENSHOT) await page.screenshot({path:process.env.FLY_KEYBOARD_SCREENSHOT});
   // Record a page sequence and verify the draft can be discarded without changing live bindings.
   await page.locator('#KeyboardSearch').fill('page top');
   await page.locator('details[data-keyboard-section=normal] summary').click();
@@ -77,7 +77,7 @@ const root = path.resolve(__dirname, '..');
   assert.match(await page.locator('details[data-keyboard-section=normal] summary').textContent(), /q q/);
   assert(!(await page.locator('#KeyboardSave').isDisabled()), 'Rebuilding preserves unsaved changes');
   await page.locator('#KeyboardDiscard').click();
-  assert.deepEqual((await page.evaluate(()=>window.miseAPI.getKeyboardConfig())).normal['page-top'], ['G G']);
+  assert.deepEqual((await page.evaluate(()=>window.flyAPI.getKeyboardConfig())).normal['page-top'], ['G G']);
   await page.locator('#CloseSettingsBtn').focus();
   await page.keyboard.press('Shift+Tab');
   assert(await page.evaluate(()=>document.getElementById('PreferencesOverlay').contains(document.activeElement)));
@@ -108,7 +108,7 @@ const root = path.resolve(__dirname, '..');
   // Invalid imports never alter the current profile.
   await page.locator('#KeyboardImport').setInputFiles({name:'invalid.json', mimeType:'application/json',buffer:Buffer.from('{')});
   await page.locator('#KeyboardStatus').filter({hasText:/JSON|Unexpected|property name/}).waitFor();
-  assert.equal((await page.evaluate(()=>window.miseAPI.getKeyboardConfig())).normal['scroll-down'][0],'Z');
+  assert.equal((await page.evaluate(()=>window.flyAPI.getKeyboardConfig())).normal['scroll-down'][0],'Z');
   await page.locator('#CloseSettingsBtn').click();
   await app.evaluate(({webContents},id)=>webContents.fromId(id).executeJavaScript('scrollTo(0,0)'),guest);
   await page.locator('webview:visible').click({position:{x:30,y:55}});

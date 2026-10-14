@@ -5,7 +5,7 @@ const assert = require('assert');
 const fs = require('fs');
 const path = require('path');
 
-console.log('Running Mise config write safety tests...');
+console.log('Running Fly config write safety tests...');
 
 const main = fs.readFileSync(path.join(__dirname, '..', 'main.js'), 'utf8');
 

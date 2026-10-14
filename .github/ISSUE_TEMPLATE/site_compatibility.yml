@@ -6,7 +6,7 @@ body:
   - type: markdown
     attributes:
       value: |
-        Mise Browser employs isolated container partitions, native adblocker request filtering (Ghostery engine), and in-DOM dark theme styling. Some websites require adjusting shield settings or whitelisting trusted authentication domains.
+        Fly Browser employs isolated container partitions, native adblocker request filtering (Ghostery engine), and in-DOM dark theme styling. Some websites require adjusting shield settings or whitelisting trusted authentication domains.
 
         Before submitting:
         * Test if turning off the tab Shield button resolves the problem.

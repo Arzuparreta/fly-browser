@@ -24,14 +24,14 @@ export function openTransientShareModal(targetUrl) {
     webview.style.flex = '1';
 
     if (state && state.globalPrivateModeActive) {
-        webview.setAttribute('partition', 'MisePrivateProfile');
+        webview.setAttribute('partition', 'FlyPrivateProfile');
     } else {
         const currentWS = state?.sessionState?.current_workspace;
         webview.setAttribute('partition', getWorkspacePartition(currentWS));
     }
 
-    if (window.miseAPI && typeof window.miseAPI.getWebviewPreloadPath === 'function') {
-        const preloadPath = window.miseAPI.getWebviewPreloadPath();
+    if (window.flyAPI && typeof window.flyAPI.getWebviewPreloadPath === 'function') {
+        const preloadPath = window.flyAPI.getWebviewPreloadPath();
         if (preloadPath) {
             webview.setAttribute('preload', preloadPath);
         }

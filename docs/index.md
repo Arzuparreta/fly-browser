@@ -2,12 +2,12 @@
 layout: home
 
 hero:
-  name: Mise Browser
-  text: Keyboard-First, Isolated Web Browser
-  tagline: Engineered for fanless Linux and focused workflows. True tab hibernation, side-by-side dual split view, isolated multi-account containers, and zero mouse dependency.
+  name: Fly Browser
+  text: Small, Minimal Linux Browser
+  tagline: Full keyboard control of the browser with a polished experience for mouse users. True tab hibernation, side-by-side split view and isolated multi-account containers.
   image:
     src: /logo.png
-    alt: Mise Browser Logo
+    alt: Fly Browser Logo
   actions:
     - theme: brand
       text: Get Started
@@ -20,7 +20,7 @@ hero:
       link: /reference/keybinds
     - theme: alt
       text: View on GitHub
-      link: https://github.com/Arzuparreta/Mise-browser
+      link: https://github.com/Arzuparreta/fly-browser
 
 features:
   - title: True Tab Hibernation
@@ -43,17 +43,17 @@ features:
     details: Distro-agnostic AppImage, Deb, RPM, and Arch packaging. Zero telemetry, zero usage tracking, and anonymous GitHub release notifications for effortless updates.
 ---
 
-![Mise Browser Dual-Split View](/screenshots/split-view.webp)
+![Fly Browser Dual-Split View](/screenshots/split-view.webp)
 
-## Why Mise Browser?
+## Why Fly Browser?
 
-Most modern web browsers consume gigabytes of memory, leak telemetry continuously, and expect a pointing device for every interaction. Named after the Czech word for *"mission"* (pronounced *mee-seh*), **Mise** takes a fundamentally different path: it treats web navigation as an intentional, keyboard-centric, distraction-free environment designed to respect both your hardware and your privacy.
+Most modern web browsers consume gigabytes of memory and leak telemetry continuously. **Fly** takes a smaller path: an intentional, distraction-free browser that respects your hardware and privacy, where every action works from the keyboard and pointer use remains comfortable and polished.
 
 ::: tip ARCHITECTURAL PILLARS
 * **Memory Conservation:** Idle tabs detach from DOM memory. Twenty tabs take the RAM footprint of two.
 * **Complete Isolation:** Separate workspace containers keep cookies, caches, and logins entirely segregated.
 * **Crash Resilience:** Atomic file writes, rolling backup journals, and safe startup hibernation prevent data loss and crash loops.
-* **Transparent Storage:** Configuration, notes, history, and keybinds live in human-readable files under `~/.config/mise-browser/`.
+* **Transparent Storage:** Configuration, notes, history, and keybinds live in human-readable files under `~/.config/fly-browser/`.
 * **Zero Cloud Dependence:** No remote telemetry, no forced account sync, and zero phone-home profiling.
 :::
 
@@ -83,16 +83,16 @@ Download the self-contained Linux AppImage from GitHub Releases and run directly
 
 ```bash
 # Make executable and launch
-chmod +x Mise-*-x86_64.AppImage
-./Mise-*-x86_64.AppImage
+chmod +x Fly-*-x86_64.AppImage
+./Fly-*-x86_64.AppImage
 ```
 
 You can also compile directly from source:
 
 ```bash
 # Clone and run from source
-git clone https://github.com/Arzuparreta/Mise-browser.git
-cd Mise-browser
+git clone https://github.com/Arzuparreta/fly-browser.git
+cd fly-browser
 npm install
 npm start
 ```
@@ -101,7 +101,7 @@ npm start
 
 ## Built with Modern Open-Source Foundations
 
-Mise combines the battle-tested rendering speed of Chromium and Electron with custom modular subsystems written in vanilla JavaScript:
+Fly combines the battle-tested rendering speed of Chromium and Electron with custom modular subsystems written in vanilla JavaScript:
 
 * **Ghostery Network Engine:** Local request filtering without third-party extension overhead.
 * **safeStorage Encryption:** Linux `libsecret`, macOS Keychain, and Windows DPAPI hardware-backed encryption for persistent cookies.
@@ -113,6 +113,6 @@ Mise combines the battle-tested rendering speed of Chromium and Electron with cu
 
 ## Source & Issues
 
-* [Source repository](https://github.com/Arzuparreta/Mise-browser)
-* [Issues](https://github.com/Arzuparreta/Mise-browser/issues)
+* [Source repository](https://github.com/Arzuparreta/fly-browser)
+* [Issues](https://github.com/Arzuparreta/fly-browser/issues)
 * Independent continuation of [Mise by Rakosn1cek](https://github.com/Rakosn1cek/Mise-browser); it does not track that repository.

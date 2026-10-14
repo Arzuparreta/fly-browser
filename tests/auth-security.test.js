@@ -24,17 +24,17 @@ Module.prototype.require = function(id) {
 
 const security = require('../security.js');
 
-console.log('Running Mise authentication & network security tests...');
+console.log('Running Fly authentication & network security tests...');
 
 // 1. Test User-Agent sanitisation for Google sign-in
 {
-    const sampleDefaultUa = 'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Mise/0.15.0 Chrome/132.0.6834.196 Electron/34.0.0 Safari/537.36';
+    const sampleDefaultUa = 'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Fly/0.15.0 Chrome/132.0.6834.196 Electron/34.0.0 Safari/537.36';
     security.setGoogleSignInUserAgent(sampleDefaultUa);
 
     const uaForAccounts = security.getGoogleSignInUserAgent('accounts.google.com');
     assert(uaForAccounts.includes('Electron/34.0.0'), 'Must retain Electron version token');
     assert(uaForAccounts.includes('Chrome/132.0.6834.196'), 'Must retain Chrome version token');
-    assert(!uaForAccounts.includes('Mise/'), 'Must strip application name token');
+    assert(!uaForAccounts.includes('Fly/'), 'Must strip application name token');
     assert(uaForAccounts.startsWith('Mozilla/5.0'), 'Must maintain valid browser prefix');
 
     // Ensure non-accounts domains do not receive the Electron override

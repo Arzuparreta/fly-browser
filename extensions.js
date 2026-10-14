@@ -1,5 +1,5 @@
 // extensions.js
-// Opt-in Chrome extension support for Mise Browser. Disabled by default.
+// Opt-in Chrome extension support for Fly Browser. Disabled by default.
 // Extensions are scoped to the workspaces that enable them. They load when such a
 // workspace gets its first live tab and unload after a grace period once every tab
 // in it has been closed or hibernated, so an idle workspace costs nothing.
@@ -96,10 +96,10 @@ function collectWarnings(manifest) {
         warnings.push('Uses declarativeNetRequest. Electron exposes the API but does not enforce its rules, so they will not apply.');
     }
     if (perms.includes('webRequestBlocking')) {
-        warnings.push('Blocking webRequest listeners are overridden by Mise\'s own network filters.');
+        warnings.push('Blocking webRequest listeners are overridden by Fly\'s own network filters.');
     }
     if (perms.includes('nativeMessaging')) {
-        warnings.push('Native messaging hosts are not configured for Mise and will probably fail.');
+        warnings.push('Native messaging hosts are not configured for Fly and will probably fail.');
     }
     if (manifest.side_panel || perms.includes('sidePanel')) {
         warnings.push('Side panels are not supported.');
@@ -310,14 +310,14 @@ function scheduleActionUpdate() {
 
 function createTabForExtension(ctrl, details) {
     if (activePartition !== ctrl.partition) {
-        return Promise.reject(new Error('Mise only opens extension tabs in the workspace currently in view'));
+        return Promise.reject(new Error('Fly only opens extension tabs in the workspace currently in view'));
     }
     const win = getMainWindow();
     return new Promise((resolve, reject) => {
         const pending = { resolve: (wc) => resolve([wc, win]), timer: null };
         pending.timer = setTimeout(() => {
             ctrl.pendingCreates = ctrl.pendingCreates.filter(p => p !== pending);
-            reject(new Error('Timed out waiting for Mise to open the tab'));
+            reject(new Error('Timed out waiting for Fly to open the tab'));
         }, CREATE_TAB_TIMEOUT_MS);
         ctrl.pendingCreates.push(pending);
         sendToRenderer('spawn-tab-with-url', details.url || 'about:blank');
@@ -467,7 +467,7 @@ function findLoaded(ctrl, extensionId) {
     return null;
 }
 
-// Popups render inside Mise's own window as a <webview>. Separate popup windows
+// Popups render inside Fly's own window as a <webview>. Separate popup windows
 // cannot be positioned on Wayland and get tiled by Hyprland or sway.
 function resolveActionTarget(extensionId, partition) {
     const ctrl = controllers.get(partition);

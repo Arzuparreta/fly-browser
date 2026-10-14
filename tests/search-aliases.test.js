@@ -9,7 +9,7 @@ const {
 } = require('../modules/overlays/searchEngine.js');
 const keybinds = require('../keybinds.js');
 
-console.log('Running Mise search aliases and custom bangs regression tests...');
+console.log('Running Fly search aliases and custom bangs regression tests...');
 
 // 1. Verify default built-in search aliases
 {
@@ -24,8 +24,8 @@ console.log('Running Mise search aliases and custom bangs regression tests...');
 
 // 2. Verify query resolution with %s placeholder
 {
-    const googleUrl = resolveSearchAliasUrl('g', 'mise browser');
-    assert.strictEqual(googleUrl, 'https://www.google.com/search?q=mise%20browser', 'Google alias must resolve query with %s');
+    const googleUrl = resolveSearchAliasUrl('g', 'fly browser');
+    assert.strictEqual(googleUrl, 'https://www.google.com/search?q=fly%20browser', 'Google alias must resolve query with %s');
 
     const aurUrl = resolveSearchAliasUrl('aur', 'hyprland-git');
     assert.strictEqual(aurUrl, 'https://aur.archlinux.org/packages?K=hyprland-git', 'AUR alias must resolve query with %s');

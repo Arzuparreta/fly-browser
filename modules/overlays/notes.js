@@ -108,12 +108,12 @@ export function toggleExpandNotesOverlay() {
 }
 
 export async function openNotesInExternalApp() {
-    if (typeof window !== 'undefined' && window.miseAPI && typeof window.miseAPI.openNotesInExternalApp === 'function') {
+    if (typeof window !== 'undefined' && window.flyAPI && typeof window.flyAPI.openNotesInExternalApp === 'function') {
         const textarea = typeof document !== 'undefined' ? document.getElementById('NotesTextArea') : null;
-        if (textarea && typeof window.miseAPI.saveNotes === 'function') {
-            await window.miseAPI.saveNotes(textarea.value);
+        if (textarea && typeof window.flyAPI.saveNotes === 'function') {
+            await window.flyAPI.saveNotes(textarea.value);
         }
-        const res = await window.miseAPI.openNotesInExternalApp();
+        const res = await window.flyAPI.openNotesInExternalApp();
         if (res && res.success) {
             const appName = res.app === 'system-default' ? 'default Markdown editor' : res.app;
             if (typeof window.setTargetUrl === 'function') {
@@ -166,9 +166,9 @@ export async function exportArticleToNotes(articleData) {
     const textarea = document.getElementById('NotesTextArea');
 
     let currentNotes = '';
-    if (window.miseAPI && typeof window.miseAPI.readNotes === 'function') {
+    if (window.flyAPI && typeof window.flyAPI.readNotes === 'function') {
         try {
-            currentNotes = (await window.miseAPI.readNotes()) || '';
+            currentNotes = (await window.flyAPI.readNotes()) || '';
         } catch (e) {
             currentNotes = textarea ? textarea.value : '';
         }
@@ -185,14 +185,14 @@ export async function exportArticleToNotes(articleData) {
         renderNotesView();
     }
 
-    if (window.miseAPI && typeof window.miseAPI.saveNotes === 'function') {
-        await window.miseAPI.saveNotes(newContent);
+    if (window.flyAPI && typeof window.flyAPI.saveNotes === 'function') {
+        await window.flyAPI.saveNotes(newContent);
     }
 
     const title = articleData.title || 'Article';
     const shortTitle = title.length > 35 ? `${title.slice(0, 32)}...` : title;
     if (typeof window.setTargetUrl === 'function') {
-        window.setTargetUrl(`Exported "${shortTitle}" to Quick Notes (~/.config/mise-browser/notes.md)`, 3500);
+        window.setTargetUrl(`Exported "${shortTitle}" to Quick Notes (~/.config/fly-browser/notes.md)`, 3500);
     }
 }
 
@@ -200,8 +200,8 @@ export async function exportArticleToNotes(articleData) {
 export async function exportArticleToExternalApp(articleData) {
     if (!articleData) return;
     const markdownSnippet = formatArticleToMarkdown(articleData);
-    if (window.miseAPI && typeof window.miseAPI.exportArticleToExternal === 'function') {
-        const res = await window.miseAPI.exportArticleToExternal({
+    if (window.flyAPI && typeof window.flyAPI.exportArticleToExternal === 'function') {
+        const res = await window.flyAPI.exportArticleToExternal({
             title: articleData.title || 'Article',
             markdown: markdownSnippet.trim()
         });
@@ -249,9 +249,9 @@ export async function appendSelectionToNotes(selectionData) {
         const textarea = typeof document !== 'undefined' ? document.getElementById('NotesTextArea') : null;
 
         let currentNotes = '';
-        if (typeof window !== 'undefined' && window.miseAPI && typeof window.miseAPI.readNotes === 'function') {
+        if (typeof window !== 'undefined' && window.flyAPI && typeof window.flyAPI.readNotes === 'function') {
             try {
-                currentNotes = (await window.miseAPI.readNotes()) || '';
+                currentNotes = (await window.flyAPI.readNotes()) || '';
             } catch (e) {
                 currentNotes = textarea ? textarea.value : '';
             }
@@ -268,14 +268,14 @@ export async function appendSelectionToNotes(selectionData) {
             renderNotesView();
         }
 
-        if (typeof window !== 'undefined' && window.miseAPI && typeof window.miseAPI.saveNotes === 'function') {
-            await window.miseAPI.saveNotes(newContent);
+        if (typeof window !== 'undefined' && window.flyAPI && typeof window.flyAPI.saveNotes === 'function') {
+            await window.flyAPI.saveNotes(newContent);
         }
 
         const preview = selectionData.text.trim();
         const shortPreview = preview.length > 35 ? `${preview.slice(0, 32)}...` : preview;
         if (typeof window !== 'undefined' && typeof window.setTargetUrl === 'function') {
-            window.setTargetUrl(`Saved "${shortPreview}" to Quick Notes (~/.config/mise-browser/notes.md)`, 3500);
+            window.setTargetUrl(`Saved "${shortPreview}" to Quick Notes (~/.config/fly-browser/notes.md)`, 3500);
         }
     } catch (err) {
         console.error('Failed to append selection to notes:', err);
@@ -357,8 +357,8 @@ export function handleNotesGlobalKeyDown(e) {
             e.preventDefault();
             e.stopPropagation();
             const textarea = typeof document !== 'undefined' ? document.getElementById('NotesTextArea') : null;
-            if (textarea && typeof window !== 'undefined' && window.miseAPI && typeof window.miseAPI.saveNotes === 'function') {
-                window.miseAPI.saveNotes(textarea.value);
+            if (textarea && typeof window !== 'undefined' && window.flyAPI && typeof window.flyAPI.saveNotes === 'function') {
+                window.flyAPI.saveNotes(textarea.value);
                 if (typeof window.setTargetUrl === 'function') {
                     window.setTargetUrl('Quick Notes saved', 2000);
                 }
@@ -388,8 +388,8 @@ export function toggleNotesOverlay() {
         notesEdited = false;
         overlay.style.display = 'flex';
         document.getElementById('CloseNotesBtn')?.focus();
-        if (window.miseAPI && typeof window.miseAPI.readNotes === 'function') {
-            window.miseAPI.readNotes().then((content) => {
+        if (window.flyAPI && typeof window.flyAPI.readNotes === 'function') {
+            window.flyAPI.readNotes().then((content) => {
                 if (!state.notesActive || request !== notesRequest || notesEdited) return;
                 notesLoaded = true;
                 textarea.value = content || '';
@@ -403,8 +403,8 @@ export function toggleNotesOverlay() {
         }
     } else {
         clearTimeout(notesSaveTimeout);
-        if (notesLoaded && window.miseAPI && typeof window.miseAPI.saveNotes === 'function') {
-            window.miseAPI.saveNotes(textarea.value);
+        if (notesLoaded && window.flyAPI && typeof window.flyAPI.saveNotes === 'function') {
+            window.flyAPI.saveNotes(textarea.value);
         }
         overlay.style.display = 'none';
         focusActiveWebview();
@@ -467,8 +467,8 @@ export function setupNotesListeners() {
             updateWordCountBadge(e.target.value);
             clearTimeout(notesSaveTimeout);
             notesSaveTimeout = setTimeout(() => {
-                if (window.miseAPI && typeof window.miseAPI.saveNotes === 'function') {
-                    window.miseAPI.saveNotes(content);
+                if (window.flyAPI && typeof window.flyAPI.saveNotes === 'function') {
+                    window.flyAPI.saveNotes(content);
                 }
             }, 300);
         });

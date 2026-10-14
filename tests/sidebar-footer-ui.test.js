@@ -1,4 +1,4 @@
-const { _electron } = require(process.env.MISE_PLAYWRIGHT_MODULE || 'playwright');
+const { _electron } = require(process.env.FLY_PLAYWRIGHT_MODULE || 'playwright');
 const fs = require('node:fs');
 const createElectronFixture = require('./electron-fixture');
 const os = require('node:os');
@@ -7,14 +7,14 @@ const http = require('node:http');
 const assert = require('node:assert/strict');
 const root = path.resolve(__dirname, '..');
 (async () => {
-    const temporary = fs.mkdtempSync(path.join(os.tmpdir(), 'mise-overlay-state-'));
+    const temporary = fs.mkdtempSync(path.join(os.tmpdir(), 'fly-overlay-state-'));
     const entry = createElectronFixture(root, temporary);
 
     const server = http.createServer((_request, response) => response.end('<!doctype html><title>Overlay fixture</title><input id="editable" style="margin-left:260px"><button>Hint target</button>'));
     await new Promise(resolve => server.listen(0, '127.0.0.1', resolve));
     let application;
     try {
-        application = await _electron.launch({executablePath: path.join(root, 'node_modules/electron/dist/electron'), args: ['--no-sandbox', '--disable-gpu', `--ozone-platform=${process.env.MISE_TEST_OZONE_PLATFORM || 'x11'}`, entry]});
+        application = await _electron.launch({executablePath: path.join(root, 'node_modules/electron/dist/electron'), args: ['--no-sandbox', '--disable-gpu', `--ozone-platform=${process.env.FLY_TEST_OZONE_PLATFORM || 'x11'}`, entry]});
         const page = await application.firstWindow();
         page.setDefaultTimeout(10000);
         page.setDefaultNavigationTimeout(10000);
@@ -64,7 +64,7 @@ const root = path.resolve(__dirname, '..');
             await inlineUpdate();
             await page.locator('#SidebarClock').click();
         }
-        await page.screenshot({path: '/tmp/mise-inline-update.png'});
+        await page.screenshot({path: '/tmp/fly-inline-update.png'});
         await page.evaluate(async () => {const {setClockVisibility} = await import('./modules/clock.js'); setClockVisibility(false);});
         assert(await page.locator('#update-indicator-btn').isVisible(), 'Disabling the clock leaves the update action available');
         await page.evaluate(async () => {const {setClockVisibility} = await import('./modules/clock.js'); setClockVisibility(true);});

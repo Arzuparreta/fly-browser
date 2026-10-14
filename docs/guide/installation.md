@@ -1,25 +1,25 @@
 # Installation & Setup
 
-Mise is designed to be efficient, modular, and easy to run across Linux, macOS, and Windows. You can download pre-built self-contained binaries directly from GitHub Releases or run from source.
+Fly is designed to be efficient, modular, and easy to run across Linux, macOS, and Windows. You can download pre-built self-contained binaries directly from GitHub Releases or run from source.
 
 ---
 
 ## Pre-Built Executables
 
-Official releases and cryptographic checksums are published for every tagged version on the [GitHub Releases page](https://github.com/Arzuparreta/Mise-browser/releases).
+Official releases and cryptographic checksums are published for every tagged version on the [GitHub Releases page](https://github.com/Arzuparreta/fly-browser/releases).
 
 ### Linux (Distro-Agnostic AppImage)
 
 The AppImage runs out of the box on Ubuntu, Debian, Fedora, Arch Linux, openSUSE, and any standard modern Linux distribution without package managers or root privileges.
 
-1. Download the latest `Mise-<version>-x86_64.AppImage`.
+1. Download the latest `Fly-<version>-x86_64.AppImage`.
 2. Make the file executable:
    ```bash
-   chmod +x Mise-*.AppImage
+   chmod +x Fly-*.AppImage
    ```
 3. Run the AppImage directly:
    ```bash
-   ./Mise-*.AppImage
+   ./Fly-*.AppImage
    ```
 
 The AppImage uses the static AppImage runtime, so it does not need `libfuse2`. It only requires FUSE, which almost every desktop distribution provides through `fuse3`. On systems without FUSE (such as some containers), run it with `--appimage-extract-and-run` instead.
@@ -29,19 +29,19 @@ To integrate with desktop menus, you can also place the AppImage in your `~/Appl
 ### macOS (DMG & Zip)
 
 1. Download the appropriate image for your Mac architecture:
-   - Apple Silicon (M1 / M2 / M3 / M4): `Mise-<version>-arm64.dmg`
-   - Intel processors: `Mise-<version>-x64.dmg`
-2. Open the `.dmg` file and drag **Mise Browser** into your **Applications** folder.
-3. **First-Launch Note**: Because independent open-source projects do not carry paid enterprise code-signing certificates, macOS Gatekeeper may present an unverified developer dialog. Right-click **Mise Browser** in Finder and select **Open**, or run the following command in Terminal:
+   - Apple Silicon (M1 / M2 / M3 / M4): `Fly-<version>-arm64.dmg`
+   - Intel processors: `Fly-<version>-x64.dmg`
+2. Open the `.dmg` file and drag **Fly Browser** into your **Applications** folder.
+3. **First-Launch Note**: Because independent open-source projects do not carry paid enterprise code-signing certificates, macOS Gatekeeper may present an unverified developer dialog. Right-click **Fly Browser** in Finder and select **Open**, or run the following command in Terminal:
    ```bash
-   xattr -cr "/Applications/Mise Browser.app"
+   xattr -cr "/Applications/Fly Browser.app"
    ```
 
 ### Windows (Portable & Setup Installer)
 
 1. Download either release artefact:
-   - **Portable**: `Mise-<version>-portable.exe` (run directly from any folder, zero installation).
-   - **Setup Installer**: `Mise-Setup-<version>.exe` (installs to `%LOCALAPPDATA%` with a Start Menu entry).
+   - **Portable**: `Fly-<version>-portable.exe` (run directly from any folder, zero installation).
+   - **Setup Installer**: `Fly-Setup-<version>.exe` (installs to `%LOCALAPPDATA%` with a Start Menu entry).
 2. **First-Launch Note**: Windows SmartScreen may present a *"Windows protected your PC"* banner on freshly released binaries. Click **More info** followed by **Run anyway**.
 
 ---
@@ -60,11 +60,11 @@ Verify that your downloaded file outputs `OK`.
 
 ---
 
-## Updating Mise
+## Updating Fly
 
-Mise includes an integrated, zero-privilege update notification system that checks the official GitHub Release ledger:
+Fly includes an integrated, zero-privilege update notification system that checks the official GitHub Release ledger:
 
-- **Automated Check**: Mise queries the GitHub Releases API shortly after startup. When a newer version is published, an update badge appears in the sidebar and opens **Preferences → About**.
+- **Automated Check**: Fly queries the GitHub Releases API shortly after startup. When a newer version is published, an update badge appears in the sidebar and opens **Preferences → About**.
 - **Manual Check**: Run **Check for Updates** in the Command Centre (`Ctrl+P`) or click **Check for updates** in **Preferences → About** (`Ctrl+H`).
 - **Applying Updates**:
   - **Linux AppImage**: Download the latest `.AppImage` from GitHub Releases and replace your existing file.
@@ -92,8 +92,8 @@ Ensure you have a terminal emulator installed for the clipboard-mediated termina
 
 1. Clone the repository and navigate into the project directory:
    ```bash
-   git clone https://github.com/Arzuparreta/Mise-browser.git
-   cd Mise-browser
+   git clone https://github.com/Arzuparreta/fly-browser.git
+   cd fly-browser
    ```
 
 2. Install dependencies:
@@ -101,7 +101,7 @@ Ensure you have a terminal emulator installed for the clipboard-mediated termina
    npm install
    ```
 
-3. Launch Mise Browser:
+3. Launch Fly Browser:
    ```bash
    npm start
    ```
@@ -122,7 +122,7 @@ To integrate a source install directly into your desktop application launcher (s
 npm run install-desktop
 ```
 
-This installs `mise.desktop` into `~/.local/share/applications/` and deploys icons across 48x48, 128x128, and 256x256 resolutions to `~/.local/share/icons/hicolor/`.
+This installs `fly-browser.desktop` into `~/.local/share/applications/` and deploys icons across 48x48, 128x128, and 256x256 resolutions to `~/.local/share/icons/hicolor/`.
 
 ---
 
@@ -131,7 +131,7 @@ This installs `mise.desktop` into `~/.local/share/applications/` and deploys ico
 All runtime configuration and persistent session data are stored locally in standard Linux XDG format:
 
 ```text
-~/.config/mise-browser/
+~/.config/fly-browser/
 ├── config.json          # Core engine and preference settings
 ├── keybinds.json        # Customisable keyboard shortcuts map
 ├── session.json         # Workspaces, open tabs, titles, and scroll offsets

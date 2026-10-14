@@ -4,7 +4,7 @@
 const assert = require('assert');
 const keybinds = require('../keybinds.js');
 
-console.log('Running Mise pinned tabs regression tests...');
+console.log('Running Fly pinned tabs regression tests...');
 
 // 1. Verify toggle-pin-tab keybindings are registered
 {
@@ -142,10 +142,10 @@ console.log('Running Mise pinned tabs regression tests...');
     assert.deepStrictEqual(mockState.tabHistory.Default, [0, 2, 3, 1]);
 
     // Regression verification: Pinning tab with shared titles/favicons array reference
-    const sharedTitles = ['Google', 'GitHub', 'YouTube', 'Mise'];
+    const sharedTitles = ['Google', 'GitHub', 'YouTube', 'Fly'];
     const sparseFavicons = ['google.ico']; // Only tab 0 had cached favicon
     const testWs = {
-        workspaces: ['https://google.com', 'https://github.com', 'https://youtube.com', 'https://mise.io'],
+        workspaces: ['https://google.com', 'https://github.com', 'https://youtube.com', 'https://fly.example'],
         activeTitles: sharedTitles,
         sessionTitles: sharedTitles, // Identical reference
         favicons: sparseFavicons
@@ -166,10 +166,10 @@ console.log('Running Mise pinned tabs regression tests...');
     moveTestArray(testWs.sessionTitles, 'Loading...'); // Must not double-move
     moveTestArray(testWs.favicons, null);
 
-    assert.strictEqual(testWs.workspaces[0], 'https://mise.io');
-    assert.strictEqual(testWs.activeTitles[0], 'Mise', 'Mise tab at index 0 must keep Mise title, not inherit Google');
+    assert.strictEqual(testWs.workspaces[0], 'https://fly.example');
+    assert.strictEqual(testWs.activeTitles[0], 'Fly', 'Fly tab at index 0 must keep Fly title, not inherit Google');
     assert.strictEqual(testWs.activeTitles[1], 'Google');
-    assert.strictEqual(testWs.favicons[0], null, 'Mise tab at index 0 must not inherit Google favicon');
+    assert.strictEqual(testWs.favicons[0], null, 'Fly tab at index 0 must not inherit Google favicon');
     assert.strictEqual(testWs.favicons[1], 'google.ico', 'Google tab shifted to index 1 must keep its favicon');
 
     console.log('✓ Tab state synchronisation, shared reference deduplication, and padding verified');
