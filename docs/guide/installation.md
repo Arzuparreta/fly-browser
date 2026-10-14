@@ -64,8 +64,8 @@ Verify that your downloaded file outputs `OK`.
 
 Mise includes an integrated, zero-privilege update notification system that checks the official GitHub Release ledger:
 
-- **Automated Check**: Mise queries the GitHub Releases API shortly after startup. When a newer version is published, an update badge appears in the sidebar and Preferences view.
-- **Manual Check**: Run **Check for Updates** in the Command Centre (`Ctrl+P`) or click the **Check for Updates** button in Preferences (`Ctrl+H`).
+- **Automated Check**: Mise queries the GitHub Releases API shortly after startup. When a newer version is published, an update badge appears in the sidebar and opens **Preferences → About**.
+- **Manual Check**: Run **Check for Updates** in the Command Centre (`Ctrl+P`) or click **Check for updates** in **Preferences → About** (`Ctrl+H`).
 - **Applying Updates**:
   - **Linux AppImage**: Download the latest `.AppImage` from GitHub Releases and replace your existing file.
   - **macOS / Windows**: Download and run the latest installer or portable executable.

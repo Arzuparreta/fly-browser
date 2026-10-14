@@ -6,7 +6,7 @@ const config = keyboard.validateConfig(keybinds.getDefaults(), keybinds.ACTION_M
 const format = (values, scope) => values.length ? values.map(value => '`' + keyboard.display(value, scope).replace(/\|/g, '&#124;') + '`').join(' / ') : 'Unassigned';
 let document = `# Keyboard controls
 
-Open **Preferences → Keyboard controls**, or press **Ctrl+,** with a new profile. Search by action, category or binding. Each action shows two expandable menus, **Browser shortcuts** and **Page keys (when not typing)**, with both sets of bindings visible in their summaries. Expand either menu to edit it. Search and the customised filter check both groups. Each group supports up to eight bindings per action.
+Open **Preferences → Keyboard**, or press **Ctrl+,** with a new profile. The editor has its own Preferences section with a pinned search bar and save bar. Search by action, category or binding. Each action shows two expandable menus side by side, **Browser shortcuts** and **Page keys** (active only when not typing), with both sets of bindings visible in their summaries. Expand either menu to edit it. Search and the customised filter check both groups. Each group supports up to eight bindings per action.
 
 Select a binding to change it, **Add binding** to record another, or × to remove it. The recorder reports conflicts and offers an explicit reassignment with the affected action names. Select **Record a two-key sequence** for page sequences. Tab moves around the recorder; Escape cancels it.
 

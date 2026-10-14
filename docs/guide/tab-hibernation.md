@@ -92,16 +92,16 @@ You can customise how quickly tabs hibernate using either the in-browser Prefere
 
 ### Method 1: In-Browser Preferences Overlay (Ctrl + H)
 
-![Mise Browser Performance & Hardware Preferences](/screenshots/preferences-1.webp)
+![Preferences Performance section](/screenshots/preferences-1.webp)
 
 1. Open **Preferences** by pressing **Ctrl + H** (or open the Command Palette with **Ctrl + P** and select **Preferences**).
-2. Locate **Tab Hibernation (Sleep Timeout)** under the **Performance & Hardware** section.
+2. Select **Performance** in the section index and locate **Tab hibernation** under **Memory**.
 3. Choose your preferred idle duration from the dropdown:
-   - **5 minutes**: Aggressive memory saving.
-   - **15 minutes**: Recommended default for daily workflow.
-   - **30 minutes**: Moderate timeout.
-   - **1 hour**: Relaxed timeout.
-   - **Never (Disabled)**: Keeps all background tabs awake.
+   - **After 5 minutes**: Aggressive memory saving.
+   - **After 15 minutes**: Recommended default for daily workflow.
+   - **After 30 minutes**: Moderate timeout.
+   - **After 1 hour**: Relaxed timeout.
+   - **Never**: Keeps all background tabs awake.
 The change takes effect immediately without needing to restart the browser.
 
 ### Method 2: Native Menu Bar (F1)

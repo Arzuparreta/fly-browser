@@ -4,7 +4,7 @@ let saved, draft, defaults, metadata, recording, busy = false;
 const el = id => document.getElementById(id);
 const status = text => { el('KeyboardStatus').textContent = text; };
 const dirty = () => JSON.stringify(draft) !== JSON.stringify(saved);
-const sections = {shortcuts: 'Browser shortcuts', normal: 'Page keys (when not typing)'};
+const sections = {shortcuts: 'Browser shortcuts', normal: 'Page keys'};
 const expanded = new Set();
 
 function refreshButtons() {
