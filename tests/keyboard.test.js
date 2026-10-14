@@ -67,9 +67,48 @@ try {
     assert.deepEqual(mixed.shortcuts['focus-nav-buttons'], ['Ctrl+Tab'], 'A changed seeded value is a user choice');
     assert(!mixed.shortcuts['next-tab'].includes('Ctrl+Tab'));
     assert.deepEqual(mixed.shortcuts['toggle-notes'], [], 'Disabling a seeded binding is a user choice');
+
+    // Saves store only changes, so later default improvements still reach the profile.
+    const stored = () => JSON.parse(fs.readFileSync(legacyFile, 'utf8'));
     assert.equal(keybinds.saveKeybinds(directory, defaults).ok, true);
+    assert.deepEqual(stored(), {version: 2, changesOnly: true, shortcuts: {}, normal: {}});
     const disabled = clone(defaults); disabled.shortcuts['reload-active-tab'] = [];
     disabled.normal['scroll-down'] = ['Z', 'ArrowDown'];
+    assert.equal(keybinds.saveKeybinds(directory, disabled).ok, true);
+    assert.deepEqual(stored(), {version: 2, changesOnly: true, shortcuts: {'reload-active-tab': []}, normal: {'scroll-down': ['Z', 'ArrowDown']}});
+    const previousNotes = keybinds.DEFAULT_KEYBINDS['toggle-notes'];
+    try {
+        keybinds.DEFAULT_KEYBINDS['toggle-notes'] = 'Ctrl+Alt+N';
+        keybinds.initializeKeybinds(directory);
+        assert.deepEqual(keybinds.getKeybinds()['toggle-notes'], ['Ctrl+Alt+N'], 'A changed default reaches a saved profile');
+        // Complete tables saved by earlier version 2 releases pinned every default.
+        fs.copyFileSync(path.join(__dirname, 'fixtures', 'fork-keybinds-079b538.json'), legacyFile);
+        keybinds.initializeKeybinds(directory);
+        assert.deepEqual(keybinds.getKeybinds()['toggle-notes'], ['Ctrl+Alt+N'], 'A changed default reaches a complete-table profile');
+        assert.deepEqual({...keybinds.getKeyboardConfig(), shortcuts: {...keybinds.getKeyboardConfig().shortcuts, 'toggle-notes': defaults.shortcuts['toggle-notes']}}, defaults);
+    } finally { keybinds.DEFAULT_KEYBINDS['toggle-notes'] = previousNotes; }
+    const complete = JSON.parse(fs.readFileSync(path.join(__dirname, 'fixtures', 'fork-keybinds-079b538.json'), 'utf8'));
+    complete.shortcuts['remove-tab'] = ['Ctrl+Q'];
+    complete.shortcuts['focus-nav-buttons'] = ['Ctrl+Shift+N', 'Ctrl+Tab'];
+    complete.shortcuts['next-tab'] = ['Ctrl+PageDown'];
+    fs.writeFileSync(legacyFile, JSON.stringify(complete));
+    keybinds.initializeKeybinds(directory);
+    assert.deepEqual(keybinds.getKeybinds()['remove-tab'], ['Ctrl+Q'], 'Changes in a complete table remain choices');
+    assert.deepEqual(keybinds.getKeybinds()['focus-nav-buttons'], defaults.shortcuts['focus-nav-buttons'], 'Migrated upstream seeds in a complete table are not choices');
+    // A changes-only file lists choices only, even when one equals an earlier default.
+    fs.writeFileSync(legacyFile, JSON.stringify({version: 2, changesOnly: true, shortcuts: {'focus-nav-buttons': ['Ctrl+Shift+N', 'Ctrl+Tab']}, normal: {}}));
+    keybinds.initializeKeybinds(directory);
+    assert.equal(keybinds.getActionForInput({type: 'keyDown', key: 'Tab', control: true}), 'focus-nav-buttons');
+    // A choice that collides with a default takes the chord instead of rejecting the whole profile.
+    fs.writeFileSync(legacyFile, JSON.stringify({version: 2, changesOnly: true, shortcuts: {'focus-sidebar': ['Ctrl+PageDown']}, normal: {'trigger-hints': ['G'], 'toggle-find': ['J']}}));
+    keybinds.initializeKeybinds(directory);
+    const collided = keybinds.getKeyboardConfig();
+    assert.equal(collided.warning, undefined);
+    assert.deepEqual(collided.shortcuts['next-tab'], ['Ctrl+Tab']);
+    assert.deepEqual(collided.normal['page-top'], [], 'A page prefix choice removes the colliding default sequence');
+    assert.deepEqual(collided.normal['scroll-down'], defaults.normal['scroll-down'].filter(combo => combo !== 'J'));
+    assert.deepEqual(keybinds.resolveKeybinds(complete).config.shortcuts['remove-tab'], ['Ctrl+Q'], 'Imports use the startup interpretation');
+    assert.deepEqual(keybinds.getKeyboardConfig(), collided, 'Resolving an import leaves the active profile unchanged');
     assert.equal(keybinds.saveKeybinds(directory, disabled).ok, true);
     keybinds.initializeKeybinds(directory);
     assert.deepEqual(keybinds.getKeyboardConfig(), disabled);

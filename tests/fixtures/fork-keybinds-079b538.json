@@ -1,0 +1,374 @@
+{
+  "version": 2,
+  "shortcuts": {
+    "toggle-menu-bar": [
+      "F1"
+    ],
+    "spawn-tab": [
+      "Ctrl+T"
+    ],
+    "toggle-address": [
+      "Ctrl+L"
+    ],
+    "toggle-dashboard": [
+      "Ctrl+Shift+W"
+    ],
+    "reload-active-tab": [
+      "Ctrl+R",
+      "F5"
+    ],
+    "remove-tab": [
+      "Ctrl+W"
+    ],
+    "focus-sidebar": [
+      "Alt+S"
+    ],
+    "focus-nav-buttons": [
+      "Alt+N"
+    ],
+    "focus-webview": [
+      "Alt+W"
+    ],
+    "trigger-hints": [
+      "Alt+F"
+    ],
+    "toggle-help": [
+      "Ctrl+H"
+    ],
+    "toggle-private-mode": [
+      "Ctrl+Shift+P"
+    ],
+    "toggle-palette": [
+      "Ctrl+P"
+    ],
+    "toggle-find": [
+      "Ctrl+F",
+      "F3"
+    ],
+    "toggle-devtools": [
+      "Ctrl+Shift+I",
+      "F12"
+    ],
+    "toggle-notes": [
+      "Ctrl+N"
+    ],
+    "toggle-zen-mode": [
+      "Ctrl+Shift+Z"
+    ],
+    "set-quickmark": [
+      "Ctrl+Shift+Q"
+    ],
+    "jump-quickmark": [
+      "Ctrl+J"
+    ],
+    "add-bookmark": [
+      "Ctrl+D"
+    ],
+    "toggle-bookmarks": [
+      "Ctrl+Shift+B"
+    ],
+    "toggle-global-media": [
+      "Ctrl+Shift+0",
+      "F10"
+    ],
+    "toggle-tab-audio-mute": [
+      "Ctrl+Shift+M",
+      "F8"
+    ],
+    "toggle-history": [
+      "Ctrl+Shift+H"
+    ],
+    "toggle-downloads": [
+      "Ctrl+Shift+D"
+    ],
+    "toggle-status-bar": [
+      "Ctrl+/"
+    ],
+    "toggle-split": [
+      "Ctrl+Shift+S"
+    ],
+    "switch-split-focus": [
+      "Ctrl+O"
+    ],
+    "swap-split-panes": [
+      "Ctrl+\\"
+    ],
+    "toggle-dark-reader": [
+      "Alt+D"
+    ],
+    "toggle-reader-view": [
+      "F9"
+    ],
+    "toggle-pin-tab": [
+      "Ctrl+Shift+X",
+      "F4"
+    ],
+    "open-keyboard-settings": [
+      "Ctrl+,"
+    ],
+    "reopen-closed-tab": [
+      "Ctrl+Shift+T"
+    ],
+    "move-tab-left": [
+      "Ctrl+Shift+PageUp"
+    ],
+    "move-tab-right": [
+      "Ctrl+Shift+PageDown"
+    ],
+    "toggle-fullscreen": [
+      "F11"
+    ],
+    "next-tab": [
+      "Ctrl+Tab",
+      "Ctrl+PageDown"
+    ],
+    "previous-tab": [
+      "Ctrl+Shift+Tab",
+      "Ctrl+PageUp"
+    ],
+    "go-back": [
+      "Alt+ArrowLeft"
+    ],
+    "go-forward": [
+      "Alt+ArrowRight"
+    ],
+    "force-reload-tab": [
+      "Ctrl+Shift+R"
+    ],
+    "zoom-in": [
+      "Ctrl+Plus",
+      "Ctrl+="
+    ],
+    "zoom-out": [
+      "Ctrl+-"
+    ],
+    "reset-zoom": [
+      "Ctrl+0"
+    ],
+    "duplicate-tab": [
+      "Ctrl+Shift+K"
+    ],
+    "next-workspace": [
+      "Alt+PageDown"
+    ],
+    "previous-workspace": [
+      "Alt+PageUp"
+    ],
+    "toggle-passthrough": [
+      "Shift+Escape"
+    ],
+    "tab-1": [
+      "Alt+1"
+    ],
+    "tab-2": [
+      "Alt+2"
+    ],
+    "tab-3": [
+      "Alt+3"
+    ],
+    "tab-4": [
+      "Alt+4"
+    ],
+    "tab-5": [
+      "Alt+5"
+    ],
+    "tab-6": [
+      "Alt+6"
+    ],
+    "tab-7": [
+      "Alt+7"
+    ],
+    "tab-8": [
+      "Alt+8"
+    ],
+    "tab-9": [
+      "Alt+9"
+    ],
+    "toggle-global-audio-mute": [],
+    "toggle-clock": [],
+    "cycle-clock-format": [],
+    "toggle-window-controls": [],
+    "toggle-sidebar-pin": [],
+    "toggle-split-horizontal": [],
+    "cycle-split-orientation": [],
+    "close-split-view": [],
+    "hibernate-tabs": [],
+    "wake-all-tabs": [],
+    "open-scripts-dir": [],
+    "open-styles-dir": [],
+    "open-script-storage-dir": [],
+    "reload-user-content": [],
+    "test-google-signin": [],
+    "toggle-theme": [],
+    "check-for-updates": [],
+    "open-diagnostics": [],
+    "toggle-diagnostics-recording": [],
+    "new-workspace": [],
+    "stop-loading": [],
+    "yank-url": [],
+    "enter-insert": [],
+    "scroll-down": [],
+    "scroll-up": [],
+    "scroll-left": [],
+    "scroll-right": [],
+    "half-page-down": [],
+    "half-page-up": [],
+    "page-top": [],
+    "page-bottom": [],
+    "show-whats-new": [],
+    "toggle-native-menu-visibility": [],
+    "move-tab-to-workspace": [],
+    "print-page": [],
+    "toggle-notifications": [],
+    "toggle-webview-theme": [],
+    "toggle-site-shields": []
+  },
+  "normal": {
+    "scroll-down": [
+      "J"
+    ],
+    "scroll-up": [
+      "K"
+    ],
+    "scroll-left": [
+      "H"
+    ],
+    "scroll-right": [
+      "L"
+    ],
+    "half-page-down": [
+      "D"
+    ],
+    "half-page-up": [
+      "U"
+    ],
+    "page-top": [
+      "G G"
+    ],
+    "page-bottom": [
+      "Shift+G"
+    ],
+    "spawn-tab": [
+      "T"
+    ],
+    "remove-tab": [
+      "X"
+    ],
+    "toggle-address": [
+      "O"
+    ],
+    "reload-active-tab": [
+      "R"
+    ],
+    "force-reload-tab": [
+      "Shift+R"
+    ],
+    "go-back": [
+      "Shift+H"
+    ],
+    "go-forward": [
+      "Shift+L"
+    ],
+    "toggle-find": [
+      "/"
+    ],
+    "trigger-hints": [
+      "F"
+    ],
+    "toggle-reader-view": [
+      "E"
+    ],
+    "toggle-tab-audio-mute": [
+      "M"
+    ],
+    "toggle-global-audio-mute": [
+      "Shift+M"
+    ],
+    "toggle-pin-tab": [
+      "P"
+    ],
+    "toggle-dashboard": [
+      "W"
+    ],
+    "focus-sidebar": [
+      "S"
+    ],
+    "yank-url": [
+      "Y"
+    ],
+    "enter-insert": [
+      "I"
+    ],
+    "toggle-menu-bar": [],
+    "focus-nav-buttons": [],
+    "focus-webview": [],
+    "toggle-help": [],
+    "toggle-private-mode": [],
+    "toggle-palette": [],
+    "toggle-devtools": [],
+    "toggle-notes": [],
+    "toggle-zen-mode": [],
+    "set-quickmark": [],
+    "jump-quickmark": [],
+    "add-bookmark": [],
+    "toggle-bookmarks": [],
+    "toggle-global-media": [],
+    "toggle-history": [],
+    "toggle-downloads": [],
+    "toggle-status-bar": [],
+    "toggle-clock": [],
+    "cycle-clock-format": [],
+    "toggle-split": [],
+    "switch-split-focus": [],
+    "swap-split-panes": [],
+    "toggle-dark-reader": [],
+    "toggle-window-controls": [],
+    "reset-zoom": [],
+    "toggle-sidebar-pin": [],
+    "toggle-split-horizontal": [],
+    "cycle-split-orientation": [],
+    "close-split-view": [],
+    "hibernate-tabs": [],
+    "wake-all-tabs": [],
+    "open-scripts-dir": [],
+    "open-styles-dir": [],
+    "open-script-storage-dir": [],
+    "reload-user-content": [],
+    "test-google-signin": [],
+    "toggle-theme": [],
+    "check-for-updates": [],
+    "open-diagnostics": [],
+    "toggle-diagnostics-recording": [],
+    "next-tab": [],
+    "previous-tab": [],
+    "duplicate-tab": [],
+    "next-workspace": [],
+    "previous-workspace": [],
+    "new-workspace": [],
+    "stop-loading": [],
+    "zoom-in": [],
+    "zoom-out": [],
+    "toggle-passthrough": [],
+    "tab-1": [],
+    "tab-2": [],
+    "tab-3": [],
+    "tab-4": [],
+    "tab-5": [],
+    "tab-6": [],
+    "tab-7": [],
+    "tab-8": [],
+    "tab-9": [],
+    "show-whats-new": [],
+    "toggle-native-menu-visibility": [],
+    "move-tab-to-workspace": [],
+    "open-keyboard-settings": [],
+    "reopen-closed-tab": [],
+    "move-tab-left": [],
+    "move-tab-right": [],
+    "toggle-fullscreen": [],
+    "print-page": [],
+    "toggle-notifications": [],
+    "toggle-webview-theme": [],
+    "toggle-site-shields": []
+  }
+}

@@ -47,6 +47,7 @@ contextBridge.exposeInMainWorld('miseAPI', {
     },
     getKeybinds: () => ipcRenderer.invoke('get-keybinds'),
     saveKeybinds: (binds) => ipcRenderer.invoke('save-keybinds', binds),
+    resolveKeybinds: (binds) => ipcRenderer.invoke('resolve-keybinds', binds),
     getActionMetadata: () => ipcRenderer.invoke('get-action-metadata'),
     reloadKeybinds: () => ipcRenderer.invoke('reload-keybinds'),
     getWorkspacePartition: (name) => ipcRenderer.invoke('get-workspace-partition', name),
