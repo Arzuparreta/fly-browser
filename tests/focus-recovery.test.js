@@ -26,4 +26,3 @@ for (const [key, extra, expected] of [
     if (extra.ctrlKey) assert(sent.every(input => input.modifiers.includes('control')));
 }
 console.log('Misrouted native key recovery preserves characters, control keys, modifiers and composition guards.');
-

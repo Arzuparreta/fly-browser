@@ -78,6 +78,12 @@ Validation: npm test and generated-file checks pass. The complete seven-suite de
 
 The final comparison has three alternating cached pairs, three default-GPU/empty-cache pairs with 30-second idle windows, and five cold-start/peak-memory pairs. Process counts and hibernation are equivalent; disabled extension compatibility code stays unloaded. Idle CPU and Preferences/switching work improve. Cached PSS and sampled startup peak are lower, but the cold one-tab idle point retains a 7.0 MiB median difference above main; tiny creation timing differences and the static catalogue/handler cost are also explicit. This is not a literal zero-byte claim. Physical low-RAM/ARM hardware, memory pressure, battery, Wayland and other platforms remain unverified. See the [full ranges, raw data and reproduction](./performance-audit.md).
 
+## Full-branch whitespace verification · 14 October 2026
+
+| ID | Original problem | Result | Validation |
+| :--- | :--- | :--- | :--- |
+| <a id="val-06"></a>VAL-06 | Local working-tree diff checks did not inspect already committed changes. PR #18 CI correctly rejected an extra blank line at EOF in focus-recovery.test.js. | Remove the blank line and validate the complete target-branch diff as well as pending edits before submission. | npm test and git diff --check against fork/personal and origin/main; CI rerun. No application code changes or benchmark hash change. |
+
 ## Keyboard control and personalised bindings · 13 October 2026
 
 Implementation and validation: [PR #1](https://github.com/Arzuparreta/Mise-browser/pull/1), targeting the fork's `personal` branch. It replaces the separate chord and hard-coded page-key paths with a shared grammar and versioned configuration. The page controller is custom Mise code, not Vimium.
