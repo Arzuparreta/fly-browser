@@ -1,14 +1,17 @@
 name: AUR
 
-# Publishes `fly-browser-bin` to the AUR for a stable release. release.yml
+# Attaches `fly-browser-bin`'s PKGBUILD to a stable release and publishes the
+# package to the AUR. release.yml
 # calls it once the GitHub Release exists; dispatch it by hand to publish a
 # release again, with a higher pkgrel when only the packaging changed:
 #
 #   gh workflow run aur.yml -f tag=vX.Y.Z [-f pkgrel=2]
 #
 # It pushes with the AUR_SSH_PRIVATE_KEY secret, a key registered to the AUR
-# account that maintains the package. Without it the job says so and succeeds,
-# so a release is never held back by the AUR.
+# account that maintains the package, once the AUR_PUBLISH repository variable
+# is `true` (docs/releasing.md, "Activating the AUR package"). Until then the
+# job writes the package, says it was not pushed and succeeds, so a release is
+# never held back or marked failed by the AUR.
 on:
   workflow_call:
     inputs:
@@ -30,7 +33,7 @@ on:
         default: '1'
 
 permissions:
-  contents: read
+  contents: write
 
 concurrency:
   group: aur
@@ -59,14 +62,26 @@ jobs:
           node scripts/aur.js --tag "$TAG" --pkgrel "$PKGREL" --sums "$RUNNER_TEMP/SHA256SUMS.txt" --out "$RUNNER_TEMP/package"
           cat "$RUNNER_TEMP/package/PKGBUILD"
 
+      # Arch users can build the package from the release itself, AUR or not.
+      - name: Attach PKGBUILD to the release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ inputs.tag }}
+        run: gh release upload "$TAG" "$RUNNER_TEMP/package/PKGBUILD" --clobber
+
       - name: Push to the AUR
         env:
           AUR_KEY: ${{ secrets.AUR_SSH_PRIVATE_KEY }}
+          AUR_PUBLISH: ${{ vars.AUR_PUBLISH }}
           TAG: ${{ inputs.tag }}
         run: |
-          if [ -z "$AUR_KEY" ]; then
-            echo "::warning::AUR_SSH_PRIVATE_KEY is not set; fly-browser-bin was not published for $TAG."
+          if [ "$AUR_PUBLISH" != true ]; then
+            echo "::notice::The AUR package is not activated (AUR_PUBLISH is not true); fly-browser-bin was not published for $TAG."
             exit 0
+          fi
+          if [ -z "$AUR_KEY" ]; then
+            echo "::error::AUR_PUBLISH is true but the AUR_SSH_PRIVATE_KEY secret is missing."
+            exit 1
           fi
           install -d -m 700 ~/.ssh
           printf '%s\n' "$AUR_KEY" > ~/.ssh/aur
