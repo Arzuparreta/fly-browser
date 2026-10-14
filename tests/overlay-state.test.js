@@ -5,7 +5,7 @@ const vm = require('node:vm');
 const source = file => fs.readFileSync(path.join(__dirname, '..', file), 'utf8').replace(/^import .*;\n/gm, '').replace(/^export /gm, '');
 const handlers = {};
 const roots = {HistoryOverlay: {contains: element => element === 'history'}, NotesOverlay: {contains: element => element === 'notes'}};
-const context = {window: {addEventListener: (type, callback, capture) => {if (!capture) handlers[type] = callback;}}, document: {querySelector: () => null, getElementById: id => roots[id], activeElement: 'history'}};
+const context = {setTimeout: callback => callback(), window: {addEventListener: (type, callback, capture) => {if (!capture) handlers[type] = callback;}}, document: {querySelector: () => null, getElementById: id => roots[id], activeElement: 'history'}};
 vm.createContext(context); vm.runInContext(source('modules/focus.js') + '\nthis.isOverlayTransition = isOverlayTransition;', context);
 let history = true, notes = false;
 context.initialiseOverlayFocus({
@@ -16,6 +16,28 @@ const escape = () => ({key: 'Escape', preventDefault() {this.defaultPrevented = 
 const event = escape(); handlers.keydown(event); assert(event.defaultPrevented); assert(!history);
 history = true; notes = true; context.prepareOverlay('HistoryOverlay'); assert(history); assert(!notes); assert(!context.isOverlayTransition());
 context.document.querySelector = () => ({}); handlers.keydown(escape()); assert(history, 'Native dialogs retain cancellation ownership');
+
+// Pointer-down runs before action handlers, including controls that stop click bubbling.
+const pointerHandlers = {};
+const control = {blur() {context.document.activeElement = null;}};
+const sidebar = {contains: el => el === control, addEventListener(type, callback, capture) {assert(capture); pointerHandlers[type] = callback;}};
+let pageFocus = 0;
+context.initialiseSidebarPointerFocus(sidebar, () => pageFocus++);
+const pointer = (editable = false, form = false) => ({target: {isContentEditable: editable, closest: selector => selector === 'input, textarea, select' ? (form ? {} : null) : control}, preventDefault() {this.defaultPrevented = true;}});
+context.document.querySelector = () => null;
+history = false; context.document.activeElement = control;
+let down = pointer(); pointerHandlers.mousedown(down);
+assert(down.defaultPrevented); assert.equal(context.document.activeElement, null); assert.equal(pageFocus, 0);
+pointerHandlers.click({detail: 1}); assert.equal(pageFocus, 1);
+pointerHandlers.click({detail: 0}); assert.equal(pageFocus, 1);
+history = true; context.document.activeElement = 'history';
+down = pointer(); pointerHandlers.mousedown(down);
+pointerHandlers.click({detail: 1});
+assert(down.defaultPrevented); assert.equal(context.document.activeElement, 'history'); assert.equal(pageFocus, 1, 'Pointer actions must preserve an active overlay');
+for (const down of [pointer(true), pointer(false, true)]) {
+    pointerHandlers.mousedown(down); assert(!down.defaultPrevented); assert.equal(pageFocus, 1);
+}
+console.log('Shared sidebar pointer policy preserves overlays and native editing.');
 
 (async () => {
     const elements = {};

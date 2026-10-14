@@ -1,5 +1,5 @@
 import { openWorkspaceMoveDialog } from './modules/tabActions.js';
-import { initialiseOverlayFocus, prepareOverlay } from './modules/focus.js';
+import { initialiseOverlayFocus, initialiseSidebarPointerFocus, prepareOverlay } from './modules/focus.js';
 import { state } from './modules/state.js';
 import { 
     isDarkMode, 
@@ -529,6 +529,7 @@ async function initializeBrowser() {
 
 function setupEventListeners() {
     const sidebar = document.getElementById('Sidebar');
+    initialiseSidebarPointerFocus(sidebar, focusActiveWebview);
     // Retain hover on window exit; host or guest entry clears it over content.
     document.addEventListener('mouseover', (event) => {
         const inside = sidebar.contains(event.target);
@@ -547,14 +548,7 @@ function setupEventListeners() {
         cycleSplitOrientation();
     });
     for (const [id, navigate] of [['back-btn', navigateFrameBack], ['forward-btn', navigateFrameForward]]) {
-        document.getElementById(id).addEventListener('click', (event) => {
-            navigate();
-            // Pointer clicks return to the page; keyboard clicks keep the control focused.
-            if (event.detail > 0) {
-                event.currentTarget.blur();
-                focusActiveWebview();
-            }
-        });
+        document.getElementById(id).addEventListener('click', navigate);
     }
     document.getElementById('menu-btn').addEventListener('click', toggleDashboardView);
 

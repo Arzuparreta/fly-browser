@@ -14,7 +14,7 @@
     "dist": "electron-builder",
     "dist:linux": "electron-builder --linux",
     "dist:dir": "electron-builder --dir",
-    "test:keyboard-ui": "node tests/keyboard-ui.test.js && node tests/navigation-focus-ui.test.js && node tests/overlay-state-ui.test.js"
+    "test:keyboard-ui": "node tests/keyboard-ui.test.js && node tests/navigation-focus-ui.test.js && node tests/overlay-state-ui.test.js && node tests/sidebar-pointer-focus-ui.test.js"
   },
   "build": {
     "appId": "io.github.rakosn1cek.mise-browser",
