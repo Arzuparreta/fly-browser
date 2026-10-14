@@ -1,5 +1,13 @@
 # Fork fixes ledger
 
+## Interface scaling · 14 October 2026
+
+| ID | Original behaviour | Fix | Validation |
+| --- | --- | --- | --- |
+| <a id="ui-01"></a>UI-01 | Inherited limitation: Fly's compact interface had no independent size preference, making controls and text difficult to read on some small or high-density displays. | New capability: Appearance offers Normal (100%) and Large (125%). Native Electron zoom scales the full browser interface immediately, with a persisted startup preference and no new dependencies, timers or background services. Invalid stored values use Normal; failed writes keep the current size and report an error. Guest zoom is isolated per live tab, with a normal initial size and its current zoom preserved when the interface changes. | Disposable-profile Electron regression covers both modes, persistence across restart, invalid configuration, write failure, focus restoration, constrained layout, existing page zoom, new tabs and navigation. Settings navigation and keyboard recorder/editable-page regressions pass. `npm test`, JavaScript syntax, `git diff --check` and the documentation build pass. |
+
+Remaining limits: validation is Linux/X11, not the owner's ThinkPad or Wayland. Operating-system title bars and native menus retain system scaling. Website zoom is per live tab rather than shared by same-origin tabs; it is not persisted after a tab is destroyed or the app restarts. Large uses 25% more space for interface controls; existing responsive layouts and scrolling handle constrained windows.
+
 ## Output after the terminal closes · 14 October 2026
 
 Implementation/work-log: [fly-browser PR #8](https://github.com/Arzuparreta/fly-browser/pull/8).

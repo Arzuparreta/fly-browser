@@ -10,6 +10,10 @@ All Fly configurations are stored in standard JSON and Markdown format within yo
 
 ## 1. Engine & Preferences (`config.json`)
 
+Use **Settings → Appearance → Interface scale** to choose **Normal (100%)** or **Large (125%)**. Large enlarges text, icons and controls immediately and is remembered across restarts. Website zoom remains independent for each live tab, including across navigation. This uses native rendering rather than stretching a bitmap, and adds no background work. Native operating-system window decorations and menus still follow system settings.
+
+The `interface_scale` preference accepts `"normal"` (default) or `"large"`; unknown values fall back to Normal.
+
 Controls hardware switches, process limits, privacy whitelists, and search preferences:
 
 ```json
