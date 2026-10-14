@@ -417,6 +417,17 @@ function hardenWebviewPreferences(webPreferences) {
     webPreferences.enableRemoteModule = false;
 }
 
+// Scripted popups (window.open with window features) keep their opener, which
+// OAuth and payment flows use to return their result. Links, plain window.open
+// calls and noopener requests have no opener to keep and open as tabs.
+function isScriptedPopup(details) {
+    if (!details || details.disposition !== 'new-window') return false;
+    const features = String(details.features || '').toLowerCase().split(',').map(f => f.trim().split('=')[0]);
+    if (features.includes('noopener') || features.includes('noreferrer')) return false;
+    const url = String(details.url || '');
+    return url === 'about:blank' || /^https?:\/\//i.test(url);
+}
+
 async function clearGoogleAuthCookies(targetSession) {
     if (!targetSession || !targetSession.cookies) return;
     try {
@@ -512,6 +523,7 @@ module.exports = {
     setNetworkExtensions,
     hasNetworkExtensions,
     hardenWebviewPreferences,
+    isScriptedPopup,
     setTrustedDomains,
     isTrustedDomain,
     applySpellcheckerLanguage,

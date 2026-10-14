@@ -171,4 +171,20 @@ console.log('Running Fly authentication & network security tests...');
     console.log('✓ onHeadersReceived PDF viewer redirection verified');
 }
 
+// Scripted popups keep their opener; everything else opens as a tab
+{
+    const popup = (url, disposition, features) => security.isScriptedPopup({ url, disposition, features });
+    assert.strictEqual(popup('https://accounts.google.com/o/oauth2/v2/auth', 'new-window', 'width=500,height=600'), true, 'Sign-in popup must keep its opener');
+    assert.strictEqual(popup('about:blank', 'new-window', 'popup'), true, 'Blank popups navigated by their opener must stay popups');
+    assert.strictEqual(popup('https://example.com/', 'foreground-tab', ''), false, 'Links and plain window.open must open tabs');
+    assert.strictEqual(popup('https://example.com/', 'background-tab', ''), false, 'Background links must open tabs');
+    assert.strictEqual(popup('https://example.com/', 'new-window', 'width=500, noopener'), false, 'noopener popups have no opener to keep');
+    assert.strictEqual(popup('https://example.com/', 'new-window', 'noreferrer'), false, 'noreferrer implies noopener');
+    assert.strictEqual(popup('file:///etc/passwd', 'new-window', 'width=500'), false, 'Local files must not open as popups');
+    assert.strictEqual(popup('javascript:alert(1)', 'new-window', 'width=500'), false, 'Script URLs must not open as popups');
+    assert.strictEqual(security.isScriptedPopup(null), false, 'Missing details must not open popups');
+
+    console.log('✓ Scripted popup classification verified');
+}
+
 console.log('\nAll authentication & network security tests passed successfully!\n');

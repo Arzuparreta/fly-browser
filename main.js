@@ -1814,6 +1814,47 @@ function createWindow() {
 
 }
 
+// Scripted popups become small child windows so sign-in flows can report back
+// to their opener; every other new window opens as a tab in the main window.
+function handleGuestWindowOpen(details) {
+    if (security.isScriptedPopup(details) && mainWindow && !mainWindow.isDestroyed()) {
+        return {
+            action: 'allow',
+            overrideBrowserWindowOptions: {
+                parent: mainWindow,
+                autoHideMenuBar: true,
+                icon: path.join(__dirname, 'assets', 'icons', 'fly-logo256.png'),
+                // Same page identity as tabs, including Google's sign-in User-Agent
+                webPreferences: {
+                    preload: path.join(__dirname, 'webview-preload.js'),
+                    sandbox: true, contextIsolation: true, nodeIntegration: false, nodeIntegrationInSubFrames: false
+                }
+            }
+        };
+    }
+    if (details.url && details.url !== 'about:blank') {
+        if (mainWindow && mainWindow.webContents) {
+            mainWindow.webContents.send('master-shortcut', 'spawn-tab-with-url', details.url);
+        }
+    }
+    return { action: 'deny' };
+}
+
+function attachPopupWindow(popup) {
+    const contents = popup.webContents;
+    popup.setMenu(null);
+    contents.setWindowOpenHandler(handleGuestWindowOpen);
+    contents.on('did-create-window', attachPopupWindow);
+    // Tab shortcuts would act on the main window behind the popup; closing the tab closes the popup
+    contents.on('before-input-event', (event, input) => {
+        const action = keybinds.getActionForInput(input, true);
+        if (action === 'remove-tab') {
+            event.preventDefault();
+            popup.close();
+        }
+    });
+}
+
 app.on('web-contents-created', (event, webContents) => {
     if (webContents.session) {
         configureAndHardenSession(webContents.session);
@@ -2062,14 +2103,8 @@ app.on('web-contents-created', (event, webContents) => {
             menu.popup({ window: mainWindow });
         });
 
-        webContents.setWindowOpenHandler((details) => {
-            if (details.url && details.url !== 'about:blank') {
-                if (mainWindow && mainWindow.webContents) {
-                    mainWindow.webContents.send('master-shortcut', 'spawn-tab-with-url', details.url);
-                }
-            }
-            return { action: 'deny' };
-        });
+        webContents.setWindowOpenHandler(handleGuestWindowOpen);
+        webContents.on('did-create-window', attachPopupWindow);
 
         // Native interception reaches focused iframes as well as the top document.
         // Bare page keys stay in the preload where editable and hints state is known.

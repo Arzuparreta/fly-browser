@@ -188,6 +188,38 @@ export function createWebView(url, currentWS, idx) {
         renderWorkspaceUI(newTargetIdx);
     });
 
+    // Electron destroys a guest that calls window.close() but leaves this element
+    // blank and holding keyboard focus, so no shortcut reaches Fly. Close the tab
+    // as the page asked; a tab Fly cannot close here reloads when next selected.
+    webview.addEventListener('close', () => {
+        const idx = getLiveTabIndex(webview, currentWS);
+        if (idx === -1) {
+            removeWebview(webview);
+            return;
+        }
+        if (currentWS === state.sessionState.current_workspace && !state.dashboardActive && !state.tabPinned?.[currentWS]?.[idx]) {
+            handleTabRemoval(idx);
+            return;
+        }
+        const selected = currentWS === state.sessionState.current_workspace &&
+            document.querySelectorAll('#TabList li')[idx]?.classList.contains('selected');
+        removeWebview(webview);
+        state.activeViewsCache[currentWS][idx] = null;
+        if (!state.tabSleepStates[currentWS]) state.tabSleepStates[currentWS] = [];
+        state.tabSleepStates[currentWS][idx] = {
+            url: state.sessionState.workspaces[currentWS]?.[idx],
+            title: state.activeTitlesCache[currentWS]?.[idx] || 'Tab',
+            scrollX: 0,
+            scrollY: 0,
+            sessionStorage: null,
+            hibernatedAt: Date.now()
+        };
+        state.sessionState.tab_sleep_states = state.tabSleepStates;
+        window.flyAPI.saveSession(state.sessionState);
+        if (selected && !state.dashboardActive) switchTabFocus(idx);
+        else if (currentWS === state.sessionState.current_workspace) updateTabSleepUI(idx, true);
+    });
+
     webview.addEventListener('render-process-gone', (e) => {
         if (e.reason !== 'clean-exit' && e.reason !== 'killed') {
             setTimeout(() => {
