@@ -1,0 +1,67 @@
+name: Release tag
+
+# Merging the version-bump pull request is the release. This tags the merge
+# commit and starts the release workflow on that tag.
+#
+# A tag pushed with `GITHUB_TOKEN` starts no workflow, so this job pushes the
+# tag and then dispatches the workflow a pushed tag would have started.
+# `workflow_dispatch` is the one event a `GITHUB_TOKEN` is allowed to cause.
+# It is dispatched only if it has no run on the tag yet, so a re-run after a
+# failure part-way through starts it only if it is still missing, and a tag
+# `scripts/release.js finish` already pushed (which started it) gets nothing twice.
+on:
+  pull_request:
+    branches: [main]
+    types: [closed]
+
+permissions:
+  contents: read
+
+jobs:
+  tag:
+    if: >-
+      github.event.pull_request.merged
+      && startsWith(github.event.pull_request.head.ref, 'release/v')
+      && github.event.pull_request.head.repo.full_name == github.repository
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: write
+      actions: write
+    steps:
+      # The commit the merge created, not whatever main is by the time this
+      # runs: another merge seconds later must not be what gets tagged.
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.merge_commit_sha }}
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Tag the merge commit and start the release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          BRANCH: ${{ github.event.pull_request.head.ref }}
+        run: |
+          node scripts/version-sync.js --check
+          tag="v$(node scripts/version-sync.js --print)"
+          if [ "release/$tag" != "$BRANCH" ]; then
+            echo "::error::$BRANCH was merged, but the tree declares $tag. Nothing was tagged."
+            exit 1
+          fi
+          if git ls-remote --exit-code --tags origin "refs/tags/$tag" >/dev/null; then
+            echo "::notice::$tag already exists; starting the release only if it has not run."
+            # A tag pushed moments ago may not have registered its run yet.
+            sleep 60
+          else
+            git config user.name "github-actions[bot]"
+            git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+            git tag --annotate "$tag" --message "Fly ${tag#v}"
+            git push origin "$tag"
+          fi
+          runs="$(gh run list --workflow release.yml --branch "$tag" --limit 1 --json databaseId --jq length)"
+          if [ "$runs" = 0 ]; then
+            gh workflow run release.yml --ref "$tag"
+            echo "::notice::release.yml dispatched on $tag."
+          else
+            echo "release.yml already has a run on $tag."
+          fi

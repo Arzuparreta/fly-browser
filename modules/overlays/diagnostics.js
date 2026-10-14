@@ -464,7 +464,7 @@ function buildMarkdownIssueReport(data) {
     lines.push('_Privacy status: 100% local, scrubbed of user paths, auth tokens, and private IPs._\n');
 
     lines.push('#### 1. Software Environment');
-    lines.push(`- **Fly Version**: v${app.version || '0.15.0'}`);
+    lines.push(`- **Fly Version**: ${app.version ? `v${app.version}` : 'unknown'}`);
     lines.push(`- **Electron**: v${app.electron || 'unknown'}`);
     lines.push(`- **Chromium**: v${app.chrome || 'unknown'}`);
     lines.push(`- **Node.js**: v${app.node || 'unknown'}`);

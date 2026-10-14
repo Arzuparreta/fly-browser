@@ -64,55 +64,43 @@ Contributions must follow these conventions:
 * **Language & Runtime:** Pure JavaScript. Frontend browser modules in `modules/` use standard ES modules. Node.js backend processes (`main.js`, `preload.js`, `security.js`, `keybinds.js`) use standard CommonJS.
 * **UK English:** All code comments, documentation, user-facing text, and issue messages must use British English spelling (e.g. `colour`, `customise`, `initialise`, `behaviour`, `optimise`, `sanitised`).
 * **Concise Code Notes:** Keep notes within code human-readable, purposeful, and concise. Avoid redundant commentary restating self-explanatory logic.
-* **Text Formatting:** Do not use double dashes in text, comments, or documentation files.
 * **Security Boundaries:**
   * Webviews must always maintain `contextIsolation: true`, `nodeIntegration: false`, and sandbox protections.
   * IPC messaging must follow existing whitelists in `preload.js` without exposing direct Node.js handles.
   * File and URL inputs must be vetted to prevent scheme traversal or unsanitised execution.
-* **Verification:** Changes must be reviewed and validated with relevant tests. State any unverified desktop or platform behaviour clearly.
 
 ***
 
 ## 5. Verification & Testing
 
-Before submitting a Pull Request, verify that your changes meet quality checks:
+Before opening a pull request:
 
-1. **Syntax Validation:**
-   Ensure modified JavaScript files parse cleanly without syntax errors:
+1. Run the regression suite, which also checks generated files and that every copy of the version agrees:
    ```bash
-   node -c main.js
-   node -c renderer.js
-   node -c preload.js
+   npm test
+   git diff --check
    ```
 
-2. **Documentation Build:**
-   If modifying documentation, verify that the VitePress documentation builds cleanly:
+2. If you touched the documentation, build it:
    ```bash
    npm run docs:build
    ```
 
-3. **Manual Verification:**
-   Test your changes on a physical desktop environment (such as Linux under Wayland or X11) to confirm that layout rendering, keyboard shortcuts, and webview tabs operate properly.
+3. Run Fly (`./launch.sh`) and exercise what you changed. Say in the pull request which platform and display server you tested on, and what you could not test.
 
 ***
 
 ## 6. Submitting Pull Requests
 
-1. Create a descriptive feature branch from `main`:
-   ```bash
-   git checkout -b feat/your-feature-name
-   ```
+1. Branch from `main`. Everything lands on `main` through a pull request; nothing is committed to it directly. Branches named `release/v*` are reserved for version bumps.
 
-2. Commit your changes using Conventional Commits:
-   * `feat:` for new capabilities
-   * `fix:` for bug fixes
-   * `docs:` for documentation updates
-   * `style:` for formatting or visual adjustments
-   * `refactor:` for code restructurings
-   * `perf:` for performance or memory optimisations
-   * `ci:` for continuous integration updates
+2. Keep changes small and focused, and give the pull request a title that says what it does for someone using Fly.
 
-3. Push your branch and open a Pull Request against `main`. Complete the checklist in the [Pull Request Template](.github/PULL_REQUEST_TEMPLATE.md).
+3. Add exactly one impact label, which decides the next version number: `impact:major` (upgrading needs manual action), `impact:minor` (new capability), `impact:patch` (a fix) or `impact:none` (nothing a user could observe). CI fails without one. If you cannot set labels, say in the description which one fits. See [Versioning and releases](docs/releasing.md).
+
+4. Never edit a version number by hand: releases set it.
+
+5. Fill in the [pull request template](.github/PULL_REQUEST_TEMPLATE.md) and let the checks finish.
 
 ***
 

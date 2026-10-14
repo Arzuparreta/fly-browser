@@ -1,0 +1,14 @@
+# Groups the generated release notes by the impact each pull request declared.
+# `impact:none` changes nothing a user could observe, so it is left out.
+changelog:
+  exclude:
+    labels: [impact:none]
+  categories:
+    - title: Changes that need action when upgrading
+      labels: [impact:major]
+    - title: New
+      labels: [impact:minor]
+    - title: Fixes
+      labels: [impact:patch]
+    - title: Other changes
+      labels: ['*']

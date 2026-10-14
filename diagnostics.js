@@ -144,11 +144,6 @@ function getLogs() {
  * Aggregates runtime, hardware, process memory, and sanitised logs.
  */
 async function gatherSystemDiagnostics(sessionStats = {}) {
-    let pkg = { version: '0.15.0' };
-    try {
-        pkg = require('./package.json');
-    } catch (e) {}
-
     const cpus = os.cpus() || [];
     const cpuModel = cpus.length > 0 ? cpus[0].model.trim() : 'Unknown';
     const totalMemBytes = os.totalmem();
@@ -198,7 +193,7 @@ async function gatherSystemDiagnostics(sessionStats = {}) {
         diagnosticsEnabled,
         application: {
             name: 'Fly Browser',
-            version: pkg.version || '0.15.0',
+            version: app.getVersion(),
             electron: process.versions.electron,
             chrome: process.versions.chrome,
             node: process.versions.node,
