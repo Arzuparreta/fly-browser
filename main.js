@@ -1347,6 +1347,8 @@ ipcMain.handle('save-keybinds', (event, binds) => {
     if (result.ok) broadcastKeyboardConfig();
     return result;
 });
+// Imports use the same interpretation as startup without changing the active profile.
+ipcMain.handle('resolve-keybinds', (event, binds) => isKeyboardHost(event) ? keybinds.resolveKeybinds(binds) : {ok: false, error: 'Only browser settings can read bindings.'});
 ipcMain.handle('get-action-metadata', event => isKeyboardHost(event) ? keybinds.getActionMetadata() : null);
 ipcMain.handle('reload-keybinds', event => {
     if (!isKeyboardHost(event)) return null;

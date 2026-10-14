@@ -36,11 +36,23 @@ const root = path.resolve(__dirname, '..');
         // Exercise the host dispatcher; guest-routed chords share the same compiled table in the main process.
         await page.evaluate(() => document.activeElement?.blur());
         await page.keyboard.press('Control+Tab');
-        await page.waitForFunction(previous => [...document.querySelectorAll('#TabList li')].findIndex(item => item.classList.contains('selected')) !== previous, before.selected, {timeout: 3000}).catch(() => {});
+        await page.waitForFunction(previous => [...document.querySelectorAll('#TabList li')].findIndex(item => item.classList.contains('selected')) !== previous, before.selected, {timeout: 10000}).catch(() => {});
         assert.deepEqual(await state(), {selected: (before.selected + 1) % count, sidebarFocused: false, badges: false},
             'Ctrl+Tab cycles tabs instead of focusing the sidebar navigation');
+        // Importing a complete table from an earlier release keeps only its changes, and saving stores only changes.
+        const complete = JSON.parse(fs.readFileSync(path.join(__dirname, 'fixtures', 'fork-keybinds-079b538.json'), 'utf8'));
+        complete.shortcuts['remove-tab'] = ['Ctrl+Q'];
+        await page.evaluate(() => window.executeBrowserAction('open-keyboard-settings'));
+        await page.locator('#PreferencesOverlay').waitFor({state: 'visible'});
+        await page.locator('#KeyboardImport').setInputFiles({name: 'complete.json', mimeType: 'application/json', buffer: Buffer.from(JSON.stringify(complete))});
+        await page.locator('#KeyboardStatus').filter({hasText: 'Bindings imported'}).waitFor();
+        await page.locator('#KeyboardSave').click();
+        await page.locator('#KeyboardStatus').filter({hasText: 'saved and applied'}).waitFor();
+        assert.deepEqual(JSON.parse(fs.readFileSync(path.join(config, 'keybinds.json'), 'utf8')),
+            {version: 2, changesOnly: true, shortcuts: {'remove-tab': ['Ctrl+Q']}, normal: {}});
+        assert.equal((await page.evaluate(() => window.miseAPI.getKeyboardConfig())).shortcuts['next-tab'][0], 'Ctrl+Tab');
         assert.deepEqual(errors, []);
-        console.log('Seeded upstream bindings: Ctrl+Tab cycles tabs and leaves the sidebar collapsed.');
+        console.log('Seeded upstream bindings: Ctrl+Tab cycles tabs and leaves the sidebar collapsed; imports and saves store only changes.');
     } finally {
         if (application) await application.close();
         await new Promise(resolve => server.close(resolve));

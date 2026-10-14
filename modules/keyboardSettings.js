@@ -218,7 +218,9 @@ export async function initialiseKeyboardEditor() {
         el('KeyboardRecordReplace').hidden = result.ok || !reassigned.ok;
     }, true);
     el('KeyboardExport').onclick = () => {
-        const url = URL.createObjectURL(new Blob([JSON.stringify(draft, null, 2) + '\n'], {type: 'application/json'}));
+        // Export only changes so that importing later still picks up newer defaults.
+        const changes = {version: 2, changesOnly: true, ...keyboard.changesFrom(draft, keyboard.validateConfig(defaults, metadata).config)};
+        const url = URL.createObjectURL(new Blob([JSON.stringify(changes, null, 2) + '\n'], {type: 'application/json'}));
         const link = document.createElement('a'); link.href = url; link.download = 'mise-keybinds.json'; link.click();
         setTimeout(() => URL.revokeObjectURL(url), 1000);
         status('Exported the current bindings, including unsaved changes.');
@@ -228,9 +230,7 @@ export async function initialiseKeyboardEditor() {
         if (!file) return;
         try {
             if (file.size > 65536) throw new Error('The bindings file must be smaller than 64 KB.');
-            const imported = JSON.parse(await file.text());
-            const config = imported.version === 2 ? imported : {version: 2, shortcuts: imported, normal: {}};
-            const result = keyboard.validateConfig({version: 2, shortcuts: {...defaults.shortcuts, ...config.shortcuts}, normal: {...defaults.normal, ...config.normal}}, metadata);
+            const result = await window.miseAPI.resolveKeybinds(JSON.parse(await file.text()));
             if (!result.ok) throw new Error(result.error);
             draft = result.config; render(); status('Bindings imported. Review them, then save to apply.');
         } catch (error) { status(error.message); }

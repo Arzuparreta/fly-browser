@@ -4,7 +4,7 @@ Open **Preferences → Keyboard**, or press **Ctrl+,** with a new profile. The e
 
 Select a binding to change it, **Add binding** to record another, or × to remove it. The recorder reports conflicts and offers an explicit reassignment with the affected action names. Select **Record a two-key sequence** for page sequences. Tab moves around the recorder; Escape cancels it.
 
-**Save bindings** validates and applies changes to every open tab immediately. **Discard changes** restores the saved profile. **Reset** restores one action; **Restore browser shortcuts** and **Restore page keys** restore their respective groups. Import stages a profile for review; export includes the current draft. No restart or configuration-file editing is needed.
+**Save bindings** validates and applies changes to every open tab immediately. **Discard changes** restores the saved profile. **Reset** restores one action; **Restore browser shortcuts** and **Restore page keys** restore their respective groups. Import stages a profile for review; export writes the current draft's changes from the defaults. No restart or configuration-file editing is needed.
 
 ## Modes and text input
 
@@ -145,17 +145,18 @@ Existing legacy profiles retain their explicit assignments, including empty and 
 
 ## Profile format
 
-Bindings remain local in `~/.config/mise-browser/keybinds.json`. Version 2 separates browser and page bindings:
+Bindings remain local in `~/.config/mise-browser/keybinds.json`. Version 2 separates browser and page bindings and stores only changes from the defaults:
 
 ```json
 {
   "version": 2,
-  "shortcuts": {"spawn-tab": ["Ctrl+T"], "reload-active-tab": []},
-  "normal": {"page-top": ["G G"], "scroll-down": ["J"]}
+  "changesOnly": true,
+  "shortcuts": {"spawn-tab": ["Ctrl+Shift+Y"], "reload-active-tab": []},
+  "normal": {"scroll-down": ["Z", "ArrowDown"]}
 }
 ```
 
-Omitted actions inherit defaults. An empty array explicitly disables an action in that section. Legacy flat action tables are accepted and migrated on the next successful save. Values use Ctrl, Alt, Shift and Meta; modifiers are normalised, while visible punctuation and the user's keyboard layout are preserved. Use Plus for the plus key. Sequences have two strokes, separated by a space, and a 700 ms interval.
+Omitted actions inherit the current defaults, so later default improvements still apply. An empty array explicitly disables an action in that section. Listed actions take precedence: a default that would collide with one of them loses only the colliding chord instead of rejecting the profile. Files without `changesOnly` come from releases that also stored unchanged defaults; values matching what those releases wrote by default are treated as unchanged. Legacy flat action tables are accepted and migrated on the next successful save. Values use Ctrl, Alt, Shift and Meta; modifiers are normalised, while visible punctuation and the user's keyboard layout are preserved. Use Plus for the plus key. Sequences have two strokes, separated by a space, and a 700 ms interval.
 
 Duplicate assignments, ambiguous sequence prefixes, unknown action IDs and unreachable page bindings are rejected. Saving replaces the file atomically before changing the active map; a failed write leaves the previous file and bindings intact. An invalid file at startup is left untouched, logged and reported in settings, with defaults used for that run.
 

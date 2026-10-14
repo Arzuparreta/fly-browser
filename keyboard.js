@@ -105,5 +105,13 @@
         }
         return {ok: true, config};
     }
-    return {normalise, eventCombo, display, compile, repeatable, validateConfig};
+    // Validated actions whose bindings differ from the validated defaults.
+    function changesFrom(config, defaults) {
+        const changes = {shortcuts: {}, normal: {}};
+        for (const scope of ['shortcuts', 'normal']) for (const [id, values] of Object.entries(config[scope])) {
+            if (JSON.stringify(values) !== JSON.stringify(defaults[scope][id] || [])) changes[scope][id] = values;
+        }
+        return changes;
+    }
+    return {normalise, eventCombo, display, compile, repeatable, validateConfig, changesFrom};
 });

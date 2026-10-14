@@ -33,6 +33,7 @@
       "hinter.js",
       "security.js",
       "keybinds.js",
+      "stored-keybind-defaults.json",
       "userContent.js",
       "diagnostics.js",
       "index.html",
