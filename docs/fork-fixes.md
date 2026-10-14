@@ -2,11 +2,19 @@
 
 Record every solved problem here, including defects inherited from upstream. Each PR must list its applicable entries in the **Fork fixes** section of the PR template. Add the PR link when one exists; do not mark an unmerged PR as repository truth.
 
+## Separation cleanup · 14 October 2026
+
+Implementation/work-log: [fly-browser PR #2](https://github.com/Arzuparreta/fly-browser/pull/2).
+
+| ID | Original problem | Result | Validation |
+| :--- | :--- | :--- | :--- |
+| <a id="fly-02"></a>FLY-02 | The documentation site still published the original author's engineering blog (seven Mise chronicles) under Fly's navigation. The previous repository, Arzuparreta/Mise-browser, was to be deleted, which would lose the work-log pull request descriptions and comments (#1–#21) and break this ledger's links to them. | Remove the blog pages and their navigation and sidebar entries. Before deleting the repository, archive every pull request's title, state, branches, merge commit, description and comments in `history/mise-work-log.md`. Point the ledger's pull request links to that archive. Within the archive, links to deleted branches or rewritten commits point to `main`, and links to merged commits keep their exact revision in fly-browser. The archive lives outside the documentation site. | The documentation build passes without blog routes or dead links. Every archived commit link resolves to an ancestor of `main`, and every `main` file link exists. No branch of the old repository held unique work except the closed upstream proposal branch, a squash of the same changes. The old repository had no releases or issues. |
+
 ## Fly Browser · 14 October 2026
 
 Implementation/work-log: [fly-browser PR #1](https://github.com/Arzuparreta/fly-browser/pull/1).
 
-Fly is the renamed continuation of Mise. Its own repository is [Arzuparreta/fly-browser](https://github.com/Arzuparreta/fly-browser), which is not a GitHub fork. The repository was created with the complete history of Arzuparreta/Mise-browser at bdea294. Earlier entries in this ledger use the Mise name and link to that repository's pull requests.
+Fly is the renamed continuation of Mise. Its own repository is [Arzuparreta/fly-browser](https://github.com/Arzuparreta/fly-browser), which is not a GitHub fork. The repository was created with the complete history of Arzuparreta/Mise-browser at bdea294. That repository has since been deleted. Earlier entries in this ledger use the Mise name, and their pull request links point to the archived work log in [history/mise-work-log.md](https://github.com/Arzuparreta/fly-browser/blob/main/history/mise-work-log.md).
 
 | ID | Original problem | Result | Validation |
 | :--- | :--- | :--- | :--- |
@@ -16,7 +24,7 @@ Remaining limits: unpacked extensions get a new id when their folder moves, beca
 
 ## Independent repository · 14 October 2026
 
-Implementation/work-log: [PR #21](https://github.com/Arzuparreta/Mise-browser/pull/21).
+Implementation/work-log: [PR #21](https://github.com/Arzuparreta/fly-browser/blob/main/history/mise-work-log.md#pr-21).
 
 | ID | Original problem | Result | Validation |
 | :--- | :--- | :--- | :--- |
@@ -26,7 +34,7 @@ Remaining limits: GitHub still lists the repository as a fork until the owner as
 
 ## Bindings saved as changes · 14 October 2026
 
-Implementation/work-log: [PR #20](https://github.com/Arzuparreta/Mise-browser/pull/20). The same change is proposed upstream in [Rakosn1cek/Mise-browser#22](https://github.com/Rakosn1cek/Mise-browser/pull/22).
+Implementation/work-log: [PR #20](https://github.com/Arzuparreta/fly-browser/blob/main/history/mise-work-log.md#pr-20). The same change is proposed upstream in [Rakosn1cek/Mise-browser#22](https://github.com/Rakosn1cek/Mise-browser/pull/22).
 
 | ID | Original problem | Result | Validation |
 | :--- | :--- | :--- | :--- |
@@ -36,7 +44,7 @@ Remaining limits: complete tables saved by earlier version 2 builds keep default
 
 ## Seeded upstream bindings · 14 October 2026
 
-Implementation/work-log: [PR #19](https://github.com/Arzuparreta/Mise-browser/pull/19). The same change is proposed upstream in [Rakosn1cek/Mise-browser#22](https://github.com/Rakosn1cek/Mise-browser/pull/22).
+Implementation/work-log: [PR #19](https://github.com/Arzuparreta/fly-browser/blob/main/history/mise-work-log.md#pr-19). The same change is proposed upstream in [Rakosn1cek/Mise-browser#22](https://github.com/Rakosn1cek/Mise-browser/pull/22).
 
 | ID | Original problem | Result | Validation |
 | :--- | :--- | :--- | :--- |
@@ -46,7 +54,7 @@ Remaining limits: a user who deliberately kept a value identical to an old upstr
 
 ## Performance parity and low-resource audit · 14 October 2026
 
-Implementation/work-log: [PR #18](https://github.com/Arzuparreta/Mise-browser/pull/18).
+Implementation/work-log: [PR #18](https://github.com/Arzuparreta/fly-browser/blob/main/history/mise-work-log.md#pr-18).
 
 Comparison, reproduction, raw measurements, cost map and limits: [performance audit](./performance-audit.md).
 
@@ -128,7 +136,7 @@ The final comparison has three alternating cached pairs, three default-GPU/empty
 
 ## Keyboard control and personalised bindings · 13 October 2026
 
-Implementation and validation: [PR #1](https://github.com/Arzuparreta/Mise-browser/pull/1), targeting the fork's `personal` branch. It replaces the separate chord and hard-coded page-key paths with a shared grammar and versioned configuration. The page controller is custom Mise code, not Vimium.
+Implementation and validation: [PR #1](https://github.com/Arzuparreta/fly-browser/blob/main/history/mise-work-log.md#pr-1), targeting the fork's `personal` branch. It replaces the separate chord and hard-coded page-key paths with a shared grammar and versioned configuration. The page controller is custom Mise code, not Vimium.
 
 | ID | Original problem | Result | Validation |
 | :--- | :--- | :--- | :--- |
@@ -173,7 +181,7 @@ New capabilities include a bounded, in-memory closed-tab URL buffer, direct keyb
 
 ## Address-bar search focus · 13 October 2026
 
-Implementation and validation: [PR #2](https://github.com/Arzuparreta/Mise-browser/pull/2), targeting the fork's `personal` branch.
+Implementation and validation: [PR #2](https://github.com/Arzuparreta/fly-browser/blob/main/history/mise-work-log.md#pr-2), targeting the fork's `personal` branch.
 
 | ID | Original problem | Result | Validation |
 | :--- | :--- | :--- | :--- |
@@ -204,7 +212,7 @@ The extensions integration at `1e71460` was already present on `fork/personal` b
 
 ## Browser panel states and cancellation · 13 October 2026
 
-Implementation and validation: [PR #4](https://github.com/Arzuparreta/Mise-browser/pull/4), targeting the fork's `personal` branch.
+Implementation and validation: [PR #4](https://github.com/Arzuparreta/fly-browser/blob/main/history/mise-work-log.md#pr-4), targeting the fork's `personal` branch.
 
 This pass fixes inherited UI defects and gaps left in the fork's keyboard work. No default binding changes or new dependencies are introduced.
 
@@ -225,7 +233,7 @@ Validation results for this pass: `npm test`, the complete `npm run test:keyboar
 
 ## Sidebar stacking above browser content · 13 October 2026
 
-Implementation and validation: [PR #5](https://github.com/Arzuparreta/Mise-browser/pull/5), targeting the fork's `personal` branch.
+Implementation and validation: [PR #5](https://github.com/Arzuparreta/fly-browser/blob/main/history/mise-work-log.md#pr-5), targeting the fork's `personal` branch.
 
 | ID | Original behaviour | Fix | Validation |
 | :--- | :--- | :--- | :--- |

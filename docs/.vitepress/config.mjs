@@ -26,25 +26,11 @@ export default defineConfig({
       { text: 'Guide', link: '/guide/getting-started' },
       { text: 'Features', link: '/guide/navigation' },
       { text: 'Scripts', link: '/guide/community-scripts' },
-      { text: 'Blog', link: '/blog/' },
       { text: 'Policies', link: '/guide/privacy-policy' },
       { text: 'Reference', link: '/reference/keybinds' },
       { text: 'GitHub', link: 'https://github.com/Arzuparreta/fly-browser' }
     ],
     sidebar: [
-      {
-        text: 'Engineering Blog',
-        items: [
-          { text: 'Chronicles Overview', link: '/blog/' },
-          { text: 'The Awakening Cascade', link: '/blog/tab-traversal-awakening-cascade' },
-          { text: 'Dark Reader Dilemma', link: '/blog/dark-reader-navigation-persistence' },
-          { text: 'Link Hints & Shadow DOM', link: '/blog/shadow-dom-link-hints' },
-          { text: 'Accidental Tab Resurrection', link: '/blog/accidental-tab-resurrection' },
-          { text: 'Google Auth & Botguard', link: '/blog/google-auth-rrk46-botguard' },
-          { text: 'Shadow DOM Keyboard Trap', link: '/blog/shadow-dom-keyboard-trap' },
-          { text: 'The "Zero-RAM" Tab Myth', link: '/blog/tab-hibernation-zero-ram-myth' }
-        ]
-      },
       {
         text: 'Getting Started',
         items: [
