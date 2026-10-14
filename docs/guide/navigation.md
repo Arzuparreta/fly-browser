@@ -9,11 +9,11 @@ Mise Browser is built around a keyboard-driven workflow, enabling efficient navi
 Link Hints allow you to click any link, button, or input field on a web page using short letter combinations:
 
 1. Press **f** in NORMAL mode to trigger the hint labels.
-2. Mise injects two-letter tags over every clickable element on the page, using an ergonomic left-hand home-cluster layout: `q, w, e, a, s, d, z, x, c, r, f, v`.
-3. Type the two letters corresponding to your target element:
+2. Mise injects letter labels over visible interactive elements on the page, using an ergonomic left-hand home-cluster layout: `q, w, e, a, s, d, z, x, c, r, f, v`.
+3. Type the label corresponding to your target element (its length depends on the number of targets):
    - Links navigate immediately.
    - Text inputs and search bars automatically receive focus for immediate typing.
-4. Press **Escape** or press **f** again to dismiss hints without clicking.
+4. Press **Escape** or the browser hint shortcut (**Alt + F** by default) to dismiss hints without clicking. Within hints, **f** can be part of a target label.
 
 ---
 
@@ -164,7 +164,7 @@ Mise Browser provides a Vim-inspired modal navigation engine that frees you from
 | `H` | History Back | Navigates back in page history |
 | `L` | History Forward | Navigates forward in page history |
 | `/` | Find in Page | Opens the in-page search bar |
-| `f` | Link Hints | Injects two-letter hint tags over clickable links |
+| `f` | Link Hints | Injects hint labels over visible interactive elements |
 | `e` | Reader View | Toggles native distraction-free reader view |
 | `w` | Dashboard | Opens the Workspace Dashboard tree |
 | `s` | Focus Sidebar | Moves focus to vertical sidebar tab list |

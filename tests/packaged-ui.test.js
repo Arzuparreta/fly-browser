@@ -24,13 +24,19 @@ const asar = require('@electron/asar');
         assert(paths.data.startsWith(temporary + path.sep), 'Packaged smoke test must use a disposable profile');
         assert(paths.app.endsWith('app.asar'), 'Test must execute the real packaged application');
         assert.match(asar.extractFile(paths.app, 'extensions.js').toString(), /function initializeExtensions/, 'Required local extension runtime must be in the archive');
+        for (const name of ['adblocker-build.js', 'adblocker-worker.js']) assert(asar.extractFile(paths.app, name).length > 0, `${name} must be packaged`);
+        const cache = path.join(paths.data, 'adblock_cache.bin');
+        for (let attempt = 0; !fs.existsSync(cache); attempt++) {
+            if (attempt === 600) throw new Error('Packaged cold filter compiler did not create its cache');
+            await new Promise(resolve => setTimeout(resolve, 50));
+        }
         const page = await application.firstWindow();
         const errors = []; page.on('pageerror', error => errors.push(error.message));
         await page.waitForFunction(() => !!window.executeBrowserAction && document.querySelectorAll('#TabList li').length === 1);
         assert.equal((await page.evaluate(() => window.miseAPI.getAppVersion())).version, version);
         assert.equal((await page.evaluate(() => window.miseAPI.getBrowserSettings())).extensions_enabled, false);
         assert.deepEqual(errors, []);
-        console.log('Packaged ASAR, application startup, version, disabled extensions and disposable paths passed.');
+        console.log('Packaged ASAR, cold filter worker/cache, application startup, version, disabled extensions and disposable paths passed.');
     } finally {
         if (application) await application.close();
         fs.rmSync(temporary, {recursive: true, force: true});

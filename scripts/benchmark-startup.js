@@ -18,6 +18,19 @@ const sources = roots.map(root => {
     return {root, sourceSha256: hash.digest('hex'), electron: require(path.join(root, 'node_modules/electron/package.json')).version};
 });
 
+function treePss(rootPid) {
+    const all = new Map();
+    for (const name of fs.readdirSync('/proc').filter(name => /^\d+$/.test(name))) {
+        try {all.set(Number(name), Number(fs.readFileSync(`/proc/${name}/stat`, 'utf8').split(') ')[1].split(' ')[1]));} catch (_) {}
+    }
+    const pids = new Set([rootPid]);
+    let changed = true;
+    while (changed) {changed = false; for (const [pid, parent] of all) if (!pids.has(pid) && pids.has(parent)) {pids.add(pid); changed = true;}}
+    let kb = 0;
+    for (const pid of pids) {try {kb += Number(fs.readFileSync(`/proc/${pid}/smaps_rollup`, 'utf8').match(/^Pss:\s+(\d+)/m)[1]);} catch (_) {}}
+    return kb / 1024;
+}
+
 (async () => {
     const server = http.createServer((_request, response) => response.end('<!doctype html><title>Startup fixture</title><main id="fixture">Local fixture</main>'));
     await new Promise(resolve => server.listen(0, '127.0.0.1', resolve));
@@ -40,10 +53,12 @@ const {ElectronBlocker}=require(${JSON.stringify(require.resolve('@ghostery/adbl
 const originalEnable=ElectronBlocker.prototype.enableBlockingInSession;
 ElectronBlocker.prototype.enableBlockingInSession=function(session){const result=originalEnable.call(this,session);globalThis.__benchProtected.add(session);return result;};
 require(${JSON.stringify(path.join(root, 'main.js'))});`);
-            let application;
+            let application, memoryTimer, peakPssMiB = 0, memorySamples = 0;
             try {
                 const start = performance.now();
                 application = await _electron.launch({executablePath: path.join(root, 'node_modules/electron/dist/electron'), args: ['--no-sandbox', '--ozone-platform=x11', temporary]});
+                const sampleMemory = () => {peakPssMiB = Math.max(peakPssMiB, treePss(application.process().pid)); memorySamples++;};
+                sampleMemory(); memoryTimer = setInterval(sampleMemory, 100);
                 const page = await application.firstWindow();
                 await page.waitForFunction(() => typeof window.togglePreferencesView === 'function' && document.querySelectorAll('#TabList li').length === 1);
                 for (let attempt = 0; ; attempt++) {
@@ -60,12 +75,14 @@ require(${JSON.stringify(path.join(root, 'main.js'))});`);
                     await page.waitForTimeout(20);
                 }
                 const protectedReadyMs = performance.now() - start;
+                sampleMemory(); clearInterval(memoryTimer);
                 const filterFetches = await application.evaluate(() => globalThis.__benchFetches);
-                const sample = {root, round, localReadyMs, protectedReadyMs, filterFetches};
+                const sample = {root, round, localReadyMs, protectedReadyMs, filterFetches, peakPssMiB, memorySamples};
                 samples.push(sample);
-                fs.writeFileSync(output, JSON.stringify({date: new Date().toISOString(), rounds, sources, display: process.env.DISPLAY || null, displayDescription: process.env.MISE_BENCH_DISPLAY_DESCRIPTION || 'unspecified X11 display', gpu: true, emptyFilterCache: true, samples}, null, 2) + '\n');
+                fs.writeFileSync(output, JSON.stringify({date: new Date().toISOString(), rounds, sources, display: process.env.DISPLAY || null, displayDescription: process.env.MISE_BENCH_DISPLAY_DESCRIPTION || 'unspecified X11 display', gpu: true, emptyFilterCache: true, peakSampling: '100 ms from Electron connection until protected guest readiness; sampled PSS, not a guaranteed allocation peak', samples}, null, 2) + '\n');
                 console.log(JSON.stringify(sample));
             } finally {
+                clearInterval(memoryTimer);
                 if (application) await application.close();
                 fs.rmSync(temporary, {recursive: true, force: true});
             }

@@ -319,7 +319,7 @@ function getAdblocker() {
                 }
             }
             if (!blockerInstance) {
-                blockerInstance = await ElectronBlocker.fromPrebuiltAdsAndTracking();
+                blockerInstance = await require('./adblocker-build')();
                 fs.writeFileSync(CACHE_PATH, blockerInstance.serialize());
             }
             blockerInstance.updateFromDiff({added: [

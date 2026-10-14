@@ -101,6 +101,7 @@ async function run(root, round, url) {
         const dom = await cdp.send('Memory.getDOMCounters');
         const memory = Object.fromEntries((await cdp.send('Performance.getMetrics')).metrics.map(m => [m.name, m.value]));
         const gpuFeatureStatus = await application.evaluate(({app}) => app.getGPUFeatureStatus());
+        const gpuInfo = process.env.MISE_BENCH_GPU === '1' ? await application.evaluate(({app}) => app.getGPUInfo('basic')) : null;
         const filterFetches = await application.evaluate(() => globalThis.__miseBenchFetches);
         const heavyExtensionModule = await application.evaluate(() => globalThis.__miseBenchRequires().some(file => file.includes('/electron-chrome-extensions/')));
         const preferences = {};
@@ -168,7 +169,7 @@ async function run(root, round, url) {
         assert.equal(views, 1, 'Hibernation must leave only the selected view');
         assert.equal(heavyExtensionModule, false, 'Disabled extensions must not load the compatibility library');
         assert.deepEqual(errors, []);
-        const result = {root, round, viewport, readyMs, idleCpuMs, idleCpuPercent, settled: before, idle: after, hostHeapMiB: memory.JSHeapUsedSize / 1048576, dom, preferences, mutationMs, hintsMessages, hintsTransitions, messagesBefore, messagesAfter, tabs, slowSwitchMs, live, sleeping, views, filterFetches, gpuFeatureStatus, heavyExtensionModule};
+        const result = {root, round, viewport, readyMs, idleCpuMs, idleCpuPercent, settled: before, idle: after, hostHeapMiB: memory.JSHeapUsedSize / 1048576, dom, preferences, mutationMs, hintsMessages, hintsTransitions, messagesBefore, messagesAfter, tabs, slowSwitchMs, live, sleeping, views, filterFetches, gpuFeatureStatus, gpuInfo, heavyExtensionModule};
         samples.push(result);
         fs.writeFileSync(output, JSON.stringify({sources, environment: {date: new Date().toISOString(), node: process.version, platform: os.release(), display: process.env.DISPLAY || null, displayDescription: process.env.MISE_BENCH_DISPLAY_DESCRIPTION || 'unspecified X11 display', cpu: os.cpus()[0].model, memoryGiB: os.totalmem()/2**30, idleMs, rounds, seededFilterCache: !!process.env.MISE_BENCH_CACHE, filterCacheSha256, gpu: process.env.MISE_BENCH_GPU === '1'}, samples}, null, 2) + '\n');
         console.log(JSON.stringify({root, round, readyMs, idleCpuPercent, idlePssMiB: after.pssMiB, hostHeapMiB: result.hostHeapMiB, nodes: dom.nodes, filterFetches, hintsMessages, hintsTransitions}));
