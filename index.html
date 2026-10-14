@@ -36,10 +36,13 @@
                 <!-- Populated dynamically -->
             </ul>
 
-            <div id="SidebarClock" class="sidebar-clock" title="Current Date and Time">
-                <i class="fa-regular fa-clock"></i>
-                <span id="SidebarClockDate" class="sidebar-clock-date"></span>
-                <span id="SidebarClockTime" class="sidebar-clock-time"></span>
+            <div class="sidebar-clock-row">
+                <div id="SidebarClock" class="sidebar-clock" title="Current Date and Time">
+                    <i class="fa-regular fa-clock"></i>
+                    <span id="SidebarClockDate" class="sidebar-clock-date"></span>
+                    <span id="SidebarClockTime" class="sidebar-clock-time"></span>
+                </div>
+                <button id="update-indicator-btn" class="nav-icon-button" title="New update available" style="display: none; color: var(--accent);"><i class="fa-solid fa-arrow-up-from-bracket"></i></button>
             </div>
 
             <div class="bottom-theme-layout">
@@ -50,7 +53,7 @@
                 <button id="noti-toggle-btn" class="nav-icon-button" title="Toggle Web Notifications"><i class="fa-regular fa-bell"></i></button>
                 <button id="settings-btn" class="nav-icon-button" title="Settings" aria-label="Settings"><i class="fa-solid fa-gear"></i></button>
             </div>
-            <button id="update-indicator-btn" class="nav-icon-button" title="New update available" style="display: none; color: var(--accent);"><i class="fa-solid fa-arrow-up-from-bracket"></i></button>
+
         </div>
 
         <div id="right-content">

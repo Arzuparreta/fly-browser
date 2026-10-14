@@ -508,9 +508,8 @@ body.sidebar-auto-collapse #Sidebar:not(.pointer-inside):not(.expanded):not(:foc
 }
 
 #update-indicator-btn {
-    position: absolute;
-    right: 4px;
-    bottom: 42px;
+    flex-shrink: 0;
+    margin: 6px 0 4px auto;
 }
 
 body.sidebar-auto-collapse #Sidebar:not(.pointer-inside):not(.expanded):not(:focus-within) .bottom-theme-layout {
@@ -3418,8 +3417,18 @@ body.light-mode .download-action-btn:hover {
     font-weight: 800;
 }
 
+/* The update action shares the clock row and takes space only when visible. */
+.sidebar-clock-row {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    flex-shrink: 0;
+}
+
 /* Sidebar Clock Widget */
 .sidebar-clock {
+    flex: 1;
+    min-width: 0;
     display: flex;
     align-items: center;
     gap: 8px;
@@ -3449,10 +3458,16 @@ body.light-mode .download-action-btn:hover {
 }
 
 .sidebar-clock-date {
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
     opacity: 0.8;
 }
 
 .sidebar-clock-time {
+    flex-shrink: 0;
+    white-space: nowrap;
     color: var(--accent);
     font-weight: 700;
     margin-left: auto;
