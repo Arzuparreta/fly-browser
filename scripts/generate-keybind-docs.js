@@ -33,7 +33,7 @@ Browser chords also work when an iframe has focus. Vim-style page keys and hint 
 
 ## Default bindings
 
-Existing legacy profiles retain their explicit assignments, including empty and alternate bindings. Newly introduced defaults never take over a legacy shortcut. The table below describes new-profile defaults and is generated from the action catalogue.
+Existing legacy profiles retain their explicit assignments, including empty and alternate bindings. Values that an earlier release wrote into the file as its own defaults are not assignments and are replaced by the current defaults. Newly introduced defaults never take over a legacy shortcut the user changed. The table below describes new-profile defaults and is generated from the action catalogue.
 
 | Action | Browser shortcuts | Page keys |
 | :--- | :--- | :--- |

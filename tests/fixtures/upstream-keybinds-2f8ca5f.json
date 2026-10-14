@@ -1,0 +1,65 @@
+{
+    "toggle-menu-bar": "F1",
+    "spawn-tab": "Ctrl+T",
+    "toggle-address": "Ctrl+L",
+    "toggle-dashboard": "Ctrl+Shift+W",
+    "reload-active-tab": [
+        "Ctrl+R",
+        "F5"
+    ],
+    "remove-tab": "Ctrl+X",
+    "focus-sidebar": "Ctrl+S",
+    "focus-nav-buttons": [
+        "Ctrl+Shift+N",
+        "Ctrl+Tab"
+    ],
+    "focus-webview": "Ctrl+W",
+    "trigger-hints": "Ctrl+F",
+    "toggle-help": "Ctrl+H",
+    "toggle-private-mode": "Ctrl+Shift+P",
+    "toggle-palette": "Ctrl+P",
+    "toggle-find": [
+        "Ctrl+Shift+F",
+        "F3"
+    ],
+    "toggle-devtools": [
+        "Ctrl+Shift+I",
+        "F12"
+    ],
+    "toggle-notes": "Ctrl+N",
+    "toggle-zen-mode": "Ctrl+Shift+Z",
+    "set-quickmark": "Ctrl+Shift+Q",
+    "jump-quickmark": "Ctrl+J",
+    "add-bookmark": "Ctrl+Shift+A",
+    "toggle-bookmarks": "Ctrl+Shift+B",
+    "toggle-global-media": [
+        "Ctrl+Shift+0",
+        "F10"
+    ],
+    "toggle-tab-audio-mute": [
+        "Ctrl+Shift+M",
+        "F8"
+    ],
+    "toggle-history": "Ctrl+Shift+H",
+    "toggle-downloads": "Ctrl+Shift+D",
+    "toggle-status-bar": "Ctrl+/",
+    "toggle-split": "Ctrl+Shift+S",
+    "switch-split-focus": "Ctrl+O",
+    "swap-split-panes": "Ctrl+\\",
+    "toggle-dark-reader": "Ctrl+D",
+    "toggle-reader-view": "F9",
+    "toggle-pin-tab": [
+        "Ctrl+Shift+X",
+        "F4"
+    ],
+    "export-reader-to-notes": "Ctrl+Shift+E",
+    "jump-to-tab-1": "Ctrl+1",
+    "jump-to-tab-2": "Ctrl+2",
+    "jump-to-tab-3": "Ctrl+3",
+    "jump-to-tab-4": "Ctrl+4",
+    "jump-to-tab-5": "Ctrl+5",
+    "jump-to-tab-6": "Ctrl+6",
+    "jump-to-tab-7": "Ctrl+7",
+    "jump-to-tab-8": "Ctrl+8",
+    "jump-to-tab-9": "Ctrl+9"
+}

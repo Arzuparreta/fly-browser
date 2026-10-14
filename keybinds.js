@@ -343,17 +343,76 @@ for (const id of Object.keys(ACTION_METADATA)) {
     DEFAULT_KEYBINDS[id] ??= [];
     DEFAULT_NORMAL[id] ??= [];
 }
+// BEGIN GENERATED LEGACY DEFAULTS
+// Every value that a pre-version-2 Mise seeded into keybinds.json (19 versions, generated from upstream/main).
+// Each entry is the sorted, space-separated set of normalised chords for that action.
+const LEGACY_DEFAULTS = {
+    "add-bookmark": ["Ctrl+Shift+A"],
+    "export-reader-to-notes": ["Ctrl+Shift+E"],
+    "focus-nav-buttons": ["Ctrl+Shift+N Ctrl+Tab"],
+    "focus-sidebar": ["Ctrl+M","Ctrl+S"],
+    "focus-webview": ["Ctrl+B","Ctrl+W"],
+    "jump-quickmark": ["Ctrl+J"],
+    "jump-to-tab-1": ["Ctrl+1"],
+    "jump-to-tab-2": ["Ctrl+2"],
+    "jump-to-tab-3": ["Ctrl+3"],
+    "jump-to-tab-4": ["Ctrl+4"],
+    "jump-to-tab-5": ["Ctrl+5"],
+    "jump-to-tab-6": ["Ctrl+6"],
+    "jump-to-tab-7": ["Ctrl+7"],
+    "jump-to-tab-8": ["Ctrl+8"],
+    "jump-to-tab-9": ["Ctrl+9"],
+    "reload-active-tab": ["Ctrl+R","Ctrl+R F5"],
+    "remove-tab": ["Ctrl+D Ctrl+W","Ctrl+X"],
+    "set-quickmark": ["Ctrl+Shift+Q"],
+    "spawn-tab": ["Ctrl+T"],
+    "swap-split-panes": ["Ctrl+Alt+X","Ctrl+\\"],
+    "switch-split-focus": ["Ctrl+Alt+O Ctrl+Alt+Tab","Ctrl+O"],
+    "toggle-address": ["Ctrl+L"],
+    "toggle-bookmarks": ["Ctrl+Shift+B"],
+    "toggle-dark-reader": ["Alt+Shift+D","Ctrl+D"],
+    "toggle-dark-reader-domain": ["Alt+Shift+E"],
+    "toggle-dashboard": ["Ctrl+Shift+W"],
+    "toggle-devtools": ["Ctrl+Shift+I F12"],
+    "toggle-downloads": ["Ctrl+Shift+D"],
+    "toggle-find": ["Ctrl+S","Ctrl+Shift+F","Ctrl+Shift+F F3"],
+    "toggle-global-media": ["Ctrl+Shift+0 F10"],
+    "toggle-help": ["Ctrl+H"],
+    "toggle-history": ["Ctrl+Shift+H"],
+    "toggle-menu-bar": ["F1"],
+    "toggle-notes": ["Ctrl+N"],
+    "toggle-palette": ["Ctrl+P"],
+    "toggle-pin-tab": ["Ctrl+Shift+X F4"],
+    "toggle-private-mode": ["Ctrl+Shift+P"],
+    "toggle-reader-view": ["F9"],
+    "toggle-split": ["Ctrl+Alt+S Ctrl+\\","Ctrl+Shift+S"],
+    "toggle-status-bar": ["Ctrl+/"],
+    "toggle-tab-audio-mute": ["Ctrl+Shift+M F8"],
+    "toggle-zen-mode": ["Ctrl+Shift+Z"],
+    "trigger-hints": ["Ctrl+F"]
+};
+// END GENERATED LEGACY DEFAULTS
 const defaults = { version: 2, shortcuts: DEFAULT_KEYBINDS, normal: DEFAULT_NORMAL };
 let active = keyboard.validateConfig(defaults, ACTION_METADATA).config;
 let configurationWarning = '';
 let compiled = keyboard.compile(active.shortcuts);
 const clone = value => JSON.parse(JSON.stringify(value));
 
+// Legacy files repeat the defaults they were seeded with; only values that differ are user choices.
+function withoutSeededDefaults(raw) {
+    const seeded = ([id, value]) => {
+        const values = Array.isArray(value) ? value : [value];
+        if (!Object.hasOwn(LEGACY_DEFAULTS, id) || !values.length || values.some(item => typeof item !== 'string')) return false;
+        const combos = values.map(keyboard.normalise);
+        return combos.every(Boolean) && LEGACY_DEFAULTS[id].includes([...new Set(combos)].sort().join(' '));
+    };
+    return Object.fromEntries(Object.entries(raw).filter(entry => !seeded(entry)));
+}
 function initialiseCandidate(raw) {
     if (!raw || typeof raw !== 'object' || Array.isArray(raw)) return {ok: false, error: 'Bindings must be an action table.'};
     if (Object.hasOwn(raw, 'version') && raw.version !== 2) return {ok: false, error: 'Unsupported keyboard configuration version.'};
     const legacy = !Object.hasOwn(raw, 'version');
-    const candidate = legacy ? {version: 2, shortcuts: raw, normal: {}} : raw;
+    const candidate = legacy ? {version: 2, shortcuts: withoutSeededDefaults(raw), normal: {}} : raw;
     if (!candidate.shortcuts || !candidate.normal || typeof candidate.shortcuts !== 'object' || typeof candidate.normal !== 'object' || Array.isArray(candidate.shortcuts) || Array.isArray(candidate.normal)) return {ok: false, error: 'Invalid binding tables.'};
     const shortcuts = {...DEFAULT_KEYBINDS, ...candidate.shortcuts};
     if (legacy) {

@@ -37,15 +37,36 @@ for (const mutate of [
 
 const directory = fs.mkdtempSync(path.join(os.tmpdir(), 'mise-keyboard-test-'));
 try {
-    fs.writeFileSync(path.join(directory, 'keybinds.json'), JSON.stringify({
-        'focus-webview': 'Ctrl+W', 'remove-tab': 'Ctrl+X', 'focus-nav-buttons': ['Ctrl+Tab', 'Ctrl+Shift+N'],
-        'reload-active-tab': '', 'trigger-hints': ['Ctrl+F']
+    const legacyFile = path.join(directory, 'keybinds.json');
+    fs.writeFileSync(legacyFile, JSON.stringify({
+        'focus-webview': 'Ctrl+Shift+Y', 'remove-tab': 'Ctrl+Q', 'focus-nav-buttons': ['Ctrl+Tab'],
+        'reload-active-tab': '', 'trigger-hints': ['Ctrl+F', 'Ctrl+G']
     }));
     keybinds.initializeKeybinds(directory);
-    assert.deepEqual(keybinds.getKeybinds()['focus-webview'], ['Ctrl+W']);
+    assert.deepEqual(keybinds.getKeybinds()['focus-webview'], ['Ctrl+Shift+Y']);
     assert.deepEqual(keybinds.getKeybinds()['reload-active-tab'], []);
     assert(!keybinds.getKeybinds()['next-tab'].includes('Ctrl+Tab'), 'New defaults cannot steal legacy bindings');
     assert(!keybinds.getKeybinds()['toggle-find'].includes('Ctrl+F'));
+
+    // Pre-version-2 Mise seeded keybinds.json with its whole default table on first launch.
+    // Those seeded values are not user choices and must not pin obsolete defaults.
+    const seeded = JSON.parse(fs.readFileSync(path.join(__dirname, 'fixtures', 'upstream-keybinds-2f8ca5f.json'), 'utf8'));
+    fs.writeFileSync(legacyFile, JSON.stringify(seeded));
+    keybinds.initializeKeybinds(directory);
+    assert.deepEqual(keybinds.getKeyboardConfig(), defaults, 'An untouched upstream profile receives the current defaults');
+    assert.equal(keybinds.getActionForInput({type: 'keyDown', key: 'Tab', control: true}), 'next-tab');
+    assert.equal(keybinds.getActionForInput({type: 'keyDown', key: 'w', control: true}), 'remove-tab');
+    fs.writeFileSync(legacyFile, JSON.stringify({...seeded, 'toggle-dark-reader-domain': 'Alt+Shift+E', 'focus-sidebar': 'Ctrl+M',
+        'toggle-find': ['F3', 'Ctrl+Shift+F'], 'remove-tab': 'Ctrl+Q', 'focus-nav-buttons': 'Ctrl+Tab', 'toggle-notes': ''}));
+    keybinds.initializeKeybinds(directory);
+    const mixed = keybinds.getKeyboardConfig();
+    assert.equal(mixed.warning, undefined, 'Seeded values of retired actions do not reject the profile');
+    assert.deepEqual(mixed.shortcuts['focus-sidebar'], defaults.shortcuts['focus-sidebar'], 'Older seeded defaults are recognised');
+    assert.deepEqual(mixed.shortcuts['toggle-find'], defaults.shortcuts['toggle-find'], 'Reordered seeded chords remain defaults');
+    assert.deepEqual(mixed.shortcuts['remove-tab'], ['Ctrl+Q']);
+    assert.deepEqual(mixed.shortcuts['focus-nav-buttons'], ['Ctrl+Tab'], 'A changed seeded value is a user choice');
+    assert(!mixed.shortcuts['next-tab'].includes('Ctrl+Tab'));
+    assert.deepEqual(mixed.shortcuts['toggle-notes'], [], 'Disabling a seeded binding is a user choice');
     assert.equal(keybinds.saveKeybinds(directory, defaults).ok, true);
     const disabled = clone(defaults); disabled.shortcuts['reload-active-tab'] = [];
     disabled.normal['scroll-down'] = ['Z', 'ArrowDown'];

@@ -2,6 +2,14 @@
 
 Record every solved problem here, including defects inherited from upstream. Each PR must list its applicable entries in the **Fork fixes** section of the PR template. Add the PR link when one exists; do not mark an unmerged PR as repository truth.
 
+## Seeded upstream bindings · 14 October 2026
+
+| ID | Original problem | Result | Validation |
+| :--- | :--- | :--- | :--- |
+| <a id="kb-30"></a>KB-30 | Every upstream release before configuration version 2 wrote its whole default table to `keybinds.json` on first launch. KB-06's legacy migration treated each of those entries as a deliberate user assignment. An untouched upstream profile therefore kept the obsolete keymap: Ctrl+Tab focused the sidebar navigation (expanding the sidebar with index badges until a click elsewhere) instead of cycling tabs, Ctrl+W focused the page instead of closing the tab, and the new defaults were stripped wherever they collided. A profile seeded by 0f8fb7f was rejected entirely because it contained the retired `toggle-dark-reader-domain` action. The KB-06 test fixture encoded the defect by using seeded upstream values as its example of customisation. | Legacy migration ignores an entry whose normalised chord set equals any default that a seeding upstream version shipped for that action, including retired actions. Only entries that differ remain user choices, keep precedence over new defaults and still block conflicting defaults. Explicitly disabled bindings and changed values are preserved. `scripts/legacy-keybind-defaults.js` regenerates the table from upstream history (19 versions, a71878f–2f8ca5f) and only reads versions that seeded the file. Version 2 files are unchanged. | All 19 historical upstream seeds now load without warnings and resolve Ctrl+Tab to next-tab and Ctrl+W to remove-tab; a real seeded profile from 4057471 loads as exactly the current defaults. Unit tests cover an untouched 2f8ca5f profile, older and reordered seeds, a retired action, a disabled seed, genuine customisations and conflict precedence; they fail on the previous migration. `tests/legacy-keybinds-ui.test.js` launches Electron with a disposable seeded profile and presses Ctrl+Tab: before the fix the sidebar takes focus and the selection does not change; after it the next tab is selected with the sidebar collapsed. |
+
+Remaining limits: a user who deliberately kept a value identical to an old upstream default cannot be distinguished from an untouched seed and receives the current default. Version 2 files saved by the editor store the full table, so a future change to Mise's own defaults would not reach profiles that have saved once; storing only differences needs load-time conflict resolution for version 2 and is not part of this fix.
+
 ## Performance parity and low-resource audit · 14 October 2026
 
 Implementation/work-log: [PR #18](https://github.com/Arzuparreta/Mise-browser/pull/18).
