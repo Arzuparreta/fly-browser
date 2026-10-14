@@ -245,8 +245,18 @@ const paletteContext = {
 };
 vm.createContext(paletteContext); vm.runInContext(paletteSource, paletteContext);
 const commands = vm.runInContext('COMMAND_DEFINITIONS', paletteContext);
+paletteContext.window.dispatchKeyboardAction = action => paletteDispatched.push(action);
 const rawActions = vm.runInContext('commandActions', paletteContext);
 const rendererSource = fs.readFileSync(path.join(__dirname, '..', 'renderer.js'), 'utf8');
+{
+    const local = [], native = [];
+    const route = rendererSource.slice(rendererSource.indexOf('    let keyboardActions ='), rendererSource.indexOf('    let pageStroke ='));
+    const context = {Set, actionNames: Object.keys(keybinds.ACTION_METADATA), window: {executeBrowserAction: action => local.push(action), miseAPI: {executeKeyboardAction: action => native.push(action)}}};
+    vm.runInNewContext(route + '; keyboardActions = new Set(actionNames); window.dispatchKeyboardAction("toggle-help"); window.dispatchKeyboardAction("trigger-hints"); window.dispatchKeyboardAction("toggle-private-mode"); window.dispatchKeyboardAction("toggle-fullscreen"); window.dispatchKeyboardAction("__proto__"); window.dispatchKeyboardAction("unknown");', context);
+    assert.deepEqual(local, ['toggle-help', 'trigger-hints']);
+    assert.deepEqual(native, ['toggle-private-mode', 'toggle-fullscreen']);
+}
+
 // Execute the renderer dispatcher to catch fallthrough between unrelated actions.
 const selectedTabs = [], fallbackActions = [], openedPalettes = [];
 let tabCount = 3;

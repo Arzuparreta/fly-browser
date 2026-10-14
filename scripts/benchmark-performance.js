@@ -81,6 +81,7 @@ async function run(root, round, url) {
             await pause(25);
         }
         const readyMs = performance.now() - start;
+        const viewport = await page.evaluate(() => ({width: innerWidth, height: innerHeight, screenWidth: screen.width, screenHeight: screen.height}));
         for (let i = 0; !fs.existsSync(path.join(temporary, 'data/adblock_cache.bin')); i++) {
             if (i === 600) throw new Error('Filter cache did not initialise');
             await pause(50);
@@ -167,9 +168,9 @@ async function run(root, round, url) {
         assert.equal(views, 1, 'Hibernation must leave only the selected view');
         assert.equal(heavyExtensionModule, false, 'Disabled extensions must not load the compatibility library');
         assert.deepEqual(errors, []);
-        const result = {root, round, readyMs, idleCpuMs, idleCpuPercent, settled: before, idle: after, hostHeapMiB: memory.JSHeapUsedSize / 1048576, dom, preferences, mutationMs, hintsMessages, hintsTransitions, messagesBefore, messagesAfter, tabs, slowSwitchMs, live, sleeping, views, filterFetches, gpuFeatureStatus, heavyExtensionModule};
+        const result = {root, round, viewport, readyMs, idleCpuMs, idleCpuPercent, settled: before, idle: after, hostHeapMiB: memory.JSHeapUsedSize / 1048576, dom, preferences, mutationMs, hintsMessages, hintsTransitions, messagesBefore, messagesAfter, tabs, slowSwitchMs, live, sleeping, views, filterFetches, gpuFeatureStatus, heavyExtensionModule};
         samples.push(result);
-        fs.writeFileSync(output, JSON.stringify({sources, environment: {date: new Date().toISOString(), node: process.version, platform: os.release(), cpu: os.cpus()[0].model, memoryGiB: os.totalmem()/2**30, idleMs, rounds, seededFilterCache: !!process.env.MISE_BENCH_CACHE, filterCacheSha256, gpu: process.env.MISE_BENCH_GPU === '1'}, samples}, null, 2) + '\n');
+        fs.writeFileSync(output, JSON.stringify({sources, environment: {date: new Date().toISOString(), node: process.version, platform: os.release(), display: process.env.DISPLAY || null, displayDescription: process.env.MISE_BENCH_DISPLAY_DESCRIPTION || 'unspecified X11 display', cpu: os.cpus()[0].model, memoryGiB: os.totalmem()/2**30, idleMs, rounds, seededFilterCache: !!process.env.MISE_BENCH_CACHE, filterCacheSha256, gpu: process.env.MISE_BENCH_GPU === '1'}, samples}, null, 2) + '\n');
         console.log(JSON.stringify({root, round, readyMs, idleCpuPercent, idlePssMiB: after.pssMiB, hostHeapMiB: result.hostHeapMiB, nodes: dom.nodes, filterFetches, hintsMessages, hintsTransitions}));
     } finally {
         if (application) await application.close();

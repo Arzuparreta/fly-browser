@@ -362,7 +362,7 @@ export function createWebView(url, currentWS, idx) {
                 setTargetUrl('Reader View Closed', 2000);
             }
         } else if (e.channel === 'keyboard-action') {
-            window.miseAPI.executeKeyboardAction(e.args[0]);
+            window.dispatchKeyboardAction(e.args[0]);
         } else if (e.channel === 'reader-export-notes') {
             exportArticleToNotes(e.args[0]);
         } else if (e.channel === 'reader-export-external') {

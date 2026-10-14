@@ -63,7 +63,7 @@ require(${JSON.stringify(path.join(root, 'main.js'))});`);
                 const filterFetches = await application.evaluate(() => globalThis.__benchFetches);
                 const sample = {root, round, localReadyMs, protectedReadyMs, filterFetches};
                 samples.push(sample);
-                fs.writeFileSync(output, JSON.stringify({date: new Date().toISOString(), rounds, sources, gpu: true, emptyFilterCache: true, samples}, null, 2) + '\n');
+                fs.writeFileSync(output, JSON.stringify({date: new Date().toISOString(), rounds, sources, display: process.env.DISPLAY || null, displayDescription: process.env.MISE_BENCH_DISPLAY_DESCRIPTION || 'unspecified X11 display', gpu: true, emptyFilterCache: true, samples}, null, 2) + '\n');
                 console.log(JSON.stringify(sample));
             } finally {
                 if (application) await application.close();

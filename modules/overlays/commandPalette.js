@@ -684,7 +684,7 @@ export const commandActions = {};
 COMMAND_DEFINITIONS.forEach(cmd => {
     const id = cmd.actionId || cmd.id;
     commandActions[id] = cmd.action;
-    cmd.action = () => window.miseAPI.executeKeyboardAction(id);
+    cmd.action = () => window.dispatchKeyboardAction(id);
     commandRegistry[cmd.title] = cmd.action;
     commandRegistry[cmd.id] = cmd.action;
 });
@@ -696,7 +696,7 @@ window.miseAPI.getActionMetadata().then(metadata => {
         const command = {id, actionId: id, title: info.label, desc: info.category,
             details: info.label, tip: 'Customise this action in Keyboard controls.', category: info.category,
             icon: 'fa-solid fa-keyboard', keywords: [id, info.label],
-            action: () => window.miseAPI.executeKeyboardAction(id)};
+            action: () => window.dispatchKeyboardAction(id)};
         COMMAND_DEFINITIONS.push(command);
         commandRegistry[id] = command.action;
     }

@@ -40,9 +40,15 @@ The subsequent upstream integration adds its Ctrl+1–9 defaults alongside the e
 
 | ID | Original problem | Result | Validation |
 | :--- | :--- | :--- | :--- |
-| VAL-05 | The navigation fixture treated loaded DOM and document.hasFocus as complete input readiness. After a slow navigation behind Preferences, the guest could report both before its first presented frame; the next injected key reached neither host nor guest handlers. Native focus-reset experiments did not fix this and are not shipped. | Wait for two guest animation frames after document readiness and after returning from the occluding Preferences panel. This is a fixture readiness condition, not a sleep or production delay. Keep the immediate tab-close typing fixture unchanged. | Repeated uninstrumented navigation runs and the complete desktop command. Guest/native traces distinguish this case from KB-27's host-routed keys and KB-28's actual hint dismissal. |
+| VAL-05 | The navigation fixture treated loaded DOM and document.hasFocus as complete input readiness. After a slow navigation behind Preferences, the guest could report both before its first presented frame; the next injected key reached neither host nor guest handlers. Native focus-reset experiments did not fix this and are not shipped. | Wait for two guest animation frames after document readiness and after returning from the occluding Preferences panel. Sharing likewise waits for its newly created guest document and first frames before testing Escape. This is a fixture readiness condition, not a sleep or production delay. Keep the immediate tab-close typing fixture unchanged. | Repeated uninstrumented navigation runs and the complete desktop command. Guest/native traces distinguish this case from KB-27's host-routed keys and KB-28's actual hint dismissal. |
 
 Electron's [native input implementation](https://github.com/electron/electron/blob/main/shell/browser/api/electron_api_web_contents.cc) documents input being held before the first frame after navigation. This supports the fixture-readiness explanation; it does not establish a universal diagnosis for every lost key on every platform. Input sent before the new page's first frame is outside this navigation-ready check.
+
+## Local keyboard dispatch · 14 October 2026
+
+| ID | Original problem | Result | Validation |
+| :--- | :--- | :--- | :--- |
+| PERF-08 | Fork browser/page/palette actions took an unnecessary host → main → host round trip even when their work belonged entirely to the renderer. The palette checked overlay state before that asynchronous dispatch completed, briefly returning focus to the guest and making immediate panel cancellation unreliable. | Use one validated renderer dispatch entry for host bindings, guest relays and palette commands. Local actions run synchronously; fullscreen, native menu controls and private-mode toggling retain main-process ownership. Known action IDs come from the validated configuration, including unbound actions. No new IPC channel or polling. | Production-dispatch tests assert local actions avoid the main-process route, native actions retain it and unknown IDs are rejected. Catalogue coverage, recorder/editable-page tests and complete palette/Preferences desktop flows validate the shared route. |
 
 ## Keyboard control and personalised bindings · 13 October 2026
 

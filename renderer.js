@@ -827,10 +827,18 @@ function setupEventListeners() {
     }
 
     let browserKeys = new Map(), pageKeys = new Map(), pagePrefixes = new Set();
+    let keyboardActions = new Set();
+    const nativeKeyboardActions = new Set(['toggle-fullscreen', 'toggle-native-menu-visibility', 'toggle-menu-bar', 'toggle-private-mode']);
+    window.dispatchKeyboardAction = action => {
+        if (!keyboardActions.has(action)) return;
+        if (nativeKeyboardActions.has(action)) window.miseAPI.executeKeyboardAction(action);
+        else window.executeBrowserAction(action);
+    };
     let pageStroke = '', pageStrokeTime = 0;
     window.addEventListener('blur', () => { pageStroke = ''; });
     window.addEventListener('focusin', () => { pageStroke = ''; });
     const applyKeyboardConfig = config => {
+        keyboardActions = new Set(Object.keys(config.shortcuts));
         browserKeys = window.MiseKeyboard.compile(config.shortcuts);
         pageKeys = window.MiseKeyboard.compile(config.normal);
         pagePrefixes = new Set([...pageKeys.keys()].filter(key => key.includes(' ')).map(key => key.split(' ')[0]));
@@ -908,7 +916,7 @@ function setupEventListeners() {
         } else pageStroke = '';
         if (!action) return;
         event.preventDefault(); event.stopImmediatePropagation();
-        if (!event.repeat || window.MiseKeyboard.repeatable(action)) window.miseAPI.executeKeyboardAction(action);
+        if (!event.repeat || window.MiseKeyboard.repeatable(action)) window.dispatchKeyboardAction(action);
     }, true);
 
     const paletteInput = document.getElementById('PaletteInput');

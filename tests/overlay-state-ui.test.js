@@ -141,6 +141,17 @@ const root = path.resolve(__dirname, '..');
         await focused('ShareModalOverlay'); await page.keyboard.press('Escape');
         await page.locator('#ShareModalOverlay').waitFor({state: 'hidden'});
         await page.evaluate(url => window.executeBrowserAction('open-transient-share', url), fixture);
+        // The host overlay can appear before its new guest has a document or input router.
+        for (let attempt = 0; ; attempt++) {
+            const ready = await page.evaluate(() => {
+                const view = document.querySelector('#ShareModalWebviewContainer webview');
+                return !view.isLoading() && view.executeJavaScript('!!document.getElementById("editable")');
+            }).catch(() => false);
+            if (ready) break;
+            if (attempt === 250) throw new Error('Share guest did not load the fixture');
+            await page.waitForTimeout(20);
+        }
+        await page.evaluate(() => document.querySelector('#ShareModalWebviewContainer webview').executeJavaScript('new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve)))'));
         await page.locator('#ShareModalWebviewContainer webview').click({position: {x: 280, y: 20}});
         await page.keyboard.press('Escape'); await page.locator('#ShareModalOverlay').waitFor({state: 'hidden'});
         await page.waitForFunction(() => document.activeElement.tagName === 'WEBVIEW');
