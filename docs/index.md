@@ -20,7 +20,7 @@ hero:
       link: /reference/keybinds
     - theme: alt
       text: View on GitHub
-      link: https://github.com/Rakosn1cek/Mise-browser
+      link: https://github.com/Arzuparreta/Mise-browser
 
 features:
   - title: True Tab Hibernation
@@ -91,7 +91,7 @@ You can also compile directly from source:
 
 ```bash
 # Clone and run from source
-git clone https://github.com/Rakosn1cek/Mise-browser.git
+git clone https://github.com/Arzuparreta/Mise-browser.git
 cd Mise-browser
 npm install
 npm start
@@ -111,8 +111,8 @@ Mise combines the battle-tested rendering speed of Chromium and Electron with cu
 
 ---
 
-## Community & Fediverse
+## Source & Issues
 
-* [Reddit (r/mise_browser)](https://www.reddit.com/r/mise_browser/)
-* <a rel="me" href="https://mastodon.social/@misebrowser">Mastodon (@misebrowser@mastodon.social)</a>
-* [GitHub Discussions & Source](https://github.com/Rakosn1cek/Mise-browser)
+* [Source repository](https://github.com/Arzuparreta/Mise-browser)
+* [Issues](https://github.com/Arzuparreta/Mise-browser/issues)
+* Independent continuation of [Mise by Rakosn1cek](https://github.com/Rakosn1cek/Mise-browser); it does not track that repository.

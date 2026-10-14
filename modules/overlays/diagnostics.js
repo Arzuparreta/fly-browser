@@ -577,7 +577,7 @@ function renderReportPane(data) {
     const githubBtn = document.getElementById('diag-open-github-btn');
     if (githubBtn) {
         githubBtn.onclick = () => {
-            const url = 'https://github.com/rakosn1cek/mise-browser/issues/new';
+            const url = 'https://github.com/Arzuparreta/Mise-browser/issues/new';
             if (window.miseAPI && typeof window.miseAPI.openExternal === 'function') {
                 window.miseAPI.openExternal(url);
             } else if (window.spawnTabWithUrl) {

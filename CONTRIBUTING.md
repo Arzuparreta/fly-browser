@@ -25,7 +25,7 @@ Please use the structured GitHub issue forms to report problems:
 * **Bug Reports:** Use the [Bug Report Form](.github/ISSUE_TEMPLATE/bug_report.yml) to report crashes, unexpected behaviour, or UI glitches. Please include your distribution, window manager (e.g. Hyprland, Sway, i3), display server (Wayland or X11), and relevant logs from the Diagnostics Hub.
 * **Website Breakdowns:** If an external site fails due to adblocking shields, Dark Reader colour inversion, or container authentication loops, submit a [Website Compatibility Report](.github/ISSUE_TEMPLATE/site_compatibility.yml).
 * **Feature Proposals:** Submit ideas via the [Feature Request Form](.github/ISSUE_TEMPLATE/feature_request.yml), describing the proposed keyboard workflow and performance considerations.
-* **Security Disclosures:** Do not report vulnerabilities publicly. Please refer to the [Security Policy](SECURITY.md) and disclose privately via [GitHub Security Advisories](https://github.com/Rakosn1cek/Mise-browser/security/advisories/new).
+* **Security Disclosures:** Do not report vulnerabilities publicly. Please refer to the [Security Policy](SECURITY.md) and disclose privately via [GitHub Security Advisories](https://github.com/Arzuparreta/Mise-browser/security/advisories/new).
 
 ***
 
@@ -41,7 +41,7 @@ Please use the structured GitHub issue forms to report problems:
 
 1. Clone the repository:
    ```bash
-   git clone https://github.com/Rakosn1cek/Mise-browser.git
+   git clone https://github.com/Arzuparreta/Mise-browser.git
    cd Mise-browser
    ```
 
@@ -118,4 +118,4 @@ Before submitting a Pull Request, verify that your changes meet quality checks:
 
 ## 7. Community & Questions
 
-For general discussion, questions regarding configuration, or sharing tips, please visit [GitHub Discussions](https://github.com/Rakosn1cek/Mise-browser/discussions).
+For questions, configuration problems or ideas, open an [issue](https://github.com/Arzuparreta/Mise-browser/issues).

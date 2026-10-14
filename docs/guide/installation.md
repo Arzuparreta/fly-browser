@@ -6,7 +6,7 @@ Mise is designed to be efficient, modular, and easy to run across Linux, macOS, 
 
 ## Pre-Built Executables
 
-Official releases and cryptographic checksums are published for every tagged version on the [GitHub Releases page](https://github.com/Rakosn1cek/Mise-browser/releases).
+Official releases and cryptographic checksums are published for every tagged version on the [GitHub Releases page](https://github.com/Arzuparreta/Mise-browser/releases).
 
 ### Linux (Distro-Agnostic AppImage)
 
@@ -92,7 +92,7 @@ Ensure you have a terminal emulator installed for the clipboard-mediated termina
 
 1. Clone the repository and navigate into the project directory:
    ```bash
-   git clone https://github.com/Rakosn1cek/Mise-browser.git
+   git clone https://github.com/Arzuparreta/Mise-browser.git
    cd Mise-browser
    ```
 

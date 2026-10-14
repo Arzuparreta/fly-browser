@@ -10,7 +10,7 @@ body:
 
         Before submitting, please ensure:
         * You have searched existing issues to confirm this has not already been reported.
-        * For security vulnerabilities, do not file a public issue. Please follow the [Security Policy](https://github.com/Rakosn1cek/Mise-browser/blob/main/SECURITY.md).
+        * For security vulnerabilities, do not file a public issue. Please follow the [Security Policy](https://github.com/Arzuparreta/Mise-browser/blob/main/SECURITY.md).
         * You can export live system and runtime details using the Diagnostics Hub (Preferences -> Diagnostics, or run `open-diagnostics` in the Command Palette via `Ctrl+P`).
 
   - type: textarea

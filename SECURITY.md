@@ -23,7 +23,7 @@ Mise tracks upstream Electron and Chromium releases and audits dependencies twic
 The maintainer appreciates the efforts of security researchers and users who report vulnerabilities responsibly:
 
 * **Private Reporting:** Please do **not** report security vulnerabilities via public GitHub issues, discussions, or pull requests.
-* **Preferred Channel:** Submit vulnerability disclosures privately via [GitHub Security Advisories](https://github.com/Rakosn1cek/Mise-browser/security/advisories/new).
+* **Preferred Channel:** Submit vulnerability disclosures privately via [GitHub Security Advisories](https://github.com/Arzuparreta/Mise-browser/security/advisories/new).
 * **Alternative Contact:** If GitHub Security Advisories are unavailable, contact the project maintainer directly via GitHub profile details.
 * **Information to Include:**
   * Detailed description of the vulnerability and its potential impact.

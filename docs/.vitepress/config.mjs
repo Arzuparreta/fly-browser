@@ -6,19 +6,18 @@ export default defineConfig({
   base: '/Mise-browser/',
   head: [
     ['link', { rel: 'icon', href: '/Mise-browser/logo.png' }],
-    ['link', { rel: 'me', href: 'https://mastodon.social/@misebrowser' }],
     ['meta', { property: 'og:type', content: 'website' }],
     ['meta', { property: 'og:site_name', content: 'Mise Browser' }],
     ['meta', { property: 'og:title', content: 'Mise Browser' }],
     ['meta', { property: 'og:description', content: 'An efficient, keyboard-first, and container-isolated web browser engineered specifically for low-resource and fanless Linux hardware.' }],
-    ['meta', { property: 'og:image', content: 'https://rakosn1cek.github.io/Mise-browser/og-image.png' }],
+    ['meta', { property: 'og:image', content: 'https://arzuparreta.github.io/Mise-browser/og-image.png' }],
     ['meta', { property: 'og:image:width', content: '1280' }],
     ['meta', { property: 'og:image:height', content: '640' }],
-    ['meta', { property: 'og:url', content: 'https://rakosn1cek.github.io/Mise-browser/' }],
+    ['meta', { property: 'og:url', content: 'https://arzuparreta.github.io/Mise-browser/' }],
     ['meta', { name: 'twitter:card', content: 'summary_large_image' }],
     ['meta', { name: 'twitter:title', content: 'Mise Browser' }],
     ['meta', { name: 'twitter:description', content: 'An efficient, keyboard-first, and container-isolated web browser engineered specifically for low-resource and fanless Linux hardware.' }],
-    ['meta', { name: 'twitter:image', content: 'https://rakosn1cek.github.io/Mise-browser/og-image.png' }]
+    ['meta', { name: 'twitter:image', content: 'https://arzuparreta.github.io/Mise-browser/og-image.png' }]
   ],
   themeConfig: {
     logo: '/logo.png',
@@ -30,7 +29,7 @@ export default defineConfig({
       { text: 'Blog', link: '/blog/' },
       { text: 'Policies', link: '/guide/privacy-policy' },
       { text: 'Reference', link: '/reference/keybinds' },
-      { text: 'GitHub', link: 'https://github.com/Rakosn1cek/Mise-browser' }
+      { text: 'GitHub', link: 'https://github.com/Arzuparreta/Mise-browser' }
     ],
     sidebar: [
       {
@@ -89,12 +88,10 @@ export default defineConfig({
       provider: 'local'
     },
     socialLinks: [
-      { icon: 'github', link: 'https://github.com/Rakosn1cek/Mise-browser' },
-      { icon: 'mastodon', link: 'https://mastodon.social/@misebrowser' },
-      { icon: 'reddit', link: 'https://www.reddit.com/r/mise_browser/' }
+      { icon: 'github', link: 'https://github.com/Arzuparreta/Mise-browser' }
     ],
     footer: {
-      message: 'Released under the GNU General Public Licence v3.0. • Follow on <a rel="me" href="https://mastodon.social/@misebrowser" target="_blank">Mastodon</a> • Discuss on <a href="https://www.reddit.com/r/mise_browser/" target="_blank">Reddit</a>',
+      message: 'Released under the GNU General Public Licence v3.0. • Independent continuation of <a href="https://github.com/Rakosn1cek/Mise-browser" target="_blank">Mise by Rakosn1cek</a>',
       copyright: 'Copyright © 2026 Mise Browser Project'
     }
   }

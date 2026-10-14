@@ -2,6 +2,16 @@
 
 Record every solved problem here, including defects inherited from upstream. Each PR must list its applicable entries in the **Fork fixes** section of the PR template. Add the PR link when one exists; do not mark an unmerged PR as repository truth.
 
+## Independent repository · 14 October 2026
+
+Implementation/work-log: [PR #21](https://github.com/Arzuparreta/Mise-browser/pull/21).
+
+| ID | Original problem | Result | Validation |
+| :--- | :--- | :--- | :--- |
+| <a id="standalone-01"></a>STANDALONE-01 | The upstream proposal (Rakosn1cek/Mise-browser#22) was declined, and development continues independently from 3be7f96 (0.15.0). The application still depended on the original repository. The update check queried its releases, so users would be offered builds from another project. The diagnostics "report issue" action, What's New links, package identifier, README downloads and badges, documentation site URLs, security and contribution links, and issue templates all pointed there, as did the original author's Reddit and Mastodon channels. The work log targeted `personal` beside a stale `main`. | Point the update check, release links, diagnostics reports, documentation, security/contribution channels, badges and issue templates to Arzuparreta/Mise-browser. Use the package identifier `io.github.arzuparreta.mise-browser`, so packaged installs do not collide with upstream installs. The name Mise and the `~/.config/mise-browser` profile are unchanged. Remove the original author's community channels and Discussions links, which are disabled here. Credit the origin and upstream commit in the README and documentation footer, and retain the original copyright notices and GPL-3.0-or-later licence. `main` becomes the development and default branch; verification runs on `main` and pull requests. Historical records (blog, ledger, audit) keep their upstream references, and the separate Oversight and community-scripts projects remain linked as optional external tools. | Repository-wide search finds no remaining references to the original repository outside historical records and the two external projects. `npm test`, `git diff --check` and `npm run docs:build` pass. A live update check against this repository's releases endpoint returns no update and no error while no release exists. |
+
+Remaining limits: GitHub still lists the repository as a fork until the owner asks GitHub Support to detach it; this has no API. Private vulnerability reporting must be enabled in repository settings for the security advisory links to accept reports. No binary release has been published from this repository yet.
+
 ## Bindings saved as changes · 14 October 2026
 
 Implementation/work-log: [PR #20](https://github.com/Arzuparreta/Mise-browser/pull/20). The same change is proposed upstream in [Rakosn1cek/Mise-browser#22](https://github.com/Rakosn1cek/Mise-browser/pull/22).
