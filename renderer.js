@@ -818,6 +818,7 @@ function setupEventListeners() {
             'split-toggle-btn': ['toggle-split', 'Toggle split view'], 'pin-sidebar-btn': ['toggle-zen-mode', 'Toggle sidebar expansion'],
             'reader-view-btn': ['toggle-reader-view', 'Toggle reader view'], 'dark-reader-btn': ['toggle-dark-reader', 'Toggle Dark Reader'],
             'back-btn': ['go-back', 'Go back'], 'forward-btn': ['go-forward', 'Go forward'],
+            'settings-btn': ['toggle-help', 'Settings'],
             'toggle-nav-btn': ['spawn-tab', 'New tab'], 'noti-toggle-btn': ['toggle-notifications', 'Toggle web notifications']};
         for (const [id, [action, label]] of Object.entries(controls)) {
             const control = document.getElementById(id);
@@ -851,6 +852,8 @@ function setupEventListeners() {
     });
 
     paletteInput.addEventListener('keydown', handlePaletteInputNavigation);
+
+    document.getElementById('settings-btn').onclick = () => togglePreferencesView();
 
     const pinSidebarBtn = document.getElementById('pin-sidebar-btn');
     if (pinSidebarBtn) {
@@ -888,7 +891,7 @@ function setupEventListeners() {
         });
     });
 
-    const bottomButtons = ['pin-sidebar-btn', 'reader-view-btn', 'dark-reader-btn', 'theme-toggle-btn', 'noti-toggle-btn'];
+    const bottomButtons = ['pin-sidebar-btn', 'reader-view-btn', 'dark-reader-btn', 'theme-toggle-btn', 'noti-toggle-btn', 'settings-btn'];
     bottomButtons.forEach((id, idx) => {
         const btn = document.getElementById(id);
         if (!btn) return;
