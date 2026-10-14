@@ -22,5 +22,5 @@ module.exports = async function buildAdblocker() {
             else reject(new Error(`Filter compiler exited without a cache (code ${code}).`));
         });
     });
-    return ElectronBlocker.deserialize(bytes);
+    return {blocker: ElectronBlocker.deserialize(bytes), cacheBytes: bytes};
 };

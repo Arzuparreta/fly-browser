@@ -3,10 +3,10 @@ const fs = require('node:fs');
 const path = require('node:path');
 const vm = require('node:vm');
 const {Worker} = require('node:worker_threads');
-const {ElectronBlocker, FiltersEngine, Request} = require('@ghostery/adblocker-electron');
+const {ElectronBlocker, adsAndTrackingLists, Request} = require('@ghostery/adblocker-electron');
 const source = fs.readFileSync(path.join(__dirname, '../adblocker-build.js'), 'utf8');
 (async () => {
-    const lists = ['||ads.example^\n@@||allowed.ads.example^', 'example.org##.advert'];
+    const lists = adsAndTrackingLists.map((_url, index) => index % 2 ? 'example.org##.advert' : '||ads.example^\n@@||allowed.ads.example^');
     let resources = JSON.stringify({redirects: [], scriptlets: []});
     const recipe = [], exits = [];
     const context = {__dirname: path.resolve(__dirname, '..'), Uint8Array, fetch: () => {}, module: {exports: {}},
@@ -14,16 +14,16 @@ const source = fs.readFileSync(path.join(__dirname, '../adblocker-build.js'), 'u
             if (id === 'node:worker_threads') return {Worker: class extends Worker {
                 constructor(...args) {super(...args); this.on('exit', code => exits.push(code));}
             }};
-            if (id === '@ghostery/adblocker-electron') return {ElectronBlocker, adsAndTrackingLists: ['preset'],
+            if (id === '@ghostery/adblocker-electron') return {ElectronBlocker, adsAndTrackingLists,
                 fetchLists: async (_fetch, urls) => {recipe.push(urls); return lists;}, fetchResources: async () => resources};
             return require(id);
         }, {resolve: require.resolve})};
     vm.runInNewContext(source, context);
-    const engine = await context.module.exports();
+    const {blocker: engine, cacheBytes} = await context.module.exports();
     assert.deepEqual(exits, [0], 'Compiler must have exited before the engine is attached');
-    assert.deepEqual(recipe, [['preset']]);
-    const expected = FiltersEngine.parse(lists.join('\n')); expected.updateResources(resources, '' + resources.length);
-    assert.deepEqual(Buffer.from(engine.serialize()), Buffer.from(expected.serialize()), 'Worker must preserve the preset parse/resources recipe');
+    assert.deepEqual(recipe, [adsAndTrackingLists]);
+    const expected = await ElectronBlocker.fromPrebuiltAdsAndTracking(async url => ({text: async () => url.endsWith('resources.json') ? resources : lists[adsAndTrackingLists.indexOf(url)]}));
+    assert.deepEqual(Buffer.from(cacheBytes), Buffer.from(expected.serialize()), 'Worker must preserve the preset parse/resources recipe');
     assert(engine.match(Request.fromRawDetails({url: 'https://ads.example/banner.js', type: 'script'})).match);
     assert(!engine.match(Request.fromRawDetails({url: 'https://allowed.ads.example/banner.js', type: 'script'})).match);
     resources = '{';

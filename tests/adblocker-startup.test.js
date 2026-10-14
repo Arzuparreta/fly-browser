@@ -25,10 +25,9 @@ const source = fs.readFileSync(path.join(__dirname, '../security.js'), 'utf8');
                 require: id => {
                     if (id === 'fs') return {...fs, writeFileSync: (...args) => {writes++; return fs.writeFileSync(...args);}};
                     if (id === 'electron') return {app: {getPath: () => temporary}, ipcMain: {removeHandler() {}}};
-                    if (id === './adblocker-build') return () => {builds++; return new Promise((resolve, reject) => {release = ok => ok ? resolve(engine) : reject(new Error('Offline'));});};
+                    if (id === './adblocker-build') return () => {builds++; return new Promise((resolve, reject) => {release = ok => ok ? resolve({blocker: engine, cacheBytes: Buffer.from('cached')}) : reject(new Error('Offline'));});};
                     if (id === '@ghostery/adblocker-electron') return {ElectronBlocker: {
-                        deserialize: buffer => {deserialisations++; if (buffer.toString() === 'corrupt') throw new Error('Invalid cache'); return engine;},
-                        fromPrebuiltAdsAndTracking: () => {builds++; return new Promise((resolve, reject) => {release = ok => ok ? resolve(engine) : reject(new Error('Offline'));});}
+                        deserialize: buffer => {deserialisations++; if (buffer.toString() === 'corrupt') throw new Error('Invalid cache'); return engine;}
                     }};
                     return require(id);
                 }

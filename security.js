@@ -319,8 +319,9 @@ function getAdblocker() {
                 }
             }
             if (!blockerInstance) {
-                blockerInstance = await require('./adblocker-build')();
-                fs.writeFileSync(CACHE_PATH, blockerInstance.serialize());
+                const built = await require('./adblocker-build')();
+                blockerInstance = built.blocker;
+                fs.writeFileSync(CACHE_PATH, built.cacheBytes);
             }
             blockerInstance.updateFromDiff({added: [
                 'youtube.com#@#+js()',
