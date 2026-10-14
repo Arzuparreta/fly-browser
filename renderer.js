@@ -237,12 +237,36 @@ export function displayUpdateNotification(updateInfo) {
         textEl.textContent = `A newer release (${updateInfo.latestVersion}) is available. You are running v${updateInfo.currentVersion}.`;
         banner.style.display = 'flex';
         if (actionBtn) {
-            actionBtn.style.display = 'inline-block';
-            actionBtn.onclick = () => {
+            const openRelease = () => {
                 if (window.flyAPI && typeof window.flyAPI.openExternal === 'function') {
                     window.flyAPI.openExternal(updateInfo.releaseUrl);
                 }
             };
+            actionBtn.style.display = 'inline-block';
+            actionBtn.disabled = false;
+            actionBtn.textContent = 'Download release';
+            actionBtn.onclick = openRelease;
+            // An AppImage replaces itself and restarts; everything else links to the release.
+            if (updateInfo.canInstall && typeof window.flyAPI?.installUpdate === 'function') {
+                actionBtn.textContent = 'Update and restart';
+                actionBtn.onclick = async () => {
+                    actionBtn.disabled = true;
+                    textEl.textContent = `Downloading Fly ${updateInfo.latestVersion}…`;
+                    const stopProgress = window.flyAPI.onUpdateProgress?.(percent => {
+                        textEl.textContent = `Downloading Fly ${updateInfo.latestVersion}… ${percent}%`;
+                    });
+                    const result = await window.flyAPI.installUpdate().catch(err => ({ ok: false, error: err.message }));
+                    stopProgress?.();
+                    if (result && result.ok) {
+                        textEl.textContent = `Restarting into Fly ${updateInfo.latestVersion}…`;
+                        return;
+                    }
+                    textEl.textContent = `The update could not be installed${result?.error ? ` (${result.error})` : ''}. Download it from the release page instead.`;
+                    actionBtn.disabled = false;
+                    actionBtn.textContent = 'Download release';
+                    actionBtn.onclick = openRelease;
+                };
+            }
         }
     }
 
