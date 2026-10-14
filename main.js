@@ -42,6 +42,7 @@ const userContent = require('./userContent');
 const extensions = require('./extensions');
 const diagnostics = require('./diagnostics');
 const { createDesktopIntegration } = require('./desktopIntegration');
+const { downloadAndReplace, restartInto } = require('./appImageUpdate');
 
 // NATIVE CONFIG UTILITIES
 const CONFIG_DIR = path.join(app.getPath('home'), '.config', 'fly-browser');
@@ -876,6 +877,7 @@ async function checkAppUpdates(manual = false) {
             releaseUrl: release.html_url || 'https://github.com/Arzuparreta/fly-browser/releases',
             publishedAt: release.published_at,
             releaseNotes: release.body || '',
+            canInstall: !!getAppImageUpdater(),
             checkedAt: Date.now(),
             manual
         };
@@ -894,18 +896,78 @@ ipcMain.handle('check-for-updates', async (event, manual = false) => {
     return checkAppUpdates(manual);
 });
 
+// An AppImage updates itself in place (appImageUpdate.js). FLY_UPDATE_FEED
+// points it at another server holding latest-linux.yml, to test an update.
+let appImageUpdater;
+function getAppImageUpdater() {
+    if (appImageUpdater !== undefined) return appImageUpdater;
+    appImageUpdater = null;
+    if (process.platform !== 'linux' || !app.isPackaged || !path.isAbsolute(process.env.APPIMAGE || '')) return null;
+    try {
+        const { autoUpdater } = require('electron-updater');
+        autoUpdater.autoDownload = false;
+        autoUpdater.autoInstallOnAppQuit = false;
+        autoUpdater.logger = {
+            debug() {},
+            info() {},
+            warn: message => diagnostics.logEvent('warn', 'update', String(message)),
+            error: message => diagnostics.logEvent('error', 'update', String(message))
+        };
+        if (process.env.FLY_UPDATE_FEED) autoUpdater.setFeedURL({ provider: 'generic', url: process.env.FLY_UPDATE_FEED });
+        appImageUpdater = autoUpdater;
+    } catch (err) {
+        diagnostics.logEvent('warn', 'update', `In-place updates are unavailable: ${err.message}`);
+    }
+    return appImageUpdater;
+}
+
+let updateInstall = null;
+ipcMain.handle('install-update', () => {
+    const updater = getAppImageUpdater();
+    if (!updater) return { ok: false, error: 'This installation cannot update itself' };
+    if (updateInstall) return updateInstall;
+    updateInstall = downloadAndReplace({
+        updater,
+        appImage: process.env.APPIMAGE,
+        onProgress: percent => {
+            if (mainWindow && !mainWindow.isDestroyed()) mainWindow.webContents.send('update-progress', percent);
+        }
+    }).then(destination => {
+        if (!destination) return { ok: false, error: 'The latest release has no AppImage update' };
+        // The menu entry follows the new file now, not at its first start.
+        try {
+            makeDesktopIntegration(destination).refresh();
+        } catch (err) {
+            diagnostics.logEvent('warn', 'desktop', `Could not update the menu entry: ${err.message}`);
+        }
+        restartInto(destination);
+        setImmediate(() => app.quit());
+        return { ok: true };
+    }).catch(err => {
+        diagnostics.logEvent('error', 'update', `AppImage update failed: ${err.message}`);
+        return { ok: false, error: err.message };
+    }).finally(() => {
+        updateInstall = null;
+    });
+    return updateInstall;
+});
+
 // Applications menu entry and default browser (Linux). Packaged builds carry the
 // desktop entry and icons in resources/; a source checkout has them at its root.
-const desktopIntegration = createDesktopIntegration({
-    resourcesDir: app.isPackaged ? process.resourcesPath : path.join(__dirname, 'build'),
-    template: (() => {
-        try {
-            return fs.readFileSync(app.isPackaged ? path.join(process.resourcesPath, 'fly-browser.desktop') : path.join(__dirname, 'fly-browser.desktop'), 'utf8');
-        } catch (e) {
-            return '';
-        }
-    })()
-});
+function makeDesktopIntegration(appImage = process.env.APPIMAGE) {
+    return createDesktopIntegration({
+        appImage,
+        resourcesDir: app.isPackaged ? process.resourcesPath : path.join(__dirname, 'build'),
+        template: (() => {
+            try {
+                return fs.readFileSync(app.isPackaged ? path.join(process.resourcesPath, 'fly-browser.desktop') : path.join(__dirname, 'fly-browser.desktop'), 'utf8');
+            } catch (e) {
+                return '';
+            }
+        })()
+    });
+}
+const desktopIntegration = makeDesktopIntegration();
 
 async function desktopIntegrationAction(action) {
     try {

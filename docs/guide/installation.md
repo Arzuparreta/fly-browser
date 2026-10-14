@@ -86,7 +86,7 @@ Fly includes an integrated, zero-privilege update notification system that check
 - **Manual Check**: Run **Check for Updates** in the Command Centre (`Ctrl+P`) or click **Check for updates** in **Preferences → About** (`Ctrl+H`).
 - **Applying Updates**:
   - **AUR package**: Upgrade with your system (`paru -Syu`).
-  - **Linux AppImage**: Download the latest `.AppImage` from GitHub Releases and replace your existing file.
+  - **Linux AppImage**: Click **Update and restart** in the notice. Fly downloads the new AppImage (only the changed blocks, where it can) and checks it against the release's SHA-512. It then replaces the file and restarts into the new version. A file named with its version, such as `Fly-0.16.1-x86_64.AppImage`, is replaced by one carrying the new version's name; a file you renamed keeps its name. The applications menu entry follows the new file. If anything fails, the old AppImage is left as it was and the notice links to the release page instead.
   - **macOS / Windows**: Download and run the latest installer or portable executable.
   - **Source Installs**: Run `git pull && npm install` in your repository folder.
 

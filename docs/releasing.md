@@ -69,12 +69,14 @@ In Claude Code, `/release` runs these steps and waits between them.
 
 | Platform | Packages |
 | --- | --- |
-| Linux x64 | `Fly-X.Y.Z-x86_64.AppImage`, `Fly-X.Y.Z-x64.tar.gz` |
+| Linux x64 | `Fly-X.Y.Z-x86_64.AppImage`, `Fly-X.Y.Z-x64.tar.gz`, `latest-linux.yml` |
 | macOS Apple Silicon | `Fly-X.Y.Z-arm64.dmg`, `Fly-X.Y.Z-arm64.zip` |
 | macOS Intel | `Fly-X.Y.Z-x64.dmg`, `Fly-X.Y.Z-x64.zip` |
 | Windows x64 | `Fly-Setup-X.Y.Z.exe`, `Fly-X.Y.Z-portable.exe` |
 
 Names carry no spaces, because GitHub renames uploaded files that have them and `SHA256SUMS.txt` would no longer match.
+
+`latest-linux.yml` is what a running AppImage reads to update itself in place: the new AppImage's name, size and SHA-512. A release without it still notifies AppImage users, who then download the file by hand.
 
 The Linux packages carry the desktop entry and the theme icons in `resources/` (`build.linux.extraResources`), for the AUR package to install.
 
