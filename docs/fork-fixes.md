@@ -2,6 +2,16 @@
 
 Record every solved problem here, including defects inherited from upstream. Each PR must list its applicable entries in the **Fork fixes** section of the PR template. Add the PR link when one exists; do not mark an unmerged PR as repository truth.
 
+## Failed startup no longer blocks later launches · 14 October 2026
+
+Implementation/work-log: [fly-browser PR #4](https://github.com/Arzuparreta/fly-browser/pull/4).
+
+| ID | Original problem | Result | Validation |
+| :--- | :--- | :--- | :--- |
+| <a id="dev-02"></a>DEV-02 | Inherited defect: `main.js` takes the single-instance lock before loading its modules. If loading then failed (here, the pre-[DEV-01](#dev-01) `launch.sh` started a fresh clone without `node_modules`, so `@ghostery/adblocker-electron` was missing), Electron reported the error but the process stayed alive with no window and kept the lock. Every later `./launch.sh`, even after dependencies were installed, handed over to that process and exited silently, so nothing opened. A rejected startup inside `whenReady` could leave the same state, and `second-instance` did nothing when no window existed. | An uncaught exception before the first window exists, or a failure in the `whenReady` startup, prints `Fly could not start: …` and exits with status 1, which releases the lock. The guard is removed once the window is created, so later errors keep Electron's normal handling. If a running instance has no window, a new launch creates one and opens the requested URLs instead of doing nothing. | On the affected desktop, a windowless Electron 44.7.2 process from 16:52 held `SingletonLock`; the inspector showed `app.isReady()` true, no windows and only `profileMigration.js` loaded. With a disposable home and `@ghostery` removed, the previous code left a windowless process holding the lock; the fixed code exits with the error. With dependencies present, the first launch opens one "Fly" window and a second launch exits with status 0 and keeps that single window. `npm test` and `git diff --check` pass. |
+
+Remaining limits: an instance that is already stuck (started by an older build) must be ended once by hand, for example `pkill -f 'user-data-dir=.*fly-browser'`. The path that recreates a window for a windowless but fully loaded instance was checked by reading, not reproduced, because Fly quits when its last window closes.
+
 ## Fresh-clone launch and dependency refresh · 14 October 2026
 
 Implementation/work-log: [fly-browser PR #3](https://github.com/Arzuparreta/fly-browser/pull/3).

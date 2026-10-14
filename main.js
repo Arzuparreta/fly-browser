@@ -17,6 +17,14 @@ try {
 // Carry an existing Mise profile over before anything opens the Fly profile directory.
 require('./profileMigration').migrateProfile(path.join(app.getPath('home'), '.config'));
 
+// A failure before the first window exists must end the process. Otherwise a windowless
+// instance keeps the single-instance lock and every later launch exits without a trace.
+function failStartup(err) {
+    console.error('Fly could not start:', err);
+    app.exit(1);
+}
+process.once('uncaughtException', failStartup);
+
 // Single instance lock to prevent duplicate windows when opening external links
 const gotSingleInstanceLock = app.requestSingleInstanceLock();
 if (!gotSingleInstanceLock) {
@@ -2081,7 +2089,11 @@ app.on('child-process-gone', (event, details) => {
 
 if (gotSingleInstanceLock) {
     app.on('second-instance', (event, commandLine) => {
-        if (mainWindow) {
+        if (app.isReady() && (!mainWindow || mainWindow.isDestroyed())) {
+            isRendererReady = false;
+            createWindow();
+            extractUrlsFromArgs(commandLine).forEach(url => dispatchTabUrl(url));
+        } else if (mainWindow) {
             if (mainWindow.isMinimized()) mainWindow.restore();
             mainWindow.show();
             mainWindow.focus();
@@ -2113,7 +2125,8 @@ if (gotSingleInstanceLock) {
             diagnostics.logEvent('warn', 'session', 'Detected previous unclean shutdown or crash, initialising recovery mode');
         }
         createWindow();
+        process.removeListener('uncaughtException', failStartup);
         initializeMemoryWatcher();
-    });
+    }).catch(failStartup);
 }
 
