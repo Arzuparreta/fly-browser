@@ -4,9 +4,9 @@ import { escapeHtml, focusActiveWebview, getActiveWebview } from '../utils.js';
 import { renderWorkspaceUI, switchTabFocus, spawnTabWithUrl, spawnNewBlankTab, handleTabRemoval } from '../webview.js';
 
 export async function loadBookmarksAndQuickmarks() {
-    if (window.miseAPI) {
-        state.bookmarks = (await window.miseAPI.readBookmarks()) || [];
-        state.quickmarks = (await window.miseAPI.readQuickmarks()) || {};
+    if (window.flyAPI) {
+        state.bookmarks = (await window.flyAPI.readBookmarks()) || [];
+        state.quickmarks = (await window.flyAPI.readQuickmarks()) || {};
     }
 }
 
@@ -44,8 +44,8 @@ export function promptQuickmark(mode) {
             const title = activeWv.getTitle() || url;
 
             state.quickmarks[key] = { url, title };
-            if (window.miseAPI && typeof window.miseAPI.saveQuickmarks === 'function') {
-                window.miseAPI.saveQuickmarks(state.quickmarks);
+            if (window.flyAPI && typeof window.flyAPI.saveQuickmarks === 'function') {
+                window.flyAPI.saveQuickmarks(state.quickmarks);
             }
             focusActiveWebview();
         } else if (state.quickmarkMode === 'jump') {
@@ -71,7 +71,7 @@ export async function addCurrentPageToBookmarks() {
 
     if (!state.bookmarks.some(b => b.url === url)) {
         state.bookmarks.unshift({ title, url, timestamp: Date.now() });
-        await window.miseAPI.saveBookmarks(state.bookmarks);
+        await window.flyAPI.saveBookmarks(state.bookmarks);
     }
 }
 
@@ -290,8 +290,8 @@ export function updateBookmarkVisualSelection() {
 export async function deleteBookmark(url) {
     if (!url) return;
     state.bookmarks = state.bookmarks.filter(bm => bm.url !== url);
-    if (window.miseAPI && typeof window.miseAPI.saveBookmarks === 'function') {
-        await window.miseAPI.saveBookmarks(state.bookmarks);
+    if (window.flyAPI && typeof window.flyAPI.saveBookmarks === 'function') {
+        await window.flyAPI.saveBookmarks(state.bookmarks);
     }
     const searchInput = document.getElementById('BookmarkSearchInput');
     renderBookmarksList(searchInput ? searchInput.value : '');
@@ -300,8 +300,8 @@ export async function deleteBookmark(url) {
 export async function deleteQuickmark(key) {
     if (!key || !state.quickmarks[key]) return;
     delete state.quickmarks[key];
-    if (window.miseAPI && typeof window.miseAPI.saveQuickmarks === 'function') {
-        window.miseAPI.saveQuickmarks(state.quickmarks);
+    if (window.flyAPI && typeof window.flyAPI.saveQuickmarks === 'function') {
+        window.flyAPI.saveQuickmarks(state.quickmarks);
     }
     const searchInput = document.getElementById('BookmarkSearchInput');
     renderBookmarksList(searchInput ? searchInput.value : '');

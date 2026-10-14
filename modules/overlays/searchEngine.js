@@ -97,11 +97,11 @@ export function renderSearchAliasesUI() {
             if (state.customSearchAliases && state.customSearchAliases[key]) {
                 delete state.customSearchAliases[key];
                 renderSearchAliasesUI();
-                if (window.miseAPI && typeof window.miseAPI.updateBrowserSettings === 'function') {
+                if (window.flyAPI && typeof window.flyAPI.updateBrowserSettings === 'function') {
                     try {
-                        const currentCfg = await window.miseAPI.getBrowserSettings();
+                        const currentCfg = await window.flyAPI.getBrowserSettings();
                         currentCfg.custom_search_aliases = { ...state.customSearchAliases };
-                        await window.miseAPI.updateBrowserSettings(currentCfg);
+                        await window.flyAPI.updateBrowserSettings(currentCfg);
                         if (typeof window.setTargetUrl === 'function') {
                             window.setTargetUrl(`Removed search alias: ${key}`, 2500);
                         }
@@ -127,8 +127,8 @@ export async function initSearchEnginePreference() {
     const urlInput = document.getElementById('new-alias-url');
 
     try {
-        if (window.miseAPI && typeof window.miseAPI.getBrowserSettings === 'function') {
-            const cfg = await window.miseAPI.getBrowserSettings();
+        if (window.flyAPI && typeof window.flyAPI.getBrowserSettings === 'function') {
+            const cfg = await window.flyAPI.getBrowserSettings();
             if (cfg) {
                 if (select && cfg.search_engine) {
                     select.value = cfg.search_engine;
@@ -147,9 +147,9 @@ export async function initSearchEnginePreference() {
     if (select) {
         select.addEventListener('change', async (e) => {
             try {
-                const currentCfg = await window.miseAPI.getBrowserSettings();
+                const currentCfg = await window.flyAPI.getBrowserSettings();
                 currentCfg.search_engine = e.target.value;
-                await window.miseAPI.updateBrowserSettings(currentCfg);
+                await window.flyAPI.updateBrowserSettings(currentCfg);
             } catch (err) {
                 console.error('Failed to update search engine preference:', err);
             }
@@ -191,11 +191,11 @@ export async function initSearchEnginePreference() {
         keyInput.value = '';
         urlInput.value = '';
 
-        if (window.miseAPI && typeof window.miseAPI.updateBrowserSettings === 'function') {
+        if (window.flyAPI && typeof window.flyAPI.updateBrowserSettings === 'function') {
             try {
-                const currentCfg = await window.miseAPI.getBrowserSettings();
+                const currentCfg = await window.flyAPI.getBrowserSettings();
                 currentCfg.custom_search_aliases = { ...state.customSearchAliases };
-                await window.miseAPI.updateBrowserSettings(currentCfg);
+                await window.flyAPI.updateBrowserSettings(currentCfg);
                 if (typeof window.setTargetUrl === 'function') {
                     window.setTargetUrl(`Added search alias: ${key} -> ${url}`, 3000);
                 }

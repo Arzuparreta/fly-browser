@@ -1,5 +1,5 @@
 // Optional Linux/Electron comparison. Normal launches load no instrumentation.
-const { _electron } = require(process.env.MISE_PLAYWRIGHT_MODULE || 'playwright');
+const { _electron } = require(process.env.FLY_PLAYWRIGHT_MODULE || 'playwright');
 const fs = require('node:fs');
 const os = require('node:os');
 const path = require('node:path');
@@ -10,11 +10,11 @@ const crypto = require('node:crypto');
 
 const roots = process.argv.slice(2).map(root => path.resolve(root));
 if (roots.length < 2) throw new Error('Supply at least two source directories, each with node_modules/electron.');
-const rounds = Number(process.env.MISE_BENCH_ROUNDS || 3);
-const idleMs = Number(process.env.MISE_BENCH_IDLE_MS || 5000);
-const output = process.env.MISE_BENCH_OUTPUT || '/tmp/mise-performance.json';
+const rounds = Number(process.env.FLY_BENCH_ROUNDS || 3);
+const idleMs = Number(process.env.FLY_BENCH_IDLE_MS || 5000);
+const output = process.env.FLY_BENCH_OUTPUT || '/tmp/fly-performance.json';
 const samples = [];
-const filterCacheSha256 = process.env.MISE_BENCH_CACHE ? crypto.createHash('sha256').update(fs.readFileSync(process.env.MISE_BENCH_CACHE)).digest('hex') : null;
+const filterCacheSha256 = process.env.FLY_BENCH_CACHE ? crypto.createHash('sha256').update(fs.readFileSync(process.env.FLY_BENCH_CACHE)).digest('hex') : null;
 const sources = roots.map(root => {
     const files = fs.readdirSync(root).filter(name => /\.(js|html|css)$/.test(name));
     const visit = directory => {for(const entry of fs.readdirSync(path.join(root, directory), {withFileTypes: true})) {const relative=path.join(directory, entry.name);if(entry.isDirectory()) visit(relative);else if(relative.endsWith('.js')) files.push(relative);}};
@@ -51,23 +51,23 @@ function processes(rootPid) {
 }
 
 async function run(root, round, url) {
-    const temporary = fs.mkdtempSync(path.join(os.tmpdir(), 'mise-perf-'));
-    const configDir = path.join(temporary, '.config/mise-browser');
+    const temporary = fs.mkdtempSync(path.join(os.tmpdir(), 'fly-perf-'));
+    const configDir = path.join(temporary, '.config/fly-browser');
     fs.mkdirSync(configDir, {recursive: true});
     fs.writeFileSync(path.join(configDir, 'session.json'), JSON.stringify({current_workspace: 'Bench', workspaces: {Bench: [url]}}));
     // All other preferences use the revision's clean defaults, including opaque colours.
     fs.writeFileSync(path.join(configDir, 'config.json'), JSON.stringify({last_seen_version: '0.15.0'}));
-    if (process.env.MISE_BENCH_CACHE) {
+    if (process.env.FLY_BENCH_CACHE) {
         fs.mkdirSync(path.join(temporary, 'data'), {recursive: true});
-        fs.copyFileSync(process.env.MISE_BENCH_CACHE, path.join(temporary, 'data/adblock_cache.bin'));
+        fs.copyFileSync(process.env.FLY_BENCH_CACHE, path.join(temporary, 'data/adblock_cache.bin'));
     }
-    fs.writeFileSync(path.join(temporary, 'package.json'), JSON.stringify({name: 'mise-performance-fixture', version: require(path.join(root, 'package.json')).version, main: 'main.js'}));
+    fs.writeFileSync(path.join(temporary, 'package.json'), JSON.stringify({name: 'fly-performance-fixture', version: require(path.join(root, 'package.json')).version, main: 'main.js'}));
     const entry = path.join(temporary, 'main.js');
-    fs.writeFileSync(entry, `const {app}=require('electron'); app.setAppPath(${JSON.stringify(root)}); app.setPath('home',${JSON.stringify(temporary)}); app.setPath('userData',${JSON.stringify(path.join(temporary, 'data'))}); app.commandLine.appendSwitch('proxy-server','http://127.0.0.1:9'); app.commandLine.appendSwitch('proxy-bypass-list','<-loopback>;127.0.0.1'); globalThis.__miseBenchFetches=0; const originalFetch=globalThis.fetch; globalThis.fetch=(...args)=>{globalThis.__miseBenchFetches++; return originalFetch(...args);}; globalThis.__miseBenchRequires=()=>Object.keys(require.cache); globalThis.__miseBenchMessages={}; app.on('web-contents-created',(_event,wc)=>wc.on('ipc-message',(_event,channel)=>{globalThis.__miseBenchMessages[channel]=(globalThis.__miseBenchMessages[channel]||0)+1;})); require(${JSON.stringify(path.join(root, 'main.js'))});`);
+    fs.writeFileSync(entry, `const {app}=require('electron'); app.setAppPath(${JSON.stringify(root)}); app.setPath('home',${JSON.stringify(temporary)}); app.setPath('userData',${JSON.stringify(path.join(temporary, 'data'))}); app.commandLine.appendSwitch('proxy-server','http://127.0.0.1:9'); app.commandLine.appendSwitch('proxy-bypass-list','<-loopback>;127.0.0.1'); globalThis.__flyBenchFetches=0; const originalFetch=globalThis.fetch; globalThis.fetch=(...args)=>{globalThis.__flyBenchFetches++; return originalFetch(...args);}; globalThis.__flyBenchRequires=()=>Object.keys(require.cache); globalThis.__flyBenchMessages={}; app.on('web-contents-created',(_event,wc)=>wc.on('ipc-message',(_event,channel)=>{globalThis.__flyBenchMessages[channel]=(globalThis.__flyBenchMessages[channel]||0)+1;})); require(${JSON.stringify(path.join(root, 'main.js'))});`);
     let application;
     try {
         const start = performance.now();
-        application = await _electron.launch({executablePath: path.join(root, 'node_modules/electron/dist/electron'), args: ['--no-sandbox', ...(process.env.MISE_BENCH_GPU === '1' ? [] : ['--disable-gpu']), '--ozone-platform=x11', temporary]});
+        application = await _electron.launch({executablePath: path.join(root, 'node_modules/electron/dist/electron'), args: ['--no-sandbox', ...(process.env.FLY_BENCH_GPU === '1' ? [] : ['--disable-gpu']), '--ozone-platform=x11', temporary]});
         const page = await application.firstWindow();
         const errors = []; page.on('pageerror', error => errors.push(error.message));
         await page.waitForFunction(() => typeof window.togglePreferencesView === 'function' && document.querySelectorAll('#TabList li').length === 1).catch(async error => {
@@ -101,9 +101,9 @@ async function run(root, round, url) {
         const dom = await cdp.send('Memory.getDOMCounters');
         const memory = Object.fromEntries((await cdp.send('Performance.getMetrics')).metrics.map(m => [m.name, m.value]));
         const gpuFeatureStatus = await application.evaluate(({app}) => app.getGPUFeatureStatus());
-        const gpuInfo = process.env.MISE_BENCH_GPU === '1' ? await application.evaluate(({app}) => app.getGPUInfo('basic')) : null;
-        const filterFetches = await application.evaluate(() => globalThis.__miseBenchFetches);
-        const heavyExtensionModule = await application.evaluate(() => globalThis.__miseBenchRequires().some(file => file.includes('/electron-chrome-extensions/')));
+        const gpuInfo = process.env.FLY_BENCH_GPU === '1' ? await application.evaluate(({app}) => app.getGPUInfo('basic')) : null;
+        const filterFetches = await application.evaluate(() => globalThis.__flyBenchFetches);
+        const heavyExtensionModule = await application.evaluate(() => globalThis.__flyBenchRequires().some(file => file.includes('/electron-chrome-extensions/')));
         const preferences = {};
         for (const rate of [1, 6]) {
             await cdp.send('Emulation.setCPUThrottlingRate', {rate});
@@ -125,15 +125,15 @@ async function run(root, round, url) {
         await cdp.send('Emulation.setCPUThrottlingRate', {rate: 1});
         // Exercise page churn in separate tasks, so MutationObservers actually run.
         await page.evaluate(() => {window.__benchHintsMessages = 0; document.querySelector('webview').addEventListener('ipc-message', event => {if(event.channel === 'guest-hints-state') window.__benchHintsMessages++;});});
-        const messagesBefore = await application.evaluate(() => ({...globalThis.__miseBenchMessages}));
+        const messagesBefore = await application.evaluate(() => ({...globalThis.__flyBenchMessages}));
         const mutationMs = await guest(`(async () => { const start = performance.now(); for(let i=0;i<150;i++){ const n=document.createElement('div');document.body.append(n);n.remove();await new Promise(r=>setTimeout(r,0)); } return performance.now()-start; })()`);
         const hintsMessages = await page.evaluate(() => window.__benchHintsMessages);
-        await guest("{const layer=document.createElement('div');layer.id='mise-hint-layer';document.documentElement.append(layer);}");
+        await guest("{const layer=document.createElement('div');layer.id='fly-hint-layer';document.documentElement.append(layer);}");
         await pause(40);
-        await guest("document.getElementById('mise-hint-layer').remove()");
+        await guest("document.getElementById('fly-hint-layer').remove()");
         await pause(40);
         const hintsTransitions = await page.evaluate(() => window.__benchHintsMessages) - hintsMessages;
-        const messagesAfter = await application.evaluate(() => ({...globalThis.__miseBenchMessages}));
+        const messagesAfter = await application.evaluate(() => ({...globalThis.__flyBenchMessages}));
         const tabs = await page.evaluate(async url => {
             const {spawnTabWithUrl, switchTabFocus, hibernateInactiveTabs} = await import('./modules/webview.js');
             const times = [];
@@ -171,7 +171,7 @@ async function run(root, round, url) {
         assert.deepEqual(errors, []);
         const result = {root, round, viewport, readyMs, idleCpuMs, idleCpuPercent, settled: before, idle: after, hostHeapMiB: memory.JSHeapUsedSize / 1048576, dom, preferences, mutationMs, hintsMessages, hintsTransitions, messagesBefore, messagesAfter, tabs, slowSwitchMs, live, sleeping, views, filterFetches, gpuFeatureStatus, gpuInfo, heavyExtensionModule};
         samples.push(result);
-        fs.writeFileSync(output, JSON.stringify({sources, environment: {date: new Date().toISOString(), node: process.version, platform: os.release(), display: process.env.DISPLAY || null, displayDescription: process.env.MISE_BENCH_DISPLAY_DESCRIPTION || 'unspecified X11 display', cpu: os.cpus()[0].model, memoryGiB: os.totalmem()/2**30, idleMs, rounds, seededFilterCache: !!process.env.MISE_BENCH_CACHE, filterCacheSha256, gpu: process.env.MISE_BENCH_GPU === '1'}, samples}, null, 2) + '\n');
+        fs.writeFileSync(output, JSON.stringify({sources, environment: {date: new Date().toISOString(), node: process.version, platform: os.release(), display: process.env.DISPLAY || null, displayDescription: process.env.FLY_BENCH_DISPLAY_DESCRIPTION || 'unspecified X11 display', cpu: os.cpus()[0].model, memoryGiB: os.totalmem()/2**30, idleMs, rounds, seededFilterCache: !!process.env.FLY_BENCH_CACHE, filterCacheSha256, gpu: process.env.FLY_BENCH_GPU === '1'}, samples}, null, 2) + '\n');
         console.log(JSON.stringify({root, round, readyMs, idleCpuPercent, idlePssMiB: after.pssMiB, hostHeapMiB: result.hostHeapMiB, nodes: dom.nodes, filterFetches, hintsMessages, hintsTransitions}));
     } finally {
         if (application) await application.close();

@@ -1,10 +1,10 @@
 # Overview & Philosophy
 
-Mise Browser is a personal, keyboard-centric web browser designed specifically for low-power and fanless Linux systems.
+Fly Browser is a small, minimal alternative to the typical Linux browsers. It keeps full control of the browser on the keyboard while offering a polished experience for mouse users.
 
-The name **Mise** originates from the Czech word for *"mission"* (pronounced roughly as *mee-seh*). It represents the project's core mission: reclaiming the web browser as an intentional, ultra-lean tool built for privacy, focus, and low-resource efficiency rather than an all-consuming operating system of its own.
+Fly is the renamed, independent continuation of [Mise by Rakosn1cek](https://github.com/Rakosn1cek/Mise-browser). It aims to stay a lean, intentional tool built for privacy, focus and low resource use rather than an all-consuming platform of its own.
 
-Typical desktop browsers consume gigabytes of memory across dozens of background processes, producing heat and throttling on fanless hardware. Mise provides an ultra-lean browsing environment by stripping away unnecessary browser overhead while delivering modern privacy isolation, multi-account containers, and complete mouse-free operation.
+Typical desktop browsers consume gigabytes of memory across dozens of background processes, producing heat and throttling on fanless hardware. Fly provides an ultra-lean browsing environment by stripping away unnecessary browser overhead while delivering modern privacy isolation, multi-account containers, and complete mouse-free operation.
 
 ---
 
@@ -21,20 +21,20 @@ Typical desktop browsers consume gigabytes of memory across dozens of background
 
 ## Architecture at a Glance
 
-Mise combines the rendering capabilities of Chromium with Electron and native system utilities:
+Fly combines the rendering capabilities of Chromium with Electron and native system utilities:
 
 1. **Main Process (`main.js`)**: Manages window lifecycles, memory pressure monitoring, partition isolation, native configurations, and keybinding translation.
 2. **Renderer Process (`renderer.js`)**: Powers the vertical tab sidebar, overlays, link hints, notes, and user interface.
 3. **Webview Partitions (`modules/webview.js`)**: Renders individual web pages inside sandboxed `<webview>` tags assigned to specific workspace container partitions.
-4. **Local Configuration (`~/.config/mise-browser/`)**: Human-readable JSON files and Markdown notes stored safely in your home directory.
+4. **Local Configuration (`~/.config/fly-browser/`)**: Human-readable JSON files and Markdown notes stored safely in your home directory.
 
 ---
 
 ## First Steps
 
-Once launched, Mise presents a clean, distraction-free window:
+Once launched, Fly presents a clean, distraction-free window:
 
-![Mise Browser Workspace Welcome Screen](/screenshots/new-workspace.webp)
+![Fly Browser Workspace Welcome Screen](/screenshots/new-workspace.webp)
 
 - Press **Ctrl + L** to open the floating address bar and navigate to any site.
 - Press **Ctrl + T** to open a new tab.

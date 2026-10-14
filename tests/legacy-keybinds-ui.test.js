@@ -1,4 +1,4 @@
-const { _electron } = require(process.env.MISE_PLAYWRIGHT_MODULE || 'playwright');
+const { _electron } = require(process.env.FLY_PLAYWRIGHT_MODULE || 'playwright');
 const fs = require('node:fs');
 const os = require('node:os');
 const path = require('node:path');
@@ -7,10 +7,10 @@ const assert = require('node:assert/strict');
 const createElectronFixture = require('./electron-fixture');
 const root = path.resolve(__dirname, '..');
 (async () => {
-    const temporary = fs.mkdtempSync(path.join(os.tmpdir(), 'mise-legacy-keybinds-'));
+    const temporary = fs.mkdtempSync(path.join(os.tmpdir(), 'fly-legacy-keybinds-'));
     const entry = createElectronFixture(root, temporary);
     // An untouched profile from an upstream release that seeded its defaults into keybinds.json.
-    const config = path.join(temporary, '.config', 'mise-browser');
+    const config = path.join(temporary, '.config', 'fly-browser');
     fs.mkdirSync(config, {recursive: true});
     fs.copyFileSync(path.join(__dirname, 'fixtures', 'upstream-keybinds-2f8ca5f.json'), path.join(config, 'keybinds.json'));
     const server = http.createServer((_request, response) => response.end('<!doctype html><title>Legacy fixture</title><p>page</p>'));
@@ -18,7 +18,7 @@ const root = path.resolve(__dirname, '..');
     let application;
     try {
         application = await _electron.launch({executablePath: path.join(root, 'node_modules/electron/dist/electron'),
-            args: ['--no-sandbox', '--disable-gpu', `--ozone-platform=${process.env.MISE_TEST_OZONE_PLATFORM || 'x11'}`, entry]});
+            args: ['--no-sandbox', '--disable-gpu', `--ozone-platform=${process.env.FLY_TEST_OZONE_PLATFORM || 'x11'}`, entry]});
         const page = await application.firstWindow();
         const errors = []; page.on('pageerror', error => errors.push(error.message));
         await page.waitForFunction(() => !!window.executeBrowserAction);
@@ -50,7 +50,7 @@ const root = path.resolve(__dirname, '..');
         await page.locator('#KeyboardStatus').filter({hasText: 'saved and applied'}).waitFor();
         assert.deepEqual(JSON.parse(fs.readFileSync(path.join(config, 'keybinds.json'), 'utf8')),
             {version: 2, changesOnly: true, shortcuts: {'remove-tab': ['Ctrl+Q']}, normal: {}});
-        assert.equal((await page.evaluate(() => window.miseAPI.getKeyboardConfig())).shortcuts['next-tab'][0], 'Ctrl+Tab');
+        assert.equal((await page.evaluate(() => window.flyAPI.getKeyboardConfig())).shortcuts['next-tab'][0], 'Ctrl+Tab');
         assert.deepEqual(errors, []);
         console.log('Seeded upstream bindings: Ctrl+Tab cycles tabs and leaves the sidebar collapsed; imports and saves store only changes.');
     } finally {

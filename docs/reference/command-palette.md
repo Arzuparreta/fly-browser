@@ -1,14 +1,14 @@
 # Command Centre & Palette Reference
 
-The Command Centre gives you rapid, searchable access to all Mise operations, internal features, and keyboard shortcuts from a full-page educational overlay.
+The Command Centre gives you rapid, searchable access to all Fly operations, internal features, and keyboard shortcuts from a full-page educational overlay.
 
 ---
 
 ## Accessing the Command Centre
 
-![Mise Browser Command Centre Overlay](/screenshots/command-centre.webp)
+![Fly Browser Command Centre Overlay](/screenshots/command-centre.webp)
 
-- Press **Ctrl + P** from anywhere in Mise.
+- Press **Ctrl + P** from anywhere in Fly.
 - Type to fuzzy-search commands, shortcuts, and keywords dynamically.
 - Click category filter chips (**All**, **Tabs & Navigation**, **Split View**, **Performance**, **Tools & Notes**, **Scripts & Styles**, **Preferences**) to filter actions instantly.
 - Use **Up** and **Down** arrow keys (or hover with your cursor) to inspect any command.
@@ -75,7 +75,7 @@ The shortcuts below are new-profile defaults. The palette shows your saved assig
 
 | Command Title | Shortcut | Action ID | Description |
 | :--- | :--- | :--- | :--- |
-| **Toggle Quick Notes** | `Ctrl+N` | `toggle-notes` | Markdown scratchpad saved locally to `~/.config/mise-browser/notes.md`. |
+| **Toggle Quick Notes** | `Ctrl+N` | `toggle-notes` | Markdown scratchpad saved locally to `~/.config/fly-browser/notes.md`. |
 | **Export Article to Quick Notes** | `Ctrl+Shift+E` | `export-reader-to-notes` | Appends active distilled Reader View article or page clipping to `notes.md`. |
 | **Export Article to External Note App** | - | `export-reader-to-external` | Saves clipping as standalone Markdown note and opens in preferred note app. |
 | **Open Quick Notes in External Application** | - | `open-notes-external` | Opens `notes.md` in configured external note app or system default editor. |
@@ -94,8 +94,8 @@ The shortcuts below are new-profile defaults. The palette shows your saved assig
 
 | Command Title | Shortcut | Action ID | Description |
 | :--- | :--- | :--- | :--- |
-| **Open User Scripts Directory** | — | — | Opens `~/.config/mise-browser/scripts` in default system file manager. |
-| **Open User Styles Directory** | — | — | Opens `~/.config/mise-browser/styles` in default system file manager. |
+| **Open User Scripts Directory** | — | — | Opens `~/.config/fly-browser/scripts` in default system file manager. |
+| **Open User Styles Directory** | — | — | Opens `~/.config/fly-browser/styles` in default system file manager. |
 | **Reload User Scripts and Styles** | — | — | Hot-reloads custom scripts and stylesheets across active webviews. |
 
 ### Preferences & System

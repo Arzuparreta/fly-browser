@@ -1,9 +1,9 @@
 # Configuration Files
 
-All Mise configurations are stored in standard JSON and Markdown format within your user profile directory:
+All Fly configurations are stored in standard JSON and Markdown format within your user profile directory:
 
 ```text
-~/.config/mise-browser/
+~/.config/fly-browser/
 ```
 
 ---
@@ -85,7 +85,7 @@ Controls hardware switches, process limits, privacy whitelists, and search prefe
   - **`overlay_opacity`**: Modal and overlay translucency percentage (50% to 100%) for Command Palette, Notes, and Preferences.
 - **`trusted_domains`**: Array of domains exempted from tracker blocking and fingerprint spoofing.
 - **`extensions_enabled`**: Master switch for [opt-in Chrome extensions](/guide/extensions). `false` by default; while `false` nothing extension related runs.
-- **`extensions_by_workspace`**: Map of workspace name to the extension folders (inside `~/.config/mise-browser/extensions/`) allowed to run there, e.g. `{ "Work": ["darkreader"] }`. Workspaces not listed load nothing.
+- **`extensions_by_workspace`**: Map of workspace name to the extension folders (inside `~/.config/fly-browser/extensions/`) allowed to run there, e.g. `{ "Work": ["darkreader"] }`. Workspaces not listed load nothing.
 - **`extensions_unload_grace_seconds`**: How long a workspace keeps its extensions loaded after its last live tab closes or hibernates (default `60`).
 - **`external_notes_command`**: Optional command or executable used to open notes and clippings (e.g. `obsidian`, `logseq`, `code`, `nvim`). When empty, uses system default Markdown handler.
 - **`custom_search_aliases`**: Key-value map of custom search prefixes and URL templates (with `%s` query placeholder). Typing `<alias> <query>` in the address bar (such as `aur hyprland` or `gh mise`) bypasses fallback engines and routes queries straight to the destination. Users can configure, override, or extend default built-ins directly in Preferences.
@@ -137,8 +137,8 @@ Maintains persistent workspaces, URLs, titles, Dark Reader preferences, and slee
 
 ### Session Files & Atomic Resilience
 
-- **`session.json`**: The primary session state file. To prevent data corruption during sudden system shutdowns or power cuts, Mise writes updates to a temporary file (`session.json.tmp`) and swaps it via an atomic POSIX rename operation.
-- **`session.json.bak`**: A rolling backup journal automatically updated before every primary session flush. If `session.json` is missing or corrupted, Mise automatically recovers the previous state from this journal.
+- **`session.json`**: The primary session state file. To prevent data corruption during sudden system shutdowns or power cuts, Fly writes updates to a temporary file (`session.json.tmp`) and swaps it via an atomic POSIX rename operation.
+- **`session.json.bak`**: A rolling backup journal automatically updated before every primary session flush. If `session.json` is missing or corrupted, Fly automatically recovers the previous state from this journal.
 - **`session_sentinel.json`**: A lifecycle sentinel file recording whether the previous browser process terminated cleanly (`"clean_exit": true`). If an abrupt crash, kill signal, or power failure occurs, the sentinel detects `clean_exit: false` on startup, engages crash recovery mode, forces background tabs to sleep to avert memory spikes, and displays a status bar notice.
 
 ---

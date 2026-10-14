@@ -80,7 +80,7 @@ export function renameWorkspace(oldName, newName) {
         state.sessionState.current_workspace = trimmed;
     }
 
-    window.miseAPI.saveSession(state.sessionState);
+    window.flyAPI.saveSession(state.sessionState);
     renderWorkspaceUI();
     buildDashboardTree();
 }
@@ -109,7 +109,7 @@ export function deleteWorkspace(wsName) {
     if (state.sessionState.tab_sleep_states?.[wsName]) delete state.sessionState.tab_sleep_states[wsName];
     delete state.sessionState.workspaces[wsName];
     
-    window.miseAPI.saveSession(state.sessionState);
+    window.flyAPI.saveSession(state.sessionState);
     renderWorkspaceUI();
     buildDashboardTree();
 }
@@ -253,7 +253,7 @@ export function buildDashboardTree() {
 
                 if (transferTab(state, sourceWS, sourceIdx, targetWS) === null) return;
 
-                window.miseAPI.saveSession(state.sessionState);
+                window.flyAPI.saveSession(state.sessionState);
                 renderWorkspaceUI();
                 buildDashboardTree();
             } catch (err) {
@@ -301,7 +301,7 @@ export function buildDashboardTree() {
 
                     if (sourceWS === targetWS) {
                         moveTabState(sourceWS, sourceIdx, targetIdx);
-                        window.miseAPI.saveSession(state.sessionState);
+                        window.flyAPI.saveSession(state.sessionState);
                         renderWorkspaceUI();
                         buildDashboardTree();
                         return;
@@ -309,7 +309,7 @@ export function buildDashboardTree() {
 
                     if (transferTab(state, sourceWS, sourceIdx, targetWS, targetIdx) === null) return;
 
-                    window.miseAPI.saveSession(state.sessionState);
+                    window.flyAPI.saveSession(state.sessionState);
                     renderWorkspaceUI();
                     buildDashboardTree();
                 } catch (err) {
@@ -350,7 +350,7 @@ export function updateDashboardVisualSelection() {
 export function executeDashboardItemActivation(payload) {
     const [type, wsName, idx] = payload;
     state.sessionState.current_workspace = wsName;
-    window.miseAPI.saveSession(state.sessionState);
+    window.flyAPI.saveSession(state.sessionState);
     
     const container = document.getElementById('webview-container');
     const allWebviews = container.querySelectorAll('webview');
@@ -391,7 +391,7 @@ export function processWorkspaceCreation() {
     if (!state.sessionState.workspaces[name]) {
         state.sessionState.workspaces[name] = [];
         state.sessionState.current_workspace = name;
-        window.miseAPI.saveSession(state.sessionState);
+        window.flyAPI.saveSession(state.sessionState);
         hideWorkspaceInputDialog();
         
         const overlay = document.getElementById('DashboardOverlay');

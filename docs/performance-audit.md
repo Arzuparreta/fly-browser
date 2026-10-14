@@ -1,5 +1,7 @@
 # Fork performance audit
 
+> Recorded before the browser was renamed from Mise to Fly. The benchmark scripts now read `FLY_*` environment variables instead of the `MISE_*` names used below; the measurements are unchanged.
+
 Audit date: 14 October 2026. The fork before optimisation is personal at `d4014bdb9e689d6667316fd00ee28c34de2529aa`, based on upstream 0.15.0 at `fa77f782efe2c1fe1e0655eb87382cca509b6212`. That was the remote main when the audit began. During final verification, upstream advanced to `2f8ca5f30e014cad1e2a3ff57d45be69ec777dba`, adding direct tab jumping, number badges and a sidebar cursor. The final comparison additionally measures that newer, pinned main revision. The integration-base results are retained separately so the fork's own changes remain traceable. Main later advanced to `3be7f9694bf6a77e916623f667e25f6199e741d0` with a documentation-only chronicle; it is integrated before submission. Its application-source hash is unchanged from 2f8ca5f, so the final measured baseline is also the current main application.
 
 The target is virtually no additional cost during normal browsing, with optional work paid for only when requested. This means no added idle polling or processes, no extension runtime while disabled, preserved tab hibernation and no repeatable material regression in the measured interactions. It does not mean literally zero additional code, DOM nodes or bytes, or a guarantee for untested hardware and websites.

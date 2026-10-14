@@ -1,14 +1,14 @@
 name: Feature Request
-description: Propose a new feature, shortcut, or workflow enhancement for Mise Browser
+description: Propose a new feature, shortcut, or workflow enhancement for Fly Browser
 title: "[Feature]: "
 labels: ["enhancement"]
 body:
   - type: markdown
     attributes:
       value: |
-        Thank you for contributing ideas to Mise Browser!
+        Thank you for contributing ideas to Fly Browser!
 
-        Mise is engineered as an efficient, keyboard-first, zero-bloat browser designed specifically for low-resource hardware. Feature proposals should prioritise:
+        Fly is engineered as an efficient, keyboard-first, zero-bloat browser designed specifically for low-resource hardware. Feature proposals should prioritise:
         * Minimal memory and CPU footprint.
         * Mouse-free keyboard workflows and modal navigation (NORMAL, INSERT, PASSTHROUGH).
         * Zero background telemetry and strict local privacy.
@@ -26,7 +26,7 @@ body:
     id: proposed_solution
     attributes:
       label: Proposed Solution
-      description: Detailed explanation of what you would like Mise Browser to do.
+      description: Detailed explanation of what you would like Fly Browser to do.
       placeholder: Describe the proposed capability or enhancement...
     validations:
       required: true
@@ -74,5 +74,5 @@ body:
       options:
         - label: I have searched open and closed issues and confirmed this is not a duplicate.
           required: true
-        - label: This proposal aligns with Mise's philosophy of efficient, keyboard-centric browsing.
+        - label: This proposal aligns with Fly's philosophy of efficient, keyboard-centric browsing.
           required: true

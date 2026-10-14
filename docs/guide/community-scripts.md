@@ -1,6 +1,6 @@
 # Community Scripts & Styles
 
-A curated catalogue of lightweight user styles (`*.user.css`) and user scripts (`*.user.js`) tested specifically for Mise Browser.
+A curated catalogue of lightweight user styles (`*.user.css`) and user scripts (`*.user.js`) tested specifically for Fly Browser.
 
 All scripts and styles are maintained in the official **[Mise-community-scripts](https://github.com/Rakosn1cek/Mise-community-scripts)** repository.
 
@@ -8,9 +8,9 @@ All scripts and styles are maintained in the official **[Mise-community-scripts]
 
 ## Why Community Scripts?
 
-Mise deliberately avoids traditional WebExtension stores to protect your privacy and keep memory usage minimal on low-power and fanless hardware. 
+Fly deliberately avoids traditional WebExtension stores to protect your privacy and keep memory usage minimal on low-power and fanless hardware.
 
-Instead of running heavy background extension workers, Mise uses a filesystem-driven engine:
+Instead of running heavy background extension workers, Fly uses a filesystem-driven engine:
 * **Zero Idle Overhead**: Scripts and styles only execute when matching pages load.
 * **Instant Hot-Reloading**: Inotify monitors your local files in real time. Styles apply on the fly without refreshing the page.
 * **Full Local Ownership**: You have full transparency over every line of CSS or JavaScript running in your browser.
@@ -28,16 +28,16 @@ Download the raw file directly into your local configuration directory:
 ```bash
 # Example: Install Amazon Dark Mode style
 curl -fsSL https://raw.githubusercontent.com/Rakosn1cek/Mise-community-scripts/main/styles/amazon-dark/amazon-dark.user.css \
-  -o ~/.config/mise-browser/styles/amazon-dark.user.css
+  -o ~/.config/fly-browser/styles/amazon-dark.user.css
 
 # Example: Install Copy Markdown Link script
 curl -fsSL https://raw.githubusercontent.com/Rakosn1cek/Mise-community-scripts/main/scripts/copy-markdown-link/copy-markdown-link.user.js \
-  -o ~/.config/mise-browser/scripts/copy-markdown-link.user.js
+  -o ~/.config/fly-browser/scripts/copy-markdown-link.user.js
 ```
 
 ### Option 2: Via Command Palette
 
-1. In Mise Browser, press **Ctrl + P** to open the Command Palette.
+1. In Fly Browser, press **Ctrl + P** to open the Command Palette.
 2. Search for **Open User Styles Directory** or **Open User Scripts Directory**.
 3. Save or drop your downloaded `.user.css` or `.user.js` files into the opened folder.
 
@@ -60,12 +60,12 @@ A high-contrast dark theme designed for Amazon UK and Amazon US storefronts, whi
 * **Repository**: [View on GitHub](https://github.com/Rakosn1cek/Mise-community-scripts/tree/main/styles/amazon-dark)
 * **Direct Download**:
   ```bash
-  curl -fsSL https://raw.githubusercontent.com/Rakosn1cek/Mise-community-scripts/main/styles/amazon-dark/amazon-dark.user.css -o ~/.config/mise-browser/styles/amazon-dark.user.css
+  curl -fsSL https://raw.githubusercontent.com/Rakosn1cek/Mise-community-scripts/main/styles/amazon-dark/amazon-dark.user.css -o ~/.config/fly-browser/styles/amazon-dark.user.css
   ```
 
 #### 2. Wikipedia Tokyo Night
 
-A custom stylesheet that styles Wikipedia to match the default Tokyo Night visual theme of Mise Browser.
+A custom stylesheet that styles Wikipedia to match the default Tokyo Night visual theme of Fly Browser.
 
 * **Target Domains**: `wikipedia.org`
 * **Features**:
@@ -76,7 +76,7 @@ A custom stylesheet that styles Wikipedia to match the default Tokyo Night visua
 * **Repository**: [View on GitHub](https://github.com/Rakosn1cek/Mise-community-scripts/tree/main/styles/wikipedia-tokyo-night)
 * **Direct Download**:
   ```bash
-  curl -fsSL https://raw.githubusercontent.com/Rakosn1cek/Mise-community-scripts/main/styles/wikipedia-tokyo-night/wikipedia-tokyo-night.user.css -o ~/.config/mise-browser/styles/wikipedia-tokyo-night.user.css
+  curl -fsSL https://raw.githubusercontent.com/Rakosn1cek/Mise-community-scripts/main/styles/wikipedia-tokyo-night/wikipedia-tokyo-night.user.css -o ~/.config/fly-browser/styles/wikipedia-tokyo-night.user.css
   ```
 
 ---
@@ -96,7 +96,7 @@ A global productivity script that copies the active page title and URL formatted
 * **Repository**: [View on GitHub](https://github.com/Rakosn1cek/Mise-community-scripts/tree/main/scripts/copy-markdown-link)
 * **Direct Download**:
   ```bash
-  curl -fsSL https://raw.githubusercontent.com/Rakosn1cek/Mise-community-scripts/main/scripts/copy-markdown-link/copy-markdown-link.user.js -o ~/.config/mise-browser/scripts/copy-markdown-link.user.js
+  curl -fsSL https://raw.githubusercontent.com/Rakosn1cek/Mise-community-scripts/main/scripts/copy-markdown-link/copy-markdown-link.user.js -o ~/.config/fly-browser/scripts/copy-markdown-link.user.js
   ```
 
 #### 2. YouTube Distraction-Free
@@ -112,7 +112,7 @@ A minimalist script that removes algorithmic recommendation traps and clutter fr
 * **Repository**: [View on GitHub](https://github.com/Rakosn1cek/Mise-community-scripts/tree/main/scripts/youtube-distraction-free)
 * **Direct Download**:
   ```bash
-  curl -fsSL https://raw.githubusercontent.com/Rakosn1cek/Mise-community-scripts/main/scripts/youtube-distraction-free/youtube-distraction-free.user.js -o ~/.config/mise-browser/scripts/youtube-distraction-free.user.js
+  curl -fsSL https://raw.githubusercontent.com/Rakosn1cek/Mise-community-scripts/main/scripts/youtube-distraction-free/youtube-distraction-free.user.js -o ~/.config/fly-browser/scripts/youtube-distraction-free.user.js
   ```
 
 ---

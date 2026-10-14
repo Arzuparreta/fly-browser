@@ -1,0 +1,12 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256">
+  <!-- Placeholder mark until the final fly icon is designed. -->
+  <rect width="256" height="256" rx="56" fill="#1d2430"/>
+  <g transform="translate(128 120)">
+    <ellipse cx="-40" cy="34" rx="22" ry="54" transform="rotate(35 -40 34)" fill="#bcd6ee" fill-opacity="0.8"/>
+    <ellipse cx="40" cy="34" rx="22" ry="54" transform="rotate(-35 40 34)" fill="#bcd6ee" fill-opacity="0.8"/>
+    <ellipse cx="0" cy="40" rx="17" ry="36" fill="#eef4fa"/>
+    <ellipse cx="0" cy="2" rx="22" ry="18" fill="#eef4fa"/>
+    <circle cx="-15" cy="-26" r="15" fill="#e2574c"/>
+    <circle cx="15" cy="-26" r="15" fill="#e2574c"/>
+  </g>
+</svg>

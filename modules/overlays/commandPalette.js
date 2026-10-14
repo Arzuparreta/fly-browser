@@ -10,7 +10,7 @@ import { getExtensionPaletteCommands, prepareExtensionPaletteCommands, syncExten
 import { renderSearchAliasesUI } from './searchEngine.js';
 
 function returnFocusToWebview() {
-    window.miseAllowWebviewFocus = true;
+    window.flyAllowWebviewFocus = true;
     focusActiveWebview();
 }
 
@@ -343,7 +343,7 @@ export const COMMAND_DEFINITIONS = [
     {
         id: 'toggle-notes',
         title: 'Toggle Quick Notes',
-        desc: 'Open Markdown notes scratchpad saved to ~/.config/mise-browser/notes.md',
+        desc: 'Open Markdown notes scratchpad saved to ~/.config/fly-browser/notes.md',
         details: 'Opens an integrated Markdown scratchpad backed by an auto-saving plain text file in your user configuration directory.',
         tip: 'Use the binding shown here, or customise this action in Keyboard controls.',
         category: 'Tools & Notes',
@@ -355,7 +355,7 @@ export const COMMAND_DEFINITIONS = [
     {
         id: 'export-reader-to-notes',
         title: 'Export Article to Quick Notes',
-        desc: 'Append active Reader View article or page clipping to ~/.config/mise-browser/notes.md',
+        desc: 'Append active Reader View article or page clipping to ~/.config/fly-browser/notes.md',
         details: 'Distills the active article into clean Markdown and appends it to your persistent quick notes file with citation details.',
         tip: 'Press Ctrl+Shift+E while reading an article to save it to your notes without leaving the page.',
         category: 'Tools & Notes',
@@ -369,7 +369,7 @@ export const COMMAND_DEFINITIONS = [
         id: 'export-reader-to-external',
         title: 'Export Article to External Note App',
         desc: 'Save active article as standalone Markdown file and open in your preferred notes tool',
-        details: 'Exports the active article into ~/.config/mise-browser/clippings/ and launches your configured external note application (Obsidian, Logseq, Neovim, etc.).',
+        details: 'Exports the active article into ~/.config/fly-browser/clippings/ and launches your configured external note application (Obsidian, Logseq, Neovim, etc.).',
         tip: 'Configure your external note command in Preferences to open clippings directly in your favourite editor.',
         category: 'Tools & Notes',
         icon: 'fa-solid fa-arrow-up-right-from-square',
@@ -380,7 +380,7 @@ export const COMMAND_DEFINITIONS = [
     {
         id: 'open-notes-external',
         title: 'Open Quick Notes in External Application',
-        desc: 'Open ~/.config/mise-browser/notes.md in your preferred notes app or system editor',
+        desc: 'Open ~/.config/fly-browser/notes.md in your preferred notes app or system editor',
         details: 'Launches your configured external note command or system default Markdown editor with notes.md.',
         tip: 'Allows editing your notes in Obsidian, Neovim, VS Code, or your desktop Markdown editor.',
         category: 'Tools & Notes',
@@ -405,7 +405,7 @@ export const COMMAND_DEFINITIONS = [
         id: 'add-bookmark',
         title: 'Bookmark Current Page',
         desc: 'Save active webpage title and URL into bookmarks collection',
-        details: 'Captures the active tab title and canonical URL, storing it in ~/.config/mise-browser/bookmarks.json for instant recall.',
+        details: 'Captures the active tab title and canonical URL, storing it in ~/.config/fly-browser/bookmarks.json for instant recall.',
         tip: 'Use the binding shown here, or customise this action in Keyboard controls.',
         category: 'Tools & Notes',
         icon: 'fa-solid fa-star',
@@ -502,35 +502,35 @@ export const COMMAND_DEFINITIONS = [
     {
         id: 'open-scripts-dir',
         title: 'Open User Scripts Directory',
-        desc: 'Browse local ~/.config/mise-browser/scripts in file manager',
+        desc: 'Browse local ~/.config/fly-browser/scripts in file manager',
         details: 'Launches your system file manager in the local user scripts directory where Tampermonkey-compatible scripts reside.',
         tip: 'Drop .user.js files here to automate page behaviours and customise web applications.',
         category: 'User Scripts & Styles',
         icon: 'fa-solid fa-file-code',
         keywords: ['scripts', 'userscript', 'tampermonkey', 'js', 'javascript', 'folder', 'directory'],
-        action: () => window.miseAPI && window.miseAPI.openUserScriptsDir && window.miseAPI.openUserScriptsDir()
+        action: () => window.flyAPI && window.flyAPI.openUserScriptsDir && window.flyAPI.openUserScriptsDir()
     },
     {
         id: 'open-styles-dir',
         title: 'Open User Styles Directory',
-        desc: 'Browse local ~/.config/mise-browser/styles in file manager',
+        desc: 'Browse local ~/.config/fly-browser/styles in file manager',
         details: 'Opens the user styles directory in your file manager for injecting custom CSS stylesheets into matched domains.',
         tip: 'Drop .user.css files here to create dark themes or tweak styling for any website.',
         category: 'User Scripts & Styles',
         icon: 'fa-solid fa-paintbrush',
         keywords: ['styles', 'userstyle', 'stylish', 'css', 'folder', 'directory', 'theme'],
-        action: () => window.miseAPI && window.miseAPI.openUserStylesDir && window.miseAPI.openUserStylesDir()
+        action: () => window.flyAPI && window.flyAPI.openUserStylesDir && window.flyAPI.openUserStylesDir()
     },
     {
         id: 'open-script-storage-dir',
         title: 'Open User Script Storage Directory',
-        desc: 'Browse local ~/.config/mise-browser/script-storage in file manager',
+        desc: 'Browse local ~/.config/fly-browser/script-storage in file manager',
         details: 'Opens the directory containing persistent JSON key-value stores used by GM_setValue and GM_getValue in user scripts.',
         tip: 'Each script stores its isolated state as an individual JSON file here.',
         category: 'User Scripts & Styles',
         icon: 'fa-solid fa-database',
         keywords: ['storage', 'gm', 'userscript', 'values', 'database', 'json', 'folder', 'directory'],
-        action: () => window.miseAPI && window.miseAPI.openUserScriptStorageDir && window.miseAPI.openUserScriptStorageDir()
+        action: () => window.flyAPI && window.flyAPI.openUserScriptStorageDir && window.flyAPI.openUserScriptStorageDir()
     },
     {
         id: 'reload-user-content',
@@ -541,7 +541,7 @@ export const COMMAND_DEFINITIONS = [
         category: 'User Scripts & Styles',
         icon: 'fa-solid fa-rotate',
         keywords: ['reload', 'refresh', 'inject', 'userscripts', 'userstyles'],
-        action: () => window.miseAPI && window.miseAPI.reloadUserContent && window.miseAPI.reloadUserContent()
+        action: () => window.flyAPI && window.flyAPI.reloadUserContent && window.flyAPI.reloadUserContent()
     },
 
     // Preferences & System
@@ -622,14 +622,14 @@ export const COMMAND_DEFINITIONS = [
         icon: 'fa-solid fa-window-maximize',
         actionId: 'toggle-menu-bar',
         keywords: ['menu', 'bar', 'top', 'native', 'window'],
-        action: () => window.miseAPI && typeof window.miseAPI.toggleMenuBar === 'function' && window.miseAPI.toggleMenuBar()
+        action: () => window.flyAPI && typeof window.flyAPI.toggleMenuBar === 'function' && window.flyAPI.toggleMenuBar()
     },
     {
         id: 'check-for-updates',
         title: 'Check for Updates',
-        desc: 'Check GitHub Releases for newer Mise versions and release notes',
-        details: 'Queries the GitHub release ledger to check if a newer Mise version is available, providing direct links to release notes and binary packages.',
-        tip: 'Mise tracks upstream Electron and Chromium security releases twice weekly.',
+        desc: 'Check GitHub Releases for newer Fly versions and release notes',
+        details: 'Queries the GitHub release ledger to check if a newer Fly version is available, providing direct links to release notes and binary packages.',
+        tip: 'Fly tracks upstream Electron and Chromium security releases twice weekly.',
         category: 'Preferences & System',
         icon: 'fa-solid fa-arrows-rotate',
         keywords: ['update', 'upgrade', 'version', 'release', 'github', 'check'],
@@ -647,8 +647,8 @@ export const COMMAND_DEFINITIONS = [
         action: () => {
             if (typeof window.openWhatsNewTab === 'function') {
                 window.openWhatsNewTab();
-            } else if (window.miseAPI && typeof window.miseAPI.getWhatsNewPath === 'function') {
-                const url = window.miseAPI.getWhatsNewPath();
+            } else if (window.flyAPI && typeof window.flyAPI.getWhatsNewPath === 'function') {
+                const url = window.flyAPI.getWhatsNewPath();
                 if (url) spawnTabWithUrl(url);
             }
         }
@@ -689,7 +689,7 @@ COMMAND_DEFINITIONS.forEach(cmd => {
     commandRegistry[cmd.id] = cmd.action;
 });
 
-window.miseAPI.getActionMetadata().then(metadata => {
+window.flyAPI.getActionMetadata().then(metadata => {
     for (const command of COMMAND_DEFINITIONS) command.category = metadata[command.actionId || command.id]?.category || command.category;
     for (const [id, info] of Object.entries(metadata)) {
         if (COMMAND_DEFINITIONS.some(command => command.id === id || command.actionId === id)) continue;
@@ -714,12 +714,12 @@ window.miseAPI.getActionMetadata().then(metadata => {
 
 let dynamicKeybinds = {};
 let dynamicNormalKeys = {};
-window.miseAPI.onKeyboardConfigChanged(config => { dynamicKeybinds = config.shortcuts; dynamicNormalKeys = config.normal; });
+window.flyAPI.onKeyboardConfigChanged(config => { dynamicKeybinds = config.shortcuts; dynamicNormalKeys = config.normal; });
 
 async function loadDynamicKeybinds() {
-    if (window.miseAPI && typeof window.miseAPI.getKeybinds === 'function') {
+    if (window.flyAPI && typeof window.flyAPI.getKeybinds === 'function') {
         try {
-            const config = await window.miseAPI.getKeyboardConfig();
+            const config = await window.flyAPI.getKeyboardConfig();
             dynamicKeybinds = config.shortcuts; dynamicNormalKeys = config.normal;
         } catch (e) {}
     }
@@ -728,7 +728,7 @@ async function loadDynamicKeybinds() {
 function getCommandShortcut(cmd) {
     if (cmd.id === 'terminal-fallback') return 'Enter';
     const id = cmd.actionId || cmd.id;
-    return [...(dynamicKeybinds[id] || []), ...(dynamicNormalKeys[id] || []).map(key => window.MiseKeyboard.display(key, 'normal') + ' (NORMAL)')];
+    return [...(dynamicKeybinds[id] || []), ...(dynamicNormalKeys[id] || []).map(key => window.FlyKeyboard.display(key, 'normal') + ' (NORMAL)')];
 }
 
 function formatShortcutBadges(shortcut) {
@@ -740,18 +740,21 @@ function formatShortcutBadges(shortcut) {
     }).join('<span class="shortcut-sep">/</span>');
 }
 
+// Storage key kept from before the Fly rename so existing profiles keep their recent commands.
+const RECENT_COMMANDS_KEY = 'mise_recent_commands';
+
 function recordRecentCommand(cmdId) {
     if (!cmdId) return;
     try {
-        const stored = JSON.parse(localStorage.getItem('mise_recent_commands') || '[]');
+        const stored = JSON.parse(localStorage.getItem(RECENT_COMMANDS_KEY) || '[]');
         const updated = [cmdId, ...stored.filter(id => id !== cmdId)].slice(0, 4);
-        localStorage.setItem('mise_recent_commands', JSON.stringify(updated));
+        localStorage.setItem(RECENT_COMMANDS_KEY, JSON.stringify(updated));
     } catch (e) {}
 }
 
 function getRecentCommands() {
     try {
-        const stored = JSON.parse(localStorage.getItem('mise_recent_commands') || '[]');
+        const stored = JSON.parse(localStorage.getItem(RECENT_COMMANDS_KEY) || '[]');
         return stored.map(id => COMMAND_DEFINITIONS.find(c => c.id === id)).filter(Boolean);
     } catch (e) {
         return [];
@@ -762,11 +765,11 @@ let preferencesActive = false;
 let paletteRequest = 0;
 
 export async function syncPreferencesUI() {
-    if (!window.miseAPI || typeof window.miseAPI.getBrowserSettings !== 'function') return;
+    if (!window.flyAPI || typeof window.flyAPI.getBrowserSettings !== 'function') return;
 
     let cfg = null;
     try {
-        cfg = await window.miseAPI.getBrowserSettings();
+        cfg = await window.flyAPI.getBrowserSettings();
         if (cfg) {
             const gpuToggle = document.getElementById('setting-gpu-toggle');
             const throttleToggle = document.getElementById('setting-throttling-toggle');
@@ -883,8 +886,8 @@ export function setupPreferencesListeners() {
                 custom_search_aliases: state.customSearchAliases || {}
             };
 
-            if (window.miseAPI && typeof window.miseAPI.saveBrowserSettings === 'function') {
-                await window.miseAPI.saveBrowserSettings(newCfg);
+            if (window.flyAPI && typeof window.flyAPI.saveBrowserSettings === 'function') {
+                await window.flyAPI.saveBrowserSettings(newCfg);
             }
         };
     }
@@ -892,10 +895,10 @@ export function setupPreferencesListeners() {
     const liveNotesCmd = document.getElementById('setting-notes-command');
     if (liveNotesCmd) {
         liveNotesCmd.onchange = async () => {
-            if (window.miseAPI && typeof window.miseAPI.getBrowserSettings === 'function') {
-                const cfg = (await window.miseAPI.getBrowserSettings()) || {};
+            if (window.flyAPI && typeof window.flyAPI.getBrowserSettings === 'function') {
+                const cfg = (await window.flyAPI.getBrowserSettings()) || {};
                 cfg.external_notes_command = liveNotesCmd.value.trim();
-                await window.miseAPI.updateBrowserSettings(cfg);
+                await window.flyAPI.updateBrowserSettings(cfg);
             }
         };
     }
@@ -905,10 +908,10 @@ export function setupPreferencesListeners() {
         sidebarToggle.onchange = async () => {
             const isAuto = sidebarToggle.checked;
             if (window.applySidebarMode) window.applySidebarMode(isAuto);
-            if (window.miseAPI && typeof window.miseAPI.getBrowserSettings === 'function') {
-                const cfg = (await window.miseAPI.getBrowserSettings()) || {};
+            if (window.flyAPI && typeof window.flyAPI.getBrowserSettings === 'function') {
+                const cfg = (await window.flyAPI.getBrowserSettings()) || {};
                 cfg.sidebar_auto_collapse = isAuto;
-                await window.miseAPI.updateBrowserSettings(cfg);
+                await window.flyAPI.updateBrowserSettings(cfg);
             }
         };
     }
@@ -954,10 +957,10 @@ export function setupPreferencesListeners() {
     if (liveSleepSelect) {
         liveSleepSelect.onchange = async () => {
             const timeoutMinutes = parseInt(liveSleepSelect.value, 10);
-            if (window.miseAPI && typeof window.miseAPI.getBrowserSettings === 'function') {
-                const cfg = (await window.miseAPI.getBrowserSettings()) || {};
+            if (window.flyAPI && typeof window.flyAPI.getBrowserSettings === 'function') {
+                const cfg = (await window.flyAPI.getBrowserSettings()) || {};
                 cfg.tab_sleep_timeout_minutes = timeoutMinutes;
-                await window.miseAPI.updateBrowserSettings(cfg);
+                await window.flyAPI.updateBrowserSettings(cfg);
             }
         };
     }
@@ -966,10 +969,10 @@ export function setupPreferencesListeners() {
     if (liveSpellSelect) {
         liveSpellSelect.onchange = async () => {
             const lang = liveSpellSelect.value;
-            if (window.miseAPI && typeof window.miseAPI.getBrowserSettings === 'function') {
-                const cfg = (await window.miseAPI.getBrowserSettings()) || {};
+            if (window.flyAPI && typeof window.flyAPI.getBrowserSettings === 'function') {
+                const cfg = (await window.flyAPI.getBrowserSettings()) || {};
                 cfg.spellchecker_language = lang;
-                await window.miseAPI.updateBrowserSettings(cfg);
+                await window.flyAPI.updateBrowserSettings(cfg);
             }
         };
     }
@@ -978,10 +981,10 @@ export function setupPreferencesListeners() {
     if (liveEmailSelect) {
         liveEmailSelect.onchange = async () => {
             const handler = liveEmailSelect.value;
-            if (window.miseAPI && typeof window.miseAPI.getBrowserSettings === 'function') {
-                const cfg = (await window.miseAPI.getBrowserSettings()) || {};
+            if (window.flyAPI && typeof window.flyAPI.getBrowserSettings === 'function') {
+                const cfg = (await window.flyAPI.getBrowserSettings()) || {};
                 cfg.email_handler = handler;
-                await window.miseAPI.updateBrowserSettings(cfg);
+                await window.flyAPI.updateBrowserSettings(cfg);
             }
         };
     }
@@ -1005,7 +1008,7 @@ export function setupPreferencesListeners() {
         saveTrustedDomainsBtn.onclick = async () => {
             const field = document.getElementById('setting-trusted-domains');
             const note = document.getElementById('setting-trusted-domains-note');
-            if (!field || !window.miseAPI || typeof window.miseAPI.updateBrowserSettings !== 'function') return;
+            if (!field || !window.flyAPI || typeof window.flyAPI.updateBrowserSettings !== 'function') return;
 
             const trustedDomains = field.value
                 .split(/[\n,]/)
@@ -1013,11 +1016,11 @@ export function setupPreferencesListeners() {
                 .filter(Boolean);
 
             try {
-                const currentCfg = (typeof window.miseAPI.getBrowserSettings === 'function')
-                    ? (await window.miseAPI.getBrowserSettings()) || {}
+                const currentCfg = (typeof window.flyAPI.getBrowserSettings === 'function')
+                    ? (await window.flyAPI.getBrowserSettings()) || {}
                     : {};
                 const mergedCfg = { ...currentCfg, trusted_domains: trustedDomains };
-                await window.miseAPI.updateBrowserSettings(mergedCfg);
+                await window.flyAPI.updateBrowserSettings(mergedCfg);
 
                 if (note) {
                     note.textContent = 'Saved: applied immediately, no restart needed.';
@@ -1428,8 +1431,8 @@ function executeTerminalFallback(rawInputText) {
         finalCommandToCopy = `oversight ${rawInputText}`;
     }
 
-    if (window.miseAPI && typeof window.miseAPI.executeTerminalCommand === 'function') {
-        window.miseAPI.executeTerminalCommand(finalCommandToCopy);
+    if (window.flyAPI && typeof window.flyAPI.executeTerminalCommand === 'function') {
+        window.flyAPI.executeTerminalCommand(finalCommandToCopy);
     }
 }
 

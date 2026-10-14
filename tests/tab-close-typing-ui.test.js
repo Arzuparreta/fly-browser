@@ -1,4 +1,4 @@
-const { _electron } = require(process.env.MISE_PLAYWRIGHT_MODULE || 'playwright');
+const { _electron } = require(process.env.FLY_PLAYWRIGHT_MODULE || 'playwright');
 const fs = require('node:fs');
 const createElectronFixture = require('./electron-fixture');
 const os = require('node:os');
@@ -8,7 +8,7 @@ const assert = require('node:assert/strict');
 const root = path.resolve(__dirname, '..');
 // Closing a tab with a page key and clicking straight into the next page's field must not lose typing.
 (async () => {
-    const temporary = fs.mkdtempSync(path.join(os.tmpdir(), 'mise-tab-close-typing-'));
+    const temporary = fs.mkdtempSync(path.join(os.tmpdir(), 'fly-tab-close-typing-'));
     const entry = createElectronFixture(root, temporary);
 
     const server = http.createServer((_request, response) => response.end('<!doctype html><input id="text" style="margin-left:260px"><news-text tabindex="0" id="noneditable">Article</news-text><div style="height:2000px"></div>'));
@@ -16,7 +16,7 @@ const root = path.resolve(__dirname, '..');
     const fixture = `http://127.0.0.1:${server.address().port}`;
     let application;
     try {
-        application = await _electron.launch({executablePath: path.join(root, 'node_modules/electron/dist/electron'), args: ['--no-sandbox', '--disable-gpu', `--ozone-platform=${process.env.MISE_TEST_OZONE_PLATFORM || 'x11'}`, entry]});
+        application = await _electron.launch({executablePath: path.join(root, 'node_modules/electron/dist/electron'), args: ['--no-sandbox', '--disable-gpu', `--ozone-platform=${process.env.FLY_TEST_OZONE_PLATFORM || 'x11'}`, entry]});
         const page = await application.firstWindow();
         const errors = []; page.on('pageerror', error => errors.push(error.message));
         await page.waitForFunction(() => !!window.executeBrowserAction);

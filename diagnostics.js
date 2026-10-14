@@ -1,5 +1,5 @@
 // diagnostics.js
-// Privacy-preserving in-memory diagnostics subsystem for Mise Browser
+// Privacy-preserving in-memory diagnostics subsystem for Fly Browser
 // Retains volatile operational logs in RAM only when explicitly enabled by user
 
 const os = require('os');
@@ -197,7 +197,7 @@ async function gatherSystemDiagnostics(sessionStats = {}) {
         timestamp: new Date().toISOString(),
         diagnosticsEnabled,
         application: {
-            name: 'Mise Browser',
+            name: 'Fly Browser',
             version: pkg.version || '0.15.0',
             electron: process.versions.electron,
             chrome: process.versions.chrome,

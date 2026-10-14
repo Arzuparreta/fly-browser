@@ -223,11 +223,11 @@ window.focusSidebar = focusSidebar;
 
 export async function testCleanGoogleSignIn() {
     try {
-        if (window.miseAPI && typeof window.miseAPI.clearGoogleAuthCookies === 'function') {
-            await window.miseAPI.clearGoogleAuthCookies('MisePrivateProfile');
+        if (window.flyAPI && typeof window.flyAPI.clearGoogleAuthCookies === 'function') {
+            await window.flyAPI.clearGoogleAuthCookies('FlyPrivateProfile');
         }
         setTargetUrl('Opening clean Google sign-in test in volatile partition...', 3500);
-        spawnTabWithUrl('https://accounts.google.com/ServiceLogin?mise_test_auth=1');
+        spawnTabWithUrl('https://accounts.google.com/ServiceLogin?fly_test_auth=1');
     } catch (err) {
         console.error('Failed to launch clean Google sign-in test:', err);
     }
@@ -262,8 +262,8 @@ export function displayUpdateNotification(updateInfo) {
         if (actionBtn) {
             actionBtn.style.display = 'inline-block';
             actionBtn.onclick = () => {
-                if (window.miseAPI && typeof window.miseAPI.openExternal === 'function') {
-                    window.miseAPI.openExternal(updateInfo.releaseUrl);
+                if (window.flyAPI && typeof window.flyAPI.openExternal === 'function') {
+                    window.flyAPI.openExternal(updateInfo.releaseUrl);
                 }
             };
         }
@@ -273,7 +273,7 @@ export function displayUpdateNotification(updateInfo) {
     const sidebarIndicator = document.getElementById('update-indicator-btn');
     if (sidebarIndicator) {
         sidebarIndicator.style.display = 'inline-flex';
-        sidebarIndicator.title = `Mise ${updateInfo.latestVersion} available. Click to review release.`;
+        sidebarIndicator.title = `Fly ${updateInfo.latestVersion} available. Click to review release.`;
         sidebarIndicator.onclick = () => openPreferencesPane('about');
     }
 }
@@ -286,8 +286,8 @@ export async function triggerUpdateCheck(manual = false) {
     }
 
     try {
-        if (window.miseAPI && typeof window.miseAPI.checkForUpdates === 'function') {
-            const result = await window.miseAPI.checkForUpdates(manual);
+        if (window.flyAPI && typeof window.flyAPI.checkForUpdates === 'function') {
+            const result = await window.flyAPI.checkForUpdates(manual);
             if (result && result.updateAvailable) {
                 displayUpdateNotification(result);
                 if (checkBtn) checkBtn.textContent = 'Update Available';
@@ -298,7 +298,7 @@ export async function triggerUpdateCheck(manual = false) {
                     const textEl = document.getElementById('UpdateNotificationText');
                     const actionBtn = document.getElementById('UpdateActionBtn');
                     if (banner && textEl) {
-                        textEl.textContent = `Mise v${result?.currentVersion || ''} is currently up to date.`;
+                        textEl.textContent = `Fly v${result?.currentVersion || ''} is currently up to date.`;
                         banner.style.display = 'flex';
                         if (actionBtn) actionBtn.style.display = 'none';
                         setTimeout(() => {
@@ -325,13 +325,13 @@ window.checkForUpdates = triggerUpdateCheck;
 let findActive = false;
 
 async function initializeBrowser() {
-    state.sessionState = await window.miseAPI.getSession();
+    state.sessionState = await window.flyAPI.getSession();
     
     // Check crash recovery sentinel
     let isCrashRecovery = false;
     try {
-        if (window.miseAPI && typeof window.miseAPI.getSessionRecoveryStatus === 'function') {
-            const status = await window.miseAPI.getSessionRecoveryStatus();
+        if (window.flyAPI && typeof window.flyAPI.getSessionRecoveryStatus === 'function') {
+            const status = await window.flyAPI.getSessionRecoveryStatus();
             isCrashRecovery = !!(status && status.wasCrash);
         }
     } catch (e) {}
@@ -402,9 +402,9 @@ async function initializeBrowser() {
     let savedTheme = 'dark';
     let sidebarAutoCollapse = true;
     let initialCfg = null;
-    if (window.miseAPI && typeof window.miseAPI.getBrowserSettings === 'function') {
+    if (window.flyAPI && typeof window.flyAPI.getBrowserSettings === 'function') {
         try {
-            const cfg = await window.miseAPI.getBrowserSettings();
+            const cfg = await window.flyAPI.getBrowserSettings();
             if (cfg) {
                 initialCfg = cfg;
                 setExtensionsConfig(cfg);
@@ -439,8 +439,8 @@ async function initializeBrowser() {
         container.classList.add(currentWebviewTheme === 'light' ? 'theme-light' : 'theme-dark');
     }
 
-    if (window.miseAPI && typeof window.miseAPI.setNativeTheme === 'function') {
-        window.miseAPI.setNativeTheme(currentWebviewTheme);
+    if (window.flyAPI && typeof window.flyAPI.setNativeTheme === 'function') {
+        window.flyAPI.setNativeTheme(currentWebviewTheme);
     }
 
     setupEventListeners();
@@ -462,17 +462,17 @@ async function initializeBrowser() {
         }, 400);
     }
 
-    if (window.miseAPI && typeof window.miseAPI.getBrowserSettings === 'function') {
-        window.miseAPI.getBrowserSettings().then((cfg) => {
+    if (window.flyAPI && typeof window.flyAPI.getBrowserSettings === 'function') {
+        window.flyAPI.getBrowserSettings().then((cfg) => {
             if (cfg && cfg.show_status_bar === false) {
                 toggleStatusBar(false);
             }
         }).catch(() => {});
     }
 
-    if (window.miseAPI && typeof window.miseAPI.getAppVersion === 'function') {
-        window.miseAPI.getAppVersion().then((info) => {
-            const badge = document.getElementById('MiseVersionBadge');
+    if (window.flyAPI && typeof window.flyAPI.getAppVersion === 'function') {
+        window.flyAPI.getAppVersion().then((info) => {
+            const badge = document.getElementById('FlyVersionBadge');
             const welcomeBadge = document.getElementById('WelcomeRuntimeVersions');
 
             const appVer = typeof info === 'object' ? info.version : info;
@@ -480,7 +480,7 @@ async function initializeBrowser() {
             const chromeVer = typeof info === 'object' ? info.chrome : '';
 
             if (appVer) {
-                let text = `Mise v${appVer}`;
+                let text = `Fly v${appVer}`;
                 if (electronVer && chromeVer) {
                     text += ` · Electron ${electronVer} · Chromium ${chromeVer}`;
                 }
@@ -488,17 +488,17 @@ async function initializeBrowser() {
                 if (welcomeBadge) welcomeBadge.textContent = text;
 
                 // Prompt What's New tab on version bump
-                if (window.miseAPI && typeof window.miseAPI.getBrowserSettings === 'function') {
-                    window.miseAPI.getBrowserSettings().then((cfg) => {
+                if (window.flyAPI && typeof window.flyAPI.getBrowserSettings === 'function') {
+                    window.flyAPI.getBrowserSettings().then((cfg) => {
                         const lastSeen = cfg?.last_seen_version;
                         if (!lastSeen) {
                             // First run on machine: record version silently
-                            window.miseAPI.updateBrowserSettings({ last_seen_version: appVer }).catch(() => {});
+                            window.flyAPI.updateBrowserSettings({ last_seen_version: appVer }).catch(() => {});
                         } else if (lastSeen !== appVer) {
                             // Version update: spawn What's New tab and record version
-                            window.miseAPI.updateBrowserSettings({ last_seen_version: appVer }).catch(() => {});
-                            if (typeof window.miseAPI.getWhatsNewPath === 'function') {
-                                const whatsNewPath = window.miseAPI.getWhatsNewPath();
+                            window.flyAPI.updateBrowserSettings({ last_seen_version: appVer }).catch(() => {});
+                            if (typeof window.flyAPI.getWhatsNewPath === 'function') {
+                                const whatsNewPath = window.flyAPI.getWhatsNewPath();
                                 if (whatsNewPath) spawnTabWithUrl(whatsNewPath);
                             }
                         }
@@ -509,14 +509,14 @@ async function initializeBrowser() {
     }
 
     window.openWhatsNewTab = () => {
-        if (window.miseAPI && typeof window.miseAPI.getWhatsNewPath === 'function') {
-            const whatsNewPath = window.miseAPI.getWhatsNewPath();
+        if (window.flyAPI && typeof window.flyAPI.getWhatsNewPath === 'function') {
+            const whatsNewPath = window.flyAPI.getWhatsNewPath();
             if (whatsNewPath) spawnTabWithUrl(whatsNewPath);
         }
     };
 
-    if (window.miseAPI && typeof window.miseAPI.onUpdateAvailable === 'function') {
-        window.miseAPI.onUpdateAvailable((info) => {
+    if (window.flyAPI && typeof window.flyAPI.onUpdateAvailable === 'function') {
+        window.flyAPI.onUpdateAvailable((info) => {
             displayUpdateNotification(info);
         });
     }
@@ -534,8 +534,8 @@ async function initializeBrowser() {
         triggerUpdateCheck(true);
     });
 
-    if (window.miseAPI && typeof window.miseAPI.signalRendererReady === 'function') {
-        window.miseAPI.signalRendererReady();
+    if (window.flyAPI && typeof window.flyAPI.signalRendererReady === 'function') {
+        window.flyAPI.signalRendererReady();
     }
 }
 
@@ -569,8 +569,8 @@ function setupEventListeners() {
     document.getElementById('WelcomePaletteBtn')?.addEventListener('click', toggleCommandPaletteView);
     document.getElementById('WelcomeNotesBtn')?.addEventListener('click', toggleNotesOverlay);
 
-    if (window.miseAPI && typeof window.miseAPI.onUserContentUpdated === 'function') {
-        window.miseAPI.onUserContentUpdated((kind) => {
+    if (window.flyAPI && typeof window.flyAPI.onUserContentUpdated === 'function') {
+        window.flyAPI.onUserContentUpdated((kind) => {
             if (kind === 'styles' || kind === 'all') {
                 reapplyActiveUserStyles();
             }
@@ -725,7 +725,7 @@ function setupEventListeners() {
                 if (target >= 0 && target < items.length && !!state.tabPinned[workspace]?.[index] === !!state.tabPinned[workspace]?.[target]) {
                     moveTabState(workspace, index, target);
                     renderWorkspaceUI(target);
-                    window.miseAPI.saveSession(state.sessionState);
+                    window.flyAPI.saveSession(state.sessionState);
                 }
                 break;
             }
@@ -774,7 +774,7 @@ function setupEventListeners() {
                 if (names.length) {
                     state.sessionState.current_workspace = names[(index + (action === 'next-workspace' ? 1 : -1) + names.length) % names.length];
                     renderWorkspaceUI(0);
-                    window.miseAPI.saveSession(state.sessionState);
+                    window.flyAPI.saveSession(state.sessionState);
                 }
                 break;
             }
@@ -803,7 +803,7 @@ function setupEventListeners() {
             case 'close-extension-popup': closeExtensionPopup(); break;
         }
     };
-    window.miseAPI.onMasterShortcut(window.executeBrowserAction);
+    window.flyAPI.onMasterShortcut(window.executeBrowserAction);
     initialiseOverlayFocus({
         WideAddressBar: {active: () => addressBar.style.display === 'block', close: displayAddressOverlay},
         FindBarOverlay: {active: () => findActive, close: toggleInPageSearch},
@@ -831,7 +831,7 @@ function setupEventListeners() {
     const nativeKeyboardActions = new Set(['toggle-fullscreen', 'toggle-native-menu-visibility', 'toggle-menu-bar', 'toggle-private-mode']);
     window.dispatchKeyboardAction = action => {
         if (!keyboardActions.has(action)) return;
-        if (nativeKeyboardActions.has(action)) window.miseAPI.executeKeyboardAction(action);
+        if (nativeKeyboardActions.has(action)) window.flyAPI.executeKeyboardAction(action);
         else window.executeBrowserAction(action);
     };
     let pageStroke = '', pageStrokeTime = 0;
@@ -839,14 +839,14 @@ function setupEventListeners() {
     window.addEventListener('focusin', () => { pageStroke = ''; });
     const applyKeyboardConfig = config => {
         keyboardActions = new Set(Object.keys(config.shortcuts));
-        browserKeys = window.MiseKeyboard.compile(config.shortcuts);
-        pageKeys = window.MiseKeyboard.compile(config.normal);
+        browserKeys = window.FlyKeyboard.compile(config.shortcuts);
+        pageKeys = window.FlyKeyboard.compile(config.normal);
         pagePrefixes = new Set([...pageKeys.keys()].filter(key => key.includes(' ')).map(key => key.split(' ')[0]));
         pageStroke = '';
         window.describeKeyboardAction = (action, label) => {
             const chords = config.shortcuts[action] || [];
             const pageKeys = config.normal[action] || [];
-            const bindings = [...chords, ...pageKeys.map(key => `${window.MiseKeyboard.display(key, 'normal')} in NORMAL mode`)];
+            const bindings = [...chords, ...pageKeys.map(key => `${window.FlyKeyboard.display(key, 'normal')} in NORMAL mode`)];
             return label + (bindings.length ? ` (${bindings.join(' / ')})` : ' (unassigned)');
         };
         const controls = {'WorkspaceHeader': ['toggle-dashboard', 'Workspace dashboard'],
@@ -865,8 +865,8 @@ function setupEventListeners() {
             if (badge) badge.textContent = config.shortcuts[action]?.join(' / ') || 'Unassigned';
         }
     };
-    window.miseAPI.getKeyboardConfig().then(applyKeyboardConfig);
-    window.miseAPI.onKeyboardConfigChanged(applyKeyboardConfig);
+    window.flyAPI.getKeyboardConfig().then(applyKeyboardConfig);
+    window.flyAPI.onKeyboardConfigChanged(applyKeyboardConfig);
     window.addEventListener('keydown', event => {
         // Recover a trusted key misrouted to the host while the DOM still focuses a guest.
         // Send it through the guest's native input path so its own modes/editors decide.
@@ -890,7 +890,7 @@ function setupEventListeners() {
         if (event.key === 'Escape' && state.preferencesActive && !(event.target.id === 'SettingsSearch' && event.target.value)) {
             event.preventDefault(); event.stopImmediatePropagation(); togglePreferencesView(); return;
         }
-        const combo = window.MiseKeyboard.eventCombo(event);
+        const combo = window.FlyKeyboard.eventCombo(event);
         let action = browserKeys.get(combo);
         if (!action && !hasActiveOverlay() && !event.target.closest('input, textarea, select, [contenteditable], [role="textbox"], [role="searchbox"], [role="combobox"]') && document.getElementById('TabList').contains(event.target) &&
             handleSidebarPageAction(pageKeys.get(combo))) {
@@ -898,7 +898,7 @@ function setupEventListeners() {
         }
         if (!action) {
             // Page bindings also work when browser navigation controls retain focus.
-            const mode = getActiveWebview()?.__miseKeyboardMode || {};
+            const mode = getActiveWebview()?.__flyKeyboardMode || {};
             const target = event.target;
             if (!combo || ['Escape', 'Tab', 'Enter', ' ', 'Delete', 'ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight'].includes(event.key) || hasActiveOverlay() || mode.passthrough || mode.input || mode.hints ||
                 target.tagName === 'WEBVIEW' || target.isContentEditable || target.closest('input, textarea, select, [role="textbox"], [role="searchbox"], [role="combobox"]')) {
@@ -916,7 +916,7 @@ function setupEventListeners() {
         } else pageStroke = '';
         if (!action) return;
         event.preventDefault(); event.stopImmediatePropagation();
-        if (!event.repeat || window.MiseKeyboard.repeatable(action)) window.dispatchKeyboardAction(action);
+        if (!event.repeat || window.FlyKeyboard.repeatable(action)) window.dispatchKeyboardAction(action);
     }, true);
 
     const paletteInput = document.getElementById('PaletteInput');
@@ -1126,8 +1126,8 @@ function setupEventListeners() {
                 if (el && (e.relatedTarget === el || el.contains(e.relatedTarget))) return;
             }
 
-            if (window.miseAllowWebviewFocus) {
-                window.miseAllowWebviewFocus = false;
+            if (window.flyAllowWebviewFocus) {
+                window.flyAllowWebviewFocus = false;
                 return;
             }
             e.preventDefault();
@@ -1146,7 +1146,7 @@ function setupEventListeners() {
     document.getElementById('PurgeHistoryBtn').addEventListener('click', async () => {
         const confirmPurge = confirm("Are you sure you want to permanently delete all history?");
         if (confirmPurge) {
-            const success = await window.miseAPI.purgeHistory();
+            const success = await window.flyAPI.purgeHistory();
             if (success) {
                 filterHistoryItems('');
             }
@@ -1190,17 +1190,17 @@ async function executeSurgicalCookieWipe() {
     const urlStr = state.sessionState.workspaces[currentWS][currentIdx] || "";
     
     const isTargetPrivate = state.globalPrivateModeActive || isTargetPrivateDomain(urlStr);
-    await window.miseAPI.clearDomainCookies({ urlStr, isPrivate: isTargetPrivate, workspace: currentWS });
+    await window.flyAPI.clearDomainCookies({ urlStr, isPrivate: isTargetPrivate, workspace: currentWS });
     
-    window.miseAllowWebviewFocus = true;
+    window.flyAllowWebviewFocus = true;
     focusActiveWebview();
 }
 
 async function executeGlobalCacheWipe() {
     const currentWS = state.sessionState.current_workspace;
-    await window.miseAPI.clearActiveCache({ isPrivate: state.globalPrivateModeActive, workspace: currentWS });
+    await window.flyAPI.clearActiveCache({ isPrivate: state.globalPrivateModeActive, workspace: currentWS });
     
-    window.miseAllowWebviewFocus = true;
+    window.flyAllowWebviewFocus = true;
     focusActiveWebview();
 }
 
@@ -1250,17 +1250,17 @@ function toggleWebviewTheme() {
         }, 140);
     }
 
-    if (window.miseAPI && typeof window.miseAPI.setNativeTheme === 'function') {
-        window.miseAPI.setNativeTheme(currentWebviewTheme);
+    if (window.flyAPI && typeof window.flyAPI.setNativeTheme === 'function') {
+        window.flyAPI.setNativeTheme(currentWebviewTheme);
     }
 
     if (webviewThemeSaveTimer) clearTimeout(webviewThemeSaveTimer);
     webviewThemeSaveTimer = setTimeout(() => {
-        if (window.miseAPI && typeof window.miseAPI.getBrowserSettings === 'function') {
-            window.miseAPI.getBrowserSettings().then((cfg) => {
+        if (window.flyAPI && typeof window.flyAPI.getBrowserSettings === 'function') {
+            window.flyAPI.getBrowserSettings().then((cfg) => {
                 const currentCfg = cfg || {};
                 currentCfg.webview_theme = currentWebviewTheme;
-                return window.miseAPI.updateBrowserSettings(currentCfg);
+                return window.flyAPI.updateBrowserSettings(currentCfg);
             }).catch(() => {});
         }
     }, 400);
@@ -1291,11 +1291,11 @@ function toggleInterfaceTheme() {
     }
     
     // Persist setting to disk asynchronously in the background without blocking the UI
-    if (window.miseAPI && typeof window.miseAPI.getBrowserSettings === 'function') {
-        window.miseAPI.getBrowserSettings().then((cfg) => {
+    if (window.flyAPI && typeof window.flyAPI.getBrowserSettings === 'function') {
+        window.flyAPI.getBrowserSettings().then((cfg) => {
             const currentCfg = cfg || {};
             currentCfg.theme = newTheme;
-            return window.miseAPI.updateBrowserSettings(currentCfg);
+            return window.flyAPI.updateBrowserSettings(currentCfg);
         }).catch(() => {});
     }
 }
@@ -1305,8 +1305,8 @@ document.getElementById('noti-toggle-btn').addEventListener('click', async () =>
     const isMuted = !!btn.querySelector('.fa-bell-slash');
     const targetState = isMuted; // If muted, enable notifications; otherwise, mute
 
-    if (window.miseAPI && typeof window.miseAPI.toggleGlobalNotifications === 'function') {
-        await window.miseAPI.toggleGlobalNotifications(targetState);
+    if (window.flyAPI && typeof window.flyAPI.toggleGlobalNotifications === 'function') {
+        await window.flyAPI.toggleGlobalNotifications(targetState);
     }
 
     if (targetState) {
@@ -1315,7 +1315,7 @@ document.getElementById('noti-toggle-btn').addEventListener('click', async () =>
         btn.innerHTML = '<i class="fa-solid fa-bell-slash"></i>';
     }
 
-    window.miseAllowWebviewFocus = true;
+    window.flyAllowWebviewFocus = true;
     focusActiveWebview();
 });
 
@@ -1386,9 +1386,9 @@ export async function toggleSidebarPin() {
     const isCurrentlyPinned = document.body.classList.contains('sidebar-pinned');
     const newAutoCollapse = isCurrentlyPinned;
     applySidebarMode(newAutoCollapse);
-    if (window.miseAPI && typeof window.miseAPI.updateBrowserSettings === 'function') {
+    if (window.flyAPI && typeof window.flyAPI.updateBrowserSettings === 'function') {
         try {
-            await window.miseAPI.updateBrowserSettings({sidebar_auto_collapse: newAutoCollapse});
+            await window.flyAPI.updateBrowserSettings({sidebar_auto_collapse: newAutoCollapse});
         } catch (e) {}
     }
 }

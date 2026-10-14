@@ -169,7 +169,7 @@ export function applySplitLayout() {
             const addressBarIsActive = addressBar && (addressBar.style.display === 'block' || currentFocused === addressBar);
 
             if (!sidebarHasFocus && !state.paletteActive && !state.helpActive && !addressBarIsActive) {
-                window.miseAllowWebviewFocus = true;
+                window.flyAllowWebviewFocus = true;
                 currentWSViews[activeIdx].focus();
             }
         }, 30);
@@ -333,7 +333,7 @@ export async function openUrlInSplit(url) {
     if (split.enabled) {
         const targetIdx = (split.activePane === 'primary') ? split.secondaryIdx : split.primaryIdx;
         state.sessionState.workspaces[currentWS][targetIdx] = url;
-        window.miseAPI.saveSession(state.sessionState);
+        window.flyAPI.saveSession(state.sessionState);
 
         const wv = state.activeViewsCache[currentWS]?.[targetIdx];
         if (wv && typeof wv.setAttribute === 'function') {
@@ -349,7 +349,7 @@ export async function openUrlInSplit(url) {
     const activeIdx = activeLi ? Array.from(document.querySelectorAll('#TabList li')).indexOf(activeLi) : 0;
 
     state.sessionState.workspaces[currentWS].push(url);
-    window.miseAPI.saveSession(state.sessionState);
+    window.flyAPI.saveSession(state.sessionState);
 
     const newTargetIdx = state.sessionState.workspaces[currentWS].length - 1;
     if (!state.tabSleepStates[currentWS]) state.tabSleepStates[currentWS] = [];

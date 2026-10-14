@@ -7,7 +7,7 @@ const source = fs.readFileSync(path.join(__dirname, '../security.js'), 'utf8');
 
 (async () => {
     for (const scenario of ['cold', 'cached', 'corrupt', 'retry']) {
-        const temporary = fs.mkdtempSync(path.join(os.tmpdir(), 'mise-blocker-test-'));
+        const temporary = fs.mkdtempSync(path.join(os.tmpdir(), 'fly-blocker-test-'));
         try {
             if (scenario === 'cached' || scenario === 'corrupt') fs.writeFileSync(path.join(temporary, 'adblock_cache.bin'), scenario);
             let builds = 0, deserialisations = 0, writes = 0, release;
@@ -61,7 +61,7 @@ const source = fs.readFileSync(path.join(__dirname, '../security.js'), 'utf8');
                 target.handlers.before({url: 'https://tracker.invalid'}, value => {result = value;});
                 assert.equal(result.cancel, true, 'Ordinary requests must still reach the blocker');
                 target.handlers.before({url: 'https://accounts.google.com/?flowName=GlifWebSignIn'}, value => {result = value;});
-                assert.match(result.redirectURL, /WebLiteSignIn/, 'Mise authentication rules must remain attached');
+                assert.match(result.redirectURL, /WebLiteSignIn/, 'Fly authentication rules must remain attached');
             }
         } finally { fs.rmSync(temporary, {recursive: true, force: true}); }
     }

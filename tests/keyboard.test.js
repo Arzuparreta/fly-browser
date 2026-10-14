@@ -35,7 +35,7 @@ for (const mutate of [
     assert.equal(keyboard.validateConfig(config, keybinds.ACTION_METADATA).ok, false);
 }
 
-const directory = fs.mkdtempSync(path.join(os.tmpdir(), 'mise-keyboard-test-'));
+const directory = fs.mkdtempSync(path.join(os.tmpdir(), 'fly-keyboard-test-'));
 try {
     const legacyFile = path.join(directory, 'keybinds.json');
     fs.writeFileSync(legacyFile, JSON.stringify({
@@ -48,7 +48,7 @@ try {
     assert(!keybinds.getKeybinds()['next-tab'].includes('Ctrl+Tab'), 'New defaults cannot steal legacy bindings');
     assert(!keybinds.getKeybinds()['toggle-find'].includes('Ctrl+F'));
 
-    // Pre-version-2 Mise seeded keybinds.json with its whole default table on first launch.
+    // Pre-version-2 Fly seeded keybinds.json with its whole default table on first launch.
     // Those seeded values are not user choices and must not pin obsolete defaults.
     const seeded = JSON.parse(fs.readFileSync(path.join(__dirname, 'fixtures', 'upstream-keybinds-2f8ca5f.json'), 'utf8'));
     fs.writeFileSync(legacyFile, JSON.stringify(seeded));
@@ -148,7 +148,7 @@ const context = {
     module: {exports: {}}, Date: {now: () => time},
     ipcRenderer: {send: () => {}, sendSync: () => clone(defaults), on: (name, callback) => { handlers[name] = callback; }, sendToHost: (...args) => messages.push(args)},
     window: {innerHeight: 800, addEventListener: (name, callback) => { handlers[name] = callback; }},
-    document: {getElementById: id => id === 'mise-hint-layer' && hints ? {} : null,
+    document: {getElementById: id => id === 'fly-hint-layer' && hints ? {} : null,
         documentElement: {scrollHeight: 9000}, activeElement: {blur: () => blurred++}},
     isEventInEditable: () => editable, getDeepActiveElement: () => ({blur: () => blurred++}),
     getScrollTarget: () => ({clientHeight: 800, scrollHeight: 9000}),
@@ -156,7 +156,7 @@ const context = {
 };
 vm.createContext(context);
 vm.runInContext(source.slice(0, source.indexOf('// END GENERATED KEYBOARD CORE')), context);
-assert(context.MiseKeyboard, 'The grammar must be global in the sandbox even when module exists');
+assert(context.FlyKeyboard, 'The grammar must be global in the sandbox even when module exists');
 vm.runInContext(source.slice(source.indexOf('let isPassthroughMode'), source.indexOf('// Host passthrough mode synchronisation')), context);
 vm.runInContext(source.slice(source.indexOf('const localPageActions')), context);
 function press(key, extra = {}) {
@@ -200,7 +200,7 @@ assert.deepEqual(hintMessages, [['guest-hints-state', true], ['guest-hints-state
 console.log('Hints IPC only reports real state transitions.');
 
 // Native guest chords work across frames, suppress destructive repeats and honour passthrough.
-keybinds.initializeKeybinds(path.join(os.tmpdir(), 'mise-nonexistent-keyboard-profile'));
+keybinds.initializeKeybinds(path.join(os.tmpdir(), 'fly-nonexistent-keyboard-profile'));
 const mainSource = fs.readFileSync(path.join(__dirname, '..', 'main.js'), 'utf8');
 const nativeHandlers = {}, nativeActions = [], nativeMessages = [];
 const contents = {on: (name, callback) => { nativeHandlers[name] = callback; }, send: (...args) => nativeMessages.push(args)};
@@ -299,7 +299,7 @@ console.log('Workspace transfers preserve metadata, pin order and container isol
 const paletteSource = fs.readFileSync(path.join(__dirname, '..', 'modules/overlays/commandPalette.js'), 'utf8').replace(/^import .*;\n/gm, '').replace(/export /g, '');
 const paletteDispatched = [];
 const paletteContext = {
-    window: {miseAPI: {getActionMetadata: () => ({then: callback => callback(keybinds.ACTION_METADATA)}),
+    window: {flyAPI: {getActionMetadata: () => ({then: callback => callback(keybinds.ACTION_METADATA)}),
         onKeyboardConfigChanged: () => {}, executeKeyboardAction: action => paletteDispatched.push(action)}},
     document: {readyState: 'loading', addEventListener: () => {}, getElementById: () => null}
 };
@@ -311,7 +311,7 @@ const rendererSource = fs.readFileSync(path.join(__dirname, '..', 'renderer.js')
 {
     const local = [], native = [];
     const route = rendererSource.slice(rendererSource.indexOf('    let keyboardActions ='), rendererSource.indexOf('    let pageStroke ='));
-    const context = {Set, actionNames: Object.keys(keybinds.ACTION_METADATA), window: {executeBrowserAction: action => local.push(action), miseAPI: {executeKeyboardAction: action => native.push(action)}}};
+    const context = {Set, actionNames: Object.keys(keybinds.ACTION_METADATA), window: {executeBrowserAction: action => local.push(action), flyAPI: {executeKeyboardAction: action => native.push(action)}}};
     vm.runInNewContext(route + '; keyboardActions = new Set(actionNames); window.dispatchKeyboardAction("toggle-help"); window.dispatchKeyboardAction("trigger-hints"); window.dispatchKeyboardAction("toggle-private-mode"); window.dispatchKeyboardAction("toggle-fullscreen"); window.dispatchKeyboardAction("__proto__"); window.dispatchKeyboardAction("unknown");', context);
     assert.deepEqual(local, ['toggle-help', 'trigger-hints']);
     assert.deepEqual(native, ['toggle-private-mode', 'toggle-fullscreen']);
@@ -327,7 +327,7 @@ const dispatchContext = {
     openCommandPalette: query => openedPalettes.push(query)
 };
 vm.createContext(dispatchContext);
-vm.runInContext(rendererSource.slice(rendererSource.indexOf('    window.executeBrowserAction ='), rendererSource.indexOf('    window.miseAPI.onMasterShortcut')), dispatchContext);
+vm.runInContext(rendererSource.slice(rendererSource.indexOf('    window.executeBrowserAction ='), rendererSource.indexOf('    window.flyAPI.onMasterShortcut')), dispatchContext);
 for (const count of [0, 3, 10]) {
     tabCount = count;
     for (let number = 1; number <= 9; number++) {
@@ -393,7 +393,7 @@ nativePress('AltGraph', {type: 'keyUp', code: 'AltRight'});
 assert(nativePress('b', {control: true, alt: true}).consumed);
 assert.equal(nativeActions.pop(), 'spawn-tab');
 nativeContext.keybinds = keybinds;
-const invalidDirectory = fs.mkdtempSync(path.join(os.tmpdir(), 'mise-invalid-keyboard-'));
+const invalidDirectory = fs.mkdtempSync(path.join(os.tmpdir(), 'fly-invalid-keyboard-'));
 const invalidFile = path.join(invalidDirectory, 'keybinds.json');
 fs.writeFileSync(invalidFile, '{');
 const logError = console.error;

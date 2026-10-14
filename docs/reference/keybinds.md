@@ -8,7 +8,7 @@ Select a binding to change it, **Add binding** to record another, or × to remov
 
 ## Modes and text input
 
-Mise has a small custom Vim-style controller, not the Vimium extension. Browser shortcuts work in text fields as well as elsewhere. Page keys only run in NORMAL mode, outside editable fields, explicit INSERT mode and link hints. Open shadow roots and composed input events are checked before consuming page keys. Custom element names do not imply editing; actual inputs, contenteditable regions and textbox/searchbox/combobox roles protect text entry. IME composition, dead keys and AltGr are left alone.
+Fly has a small custom Vim-style controller, not the Vimium extension. Browser shortcuts work in text fields as well as elsewhere. Page keys only run in NORMAL mode, outside editable fields, explicit INSERT mode and link hints. Open shadow roots and composed input events are checked before consuming page keys. Custom element names do not imply editing; actual inputs, contenteditable regions and textbox/searchbox/combobox roles protect text entry. IME composition, dead keys and AltGr are left alone.
 
 - **NORMAL:** page keys are available. Defaults include hjkl scrolling, d/u for half-page scrolling, gg for the top, and Shift+G for the bottom.
 - **INSERT:** focus a text field or use the configured insert action. Escape leaves insert mode.
@@ -145,7 +145,7 @@ Existing legacy profiles retain their explicit assignments, including empty and 
 
 ## Profile format
 
-Bindings remain local in `~/.config/mise-browser/keybinds.json`. Version 2 separates browser and page bindings and stores only changes from the defaults:
+Bindings remain local in `~/.config/fly-browser/keybinds.json`. Version 2 separates browser and page bindings and stores only changes from the defaults:
 
 ```json
 {

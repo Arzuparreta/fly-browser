@@ -1,27 +1,27 @@
 import { defineConfig } from 'vitepress';
 
 export default defineConfig({
-  title: 'Mise Browser',
+  title: 'Fly Browser',
   description: 'Keyboard-first, container-isolated web browser for fanless Linux systems',
-  base: '/Mise-browser/',
+  base: '/fly-browser/',
   head: [
-    ['link', { rel: 'icon', href: '/Mise-browser/logo.png' }],
+    ['link', { rel: 'icon', href: '/fly-browser/logo.png' }],
     ['meta', { property: 'og:type', content: 'website' }],
-    ['meta', { property: 'og:site_name', content: 'Mise Browser' }],
-    ['meta', { property: 'og:title', content: 'Mise Browser' }],
+    ['meta', { property: 'og:site_name', content: 'Fly Browser' }],
+    ['meta', { property: 'og:title', content: 'Fly Browser' }],
     ['meta', { property: 'og:description', content: 'An efficient, keyboard-first, and container-isolated web browser engineered specifically for low-resource and fanless Linux hardware.' }],
-    ['meta', { property: 'og:image', content: 'https://arzuparreta.github.io/Mise-browser/og-image.png' }],
+    ['meta', { property: 'og:image', content: 'https://arzuparreta.github.io/fly-browser/og-image.png' }],
     ['meta', { property: 'og:image:width', content: '1280' }],
     ['meta', { property: 'og:image:height', content: '640' }],
-    ['meta', { property: 'og:url', content: 'https://arzuparreta.github.io/Mise-browser/' }],
+    ['meta', { property: 'og:url', content: 'https://arzuparreta.github.io/fly-browser/' }],
     ['meta', { name: 'twitter:card', content: 'summary_large_image' }],
-    ['meta', { name: 'twitter:title', content: 'Mise Browser' }],
+    ['meta', { name: 'twitter:title', content: 'Fly Browser' }],
     ['meta', { name: 'twitter:description', content: 'An efficient, keyboard-first, and container-isolated web browser engineered specifically for low-resource and fanless Linux hardware.' }],
-    ['meta', { name: 'twitter:image', content: 'https://arzuparreta.github.io/Mise-browser/og-image.png' }]
+    ['meta', { name: 'twitter:image', content: 'https://arzuparreta.github.io/fly-browser/og-image.png' }]
   ],
   themeConfig: {
     logo: '/logo.png',
-    siteTitle: 'Mise Browser',
+    siteTitle: 'Fly Browser',
     nav: [
       { text: 'Guide', link: '/guide/getting-started' },
       { text: 'Features', link: '/guide/navigation' },
@@ -29,7 +29,7 @@ export default defineConfig({
       { text: 'Blog', link: '/blog/' },
       { text: 'Policies', link: '/guide/privacy-policy' },
       { text: 'Reference', link: '/reference/keybinds' },
-      { text: 'GitHub', link: 'https://github.com/Arzuparreta/Mise-browser' }
+      { text: 'GitHub', link: 'https://github.com/Arzuparreta/fly-browser' }
     ],
     sidebar: [
       {
@@ -88,11 +88,11 @@ export default defineConfig({
       provider: 'local'
     },
     socialLinks: [
-      { icon: 'github', link: 'https://github.com/Arzuparreta/Mise-browser' }
+      { icon: 'github', link: 'https://github.com/Arzuparreta/fly-browser' }
     ],
     footer: {
       message: 'Released under the GNU General Public Licence v3.0. • Independent continuation of <a href="https://github.com/Rakosn1cek/Mise-browser" target="_blank">Mise by Rakosn1cek</a>',
-      copyright: 'Copyright © 2026 Mise Browser Project'
+      copyright: 'Copyright © 2026 Fly Browser Project'
     }
   }
 });

@@ -160,8 +160,8 @@ function createDownloadCardElement(data) {
     if (cancelBtn) {
         cancelBtn.addEventListener('click', (e) => {
             e.stopPropagation();
-            if (window.miseAPI && typeof window.miseAPI.cancelDownload === 'function') {
-                window.miseAPI.cancelDownload(data.id);
+            if (window.flyAPI && typeof window.flyAPI.cancelDownload === 'function') {
+                window.flyAPI.cancelDownload(data.id);
             }
         });
     }
@@ -280,8 +280,8 @@ export function handleDownloadDone(data) {
                 openBtn.addEventListener('click', (e) => {
                     e.stopPropagation();
                     const activePath = card.getAttribute('data-save-path') || currentSavePath;
-                    if (activePath && window.miseAPI && typeof window.miseAPI.openDownload === 'function') {
-                        window.miseAPI.openDownload(activePath);
+                    if (activePath && window.flyAPI && typeof window.flyAPI.openDownload === 'function') {
+                        window.flyAPI.openDownload(activePath);
                     }
                 });
             }
@@ -291,8 +291,8 @@ export function handleDownloadDone(data) {
                 revealBtn.addEventListener('click', (e) => {
                     e.stopPropagation();
                     const activePath = card.getAttribute('data-save-path') || currentSavePath;
-                    if (activePath && window.miseAPI && typeof window.miseAPI.revealDownload === 'function') {
-                        window.miseAPI.revealDownload(activePath);
+                    if (activePath && window.flyAPI && typeof window.flyAPI.revealDownload === 'function') {
+                        window.flyAPI.revealDownload(activePath);
                     }
                 });
             }
@@ -312,8 +312,8 @@ export function handleDownloadDone(data) {
             content.style.cursor = 'pointer';
             content.onclick = () => {
                 const activePath = card.getAttribute('data-save-path') || currentSavePath;
-                if (activePath && window.miseAPI && typeof window.miseAPI.openDownload === 'function') {
-                    window.miseAPI.openDownload(activePath);
+                if (activePath && window.flyAPI && typeof window.flyAPI.openDownload === 'function') {
+                    window.flyAPI.openDownload(activePath);
                 }
             };
         }
@@ -370,15 +370,15 @@ export function initDownloadShelf() {
         });
     }
 
-    if (window.miseAPI) {
-        if (typeof window.miseAPI.onDownloadStarted === 'function') {
-            window.miseAPI.onDownloadStarted((data) => handleDownloadStarted(data));
+    if (window.flyAPI) {
+        if (typeof window.flyAPI.onDownloadStarted === 'function') {
+            window.flyAPI.onDownloadStarted((data) => handleDownloadStarted(data));
         }
-        if (typeof window.miseAPI.onDownloadProgress === 'function') {
-            window.miseAPI.onDownloadProgress((data) => handleDownloadProgress(data));
+        if (typeof window.flyAPI.onDownloadProgress === 'function') {
+            window.flyAPI.onDownloadProgress((data) => handleDownloadProgress(data));
         }
-        if (typeof window.miseAPI.onDownloadDone === 'function') {
-            window.miseAPI.onDownloadDone((data) => handleDownloadDone(data));
+        if (typeof window.flyAPI.onDownloadDone === 'function') {
+            window.flyAPI.onDownloadDone((data) => handleDownloadDone(data));
         }
     }
 }

@@ -1,8 +1,8 @@
 # Chrome Extensions (Opt-in)
 
-Mise is built around **zero extensions**: ad blocking, tab suspension, styling and page scripting are handled natively or through [user scripts and styles](/guide/user-scripts-and-styles). That remains the recommended setup.
+Fly is built around **zero extensions**: ad blocking, tab suspension, styling and page scripting are handled natively or through [user scripts and styles](/guide/user-scripts-and-styles). That remains the recommended setup.
 
-For the few extensions that have no userscript equivalent, Mise can load **unpacked Chrome extensions** under strict rules designed to keep its idle footprint at zero:
+For the few extensions that have no userscript equivalent, Fly can load **unpacked Chrome extensions** under strict rules designed to keep its idle footprint at zero:
 
 * **Off by default.** While disabled, no extension code, library or process is loaded.
 * **Per workspace.** Each extension only runs in the workspaces you tick. Every other workspace stays exactly as lean as before.
@@ -15,9 +15,9 @@ For the few extensions that have no userscript equivalent, Mise can load **unpac
 ## Installing an Extension
 
 1. Download the extension's **Chrome build** as a `.zip` (most open source extensions publish one on their GitHub releases page) and unpack it.
-2. Move the unpacked folder into `~/.config/mise-browser/extensions/`, so that `manifest.json` sits directly inside it:
+2. Move the unpacked folder into `~/.config/fly-browser/extensions/`, so that `manifest.json` sits directly inside it:
    ```text
-   ~/.config/mise-browser/extensions/
+   ~/.config/fly-browser/extensions/
    └── darkreader/
        ├── manifest.json
        └── ...
@@ -47,7 +47,7 @@ Replace the folder contents with the new version and run **Reload Extensions** (
 | **Context menu** | Items added by extensions appear in the right-click menu of pages in that workspace (see the `onInstalled` note under Compatibility). |
 | **Keyboard** | Bind `open-extension-actions` in `keybinds.json` to jump straight to the Extensions category of the Command Palette. It has no default key so pages keep every shortcut. |
 
-Popups render inside the Mise window rather than as separate windows, so they behave the same on X11, Wayland, Hyprland and sway.
+Popups render inside the Fly window rather than as separate windows, so they behave the same on X11, Wayland, Hyprland and sway.
 
 ---
 
@@ -78,17 +78,17 @@ Content scripts scale with the number of **live** tabs that match, which tab hib
 
 Extension APIs come from Electron plus the [electron-chrome-extensions](https://github.com/samuelmaddock/electron-browser-shell/tree/master/packages/electron-chrome-extensions) library (GPL-3.0). Most extensions that modify pages work. Known limits:
 
-* **`declarativeNetRequest` rules are not enforced.** Electron exposes the API but its rules never block anything, so rule based blockers such as uBlock Origin Lite load without effect. Mise's built-in blocker covers this.
-* **Blocking `webRequest` is overridden** by Mise's own network filters, which take precedence in Electron.
+* **`declarativeNetRequest` rules are not enforced.** Electron exposes the API but its rules never block anything, so rule based blockers such as uBlock Origin Lite load without effect. Fly's built-in blocker covers this.
+* **Blocking `webRequest` is overridden** by Fly's own network filters, which take precedence in Electron.
 * **`runtime.onInstalled` does not fire** for unpacked extensions in Electron. Anything an extension only sets up there, most often its context menu items, will be missing. Items created when the extension starts do appear.
 * **No side panels, native messaging hosts or Chrome sync.**
 * **Firefox builds**: there is no Gecko engine, so `.xpi` files are not supported as such. Cross-browser extensions often work when their Firefox build is unpacked, but the Chrome build is the safer choice.
 * **Hibernation** closes a tab's renderer, so an extension sees the tab close and a new one open when it wakes. Extensions that keep per-tab state start fresh for that tab.
-* Mise's native Dark Reader (`Alt + D` by default; configurable in Keyboard preferences) and a dark mode extension on the same tab invert colours twice. Use one or the other.
-* In NORMAL mode Mise keeps keystrokes for its own shortcuts, so extension keyboard handlers inside pages only receive keys in INSERT or PASSTHROUGH mode.
+* Fly's native Dark Reader (`Alt + D` by default; configurable in Keyboard preferences) and a dark mode extension on the same tab invert colours twice. Use one or the other.
+* In NORMAL mode Fly keeps keystrokes for its own shortcuts, so extension keyboard handlers inside pages only receive keys in INSERT or PASSTHROUGH mode.
 
 ---
 
 ## Disabling
 
-Turn off **Enable Chrome Extensions**. Every extension unloads immediately; pages that already ran content scripts keep them until reloaded. Removing a folder from `~/.config/mise-browser/extensions/` uninstalls it.
+Turn off **Enable Chrome Extensions**. Every extension unloads immediately; pages that already ran content scripts keep them until reloaded. Removing a folder from `~/.config/fly-browser/extensions/` uninstalls it.

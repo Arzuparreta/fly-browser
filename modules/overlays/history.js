@@ -24,7 +24,7 @@ export function filterHistoryItems(filterText) {
     const listContainer = document.getElementById('HistoryResultsList');
     listContainer.innerHTML = '';
 
-    window.miseAPI.searchHistory(filterText).then((results) => {
+    window.flyAPI.searchHistory(filterText).then((results) => {
         state.historyResults = results;
 
         if (state.historyResults.length === 0) {

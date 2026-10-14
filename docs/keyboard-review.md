@@ -1,6 +1,6 @@
 # Keyboard control coverage review
 
-Reviewed the action catalogue, renderer keyboard listeners, sandboxed guest preload, custom hinter, native reader, navigation/sidebar controls, all overlays and the existing command palette. The controller is implemented by Mise itself; no Vimium extension is embedded.
+Reviewed the action catalogue, renderer keyboard listeners, sandboxed guest preload, custom hinter, native reader, navigation/sidebar controls, all overlays and the existing command palette. The controller is implemented by Fly itself; no Vimium extension is embedded.
 
 ## Control surfaces
 
@@ -36,4 +36,4 @@ Automated checks cover configuration and guest/native dispatch, plus a live Linu
 
 See [the generated reference](./reference/keybinds.md) for all actions and defaults, and [the fork fixes ledger](./fork-fixes.md) for each inherited defect, its repair and validation limits.
 
-To run the optional UI suite, make Playwright available to Node or set `MISE_PLAYWRIGHT_MODULE` to its installed module path, then run `npm run test:keyboard-ui`. It needs an Electron binary and a display. `MISE_TEST_OZONE_PLATFORM` selects the display backend; the default is `x11`. `MISE_KEYBOARD_SCREENSHOT` optionally saves the editor screenshot. The suite sets Electron's home and user-data paths to temporary directories and removes them after the run.
+To run the optional UI suite, make Playwright available to Node or set `FLY_PLAYWRIGHT_MODULE` to its installed module path, then run `npm run test:keyboard-ui`. It needs an Electron binary and a display. `FLY_TEST_OZONE_PLATFORM` selects the display backend; the default is `x11`. `FLY_KEYBOARD_SCREENSHOT` optionally saves the editor screenshot. The suite sets Electron's home and user-data paths to temporary directories and removes them after the run.

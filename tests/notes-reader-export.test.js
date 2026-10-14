@@ -5,7 +5,7 @@ const assert = require('assert');
 const keybinds = require('../keybinds.js');
 const { parseMarkdownToHtml, formatArticleToMarkdown } = require('../modules/overlays/notes.js');
 
-console.log('Running Mise notes overlay and Reader View export regression tests...');
+console.log('Running Fly notes overlay and Reader View export regression tests...');
 
 // 1. Verify export-reader-to-notes keybinding is registered
 {
@@ -63,12 +63,12 @@ console.log('Running Mise notes overlay and Reader View export regression tests.
 
 // 5. Verify markdown parsing with headers, links, and rules
 {
-    const source = '# Header 1\n## Header 2\n[Mise Browser](https://misebrowser.com)\n***\n> Quoted excerpt';
+    const source = '# Header 1\n## Header 2\n[Fly Browser](https://flybrowser.example)\n***\n> Quoted excerpt';
     const html = parseMarkdownToHtml(source);
 
     assert(html.includes('<h1>Header 1</h1>'), 'Must render h1 tag');
     assert(html.includes('<h2>Header 2</h2>'), 'Must render h2 tag');
-    assert(html.includes('<a href="https://misebrowser.com" target="_blank" rel="noopener noreferrer">Mise Browser</a>'), 'Must render anchor link');
+    assert(html.includes('<a href="https://flybrowser.example" target="_blank" rel="noopener noreferrer">Fly Browser</a>'), 'Must render anchor link');
     assert(html.includes('<hr>'), 'Must render horizontal rule');
     assert(html.includes('<blockquote>Quoted excerpt</blockquote>'), 'Must render blockquote');
 
@@ -153,20 +153,20 @@ console.log('Running Mise notes overlay and Reader View export regression tests.
     const { formatSelectionToMarkdown, parseMarkdownToHtml } = require('../modules/overlays/notes.js');
 
     const sampleSelection = {
-        text: 'Mise is an efficient, privacy-focused, keyboard-centric web browser.\nBuilt with Electron on Linux.',
-        title: 'Mise Browser Project',
-        url: 'https://misebrowser.com'
+        text: 'Fly is an efficient, privacy-focused, keyboard-centric web browser.\nBuilt with Electron on Linux.',
+        title: 'Fly Browser Project',
+        url: 'https://flybrowser.example'
     };
 
     const markdown = formatSelectionToMarkdown(sampleSelection);
-    assert(markdown.includes('### [Mise Browser Project](https://misebrowser.com)'), 'Must include title with link');
+    assert(markdown.includes('### [Fly Browser Project](https://flybrowser.example)'), 'Must include title with link');
     assert(markdown.includes('*Captured:'), 'Must include capture timestamp');
-    assert(markdown.includes('> Mise is an efficient, privacy-focused, keyboard-centric web browser.'), 'Must prefix first line with blockquote');
+    assert(markdown.includes('> Fly is an efficient, privacy-focused, keyboard-centric web browser.'), 'Must prefix first line with blockquote');
     assert(markdown.includes('> Built with Electron on Linux.'), 'Must prefix second line with blockquote');
 
     const html = parseMarkdownToHtml(markdown);
-    assert(html.includes('<h3><a href="https://misebrowser.com" target="_blank" rel="noopener noreferrer">Mise Browser Project</a></h3>'), 'Must render linked h3 heading');
-    assert(html.includes('<blockquote>Mise is an efficient, privacy-focused, keyboard-centric web browser.<br>Built with Electron on Linux.</blockquote>'), 'Must render cohesive merged blockquote');
+    assert(html.includes('<h3><a href="https://flybrowser.example" target="_blank" rel="noopener noreferrer">Fly Browser Project</a></h3>'), 'Must render linked h3 heading');
+    assert(html.includes('<blockquote>Fly is an efficient, privacy-focused, keyboard-centric web browser.<br>Built with Electron on Linux.</blockquote>'), 'Must render cohesive merged blockquote');
 
     // Test fallback when URL is missing
     const noUrlSelection = {

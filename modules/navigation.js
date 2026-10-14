@@ -65,7 +65,7 @@ function applyTargetUrl(targetUrl) {
     const currentIdx = Array.from(document.querySelectorAll('#TabList li')).indexOf(activeListItem);
 
     state.sessionState.workspaces[currentWS][currentIdx] = targetUrl;
-    window.miseAPI.saveSession(state.sessionState);
+    window.flyAPI.saveSession(state.sessionState);
 
     const effectiveLoadUrl = isPdfUrl(targetUrl) ? getPdfViewerUrl(targetUrl) : targetUrl;
 
@@ -120,7 +120,7 @@ export async function handleNavigation(input) {
 
         if (matchedWs) {
             state.sessionState.current_workspace = matchedWs;
-            window.miseAPI.saveSession(state.sessionState);
+            window.flyAPI.saveSession(state.sessionState);
             renderWorkspaceUI(0);
         } else {
             alert(`Workspace "${targetWs}" does not exist.`);
@@ -175,9 +175,9 @@ export async function handleNavigation(input) {
                 targetUrl = `https://${trimmedInput}`;
             } else {
                 let searchTemplate = 'https://duckduckgo.com/?q=%s';
-                if (window.miseAPI && typeof window.miseAPI.getBrowserSettings === 'function') {
+                if (window.flyAPI && typeof window.flyAPI.getBrowserSettings === 'function') {
                     try {
-                        const cfg = await window.miseAPI.getBrowserSettings();
+                        const cfg = await window.flyAPI.getBrowserSettings();
                         if (cfg && cfg.search_engine) {
                             searchTemplate = cfg.search_engine;
                         }
@@ -287,9 +287,9 @@ export function setupAddressBarAutocomplete() {
             });
         });
 
-        if (window.miseAPI && typeof window.miseAPI.searchHistory === 'function') {
+        if (window.flyAPI && typeof window.flyAPI.searchHistory === 'function') {
             try {
-                const historyMatches = await window.miseAPI.searchHistory(query);
+                const historyMatches = await window.flyAPI.searchHistory(query);
                 historyMatches.slice(0, 5).forEach(item => {
                     matches.push({ title: item.title, value: item.url, type: 'History' });
                 });
@@ -387,7 +387,7 @@ export async function selectSuggestion(item) {
     if (item.value.startsWith('ws:')) {
         const targetWs = item.value.split('ws:')[1];
         state.sessionState.current_workspace = targetWs;
-        window.miseAPI.saveSession(state.sessionState);
+        window.flyAPI.saveSession(state.sessionState);
         renderWorkspaceUI(0);
         hideSuggestions();
         const addressBar = document.getElementById('WideAddressBar');
@@ -412,9 +412,9 @@ export async function selectSuggestion(item) {
 
     if (item.forceSearch) {
         let searchTemplate = 'https://duckduckgo.com/?q=%s';
-        if (window.miseAPI && typeof window.miseAPI.getBrowserSettings === 'function') {
+        if (window.flyAPI && typeof window.flyAPI.getBrowserSettings === 'function') {
             try {
-                const cfg = await window.miseAPI.getBrowserSettings();
+                const cfg = await window.flyAPI.getBrowserSettings();
                 if (cfg && cfg.search_engine) {
                     searchTemplate = cfg.search_engine;
                 }

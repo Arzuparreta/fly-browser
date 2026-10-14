@@ -1,5 +1,5 @@
 // modules/userScriptShim.js
-// Userscript execution wrapper and GM_* API shim for Mise Browser
+// Userscript execution wrapper and GM_* API shim for Fly Browser
 
 export function buildUserScriptWrapper(item) {
     const token = item.token || '';
@@ -16,22 +16,22 @@ export function buildUserScriptWrapper(item) {
     return `(function(__gm_token__, __gm_script_id__, __gm_initial_storage__, __gm_meta__) {
     'use strict';
 
-    if (!window.__miseInjectedScripts) {
+    if (!window.__flyInjectedScripts) {
         try {
-            Object.defineProperty(window, '__miseInjectedScripts', {
+            Object.defineProperty(window, '__flyInjectedScripts', {
                 value: new Set(),
                 writable: true,
                 configurable: true,
                 enumerable: false
             });
         } catch (e) {
-            window.__miseInjectedScripts = new Set();
+            window.__flyInjectedScripts = new Set();
         }
     }
-    if (window.__miseInjectedScripts.has(__gm_script_id__)) {
+    if (window.__flyInjectedScripts.has(__gm_script_id__)) {
         return;
     }
-    window.__miseInjectedScripts.add(__gm_script_id__);
+    window.__flyInjectedScripts.add(__gm_script_id__);
 
     var __gm_store = Object.assign({}, __gm_initial_storage__ || {});
     var __gm_listeners = new Map();
@@ -54,8 +54,8 @@ export function buildUserScriptWrapper(item) {
                 try { listener.fn(k, oldVal, value, false); } catch (e) {}
             }
         }
-        if (window.__miseGMBridge && typeof window.__miseGMBridge.setStorageValue === 'function') {
-            window.__miseGMBridge.setStorageValue(__gm_token__, __gm_script_id__, k, value).catch(function() {});
+        if (window.__flyGMBridge && typeof window.__flyGMBridge.setStorageValue === 'function') {
+            window.__flyGMBridge.setStorageValue(__gm_token__, __gm_script_id__, k, value).catch(function() {});
         }
     };
 
@@ -70,8 +70,8 @@ export function buildUserScriptWrapper(item) {
                 try { listener.fn(k, oldVal, undefined, false); } catch (e) {}
             }
         }
-        if (window.__miseGMBridge && typeof window.__miseGMBridge.deleteStorageValue === 'function') {
-            window.__miseGMBridge.deleteStorageValue(__gm_token__, __gm_script_id__, k).catch(function() {});
+        if (window.__flyGMBridge && typeof window.__flyGMBridge.deleteStorageValue === 'function') {
+            window.__flyGMBridge.deleteStorageValue(__gm_token__, __gm_script_id__, k).catch(function() {});
         }
     };
 
@@ -103,8 +103,8 @@ export function buildUserScriptWrapper(item) {
             try { details.onreadystatechange({ readyState: 1 }); } catch (e) {}
         }
 
-        if (!window.__miseGMBridge || typeof window.__miseGMBridge.request !== 'function') {
-            var bridgeErr = { isTimeout: false, message: 'Mise GM bridge unavailable', status: 0, statusText: 'Error' };
+        if (!window.__flyGMBridge || typeof window.__flyGMBridge.request !== 'function') {
+            var bridgeErr = { isTimeout: false, message: 'Fly GM bridge unavailable', status: 0, statusText: 'Error' };
             if (typeof details.onerror === 'function') details.onerror(bridgeErr);
             return { abort: function() {} };
         }
@@ -117,7 +117,7 @@ export function buildUserScriptWrapper(item) {
             timeout: Number(details.timeout) || 30000
         };
 
-        window.__miseGMBridge.request(__gm_token__, payload)
+        window.__flyGMBridge.request(__gm_token__, payload)
             .then(function(res) {
                 if (isAborted) return;
 
@@ -238,7 +238,7 @@ export function buildUserScriptWrapper(item) {
 
     var GM_log = function() {
         var args = Array.prototype.slice.call(arguments);
-        args.unshift('[Mise UserScript: ' + (__gm_meta__.name || __gm_script_id__) + ']');
+        args.unshift('[Fly UserScript: ' + (__gm_meta__.name || __gm_script_id__) + ']');
         console.log.apply(console, args);
     };
 
@@ -255,7 +255,7 @@ export function buildUserScriptWrapper(item) {
         }
         if (typeof Notification !== 'undefined' && Notification.permission === 'granted') {
             try {
-                var notif = new Notification(opts.title || (__gm_meta__.name || 'Mise UserScript'), {
+                var notif = new Notification(opts.title || (__gm_meta__.name || 'Fly UserScript'), {
                     body: opts.text || '',
                     icon: opts.image || undefined
                 });
@@ -265,7 +265,7 @@ export function buildUserScriptWrapper(item) {
                 return notif;
             } catch (e) {}
         }
-        console.log('[Mise UserScript Notification]', opts.title || '', opts.text || '');
+        console.log('[Fly UserScript Notification]', opts.title || '', opts.text || '');
         return null;
     };
 
@@ -282,7 +282,7 @@ export function buildUserScriptWrapper(item) {
             grants: __gm_meta__.grants || [],
             runAt: __gm_meta__.runAt || 'document-end'
         },
-        scriptHandler: 'Mise Browser',
+        scriptHandler: 'Fly Browser',
         version: '0.15.0'
     };
 
@@ -325,8 +325,8 @@ export function buildUserScriptWrapper(item) {
 ${item.code}
         }).call(window);
     } catch (err) {
-        console.error('[Mise UserScript: ' + (__gm_meta__.name || __gm_script_id__) + ']', err);
+        console.error('[Fly UserScript: ' + (__gm_meta__.name || __gm_script_id__) + ']', err);
     }
 })(${tokenJson}, ${scriptIdJson}, ${storageJson}, ${metaJson});
-//# sourceURL=mise-userscript://${sourceUrlName}.user.js`;
+//# sourceURL=fly-userscript://${sourceUrlName}.user.js`;
 }

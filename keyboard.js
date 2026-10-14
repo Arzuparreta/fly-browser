@@ -1,7 +1,7 @@
 // Shared shortcut grammar for the main process and the settings editor.
 (function (root, factory) {
     if (typeof module === 'object' && module.exports) module.exports = factory();
-    else root.MiseKeyboard = factory();
+    else root.FlyKeyboard = factory();
 })(typeof globalThis !== 'undefined' ? globalThis : this, function () {
     const aliases = {control: 'Ctrl', ctrl: 'Ctrl', option: 'Alt', alt: 'Alt', shift: 'Shift',
         cmd: 'Meta', command: 'Meta', super: 'Meta', meta: 'Meta'};

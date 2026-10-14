@@ -1,6 +1,6 @@
-# Mise working agreements
+# Fly working agreements
 
-Follow CONTRIBUTING.md and the user's workflow instructions. This repository is an independent continuation of Mise and no longer tracks or contributes to Rakosn1cek/Mise-browser; do not fetch, merge or open pull requests against it. Complete authorised commits, pushes, pull requests and merges as requested.
+Follow CONTRIBUTING.md and the user's workflow instructions. Fly is the renamed, independent continuation of Mise. This repository no longer tracks or contributes to Rakosn1cek/Mise-browser; do not fetch, merge or open pull requests against it. Complete authorised commits, pushes, pull requests and merges as requested.
 
 ## Branch workflow
 

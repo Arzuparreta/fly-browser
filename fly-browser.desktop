@@ -1,10 +1,10 @@
 [Desktop Entry]
-Name=Mise
-Comment=Minimalist Keyboard-Driven Web Browser
-Exec=mise %u
-Icon=mise
+Name=Fly
+Comment=Small, minimal web browser with full keyboard control and a polished mouse experience
+Exec=fly-browser %u
+Icon=fly-browser
 Terminal=false
 Type=Application
 Categories=Network;WebBrowser;
 MimeType=text/html;text/xml;application/xhtml+xml;x-scheme-handler/http;x-scheme-handler/https;
-StartupWMClass=mise
+StartupWMClass=fly-browser

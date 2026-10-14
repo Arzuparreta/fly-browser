@@ -4,7 +4,7 @@
 const assert = require('assert');
 const keybinds = require('../keybinds.js');
 
-console.log('Running Mise audio controls and keybind regression tests...');
+console.log('Running Fly audio controls and keybind regression tests...');
 
 // 1. Verify audio mute keybindings are registered
 {

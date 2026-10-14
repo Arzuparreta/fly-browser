@@ -51,7 +51,7 @@ export function focusActiveWebview() {
     if (activeListItem) {
         const currentIdx = Array.from(document.querySelectorAll('#TabList li')).indexOf(activeListItem);
         if (state.activeViewsCache[currentWS] && state.activeViewsCache[currentWS][currentIdx]) {
-            window.miseAllowWebviewFocus = true;
+            window.flyAllowWebviewFocus = true;
             state.activeViewsCache[currentWS][currentIdx].focus();
         }
     }
@@ -85,11 +85,11 @@ export function isPdfUrl(url) {
 
 export function getPdfViewerUrl(targetUrl) {
     if (!targetUrl || typeof targetUrl !== 'string') return targetUrl;
-    if (typeof window.miseAPI?.getPdfViewerUrl === 'function') {
-        return window.miseAPI.getPdfViewerUrl(targetUrl);
+    if (typeof window.flyAPI?.getPdfViewerUrl === 'function') {
+        return window.flyAPI.getPdfViewerUrl(targetUrl);
     }
-    if (typeof window.miseAPI?.getPdfViewerPath === 'function') {
-        const viewerHtml = window.miseAPI.getPdfViewerPath();
+    if (typeof window.flyAPI?.getPdfViewerPath === 'function') {
+        const viewerHtml = window.flyAPI.getPdfViewerPath();
         if (targetUrl.startsWith(viewerHtml)) return targetUrl;
         return `${viewerHtml}?file=${encodeURIComponent(targetUrl)}`;
     }
@@ -124,7 +124,7 @@ export function isMatchingDomain(url, targetDomain) {
 // Checks whether a URL matches domains designated for isolated private sessions
 export function isTargetPrivateDomain(url) {
     if (!url || typeof url !== 'string') return false;
-    if (url.includes('mise_test_auth=1')) return true;
+    if (url.includes('fly_test_auth=1')) return true;
     return isMatchingDomain(url, 'ycombinator.com');
 }
 

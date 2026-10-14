@@ -31,7 +31,7 @@ for (const commit of git('log', '--format=%h', ...refs, '--', 'keybinds.js').tri
         counts.legacy++;
     } else if (source.includes('JSON.stringify(result.config, null, 2)')) {
         // These versions saved the complete validated table, including every unchanged default.
-        const directory = fs.mkdtempSync(path.join(os.tmpdir(), 'mise-stored-defaults-'));
+        const directory = fs.mkdtempSync(path.join(os.tmpdir(), 'fly-stored-defaults-'));
         try {
             fs.writeFileSync(path.join(directory, 'keybinds.js'), source);
             fs.writeFileSync(path.join(directory, 'keyboard.js'), git('show', `${commit}:keyboard.js`));

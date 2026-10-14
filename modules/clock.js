@@ -86,8 +86,8 @@ export function cycleClockFormat() {
         currentClockMode = 'datetime';
     }
 
-    if (window.miseAPI && typeof window.miseAPI.updateBrowserSettings === 'function') {
-        window.miseAPI.updateBrowserSettings({ clock_format: currentClockMode }).catch(() => {});
+    if (window.flyAPI && typeof window.flyAPI.updateBrowserSettings === 'function') {
+        window.flyAPI.updateBrowserSettings({ clock_format: currentClockMode }).catch(() => {});
     }
 
     updateClockUI();
@@ -113,8 +113,8 @@ export function setClockVisibility(visible) {
         toggleInput.checked = isClockEnabled;
     }
 
-    if (window.miseAPI && typeof window.miseAPI.updateBrowserSettings === 'function') {
-        window.miseAPI.updateBrowserSettings({ show_clock: isClockEnabled }).catch(() => {});
+    if (window.flyAPI && typeof window.flyAPI.updateBrowserSettings === 'function') {
+        window.flyAPI.updateBrowserSettings({ show_clock: isClockEnabled }).catch(() => {});
     }
 
     return isClockEnabled;
@@ -144,8 +144,8 @@ export function initClock() {
     }
 
     // Load persisted settings
-    if (window.miseAPI && typeof window.miseAPI.getBrowserSettings === 'function') {
-        window.miseAPI.getBrowserSettings().then((cfg) => {
+    if (window.flyAPI && typeof window.flyAPI.getBrowserSettings === 'function') {
+        window.flyAPI.getBrowserSettings().then((cfg) => {
             if (cfg) {
                 if (typeof cfg.show_clock === 'boolean') {
                     setClockVisibility(cfg.show_clock);
