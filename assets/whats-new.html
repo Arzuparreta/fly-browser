@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>What's New in Fly v0.15.0</title>
+    <title>What's New in Fly</title>
     <link rel="icon" type="image/png" href="icons/fly-logo48.png">
     <link rel="stylesheet" href="fonts/fonts.css">
     <style>
@@ -165,15 +165,16 @@
         .feature-points li {
             font-size: 13px;
             color: var(--text-muted);
-            display: flex;
-            align-items: baseline;
-            gap: 8px;
+            position: relative;
+            padding-left: 16px;
         }
 
         .feature-points li::before {
             content: "•";
             color: var(--accent);
             font-weight: bold;
+            position: absolute;
+            left: 0;
         }
 
         footer {
@@ -221,69 +222,70 @@
                     Full Release on GitHub ↗
                 </a>
             </div>
-            <h1>What's New in Fly v0.15.0</h1>
-            <p class="subtitle">Custom search engine aliases & bangs, expansive quick notes with reader export, pinned tabs, and per-tab audio management.</p>
+            <h1>What's New in Fly</h1>
+            <p class="subtitle">Mise is now Fly: an independent browser with its own look, uBlock Origin ready to switch on, a larger interface size and a round of reliability fixes. Its first release.</p>
         </header>
 
         <section class="feature-card">
-            <h2 class="feature-title">Custom Search Engine Aliases & Bangs</h2>
+            <h2 class="feature-title">Mise Is Now Fly</h2>
             <p class="feature-desc">
-                Execute targeted queries across search engines, developer documentation, and package repositories straight from the address bar or Command Palette.
+                Fly continues Mise as an independent project: a small, minimal browser with full keyboard control and a polished experience for mouse users.
             </p>
             <ul class="feature-points">
-                <li>Built-in aliases and DuckDuckGo bang syntax: use quick prefixes like <kbd>g</kbd>, <kbd>!ddg</kbd>, <kbd>yt</kbd>, <kbd>gh</kbd>, <kbd>aur</kbd>, <kbd>pkg</kbd>, <kbd>so</kbd>, <kbd>r</kbd>, <kbd>sp</kbd>, <kbd>b</kbd>, and <kbd>k</kbd>.</li>
-                <li>Fully user-customisable search providers: define, edit, or override engine aliases directly in Preferences (<kbd>F1</kbd>) or via <kbd>config.json</kbd>.</li>
-                <li>Live address bar autocomplete with visual badge indicators highlighting the active search provider.</li>
+                <li>Your Mise profile in <kbd>~/.config/mise-browser</kbd> moves to <kbd>~/.config/fly-browser</kbd> on first launch, with tabs, notes, bookmarks and settings intact. An existing Fly profile is never overwritten.</li>
+                <li>Update checks, issue reports and links now point to Fly's own repository.</li>
+                <li>Releases are versioned automatically from what each change does to someone upgrading, so the number tells you what to expect.</li>
             </ul>
         </section>
 
         <section class="feature-card">
-            <h2 class="feature-title">Expansive Quick Notes & Reader View Export</h2>
+            <h2 class="feature-title">A New Look</h2>
             <p class="feature-desc">
-                A redesigned Markdown scratchpad optimised for comfortable authoring, web clipping, and knowledge management interoperability.
+                A calmer, more legible interface, with its fonts and icons bundled locally.
             </p>
             <ul class="feature-points">
-                <li>Expansive 920px responsive overlay with full canvas toggle (<kbd>f</kbd>) and real-time word and character counters.</li>
-                <li>Export clean distilled articles from Reader View directly into Quick Notes via <kbd>Ctrl + Shift + E</kbd> with YAML frontmatter.</li>
-                <li>Context menu web clipping: highlight any text on a web page, right-click, and select "Save to Notes".</li>
-                <li>Instant launcher buttons to open notes directly inside your favourite external vault editors: Obsidian, Neovim, and Logseq.</li>
+                <li>New palette, IBM Plex Sans and Mono, and a text-only FLY wordmark in the sidebar, in expanded and compact modes.</li>
+                <li>Tab rows show each page's domain and state; status cells summarise the current page at a glance.</li>
+                <li>A local new tab page searches with your configured engine and shows real snapshots of the sites you visit.</li>
+                <li>Preferences, Reader View, the PDF viewer and these release notes share the same design. Backdrop blur is gone.</li>
             </ul>
         </section>
 
         <section class="feature-card">
-            <h2 class="feature-title">Pinned Tabs & Accidental Closure Protection</h2>
+            <h2 class="feature-title">uBlock Origin, Ready When You Are</h2>
             <p class="feature-desc">
-                Dock essential communication channels, web applications, and reference documents permanently at the top of your tab strip.
+                Extension support stays off by default. Turn it on and uBlock Origin is already installed.
             </p>
             <ul class="feature-points">
-                <li>Toggle pinned state instantly via <kbd>Ctrl + Shift + P</kbd> or Normal mode <kbd>P</kbd>.</li>
-                <li>Pinned tabs remain docked at the top in a compact icon-first format across all workspace navigation.</li>
-                <li>Guard against accidental closure: pinned tabs ignore single-key <kbd>x</kbd> and mass tab closure sweeps.</li>
-                <li>Automatic hibernation exemption ensures pinned tabs remain active in memory for audio playback and real-time alerts.</li>
+                <li>The official uBlock Origin release is bundled and loads in every workspace without a saved extension selection.</li>
+                <li>Enabled and Remove choices for each extension now persist across restarts and updates.</li>
+                <li>The built-in Dark Reader toggle has been removed; Dark Reader can still be installed as an extension.</li>
             </ul>
         </section>
 
         <section class="feature-card">
-            <h2 class="feature-title">Per-Tab Audio Indicators & Global Mute</h2>
+            <h2 class="feature-title">Large Interface Size</h2>
             <p class="feature-desc">
-                Granular control over audio-producing web pages with instant visual feedback and dedicated keyboard shortcuts.
+                For small or high-density displays where the compact interface is hard to read.
             </p>
             <ul class="feature-points">
-                <li>Dynamic speaker indicators on active tabs displaying subtle audio pulse animations when sound is detected.</li>
-                <li>Clickable speaker badge on tabs to mute or unmute individual webviews with a single click.</li>
-                <li>Per-tab mute toggle via <kbd>Ctrl + Shift + M</kbd>, <kbd>F8</kbd>, or Normal mode <kbd>m</kbd>.</li>
-                <li>Global mute toggle via Normal mode <kbd>M</kbd> or Command Palette to silence all browser tabs instantly.</li>
+                <li>Preferences (<kbd>F1</kbd>) → Appearance offers Normal (100%) and Large (125%). The change applies immediately and survives restarts.</li>
+                <li>Website zoom stays independent for each tab and is preserved when you switch sizes.</li>
             </ul>
         </section>
 
         <section class="feature-card">
-            <h2 class="feature-title">Atomic Configuration Writes & Upcoming Roadmap</h2>
+            <h2 class="feature-title">Fixes</h2>
             <p class="feature-desc">
-                Enhanced crash safety and persistent state protection on low-resource and embedded Linux systems.
+                Problems carried over from Mise that no longer get in your way.
             </p>
             <ul class="feature-points">
-                <li>Atomic configuration writes via temporary file staging and rename swaps eliminate risk of corrupted configuration on abrupt shutdowns.</li>
-                <li>Session Auto-Recovery: slated as the immediate focus for the next release cycle to restore tabs seamlessly after unexpected crashes.</li>
+                <li>Sign-in popups (such as "Continue with Google") keep their connection to the page that opened them, so popup logins complete.</li>
+                <li>A page that closes itself now closes its tab, instead of leaving a blank tab that ignored the keyboard.</li>
+                <li>Searching from the address bar works in a workspace with no open tabs.</li>
+                <li>Closing the terminal Fly was started from no longer opens a "JavaScript error in the main process" dialog.</li>
+                <li>A failed start no longer blocks every later launch.</li>
+                <li><kbd>launch.sh</kbd> sets up a fresh clone, refreshes dependencies after a pull and stays attached to the terminal.</li>
             </ul>
         </section>
 
