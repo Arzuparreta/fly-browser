@@ -10,6 +10,7 @@ const { app, ipcMain } = require('electron');
 let blockerInstance = null;
 let blockerInitialisation = null;
 let ipcInitialized = false;
+const networkExtensionSessions = new WeakSet();
 
 // Domains the user has explicitly marked as trusted (e.g. their bank, their
 // usual checkout sites). Anti-fingerprinting and ad/tracker blocking are
@@ -186,7 +187,11 @@ function hardenSession(targetSession, spellLang = 'en-GB') {
     });
 
     attachNetworkHandlers(targetSession);
+    attachHeaderHandler(targetSession);
+}
 
+function attachHeaderHandler(targetSession) {
+    if (networkExtensionSessions.has(targetSession)) return;
     const cleanUserAgent = (ua) => {
         return (ua || '')
             .replace(/fly-browser\/[0-9.]+\s*/gi, '')
@@ -229,11 +234,38 @@ function hardenSession(targetSession, spellLang = 'en-GB') {
     }
 }
 
+// Electron selects either its native handlers or chrome.webRequest for an entire
+// session. Even one native listener prevents extensions from seeing requests.
+function setNetworkExtensions(targetSession, enabled) {
+    if (networkExtensionSessions.has(targetSession) === enabled) return;
+    if (enabled) {
+        networkExtensionSessions.add(targetSession);
+        if (blockerInstance && blockerInstance.isBlockingEnabled(targetSession)) {
+            blockerInstance.disableBlockingInSession(targetSession);
+            attachAdblockerIpc();
+        }
+        for (const event of ['onBeforeRequest', 'onBeforeSendHeaders', 'onSendHeaders',
+            'onHeadersReceived', 'onResponseStarted', 'onBeforeRedirect', 'onCompleted', 'onErrorOccurred']) {
+            targetSession.webRequest[event](null);
+        }
+    } else {
+        networkExtensionSessions.delete(targetSession);
+        // Restore synchronous rules immediately; initialise cosmetics afterwards.
+        attachNetworkHandlers(targetSession);
+        attachHeaderHandler(targetSession);
+        initialiseAdblocker(targetSession);
+    }
+}
+
+function hasNetworkExtensions(targetSession) {
+    return networkExtensionSessions.has(targetSession);
+}
+
 // Electron keeps a single listener per webRequest event, so the ad-blocker's
 // onBeforeRequest and onHeadersReceived would replace ours. Register one
 // listener for each that runs Fly's rules first, then hands over to the blocker.
 function attachNetworkHandlers(targetSession) {
-    if (!targetSession.webRequest) return;
+    if (!targetSession.webRequest || networkExtensionSessions.has(targetSession)) return;
 
     const blockingEnabled = () => blockerInstance && blockerInstance.isBlockingEnabled(targetSession);
 
@@ -305,6 +337,22 @@ const GHOSTERY_IPC_CHANNELS = [
     '@ghostery/adblocker/cosmetic-filters'
 ];
 
+// Ghostery removes these process-wide handlers when disabling one session.
+// Keep them available for other workspaces and scope calls to native sessions.
+function attachAdblockerIpc() {
+    GHOSTERY_IPC_CHANNELS.forEach(channel => {
+        try { ipcMain.removeHandler(channel); } catch (e) {}
+    });
+    const nativeSender = event => event.sender &&
+        !networkExtensionSessions.has(event.sender.session) &&
+        blockerInstance.isBlockingEnabled(event.sender.session);
+    ipcMain.handle('@ghostery/adblocker/inject-cosmetic-filters', (event, ...args) => {
+        if (nativeSender(event)) return blockerInstance.onInjectCosmeticFilters(event, ...args);
+    });
+    ipcMain.handle('@ghostery/adblocker/is-mutation-observer-enabled', event =>
+        nativeSender(event) ? blockerInstance.onIsMutationObserverEnabled(event) : false);
+}
+
 // Sessions start together on a clean profile. Share the pending engine build so
 // they cannot download, deserialize and retain separate copies of the filter set.
 function getAdblocker() {
@@ -341,7 +389,7 @@ function getAdblocker() {
 }
 
 async function initialiseAdblocker(targetSession) {
-    if (!await getAdblocker()) return;
+    if (!await getAdblocker() || networkExtensionSessions.has(targetSession)) return;
 
     try {
         if (ipcInitialized) {
@@ -350,6 +398,7 @@ async function initialiseAdblocker(targetSession) {
             });
         }
         blockerInstance.enableBlockingInSession(targetSession);
+        attachAdblockerIpc();
         attachNetworkHandlers(targetSession);
         ipcInitialized = true;
     } catch (err) {
@@ -460,6 +509,8 @@ function validatePdfAccess(token, targetUrl, senderUrl) {
 
 module.exports = {
     hardenSession,
+    setNetworkExtensions,
+    hasNetworkExtensions,
     hardenWebviewPreferences,
     setTrustedDomains,
     isTrustedDomain,

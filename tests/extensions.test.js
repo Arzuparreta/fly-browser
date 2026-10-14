@@ -153,5 +153,39 @@ function writeExtension(folder, manifest, files = {}) {
     console.log('✓ Extension actions keyboard entry registered without a default binding');
 }
 
+// Bundled installs, updates and removals must preserve profile decisions.
+{
+    const source = path.join(tmpRoot, 'bundles');
+    const target = path.join(tmpRoot, 'profile-extensions');
+    fs.mkdirSync(path.join(source, 'blocker'), { recursive: true });
+    fs.writeFileSync(path.join(source, 'blocker', 'manifest.json'), JSON.stringify({ manifest_version: 2, name: 'Blocker', version: '1' }));
+    let cfg = extensions.provisionBundledExtensions(target, source, {});
+    assert(fs.existsSync(path.join(target, 'blocker', 'manifest.json')));
+    assert.deepStrictEqual(extensions.getWorkspaceFolders(cfg, 'New workspace'), ['blocker']);
+    cfg = { ...cfg, extensions_disabled: ['blocker'], extensions_by_workspace: { Work: [] } };
+    fs.writeFileSync(path.join(source, 'blocker', 'manifest.json'), JSON.stringify({ manifest_version: 2, name: 'Blocker', version: '2' }));
+    cfg = extensions.provisionBundledExtensions(target, source, cfg);
+    assert.equal(cfg.extensions_bundled.blocker.version, '2');
+    assert.deepStrictEqual(extensions.getWorkspaceFolders(cfg, 'New workspace'), []);
+    assert.deepStrictEqual(extensions.getWorkspaceFolders({ ...cfg, extensions_disabled: [] }, 'Work'), [], 'An explicit empty selection must stay empty');
+    const beforeId = extensions.describeExtension('blocker', path.join(target, 'blocker')).id;
+    fs.rmSync(path.join(target, 'blocker'), { recursive: true });
+    cfg = extensions.provisionBundledExtensions(target, source, cfg);
+    assert.equal(cfg.extensions_bundled.blocker.removed, true);
+    cfg = extensions.provisionBundledExtensions(target, source, cfg);
+    assert(!fs.existsSync(path.join(target, 'blocker')), 'Deleted bundles must never be recreated');
+    fs.cpSync(path.join(source, 'blocker'), path.join(target, 'blocker'), { recursive: true });
+    assert.equal(extensions.describeExtension('blocker', path.join(target, 'blocker')).id, beforeId, 'Manual reinstall keeps storage identity');
+    assert.equal(extensions.provisionBundledExtensions(target, source, cfg), cfg);
+
+    const existing = path.join(tmpRoot, 'manual');
+    fs.mkdirSync(path.join(existing, 'blocker'), { recursive: true });
+    fs.writeFileSync(path.join(existing, 'blocker', 'manifest.json'), '{"name":"User copy","version":"99"}');
+    const userCfg = extensions.provisionBundledExtensions(existing, source, {});
+    assert.equal(userCfg.extensions_bundled.blocker.managed, false);
+    assert.equal(extensions.describeExtension('blocker', path.join(existing, 'blocker')).version, '99');
+    console.log('✓ Bundled installs preserve disabled state, empty workspace selections, removals, stable ids and manual copies');
+}
+
 fs.rmSync(tmpRoot, { recursive: true, force: true });
 console.log('All extension support tests passed.');

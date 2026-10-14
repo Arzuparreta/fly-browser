@@ -6,7 +6,7 @@
   "license": "GPL-3.0-or-later",
   "scripts": {
     "start": "install-electron && electron . --log-level=3",
-    "test": "node tests/auth-security.test.js && node tests/adblocker-startup.test.js && node tests/adblocker-build.test.js && node tests/clock.test.js && node tests/audio-controls.test.js && node tests/pinned-tabs.test.js && node tests/notes-reader-export.test.js && node tests/search-aliases.test.js && node tests/config-writes.test.js && node tests/profile-migration.test.js && node tests/keyboard.test.js && node scripts/sync-keyboard.js --check && node scripts/generate-keybind-docs.js --check && node tests/navigation-focus.test.js && node tests/overlay-state.test.js && node tests/extensions.test.js && node tests/tab-jump.test.js && node tests/focus-recovery.test.js",
+    "test": "node tests/auth-security.test.js && node tests/adblocker-startup.test.js && node tests/adblocker-build.test.js && node tests/clock.test.js && node tests/audio-controls.test.js && node tests/pinned-tabs.test.js && node tests/notes-reader-export.test.js && node tests/search-aliases.test.js && node tests/config-writes.test.js && node tests/profile-migration.test.js && node tests/keyboard.test.js && node scripts/sync-keyboard.js --check && node scripts/generate-keybind-docs.js --check && node tests/navigation-focus.test.js && node tests/overlay-state.test.js && node tests/extensions.test.js && node tests/tab-jump.test.js && node tests/focus-recovery.test.js && node scripts/generate-extension-preload.js --check",
     "docs:dev": "vitepress dev docs",
     "docs:build": "vitepress build docs",
     "docs:preview": "vitepress preview docs",
@@ -46,7 +46,8 @@
       "keyboard.js",
       "extensions.js",
       "adblocker-build.js",
-      "adblocker-worker.js"
+      "adblocker-worker.js",
+      "extension-api.preload.js"
     ],
     "linux": {
       "target": [
@@ -90,7 +91,10 @@
       "allowToChangeInstallationDirectory": true,
       "createDesktopShortcut": true,
       "createStartMenuShortcut": true
-    }
+    },
+    "asarUnpack": [
+      "assets/extensions/**/*"
+    ]
   },
   "allowScripts": {
     "electron@44.7.0": true

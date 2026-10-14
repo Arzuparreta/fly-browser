@@ -27,14 +27,23 @@ let popupState = null;
 export function setExtensionsConfig(cfg) {
     state.extensions = {
         enabled: !!(cfg && cfg.extensions_enabled === true),
-        byWorkspace: (cfg && cfg.extensions_by_workspace) || {}
+        byWorkspace: (cfg && cfg.extensions_by_workspace) || {},
+        bundled: (cfg && cfg.extensions_bundled) || {},
+        disabled: (cfg && cfg.extensions_disabled) || []
     };
+}
+
+function workspaceFolders(workspace, ext = state.extensions) {
+    if (!ext) return [];
+    const defaults = Object.entries(ext.bundled || {}).filter(([, entry]) => entry && !entry.removed).map(([folder]) => folder);
+    const list = Array.isArray(ext.byWorkspace[workspace]) ? ext.byWorkspace[workspace] : defaults;
+    return list.filter(folder => !(ext.disabled || []).includes(folder));
 }
 
 export function workspaceHasExtensions(workspace) {
     const ext = state.extensions;
     if (!ext || !ext.enabled) return false;
-    const list = ext.byWorkspace[workspace];
+    const list = workspaceFolders(workspace, ext);
     return Array.isArray(list) && list.length > 0;
 }
 
@@ -321,7 +330,7 @@ export function getExtensionPaletteCommands() {
 
     const workspace = state.sessionState.current_workspace;
     if (!workspaceHasExtensions(workspace)) return commands;
-    const enabledFolders = state.extensions.byWorkspace[workspace] || [];
+    const enabledFolders = workspaceFolders(workspace);
 
     for (const info of installedCache.filter(i => enabledFolders.includes(i.folder))) {
         if (info.hasAction) {
@@ -428,26 +437,48 @@ function renderInstalledList(res) {
         const icon = info.icon ? `<img class="ext-icon" src="${info.icon}" alt="">` : '<i class="fa-solid fa-puzzle-piece ext-icon"></i>';
         const warnings = (info.warnings || []).map(w => `<div class="ext-warning"><i class="fa-solid fa-triangle-exclamation"></i> ${escapeHtml(w)}</div>`).join('');
         const chips = workspaces.map(ws => {
-            const checked = Array.isArray(res.byWorkspace[ws]) && res.byWorkspace[ws].includes(info.folder);
-            return `<label class="ext-ws-chip"><input type="checkbox" data-folder="${escapeHtml(info.folder)}" data-workspace="${escapeHtml(ws)}"${checked ? ' checked' : ''}${res.enabled ? '' : ' disabled'}> ${escapeHtml(ws)}</label>`;
+            const checked = workspaceFolders(ws).includes(info.folder);
+            return `<label class="ext-ws-chip"><input type="checkbox" data-folder="${escapeHtml(info.folder)}" data-workspace="${escapeHtml(ws)}"${checked ? ' checked' : ''}${res.enabled && info.enabled ? '' : ' disabled'}> ${escapeHtml(ws)}</label>`;
         }).join('');
         const options = info.optionsPage ? `<button type="button" class="settings-action-btn ext-options-btn" data-folder="${escapeHtml(info.folder)}">Options</button>` : '';
-        return `<div class="ext-card">
-            <div class="ext-card-head">${icon}<span class="ext-name">${escapeHtml(info.name)}</span><span class="ext-version">${escapeHtml(info.version)} · MV${escapeHtml(String(info.manifestVersion || '?'))}</span><span class="ext-kind ${kind.cls}" title="${escapeHtml(kind.title)}">${kind.text}</span>${options}</div>
+        const controls = `<label class="ext-ws-chip"><input type="checkbox" class="ext-enabled-toggle" data-folder="${escapeHtml(info.folder)}"${info.enabled ? ' checked' : ''}> Enabled</label><button type="button" class="settings-action-btn ext-remove-btn" data-folder="${escapeHtml(info.folder)}">Remove</button>`;
+        return `<div class="ext-card" data-extension-folder="${escapeHtml(info.folder)}">
+            <div class="ext-card-head">${icon}<span class="ext-name">${escapeHtml(info.name)}</span><span class="ext-version">${escapeHtml(info.version)} · MV${escapeHtml(String(info.manifestVersion || '?'))}</span><span class="ext-kind ${kind.cls}" title="${escapeHtml(kind.title)}">${kind.text}</span>${info.bundled ? '<span class="ext-kind">Included</span>' : ''}${options}${controls}</div>
             ${warnings}
             <div class="ext-ws-chips"><span class="ext-ws-label">Active in:</span>${chips}</div>
         </div>`;
     }).join('');
 
-    list.querySelectorAll('input[type="checkbox"][data-folder]').forEach(box => {
+    list.querySelectorAll('input[type="checkbox"][data-workspace]').forEach(box => {
         box.onchange = () => saveWorkspaceSelection(box.dataset.workspace, box.dataset.folder, box.checked);
+    });
+    list.querySelectorAll('.ext-enabled-toggle').forEach(box => {
+        box.onchange = async () => {
+            const current = (await window.flyAPI.getBrowserSettings()) || {};
+            const disabled = new Set(current.extensions_disabled || []);
+            if (box.checked) disabled.delete(box.dataset.folder); else disabled.add(box.dataset.folder);
+            await persistConfig({ extensions_disabled: [...disabled] });
+            await syncExtensionsPreferences();
+            refreshStatusBarActions();
+        };
+    });
+    list.querySelectorAll('.ext-remove-btn').forEach(btn => {
+        btn.onclick = async () => {
+            btn.disabled = true;
+            const result = await window.flyAPI.extensionsRemove(btn.dataset.folder);
+            setExtensionsConfig(await window.flyAPI.getBrowserSettings());
+            installedCache = [];
+            setPreferencesNote(result?.error || 'Extension removed. Reload open tabs to clear injected scripts.');
+            await syncExtensionsPreferences();
+            refreshStatusBarActions();
+        };
     });
     list.querySelectorAll('.ext-options-btn').forEach(btn => {
         btn.onclick = () => {
             const info = res.installed.find(i => i.folder === btn.dataset.folder);
             if (!info) return;
             const enabledHere = workspaceHasExtensions(state.sessionState.current_workspace) &&
-                (state.extensions.byWorkspace[state.sessionState.current_workspace] || []).includes(info.folder);
+                workspaceFolders(state.sessionState.current_workspace).includes(info.folder);
             if (!enabledHere) {
                 setPreferencesNote('Enable this extension for the current workspace to open its options.');
                 return;
@@ -473,6 +504,8 @@ export async function syncExtensionsPreferences() {
     try { res = await window.flyAPI.extensionsGetState({ scan: true, metrics: true }); } catch (e) { return; }
     if (!res) return;
 
+    setExtensionsConfig({ extensions_enabled: res.enabled, extensions_by_workspace: res.byWorkspace,
+        extensions_bundled: res.bundled, extensions_disabled: res.disabled });
     toggle.checked = !!res.enabled;
     installedCache = res.installed || [];
     const dirLabel = document.getElementById('ExtensionsDirectoryPath');
@@ -490,15 +523,16 @@ async function persistConfig(patch) {
     await window.flyAPI.updateBrowserSettings(merged);
     setExtensionsConfig(merged);
     await window.flyAPI.extensionsApplyConfig();
+    setExtensionsConfig(await window.flyAPI.getBrowserSettings());
     await ensureLiveWorkspaces();
 }
 
 async function saveWorkspaceSelection(workspace, folder, enabled) {
     const current = (await window.flyAPI.getBrowserSettings()) || {};
     const map = { ...(current.extensions_by_workspace || {}) };
-    const list = new Set(Array.isArray(map[workspace]) ? map[workspace] : []);
+    const list = new Set(Array.isArray(map[workspace]) ? map[workspace] : Object.entries(current.extensions_bundled || {}).filter(([, entry]) => entry && !entry.removed).map(([name]) => name));
     if (enabled) list.add(folder); else list.delete(folder);
-    if (list.size) map[workspace] = [...list]; else delete map[workspace];
+    map[workspace] = [...list];
 
     await persistConfig({ extensions_by_workspace: map });
     setPreferencesNote(enabled
@@ -514,7 +548,7 @@ export function setupExtensionsPreferencesListeners() {
         toggle.onchange = async () => {
             await persistConfig({ extensions_enabled: toggle.checked });
             setPreferencesNote(toggle.checked
-                ? 'Extensions enabled. Choose the workspaces each one may run in.'
+                ? 'Extensions enabled. Included extensions are ready in workspaces without a saved selection.'
                 : 'Extensions disabled and unloaded everywhere. Open tabs keep injected scripts until reloaded.');
             await syncExtensionsPreferences();
             refreshStatusBarActions();

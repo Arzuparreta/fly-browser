@@ -123,6 +123,8 @@ const DEFAULT_CONFIG = {
     // Opt-in Chrome extensions, see extensions.js and docs/guide/extensions.md
     extensions_enabled: false,
     extensions_by_workspace: {},
+    extensions_bundled: {},
+    extensions_disabled: [],
     extensions_unload_grace_seconds: 60
 };
 
@@ -1788,6 +1790,8 @@ function createWindow() {
     extensions.initializeExtensions({
         configDir: CONFIG_DIR,
         getConfig: loadBrowserConfig,
+        saveConfig: cfg => writeConfigFile({ ...loadBrowserConfig(), ...cfg }),
+        setNetworkExtensions: security.setNetworkExtensions,
         getMainWindow: () => mainWindow,
         getWorkspacePartition,
         logEvent: (level, category, message) => diagnostics.logEvent(level, category, message)
@@ -1817,6 +1821,32 @@ app.on('web-contents-created', (event, webContents) => {
 
     if (webContents.getType() === 'webview') {
         webContents.setMaxListeners(30);
+
+        const rewriteSignIn = (event, details) => {
+            const url = event.url || (typeof details === 'string' ? details : details?.url);
+            const mainFrame = event.isMainFrame ?? details?.isMainFrame;
+            if (!mainFrame || !security.hasNetworkExtensions(webContents.session)) return;
+            if (/^https?:\/\/accounts\.google\.com\//i.test(url) && url.includes('flowName=GlifWebSignIn')) {
+                event.preventDefault();
+                webContents.loadURL(url.replaceAll('flowName=GlifWebSignIn', 'flowName=WebLiteSignIn')).catch(() => {});
+            }
+        };
+        webContents.on('will-frame-navigate', rewriteSignIn);
+        webContents.on('will-redirect', rewriteSignIn);
+        webContents.on('dom-ready', () => {
+            if (!security.hasNetworkExtensions(webContents.session)) return;
+            const url = webContents.getURL();
+            if (!/^https?:\/\//i.test(url)) return;
+            // Extension-owned sessions cannot use native response-header hooks.
+            // Chromium still exposes the MIME type on its generated PDF document.
+            webContents.executeJavaScript('document.contentType').then(type => {
+                if (!webContents.isDestroyed() && webContents.getURL() === url &&
+                    security.hasNetworkExtensions(webContents.session) &&
+                    /^(application\/pdf|application\/x-pdf)$/i.test(type)) {
+                    webContents.loadURL(security.mintPdfViewerUrl(url)).catch(() => {});
+                }
+            }).catch(() => {});
+        });
 
         webContents.on('did-navigate', (navEvent, url) => {
             logVisit(webContents.getTitle(), url);

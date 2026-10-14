@@ -137,10 +137,6 @@ import {
     setTargetUrl
 } from './modules/statusBar.js';
 
-import { 
-    toggleDarkReaderOnActiveTab, 
-    updateDarkReaderButtonUI 
-} from './modules/darkReader.js';
 
 import {
     initClock,
@@ -161,7 +157,6 @@ import {
 } from './modules/windowControls.js';
 
 // Attach functions needed across module boundaries to window
-window.toggleDarkReaderOnActiveTab = toggleDarkReaderOnActiveTab;
 window.toggleReaderViewOnActiveTab = toggleReaderViewOnActiveTab;
 window.toggleDashboardView = toggleDashboardView;
 window.displayAddressOverlay = displayAddressOverlay;
@@ -336,15 +331,12 @@ async function initializeBrowser() {
         }
     } catch (e) {}
 
-    // Restore cached titles, sleeping tab states, favicons, and dark reader flags
+    // Restore cached titles, sleeping tab states, and favicons
     if (state.sessionState.tab_titles) {
         state.activeTitlesCache = { ...state.sessionState.tab_titles };
     }
     if (state.sessionState.tab_favicons) {
         state.tabFavicons = { ...state.sessionState.tab_favicons };
-    }
-    if (state.sessionState.tab_dark_reader) {
-        state.tabDarkReaderStates = { ...state.sessionState.tab_dark_reader };
     }
     if (state.sessionState.tab_pinned) {
         state.tabPinned = { ...state.sessionState.tab_pinned };
@@ -364,7 +356,6 @@ async function initializeBrowser() {
                             title: state.activeTitlesCache[ws]?.[i] || u,
                             scrollX: 0,
                             scrollY: 0,
-                            darkReader: !!state.tabDarkReaderStates?.[ws]?.[i],
                             hibernatedAt: Date.now()
                         };
                     }
@@ -388,7 +379,6 @@ async function initializeBrowser() {
                         scrollX: prev?.scrollX || 0,
                         scrollY: prev?.scrollY || 0,
                         sessionStorage: prev?.sessionStorage || null,
-                        darkReader: prev?.darkReader || !!state.tabDarkReaderStates?.[ws]?.[i],
                         hibernatedAt: Date.now()
                     };
                 } else {
@@ -551,7 +541,6 @@ function setupEventListeners() {
     });
 
     document.getElementById('reader-view-btn')?.addEventListener('click', toggleReaderViewOnActiveTab);
-    document.getElementById('dark-reader-btn')?.addEventListener('click', toggleDarkReaderOnActiveTab);
     document.getElementById('theme-toggle-btn').addEventListener('click', toggleWebviewTheme);
     document.getElementById('toggle-nav-btn').addEventListener('click', displayAddressOverlay);
     document.getElementById('split-toggle-btn')?.addEventListener('click', () => toggleSplitView());
@@ -702,7 +691,6 @@ function setupEventListeners() {
             case 'open-diagnostics':
             case 'toggle-diagnostics': toggleDiagnosticsView(); break;
             case 'toggle-diagnostics-recording': toggleDiagnosticsRecording(); break;
-            case 'toggle-dark-reader': toggleDarkReaderOnActiveTab(); break;
             case 'toggle-reader-view': toggleReaderViewOnActiveTab(); break;
             case 'go-back':
             case 'go-back-signal': navigateFrameBack(); break;
@@ -851,7 +839,7 @@ function setupEventListeners() {
         };
         const controls = {'WorkspaceHeader': ['toggle-dashboard', 'Workspace dashboard'],
             'split-toggle-btn': ['toggle-split', 'Toggle split view'], 'pin-sidebar-btn': ['toggle-zen-mode', 'Toggle sidebar expansion'],
-            'reader-view-btn': ['toggle-reader-view', 'Toggle reader view'], 'dark-reader-btn': ['toggle-dark-reader', 'Toggle Dark Reader'],
+            'reader-view-btn': ['toggle-reader-view', 'Toggle reader view'],
             'back-btn': ['go-back', 'Go back'], 'forward-btn': ['go-forward', 'Go forward'],
             'settings-btn': ['toggle-help', 'Settings'],
             'toggle-nav-btn': ['spawn-tab', 'New tab'], 'noti-toggle-btn': ['toggle-notifications', 'Toggle web notifications']};
@@ -964,7 +952,7 @@ function setupEventListeners() {
         });
     });
 
-    const bottomButtons = ['pin-sidebar-btn', 'reader-view-btn', 'dark-reader-btn', 'theme-toggle-btn', 'noti-toggle-btn', 'settings-btn'];
+    const bottomButtons = ['pin-sidebar-btn', 'reader-view-btn', 'theme-toggle-btn', 'noti-toggle-btn', 'settings-btn'];
     bottomButtons.forEach((id, idx) => {
         const btn = document.getElementById(id);
         if (!btn) return;

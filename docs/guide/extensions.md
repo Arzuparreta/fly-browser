@@ -1,16 +1,24 @@
 # Chrome Extensions (Opt-in)
 
-Fly is built around **zero extensions**: ad blocking, tab suspension, styling and page scripting are handled natively or through [user scripts and styles](/guide/user-scripts-and-styles). That remains the recommended setup.
+Fly keeps extensions **off by default**. Native ad blocking, tab suspension and [user scripts and styles](/guide/user-scripts-and-styles) remain available without enabling extension support. **uBlock Origin 1.75.0** is included as a normal preinstalled Chromium extension. Dark Reader is not included and its former native CSS toggle has been removed; install its Chrome build yourself if wanted.
 
-For the few extensions that have no userscript equivalent, Fly can load **unpacked Chrome extensions** under strict rules designed to keep its idle footprint at zero:
+Fly loads **unpacked Chrome extensions** with these rules:
 
 * **Off by default.** While disabled, no extension code, library or process is loaded.
-* **Per workspace.** Each extension only runs in the workspaces you tick. Every other workspace stays exactly as lean as before.
+* **Per workspace.** Included extensions are selected in workspaces without a saved selection. You can change each workspace’s selection, including selecting none. Manually installed extensions run only where selected.
 * **Only while needed.** Extensions load when an opted-in workspace gets its first live tab and unload once every tab in it has been closed or hibernated, after a grace period (60 seconds by default).
-* **Local only.** There is no extension store and no automatic updates. Only code you place in your config directory can run.
+* **Local only.** There is no extension store. Included extensions are copied into your profile; Fly releases can update managed copies. Manually installed folders are never overwritten.
 * **Never in private browsing.** Electron refuses to load extensions into in-memory sessions.
 
 ---
+
+## Included uBlock Origin
+
+Open **Preferences → Extensions** and turn on **Enable Chrome extensions**. uBlock Origin is already listed, with popup, options, commands, workspace selection and resource usage. Reload existing tabs to apply its content scripts; newly opened tabs receive them immediately.
+
+The **Enabled** checkbox switches an extension off everywhere while retaining its files, storage and workspace selections. **Remove** unloads it and deletes its profile folder. Both choices persist across restarts and Fly updates. Deleting an included folder manually also records its removal on the next scan or enabled launch. An explicit empty workspace selection stays empty after updates. Turning the global extension switch back on never reverses an individual disable or removal.
+
+To reinstall a removed extension deliberately, place its unpacked Chrome build in the extensions directory again, enable it and choose its workspaces. Fly does not silently restore removed bundles. Reinstalling at the same path retains the extension’s identity and workspace storage.
 
 ## Installing an Extension
 
@@ -79,16 +87,15 @@ Content scripts scale with the number of **live** tabs that match, which tab hib
 Extension APIs come from Electron plus the [electron-chrome-extensions](https://github.com/samuelmaddock/electron-browser-shell/tree/master/packages/electron-chrome-extensions) library (GPL-3.0). Most extensions that modify pages work. Known limits:
 
 * **`declarativeNetRequest` rules are not enforced.** Electron exposes the API but its rules never block anything, so rule based blockers such as uBlock Origin Lite load without effect. Fly's built-in blocker covers this.
-* **Blocking `webRequest` is overridden** by Fly's own network filters, which take precedence in Electron.
+* **Network extensions take over filtering in their workspace.** Electron chooses either native handlers or extension handlers for the whole session: even a native header listener prevents extension request blocking. Fly detaches its native blocker and request header rules while a `webRequest` extension is loaded, and restores them when the last one unloads. Configure trusted sites in uBlock itself; Fly’s native shield exceptions and header standardisation do not apply during this handover. Session isolation and permission controls remain active. PDF URLs still use the built-in viewer; MIME-only PDF responses are recognised on the generated PDF document and routed to the same viewer. Google sign-in navigation rewriting stays available, but native subresource header rewriting does not.
 * **`runtime.onInstalled` does not fire** for unpacked extensions in Electron. Anything an extension only sets up there, most often its context menu items, will be missing. Items created when the extension starts do appear.
 * **No side panels, native messaging hosts or Chrome sync.**
 * **Firefox builds**: there is no Gecko engine, so `.xpi` files are not supported as such. Cross-browser extensions often work when their Firefox build is unpacked, but the Chrome build is the safer choice.
 * **Hibernation** closes a tab's renderer, so an extension sees the tab close and a new one open when it wakes. Extensions that keep per-tab state start fresh for that tab.
-* Fly's native Dark Reader (`Alt + D` by default; configurable in Keyboard preferences) and a dark mode extension on the same tab invert colours twice. Use one or the other.
 * In NORMAL mode Fly keeps keystrokes for its own shortcuts, so extension keyboard handlers inside pages only receive keys in INSERT or PASSTHROUGH mode.
 
 ---
 
 ## Disabling
 
-Turn off **Enable Chrome Extensions**. Every extension unloads immediately; pages that already ran content scripts keep them until reloaded. Removing a folder from `~/.config/fly-browser/extensions/` uninstalls it.
+Turn off **Enable Chrome Extensions**. Every extension unloads immediately; pages that already ran content scripts keep them until reloaded. Use an extension’s **Enabled** checkbox or **Remove** button for an individual change. Removing its folder from `~/.config/fly-browser/extensions/` also uninstalls it. Included extensions stay removed after updates.
