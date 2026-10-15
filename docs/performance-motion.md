@@ -1,62 +1,96 @@
 # Interface motion
 
-Fly uses short feedback transitions (120 ms) and surface transitions (180 ms),
-with `cubic-bezier(0.2, 0, 0, 1)`. The host interface defines these as
-`--motion-fast`, `--motion-normal` and `--motion-ease` in `style.css`.
-The isolated reader and What's New page use the same feedback timing.
+Fly's interface uses two durations and one curve, defined in `style.css`:
+`--motion-fast` (120 ms) for feedback such as hover, focus and colour changes,
+`--motion-normal` (220 ms) for surfaces such as the sidebar, and
+`--motion-ease` (`cubic-bezier(0.2, 0, 0, 1)`) for both. Anything that moves
+animates `transform` or `opacity`; colours may fade. Transitions list the
+properties they animate instead of `all`. The isolated reader and the What's
+New page use the same feedback timing.
 
-The auto-collapse sidebar keeps a fixed surface and animates its clip. Its
-visible rail remains 36 px wide and its expanded surface remains 260 px wide.
-The clipped area does not receive pointer input. Compact and expanded control
-layouts change once at the state boundary; widths, padding, margins and tab
-rows no longer interpolate independently. Pinning changes the page viewport
-once instead of repeatedly resizing an embedded website. Long tab lists scroll
-without shrinking their rows or navigation controls.
+## Sidebar
 
-Download fills animate `scaleX` instead of width. Controls explicitly list the
-properties they animate. Reader font and column-width changes reflow the
-article once. The update indicator stays highlighted without an endless shadow
-pulse. Busy indicators still communicate ongoing operations. There are no new
-runtime timers, animation loops, duplicated sidebar trees or permanent
-`will-change` layers.
+The collapsed rail is the left column of the expanded sidebar, not a second
+layout. The workspace badge, favicons and pin sit on the rail's centre line in
+both states, every tab row is 40 px tall in both states, and tab text starts
+past the rail's edge. Expanding therefore moves only the sidebar's right edge:
+no icon, row or line of text changes position or size, and nothing is laid out
+again while the edge moves.
 
-OS reduced-motion preferences disable host, reader and What's New transitions
-and animations, and dashboard navigation uses immediate scrolling. These rules
-apply to Fly's own interface, not arbitrary website content.
+The edge moves on the compositor. `#Sidebar` slides from `translateX(-224px)`
+to its place while `.sidebar-content` slides back by the same amount, and
+`.sidebar-viewport` clips the content to the panel. Both are permanent layers
+(`will-change: transform`), so no layer is created or painted again when an
+animation starts. Decorations that differ between states crossfade with
+`opacity`: the 28 px tile around a selected, pinned or split tab and the frame
+around the workspace badge become the full-row highlight and header frame; the
+favicon indicators for sleeping, pinned and playing tabs become the row's
+badges. Controls that only exist expanded (navigation, clock, update notice,
+footer buttons, window controls) fade with the edge. While collapsed they
+ignore the pointer but stay focusable, so focusing one expands the sidebar.
+The panel's shadow is a separate layer that fades instead of a `box-shadow`
+that would be repainted every frame.
 
-## Reproducing the comparison
+The expanded sidebar floats over the page, which never resizes during a hover.
+Pinning or unpinning resizes the page once. With the default auto-collapse
+setting, Fly starts with the sidebar collapsed instead of animating it closed.
+A page's own pointer-entry message is compared with the time of the last
+pointer entry into the sidebar, so a message delayed behind the sidebar's own
+event cannot close it while the pointer is over it.
 
-Run `node tests/motion-ui.test.js` with Playwright available. If it is installed
-outside the project, set `FLY_PLAYWRIGHT_MODULE` to its module path. This is an
-optional local Electron check, not an additional CI gate. It creates and removes
-a disposable profile.
+`prefers-reduced-motion: reduce` turns off transitions and animations in the
+interface, the reader and What's New, and dashboard navigation scrolls
+immediately. Websites keep their own motion.
 
-To compare CSS revisions, save the earlier `style.css` to a temporary file and
-pass its absolute path as `FLY_MOTION_BASELINE`. The same running application
-then exercises each stylesheet with 60 tabs, 12 alternating sidebar states,
-and CPU throttling rates of 1 and 6. It reports CDP layout/style durations,
-layout counts and sampled requestAnimationFrame intervals. By default it uses
-software rendering; `FLY_MOTION_GPU=1` allows the normal GPU path and prints the
-actual feature status. `FLY_MOTION_SCREENSHOT` optionally saves the expanded
-state for visual inspection.
+## Other changes
 
-In the local X11 software-rendered comparison on 2026-10-15:
+- Download progress fills animate `scaleX` instead of `width`.
+- Reader text-size and column-width changes apply at once instead of reflowing
+  the article on every frame.
+- The update notice stays highlighted without an endless pulse that repainted
+  its shadow every frame.
+- Busy spinners still turn while an operation runs. Nothing else animates at
+  rest.
 
-| CPU throttle | Layouts before → after | Layout time before → after | Frame interval p95 before → after |
-| --- | --- | --- | --- |
-| 1 | 373 → 18 | 447 → 21 ms | 13.9 → 7 ms |
-| 6 | 189 → 18 | 799 → 133 ms | 34.8 → 7 ms |
+## Measurements
 
-With GPU compositing enabled, the same comparison at CPU ×6 measured
-211 → 18 layouts and 805 → 121 ms of layout time (frame interval p95
-34.7 → 7 ms).
+[Raw summary](/benchmarks/2026-10-15-sidebar-motion.json). Electron 44.7.2 on
+the X11/i3 machine used by the other performance pages (Ryzen 7 5800X,
+GeForce RTX 3060, 144 Hz display), 60 tabs, the sidebar opened and closed with
+the real X11 pointer, recorded with Chromium tracing. "Before" is `main` at
+`72a162b`.
 
-These are diagnostic samples on this machine, not portable FPS or battery-life
-guarantees. The comparison isolates stylesheet changes, not whole application
-revisions. GPU drivers, display refresh, load and hardware affect the results.
-Physical old-PC testing and battery discharge measurements remain unverified.
+Totals over 12 transitions, before → after:
 
-The regression check also covers interrupted transitions, hidden-area hit
-testing, focus expansion, long lists, live reduced-motion changes, the absence
-of decorative animation at rest, and download fill updates. Companion sidebar,
-overlay and keyboard UI tests cover real pointer and keyboard actions.
+| Configuration | Frames missing an update | Main-thread frame work, ms | Layout, ms | Paint, ms | Raster, ms |
+| --- | ---: | ---: | ---: | ---: | ---: |
+| Default GPU | 48.6 % → 1.3 % | 1,386 → 103 | 410 → 1.7 | 381 → 8.3 | 134 → 10.7 |
+| Software compositing (`disable_gpu`) | 49.1 % → 0.8 % | 1,414 → 107 | 418 → 2.0 | 384 → 8.4 | 445 → 41.5 |
+| Default GPU, interface CPU throttled ×4 | 60.0 % → 3.9 % | 3,331 → 318 | 876 → 7.7 | 758 → 26.9 | 76 → 10.1 |
+
+Frames "missing an update" are frames the compositor presented while the
+sidebar was animating but without the animation's latest step, so the motion
+repeated a position. Before, the sidebar's width, padding and rows were laid
+out again on the main thread of Fly's interface for every step, and that thread
+delivered an update for only about every other frame at 144 Hz. Now the
+compositor moves both layers on every frame, and the main thread only works
+when the state changes.
+
+With the default GPU, 11 of the 12 transitions advanced on every frame,
+6.9 ms apart. The first opening after the 60 tabs loaded missed four frames
+in its first 35 ms. With the interface's CPU throttled, each transition can
+start a frame late while the main thread applies the new state; the slide
+itself then runs on the compositor.
+
+These are samples from one machine. They show where the work happens, not a
+frame rate or battery life for other hardware. Battery drain and older GPUs and
+drivers were not measured.
+
+## Checking it
+
+`node tests/motion-ui.test.js` (part of `npm run test:keyboard-ui`) checks that
+the rail and the expanded sidebar share their layout, that only `transform` and
+`opacity` animate while the content stays still, that only the rail receives
+pointer input, that interrupted transitions settle, that a stale page entry
+cannot close the sidebar, that reduced motion applies at once and that nothing
+animates at rest.

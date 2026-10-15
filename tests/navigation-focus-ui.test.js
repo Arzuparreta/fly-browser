@@ -26,7 +26,6 @@ const root = path.resolve(__dirname, '..');
         application = await _electron.launch({executablePath: path.join(root, 'node_modules/electron/dist/electron'),
             args: ['--no-sandbox', '--disable-gpu', `--ozone-platform=${process.env.FLY_TEST_OZONE_PLATFORM || 'x11'}`, entry]});
         const page = await application.firstWindow();
-        await require('./sidebar-geometry')(page);
         const errors = []; page.on('pageerror', error => errors.push(error.message));
         await page.waitForFunction(() => !!window.executeBrowserAction);
         // Navigating while the initial page is still loading aborts it and rejects the navigation.
@@ -137,7 +136,7 @@ const root = path.resolve(__dirname, '..');
             assert.equal((await snapshot()).host, 'WEBVIEW', 'Pointer history navigation must return page focus');
             // Use host content for pointer exit; guest entry is covered by the overlay suite.
             await page.mouse.move(500, await page.evaluate(() => innerHeight - 10));
-            await page.waitForFunction(() => window.__sidebarVisibleWidth() <= 37);
+            await page.waitForFunction(() => document.getElementById('Sidebar').getBoundingClientRect().right <= 37);
             assert.equal(await page.locator('#' + button).evaluate(button => button.matches(':focus')), false);
         }
         for (const [button, destination, key] of [['back-btn', '/history-first', 'Enter'], ['forward-btn', '/history-second', 'Space']]) {
@@ -145,7 +144,7 @@ const root = path.resolve(__dirname, '..');
             await page.locator('#' + button).press(key);
             await historyReady(destination);
             assert.equal((await snapshot()).hostId, button, 'Keyboard history navigation must retain button focus');
-            await page.waitForFunction(() => window.__sidebarVisibleWidth() >= 259);
+            await page.waitForFunction(() => document.getElementById('Sidebar').getBoundingClientRect().right >= 259);
         }
         await page.keyboard.press('Control+Shift+z');
         await page.waitForFunction(() => document.body.classList.contains('sidebar-pinned'));
@@ -153,7 +152,7 @@ const root = path.resolve(__dirname, '..');
         await historyReady('/history-first');
         await page.mouse.move(500, await page.evaluate(() => innerHeight - 10));
         assert.equal((await snapshot()).host, 'WEBVIEW');
-        assert(await page.locator('#Sidebar').evaluate(sidebar => window.__sidebarVisibleWidth() >= 259));
+        assert(await page.locator('#Sidebar').evaluate(sidebar => sidebar.getBoundingClientRect().right >= 259));
         await page.keyboard.press('Control+Shift+z');
         await page.waitForFunction(() => document.body.classList.contains('sidebar-auto-collapse'));
         assert.deepEqual(errors, []);

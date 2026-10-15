@@ -8,7 +8,7 @@
     --sidebar-opacity: 100%;
     --overlay-opacity: 100%;
     --motion-fast: 120ms;
-    --motion-normal: 180ms;
+    --motion-normal: 220ms;
     --motion-ease: cubic-bezier(0.2, 0, 0, 1);
 }
 
@@ -38,81 +38,82 @@ body, html {
     height: 100vh;
 }
 
+/* Sidebar
+   One layout serves every state: the collapsed rail is the expanded sidebar's
+   left column, so icons, rows and text never move or reflow. Expanding slides
+   the panel (#Sidebar) out while its content slides back by the same amount;
+   the panel's clip reveals content that stays put. Both slides are transforms
+   on permanent layers, so the compositor animates them without the
+   interface's main thread. Rail-only and expanded-only decorations crossfade. */
 #Sidebar {
     position: relative;
     width: 260px;
-    min-width: 260px;
+    flex: none;
     background-color: color-mix(in srgb, var(--bg-sidebar) var(--sidebar-opacity, 100%), transparent);
     border-right: 1px solid var(--border);
-    display: flex;
-    flex-direction: column;
-    padding: 10px;
 }
 
-/* Auto-collapse 36px strip mode */
+.sidebar-viewport {
+    position: absolute;
+    inset: 0;
+    overflow: clip;
+}
+
+.sidebar-content {
+    position: absolute;
+    top: 0;
+    left: 0;
+    bottom: 0;
+    width: 259px;
+    display: flex;
+    flex-direction: column;
+    align-items: flex-start;
+    padding: 8px 0 42px;
+}
+
 body.sidebar-auto-collapse #Sidebar {
-    /* Keep the surface stable: only its visible clip moves each frame. */
-    width: 260px;
-    min-width: 260px;
-    max-width: 260px;
-    clip-path: inset(0 224px 0 0);
-    transition: clip-path var(--motion-normal) var(--motion-ease);
     position: absolute;
     top: 0;
     left: 0;
     bottom: 0;
     height: 100vh;
     z-index: 90;
-    padding: 6px 3px 42px;
-    overflow-x: hidden;
-    overflow-y: hidden;
 }
 
+body.sidebar-auto-collapse :is(#Sidebar, .sidebar-content) {
+    will-change: transform;
+    transition: transform var(--motion-normal) var(--motion-ease);
+}
+
+/* Collapsed: 36px of the panel stay on screen; the content shifts back by the
+   same 224px, so the rail shows the content's left column unchanged. */
+body.sidebar-auto-collapse #Sidebar:not(.pointer-inside, .expanded, :focus-within) {
+    transform: translateX(-224px);
+}
+
+body.sidebar-auto-collapse #Sidebar:not(.pointer-inside, .expanded, :focus-within) .sidebar-content {
+    transform: translateX(224px);
+}
+
+/* The floating panel's shadow fades rather than repainting every frame. */
+body.sidebar-auto-collapse #Sidebar::after {
+    content: "";
+    position: absolute;
+    inset: 0;
+    z-index: -1;
+    box-shadow: 6px 0 28px rgba(0, 0, 0, 0.65);
+    pointer-events: none;
+    transition: opacity var(--motion-normal) var(--motion-ease);
+}
+
+body.sidebar-auto-collapse #Sidebar:not(.pointer-inside, .expanded, :focus-within)::after {
+    opacity: 0;
+}
+
+/* The expanded sidebar floats over the page; the page never resizes. */
 body.sidebar-auto-collapse #right-content {
     margin-left: 36px;
     width: calc(100vw - 36px);
-}
-
-/* Smooth expansion on retained pointer presence, focus, or the shortcut */
-body.sidebar-auto-collapse #Sidebar.pointer-inside,
-body.sidebar-auto-collapse #Sidebar.expanded,
-body.sidebar-auto-collapse #Sidebar:focus-within {
-    width: 260px;
-    min-width: 260px;
-    max-width: 260px;
-    padding: 10px 10px 42px;
-    clip-path: inset(0 -32px 0 0);
-    box-shadow: 6px 0 28px rgba(0, 0, 0, 0.65);
-    overflow-y: auto;
-}
-
-/* Clip also excludes hidden content from pointer hit testing. Layout changes
-   once at the state boundary, never on every animation frame. */
-body.sidebar-auto-collapse #Sidebar:not(.pointer-inside):not(.expanded):not(:focus-within) > :not(.bottom-theme-layout) {
-    width: 28px;
-    max-width: 28px;
-}
-
-body.sidebar-auto-collapse #Sidebar:not(.pointer-inside):not(.expanded):not(:focus-within)::after {
-    content: "";
-    position: absolute;
-    left: 35px;
-    top: 0;
-    bottom: 0;
-    width: 1px;
-    background: var(--border);
-    pointer-events: none;
-}
-
-/* Pinned (expanded) mode */
-body.sidebar-pinned #Sidebar {
-    position: relative;
-    width: 260px;
-    min-width: 260px;
-    max-width: 260px;
-    padding: 10px 10px 42px;
-    box-shadow: none;
-    overflow-y: auto;
 }
 
 body.sidebar-pinned #right-content {
@@ -120,25 +121,39 @@ body.sidebar-pinned #right-content {
     width: calc(100vw - 260px);
 }
 
-#Sidebar::before {
+.sidebar-content::before {
     content: "";
     position: absolute;
-    top: 0;
-    left: 0;
-    width: 100%;
-    height: 100%;
+    inset: 0;
     background-image: url('./assets/identity/engraving-chasis@2x.png');
     background-repeat: no-repeat;
     background-position: center bottom 100px;
     background-size: 230px;
-    opacity: 1;
     z-index: 0;
     pointer-events: none;
+}
+
+/* Details that exist only in the expanded sidebar fade with its edge. Faded
+   controls ignore the pointer but stay focusable: focusing one expands the
+   sidebar, as keyboard routes into the navigation buttons expect. */
+body.sidebar-auto-collapse .sidebar-content::before,
+body.sidebar-auto-collapse .bottom-theme-layout::before,
+body.sidebar-auto-collapse :is(.window-controls, .nav-action-layout, .sidebar-clock-row) {
     transition: opacity var(--motion-normal) var(--motion-ease);
 }
 
-body.sidebar-auto-collapse #Sidebar:not(.pointer-inside):not(.expanded):not(:focus-within)::before {
+body.sidebar-auto-collapse :is(#reader-view-btn, #noti-toggle-btn, #settings-btn) {
+    transition: opacity var(--motion-normal) var(--motion-ease),
+                background-color var(--motion-fast) var(--motion-ease),
+                border-color var(--motion-fast) var(--motion-ease),
+                color var(--motion-fast) var(--motion-ease);
+}
+
+body.sidebar-auto-collapse #Sidebar:not(.pointer-inside, .expanded, :focus-within) .sidebar-content::before,
+body.sidebar-auto-collapse #Sidebar:not(.pointer-inside, .expanded, :focus-within) .bottom-theme-layout::before,
+body.sidebar-auto-collapse #Sidebar:not(.pointer-inside, .expanded, :focus-within) :is(.window-controls, .nav-action-layout, .sidebar-clock-row, #reader-view-btn, #noti-toggle-btn, #settings-btn) {
     opacity: 0;
+    pointer-events: none;
 }
 
 /* Sidebar Window Controls */
@@ -146,8 +161,9 @@ body.sidebar-auto-collapse #Sidebar:not(.pointer-inside):not(.expanded):not(:foc
     display: flex;
     align-items: center;
     justify-content: space-between;
-    padding: 2px 4px 6px 4px;
-    margin-bottom: 6px;
+    width: 245px;
+    margin: 0 0 6px 4px;
+    padding: 2px 0 6px;
     border-bottom: 1px solid var(--border);
     flex-shrink: 0;
 }
@@ -204,47 +220,49 @@ body.sidebar-auto-collapse #Sidebar:not(.pointer-inside):not(.expanded):not(:foc
     color: #ffffff;
 }
 
-/* Auto-collapse adaptation for 36px strip */
-body.sidebar-auto-collapse #Sidebar:not(.pointer-inside):not(.expanded):not(:focus-within) .window-controls {
-    flex-direction: column;
-    padding: 2px 0 6px 0;
-    margin-bottom: 6px;
-    justify-content: center;
-    gap: 4px;
-}
-
-body.sidebar-auto-collapse #Sidebar:not(.pointer-inside):not(.expanded):not(:focus-within) .window-controls-brand {
-    display: none;
-}
-
-body.sidebar-auto-collapse #Sidebar:not(.pointer-inside):not(.expanded):not(:focus-within) .window-controls-actions {
-    flex-direction: column;
-    gap: 4px;
-    width: 100%;
-    align-items: center;
-}
-
-body.sidebar-auto-collapse #Sidebar:not(.pointer-inside):not(.expanded):not(:focus-within) .win-btn {
-    width: 26px;
-    height: 22px;
-    font-size: 10px;
-}
-
-/* Workspace Header & Badges */
+/* Workspace Header & Badges. Its frame is drawn twice: around the whole row
+   (::before) and hugging the badge in the rail (::after); they crossfade. */
 #WorkspaceHeader {
+    position: relative;
+    z-index: 0;
     display: flex;
     align-items: center;
     gap: 8px;
-    padding: 3px 2px;
-    cursor: pointer;
-    border-radius: 6px;
-    transition: background-color var(--motion-fast) var(--motion-ease);
-    flex-shrink: 0;
+    width: 246px;
     min-height: 34px;
+    margin-left: 3px;
+    padding: 3px 1px;
+    cursor: pointer;
+    flex-shrink: 0;
 }
 
-#WorkspaceHeader:hover {
-    background: var(--selected);
+#WorkspaceHeader::before,
+#WorkspaceHeader::after {
+    content: "";
+    position: absolute;
+    z-index: -1;
+    top: 0;
+    left: 0;
+    height: 100%;
+    box-sizing: border-box;
+    background-color: var(--panel);
+    border: 1px solid var(--border);
+    border-radius: 2px;
+    pointer-events: none;
+}
+
+#WorkspaceHeader::before {
+    width: 100%;
+    transition: background-color var(--motion-fast) var(--motion-ease);
+}
+
+#WorkspaceHeader::after {
+    width: 30px;
+    opacity: 0;
+}
+
+#WorkspaceHeader:hover::before {
+    background-color: var(--selected);
 }
 
 #WorkspaceBadge {
@@ -263,61 +281,26 @@ body.sidebar-auto-collapse #Sidebar:not(.pointer-inside):not(.expanded):not(:foc
     letter-spacing: 0.5px;
     text-transform: uppercase;
     box-shadow: 0 1px 3px rgba(0,0,0,0.3);
-    margin: 0 auto;
     transition: border-color var(--motion-fast) var(--motion-ease);
 }
 
 #WorkspaceLabel {
+    min-width: 0;
+    max-width: 180px;
     color: var(--text);
     font-weight: bold;
     font-size: 13px;
     white-space: nowrap;
     overflow: hidden;
     text-overflow: ellipsis;
-    opacity: 0;
-    max-width: 0;
-    display: none;
-    transition: opacity var(--motion-fast) var(--motion-ease);
-}
-
-body.sidebar-auto-collapse #Sidebar.pointer-inside #WorkspaceLabel,
-body.sidebar-auto-collapse #Sidebar.expanded #WorkspaceLabel,
-body.sidebar-auto-collapse #Sidebar:focus-within #WorkspaceLabel,
-body.sidebar-pinned #WorkspaceLabel {
-    opacity: 1;
-    max-width: 180px;
-    display: inline-block;
-}
-
-body.sidebar-auto-collapse #Sidebar.pointer-inside #WorkspaceBadge,
-body.sidebar-auto-collapse #Sidebar.expanded #WorkspaceBadge,
-body.sidebar-auto-collapse #Sidebar:focus-within #WorkspaceBadge,
-body.sidebar-pinned #WorkspaceBadge {
-    margin: 0;
 }
 
 .nav-action-layout {
-    flex-shrink: 0;
     display: flex;
+    flex-shrink: 0;
     gap: 6px;
-    padding: 0;
     align-items: center;
-    opacity: 0;
-    max-height: 0;
-    overflow: hidden;
-    pointer-events: none;
-    transition: opacity var(--motion-fast) var(--motion-ease);
-    margin: 0;
-}
-
-body.sidebar-auto-collapse #Sidebar.pointer-inside .nav-action-layout,
-body.sidebar-auto-collapse #Sidebar.expanded .nav-action-layout,
-body.sidebar-auto-collapse #Sidebar:focus-within .nav-action-layout,
-body.sidebar-pinned .nav-action-layout {
-    opacity: 1;
-    max-height: 40px;
-    pointer-events: auto;
-    margin: 6px 0;
+    margin: 6px 0 6px 4px;
 }
 
 .nav-icon-button {
@@ -348,12 +331,19 @@ body.sidebar-pinned .nav-action-layout {
     border-color: var(--accent);
 }
 
+/* The clock follows the last tab; a list too long to fit scrolls instead of
+   squeezing its rows. */
 #TabList {
-    min-height: 0;
     list-style: none;
-    flex-grow: 1;
+    flex: 0 1 auto;
+    min-height: 0;
+    width: 259px;
+    padding-left: 4px;
     overflow-y: auto;
     overflow-x: hidden;
+    scrollbar-width: thin;
+    scrollbar-color: var(--border) transparent;
+    scrollbar-gutter: stable;
     margin-top: 4px;
     background-color: transparent;
     border: none;
@@ -363,10 +353,13 @@ body.sidebar-pinned .nav-action-layout {
     gap: 4px;
 }
 
+/* The favicon sits on the rail's centre line, and the text starts past the
+   rail's edge, so the rail shows exactly the icon column. */
 #TabList li {
-    flex-shrink: 0;
-    padding: 6px 8px;
-    border-radius: 6px;
+    flex: none;
+    height: 40px;
+    padding: 0 8px 0 5px;
+    border-radius: 2px;
     font-size: 13px;
     color: var(--text);
     cursor: pointer;
@@ -377,26 +370,34 @@ body.sidebar-pinned .nav-action-layout {
     align-items: center;
     gap: 8px;
     position: relative;
-    transition: background-color var(--motion-fast) var(--motion-ease), border-color var(--motion-fast) var(--motion-ease);
-    border: 1px solid transparent;
+    z-index: 0;
+    transition: background-color var(--motion-fast) var(--motion-ease);
 }
 
-/* Collapsed tab appearance in 36px strip */
-body.sidebar-auto-collapse #Sidebar:not(.pointer-inside):not(.expanded):not(:focus-within) #TabList li {
+/* Persistent row states are drawn twice: as the full row (::before) and as a
+   28px tile around the favicon for the rail (::after); they crossfade. */
+#TabList li:is(.selected, .tab-pinned, .split-pane-1-tab, .split-pane-2-tab)::before,
+#TabList li:is(.selected, .tab-pinned, .split-pane-1-tab, .split-pane-2-tab)::after {
+    content: "";
+    position: absolute;
+    z-index: -1;
+    box-sizing: border-box;
+    border: 1px solid transparent;
+    pointer-events: none;
+}
+
+#TabList li::before {
+    inset: 0;
+    border-radius: 2px;
+}
+
+#TabList li::after {
+    top: 6px;
+    left: 0;
     width: 28px;
     height: 28px;
-    padding: 0;
-    margin: 0 auto;
-    justify-content: center;
     border-radius: 6px;
-}
-
-body.sidebar-auto-collapse #Sidebar:not(.pointer-inside):not(.expanded):not(:focus-within) #TabList li .tab-title,
-body.sidebar-auto-collapse #Sidebar:not(.pointer-inside):not(.expanded):not(:focus-within) #TabList li .tab-sleep-badge,
-body.sidebar-auto-collapse #Sidebar:not(.pointer-inside):not(.expanded):not(:focus-within) #TabList li .tab-media-badge,
-body.sidebar-auto-collapse #Sidebar:not(.pointer-inside):not(.expanded):not(:focus-within) #TabList li .tab-pin-badge,
-body.sidebar-auto-collapse #Sidebar:not(.pointer-inside):not(.expanded):not(:focus-within) #TabList li .tab-close-btn {
-    display: none !important;
+    opacity: 0;
 }
 
 /* Tab Favicon Wrapper */
@@ -404,6 +405,7 @@ body.sidebar-auto-collapse #Sidebar:not(.pointer-inside):not(.expanded):not(:foc
     width: 18px;
     height: 18px;
     min-width: 18px;
+    margin-right: 2px;
     display: flex;
     align-items: center;
     justify-content: center;
@@ -425,41 +427,58 @@ body.sidebar-auto-collapse #Sidebar:not(.pointer-inside):not(.expanded):not(:foc
     display: none;
 }
 
-/* Mini indicators for 36px collapsed strip */
-.tab-sleep-dot {
-    display: none;
+/* Mini indicators stand in for the row's badges in the rail. */
+.tab-sleep-dot,
+.tab-audio-dot,
+.tab-pin-dot {
     position: absolute;
-    bottom: -3px;
-    right: -3px;
     font-size: 7px;
-    color: var(--accent);
     background: var(--bg-sidebar);
     border-radius: 50%;
     padding: 1px;
+    opacity: 0;
+}
+
+.tab-sleep-dot {
+    bottom: -3px;
+    right: -3px;
+    color: var(--accent);
 }
 
 .tab-audio-dot {
-    display: none;
-    position: absolute;
     top: -3px;
     right: -3px;
-    font-size: 7px;
     color: var(--text);
-    background: var(--bg-sidebar);
-    border-radius: 50%;
-    padding: 1px;
 }
 
 .tab-pin-dot {
-    display: none;
-    position: absolute;
     top: -3px;
     left: -3px;
-    font-size: 7px;
     color: var(--warning);
-    background: var(--bg-sidebar);
-    border-radius: 50%;
-    padding: 1px;
+}
+
+/* Rail and expanded decorations swap with the sidebar's motion. */
+body.sidebar-auto-collapse #WorkspaceHeader::before,
+body.sidebar-auto-collapse #WorkspaceHeader::after,
+body.sidebar-auto-collapse #TabList li:is(.selected, .tab-pinned, .split-pane-1-tab, .split-pane-2-tab)::before,
+body.sidebar-auto-collapse #TabList li:is(.selected, .tab-pinned, .split-pane-1-tab, .split-pane-2-tab)::after,
+body.sidebar-auto-collapse :is(.tab-sleep-dot, .tab-audio-dot, .tab-pin-dot) {
+    transition: opacity var(--motion-normal) var(--motion-ease);
+}
+
+body.sidebar-auto-collapse #WorkspaceHeader::before {
+    transition: opacity var(--motion-normal) var(--motion-ease), background-color var(--motion-fast) var(--motion-ease);
+}
+
+body.sidebar-auto-collapse #Sidebar:not(.pointer-inside, .expanded, :focus-within) #WorkspaceHeader::before,
+body.sidebar-auto-collapse #Sidebar:not(.pointer-inside, .expanded, :focus-within) #TabList li:is(.selected, .tab-pinned, .split-pane-1-tab, .split-pane-2-tab)::before {
+    opacity: 0;
+}
+
+body.sidebar-auto-collapse #Sidebar:not(.pointer-inside, .expanded, :focus-within) #WorkspaceHeader::after,
+body.sidebar-auto-collapse #Sidebar:not(.pointer-inside, .expanded, :focus-within) #TabList li:is(.selected, .tab-pinned, .split-pane-1-tab, .split-pane-2-tab)::after,
+body.sidebar-auto-collapse #Sidebar:not(.pointer-inside, .expanded, :focus-within) :is(.tab-sleep-dot, .tab-audio-dot, .tab-pin-dot) {
+    opacity: 1;
 }
 
 /* Dynamic Tab Jump Index Badge */
@@ -497,53 +516,35 @@ body.show-tab-badges .tab-index-badge ~ .tab-fallback-icon {
     opacity: 0.15;
 }
 
-
-body.sidebar-auto-collapse #Sidebar:not(.pointer-inside):not(.expanded):not(:focus-within) #TabList li.tab-sleeping .tab-sleep-dot {
-    display: block;
-}
-
-body.sidebar-auto-collapse #Sidebar:not(.pointer-inside):not(.expanded):not(:focus-within) #TabList li .tab-audio-dot {
-    display: block;
-}
-
-body.sidebar-auto-collapse #Sidebar:not(.pointer-inside):not(.expanded):not(:focus-within) #TabList li.tab-pinned .tab-pin-dot {
-    display: block;
-}
-
 /* Sleeping tab styling */
 #TabList li.tab-sleeping .tab-favicon {
     opacity: 0.55;
     filter: grayscale(40%);
 }
 
-#TabList li.selected {
-    background-color: var(--selected);
-    color: var(--text);
+#TabList li.selected::before,
+#TabList li.selected::after {
+    background-color: var(--panel);
     border-color: var(--accent);
+    border-left-width: 2px;
 }
 
 #TabList li:hover {
     background-color: rgba(54, 74, 133, 0.45);
 }
 
-#TabList li:focus-visible {
-    border-color: var(--accent);
-    outline: none;
+/* A hover left over from before the rail collapsed must not tint it. */
+body.sidebar-auto-collapse #Sidebar:not(.pointer-inside, .expanded, :focus-within) #TabList li:hover {
+    background-color: transparent;
 }
 
 #TabList li:focus:not(.selected) {
-    border-color: var(--accent);
     background-color: rgba(122, 162, 247, 0.16);
     outline: 1px dashed var(--accent);
     outline-offset: -1px;
 }
 
 /* Fixed footer geometry keeps the pin centred in the 36px collapsed strip. */
-#Sidebar {
-    padding-bottom: 42px;
-    overflow-x: hidden;
-}
-
 .bottom-theme-layout {
     position: absolute;
     left: 0;
@@ -551,9 +552,18 @@ body.sidebar-auto-collapse #Sidebar:not(.pointer-inside):not(.expanded):not(:foc
     width: 259px;
     display: flex;
     padding: 8px 4px 0;
-    border-top: 1px solid var(--border);
     align-items: center;
     justify-content: space-between;
+}
+
+.bottom-theme-layout::before {
+    content: "";
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    border-top: 1px solid var(--border);
+    pointer-events: none;
 }
 
 .bottom-theme-layout button {
@@ -563,18 +573,6 @@ body.sidebar-auto-collapse #Sidebar:not(.pointer-inside):not(.expanded):not(:foc
 #update-indicator-btn {
     flex-shrink: 0;
     margin: 6px 0 4px auto;
-}
-
-body.sidebar-auto-collapse #Sidebar:not(.pointer-inside):not(.expanded):not(:focus-within) .bottom-theme-layout {
-    border-top-color: transparent;
-}
-
-body.sidebar-auto-collapse #Sidebar:not(.pointer-inside):not(.expanded):not(:focus-within) .bottom-theme-layout button:not(#pin-sidebar-btn) {
-    visibility: hidden;
-}
-
-body.sidebar-auto-collapse #Sidebar:not(.pointer-inside):not(.expanded):not(:focus-within) #update-indicator-btn {
-    visibility: hidden;
 }
 
 #pin-sidebar-btn:focus-visible {
@@ -710,11 +708,13 @@ webview {
     background-color: var(--text);
 }
 
-#TabList li.split-pane-1-tab {
+#TabList li.split-pane-1-tab::before,
+#TabList li.split-pane-1-tab::after {
     border-color: color-mix(in srgb, var(--accent) 40%, transparent);
 }
 
-#TabList li.split-pane-2-tab {
+#TabList li.split-pane-2-tab::before,
+#TabList li.split-pane-2-tab::after {
     border-color: color-mix(in srgb, var(--text) 40%, transparent);
 }
 
@@ -2499,13 +2499,15 @@ webview {
     background: rgba(247, 118, 142, 0.18);
 }
 
-#TabList li.tab-pinned {
-    background: rgba(224, 175, 104, 0.08);
+#TabList li.tab-pinned::before,
+#TabList li.tab-pinned::after {
+    background-color: rgba(224, 175, 104, 0.08);
     border-color: rgba(224, 175, 104, 0.25);
 }
 
-#TabList li.tab-pinned.selected {
-    background: rgba(122, 162, 247, 0.2);
+#TabList li.tab-pinned.selected::before,
+#TabList li.tab-pinned.selected::after {
+    background-color: rgba(122, 162, 247, 0.2);
     border-color: var(--accent);
 }
 
@@ -3258,6 +3260,8 @@ body.light-mode .download-action-btn:hover {
 
 /* The update action shares the clock row and takes space only when visible. */
 .sidebar-clock-row {
+    width: 245px;
+    margin-left: 4px;
     display: flex;
     align-items: center;
     gap: 6px;
@@ -3310,10 +3314,6 @@ body.light-mode .download-action-btn:hover {
     color: var(--accent);
     font-weight: 700;
     margin-left: auto;
-}
-
-body.sidebar-auto-collapse #Sidebar:not(.pointer-inside):not(.expanded):not(:focus-within) #SidebarClock {
-    display: none !important;
 }
 
 /* Light Theme Overrides */
@@ -4368,28 +4368,23 @@ body.light-mode {
     --link: #2457b8;
 }
 button, input, select, textarea { font-family: inherit; }
-body.light-mode #Sidebar, body.light-mode #StatusBar {
+body.light-mode .sidebar-content, body.light-mode #StatusBar {
     background-image: url('assets/identity/paper-grain.png');
 }
-body.light-mode #Sidebar::before { background-image: url('assets/identity/engraving-papel@2x.png'); }
+body.light-mode .sidebar-content::before { background-image: url('assets/identity/engraving-papel@2x.png'); }
 #WindowControls { justify-content: flex-end; }
 #WorkspaceBadge, #StatusBarMode { font-family: 'Doto', monospace; font-weight: 900; background: var(--cell); color: var(--text); border-radius: 2px; }
-#WorkspaceHeader { background: var(--panel); border: 1px solid var(--border); border-radius: 2px; }
 #StatusBar { background-color: var(--bg-sidebar); font-family: 'IBM Plex Mono', monospace; }
 #StatusBarMode { border-left: 2px solid var(--accent); }
 #StatusBarClockTime, #SidebarClockTime { font-family: 'Doto', monospace; font-weight: 800; }
-#TabList li { border-radius: 2px; }
-#TabList li.selected { background: var(--panel); border-left: 2px solid var(--accent); }
 .tab-copy { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 3px; }
-.tab-copy .tab-title { display: block; overflow: hidden; text-overflow: ellipsis; }
-.tab-domain { font: 10px 'IBM Plex Mono', monospace; color: var(--link); overflow: hidden; text-overflow: ellipsis; }
+.tab-copy .tab-title { display: block; line-height: 16px; overflow: hidden; text-overflow: ellipsis; }
+.tab-domain { font: 10px/13px 'IBM Plex Mono', monospace; color: var(--link); overflow: hidden; text-overflow: ellipsis; }
 .tab-flight-state { font: 8px 'IBM Plex Mono', monospace; color: var(--dim); letter-spacing: .04em; }
 .tab-flight-state::after { content: 'IN FLIGHT'; }
 .tab-sleeping .tab-flight-state::after { content: 'LANDED'; }
 .tab-item:has(.tab-media-badge:not(.is-muted)) .tab-flight-state::after { content: 'PLAYING'; }
 .tab-sleeping .tab-title, .tab-sleeping .tab-domain { color: var(--dim); }
-body.sidebar-auto-collapse #Sidebar:not(.pointer-inside):not(.expanded):not(:focus-within) .tab-copy,
-body.sidebar-auto-collapse #Sidebar:not(.pointer-inside):not(.expanded):not(:focus-within) .tab-flight-state { display: none; }
 :focus-visible { outline: 1px solid var(--accent) !important; outline-offset: 3px; }
 #EmptyWorkspaceWelcome { background-image: radial-gradient(var(--border) .7px, transparent .7px); background-size: 16px 16px; }
 .welcome-card { background: var(--bg-main); border-radius: 2px; }

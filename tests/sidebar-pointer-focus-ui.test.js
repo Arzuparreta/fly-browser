@@ -16,7 +16,6 @@ const root = path.resolve(__dirname, '..');
     try {
         application = await _electron.launch({executablePath: path.join(root, 'node_modules/electron/dist/electron'), args: ['--no-sandbox', '--disable-gpu', `--ozone-platform=${process.env.FLY_TEST_OZONE_PLATFORM || 'x11'}`, entry]});
         const page = await application.firstWindow();
-        await require('./sidebar-geometry')(page);
         const errors = []; page.on('pageerror', error => errors.push(error.message));
         await page.waitForFunction(() => !!window.executeBrowserAction);
         await page.waitForFunction(() => {try {return [...document.querySelectorAll('webview')].find(view => view.getClientRects().length)?.getWebContentsId() > 0;} catch {return false;}});
@@ -25,11 +24,11 @@ const root = path.resolve(__dirname, '..');
         const expand = async () => {
             await page.mouse.move(500, await page.evaluate(() => innerHeight - 10));
             await page.mouse.move(10, 100);
-            await page.waitForFunction(() => document.body.classList.contains('sidebar-pinned') || window.__sidebarVisibleWidth() >= 259);
+            await page.waitForFunction(() => document.getElementById('Sidebar').getBoundingClientRect().right === 260);
         };
         const contract = async () => {
             await page.mouse.move(500, await page.evaluate(() => innerHeight - 10));
-            await page.waitForFunction(() => window.__sidebarVisibleWidth() <= 37);
+            await page.waitForFunction(() => document.getElementById('Sidebar').getBoundingClientRect().right === 36);
             assert.equal(await page.evaluate(() => document.getElementById('Sidebar').contains(document.activeElement)), false);
         };
         const click = async selector => {
@@ -72,7 +71,7 @@ const root = path.resolve(__dirname, '..');
             await page.keyboard.press(key);
             await page.mouse.move(500, 400);
             assert.equal(await page.evaluate(() => document.activeElement.id), 'SidebarClock');
-            assert.equal(await page.locator('#Sidebar').evaluate(() => window.__sidebarVisibleWidth()), 260);
+            assert.equal(await page.locator('#Sidebar').evaluate(el => el.getBoundingClientRect().right), 260);
         }
         // A pointer click releases focus even when keyboard navigation preceded it.
         await click('#SidebarClock');
@@ -110,7 +109,7 @@ const root = path.resolve(__dirname, '..');
         // Future editable sidebar controls retain native pointer focus and text selection.
         await page.evaluate(() => {
             const input = document.createElement('input'); input.id = 'sidebar-editable';
-            document.getElementById('Sidebar').prepend(input);
+            document.querySelector('#Sidebar .sidebar-content').prepend(input);
         });
         await expand(); await page.locator('#sidebar-editable').click();
         await page.keyboard.type('editable');

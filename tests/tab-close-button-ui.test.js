@@ -39,10 +39,11 @@ const root = path.resolve(__dirname, '..');
         const urls = () => page.evaluate(() => window.flyAPI.getSession().then(s => s.workspaces[s.current_workspace]));
         const selectedIndex = () => page.evaluate(() => [...document.querySelectorAll('#TabList li')].findIndex(li => li.classList.contains('selected')));
         const tab = index => page.locator('#TabList li').nth(index);
-        // The collapsed strip expands under the pointer, so the hover is repeated on the laid-out row.
+        // Rows keep their full width under the collapsed strip, so the first hover
+        // targets the favicon the strip shows; it is repeated once the row is revealed.
         const hover = async index => {
-            await tab(index).hover();
-            await page.waitForFunction(() => document.getElementById('Sidebar').getBoundingClientRect().width > 200);
+            await tab(index).hover({position: {x: 14, y: 20}});
+            await page.waitForFunction(() => document.getElementById('Sidebar').getBoundingClientRect().right > 200);
             await page.mouse.move(0, 0);
             await tab(index).hover();
         };

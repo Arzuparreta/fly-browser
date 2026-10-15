@@ -1,3 +1,4 @@
+import { isCurrentGuestPointerEntry } from './sidebarPointer.js';
 import { NEW_TAB_URL, isNewTab, refreshNewTab } from './newTab.js';
 import { hasActiveOverlay } from './focus.js';
 import { state } from './state.js';
@@ -359,7 +360,12 @@ export function createWebView(url, currentWS, idx) {
         if (liveIdx < 0) return;
 
         if (e.channel === 'guest-pointer-enter') {
-            if (webview.getClientRects().length) document.getElementById('Sidebar').classList.remove('pointer-inside');
+            const sidebar = document.getElementById('Sidebar');
+            // Guest IPC can arrive after the pointer has already returned to the
+            // host. Never let an old guest entry reverse a current sidebar hover.
+            if (webview.getClientRects().length && isCurrentGuestPointerEntry(e.args?.[0])) {
+                sidebar.classList.remove('pointer-inside');
+            }
         } else if (e.channel === 'guest-input-focus') {
             handleGuestInputFocus(!!e.args[0], currentWS, liveIdx);
         } else if (e.channel === 'guest-hints-state') {

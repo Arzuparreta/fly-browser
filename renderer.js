@@ -1,3 +1,4 @@
+import { recordSidebarPointerEntry } from './modules/sidebarPointer.js';
 import { openWorkspaceMoveDialog } from './modules/tabActions.js';
 import { initialiseOverlayFocus, initialiseSidebarPointerFocus, prepareOverlay, hasActiveOverlay } from './modules/focus.js';
 import { focusSettingsSearch } from './modules/settingsNav.js';
@@ -554,6 +555,7 @@ function setupEventListeners() {
         const inside = sidebar.contains(event.target);
         // Internal pointer transitions must not undo keyboard contraction.
         if (inside && sidebar.contains(event.relatedTarget)) return;
+        if (inside) recordSidebarPointerEntry(event);
         sidebar.classList.toggle('pointer-inside', inside);
     });
 

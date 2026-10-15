@@ -8,50 +8,53 @@
     <link rel="stylesheet" href="assets/fonts/fonts.css">
     <link rel="stylesheet" href="style.css">
 </head>
-<body class="dark-mode">
+<body class="dark-mode sidebar-auto-collapse">
     <div class="main-container">
         <div id="Sidebar">
-            <div id="WindowControls" class="window-controls" style="display: none;">
-                <div class="window-controls-actions">
-                    <button id="win-min-btn" class="win-btn win-min" title="Minimise"><i class="fa-solid fa-minus"></i></button>
-                    <button id="win-max-btn" class="win-btn win-max" title="Maximise"><i class="fa-regular fa-square"></i></button>
-                    <button id="win-close-btn" class="win-btn win-close" title="Close"><i class="fa-solid fa-xmark"></i></button>
+            <div class="sidebar-viewport">
+                <div class="sidebar-content">
+                    <div id="WindowControls" class="window-controls" style="display: none;">
+                        <div class="window-controls-actions">
+                            <button id="win-min-btn" class="win-btn win-min" title="Minimise"><i class="fa-solid fa-minus"></i></button>
+                            <button id="win-max-btn" class="win-btn win-max" title="Maximise"><i class="fa-regular fa-square"></i></button>
+                            <button id="win-close-btn" class="win-btn win-close" title="Close"><i class="fa-solid fa-xmark"></i></button>
+                        </div>
+                    </div>
+
+                    <div id="WorkspaceHeader" title="Workspace: Click to open Workspace Dashboard">
+                        <div id="WorkspaceBadge" class="workspace-badge">1</div>
+                        <span id="WorkspaceLabel" class="workspace-label">Workspace 1</span>
+                    </div>
+
+                    <div class="nav-action-layout">
+                        <button id="back-btn" class="nav-icon-button" title="Go Back"><i class="fa-solid fa-angle-left"></i></button>
+                        <button id="forward-btn" class="nav-icon-button" title="Go Forward"><i class="fa-solid fa-angle-right"></i></button>
+                        <button id="toggle-nav-btn" class="nav-icon-button" title="New Tab / Navigation"><i class="fa-solid fa-plus"></i></button>
+                        <button id="split-toggle-btn" class="nav-icon-button" title="Toggle Split View"><i class="fa-solid fa-table-columns"></i></button>
+                        <button id="menu-btn" class="nav-icon-button" title="Workspaces Dashboard"><i class="fa-solid fa-bars"></i></button>
+                    </div>
+
+                    <ul id="TabList">
+                        <!-- Populated dynamically -->
+                    </ul>
+
+                    <div class="sidebar-clock-row">
+                        <div id="SidebarClock" class="sidebar-clock" title="Current Date and Time">
+                            <i class="fa-regular fa-clock"></i>
+                            <span id="SidebarClockDate" class="sidebar-clock-date"></span>
+                            <span id="SidebarClockTime" class="sidebar-clock-time"></span>
+                        </div>
+                        <button id="update-indicator-btn" class="nav-icon-button" title="New update available" style="display: none; color: var(--accent);"><i class="fa-solid fa-arrow-up-from-bracket"></i></button>
+                    </div>
+
+                    <div class="bottom-theme-layout">
+                        <button id="pin-sidebar-btn" class="nav-icon-button" title="Pin / Auto-Collapse Sidebar"><i class="fa-solid fa-thumbtack"></i></button>
+                        <button id="reader-view-btn" class="nav-icon-button" title="Toggle Reader View"><i class="fa-solid fa-book-open"></i></button>
+                        <button id="noti-toggle-btn" class="nav-icon-button" title="Toggle Web Notifications"><i class="fa-regular fa-bell"></i></button>
+                        <button id="settings-btn" class="nav-icon-button" title="Settings" aria-label="Settings"><i class="fa-solid fa-gear"></i></button>
+                    </div>
                 </div>
             </div>
-
-            <div id="WorkspaceHeader" title="Workspace: Click to open Workspace Dashboard">
-                <div id="WorkspaceBadge" class="workspace-badge">1</div>
-                <span id="WorkspaceLabel" class="workspace-label">Workspace 1</span>
-            </div>
-            
-            <div class="nav-action-layout">
-                <button id="back-btn" class="nav-icon-button" title="Go Back"><i class="fa-solid fa-angle-left"></i></button>
-                <button id="forward-btn" class="nav-icon-button" title="Go Forward"><i class="fa-solid fa-angle-right"></i></button>
-                <button id="toggle-nav-btn" class="nav-icon-button" title="New Tab / Navigation"><i class="fa-solid fa-plus"></i></button>
-                <button id="split-toggle-btn" class="nav-icon-button" title="Toggle Split View"><i class="fa-solid fa-table-columns"></i></button>
-                <button id="menu-btn" class="nav-icon-button" title="Workspaces Dashboard"><i class="fa-solid fa-bars"></i></button>
-            </div>
-
-            <ul id="TabList">
-                <!-- Populated dynamically -->
-            </ul>
-
-            <div class="sidebar-clock-row">
-                <div id="SidebarClock" class="sidebar-clock" title="Current Date and Time">
-                    <i class="fa-regular fa-clock"></i>
-                    <span id="SidebarClockDate" class="sidebar-clock-date"></span>
-                    <span id="SidebarClockTime" class="sidebar-clock-time"></span>
-                </div>
-                <button id="update-indicator-btn" class="nav-icon-button" title="New update available" style="display: none; color: var(--accent);"><i class="fa-solid fa-arrow-up-from-bracket"></i></button>
-            </div>
-
-            <div class="bottom-theme-layout">
-                <button id="pin-sidebar-btn" class="nav-icon-button" title="Pin / Auto-Collapse Sidebar"><i class="fa-solid fa-thumbtack"></i></button>
-                <button id="reader-view-btn" class="nav-icon-button" title="Toggle Reader View"><i class="fa-solid fa-book-open"></i></button>
-                <button id="noti-toggle-btn" class="nav-icon-button" title="Toggle Web Notifications"><i class="fa-regular fa-bell"></i></button>
-                <button id="settings-btn" class="nav-icon-button" title="Settings" aria-label="Settings"><i class="fa-solid fa-gear"></i></button>
-            </div>
-
         </div>
 
         <div id="right-content">
