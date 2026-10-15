@@ -505,7 +505,8 @@ async function initializeBrowser() {
                             window.flyAPI.updateBrowserSettings({ last_seen_version: appVer }).catch(() => {});
                             if (typeof window.flyAPI.getWhatsNewPath === 'function') {
                                 const whatsNewPath = window.flyAPI.getWhatsNewPath();
-                                if (whatsNewPath) spawnTabWithUrl(whatsNewPath);
+                                // The page lists every release after the one this profile last ran.
+                                if (whatsNewPath) spawnTabWithUrl(`${whatsNewPath}?from=${encodeURIComponent(lastSeen)}`);
                             }
                         }
                     }).catch(() => {});

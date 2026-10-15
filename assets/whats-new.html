@@ -169,6 +169,32 @@
             padding-left: 16px;
         }
 
+        .releases {
+            display: flex;
+            flex-direction: column;
+            gap: 28px;
+        }
+
+        .release-heading {
+            font-size: 13px;
+            font-weight: 600;
+            color: var(--text-muted);
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+        }
+
+        .action-badge {
+            align-self: flex-start;
+            border: 1px solid var(--accent);
+            border-radius: 4px;
+            color: var(--accent);
+            font-size: 11px;
+            font-weight: 600;
+            letter-spacing: 0.5px;
+            padding: 1px 8px;
+            text-transform: uppercase;
+        }
+
         .feature-points li::before {
             content: "•";
             color: var(--accent);
@@ -217,62 +243,16 @@
         <header>
             <div class="tag-row">
                 <span class="badge">Release Notes</span>
-                <span class="version-date">October 2026</span>
+                <span class="version-date" id="ReleaseDate"></span>
                 <a href="https://github.com/Arzuparreta/fly-browser/releases" target="_blank" rel="noopener noreferrer" class="github-link">
                     Full Release on GitHub ↗
                 </a>
             </div>
             <h1>What's New in Fly</h1>
-            <p class="subtitle">uBlock Origin is now Fly's ad blocker, and tabs close with the mouse. If you had turned extensions off, read the first card: you need to turn them back on to keep blocking ads. Below it, fly-install from the previous release.</p>
+            <p class="subtitle" id="ReleaseSummary"></p>
         </header>
 
-        <section class="feature-card">
-            <h2 class="feature-title">uBlock Origin Blocks Ads</h2>
-            <p class="feature-desc">
-                The included uBlock Origin is Fly's only ad and tracker blocker. The built-in shields are gone.
-            </p>
-            <ul class="feature-points">
-                <li>New profiles start with uBlock on. Open its popup from the status bar to pause it on a site, or its options to manage filter lists and your own rules.</li>
-                <li>If you had switched off <kbd>Enable Chrome extensions</kbd>, Fly now has no ad blocker until you switch it back on in Preferences (<kbd>Ctrl + H</kbd>) → Extensions. Your other extension choices and permission exceptions are kept.</li>
-                <li>Private browsing has no ad blocker: Electron cannot load extensions into its in-memory session.</li>
-                <li>The old blocker made some video players, CNN's among them, retry a blocked request thousands of times a second. That no longer happens, and videos restored with your session play again because new tabs wait until uBlock's filters are ready.</li>
-            </ul>
-        </section>
-
-        <section class="feature-card">
-            <h2 class="feature-title">Close Tabs with the Mouse</h2>
-            <p class="feature-desc">
-                Tabs in the sidebar can be closed without the keyboard.
-            </p>
-            <ul class="feature-points">
-                <li>Hover a tab and click its <kbd>×</kbd>, or middle-click the tab. It closes without being selected first, and the tab you were on stays selected.</li>
-                <li>The selected tab always shows its <kbd>×</kbd>; the others show it on hover.</li>
-                <li>Pinned tabs have no <kbd>×</kbd> and ignore middle-click. Unpin them first.</li>
-            </ul>
-        </section>
-
-        <section class="feature-card">
-            <h2 class="feature-title">Smaller Fixes</h2>
-            <ul class="feature-points">
-                <li>Tab hibernation no longer stops at a tab that is still loading, so the tabs after it go to sleep and free their memory too.</li>
-                <li>The sidebar starts with the workspace header; the FLY wordmark row is gone.</li>
-                <li>Starting Fly from a terminal while it is already running now says so instead of quitting silently.</li>
-            </ul>
-        </section>
-
-        <section class="feature-card">
-            <h2 class="feature-title">fly-install</h2>
-            <p class="feature-desc">
-                From the previous release: one command to install Fly and keep every copy of it in order.
-            </p>
-            <ul class="feature-points">
-                <li><kbd>fly-install install</kbd> builds the <kbd>fly-browser-bin</kbd> package on Arch-based systems and installs the AppImage anywhere else, checked against the release's checksums.</li>
-                <li>An AppImage it installs goes straight into your applications menu, Rofi and other launchers, with the same entry Fly writes itself, so Preferences → About can still manage it.</li>
-                <li><kbd>fly-install status</kbd> lists every copy of Fly on the machine and whether it is current; <kbd>fly-install update</kbd> updates them all.</li>
-                <li><kbd>fly-install uninstall</kbd> removes the package or an AppImage together with the menu entry and icons added for it. Your profile is kept.</li>
-                <li>Get it from the installation guide, linked from the GitHub release.</li>
-            </ul>
-        </section>
+        <main id="Releases" class="releases"></main>
 
         <footer>
             <div class="footer-left">
@@ -288,5 +268,7 @@
             </div>
         </footer>
     </div>
+    <script src="whats-new-releases.js"></script>
+    <script src="whats-new-page.js"></script>
 </body>
 </html>

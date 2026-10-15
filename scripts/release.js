@@ -24,6 +24,7 @@
 'use strict';
 const {spawnSync} = require('node:child_process');
 const {declaredVersion, setDeclaredVersion, sync, validate, fail} = require('./version-sync');
+const whatsNew = require('./whats-new');
 
 // Ordered by how much they move the number. `none` is not the absence of a
 // label: it is the explicit claim that a change ships nothing a user would notice.
@@ -97,6 +98,7 @@ function classify(entry) {
     return {
         number: entry.number,
         title: entry.title,
+        body: entry.body || '',
         impact: known.length ? known[known.length - 1] : UNLABELLED,
         labelled: known.length > 0
     };
@@ -106,7 +108,7 @@ function classify(entry) {
 function mergedSince(tag) {
     const taggedAt = tag ? new Date(git('log', '-1', '--format=%cI', `refs/tags/${tag}`)) : null;
     const entries = JSON.parse(gh('pr', 'list', '--state', 'merged', '--base', 'main', '--limit', '500',
-        '--json', 'number,title,labels,mergedAt,mergeCommit') || '[]');
+        '--json', 'number,title,body,labels,mergedAt,mergeCommit') || '[]');
     return entries
         .filter(entry => !tag || !inRelease(entry.mergeCommit?.oid, entry.mergedAt, tag, taggedAt))
         .map(classify)
@@ -196,6 +198,11 @@ function plan(options) {
     const {version, impact, pulls, tag} = resolve(options);
     console.log(`${declaredVersion()} → ${version}  (${impact})\n`);
     console.log(summarise(pulls, tag));
+    const bare = pulls.filter(pull => pull.impact !== 'none' && !whatsNew.extractNote(pull.body));
+    if (bare.length) {
+        console.log(`What's New shows only the title of these; a \`## What's New\` section in the description says more:`);
+        for (const pull of bare) console.log(`  #${pull.number} ${pull.title}`);
+    }
 }
 
 function prepare(options) {
@@ -208,6 +215,8 @@ function prepare(options) {
     git('switch', '--quiet', '--create', branch, 'origin/main');
     setDeclaredVersion(version);
     sync(version, {check: false});
+    whatsNew.recordRelease(version, pulls);
+    git('add', whatsNew.DATA_FILE);
     git('commit', '--quiet', '--all', '--message', `Version ${version}`);
     git('push', '--quiet', '--set-upstream', 'origin', branch);
 
@@ -215,7 +224,7 @@ function prepare(options) {
         `Bump to \`${version}\`, derived from the impact labels below.`,
         '',
         summarise(pulls, tag),
-        `Merging this tags \`v${version}\` and publishes the Linux, macOS and Windows packages. Nothing in this pull request is hand-written: \`scripts/version-sync.js\` produced every changed line.`,
+        `Merging this tags \`v${version}\` and publishes the Linux, macOS and Windows packages. Nothing in this pull request is hand-written: \`scripts/version-sync.js\` wrote the version and \`scripts/whats-new.js\` the What's New page from the pull requests above.`,
         ''
     ].join('\n');
     const url = gh('pr', 'create', '--base', 'main', '--head', branch, '--title', `Version ${version}`,

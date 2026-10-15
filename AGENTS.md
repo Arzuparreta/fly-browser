@@ -27,6 +27,11 @@
   could observe. Release numbers are derived from these labels, so an
   unlabelled pull request ships as a patch whatever it actually did. CI
   rejects a pull request without one.
+- A pull request with a `major`, `minor` or `patch` label you open includes a
+  `## What's New` section in its description, written for users: what
+  changes for them and anything they must do. The release writes the What's
+  New page from it (`docs/releasing.md`). It stays optional for pull
+  requests the owner opens by hand, which fall back to their title.
 - Never write a version number by hand, anywhere. `package.json` declares it,
   `scripts/version-sync.js` copies it where it is needed, and releases are cut
   with `scripts/release.js` (see `docs/releasing.md`, or `/release`).
