@@ -129,6 +129,16 @@ const root = path.resolve(__dirname, '..');
             await view.loadURL(url + '/history-first');
             await view.loadURL(url + '/history-second');
         }, fixture);
+        for (const [button, other, edge] of [['back-btn', 'forward-btn', 'Right'], ['forward-btn', 'back-btn', 'Left']]) {
+            await page.mouse.move(10, 100);
+            await page.locator('#' + button).hover();
+            await page.waitForFunction(({button, other, edge}) => {
+                const active = getComputedStyle(document.getElementById(button));
+                const inactive = getComputedStyle(document.getElementById(other));
+                return active['border' + edge + 'Width'] === '1px' && active['border' + edge + 'Color'] === active.borderTopColor &&
+                    inactive.borderTopColor !== active.borderTopColor && Number(active.zIndex) > (Number(inactive.zIndex) || 0);
+            }, {button, other, edge});
+        }
         for (const [button, destination] of [['back-btn', '/history-first'], ['forward-btn', '/history-second']]) {
             await page.mouse.move(10, 100);
             await page.locator('#' + button).click();
