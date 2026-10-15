@@ -93,7 +93,8 @@ import {
     renderSuggestions, 
     updateSuggestionHighlight, 
     selectSuggestion, 
-    hideSuggestions 
+    hideSuggestions,
+    dismissAddressBar
 } from './modules/navigation.js';
 
 import { openTransientShareModal, closeTransientShareModal } from './modules/overlays/shareModal.js';
@@ -616,7 +617,6 @@ function setupEventListeners() {
     // guest, so focus leaving browser chrome for a webview stands in for that press: the bar
     // never stays open, unreachable by Escape, while a page holds the keyboard. The webview
     // becomes active only after the focusout; leaving the window keeps the active element.
-    const dismissAddressBar = () => { addressBar.style.display = 'none'; hideSuggestions(); };
     // The navigation button toggles the bar on click, so it closes the bar itself.
     document.addEventListener('mousedown', event => {
         if (addressBar.style.display === 'block' && !event.target.closest('#AddressBarContainer, #toggle-nav-btn')) dismissAddressBar();

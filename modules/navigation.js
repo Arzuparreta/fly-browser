@@ -438,6 +438,13 @@ export async function selectSuggestion(item) {
     hideSuggestions();
 }
 
+// Hides the bar and discards its text without moving focus, for callers that already own it.
+export function dismissAddressBar() {
+    const addressBar = document.getElementById('WideAddressBar');
+    if (addressBar) addressBar.style.display = 'none';
+    hideSuggestions();
+}
+
 export function hideSuggestions() {
     const suggestionsList = document.getElementById('AddressSuggestions');
     if (suggestionsList) suggestionsList.style.display = 'none';
