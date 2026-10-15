@@ -174,9 +174,9 @@ export const COMMAND_DEFINITIONS = [
     },
     {
         id: 'reset-zoom',
-        title: 'Reset Tab Zoom Level',
+        title: 'Reset Site Zoom Level',
         desc: 'Restore webpage zoom magnification back to 100% default',
-        details: 'Resets the webview viewport zoom factor to unity (0 level), clearing custom page scalings applied via trackpad or shortcuts.',
+        details: 'Restores 100% zoom for this site in every open tab and clears its saved zoom preference.',
         tip: 'Quickly recover standard layout proportions if a page was accidentally zoomed.',
         category: 'Tabs & Navigation',
         icon: 'fa-solid fa-magnifying-glass-arrows-rotate',
@@ -187,7 +187,7 @@ export const COMMAND_DEFINITIONS = [
             if (!activeListItem) return;
             const currentIdx = Array.from(document.querySelectorAll('#TabList li')).indexOf(activeListItem);
             const activeWv = state.activeViewsCache[currentWS]?.[currentIdx];
-            if (activeWv) activeWv.setZoomLevel(0);
+            if (activeWv) window.flyAPI.changeSiteZoom(activeWv.getWebContentsId(), 'reset-zoom');
         }
     },
     {

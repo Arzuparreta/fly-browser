@@ -3,6 +3,7 @@ const { contextBridge, ipcRenderer } = require('electron');
 
 // Preload private API exposure
 contextBridge.exposeInMainWorld('flyAPI', {
+    changeSiteZoom: (id, action) => ipcRenderer.invoke('change-site-zoom', id, action),
     getSession: () => ipcRenderer.invoke('get-session'),
     getSessionRecoveryStatus: () => ipcRenderer.invoke('get-session-recovery-status'),
     saveSession: (sessionData) => ipcRenderer.invoke('save-session', sessionData),

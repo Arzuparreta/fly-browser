@@ -737,7 +737,7 @@ function setupEventListeners() {
             case 'zoom-in':
             case 'zoom-out': {
                 const view = getActiveWebview();
-                if (view) view.setZoomLevel(Math.max(-5, Math.min(5, view.getZoomLevel() + (action === 'zoom-in' ? 0.5 : -0.5))));
+                if (view) window.flyAPI.changeSiteZoom(view.getWebContentsId(), action);
                 break;
             }
             case 'yank-url': {
