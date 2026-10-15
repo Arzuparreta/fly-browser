@@ -34,6 +34,9 @@ process.once('uncaughtException', failStartup);
 // Single instance lock to prevent duplicate windows when opening external links
 const gotSingleInstanceLock = app.requestSingleInstanceLock();
 if (!gotSingleInstanceLock) {
+    // The running instance is asked to show itself through 'second-instance'. Say so,
+    // because a window on another workspace may not come forward on its own.
+    console.log('Fly is already running; asked its window to come forward.');
     app.quit();
 }
 

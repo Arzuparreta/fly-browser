@@ -185,6 +185,8 @@ All runtime configuration and persistent session data are stored locally in stan
 
 `launch.sh` stays in the foreground and returns Electron's exit status. Close Fly to return to the prompt; this prevents late warnings being mixed into the next shell command.
 
+If Fly is already running, a new launch prints `Fly is already running; asked its window to come forward.` and exits; with tiling window managers such as i3 that window may be on another workspace, marked urgent rather than focused. When a pull has changed the dependencies, `launch.sh` refuses to reinstall them while a Fly from the same folder is running, because that would delete its files; close it and launch again.
+
 - npm deprecation notices for `inflight`, `rimraf` and `glob` currently come from the development packaging toolchain (`electron-builder`, including its Windows tooling). They are not reports of a leak in a running Fly tab. They remain visible until the upstream dependency chain is replaced; forcing incompatible major versions is not a safe fix.
 - npm's installation policy explicitly allows the pinned esbuild setup script and denies the unused Squirrel Windows installer script. Fly's Windows targets are NSIS and portable; Electron's binary is downloaded separately by `install-electron`.
 - Electron can print `ExtensionLoadWarning` for uBlock's Manifest V2 and permissions. Fly supplies context menus and navigation APIs through its compatibility layer, but does not claim complete Chrome compatibility. These warnings stay visible. The existing blocking test checks actual network and cosmetic filtering.
