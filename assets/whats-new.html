@@ -223,13 +223,47 @@
                 </a>
             </div>
             <h1>What's New in Fly</h1>
-            <p class="subtitle">A terminal installer that installs, finds, updates and removes Fly on any Linux distribution, menu entry included. Below it, what came in 0.17: Fly in your launcher however you install it, AppImage updates in place, and Quick Notes removed.</p>
+            <p class="subtitle">uBlock Origin is now Fly's ad blocker, and tabs close with the mouse. If you had turned extensions off, read the first card: you need to turn them back on to keep blocking ads. Below it, fly-install from the previous release.</p>
         </header>
+
+        <section class="feature-card">
+            <h2 class="feature-title">uBlock Origin Blocks Ads</h2>
+            <p class="feature-desc">
+                The included uBlock Origin is Fly's only ad and tracker blocker. The built-in shields are gone.
+            </p>
+            <ul class="feature-points">
+                <li>New profiles start with uBlock on. Open its popup from the status bar to pause it on a site, or its options to manage filter lists and your own rules.</li>
+                <li>If you had switched off <kbd>Enable Chrome extensions</kbd>, Fly now has no ad blocker until you switch it back on in Preferences (<kbd>F1</kbd>) → Extensions. Your other extension choices and permission exceptions are kept.</li>
+                <li>Private browsing has no ad blocker: Electron cannot load extensions into its in-memory session.</li>
+                <li>The old blocker made some video players, CNN's among them, retry a blocked request thousands of times a second. That no longer happens, and videos restored with your session play again because new tabs wait until uBlock's filters are ready.</li>
+            </ul>
+        </section>
+
+        <section class="feature-card">
+            <h2 class="feature-title">Close Tabs with the Mouse</h2>
+            <p class="feature-desc">
+                Tabs in the sidebar can be closed without the keyboard.
+            </p>
+            <ul class="feature-points">
+                <li>Hover a tab and click its <kbd>×</kbd>, or middle-click the tab. It closes without being selected first, and the tab you were on stays selected.</li>
+                <li>The selected tab always shows its <kbd>×</kbd>; the others show it on hover.</li>
+                <li>Pinned tabs have no <kbd>×</kbd> and ignore middle-click. Unpin them first.</li>
+            </ul>
+        </section>
+
+        <section class="feature-card">
+            <h2 class="feature-title">Smaller Fixes</h2>
+            <ul class="feature-points">
+                <li>Tab hibernation no longer stops at a tab that is still loading, so the tabs after it go to sleep and free their memory too.</li>
+                <li>The sidebar starts with the workspace header; the FLY wordmark row is gone.</li>
+                <li>Starting Fly from a terminal while it is already running now says so instead of quitting silently.</li>
+            </ul>
+        </section>
 
         <section class="feature-card">
             <h2 class="feature-title">fly-install</h2>
             <p class="feature-desc">
-                One command to install Fly and keep every copy of it in order.
+                From the previous release: one command to install Fly and keep every copy of it in order.
             </p>
             <ul class="feature-points">
                 <li><kbd>fly-install install</kbd> builds the <kbd>fly-browser-bin</kbd> package on Arch-based systems and installs the AppImage anywhere else, checked against the release's checksums.</li>
@@ -237,43 +271,6 @@
                 <li><kbd>fly-install status</kbd> lists every copy of Fly on the machine and whether it is current; <kbd>fly-install update</kbd> updates them all.</li>
                 <li><kbd>fly-install uninstall</kbd> removes the package or an AppImage together with the menu entry and icons added for it. Your profile is kept.</li>
                 <li>Get it from the installation guide, linked from the GitHub release.</li>
-            </ul>
-        </section>
-
-        <section class="feature-card">
-            <h2 class="feature-title">In Your Launcher, Like Any Browser</h2>
-            <p class="feature-desc">
-                Rofi, Wofi, Fuzzel and desktop menus now list Fly without any manual setup.
-            </p>
-            <ul class="feature-points">
-                <li>On Arch, CachyOS and other Arch-based systems, install <kbd>fly-browser-bin</kbd> from the AUR. It brings the desktop entry and icons and updates with the rest of your system.</li>
-                <li>Started from an AppImage, Fly offers once to add itself to your applications menu. The entry follows the file if you move it or replace it with a newer release, and removing it takes away only what Fly added.</li>
-                <li>Preferences (<kbd>F1</kbd>) → About → Desktop integration adds or removes the entry and makes Fly your default browser, so links from other applications open here.</li>
-            </ul>
-        </section>
-
-        <section class="feature-card">
-            <h2 class="feature-title">AppImage Updates in Place</h2>
-            <p class="feature-desc">
-                When a new release is out, an AppImage no longer sends you to download it by hand.
-            </p>
-            <ul class="feature-points">
-                <li>The update notice offers <kbd>Update and restart</kbd>: Fly downloads the new AppImage, checks it against the release's checksum, replaces the old file and restarts into the new version.</li>
-                <li>If anything fails, the old AppImage is left as it was and the notice links to the release page instead.</li>
-                <li>This works from this release onwards: the next update is the first that arrives this way.</li>
-            </ul>
-        </section>
-
-        <section class="feature-card">
-            <h2 class="feature-title">Quick Notes Removed</h2>
-            <p class="feature-desc">
-                Fly no longer has a notes feature.
-            </p>
-            <ul class="feature-points">
-                <li>The notes overlay, Reader View export, "Save to Notes" and the external editor integration are gone, and <kbd>Ctrl + N</kbd> and <kbd>Ctrl + Shift + E</kbd> are free.</li>
-                <li>Your existing <kbd>~/.config/fly-browser/notes.md</kbd> and any <kbd>clippings/</kbd> stay on disk untouched; open them in any editor.</li>
-                <li>Shortcuts you had bound to the removed actions are dropped on load, and the rest of your keyboard profile is kept.</li>
-                <li>The welcome screen's fourth card now opens the Workspace Dashboard.</li>
             </ul>
         </section>
 
