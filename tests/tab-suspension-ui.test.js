@@ -23,15 +23,34 @@ const root = path.resolve(__dirname, '..');
 (async () => {
     const directory = fs.mkdtempSync(path.join(os.tmpdir(), 'fly-suspension-'));
     let requests = 0;
+    let transferResponse;
     const server = http.createServer((req, res) => {
         requests++;
+        if (req.url === '/transfer') { transferResponse = res; res.writeHead(200, {'Content-Type': 'text/plain'}); res.write('pending'); return; }
         if (req.url === '/stream') { res.writeHead(200, {'Content-Type': 'text/event-stream'}); res.write('data: alive\n\n'); return; }
         res.end('<!doctype html><title>Suspension fixture</title><input id="draft"><div style="height:5000px"></div><script>window.counter=0;window.freezeCount=0;document.addEventListener("freeze",()=>{window.freezeCount++;window.atFreeze=counter});document.addEventListener("resume",()=>window.atResume=counter);window.identity=Math.random();setInterval(()=>{window.counter++;const end=performance.now()+3;while(performance.now()<end){}},20)</script>');
     });
     await new Promise(resolve => server.listen(0, '127.0.0.1', resolve));
     let application;
     try {
-        application = await launch(root, directory);
+        application = await launch(root, directory, {bootstrap: `
+            // Electron builds differ in when DevTools replaces an attached debugger.
+            // Exercise the documented detach path deterministically on every build.
+            app.on('web-contents-created', (_event, guest) => {
+                if (guest.getType() !== 'webview') return;
+                const attach = guest.debugger.attach.bind(guest.debugger);
+                guest.debugger.attach = (...args) => {
+                    if (guest.isDevToolsOpened() && guest.getURL().endsWith('#gap')) {
+                        guest.executeJavaScript('window.fixtureMonitoringGap = true').catch(() => {});
+                        throw new Error('Fixture: transport unavailable while DevTools is open');
+                    }
+                    return attach(...args);
+                };
+                guest.on('devtools-opened', () => {
+                    if (guest.debugger.isAttached()) guest.debugger.detach();
+                });
+            });
+        `});
         const {page} = application;
         await page.waitForFunction(() => !!window.executeBrowserAction);
         await page.evaluate(async url => (await import('./modules/navigation.js')).handleNavigation(url), `http://127.0.0.1:${server.address().port}/page`);
@@ -133,6 +152,53 @@ const root = path.resolve(__dirname, '..');
         assert.equal((await stats()).session.frozenTabs, 0);
         await suspend(); assert.equal((await stats()).session.frozenTabs, 0);
         await page.evaluate(() => window.suspensionTestView.closeDevTools());
+        await page.waitForTimeout(300);
+        await suspend();
+        assert.equal((await stats()).session.frozenTabs, 1, 'Closing DevTools restores suspension');
+        // Repeat from an ordinary foreground page, not just an already frozen guest.
+        await selectOriginal();
+        await page.evaluate(() => window.suspensionTestView.openDevTools());
+        await page.waitForTimeout(300);
+        await page.evaluate(() => window.suspensionTestView.closeDevTools());
+        await page.waitForTimeout(300);
+        await background(); await suspend();
+        assert.equal((await stats()).session.frozenTabs, 1, 'Foreground DevTools cycle preserves suspension');
+        await selectOriginal();
+        assert.equal((await read()).identity, original.identity, 'DevTools recovery preserves the live document');
+        // A transfer already in flight must survive debugger replacement and
+        // keep the page running until its body has finished loading.
+        await script('window.transfer = fetch("/transfer").then(response => response.text()); true');
+        for (let count = 0; !transferResponse && count < 50; count++) await page.waitForTimeout(20);
+        assert(transferResponse);
+        await page.evaluate(() => window.suspensionTestView.openDevTools());
+        await page.waitForTimeout(300);
+        await page.evaluate(() => window.suspensionTestView.closeDevTools());
+        await page.waitForTimeout(300);
+        await background(); await suspend();
+        assert.equal((await stats()).session.frozenTabs, 0, 'Recovery keeps existing transfers protected');
+        transferResponse.end(' finished');
+        assert.equal(await script('transfer'), 'pending finished');
+        await page.waitForTimeout(150); await suspend();
+        assert.equal((await stats()).session.frozenTabs, 1, 'Suspension returns after the observed transfer finishes');
+        // This cycle refuses reattachment until close, so its fetch starts in a
+        // real monitoring gap and has no requestWillBeSent in the new session.
+        await selectOriginal();
+        await script('history.replaceState({}, "", "#gap"); true');
+        await page.evaluate(() => window.suspensionTestView.openDevTools());
+        await page.waitForTimeout(300);
+        assert.equal(await script('window.fixtureMonitoringGap'), true, 'Fixture really refused reconnection');
+        await script('window.controller = new AbortController(); window.gapTransfer = fetch("/transfer", {signal: controller.signal}).then(response => response.text()).catch(() => "cancelled"); true');
+        await page.waitForTimeout(150);
+        await page.evaluate(() => window.suspensionTestView.closeDevTools());
+        await page.waitForTimeout(300);
+        await background(); await suspend();
+        assert.equal((await stats()).session.frozenTabs, 0, 'Requests started in a monitoring gap stay protected');
+        await script('controller.abort(); true');
+        assert.equal(await script('gapTransfer'), 'cancelled');
+        await page.waitForTimeout(150); await suspend();
+        assert.equal((await stats()).session.frozenTabs, 1, 'Suspension returns after missed work settles');
+        await selectOriginal();
+        assert.equal((await read()).identity, original.identity);
         assert.deepEqual(page.errors, []);
         console.log('Electron suspension: same guest, document, form, JS, scroll, history and storage; no reload; pin protection and badge removal passed.');
     } finally {

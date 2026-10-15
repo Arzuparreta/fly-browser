@@ -5,14 +5,18 @@ const {createTabSuspension, migrateSuspensionConfig} = require('../tabSuspension
 function fixture() {
     let clock = 0;
     const calls = [];
+    let contextId = 0;
     const debuggerAPI = new EventEmitter();
     debuggerAPI.attached = false;
     debuggerAPI.isAttached = () => debuggerAPI.attached;
     debuggerAPI.attach = () => { debuggerAPI.attached = true; };
     debuggerAPI.sendCommand = async (method, params) => {
         calls.push([method, params]);
-        if (method === 'Runtime.enable') debuggerAPI.emit('message', {}, 'Runtime.executionContextCreated', {context: {id: 1, auxData: {isDefault: true}}});
+        if (method === 'Runtime.enable') debuggerAPI.emit('message', {}, 'Runtime.executionContextCreated', {context: {id: ++contextId, auxData: {isDefault: true}}});
         if (method === 'Page.getFrameTree') return {frameTree: {frame: {id: 'top'}}};
+        if (method === 'Runtime.evaluate' && params.expression === 'Promise.prototype') return {result: {objectId: 'promise-prototype'}};
+        if (method === 'Runtime.queryObjects') return {objects: {objectId: 'promises'}};
+        if (method === 'Runtime.callFunctionOn') return {result: {value: 0}};
         if (method === 'Runtime.evaluate') return params.awaitPromise ? {result: {value: false}} : {result: {subtype: 'null', value: null}};
         return {};
     };
@@ -73,6 +77,112 @@ function fixture() {
     await f.manager.setPolicy(1, {visible: false, pinned: false});
     await f.manager.scan(true); assert.equal(f.manager.stats().frozenTabs, 0);
     f.guest.emit('destroyed'); assert.equal(f.manager.stats().frozenTabs, 0);
+    // Opening DevTools disconnects Electron's debugger. Closing it must restore
+    // both manual and automatic suspension without replacing the live page.
+    const tools = fixture();
+    await tools.manager.setPolicy(1, {visible: true, pinned: false});
+    tools.guest.debugger.emit('message', {}, 'Network.requestWillBeSent', {requestId: 'old-session'});
+    tools.guest.isDevToolsOpened = () => true;
+    tools.guest.debugger.attached = false;
+    tools.guest.debugger.emit('detach', {}, 'replaced_with_devtools');
+    tools.guest.emit('devtools-opened');
+    await tools.manager.scan(true);
+    assert.equal(tools.manager.stats().frozenTabs, 0);
+    tools.guest.isDevToolsOpened = () => false;
+    tools.guest.emit('devtools-closed');
+    await tools.manager.setPolicy(1, {visible: false, pinned: false});
+    await tools.manager.scan(true);
+    assert.equal(tools.manager.stats().frozenTabs, 0, 'Reconnection preserves in-flight request protection');
+    tools.guest.debugger.emit('message', {}, 'Network.loadingFinished', {requestId: 'old-session'});
+    await tools.manager.scan(true);
+    assert.equal(tools.manager.stats().frozenTabs, 1, 'Closing DevTools restores manual suspension');
+    assert.equal(tools.calls.filter(([method]) => method === 'Runtime.enable').length, 2);
+    assert.equal(tools.calls.filter(([method]) => method === 'Network.enable').length, 2);
+    // Repeated close notifications reuse a healthy session and do not add listeners.
+    tools.guest.emit('devtools-closed'); await tools.manager.scan(true);
+    assert.equal(tools.calls.filter(([method]) => method === 'Runtime.enable').length, 2);
+    assert.equal(tools.guest.debugger.listenerCount('message'), 1);
+    assert.equal(tools.guest.debugger.listenerCount('detach'), 1);
+    await tools.manager.setPolicy(1, {visible: true, pinned: false});
+    await tools.manager.setPolicy(1, {visible: false, pinned: false});
+    tools.tick(15 * 60000);
+    await tools.manager.scan();
+    assert.equal(tools.manager.stats().frozenTabs, 1, 'Closing DevTools restores automatic suspension');
+    // A failed reconnect stays safe and can be retried on the next close event.
+    const retry = fixture();
+    await retry.manager.setPolicy(1, {visible: true, pinned: false});
+    retry.guest.debugger.attached = false;
+    retry.guest.debugger.emit('detach');
+    const retryCommand = retry.guest.debugger.sendCommand;
+    retry.guest.debugger.sendCommand = async (method, params) => {
+        if (method === 'Network.enable') throw new Error('Reconnect failed');
+        return retryCommand(method, params);
+    };
+    retry.guest.emit('devtools-closed');
+    await retry.manager.setPolicy(1, {visible: false, pinned: false});
+    await retry.manager.scan(true); assert.equal(retry.manager.stats().frozenTabs, 0);
+    retry.guest.debugger.sendCommand = retryCommand;
+    retry.guest.emit('devtools-closed');
+    await retry.manager.scan(true); assert.equal(retry.manager.stats().frozenTabs, 1);
+    // Closing DevTools never sends commands through a debugger owned elsewhere.
+    const otherDebugger = fixture();
+    await otherDebugger.manager.setPolicy(1, {visible: true, pinned: false});
+    otherDebugger.guest.debugger.emit('detach');
+    const commandCount = otherDebugger.calls.length;
+    otherDebugger.guest.emit('devtools-closed');
+    await otherDebugger.manager.scan(true);
+    assert.equal(otherDebugger.calls.length, commandCount);
+    // Detach during Runtime/Network setup invalidates the pending connection.
+    const lostSetup = fixture();
+    await lostSetup.manager.setPolicy(1, {visible: true, pinned: false});
+    lostSetup.guest.debugger.attached = false;
+    lostSetup.guest.debugger.emit('detach');
+    const lostCommand = lostSetup.guest.debugger.sendCommand;
+    lostSetup.guest.debugger.sendCommand = async (method, params) => {
+        const result = await lostCommand(method, params);
+        if (method === 'Runtime.enable') {
+            lostSetup.guest.debugger.attached = false;
+            lostSetup.guest.debugger.emit('detach');
+        }
+        return result;
+    };
+    lostSetup.guest.emit('devtools-closed');
+    await lostSetup.manager.setPolicy(1, {visible: false, pinned: false});
+    await lostSetup.manager.scan(true); assert.equal(lostSetup.manager.stats().frozenTabs, 0);
+    lostSetup.guest.debugger.sendCommand = lostCommand;
+    lostSetup.guest.emit('devtools-closed');
+    await lostSetup.manager.scan(true); assert.equal(lostSetup.manager.stats().frozenTabs, 1);
+    // A fetch started during an unobserved gap has no request ID to replay.
+    const missed = fixture();
+    await missed.manager.setPolicy(1, {visible: true, pinned: false});
+    missed.guest.debugger.attached = false; missed.guest.debugger.emit('detach');
+    missed.guest.emit('devtools-closed');
+    let promiseState = 'pending';
+    const missedCommand = missed.guest.debugger.sendCommand;
+    missed.guest.debugger.sendCommand = async (method, params) => {
+        if (method === 'Runtime.callFunctionOn' && params.objectId === 'promises') return {result: {value: 1}};
+        if (method === 'Runtime.getProperties' && params.objectId === 'promises') return {result: [{name: '0', value: {objectId: 'request-promise'}}]};
+        if (method === 'Runtime.getProperties' && params.objectId === 'request-promise') return {internalProperties: [{name: '[[PromiseState]]', value: {value: promiseState}}]};
+        return missedCommand(method, params);
+    };
+    await missed.manager.setPolicy(1, {visible: false, pinned: false});
+    await missed.manager.scan(true); assert.equal(missed.manager.stats().frozenTabs, 0);
+    promiseState = 'fulfilled';
+    await missed.manager.scan(true); assert.equal(missed.manager.stats().frozenTabs, 1);
+    // A missed completion can keep its old document awake, but does not leak
+    // into the next document or erase requests observed by the new session.
+    const navigation = fixture();
+    await navigation.manager.setPolicy(1, {visible: true, pinned: false});
+    navigation.guest.debugger.emit('message', {}, 'Network.requestWillBeSent', {requestId: 'old'});
+    navigation.guest.debugger.attached = false; navigation.guest.debugger.emit('detach');
+    navigation.guest.emit('devtools-closed');
+    await navigation.manager.setPolicy(1, {visible: false, pinned: false});
+    await navigation.manager.scan(true); assert.equal(navigation.manager.stats().frozenTabs, 0);
+    navigation.guest.debugger.emit('message', {}, 'Network.requestWillBeSent', {requestId: 'current'});
+    navigation.guest.emit('did-navigate');
+    await navigation.manager.scan(true); assert.equal(navigation.manager.stats().frozenTabs, 0);
+    navigation.guest.debugger.emit('message', {}, 'Network.loadingFinished', {requestId: 'current'});
+    await navigation.manager.scan(true); assert.equal(navigation.manager.stats().frozenTabs, 1);
     // Retained native objects and unknown frame contexts prevent forced suspension.
     const busy = fixture();
     await busy.manager.setPolicy(1, {visible: false, pinned: false});

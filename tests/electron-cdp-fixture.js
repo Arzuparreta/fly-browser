@@ -5,9 +5,11 @@ const path = require('node:path');
 const {spawn} = require('node:child_process');
 const createFixture = require('./electron-fixture');
 const pause = ms => new Promise(resolve => setTimeout(resolve, ms));
-module.exports = async function launch(root, directory) {
+module.exports = async function launch(root, directory, {bootstrap = ''} = {}) {
+    const entry = createFixture(root, directory);
+    if (bootstrap) fs.appendFileSync(path.join(entry, 'main.js'), '\n' + bootstrap);
     const child = spawn(path.join(root, 'node_modules/electron/dist/electron'), [
-        '--no-sandbox', '--disable-gpu', '--ozone-platform=x11', '--remote-debugging-port=0', createFixture(root, directory)
+        '--no-sandbox', '--disable-gpu', '--ozone-platform=x11', '--remote-debugging-port=0', entry
     ], {stdio: ['ignore', 'ignore', 'pipe']});
     let stderr = ''; child.stderr.on('data', data => { stderr += data; });
     let socket;
