@@ -976,7 +976,7 @@ function setupEventListeners() {
         });
     });
 
-    const bottomButtons = ['pin-sidebar-btn', 'reader-view-btn', 'split-toggle-btn', 'noti-toggle-btn', 'settings-btn'];
+    const bottomButtons = ['pin-sidebar-btn', 'split-toggle-btn', 'reader-view-btn', 'noti-toggle-btn', 'settings-btn'];
     bottomButtons.forEach((id, idx) => {
         const btn = document.getElementById(id);
         if (!btn) return;
