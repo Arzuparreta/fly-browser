@@ -203,6 +203,9 @@ export function setupAddressBarAutocomplete() {
 
     if (!addressBar || !suggestionsList) return;
 
+    // Presses on the list keep focus in the bar, so a later page click still closes it.
+    suggestionsList.addEventListener('mousedown', e => e.preventDefault());
+
     addressBar.addEventListener('input', async (e) => {
         const query = e.target.value.trim();
         if (!query) {

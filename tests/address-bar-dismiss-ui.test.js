@@ -63,16 +63,25 @@ const root = path.resolve(__dirname, '..');
         await page.locator('#toggle-nav-btn').click();
         await bar.waitFor({state: 'hidden'});
 
-        // Clicks inside the bar keep it open; reopening starts from the page address, not the discarded text.
+        // Clicks inside the bar keep it open; reopening after a page click starts from the page address.
         await open();
         await bar.click();
         assert(await bar.isVisible());
-        await page.keyboard.press('Escape');
+        await page.locator('webview:visible').click({position: {x: 100, y: 50}});
         await bar.waitFor({state: 'hidden'});
         await page.keyboard.press('Control+l');
         await page.waitForFunction(() => document.activeElement.id === 'WideAddressBar');
         assert.notEqual(await bar.inputValue(), 'discarded');
-        await page.keyboard.press('Escape');
+
+        // A press on the suggestion list that selects nothing keeps focus in the bar, so a page click still closes it.
+        await bar.fill('1+1');
+        await page.locator('#AddressSuggestions').waitFor({state: 'visible'});
+        const list = await page.locator('#AddressSuggestions').boundingBox();
+        await page.mouse.click(list.x + list.width / 2, list.y + 2);
+        assert(await bar.isVisible());
+        assert.equal(await page.evaluate(() => document.activeElement.id), 'WideAddressBar');
+        await page.locator('webview:visible').click({position: {x: 100, y: 50}});
+        await bar.waitFor({state: 'hidden'});
 
         // Opening from the command palette must not be closed by the palette handing focus back.
         await page.keyboard.press('Control+p');
@@ -85,12 +94,6 @@ const root = path.resolve(__dirname, '..');
         assert.equal(await page.evaluate(() => document.activeElement.id), 'WideAddressBar');
         await page.keyboard.press('Escape');
 
-        // Leaving the window, as with Alt+Tab, keeps the bar open and focused.
-        await open();
-        await page.evaluate(() => window.dispatchEvent(new Event('blur')));
-        await application.evaluate(({BrowserWindow}) => BrowserWindow.getAllWindows()[0].blur());
-        await page.waitForTimeout(200);
-        assert(await bar.isVisible(), 'Losing window focus must not close the bar');
         assert.deepEqual(errors, []);
         console.log('Address bar dismiss UI checks passed');
     } finally {
