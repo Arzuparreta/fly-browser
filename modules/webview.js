@@ -830,8 +830,26 @@ export function renderWorkspaceUI(targetTabToFocus = null) {
             li.appendChild(mediaBadge);
         }
 
+        if (!isPinned) {
+            const closeButton = document.createElement('button');
+            closeButton.type = 'button';
+            closeButton.className = 'tab-close-btn';
+            closeButton.tabIndex = -1;
+            closeButton.title = 'Close tab';
+            closeButton.setAttribute('aria-label', 'Close tab');
+            closeButton.innerHTML = '<i class="fa-solid fa-xmark"></i>';
+            closeButton.addEventListener('click', (e) => {
+                e.stopPropagation();
+                if (state.dashboardActive && typeof window.toggleDashboardView === 'function') {
+                    window.toggleDashboardView();
+                }
+                handleTabRemoval(idx);
+            });
+            li.appendChild(closeButton);
+        }
+
         li.addEventListener('click', (e) => {
-            if (e.target.closest('.tab-media-badge') || e.target.closest('.tab-pin-badge')) return;
+            if (e.target.closest('.tab-media-badge') || e.target.closest('.tab-pin-badge') || e.target.closest('.tab-close-btn')) return;
             if (state.dashboardActive && typeof window.toggleDashboardView === 'function') {
                 window.toggleDashboardView();
             }
