@@ -48,6 +48,7 @@ console.log('Shared sidebar pointer policy preserves overlays and native editing
     const paletteContext = {
         state: {paletteActive: false}, document: {getElementById: id => id === 'PaletteInput' ? paletteInput : id === 'CommandPaletteOverlay' ? paletteOverlay : null},
         prepareOverlay() {}, returnFocusToWebview() {pageFocus++;},
+        hasActiveOverlay: () => paletteContext.addressBarOpen || ['paletteActive', 'preferencesActive', 'dashboardActive', 'bookmarksActive', 'historyActive', 'diagnosticsActive'].some(key => paletteContext.state[key]),
         loadDynamicKeybinds: () => new Promise(resolve => palettePending.push(resolve)),
         prepareExtensionPaletteCommands: async () => {}, filterPaletteCommands: query => paletteFilters.push(query)
     };
@@ -80,5 +81,10 @@ console.log('Shared sidebar pointer policy preserves overlays and native editing
     paletteContext.state.paletteMatches = [{id: 'copy', action() {}}];
     paletteContext.executePaletteSelection('copy');
     assert.equal(pageFocus, focusBefore + 1, 'A non-overlay command returns page focus once');
+    // The address bar focuses itself on the next frame; page focus arriving later would strand it.
+    paletteContext.state.paletteActive = true;
+    paletteContext.state.paletteMatches = [{id: 'toggle-address', action() {paletteContext.addressBarOpen = true;}}];
+    paletteContext.executePaletteSelection('toggle-address');
+    assert.equal(pageFocus, focusBefore + 1, 'Opening the address bar from the palette keeps page focus untouched');
     console.log('Overlay cancellation ownership, transition focus suppression and palette races passed.');
 })().catch(error => {console.error(error); process.exitCode = 1;});

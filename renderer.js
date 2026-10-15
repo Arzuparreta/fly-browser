@@ -612,6 +612,17 @@ function setupEventListeners() {
         }
     });
 
+    // A press outside the bar discards it like Escape. A press in a page reaches only the
+    // guest, so the bar handing its focus to a webview stands in for that press. The webview
+    // becomes active only after the blur; leaving the window keeps the bar active and open.
+    const dismissAddressBar = () => { addressBar.style.display = 'none'; hideSuggestions(); };
+    document.addEventListener('mousedown', event => {
+        if (addressBar.style.display === 'block' && !document.getElementById('AddressBarContainer').contains(event.target)) dismissAddressBar();
+    }, true);
+    addressBar.addEventListener('blur', () => setTimeout(() => {
+        if (addressBar.style.display === 'block' && document.activeElement?.tagName === 'WEBVIEW') dismissAddressBar();
+    }));
+
     addressBar.addEventListener('focus', () => {
         requestAnimationFrame(() => {
             addressBar.select();
