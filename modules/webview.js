@@ -645,6 +645,11 @@ export function getFaviconUrl(urlStr) {
 
 export function renderWorkspaceUI(targetTabToFocus = null) {
     const currentWS = state.sessionState.current_workspace;
+    const wsLabel = document.getElementById('WorkspaceLabel');
+    if (wsLabel) {
+        wsLabel.textContent = currentWS;
+        wsLabel.title = `Workspace: ${currentWS} (Container: ${getWorkspacePartition(currentWS)})`;
+    }
     const wsBadge = document.getElementById('WorkspaceBadge');
     if (wsBadge) {
         wsBadge.textContent = getWorkspaceBadgeText(currentWS);
