@@ -220,48 +220,25 @@ body.sidebar-auto-collapse #Sidebar:not(.pointer-inside, .expanded, :focus-withi
     color: #ffffff;
 }
 
-/* Workspace Header & Badges. Its frame is drawn twice: around the whole row
-   (::before) and hugging the badge in the rail (::after); they crossfade. */
-#WorkspaceHeader {
-    position: relative;
-    z-index: 0;
+/* One row holds the workspace badge, which opens the dashboard, and the
+   navigation buttons, spread like the footer's. Only the badge sits in the
+   rail; the buttons are uniform 28px squares beside it. */
+.sidebar-top-row {
     display: flex;
     align-items: center;
-    gap: 8px;
-    width: 246px;
-    min-height: 34px;
-    margin-left: 3px;
-    padding: 3px 1px;
-    cursor: pointer;
+    justify-content: space-between;
+    width: 245px;
+    margin: 0 0 6px 4px;
     flex-shrink: 0;
 }
 
-#WorkspaceHeader::before,
-#WorkspaceHeader::after {
-    content: "";
-    position: absolute;
-    z-index: -1;
-    top: 0;
-    left: 0;
-    height: 100%;
-    box-sizing: border-box;
-    background-color: var(--panel);
-    border: 1px solid var(--border);
-    border-radius: 2px;
-    pointer-events: none;
+#WorkspaceHeader {
+    display: flex;
+    flex: none;
+    cursor: pointer;
 }
 
-#WorkspaceHeader::before {
-    width: 100%;
-    transition: background-color var(--motion-fast) var(--motion-ease);
-}
-
-#WorkspaceHeader::after {
-    width: 30px;
-    opacity: 0;
-}
-
-#WorkspaceHeader:hover::before {
+#WorkspaceHeader:hover #WorkspaceBadge {
     background-color: var(--selected);
 }
 
@@ -281,26 +258,19 @@ body.sidebar-auto-collapse #Sidebar:not(.pointer-inside, .expanded, :focus-withi
     letter-spacing: 0.5px;
     text-transform: uppercase;
     box-shadow: 0 1px 3px rgba(0,0,0,0.3);
-    transition: border-color var(--motion-fast) var(--motion-ease);
+    transition: background-color var(--motion-fast) var(--motion-ease), border-color var(--motion-fast) var(--motion-ease);
 }
 
-#WorkspaceLabel {
-    min-width: 0;
-    max-width: 180px;
-    color: var(--text);
-    font-weight: bold;
-    font-size: 13px;
-    white-space: nowrap;
-    overflow: hidden;
-    text-overflow: ellipsis;
-}
-
+/* Five 28px controls over 245px: the gaps are 26-27px, ending in line with
+   the tab rows. */
 .nav-action-layout {
     display: flex;
-    flex-shrink: 0;
-    gap: 6px;
+    gap: 26px;
     align-items: center;
-    margin: 6px 0 6px 4px;
+}
+
+.nav-action-layout .nav-icon-button {
+    height: 28px;
 }
 
 .nav-icon-button {
@@ -458,24 +428,16 @@ body.sidebar-auto-collapse #Sidebar:not(.pointer-inside, .expanded, :focus-withi
 }
 
 /* Rail and expanded decorations swap with the sidebar's motion. */
-body.sidebar-auto-collapse #WorkspaceHeader::before,
-body.sidebar-auto-collapse #WorkspaceHeader::after,
 body.sidebar-auto-collapse #TabList li:is(.selected, .tab-pinned, .split-pane-1-tab, .split-pane-2-tab)::before,
 body.sidebar-auto-collapse #TabList li:is(.selected, .tab-pinned, .split-pane-1-tab, .split-pane-2-tab)::after,
 body.sidebar-auto-collapse :is(.tab-sleep-dot, .tab-audio-dot, .tab-pin-dot) {
     transition: opacity var(--motion-normal) var(--motion-ease);
 }
 
-body.sidebar-auto-collapse #WorkspaceHeader::before {
-    transition: opacity var(--motion-normal) var(--motion-ease), background-color var(--motion-fast) var(--motion-ease);
-}
-
-body.sidebar-auto-collapse #Sidebar:not(.pointer-inside, .expanded, :focus-within) #WorkspaceHeader::before,
 body.sidebar-auto-collapse #Sidebar:not(.pointer-inside, .expanded, :focus-within) #TabList li:is(.selected, .tab-pinned, .split-pane-1-tab, .split-pane-2-tab)::before {
     opacity: 0;
 }
 
-body.sidebar-auto-collapse #Sidebar:not(.pointer-inside, .expanded, :focus-within) #WorkspaceHeader::after,
 body.sidebar-auto-collapse #Sidebar:not(.pointer-inside, .expanded, :focus-within) #TabList li:is(.selected, .tab-pinned, .split-pane-1-tab, .split-pane-2-tab)::after,
 body.sidebar-auto-collapse #Sidebar:not(.pointer-inside, .expanded, :focus-within) :is(.tab-sleep-dot, .tab-audio-dot, .tab-pin-dot) {
     opacity: 1;

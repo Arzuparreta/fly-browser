@@ -569,7 +569,6 @@ function setupEventListeners() {
     for (const [id, navigate] of [['back-btn', navigateFrameBack], ['forward-btn', navigateFrameForward]]) {
         document.getElementById(id).addEventListener('click', navigate);
     }
-    document.getElementById('menu-btn').addEventListener('click', toggleDashboardView);
 
     document.getElementById('WelcomeNewTabBtn')?.addEventListener('click', spawnNewBlankTab);
     document.getElementById('WelcomeBookmarksBtn')?.addEventListener('click', toggleBookmarksOverlay);
@@ -931,7 +930,8 @@ function setupEventListeners() {
         pinSidebarBtn.onclick = () => toggleSidebarPin();
     }
 
-    const topNavIds = ['back-btn', 'forward-btn', 'toggle-nav-btn', 'split-toggle-btn', 'menu-btn'];
+    // The workspace control and the navigation buttons share one row.
+    const topNavIds = ['WorkspaceHeader', 'back-btn', 'forward-btn', 'toggle-nav-btn', 'split-toggle-btn'];
     topNavIds.forEach((id, idx) => {
         const btn = document.getElementById(id);
         if (!btn) return;

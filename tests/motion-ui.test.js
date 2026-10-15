@@ -37,7 +37,7 @@ const root = path.resolve(__dirname, '..');
         const geometry = () => page.evaluate(() => {
             const rect = selector => document.querySelector(selector).getBoundingClientRect().toJSON();
             return {
-                badge: rect('#WorkspaceBadge'), label: rect('#WorkspaceLabel'), pin: rect('#pin-sidebar-btn'),
+                badge: rect('#WorkspaceBadge'), pin: rect('#pin-sidebar-btn'),
                 favicon: rect('#TabList li.selected .tab-favicon-wrapper'), title: rect('#TabList li.selected .tab-title'),
                 rows: [...document.querySelectorAll('#TabList li')].slice(0, 8).map(row => row.getBoundingClientRect().toJSON())
             };

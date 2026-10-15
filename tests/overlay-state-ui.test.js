@@ -63,7 +63,7 @@ const root = path.resolve(__dirname, '..');
         await page.keyboard.press('Control+l'); await focused('WideAddressBar');
         await page.keyboard.press('Escape'); await page.locator('#WideAddressBar').waitFor({state: 'hidden'});
         await page.keyboard.press('Control+l'); await focused('WideAddressBar');
-        await page.locator('#menu-btn').focus(); await page.keyboard.press('Escape');
+        await page.locator('#split-toggle-btn').focus(); await page.keyboard.press('Escape');
         await page.locator('#WideAddressBar').waitFor({state: 'hidden'});
         for (const [key, id] of surfaces) {
             await page.keyboard.press(key); await page.locator('#' + id).waitFor({state: 'visible'}); await focused(id);
@@ -258,7 +258,7 @@ const root = path.resolve(__dirname, '..');
         }
         await page.mouse.move(10, 100);
         await page.waitForFunction(() => document.getElementById('Sidebar').getBoundingClientRect().right >= 259);
-        await page.locator('#WorkspaceLabel').click();
+        await page.locator('#WorkspaceBadge').click();
         await focused('DashboardOverlay'); await page.keyboard.press('Escape');
         await page.mouse.move(500, 400);
         await checkSidebarShortcut();

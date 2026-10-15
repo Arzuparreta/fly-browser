@@ -22,11 +22,11 @@ to its place while `.sidebar-content` slides back by the same amount, and
 `.sidebar-viewport` clips the content to the panel. Both are permanent layers
 (`will-change: transform`), so no layer is created or painted again when an
 animation starts. Decorations that differ between states crossfade with
-`opacity`: the 28 px tile around a selected, pinned or split tab and the frame
-around the workspace badge become the full-row highlight and header frame; the
-favicon indicators for sleeping, pinned and playing tabs become the row's
-badges. Controls that only exist expanded (navigation, clock, update notice,
-footer buttons, window controls) fade with the edge. While collapsed they
+`opacity`: the 28 px tile around a selected, pinned or split tab becomes the
+full-row highlight, and the favicon indicators for sleeping, pinned and
+playing tabs become the row's badges. Controls that only exist expanded
+(navigation buttons, clock, update notice, footer buttons, window controls)
+fade with the edge. While collapsed they
 ignore the pointer but stay focusable, so focusing one expands the sidebar.
 The panel's shadow is a separate layer that fades instead of a `box-shadow`
 that would be repainted every frame.

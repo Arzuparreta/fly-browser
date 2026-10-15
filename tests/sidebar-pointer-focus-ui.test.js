@@ -48,7 +48,7 @@ const root = path.resolve(__dirname, '..');
             await contract();
             console.log('Pointer action contracts:', selector);
         }
-        for (const [selector, surface] of [['#WorkspaceBadge', 'DashboardOverlay'], ['#menu-btn', 'DashboardOverlay'], ['#toggle-nav-btn', 'WideAddressBar'], ['#settings-btn', 'PreferencesOverlay']]) {
+        for (const [selector, surface] of [['#WorkspaceBadge', 'DashboardOverlay'], ['#toggle-nav-btn', 'WideAddressBar'], ['#settings-btn', 'PreferencesOverlay']]) {
             console.log('Opening surface:', selector);
             await click(selector);
             await page.waitForFunction(id => document.getElementById(id).contains(document.activeElement), surface, {timeout: 5000}).catch(async error => {console.log(await page.evaluate(() => ({focus: document.activeElement.outerHTML.slice(0,200), surfaces: [...document.querySelectorAll('[id$=Overlay], #WideAddressBar')].filter(el => el.getClientRects().length).map(el => el.id)}))); throw error;});

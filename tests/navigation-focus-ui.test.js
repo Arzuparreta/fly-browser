@@ -56,7 +56,7 @@ const root = path.resolve(__dirname, '..');
             await painted();
         };
         for (const query of ['first', 'second', 'third']) {
-            await page.locator('#menu-btn').focus();
+            await page.locator('#split-toggle-btn').focus();
             await page.keyboard.press('Control+l');
             await page.locator('#WideAddressBar').fill(query);
             await page.locator('#WideAddressBar').press('Enter');
