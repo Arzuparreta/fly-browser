@@ -59,7 +59,31 @@ const root = path.resolve(__dirname, '..');
         assert.deepEqual(latest.headings, [], 'Opened by hand, it shows the latest release alone');
         assert.equal(latest.summary.startsWith(`Fly ${releases[0].version}.`), true);
         assert.equal(JSON.parse(fs.readFileSync(configPath)).last_seen_version, require('../package.json').version);
-        console.log("What's New lists every missed release after an upgrade and the latest one on demand.");
+
+        // The footer names the reader's own bindings and follows changes to them.
+        const footer = url => page.evaluate(url => [...document.querySelectorAll('webview')].find(v => v.getURL() === url)
+            .executeJavaScript(`document.getElementById('Shortcuts').innerText.replace(/\\s+/g, ' ').trim()`), url);
+        assert.match(await footer(plain), /Close: Escape \/ Ctrl\+W \/ x in NORMAL mode/);
+        assert.match(await footer(plain), /Preferences: Ctrl\+H/);
+        const config = await page.evaluate(() => window.flyAPI.getKeyboardConfig());
+        const saved = await page.evaluate(config => window.flyAPI.saveKeybinds(config),
+            {...config, shortcuts: {...config.shortcuts, 'remove-tab': ['Ctrl+Alt+Q'], 'toggle-palette': []}});
+        assert.equal(saved.ok, true, saved.error);
+        await page.waitForFunction(url => [...document.querySelectorAll('webview')].find(v => v.getURL() === url)
+            .executeJavaScript(`document.getElementById('Shortcuts').innerText.includes('Ctrl+Alt+Q')`), plain);
+        assert.match(await footer(plain), /Close: Escape \/ Ctrl\+Alt\+Q \/ x in NORMAL mode/);
+        assert.match(await footer(plain), /Palette: unassigned/);
+
+        // The Close button and Escape each close the page's own tab.
+        const open = () => page.evaluate(() => [...document.querySelectorAll('webview')].filter(v => { try { return v.getURL().includes('whats-new.html'); } catch { return false; } }).length);
+        assert.equal(await open(), 2);
+        await page.evaluate(url => [...document.querySelectorAll('webview')].find(v => v.getURL() === url)
+            .executeJavaScript(`document.querySelector('footer [data-close]').click()`).catch(() => {}), plain);
+        await page.waitForFunction(() => [...document.querySelectorAll('webview')].filter(v => { try { return v.getURL().includes('whats-new.html'); } catch { return false; } }).length === 1);
+        const guest = await application.evaluate(({webContents}) => webContents.getAllWebContents().find(w => w.getType() === 'webview' && w.getURL().includes('whats-new.html')).id);
+        await application.evaluate(({webContents}, id) => webContents.fromId(id).sendInputEvent({type: 'keyDown', keyCode: 'Escape'}), guest);
+        await page.waitForFunction(() => ![...document.querySelectorAll('webview')].some(v => { try { return v.getURL().includes('whats-new.html'); } catch { return false; } }));
+        console.log("What's New lists every missed release after an upgrade and the latest one on demand, shows the reader's bindings, and closes with its button or Escape.");
     } finally {
         if (application) await application.close();
         fs.rmSync(temporary, { recursive: true, force: true });
