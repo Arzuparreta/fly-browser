@@ -625,9 +625,10 @@ function setupEventListeners() {
         if (addressBar.style.display === 'block' && document.activeElement?.tagName === 'WEBVIEW') dismissAddressBar();
     }));
 
+    // select() also focuses the input, so it must not pull focus back after it moved on.
     addressBar.addEventListener('focus', () => {
         requestAnimationFrame(() => {
-            addressBar.select();
+            if (document.activeElement === addressBar) addressBar.select();
         });
     });
 	
