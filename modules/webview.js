@@ -305,7 +305,8 @@ export function createWebView(url, currentWS, idx) {
             const activeListItem = document.querySelector('#TabList li.selected');
             const currentSelectedIdx = activeListItem ? Array.from(document.querySelectorAll('#TabList li')).indexOf(activeListItem) : -1;
             if (liveIdx === currentSelectedIdx) {
-                updateSecurityStatus(webview.getURL());
+                // The page can close itself while the hinter loads, destroying its guest.
+                try { updateSecurityStatus(webview.getURL()); } catch { return; }
                 updateStatusBarFromActiveView();
             }
         }
@@ -644,11 +645,6 @@ export function getFaviconUrl(urlStr) {
 
 export function renderWorkspaceUI(targetTabToFocus = null) {
     const currentWS = state.sessionState.current_workspace;
-    const wsLabel = document.getElementById('WorkspaceLabel');
-    if (wsLabel) {
-        wsLabel.textContent = currentWS;
-        wsLabel.title = `Workspace: ${currentWS} (Container: ${getWorkspacePartition(currentWS)})`;
-    }
     const wsBadge = document.getElementById('WorkspaceBadge');
     if (wsBadge) {
         wsBadge.textContent = getWorkspaceBadgeText(currentWS);
