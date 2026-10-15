@@ -1168,6 +1168,7 @@ export function handleTabRemoval(explicitIdx) {
                 if (state.sessionState.tab_sleep_states?.[wsName]) delete state.sessionState.tab_sleep_states[wsName];
                 if (state.sessionState.tab_favicons?.[wsName]) delete state.sessionState.tab_favicons[wsName];
                 delete state.sessionState.workspaces[wsName];
+                delete state.sessionState.workspace_partitions?.[wsName];
                 
                 window.flyAPI.saveSession(state.sessionState);
                 renderWorkspaceUI();

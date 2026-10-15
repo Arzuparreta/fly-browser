@@ -47,6 +47,7 @@ contextBridge.exposeInMainWorld('flyAPI', {
     getActionMetadata: () => ipcRenderer.invoke('get-action-metadata'),
     reloadKeybinds: () => ipcRenderer.invoke('reload-keybinds'),
     getWorkspacePartition: (name) => ipcRenderer.invoke('get-workspace-partition', name),
+    allocateWorkspacePartition: (name) => ipcRenderer.invoke('allocate-workspace-partition', name),
     flushSessionStore: (context) => ipcRenderer.invoke('flush-session-store', context),
     onDownloadStarted: (callback) => {
         const handler = (event, data) => callback(data);
@@ -113,6 +114,7 @@ contextBridge.exposeInMainWorld('flyAPI', {
     },
     // Opt-in Chrome extensions (extensions.js)
     extensionsEnsure: (workspace, partition) => ipcRenderer.invoke('extensions-ensure', workspace, partition),
+    extensionsRenameWorkspace: (from, to) => ipcRenderer.invoke('extensions-rename-workspace', from, to),
     extensionsTabFocused: (webContentsId) => ipcRenderer.send('extensions-tab-focused', webContentsId),
     extensionsActivate: (extensionId, partition) => ipcRenderer.invoke('extensions-activate', extensionId, partition),
     extensionsRunCommand: (extensionId, partition, name) => ipcRenderer.invoke('extensions-run-command', extensionId, partition, name),

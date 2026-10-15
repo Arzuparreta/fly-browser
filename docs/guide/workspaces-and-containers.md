@@ -14,12 +14,14 @@ In Fly, every workspace is automatically assigned its own dedicated, persistent 
 - A workspace named `Personal` runs inside partition `persist:personal`.
 - A workspace named `Cloud Dev` runs inside partition `persist:cloud-dev`.
 
+No two workspaces share a partition. When a name would give a partition that another workspace uses, or that a deleted workspace left on disk, the new workspace gets a numbered one instead: `work` next to `Work` runs inside `persist:work-2`. The dashboard shows each workspace's partition next to its name.
+
 ### What This Enables:
 
 1. **Simultaneous Account Logins**: Remain signed into different accounts on Google, GitHub, AWS, or Slack in separate workspaces without cross-contamination.
 2. **Strict Cookie Isolation**: Third-party cookies and tracking beacons in one workspace cannot read session data from another workspace.
 3. **Persistent State**: Unlike private browsing, container partitions persist across reboots, so you do not need to sign in every time you launch the browser.
-4. **Automatic Migration**: Renaming a workspace automatically migrates tabs while maintaining safety and isolation.
+4. **Automatic Migration**: Renaming a workspace migrates its tabs and keeps its partition, so its logins stay.
 
 ---
 

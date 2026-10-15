@@ -678,6 +678,25 @@ function handleWebviewAttached(wc, src) {
     attachTabWebContents(wc);
 }
 
+// A renamed workspace keeps its partition, so its extension selection and its loaded
+// extensions follow it to the new name. A selection left under the new name by a deleted
+// workspace is dropped.
+function renameWorkspace(from, to) {
+    const cfg = getConfig();
+    const map = { ...((cfg && cfg.extensions_by_workspace) || {}) };
+    if (Object.prototype.hasOwnProperty.call(map, from) || Object.prototype.hasOwnProperty.call(map, to)) {
+        const list = map[from];
+        delete map[from];
+        delete map[to];
+        if (list !== undefined) map[to] = list;
+        saveConfig({ extensions_by_workspace: map });
+    }
+    for (const ctrl of controllers.values()) {
+        if (ctrl.workspace === from) ctrl.workspace = to;
+    }
+    return true;
+}
+
 function runCommand(extensionId, partition, commandName) {
     const ctrl = controllers.get(partition);
     if (!ctrl || !ctrl.ece || !findLoaded(ctrl, extensionId)) return false;
@@ -887,6 +906,7 @@ function initializeExtensions(options) {
     const guard = (handler) => (event, ...args) => (fromMainWindow(event) ? handler(...args) : null);
 
     ipcMain.handle('extensions-ensure', guard((workspace, partition) => ensureForWorkspace(String(workspace || ''), String(partition || ''))));
+    ipcMain.handle('extensions-rename-workspace', guard((from, to) => renameWorkspace(String(from), String(to))));
     ipcMain.on('extensions-tab-focused', (event, wcId) => { if (fromMainWindow(event)) focusTab(wcId); });
     ipcMain.handle('extensions-activate', guard((extensionId, partition) => resolveActionTarget(String(extensionId), String(partition))));
     ipcMain.handle('extensions-run-command', guard((extensionId, partition, name) => runCommand(String(extensionId), String(partition), String(name))));

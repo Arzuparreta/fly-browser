@@ -32,6 +32,21 @@ export function setExtensionsConfig(cfg) {
     };
 }
 
+// Mirrors renameWorkspace in extensions.js. Called before the renamed workspace's tabs are
+// re-created, so they and the main process see the selection under the new name.
+export function renameWorkspaceExtensions(from, to) {
+    const ext = state.extensions;
+    if (ext) {
+        const byWorkspace = { ...ext.byWorkspace };
+        const list = byWorkspace[from];
+        delete byWorkspace[from];
+        delete byWorkspace[to];
+        if (list !== undefined) byWorkspace[to] = list;
+        ext.byWorkspace = byWorkspace;
+    }
+    window.flyAPI.extensionsRenameWorkspace(from, to).catch(() => {});
+}
+
 function workspaceFolders(workspace, ext = state.extensions) {
     if (!ext) return [];
     const defaults = Object.entries(ext.bundled || {}).filter(([, entry]) => entry && !entry.removed).map(([folder]) => folder);
