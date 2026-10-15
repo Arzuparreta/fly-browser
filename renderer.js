@@ -945,7 +945,7 @@ function setupEventListeners() {
     }
 
     // The workspace control and the navigation buttons share one row.
-    const topNavIds = ['WorkspaceHeader', 'back-btn', 'forward-btn', 'toggle-nav-btn', 'split-toggle-btn'];
+    const topNavIds = ['WorkspaceHeader', 'toggle-nav-btn', 'split-toggle-btn', 'back-btn', 'forward-btn'];
     topNavIds.forEach((id, idx) => {
         const btn = document.getElementById(id);
         if (!btn) return;
