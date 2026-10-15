@@ -24,6 +24,27 @@ The package installs Fly to `/opt/fly-browser`, the `fly-browser` command, a des
 
 Flags you want on every launch, such as `--ozone-platform=wayland`, go in `~/.config/fly-browser-flags.conf`, one or more per line; `#` starts a comment.
 
+### Installer script (any distribution)
+
+`fly-install` installs Fly, finds every copy on the machine, updates them and uninstalls them, from the terminal:
+
+```bash
+mkdir -p ~/.local/bin
+curl -fsSL https://raw.githubusercontent.com/Arzuparreta/fly-browser/main/scripts/fly-install -o ~/.local/bin/fly-install
+chmod +x ~/.local/bin/fly-install
+
+fly-install install      # the Arch package where makepkg exists, otherwise the AppImage
+fly-install status       # every installation found, its version, and whether it is current
+fly-install update       # brings every installation to the latest release
+fly-install uninstall package|PATH|all
+```
+
+- On Arch-based systems, `install` and `update` build `fly-browser-bin` from the release's `PKGBUILD` in a temporary directory, which they remove afterwards, so downloads do not pile up. `--appimage` installs the AppImage there instead.
+- Elsewhere, the AppImage goes into `~/Applications`, checked against the release's `SHA256SUMS.txt`.
+- An AppImage is added to the applications menu in the standard XDG locations that every Linux desktop and launcher reads: the desktop entry goes in `~/.local/share/applications`, and the icons go in the `hicolor` theme. Fly recognises that entry as its own, keeps it pointing at the AppImage, and can remove it from Preferences.
+- `status` looks in `~/Applications`, `~/.local/bin`, `~/bin`, `~/Desktop`, `~/Downloads` and the AppImage the menu starts, so stray copies show up. `update` brings each of them up to date.
+- `uninstall` removes the package with pacman, or deletes an AppImage together with the menu entry and icons that were added for it. Your profile in `~/.config/fly-browser` is kept.
+
 ### Linux (Distro-Agnostic AppImage)
 
 The AppImage runs out of the box on Ubuntu, Debian, Fedora, Arch Linux, openSUSE, and any standard modern Linux distribution without package managers or root privileges.
