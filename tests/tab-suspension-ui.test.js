@@ -31,7 +31,15 @@ const root = path.resolve(__dirname, '..');
     await new Promise(resolve => server.listen(0, '127.0.0.1', resolve));
     let application;
     try {
-        application = await launch(root, directory);
+        application = await launch(root, directory, {bootstrap: `
+            // Electron builds differ in when DevTools replaces an attached debugger.
+            // Exercise the documented detach path deterministically on every build.
+            app.on('web-contents-created', (_event, guest) => {
+                if (guest.getType() === 'webview') guest.on('devtools-opened', () => {
+                    if (guest.debugger.isAttached()) guest.debugger.detach();
+                });
+            });
+        `});
         const {page} = application;
         await page.waitForFunction(() => !!window.executeBrowserAction);
         await page.evaluate(async url => (await import('./modules/navigation.js')).handleNavigation(url), `http://127.0.0.1:${server.address().port}/page`);
@@ -133,6 +141,19 @@ const root = path.resolve(__dirname, '..');
         assert.equal((await stats()).session.frozenTabs, 0);
         await suspend(); assert.equal((await stats()).session.frozenTabs, 0);
         await page.evaluate(() => window.suspensionTestView.closeDevTools());
+        await page.waitForTimeout(300);
+        await suspend();
+        assert.equal((await stats()).session.frozenTabs, 1, 'Closing DevTools restores suspension');
+        // Repeat from an ordinary foreground page, not just an already frozen guest.
+        await selectOriginal();
+        await page.evaluate(() => window.suspensionTestView.openDevTools());
+        await page.waitForTimeout(300);
+        await page.evaluate(() => window.suspensionTestView.closeDevTools());
+        await page.waitForTimeout(300);
+        await background(); await suspend();
+        assert.equal((await stats()).session.frozenTabs, 1, 'Foreground DevTools cycle preserves suspension');
+        await selectOriginal();
+        assert.equal((await read()).identity, original.identity, 'DevTools recovery preserves the live document');
         assert.deepEqual(page.errors, []);
         console.log('Electron suspension: same guest, document, form, JS, scroll, history and storage; no reload; pin protection and badge removal passed.');
     } finally {

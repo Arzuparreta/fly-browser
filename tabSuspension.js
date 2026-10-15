@@ -33,24 +33,60 @@ function createTabSuspension({getTimeout = () => 15, now = () => performance.now
         entry.revision++;
         return enqueue(entry, async () => {
             if (!entry.frozen || entry.guest.isDestroyed()) return;
-            // DevTools can detach our transport. Reattach only when no other debugger owns it.
-            if (!entry.guest.debugger.isAttached()) { entry.guest.debugger.attach(); entry.owned = true; }
+            // A fresh transport also needs Runtime/Network monitoring rebuilt.
+            if (!await enableMonitoring(entry)) return;
             await command(entry, 'Page.setWebLifecycleState', {state: 'active'});
             entry.frozen = false;
         });
     }
+    // Called inside the guest queue, including when resume needs a new transport.
+    async function enableMonitoring(entry) {
+        const guest = entry.guest;
+        if (guest.isDestroyed()) return false;
+        if (guest.debugger.isAttached()) {
+            if (!entry.owned) return false; // Never take over another debugger.
+            if (entry.ready) return true;
+        } else {
+            guest.debugger.attach();
+            entry.owned = true;
+        }
+        const connection = entry.connection;
+        entry.ready = false;
+        entry.contexts.clear();
+        entry.requests.clear();
+        entry.sockets.clear();
+        // Runtime.enable must replay the current document's contexts even if a
+        // resume already attached this transport or an earlier setup failed.
+        for (const [method, params] of [
+            ['Runtime.disable'], ['Runtime.enable'], ['Network.disable'],
+            ['Network.enable', {maxTotalBufferSize: 0, maxResourceBufferSize: 0}]
+        ]) {
+            if (connection !== entry.connection || !entry.owned || guest.isDestroyed()) return false;
+            await command(entry, method, params);
+        }
+        if (connection !== entry.connection || !entry.owned) return false;
+        entry.ready = true;
+        return true;
+    }
+    function restoreMonitoring(entry) {
+        return enqueue(entry, async () => {
+            try { await enableMonitoring(entry); }
+            catch { entry.ready = false; }
+        });
+    }
     function attach(guest) {
         const entry = {guest, visible: true, pinned: false, backgroundSince: now(), revision: 0,
-            frozen: false, media: false, downloads: 0, ready: false, owned: false,
+            frozen: false, media: false, downloads: 0, ready: false, owned: false, connection: 0,
             requests: new Set(), sockets: new Set(), contexts: new Set(), queue: Promise.resolve()};
         guests.set(guest.id, entry);
         guest.once('destroyed', () => guests.delete(guest.id));
         guest.on('media-started-playing', () => { entry.media = true; resume(entry).catch(() => {}); });
         guest.on('media-paused', () => { entry.media = false; });
         guest.on('devtools-opened', () => { resume(entry).catch(() => {}); });
+        guest.on('devtools-closed', () => { restoreMonitoring(entry); });
         guest.on('did-start-loading', () => { resume(entry).catch(() => {}); });
         guest.debugger.on('detach', () => {
-            entry.ready = false; entry.owned = false;
+            entry.ready = false; entry.owned = false; entry.connection++;
             // Invalidate an eligibility scan, including one racing DevTools opening.
             entry.revision++;
         });
@@ -71,15 +107,7 @@ function createTabSuspension({getTimeout = () => 15, now = () => performance.now
             if (method === 'Network.webSocketClosed' || method === 'Network.webTransportClosed') entry.sockets.delete(params.requestId ?? params.transportId);
             if (method === 'Network.loadingFinished' || method === 'Network.loadingFailed') entry.requests.delete(params.requestId);
         });
-        enqueue(entry, async () => {
-            try {
-                if (guest.debugger.isAttached()) return;
-                guest.debugger.attach(); entry.owned = true;
-                await command(entry, 'Runtime.enable');
-                await command(entry, 'Network.enable', {maxTotalBufferSize: 0, maxResourceBufferSize: 0});
-                entry.ready = true;
-            } catch { entry.ready = false; }
-        });
+        restoreMonitoring(entry);
     }
     // Inspect actual native objects instead of patching websites' networking/media APIs.
     // Check every default frame context. Cross-process frames make the page ineligible.
