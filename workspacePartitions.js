@@ -29,8 +29,10 @@ function unusedPartition(name, isTaken) {
 
 // Gives every workspace in the session a partition no other workspace uses. A stored
 // partition stays. A workspace without one takes the partition its name used to derive,
-// unless another workspace already holds it, and otherwise an unused one.
-function assignPartitions(sessionData, isTaken = () => false) {
+// unless another workspace already holds it, and otherwise "name--2". Earlier versions
+// collapsed repeated dashes, so they never used that form, and new workspaces never get it.
+// The choice depends only on the session, so a launch that cannot save it makes it again.
+function assignPartitions(sessionData) {
     const names = Object.keys(sessionData.workspaces || {});
     if (sessionData.current_workspace && !names.includes(sessionData.current_workspace)) names.push(sessionData.current_workspace);
     const stored = sessionData.workspace_partitions && typeof sessionData.workspace_partitions === 'object' ? sessionData.workspace_partitions : {};
@@ -44,7 +46,10 @@ function assignPartitions(sessionData, isTaken = () => false) {
     };
     const unstored = names.filter(name => !(typeof stored[name] === 'string' && PARTITION_PATTERN.test(stored[name]) && claim(name, stored[name])));
     const unclaimed = unstored.filter(name => !claim(name, legacyPartition(name)));
-    for (const name of unclaimed) claim(name, unusedPartition(name, partition => used.has(partition) || isTaken(partition)));
+    for (const name of unclaimed) {
+        let n = 2;
+        while (!claim(name, `${legacyPartition(name)}--${n}`)) n++;
+    }
     return assigned;
 }
 
@@ -63,7 +68,7 @@ function createWorkspacePartitions(partitionsDir) {
         load(sessionData) {
             const before = JSON.stringify(sessionData.workspace_partitions);
             const stored = sessionData.workspace_partitions && typeof sessionData.workspace_partitions === 'object' ? sessionData.workspace_partitions : {};
-            sessionData.workspace_partitions = assignPartitions({ ...sessionData, workspace_partitions: { ...current, ...stored } }, isTaken);
+            sessionData.workspace_partitions = assignPartitions({ ...sessionData, workspace_partitions: { ...current, ...stored } });
             current = { ...sessionData.workspace_partitions };
             return JSON.stringify(sessionData.workspace_partitions) !== before;
         },

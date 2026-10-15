@@ -46,42 +46,42 @@ const root = path.resolve(__dirname, '..');
     try {
         let page = await launch();
         const stored = JSON.parse(fs.readFileSync(path.join(configDir, 'session.json'), 'utf8')).workspace_partitions;
-        assert.deepEqual(stored, { Trabajo: 'persist:trabajo', trabajo: 'persist:trabajo-3' }, 'The completed assignment must be written at once');
+        assert.deepEqual(stored, { Trabajo: 'persist:trabajo', trabajo: 'persist:trabajo--2' }, 'The completed assignment must be written at once');
         assert.equal(await visiblePartition(page, '/upper'), 'persist:trabajo', 'The first workspace keeps its old partition');
         await page.evaluate(() => window.executeBrowserAction('next-workspace'));
-        assert.equal(await visiblePartition(page, '/lower'), 'persist:trabajo-3');
+        assert.equal(await visiblePartition(page, '/lower'), 'persist:trabajo--2');
         assert.deepEqual(await cookies('persist:trabajo'), ['upper']);
-        assert.deepEqual(await cookies('persist:trabajo-3'), ['lower'], 'Workspaces whose names differ in case must not share cookies');
+        assert.deepEqual(await cookies('persist:trabajo--2'), ['lower'], 'Workspaces whose names differ in case must not share cookies');
 
         // A new workspace skips the assigned partitions and the left-behind folder.
         await page.evaluate(() => window.executeBrowserAction('new-workspace'));
         await page.locator('#NewWorkspaceTitleInput').fill('TRABAJO');
         await page.locator('#NewWorkspaceTitleInput').press('Enter');
         await page.locator('#WorkspaceInputBox').waitFor({ state: 'hidden' });
-        assert.equal((await partitions(page)).TRABAJO, 'persist:trabajo-4');
+        assert.equal((await partitions(page)).TRABAJO, 'persist:trabajo-3');
 
         // Renaming keeps the partition; deleting and recreating a name gives a new one.
         await page.evaluate(() => window.executeBrowserAction('toggle-dashboard'));
-        await header(page, 'trabajo-3').getByTitle('Rename Workspace').click();
+        await header(page, 'trabajo--2').getByTitle('Rename Workspace').click();
         await page.locator('.dashboard-rename-input').fill('Personal');
         await page.locator('.dashboard-rename-input').press('Enter');
-        await header(page, 'trabajo-4').getByTitle('Delete Workspace').click();
+        await header(page, 'trabajo-3').getByTitle('Delete Workspace').click();
         await page.waitForFunction(() => !document.querySelector('.dashboard-rename-input'));
-        assert.deepEqual(await partitions(page), { Trabajo: 'persist:trabajo', Personal: 'persist:trabajo-3' });
+        assert.deepEqual(await partitions(page), { Trabajo: 'persist:trabajo', Personal: 'persist:trabajo--2' });
         await page.evaluate(() => window.executeBrowserAction('new-workspace'));
         await page.locator('#NewWorkspaceTitleInput').fill('TRABAJO');
         await page.locator('#NewWorkspaceTitleInput').press('Enter');
         await page.locator('#WorkspaceInputBox').waitFor({ state: 'hidden' });
-        assert.equal((await partitions(page)).TRABAJO, 'persist:trabajo-5');
-        await page.evaluate(() => window.flyAPI.flushSessionStore({ partition: 'persist:trabajo-3' }));
+        assert.equal((await partitions(page)).TRABAJO, 'persist:trabajo-4');
+        await page.evaluate(() => window.flyAPI.flushSessionStore({ partition: 'persist:trabajo--2' }));
         await application.close();
 
         // After a restart every workspace still has its partition and its logins.
         page = await launch();
-        assert.deepEqual(await partitions(page), { Trabajo: 'persist:trabajo', Personal: 'persist:trabajo-3', TRABAJO: 'persist:trabajo-5' });
-        assert.deepEqual(await cookies('persist:trabajo-3'), ['lower']);
+        assert.deepEqual(await partitions(page), { Trabajo: 'persist:trabajo', Personal: 'persist:trabajo--2', TRABAJO: 'persist:trabajo-4' });
+        assert.deepEqual(await cookies('persist:trabajo--2'), ['lower']);
         await page.evaluate(() => window.executeBrowserAction('previous-workspace'));
-        assert.equal(await visiblePartition(page, '/lower'), 'persist:trabajo-3');
+        assert.equal(await visiblePartition(page, '/lower'), 'persist:trabajo--2');
         assert.deepEqual(pageErrors, []);
         console.log('Workspace partitions stay separate across migration, creation, renames, deletion and restarts.');
     } finally {

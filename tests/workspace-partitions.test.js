@@ -15,11 +15,11 @@ const legacy = {
 const migrated = assignPartitions(legacy);
 assert.deepEqual(migrated, {
     'Trabajo': 'persist:trabajo',
-    'trabajo': 'persist:trabajo-3',
+    'trabajo': 'persist:trabajo--2',
     'Trabajo 2': 'persist:trabajo-2',
     '日本': 'persist:default',
     'Mi web': 'persist:mi-web',
-    'mi-web': 'persist:mi-web-2',
+    'mi-web': 'persist:mi-web--2',
     'Gone': 'persist:gone'
 });
 assert.equal(legacyPartition('Workspace 1'), 'persist:workspace-1');
@@ -42,22 +42,25 @@ assert(unique(migrated) && unique(stored));
 
 const root = fs.mkdtempSync(path.join(os.tmpdir(), 'fly-workspace-partitions-'));
 try {
-    // A folder left by a deleted workspace is never handed to a new one.
-    fs.mkdirSync(path.join(root, 'trabajo-2'), {recursive: true});
+    const unsaved = () => ({current_workspace: 'Trabajo', workspaces: {'Trabajo': [], 'trabajo': []}});
     const partitions = createWorkspacePartitions(root);
-    const session = {current_workspace: 'Trabajo', workspaces: {'Trabajo': [], 'trabajo': []}};
+    const session = unsaved();
     assert.equal(partitions.load(session), true, 'Completing a session reports the change so it is written');
-    assert.deepEqual(session.workspace_partitions, {'Trabajo': 'persist:trabajo', 'trabajo': 'persist:trabajo-3'});
+    assert.deepEqual(session.workspace_partitions, {'Trabajo': 'persist:trabajo', 'trabajo': 'persist:trabajo--2'});
     assert.equal(partitions.load(JSON.parse(JSON.stringify(session))), false);
-    // Loading the same unsaved session again gives the same assignment.
-    const reread = {current_workspace: 'Trabajo', workspaces: {'Trabajo': [], 'trabajo': []}};
-    fs.mkdirSync(path.join(root, 'trabajo-3'));
-    partitions.load(reread);
-    assert.deepEqual(reread.workspace_partitions, session.workspace_partitions);
-    assert.equal(partitions.get('trabajo'), 'persist:trabajo-3');
+    assert.equal(partitions.get('trabajo'), 'persist:trabajo--2');
     assert.equal(partitions.get('Unknown'), null);
+    // A launch that could not save the assignment, and has since filled its folders, makes
+    // the same one again.
+    fs.mkdirSync(path.join(root, 'trabajo--2'));
+    const relaunched = unsaved();
+    createWorkspacePartitions(root).load(relaunched);
+    assert.deepEqual(relaunched.workspace_partitions, session.workspace_partitions);
 
-    // New workspaces avoid assigned partitions, existing folders and earlier allocations.
+    // New workspaces avoid assigned partitions, folders left by deleted workspaces and
+    // earlier allocations.
+    fs.mkdirSync(path.join(root, 'trabajo-2'));
+    fs.mkdirSync(path.join(root, 'trabajo-3'));
     const first = partitions.allocate('TRABAJO');
     assert.equal(first, 'persist:trabajo-4');
     assert.equal(partitions.allocate('trabajo'), 'persist:trabajo-5');
