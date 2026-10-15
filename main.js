@@ -256,7 +256,7 @@ initializeEngineSwitches();
 
 let mainWindow;
 const tabNumbers = createTabNumbers({
-    modifiers: () => keybinds.tabNumberModifiers(),
+    modifier: () => keybinds.tabModifier(),
     send: shown => { if (mainWindow && !mainWindow.isDestroyed()) mainWindow.webContents.send('tab-numbers', shown); }
 });
 let privateBrowsingEnabled = false;

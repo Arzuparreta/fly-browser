@@ -1,11 +1,11 @@
-// Tab numbers show while the modifier of the tab selection shortcuts (Alt+1–9 by default) is held
-// on its own, whether the page or Fly's interface has the keyboard. Chromium drops the key releases
-// that follow a shortcut Fly takes from a page, so every event other than a fresh press of that
-// modifier hides them; they can never outlive the key. The delay keeps quick chords such as Alt+S
-// from flashing them.
+// Tab numbers show while the modifier for selecting tabs by number (Alt by default) is held on its
+// own, whether the page or Fly's interface has the keyboard. Chromium drops the key releases that
+// follow a shortcut Fly takes from a page, so every event other than a fresh press of that modifier
+// hides them; they can never outlive the key. The delay keeps quick chords such as Alt+S from
+// flashing them.
 const MODIFIERS = [['Control', 'control', 'Ctrl'], ['Alt', 'alt', 'Alt'], ['Shift', 'shift', 'Shift'], ['Meta', 'meta', 'Meta']];
 
-function createTabNumbers({modifiers, send, delay = 150}) {
+function createTabNumbers({modifier, send, delay = 150}) {
     let shown = false;
     let timer = null;
     const set = value => {
@@ -21,7 +21,7 @@ function createTabNumbers({modifiers, send, delay = 150}) {
         if (!pressed || passthrough || input.code === 'AltRight') return set(false);
         if (input.isAutoRepeat) return;
         const held = MODIFIERS.filter(([key, flag]) => key === input.key || input[flag]).map(([, , name]) => name).join('+');
-        if (!modifiers().has(held)) return set(false);
+        if (!modifier() || held !== modifier()) return set(false);
         if (!shown && !timer) timer = setTimeout(() => set(true), delay);
     }
     return {track, hide: () => set(false)};

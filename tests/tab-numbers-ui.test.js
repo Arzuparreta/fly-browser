@@ -99,8 +99,28 @@ const root = path.resolve(__dirname, '..');
         await send({type: 'keyDown', keyCode: '9', modifiers: ['alt']});
         await page.waitForTimeout(200);
         assert.equal(await selected(), first);
+        await send({type: 'keyDown', keyCode: 'Escape', modifiers: ['shift']});
+        await send({type: 'keyUp', keyCode: 'Escape', modifiers: ['shift']});
+
+        // One modifier in Preferences → Keyboard moves tab selection and the numbers together.
+        await page.evaluate(() => window.executeBrowserAction('open-keyboard-settings'));
+        await page.locator('#KeyboardTabs').selectOption('Ctrl');
+        await page.locator('#KeyboardSave').click();
+        await page.locator('#KeyboardStatus').filter({hasText: 'saved and applied'}).waitFor();
+        await page.keyboard.press('Escape');
+        await page.locator('webview:visible').evaluate(view => view.focus());
+        await page.waitForFunction(() => document.activeElement.tagName === 'WEBVIEW');
+        await send(altDown);
+        await page.waitForTimeout(300);
+        assert.equal(await shown(), false);
+        await send(altUp);
+        await send({type: 'keyDown', keyCode: 'Control', modifiers: ['control']});
+        await waitShown(true);
+        await send({type: 'keyDown', keyCode: '9', modifiers: ['control']});
+        await page.waitForFunction(() => document.querySelector('#TabList li:last-child').classList.contains('selected'));
+        assert.equal(await shown(), false);
         assert.deepEqual(errors, []);
-        console.log('Tab numbers: shown while Alt is held in pages and the interface, 1–8 and 9 on the last tab, hidden by any other key, blur and passthrough.');
+        console.log('Tab numbers: shown while the tab modifier is held in pages and the interface, 1–8 and 9 on the last tab, hidden by any other key, blur and passthrough; the modifier is set once in Preferences.');
     } finally {
         if (application) await application.close();
         await new Promise(resolve => server.close(resolve));

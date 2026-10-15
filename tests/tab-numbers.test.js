@@ -11,26 +11,25 @@ const altDown = key('keyDown', 'Alt', 'AltLeft', {alt: true});
 const altUp = key('keyUp', 'Alt', 'AltLeft');
 
 (async () => {
-    // The default tab selection shortcuts are Alt+1–9; their modifier shows the numbers.
+    // One modifier selects tabs by number (Alt by default) and is the one that shows the numbers.
     keybinds.initializeKeybinds(fs.mkdtempSync(path.join(os.tmpdir(), 'fly-tab-numbers-')));
-    assert.deepEqual([...keybinds.tabNumberModifiers()], ['Alt']);
+    assert.equal(keybinds.tabModifier(), 'Alt');
+    assert.equal(keybinds.getActionForInput({type: 'keyDown', key: '1', code: 'Digit1', alt: true}), 'tab-1');
+    assert.equal(keybinds.getActionForInput({type: 'keyDown', key: '9', code: 'Digit9', alt: true}), 'tab-9');
     const directory = fs.mkdtempSync(path.join(os.tmpdir(), 'fly-tab-numbers-'));
-    const shortcuts = {};
-    for (let index = 1; index <= 9; index++) shortcuts[`tab-${index}`] = [`Ctrl+Shift+${index}`];
-    shortcuts['tab-9'].push('F2');
-    assert.equal(keybinds.saveKeybinds(directory, {version: 2, shortcuts: {...keybinds.getKeybinds(), ...shortcuts}, normal: keybinds.getKeyboardConfig().normal}).ok, true);
-    assert.deepEqual([...keybinds.tabNumberModifiers()], ['Ctrl+Shift'], 'Rebound shortcuts move the numbers to their modifier; function keys have none');
-    const config = () => ({version: 2, shortcuts: {...keybinds.getKeybinds(), ...shortcuts}, normal: keybinds.getKeyboardConfig().normal});
-    shortcuts['tab-2'] = ['Ctrl+Alt+2'];
-    assert.equal(keybinds.saveKeybinds(directory, config()).ok, true);
-    assert.deepEqual([...keybinds.tabNumberModifiers()], [], 'A modifier only some tab shortcuts use shows no numbers');
-    shortcuts['tab-2'] = ['Ctrl+Alt+2', 'Ctrl+Shift+2'];
-    assert.equal(keybinds.saveKeybinds(directory, config()).ok, true);
-    assert.deepEqual([...keybinds.tabNumberModifiers()], ['Ctrl+Shift']);
+    const config = tabs => ({...keybinds.getKeyboardConfig(), tabs});
+    assert.equal(keybinds.saveKeybinds(directory, config('shift+ctrl')).ok, true);
+    assert.equal(keybinds.tabModifier(), 'Ctrl+Shift');
+    assert.equal(keybinds.getActionForInput({type: 'keyDown', key: '!', code: 'Digit1', control: true, shift: true}), 'tab-1');
+    assert.equal(keybinds.getActionForInput({type: 'keyDown', key: '1', code: 'Digit1', alt: true}), null);
+    assert.equal(keybinds.saveKeybinds(directory, config('')).ok, true);
+    assert.equal(keybinds.tabModifier(), '', 'Off');
+    keybinds.initializeKeybinds(directory);
+    assert.equal(keybinds.tabModifier(), '', 'Off survives a restart');
 
-    let modifiers = new Set(['Alt']);
+    let modifier = 'Alt';
     const sent = [];
-    const numbers = createTabNumbers({modifiers: () => modifiers, send: shown => sent.push(shown), delay: 20});
+    const numbers = createTabNumbers({modifier: () => modifier, send: shown => sent.push(shown), delay: 20});
 
     // Holding the modifier shows the numbers after the delay; releasing it hides them.
     numbers.track(altDown);
@@ -72,13 +71,17 @@ const altUp = key('keyUp', 'Alt', 'AltLeft');
     await wait(40);
     assert.deepEqual(sent, []);
 
-    // A two-modifier chord shows them once both are held.
-    modifiers = new Set(['Ctrl+Shift']);
+    // A two-modifier chord shows them once both are held; with tab selection off nothing does.
+    modifier = 'Ctrl+Shift';
     numbers.track(key('keyDown', 'Control', 'ControlLeft', {control: true}));
     numbers.track(key('keyDown', 'Shift', 'ShiftLeft', {control: true, shift: true}));
     await wait(40);
     assert.deepEqual(sent, [true]);
     numbers.track(key('keyUp', 'Shift', 'ShiftLeft', {control: true}));
     assert.deepEqual(sent, [true, false]);
-    console.log('Tab numbers follow the tab selection modifier, never outlive it and ignore AltGr and passthrough.');
+    modifier = '';
+    numbers.track(altDown);
+    await wait(40);
+    assert.deepEqual(sent, [true, false]);
+    console.log('Tab numbers follow the tab selection modifier, never outlive it and ignore AltGr, passthrough and Off.');
 })().catch(error => { console.error(error); process.exit(1); });

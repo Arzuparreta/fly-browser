@@ -836,8 +836,8 @@ function setupEventListeners() {
     window.addEventListener('blur', () => { pageStroke = ''; });
     window.addEventListener('focusin', () => { pageStroke = ''; });
     const applyKeyboardConfig = config => {
-        keyboardActions = new Set(Object.keys(config.shortcuts));
-        browserKeys = window.FlyKeyboard.compile(config.shortcuts);
+        browserKeys = window.FlyKeyboard.compile(config.shortcuts, config.tabs);
+        keyboardActions = new Set([...Object.keys(config.shortcuts), ...browserKeys.values()]);
         pageKeys = window.FlyKeyboard.compile(config.normal);
         pagePrefixes = new Set([...pageKeys.keys()].filter(key => key.includes(' ')).map(key => key.split(' ')[0]));
         pageStroke = '';

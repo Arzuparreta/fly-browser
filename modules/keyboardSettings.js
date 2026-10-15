@@ -45,6 +45,7 @@ export function filterKeyboardActions(query) {
     render();
 }
 function render() {
+    if (draft) el('KeyboardTabs').value = draft.tabs;
     if (!draft || !editorRequested) return;
     const query = el('KeyboardSearch').value.toLowerCase().trim();
     const modifiedOnly = el('KeyboardModified').checked;
@@ -154,7 +155,16 @@ function cancelRecord() {
     const focus = recording?.returnFocus;
     recording = null; el('KeyboardRecorder').close(); focus?.focus();
 }
+// Every modifier chord a browser shortcut can use (it needs Ctrl, Alt or Meta), and Off.
+function populateTabModifiers() {
+    const names = ['Ctrl', 'Alt', 'Shift', 'Meta'];
+    const chords = Array.from({length: 15}, (_, mask) => names.filter((_, bit) => (mask + 1) & 1 << bit).join('+'))
+        .filter(chord => chord !== 'Shift').sort((a, b) => a.split('+').length - b.split('+').length);
+    el('KeyboardTabs').replaceChildren(...['', ...chords].map(chord => new Option(chord ? `${chord}+1 … ${chord}+9` : 'Off', chord)));
+    el('KeyboardTabs').onchange = () => { draft.tabs = el('KeyboardTabs').value; refreshButtons(); };
+}
 export async function initialiseKeyboardEditor() {
+    populateTabModifiers();
     try {
         [saved, defaults, metadata] = await Promise.all([window.flyAPI.getKeyboardConfig(), window.flyAPI.getKeyboardDefaults(), window.flyAPI.getActionMetadata()]);
         defaults = keyboard.validateConfig(defaults, metadata).config;
@@ -164,7 +174,11 @@ export async function initialiseKeyboardEditor() {
     el('KeyboardSearch').oninput = render;
     el('KeyboardModified').onchange = render;
     el('KeyboardDiscard').onclick = () => { el('KeyboardSearch').focus({preventScroll: true}); draft = clone(saved); render(); };
-    for (const section of Object.keys(sections)) el(section === 'shortcuts' ? 'KeyboardResetShortcuts' : 'KeyboardResetNormal').onclick = () => { draft[section] = clone(defaults[section]); render(); };
+    for (const section of Object.keys(sections)) el(section === 'shortcuts' ? 'KeyboardResetShortcuts' : 'KeyboardResetNormal').onclick = () => {
+        draft[section] = clone(defaults[section]);
+        if (section === 'shortcuts') draft.tabs = defaults.tabs;
+        render();
+    };
     el('KeyboardSave').onclick = async () => {
         if (busy) return;
         el('KeyboardSearch').focus({preventScroll: true});
