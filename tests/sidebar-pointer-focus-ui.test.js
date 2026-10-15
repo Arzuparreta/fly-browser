@@ -24,11 +24,11 @@ const root = path.resolve(__dirname, '..');
         const expand = async () => {
             await page.mouse.move(500, await page.evaluate(() => innerHeight - 10));
             await page.mouse.move(10, 100);
-            await page.waitForFunction(() => document.getElementById('Sidebar').offsetWidth === 260);
+            await page.waitForFunction(() => document.getElementById('Sidebar').getBoundingClientRect().right === 260);
         };
         const contract = async () => {
             await page.mouse.move(500, await page.evaluate(() => innerHeight - 10));
-            await page.waitForFunction(() => document.getElementById('Sidebar').offsetWidth === 36);
+            await page.waitForFunction(() => document.getElementById('Sidebar').getBoundingClientRect().right === 36);
             assert.equal(await page.evaluate(() => document.getElementById('Sidebar').contains(document.activeElement)), false);
         };
         const click = async selector => {
@@ -48,7 +48,7 @@ const root = path.resolve(__dirname, '..');
             await contract();
             console.log('Pointer action contracts:', selector);
         }
-        for (const [selector, surface] of [['#WorkspaceBadge', 'DashboardOverlay'], ['#menu-btn', 'DashboardOverlay'], ['#toggle-nav-btn', 'WideAddressBar'], ['#settings-btn', 'PreferencesOverlay']]) {
+        for (const [selector, surface] of [['#WorkspaceBadge', 'DashboardOverlay'], ['#toggle-nav-btn', 'WideAddressBar'], ['#settings-btn', 'PreferencesOverlay']]) {
             console.log('Opening surface:', selector);
             await click(selector);
             await page.waitForFunction(id => document.getElementById(id).contains(document.activeElement), surface, {timeout: 5000}).catch(async error => {console.log(await page.evaluate(() => ({focus: document.activeElement.outerHTML.slice(0,200), surfaces: [...document.querySelectorAll('[id$=Overlay], #WideAddressBar')].filter(el => el.getClientRects().length).map(el => el.id)}))); throw error;});
@@ -71,7 +71,7 @@ const root = path.resolve(__dirname, '..');
             await page.keyboard.press(key);
             await page.mouse.move(500, 400);
             assert.equal(await page.evaluate(() => document.activeElement.id), 'SidebarClock');
-            assert.equal(await page.locator('#Sidebar').evaluate(el => el.offsetWidth), 260);
+            assert.equal(await page.locator('#Sidebar').evaluate(el => el.getBoundingClientRect().right), 260);
         }
         // A pointer click releases focus even when keyboard navigation preceded it.
         await click('#SidebarClock');
@@ -109,7 +109,7 @@ const root = path.resolve(__dirname, '..');
         // Future editable sidebar controls retain native pointer focus and text selection.
         await page.evaluate(() => {
             const input = document.createElement('input'); input.id = 'sidebar-editable';
-            document.getElementById('Sidebar').prepend(input);
+            document.querySelector('#Sidebar .sidebar-content').prepend(input);
         });
         await expand(); await page.locator('#sidebar-editable').click();
         await page.keyboard.type('editable');

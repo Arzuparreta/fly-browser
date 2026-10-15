@@ -340,7 +340,7 @@ export function updateDashboardVisualSelection() {
     state.dashboardItems.forEach((item, idx) => {
         if (idx === state.dashboardSelectionIdx) {
             item.element.classList.add('dashboard-selected');
-            item.element.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
+            item.element.scrollIntoView({ block: 'nearest', behavior: window.matchMedia('(prefers-reduced-motion: reduce)').matches ? 'instant' : 'smooth' });
         } else {
             item.element.classList.remove('dashboard-selected');
         }

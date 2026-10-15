@@ -52,7 +52,7 @@ const pages = {
             const count = document.querySelectorAll('#TabList li').length;
             for (let index = 0; index < count; index++) window.executeBrowserAction('remove-tab');
         });
-        await page.locator('#menu-btn').focus();
+        await page.locator('#split-toggle-btn').focus();
         await page.keyboard.press('Control+l');
         await page.locator('#WideAddressBar').fill(fixture + '/');
         await page.locator('#WideAddressBar').press('Enter');

@@ -22,7 +22,7 @@ const root = path.resolve(__dirname, '..');
         assert.equal(await page.locator('.keyboard-row').count(), 0, 'Hidden keyboard rows must not be built at startup');
 
         // Opening focuses the selected index entry; exactly one pane is laid out.
-        await page.locator('#menu-btn').focus();
+        await page.locator('#split-toggle-btn').focus();
         await page.keyboard.press('Control+h');
         await page.locator('#PreferencesOverlay').waitFor({state: 'visible'});
         assert.equal(await active(), 'SettingsTab-general');
@@ -139,7 +139,7 @@ const root = path.resolve(__dirname, '..');
         // Direct entry points open their own pane.
         await page.keyboard.press('Escape');
         await page.locator('#PreferencesOverlay').waitFor({state: 'hidden'});
-        await page.locator('#menu-btn').focus();
+        await page.locator('#split-toggle-btn').focus();
         await page.keyboard.press('Control+,');
         await page.locator('#PreferencesOverlay').waitFor({state: 'visible'});
         assert.equal(await active(), 'KeyboardSearch');
@@ -152,8 +152,8 @@ const root = path.resolve(__dirname, '..');
         await page.keyboard.press('Escape');
         await page.locator('#PreferencesOverlay').waitFor({state: 'hidden'});
         await page.evaluate(async () => {const {displayUpdateNotification} = await import('./renderer.js'); displayUpdateNotification({updateAvailable: true, currentVersion: '0.14.0', latestVersion: '99.0.0', releaseUrl: 'https://example.invalid/release'});});
-        await page.locator('#menu-btn').focus();
-        await page.waitForFunction(() => document.getElementById('Sidebar').offsetWidth === 260);
+        await page.locator('#split-toggle-btn').focus();
+        await page.waitForFunction(() => document.getElementById('Sidebar').getBoundingClientRect().right === 260);
         await page.locator('#update-indicator-btn').click();
         await page.locator('#PreferencesOverlay').waitFor({state: 'visible'});
         assert.deepEqual(await visiblePanes(), ['SettingsPane-about']);

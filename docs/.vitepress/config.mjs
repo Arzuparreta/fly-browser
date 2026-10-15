@@ -70,6 +70,7 @@ export default defineConfig({
           { text: 'Fork Performance Audit', link: '/performance-audit' },
           { text: 'Fly vs Chromium Resource Use', link: '/performance-vs-chromium' },
           { text: 'Ad Blocking Follow-up', link: '/performance-shields-removal' },
+          { text: 'Interface Motion', link: '/performance-motion' },
           { text: 'Adoption and Review', link: '/adoption-review' }
         ]
       }

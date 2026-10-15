@@ -61,7 +61,7 @@ const root = path.resolve(__dirname, '..');
         assert.equal(JSON.parse(fs.readFileSync(path.join(temporary, '.config/fly-browser/config.json'), 'utf8')).desktop_integration_offered, true);
 
         // Preferences → About shows it, and every action is reachable by keyboard.
-        await page.locator('#menu-btn').focus();
+        await page.locator('#split-toggle-btn').focus();
         await page.keyboard.press('Control+h');
         await page.locator('#PreferencesOverlay').waitFor({ state: 'visible' });
         await page.locator('#SettingsTab-about').click();

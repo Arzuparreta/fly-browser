@@ -2917,6 +2917,10 @@ if (typeof module === "object") {
 
     function generateReaderStyles() {
         return `
+        @media (prefers-reduced-motion: reduce) {
+            *, *::before, *::after { transition: none !important; animation: none !important; }
+        }
+
         :host {
             all: initial;
             font-family: inherit;
@@ -2934,7 +2938,7 @@ if (typeof module === "object") {
             display: flex;
             flex-direction: column;
             align-items: center;
-            transition: background-color 0.2s ease, color 0.2s ease;
+            transition: background-color 120ms cubic-bezier(0.2, 0, 0, 1), color 120ms cubic-bezier(0.2, 0, 0, 1);
             padding: 40px 20px 100px 20px;
         }
 
@@ -2993,7 +2997,7 @@ if (typeof module === "object") {
             width: 100%;
             line-height: 1.75;
             color: var(--text-color);
-            transition: max-width 0.2s ease, font-size 0.2s ease;
+            /* Reading geometry changes once, without repeatedly reflowing the article. */
         }
 
         .fly-reader-container.width-narrow { max-width: 620px; }
@@ -3029,7 +3033,7 @@ if (typeof module === "object") {
             display: inline-flex;
             align-items: center;
             justify-content: center;
-            transition: all 0.15s ease;
+            transition: background-color 120ms cubic-bezier(0.2, 0, 0, 1), color 120ms cubic-bezier(0.2, 0, 0, 1), border-color 120ms cubic-bezier(0.2, 0, 0, 1);
         }
 
         .toolbar-btn:hover {
@@ -3100,7 +3104,7 @@ if (typeof module === "object") {
         .article-link {
             color: var(--accent-color);
             text-decoration: none;
-            transition: opacity 0.15s ease;
+            transition: opacity 120ms cubic-bezier(0.2, 0, 0, 1);
         }
 
         .article-link:hover {

@@ -1,3 +1,4 @@
+import { recordSidebarPointerEntry } from './modules/sidebarPointer.js';
 import { openWorkspaceMoveDialog } from './modules/tabActions.js';
 import { initialiseOverlayFocus, initialiseSidebarPointerFocus, prepareOverlay, hasActiveOverlay } from './modules/focus.js';
 import { focusSettingsSearch } from './modules/settingsNav.js';
@@ -554,6 +555,7 @@ function setupEventListeners() {
         const inside = sidebar.contains(event.target);
         // Internal pointer transitions must not undo keyboard contraction.
         if (inside && sidebar.contains(event.relatedTarget)) return;
+        if (inside) recordSidebarPointerEntry(event);
         sidebar.classList.toggle('pointer-inside', inside);
     });
 
@@ -567,7 +569,6 @@ function setupEventListeners() {
     for (const [id, navigate] of [['back-btn', navigateFrameBack], ['forward-btn', navigateFrameForward]]) {
         document.getElementById(id).addEventListener('click', navigate);
     }
-    document.getElementById('menu-btn').addEventListener('click', toggleDashboardView);
 
     document.getElementById('WelcomeNewTabBtn')?.addEventListener('click', spawnNewBlankTab);
     document.getElementById('WelcomeBookmarksBtn')?.addEventListener('click', toggleBookmarksOverlay);
@@ -929,7 +930,8 @@ function setupEventListeners() {
         pinSidebarBtn.onclick = () => toggleSidebarPin();
     }
 
-    const topNavIds = ['back-btn', 'forward-btn', 'toggle-nav-btn', 'split-toggle-btn', 'menu-btn'];
+    // The workspace control and the navigation buttons share one row.
+    const topNavIds = ['WorkspaceHeader', 'back-btn', 'forward-btn', 'toggle-nav-btn', 'split-toggle-btn'];
     topNavIds.forEach((id, idx) => {
         const btn = document.getElementById(id);
         if (!btn) return;

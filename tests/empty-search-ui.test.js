@@ -34,7 +34,7 @@ const root = path.resolve(__dirname, '..');
                 for (let index = 0; index < count; index++) window.executeBrowserAction('remove-tab');
             });
             assert.equal(await page.locator('#TabList li').count(), 0);
-            await page.locator('#menu-btn').focus();
+            await page.locator('#split-toggle-btn').focus();
             await page.keyboard.press('Control+l');
             await page.locator('#WideAddressBar').fill(input);
             await page.locator('#WideAddressBar').press('Enter');

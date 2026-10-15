@@ -1,3 +1,4 @@
+import { isCurrentGuestPointerEntry } from './sidebarPointer.js';
 import { NEW_TAB_URL, isNewTab, refreshNewTab } from './newTab.js';
 import { hasActiveOverlay } from './focus.js';
 import { state } from './state.js';
@@ -304,7 +305,8 @@ export function createWebView(url, currentWS, idx) {
             const activeListItem = document.querySelector('#TabList li.selected');
             const currentSelectedIdx = activeListItem ? Array.from(document.querySelectorAll('#TabList li')).indexOf(activeListItem) : -1;
             if (liveIdx === currentSelectedIdx) {
-                updateSecurityStatus(webview.getURL());
+                // The page can close itself while the hinter loads, destroying its guest.
+                try { updateSecurityStatus(webview.getURL()); } catch { return; }
                 updateStatusBarFromActiveView();
             }
         }
@@ -359,7 +361,12 @@ export function createWebView(url, currentWS, idx) {
         if (liveIdx < 0) return;
 
         if (e.channel === 'guest-pointer-enter') {
-            if (webview.getClientRects().length) document.getElementById('Sidebar').classList.remove('pointer-inside');
+            const sidebar = document.getElementById('Sidebar');
+            // Guest IPC can arrive after the pointer has already returned to the
+            // host. Never let an old guest entry reverse a current sidebar hover.
+            if (webview.getClientRects().length && isCurrentGuestPointerEntry(e.args?.[0])) {
+                sidebar.classList.remove('pointer-inside');
+            }
         } else if (e.channel === 'guest-input-focus') {
             handleGuestInputFocus(!!e.args[0], currentWS, liveIdx);
         } else if (e.channel === 'guest-hints-state') {
@@ -638,11 +645,6 @@ export function getFaviconUrl(urlStr) {
 
 export function renderWorkspaceUI(targetTabToFocus = null) {
     const currentWS = state.sessionState.current_workspace;
-    const wsLabel = document.getElementById('WorkspaceLabel');
-    if (wsLabel) {
-        wsLabel.textContent = currentWS;
-        wsLabel.title = `Workspace: ${currentWS} (Container: ${getWorkspacePartition(currentWS)})`;
-    }
     const wsBadge = document.getElementById('WorkspaceBadge');
     if (wsBadge) {
         wsBadge.textContent = getWorkspaceBadgeText(currentWS);

@@ -148,7 +148,7 @@ function createDownloadCardElement(data) {
                 <span class="download-card-status">${initialStatus}</span>
             </div>
             <div class="download-card-progress-track">
-                <div class="download-card-progress-bar" style="width: 0%;"></div>
+                <div class="download-card-progress-bar" style="transform: scaleX(0);"></div>
             </div>
         </div>
         <div class="download-card-actions">
@@ -215,7 +215,7 @@ export function handleDownloadProgress(data) {
     const percent = data.percent || 0;
 
     if (progressBar) {
-        progressBar.style.width = `${percent}%`;
+        progressBar.style.transform = `scaleX(${Math.max(0, Math.min(100, percent)) / 100})`;
     }
 
     if (statusSpan) {
@@ -262,7 +262,7 @@ export function handleDownloadDone(data) {
 
     if (data.state === 'completed') {
         card.classList.add('completed');
-        if (progressBar) progressBar.style.width = '100%';
+        if (progressBar) progressBar.style.transform = 'scaleX(1)';
         if (progressTrack) progressTrack.style.display = 'none';
 
         const sizeStr = formatBytes(data.totalBytes || data.receivedBytes);

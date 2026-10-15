@@ -36,7 +36,7 @@ const root = path.resolve(__dirname, '..');
                 if (await page.locator(target).count() === 0) continue;
                 await page.keyboard.press('Alt+s');
                 await page.waitForFunction(() => document.getElementById('Sidebar').contains(document.activeElement));
-                await page.waitForFunction(() => document.getElementById('Sidebar').getBoundingClientRect().width >= 259);
+                await page.waitForFunction(() => document.getElementById('Sidebar').getBoundingClientRect().right >= 259);
                 await page.locator(target).focus();
                 await page.keyboard.press('Alt+s');
                 await page.waitForFunction(() => !document.getElementById('Sidebar').contains(document.activeElement), null, {timeout: 5000});
@@ -44,8 +44,8 @@ const root = path.resolve(__dirname, '..');
                     await page.waitForFunction(() => document.activeElement.tagName === 'WEBVIEW');
                 }
                 await page.waitForFunction(pinned => {
-                    const width = document.getElementById('Sidebar').getBoundingClientRect().width;
-                    return pinned ? width >= 259 : width <= 37;
+                    const edge = document.getElementById('Sidebar').getBoundingClientRect().right;
+                    return pinned ? edge >= 259 : edge <= 37;
                 }, pinned);
                 assert.equal(await page.evaluate(() => document.body.classList.contains('sidebar-pinned')), pinned);
             }
@@ -54,7 +54,7 @@ const root = path.resolve(__dirname, '..');
                 await page.keyboard.press('Alt+s');
                 await page.waitForFunction(() => document.getElementById('Sidebar').contains(document.activeElement));
                 await page.keyboard.press('Alt+s');
-                await page.waitForFunction(() => document.getElementById('Sidebar').getBoundingClientRect().width <= 37);
+                await page.waitForFunction(() => document.getElementById('Sidebar').getBoundingClientRect().right <= 37);
             }
         };
         await checkSidebarShortcut();
@@ -63,7 +63,7 @@ const root = path.resolve(__dirname, '..');
         await page.keyboard.press('Control+l'); await focused('WideAddressBar');
         await page.keyboard.press('Escape'); await page.locator('#WideAddressBar').waitFor({state: 'hidden'});
         await page.keyboard.press('Control+l'); await focused('WideAddressBar');
-        await page.locator('#menu-btn').focus(); await page.keyboard.press('Escape');
+        await page.locator('#split-toggle-btn').focus(); await page.keyboard.press('Escape');
         await page.locator('#WideAddressBar').waitFor({state: 'hidden'});
         for (const [key, id] of surfaces) {
             await page.keyboard.press(key); await page.locator('#' + id).waitFor({state: 'visible'}); await focused(id);
@@ -159,7 +159,7 @@ const root = path.resolve(__dirname, '..');
         // Content layers must not cover the expanded sidebar, including empty workspaces.
         const sidebarAboveContent = () => page.evaluate(() => document.elementFromPoint(150, 100)?.closest('#Sidebar')?.id === 'Sidebar');
         await page.mouse.move(10, 100);
-        await page.waitForFunction(() => document.getElementById('Sidebar').getBoundingClientRect().width >= 259);
+        await page.waitForFunction(() => document.getElementById('Sidebar').getBoundingClientRect().right >= 259);
         assert(await sidebarAboveContent(), 'The expanded sidebar must remain above the live webview');
         const checkPin = async pinned => {
             await page.waitForFunction(pinned => {
@@ -190,19 +190,19 @@ const root = path.resolve(__dirname, '..');
             await checkPin(false);
             await page.waitForFunction(() => getComputedStyle(document.getElementById('pin-sidebar-btn')).backgroundColor === 'rgba(0, 0, 0, 0)');
             await moveToContent();
-            await page.waitForFunction(() => document.getElementById('Sidebar').getBoundingClientRect().width <= 37);
+            await page.waitForFunction(() => document.getElementById('Sidebar').getBoundingClientRect().right <= 37);
             await page.mouse.move(10, 100);
             await page.locator('#pin-sidebar-btn').click();
             await checkPin(true);
             await moveToContent();
             await page.keyboard.press('Control+Shift+z');
             await checkPin(false);
-            await page.waitForFunction(() => document.getElementById('Sidebar').getBoundingClientRect().width <= 37);
+            await page.waitForFunction(() => document.getElementById('Sidebar').getBoundingClientRect().right <= 37);
             // Temporary keyboard focus expansion must not survive an unpin.
             await page.keyboard.press('Alt+s');
             await page.keyboard.press('Control+Shift+z'); await checkPin(true);
             await page.keyboard.press('Control+Shift+z'); await checkPin(false);
-            await page.waitForFunction(() => document.getElementById('Sidebar').getBoundingClientRect().width <= 37);
+            await page.waitForFunction(() => document.getElementById('Sidebar').getBoundingClientRect().right <= 37);
             await page.evaluate(() => window.executeBrowserAction('toggle-sidebar-pin'));
             await checkPin(true);
             await page.evaluate(() => window.toggleSidebarExpansion());
@@ -210,13 +210,13 @@ const root = path.resolve(__dirname, '..');
         };
         await checkPinRoutes();
         await page.mouse.move(10, 100);
-        await page.waitForFunction(() => document.getElementById('Sidebar').getBoundingClientRect().width >= 259);
+        await page.waitForFunction(() => document.getElementById('Sidebar').getBoundingClientRect().right >= 259);
         // Window exits must not collapse the sidebar, even at the outermost pixel.
-        const sidebarWidth = () => page.locator('#Sidebar').evaluate(sidebar => sidebar.getBoundingClientRect().width);
+        const sidebarEdge = () => page.locator('#Sidebar').evaluate(sidebar => sidebar.getBoundingClientRect().right);
         for (const x of [-1, 0, -1, 0, -1]) {
             await page.mouse.move(x, 100);
             await page.waitForTimeout(250);
-            assert(await sidebarWidth() >= 259, 'Leaving the left window edge must retain expansion');
+            assert(await sidebarEdge() >= 259, 'Leaving the left window edge must retain expansion');
         }
         await page.mouse.move(500, 100);
         // Host CDP pointer injection does not route into Electron's guest surface.
@@ -226,14 +226,14 @@ const root = path.resolve(__dirname, '..');
             guest.sendInputEvent({type: 'mouseLeave', x: -1, y: 100});
             guest.sendInputEvent({type: 'mouseMove', x: 500, y: 100});
         }, guestId);
-        await page.waitForFunction(() => document.getElementById('Sidebar').getBoundingClientRect().width <= 37, null, {timeout: 5000});
+        await page.waitForFunction(() => document.getElementById('Sidebar').getBoundingClientRect().right <= 37, null, {timeout: 5000});
         await page.mouse.move(10, 100);
-        await page.waitForFunction(() => document.getElementById('Sidebar').getBoundingClientRect().width >= 259);
+        await page.waitForFunction(() => document.getElementById('Sidebar').getBoundingClientRect().right >= 259);
         const windowHeight = await page.evaluate(() => innerHeight);
         for (const point of [{x: 10, y: -1}, {x: 10, y: windowHeight}]) {
             await page.mouse.move(point.x, point.y);
             await page.waitForTimeout(250);
-            assert(await sidebarWidth() >= 259, 'Leaving the top or bottom window edge must retain expansion');
+            assert(await sidebarEdge() >= 259, 'Leaving the top or bottom window edge must retain expansion');
             await page.mouse.move(10, 100);
         }
         await page.evaluate(() => window.executeBrowserAction('new-workspace'));
@@ -241,24 +241,24 @@ const root = path.resolve(__dirname, '..');
         await page.locator('#NewWorkspaceTitleInput').press('Enter');
         await page.locator('#EmptyWorkspaceWelcome').waitFor({state: 'visible'});
         await page.mouse.move(10, 100);
-        await page.waitForFunction(() => document.getElementById('Sidebar').getBoundingClientRect().width >= 259);
+        await page.waitForFunction(() => document.getElementById('Sidebar').getBoundingClientRect().right >= 259);
         assert(await sidebarAboveContent(), 'The expanded sidebar must paint and receive clicks above the empty workspace');
         if (process.env.FLY_SIDEBAR_SCREENSHOT) await page.screenshot({path: process.env.FLY_SIDEBAR_SCREENSHOT});
         await page.mouse.move(-1, 100);
         await page.waitForTimeout(250);
-        assert(await sidebarWidth() >= 259, 'The empty-workspace sidebar must also remain expanded outside the window');
+        assert(await sidebarEdge() >= 259, 'The empty-workspace sidebar must also remain expanded outside the window');
         await page.mouse.move(500, 400);
-        await page.waitForFunction(() => document.getElementById('Sidebar').getBoundingClientRect().width <= 37);
+        await page.waitForFunction(() => document.getElementById('Sidebar').getBoundingClientRect().right <= 37);
         for (const button of ['back-btn', 'forward-btn']) {
             await page.mouse.move(10, 100);
             await page.locator('#' + button).click();
             assert.equal(await page.locator('#' + button).evaluate(button => button.matches(':focus')), false);
             await page.mouse.move(500, 400);
-            await page.waitForFunction(() => document.getElementById('Sidebar').getBoundingClientRect().width <= 37);
+            await page.waitForFunction(() => document.getElementById('Sidebar').getBoundingClientRect().right <= 37);
         }
         await page.mouse.move(10, 100);
-        await page.waitForFunction(() => document.getElementById('Sidebar').getBoundingClientRect().width >= 259);
-        await page.locator('#WorkspaceLabel').click();
+        await page.waitForFunction(() => document.getElementById('Sidebar').getBoundingClientRect().right >= 259);
+        await page.locator('#WorkspaceBadge').click();
         await focused('DashboardOverlay'); await page.keyboard.press('Escape');
         await page.mouse.move(500, 400);
         await checkSidebarShortcut();
