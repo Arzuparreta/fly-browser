@@ -34,7 +34,7 @@ Controls hardware switches, process limits, privacy whitelists, and search prefe
     },
     "spellchecker_language": "en-GB",
     "theme": "dark",
-    "webview_theme": "dark",
+    "sync_website_theme": true,
     "theme_colors": {
         "dark": {
             "accent": "#e0261c",
@@ -77,7 +77,7 @@ Controls hardware switches, process limits, privacy whitelists, and search prefe
 - **`search_engine`**: Fallback search provider URL when non-URL queries are entered without an alias.
 - **`spellchecker_language`**: Dictionary language used for input spellchecking (e.g. `en-GB`, `en-US`, `en-CA`, `en-AU`, `cs`, `de`, `fr`, `es`, `it`, `pt`, `nl`, `pl`, or `disabled`).
 - **`theme`**: Interface theme preference (`dark` for Tokyo Night or `light`).
-- **`webview_theme`**: Website native theme preference (`dark` or `light`), toggled via the sidebar theme button.
+- **`sync_website_theme`**: When `true` (the default), websites that offer their own dark mode follow the interface theme through the standard `prefers-color-scheme` preference, updating live. Pages without one are never altered. When `false`, websites always see the light preference.
 - **`theme_colors`**: Custom visual colour palette and opacity settings per theme mode:
 
 ![Preferences Appearance section](/screenshots/preferences-2.webp)

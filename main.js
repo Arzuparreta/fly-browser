@@ -118,7 +118,7 @@ const DEFAULT_CONFIG = {
     spellchecker_language: 'en-GB',
     theme: 'dark',
     interface_scale: 'normal',
-    webview_theme: 'dark',
+    sync_website_theme: true,
     trusted_domains: ['accounts.google.com'],
     tab_sleep_timeout_minutes: 15,
     sidebar_auto_collapse: true,
@@ -150,6 +150,12 @@ function writeConfigFile(cfg) {
     fs.renameSync(tmpPath, CONFIG_PATH);
 }
 
+// Websites see the interface theme through prefers-color-scheme, or the light default when unsynced.
+function websiteTheme(cfg) {
+    if (cfg.sync_website_theme === false) return 'light';
+    return cfg.theme === 'light' ? 'light' : 'dark';
+}
+
 function loadBrowserConfig() {
     try {
         if (!fs.existsSync(CONFIG_DIR)) fs.mkdirSync(CONFIG_DIR, { recursive: true });
@@ -163,7 +169,6 @@ function loadBrowserConfig() {
             ...parsed,
             interface_scale: parsed.interface_scale === 'large' ? 'large' : 'normal',
             spellchecker_language: parsed.spellchecker_language || 'en-GB',
-            webview_theme: parsed.webview_theme || 'dark',
             theme_colors: {
                 dark: { ...DEFAULT_THEME_COLORS.dark, ...(parsed.theme_colors?.dark || {}) },
                 light: { ...DEFAULT_THEME_COLORS.light, ...(parsed.theme_colors?.light || {}) }
@@ -1086,8 +1091,7 @@ ipcMain.on('set-native-theme', (event, mode) => {
         nativeTheme.themeSource = mode;
         return;
     }
-    const cfg = loadBrowserConfig();
-    nativeTheme.themeSource = cfg.webview_theme || 'dark';
+    nativeTheme.themeSource = websiteTheme(loadBrowserConfig());
 });
 
 ipcMain.handle('get-browser-settings', async () => {
@@ -1752,7 +1756,7 @@ function createWindow() {
         }
     });
     
-    nativeTheme.themeSource = cfg.webview_theme || 'dark';
+    nativeTheme.themeSource = websiteTheme(cfg);
     const systemMenu = Menu.buildFromTemplate([
         {
             label: 'Fly Settings',

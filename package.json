@@ -16,7 +16,7 @@
     "dist": "electron-builder",
     "dist:linux": "electron-builder --linux",
     "dist:dir": "electron-builder --dir",
-    "test:keyboard-ui": "node tests/desktop-integration-ui.test.js && node tests/appimage-update-ui.test.js && node tests/keyboard-ui.test.js && node tests/empty-search-ui.test.js && node tests/navigation-focus-ui.test.js && node tests/overlay-state-ui.test.js && node tests/sidebar-pointer-focus-ui.test.js && node tests/settings-nav-ui.test.js && node tests/interface-scale-ui.test.js && node tests/tab-close-typing-ui.test.js && node tests/tab-close-button-ui.test.js && node tests/sidebar-cursor-ui.test.js && node tests/legacy-keybinds-ui.test.js && node tests/oauth-popup-ui.test.js && node tests/self-closing-tab-ui.test.js",
+    "test:keyboard-ui": "node tests/desktop-integration-ui.test.js && node tests/appimage-update-ui.test.js && node tests/keyboard-ui.test.js && node tests/empty-search-ui.test.js && node tests/navigation-focus-ui.test.js && node tests/overlay-state-ui.test.js && node tests/sidebar-pointer-focus-ui.test.js && node tests/settings-nav-ui.test.js && node tests/interface-scale-ui.test.js && node tests/website-theme-ui.test.js && node tests/tab-close-typing-ui.test.js && node tests/tab-close-button-ui.test.js && node tests/sidebar-cursor-ui.test.js && node tests/legacy-keybinds-ui.test.js && node tests/oauth-popup-ui.test.js && node tests/self-closing-tab-ui.test.js",
     "test:identity-ui": "node tests/identity-ui.test.js",
     "test:blocking-ui": "node tests/extensions-ui.test.js && node tests/blocking-startup-ui.test.js"
   },

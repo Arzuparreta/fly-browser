@@ -48,7 +48,6 @@
             <div class="bottom-theme-layout">
                 <button id="pin-sidebar-btn" class="nav-icon-button" title="Pin / Auto-Collapse Sidebar"><i class="fa-solid fa-thumbtack"></i></button>
                 <button id="reader-view-btn" class="nav-icon-button" title="Toggle Reader View"><i class="fa-solid fa-book-open"></i></button>
-                <button id="theme-toggle-btn" class="nav-icon-button" title="Toggle Website Dark/Light Theme"><i class="fa-solid fa-moon"></i></button>
                 <button id="noti-toggle-btn" class="nav-icon-button" title="Toggle Web Notifications"><i class="fa-regular fa-bell"></i></button>
                 <button id="settings-btn" class="nav-icon-button" title="Settings" aria-label="Settings"><i class="fa-solid fa-gear"></i></button>
             </div>
@@ -315,6 +314,16 @@
                                             </div>
                                             <label class="toggle-switch">
                                                 <input type="checkbox" id="setting-theme-toggle">
+                                                <span class="toggle-slider"></span>
+                                            </label>
+                                        </div>
+                                        <div class="setting-item" data-keywords="theme mode light dark night website page sync prefers-color-scheme">
+                                            <div class="setting-info">
+                                                <label class="setting-label" for="setting-website-theme-toggle">Match websites to the interface</label>
+                                                <span class="setting-desc">Websites with their own dark mode follow Chasis and Papel. Others are never changed.</span>
+                                            </div>
+                                            <label class="toggle-switch">
+                                                <input type="checkbox" id="setting-website-theme-toggle" checked>
                                                 <span class="toggle-slider"></span>
                                             </label>
                                         </div>

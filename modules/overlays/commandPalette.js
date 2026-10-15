@@ -754,6 +754,9 @@ export async function syncPreferencesUI() {
     const themeToggle = document.getElementById('setting-theme-toggle');
     if (themeToggle) themeToggle.checked = document.body.classList.contains('dark-mode');
 
+    const websiteThemeToggle = document.getElementById('setting-website-theme-toggle');
+    if (websiteThemeToggle) websiteThemeToggle.checked = cfg?.sync_website_theme !== false;
+
     const privateToggle = document.getElementById('setting-private-toggle');
     if (privateToggle) privateToggle.checked = !!state.globalPrivateModeActive;
 
@@ -792,6 +795,13 @@ export function setupPreferencesListeners() {
     if (themeToggle) {
         themeToggle.onchange = () => {
             if (window.toggleInterfaceTheme) window.toggleInterfaceTheme();
+        };
+    }
+
+    const websiteThemeToggle = document.getElementById('setting-website-theme-toggle');
+    if (websiteThemeToggle) {
+        websiteThemeToggle.onchange = () => {
+            if (window.setWebsiteThemeSync) window.setWebsiteThemeSync(websiteThemeToggle.checked);
         };
     }
 
