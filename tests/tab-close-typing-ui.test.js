@@ -39,7 +39,9 @@ const root = path.resolve(__dirname, '..');
             const tabs = await page.locator('#TabList li').count();
             await page.locator('webview:visible').click({position: {x: 350, y: 300}});
             await guest('document.getElementById("noneditable").focus()');
-            await page.keyboard.press('x');
+            // The key removes the page that received it, so Chromium can drop the acknowledgement
+            // Playwright awaits; the closed tab below is what proves the key arrived.
+            page.keyboard.press('x').catch(() => {});
             await page.waitForFunction(count => document.querySelectorAll('#TabList li').length === count - 1, tabs);
             await until(() => guest('!!document.getElementById("text")'), 'Next tab is not ready');
             // No settling delay: the click races the browser's deferred focus of the new tab.

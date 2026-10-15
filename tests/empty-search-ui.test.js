@@ -40,7 +40,8 @@ const root = path.resolve(__dirname, '..');
             await page.locator('#WideAddressBar').press('Enter');
             await page.waitForFunction(expected => {
                 const view = document.querySelector('webview');
-                return view && !view.isLoading() && view.getURL() === expected;
+                // A webview throws until dom-ready, which a fresh tab may not have reached yet.
+                try { return view && !view.isLoading() && view.getURL() === expected; } catch (e) { return false; }
             }, expected);
             assert.equal(await page.locator('#TabList li').count(), 1);
             await page.locator('#WideAddressBar').waitFor({state: 'hidden'});

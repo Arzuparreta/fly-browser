@@ -58,7 +58,8 @@ const pages = {
         await page.locator('#WideAddressBar').press('Enter');
         await page.waitForFunction(url => {
             const view = document.querySelector('webview');
-            return view && !view.isLoading() && view.getURL() === url;
+            // A webview throws until dom-ready, which a fresh tab may not have reached yet.
+            try { return view && !view.isLoading() && view.getURL() === url; } catch (e) { return false; }
         }, fixture + '/');
         const inGuest = code => page.evaluate(code => document.querySelector('webview').executeJavaScript(code, true), code);
         const windowCount = () => application.evaluate(({BrowserWindow}) => BrowserWindow.getAllWindows().length);
