@@ -459,7 +459,6 @@ body.sidebar-auto-collapse #Sidebar:not(.pointer-inside, .expanded, :focus-withi
 }
 
 /* Mini indicators stand in for the row's badges in the rail. */
-.tab-sleep-dot,
 .tab-audio-dot,
 .tab-pin-dot {
     position: absolute;
@@ -470,11 +469,6 @@ body.sidebar-auto-collapse #Sidebar:not(.pointer-inside, .expanded, :focus-withi
     opacity: 0;
 }
 
-.tab-sleep-dot {
-    bottom: -3px;
-    right: -3px;
-    color: var(--accent);
-}
 
 .tab-audio-dot {
     top: -3px;
@@ -491,7 +485,7 @@ body.sidebar-auto-collapse #Sidebar:not(.pointer-inside, .expanded, :focus-withi
 /* Rail and expanded decorations swap with the sidebar's motion. */
 body.sidebar-auto-collapse #TabList li:is(.selected, .tab-pinned, .split-pane-1-tab, .split-pane-2-tab)::before,
 body.sidebar-auto-collapse #TabList li:is(.selected, .tab-pinned, .split-pane-1-tab, .split-pane-2-tab)::after,
-body.sidebar-auto-collapse :is(.tab-sleep-dot, .tab-audio-dot, .tab-pin-dot) {
+body.sidebar-auto-collapse :is(.tab-audio-dot, .tab-pin-dot) {
     transition: opacity var(--motion-normal) var(--motion-ease);
 }
 
@@ -500,7 +494,7 @@ body.sidebar-auto-collapse #Sidebar:not(.pointer-inside, .expanded, :focus-withi
 }
 
 body.sidebar-auto-collapse #Sidebar:not(.pointer-inside, .expanded, :focus-within) #TabList li:is(.selected, .tab-pinned, .split-pane-1-tab, .split-pane-2-tab)::after,
-body.sidebar-auto-collapse #Sidebar:not(.pointer-inside, .expanded, :focus-within) :is(.tab-sleep-dot, .tab-audio-dot, .tab-pin-dot) {
+body.sidebar-auto-collapse #Sidebar:not(.pointer-inside, .expanded, :focus-within) :is(.tab-audio-dot, .tab-pin-dot) {
     opacity: 1;
 }
 
@@ -527,10 +521,6 @@ body.show-tab-numbers #TabList > li:nth-child(n+9):last-child .tab-favicon-wrapp
 body.show-tab-numbers #TabList > li:nth-child(n+9):last-child .tab-favicon-wrapper::after { content: '9'; }
 
 /* Sleeping tab styling */
-#TabList li.tab-sleeping .tab-favicon {
-    opacity: 0.55;
-    filter: grayscale(40%);
-}
 
 #TabList li.selected::before,
 #TabList li.selected::after {
@@ -2591,31 +2581,10 @@ webview {
     text-align: left;
 }
 
-#TabList li.tab-sleeping {
-    opacity: 0.65;
-}
 
-#TabList li.tab-sleeping:hover {
-    opacity: 0.9;
-}
 
-#TabList li.tab-sleeping.selected {
-    opacity: 1;
-}
 
-#TabList li.tab-sleeping .tab-title {
-    font-style: italic;
-}
 
-.tab-sleep-badge {
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
-    font-size: 11px;
-    color: var(--accent, #e0261c);
-    margin-right: 6px;
-    opacity: 0.85;
-}
 
 
 
@@ -4390,11 +4359,6 @@ body.light-mode .sidebar-content::before { background-image: url('assets/identit
 .tab-copy { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 3px; }
 .tab-copy .tab-title { display: block; line-height: 16px; overflow: hidden; text-overflow: ellipsis; }
 .tab-domain { font: 10px/13px 'IBM Plex Mono', monospace; color: var(--link); overflow: hidden; text-overflow: ellipsis; }
-.tab-flight-state { font: 8px 'IBM Plex Mono', monospace; color: var(--dim); letter-spacing: .04em; }
-.tab-flight-state::after { content: 'IN FLIGHT'; }
-.tab-sleeping .tab-flight-state::after { content: 'LANDED'; }
-.tab-item:has(.tab-media-badge:not(.is-muted)) .tab-flight-state::after { content: 'PLAYING'; }
-.tab-sleeping .tab-title, .tab-sleeping .tab-domain { color: var(--dim); }
 :focus-visible { outline: 1px solid var(--accent) !important; outline-offset: 3px; }
 #EmptyWorkspaceWelcome { background-image: radial-gradient(var(--border) .7px, transparent .7px); background-size: 16px 16px; }
 .welcome-card { background: var(--bg-main); border-radius: 2px; }

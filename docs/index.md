@@ -4,7 +4,7 @@ layout: home
 hero:
   name: Fly Browser
   text: Small, Minimal Linux Browser
-  tagline: Full keyboard control of the browser with a polished experience for mouse users. True tab hibernation, side-by-side split view and isolated multi-account containers.
+  tagline: Full keyboard control of the browser with a polished experience for mouse users. State-preserving tab suspension, side-by-side split view and isolated multi-account containers.
   image:
     src: /logo.png
     alt: Fly Browser Logo
@@ -23,8 +23,8 @@ hero:
       link: https://github.com/Arzuparreta/fly-browser
 
 features:
-  - title: True Tab Hibernation
-    details: Inactive background tabs detach entirely from memory across all workspaces. Live scroll positions and navigation history restore smoothly upon selection.
+  - title: Tab Suspension
+    details: Eligible background pages pause in memory and resume without reloading, preserving their document and JavaScript state.
   - title: Dual-Split View
     details: Browse two pages side-by-side with customisable partition ratios. Swap panes, open links directly into split view, or toggle seamlessly via keyboard shortcuts.
   - title: Multi-Account Containers
@@ -52,7 +52,7 @@ Most modern web browsers consume gigabytes of memory and leak telemetry continuo
 ::: tip ARCHITECTURAL PILLARS
 * **Memory Conservation:** Idle tabs detach from DOM memory. Twenty tabs take the RAM footprint of two.
 * **Complete Isolation:** Separate workspace containers keep cookies, caches, and logins entirely segregated.
-* **Crash Resilience:** Atomic file writes, rolling backup journals, and safe startup hibernation prevent data loss and crash loops.
+* **Crash Resilience:** Atomic file writes, rolling backup journals, and on-demand session restoration prevent data loss and crash loops.
 * **Transparent Storage:** Configuration, history, and keybinds live in human-readable files under `~/.config/fly-browser/`.
 * **Zero Cloud Dependence:** No remote telemetry, no forced account sync, and zero phone-home profiling.
 :::
@@ -72,7 +72,7 @@ Keep your hands on the home row. Every major workflow is reachable via concise, 
 | `Ctrl + L` / `o` | Omnibar | Open floating address bar with search engine aliases |
 | `Ctrl + Shift + H` | History Overlay | Search, reopen, or purge visited history records |
 | `Ctrl + Shift + P` | Private Window | Open zero-trace volatile browsing container |
-| `Ctrl + H` | Preferences | Adjust hardware flags, sleep timeouts, and site permissions |
+| `Ctrl + H` | Preferences | Adjust hardware flags, suspension timeouts, and site permissions |
 
 ---
 

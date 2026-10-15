@@ -232,7 +232,7 @@ async function gatherSystemDiagnostics(sessionStats = {}) {
             activeWorkspace: sessionStats.activeWorkspace ? sanitizeString(sessionStats.activeWorkspace) : 'Workspace 1',
             totalTabs: sessionStats.totalTabs || 0,
             activeWebviews: sessionStats.activeWebviews || 0,
-            hibernatedTabs: sessionStats.hibernatedTabs || 0,
+            frozenTabs: sessionStats.frozenTabs || 0,
             splitActive: !!sessionStats.splitActive,
             privateBrowsingActive: !!sessionStats.privateBrowsingActive
         },

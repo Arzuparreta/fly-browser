@@ -4,7 +4,6 @@ window.updateFlyNewTab = data => {
     for (const [key, value] of Object.entries(data.colours)) document.documentElement.style.setProperty(key, value);
     document.getElementById('memory-fly').src = `identity/memory-${data.light ? 'papel' : 'chasis'}@2x.png`;
     document.getElementById('memory').textContent = `${data.memory} MB`;
-    document.getElementById('landed').textContent = String(data.landed);
     searchTemplate = data.search;
     document.getElementById('address-hint').textContent = data.addressHint;
     document.getElementById('links-hint').textContent = data.linksHint;

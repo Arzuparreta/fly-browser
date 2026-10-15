@@ -76,7 +76,7 @@ All three are under the SIL Open Font License. Bundle them inside the app as sub
 
 - **Sidebar header:** small colour fly, `FLY` in Doto, window controls.
 - **Workspace card:** workspace number in Doto cells, name, container, its key hint.
-- **Tab board:** columns for jump number, title over domain (domain in Link colour, mono), state and memory. States in the mockups were written in Spanish for review. Interface copy must be UK English, for example `IN FLIGHT` (active), `LANDED` (hibernated) and `PLAYING` (audio). Landed tabs use dim text. The active row gets the panel background and the red bar.
+- **Tab board:** columns for jump number, title over domain (domain in Link colour, mono), state and memory. Text state badges are omitted. Audio/mute, pin and split-pane controls convey actionable state. The active row gets the panel background and the red bar.
 - **Engraving:** the engraved fly at the bottom of the sidebar, under the tabs, replacing `#Sidebar::before` and `assets/logo.svg`.
 - **New tab:** Doto clock on cells, date in spaced mono capitals, search field with corner brackets and its `/` hint, a short list of frequent sites with key hints, and the fly memory with hairline annotations.
 - **Status bar:** mode badge in Doto on a cell (`NORMAL`, `INSERT`, `HINTS`, `PASSTHROUGH`, `SPLIT` already exist in `modules/statusBar.js`), workspace, key hints, and on the right the blocker state, connection security and time.
@@ -88,7 +88,6 @@ Annotate only with values the browser really has. Checked in the code on 14 Octo
 | Annotation | Source |
 | :--- | :--- |
 | Memory in use | `app.getAppMetrics()` is already read in `main.js` and `diagnostics.js`. |
-| Landed (hibernated) tabs | Hibernation state lives in `modules/webview.js` (`hibernateTab`, `hibernatedAt`). |
 | Telemetry | Always zero by policy; a fixed statement, not a measurement. |
 | Trackers blocked | **No counter exists.** Add one from the Ghostery blocker events only if it costs nothing measurable; otherwise drop this annotation. |
 

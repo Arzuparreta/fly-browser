@@ -1,122 +1,34 @@
-# True Tab Hibernation (Sleeping Tabs)
+# Tab Suspension
 
-True Tab Hibernation is a core performance feature in Fly Browser designed to cap Chromium memory and process consumption on fanless and low-resource hardware.
+Fly pauses eligible background pages using Chromium's frozen lifecycle state. The page stays in memory: selecting its tab resumes the same document without reloading it. Form values, JavaScript state, navigation history and scroll position stay with that document.
 
----
+Suspension saves CPU and battery. It does **not** promise the memory savings of unloading a page. Fly never automatically destroys an open page to save memory, including when memory is low. Browser or renderer crashes can still lose unsaved work; suspension is not a backup.
 
-## Why True Hibernation Matters
+## Automatic suspension
 
-Standard browsers keep background tabs mounted in the DOM. Even when background timers are throttled, each open tab maintains an active Chromium renderer process consuming between 100 MB and 400 MB of RAM, in addition to background cache allocations. On fanless devices, 15 open tabs can quickly consume 3 GB of memory and induce CPU thermal throttling.
+In **Preferences → Performance → Tab suspension**, choose 5, 15, 30 or 60 minutes, or **Never**. The default is 15 minutes. The native **Fly Settings → Tab Suspension** menu offers the same choices.
 
-Fly resolves this by implementing **True Hibernation**:
-When an inactive tab exceeds its sleep timer, its `<webview>` element is completely detached from the DOM. This terminates the guest document and JavaScript execution context, slashing RAM consumption by up to 85% down to the baseline Chromium process overhead (around 40-90 MB) while keeping the tab visible in the sidebar.
+Time counts continuously from when the page becomes hidden, including switching to another workspace. Fly checks every 30 seconds. Selecting a page restarts its background interval the next time you leave it.
 
----
+Fly protects visible pages, including both split panes, and pinned tabs. It also leaves pages running when they are loading, playing media, capturing, downloading, or have active requests, calls or persistent connections. Pages with DevTools open are excluded. If eligibility cannot be established, or Chromium rejects suspension, the page remains alive with normal background throttling.
 
-## What Gets Preserved
+Open WebSocket and EventSource connections, live media tracks, unclosed audio contexts and peer connections prevent suspension. Pages holding Web Locks, retained IndexedDB transactions or worker objects are also excluded, as are pages with frames whose state Fly cannot inspect. These conservative checks favour keeping applications working over suspending every page. Busy pages are reconsidered on a later scan.
 
-Before detaching an idle tab, Fly queries the live page to save its complete state:
+Suspension can pause application timers and callbacks. It preserves the local document; it cannot guarantee that a remote service will never expire a session or change its data while you are away.
 
-- **Live URL**: Preserves the exact current URL, including in-page hash changes and deep links.
-- **Page Title**: Retains the human-readable document title in `~/.config/fly-browser/session.json`.
-- **Exact Scroll Coordinates**: Captures `[window.scrollX, window.scrollY]` offsets so that long articles, documentation pages, and feeds reopen at the precise reading position.
+## Manual controls
 
----
+Open the Command Palette and choose:
 
-## Audio & Media Protection
+- **Suspend Inactive Tabs**: pause eligible background pages across workspaces, using the same protections as automatic suspension.
+- **Resume Tabs in Workspace**: resume existing pages in the current workspace without reloading them. Tabs not yet opened since startup remain unloaded.
 
-Tabs currently playing audio or video are strictly protected:
+Choosing **Never** resumes suspended pages immediately. There are no sleep moons or IN FLIGHT, LANDED or PLAYING text badges. The audio and mute controls remain available.
 
-- If you are playing music, a podcast, or a video on YouTube or Spotify in a background tab, Fly detects the active media stream via `media-started-playing` and `isCurrentlyAudible()`.
-- Audible tabs are exempted from sleep scans and will never be hibernated while playing.
+## Starting and recovering a session
 
----
+Restoring a session after the browser has closed is separate from suspension. Background tabs load on demand so that starting Fly does not load every saved website at once. Opening such a tab requires loading the website; there is no live document from the previous process to resume.
 
-## Re-hydration on Demand
+Fly still uses atomic session writes, a backup session file and an exit sentinel for recovery after unexpected shutdowns. These protect the saved session, not arbitrary unsaved website content.
 
-Waking a dormant tab is instantaneous:
-
-1. Click the sleeping tab in the sidebar or select it using keyboard navigation.
-2. Fly re-instantiates the `<webview>` element inside the appropriate workspace container partition.
-3. Upon page load, the saved scroll position is automatically restored.
-4. The sleeping indicator clears, and the tab becomes fully active.
-
----
-
-## Cold Boot Hibernation
-
-When you launch Fly Browser with dozens of tabs across multiple workspaces:
-
-- Only the single active tab in your current workspace is mounted into memory on startup.
-- All background tabs initialise in dormant sleep state, displaying their saved titles and sleep badges in the sidebar.
-- The browser opens in seconds and uses minimal initial RAM.
-
----
-
-## Crash & Unexpected Shutdown Recovery
-
-Hibernation handles memory pressure gracefully during normal browsing, but Fly also includes comprehensive crash resilience to protect your work if the system loses power, the Linux kernel invokes the Out-Of-Memory (OOM) killer, or Electron is force-quit:
-
-### 1. Atomic Disk Writes & Rolling Journal
-Sessions are never saved via naive synchronous file overwrites. When writing to disk:
-- Fly first writes the complete session payload to a temporary file (`session.json.tmp`).
-- The existing valid session file is rotated into a rolling backup journal (`session.json.bak`).
-- Fly performs an atomic POSIX rename (`session.json.tmp` to `session.json`).
-
-Because the rename operation is atomic at the filesystem level, power failures or process terminations can never produce a corrupted or half-written session file. If the primary file is ever damaged or missing, Fly automatically falls back to `session.json.bak` and restores your workspaces without data loss.
-
-### 2. Clean-Exit Sentinel Tracking
-A dedicated lifecycle sentinel (`session_sentinel.json`) tracks whether the browser exited cleanly:
-- On startup, Fly marks the sentinel as active (`clean_exit: false`).
-- On graceful shutdown (such as closing the window or quitting via shortcut), the sentinel is updated to `clean_exit: true`.
-- If Fly launches and detects `clean_exit === false`, it recognises that the previous session ended abruptly and automatically engages crash recovery mode.
-
-### 3. OOM Loop Prevention
-When recovering from an unexpected termination, Fly automatically enforces hibernation across **all background tabs in all workspaces**:
-- Even if multiple tabs were actively loaded before the crash, only the single active tab of your current workspace is mounted into memory.
-- All other tabs load in dormant sleep state with their titles, URLs, favicons, and scroll offsets intact.
-- This ensures that recovering a session with dozens of tabs never triggers an immediate secondary memory spike or crash loop on fanless hardware.
-
-### 4. Unobtrusive Notification
-Consistent with Fly's uncluttered canvas philosophy, crash recovery does not obstruct your screen with modal dialogues or alert boxes. A calm, non-intrusive status bar notification briefly appears at the bottom of the window:
-
-```text
-Session restored after unexpected shutdown
-```
-
----
-
-## Configuring the Sleep Timeout
-
-You can customise how quickly tabs hibernate using either the in-browser Preferences overlay or the native top menu bar:
-
-### Method 1: In-Browser Preferences Overlay (Ctrl + H)
-
-![Preferences Performance section](/screenshots/preferences-1.webp)
-
-1. Open **Preferences** by pressing **Ctrl + H** (or open the Command Palette with **Ctrl + P** and select **Preferences**).
-2. Select **Performance** in the section index and locate **Tab hibernation** under **Memory**.
-3. Choose your preferred idle duration from the dropdown:
-   - **After 5 minutes**: Aggressive memory saving.
-   - **After 15 minutes**: Recommended default for daily workflow.
-   - **After 30 minutes**: Moderate timeout.
-   - **After 1 hour**: Relaxed timeout.
-   - **Never**: Keeps all background tabs awake.
-The change takes effect immediately without needing to restart the browser.
-
-### Method 2: Native Menu Bar (F1)
-
-![Fly Settings Tab Hibernation Menu](/screenshots/menu.webp)
-
-1. Press **F1** to display the native top menu bar.
-2. Click **Fly Settings** -> **Tab Hibernation (Sleep Timeout)**.
-3. Select your desired sleep timeout duration.
-
----
-
-## Manual Hibernation Controls
-
-You can also trigger hibernation manually via the Command Palette (**Ctrl + P**):
-
-- **Hibernate Inactive Tabs**: Immediately detaches all eligible idle background tabs across all workspaces.
-- **Wake All Tabs in Workspace**: Re-instantiates all sleeping tabs in the active workspace at once.
+Existing hibernation settings migrate to suspension with the chosen timeout preserved, including **Never**. Saved URLs, titles and any previously captured scroll or session-storage data remain readable. New runtime suspension neither captures nor reconstructs a page's state.

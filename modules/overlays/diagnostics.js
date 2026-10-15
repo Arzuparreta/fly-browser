@@ -49,17 +49,11 @@ function gatherCurrentSessionStats() {
     });
 
     const activeWebviews = document.querySelectorAll('webview').length;
-    let hibernatedTabs = 0;
-    if (state.tabSleepStates) {
-        hibernatedTabs = Object.values(state.tabSleepStates).filter(Boolean).length;
-    }
-
     return {
         workspaceCount: wsNames.length,
         activeWorkspace: state.sessionState.current_workspace || 'Workspace 1',
         totalTabs,
         activeWebviews,
-        hibernatedTabs,
         splitActive: !!state.splitStates[state.sessionState.current_workspace]?.isSplit,
         privateBrowsingActive: !!state.globalPrivateModeActive
     };
@@ -289,8 +283,8 @@ function renderProcessesPane(data) {
                 <span class="diag-stat-value">${pm.heapUsedMB || 0} / ${pm.heapTotalMB || 0} MB</span>
             </div>
             <div class="diag-mini-stat">
-                <span class="diag-stat-label">Hibernated Tabs</span>
-                <span class="diag-stat-value">${sess.hibernatedTabs || 0} / ${sess.totalTabs || 0}</span>
+                <span class="diag-stat-label">Suspended Tabs</span>
+                <span class="diag-stat-value">${sess.frozenTabs || 0} / ${sess.totalTabs || 0}</span>
             </div>
         </div>
 
@@ -481,7 +475,7 @@ function buildMarkdownIssueReport(data) {
 
     lines.push('#### 3. Session & Process State');
     lines.push(`- **Workspaces**: ${sess.workspaceCount}`);
-    lines.push(`- **Total Tabs**: ${sess.totalTabs} (Hibernated: ${sess.hibernatedTabs}, Active Webviews: ${sess.activeWebviews})`);
+    lines.push(`- **Total Tabs**: ${sess.totalTabs} (Suspended: ${sess.frozenTabs}, Active Webviews: ${sess.activeWebviews})`);
     lines.push(`- **Total Chromium Processes**: ${procs.length}`);
     lines.push(`- **Main Process Heap**: ${data.processMemory?.heapUsedMB || 0} MB / ${data.processMemory?.heapTotalMB || 0} MB\n`);
 

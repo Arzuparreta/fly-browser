@@ -5,6 +5,9 @@ const https = require('https');
 const { exec, spawn, execSync, spawnSync } = require('child_process');
 const v8 = require('v8');
 const vm = require('vm');
+const {createTabSuspension, migrateSuspensionConfig} = require('./tabSuspension');
+const tabSuspension = createTabSuspension({getTimeout: () => loadBrowserConfig().tab_suspend_timeout_minutes});
+app.once('will-quit', () => tabSuspension.stop());
 
 // Include extension background pages in Chromium’s renderer sandbox.
 app.enableSandbox();
@@ -73,6 +76,22 @@ ipcMain.handle('change-site-zoom', (event, id, action) => {
     }
 });
 
+function trustedSuspensionGuest(event, id) {
+    if (!mainWindow || event.sender !== mainWindow.webContents || !Number.isInteger(id)) return null;
+    const guest = webContents.fromId(id);
+    return guest && guest.getType() === 'webview' && guest.hostWebContents === event.sender ? guest : null;
+}
+ipcMain.handle('set-tab-suspension-policy', (event, id, policy) => {
+    if (!trustedSuspensionGuest(event, id) || typeof policy?.visible !== 'boolean' || typeof policy?.pinned !== 'boolean') return;
+    return tabSuspension.setPolicy(id, policy);
+});
+ipcMain.handle('resume-tab', (event, id) => {
+    if (trustedSuspensionGuest(event, id)) return tabSuspension.resume(id);
+});
+ipcMain.handle('suspend-inactive-tabs', event => {
+    if (mainWindow && event.sender === mainWindow.webContents) return tabSuspension.scan(true);
+});
+
 let isCrashRecovery = false;
 
 function checkAndInitializeSentinel() {
@@ -133,7 +152,7 @@ const DEFAULT_CONFIG = {
     interface_scale: 'normal',
     sync_website_theme: true,
     trusted_domains: ['accounts.google.com'],
-    tab_sleep_timeout_minutes: 15,
+    tab_suspend_timeout_minutes: 15,
     sidebar_auto_collapse: true,
     show_status_bar: true,
     show_clock: true,
@@ -158,9 +177,11 @@ const DEFAULT_CONFIG = {
 // DEFAULT_CONFIG and have the next save persist those defaults over the user's settings.
 // Synchronous on purpose: saves never interleave, so no update can be lost either.
 function writeConfigFile(cfg) {
+    cfg = migrateSuspensionConfig(cfg);
     const tmpPath = `${CONFIG_PATH}.${process.pid}.tmp`;
     fs.writeFileSync(tmpPath, JSON.stringify(cfg, null, 4), 'utf-8');
     fs.renameSync(tmpPath, CONFIG_PATH);
+    if (cfg.tab_suspend_timeout_minutes === 0) tabSuspension.scan().catch(() => {});
 }
 
 // Websites see the interface theme through prefers-color-scheme, or the light default when unsynced.
@@ -176,7 +197,9 @@ function loadBrowserConfig() {
             writeConfigFile(DEFAULT_CONFIG);
             return { ...DEFAULT_CONFIG };
         }
-        const parsed = JSON.parse(fs.readFileSync(CONFIG_PATH, 'utf-8'));
+        const stored = JSON.parse(fs.readFileSync(CONFIG_PATH, 'utf-8'));
+        const parsed = migrateSuspensionConfig(stored);
+        if (Object.hasOwn(stored, 'tab_sleep_timeout_minutes')) writeConfigFile(parsed);
         return {
             ...DEFAULT_CONFIG,
             ...parsed,
@@ -427,7 +450,8 @@ const recentDownloads = [];
 const MAX_RECENT_DOWNLOADS = 20;
 
 function configureDownloads(targetSession) {
-    targetSession.on('will-download', (event, item) => {
+    targetSession.on('will-download', (event, item, contents) => {
+        if (contents) tabSuspension.trackDownload(contents.id, item);
         const downloadId = `dl_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
         let startedNotified = false;
         let lastProgressBytes = 0;
@@ -1559,7 +1583,7 @@ ipcMain.handle('update-browser-settings', async (event, newCfg) => {
 });
 
 ipcMain.handle('get-system-diagnostics', async (event, sessionStats) => {
-    return diagnostics.gatherSystemDiagnostics(sessionStats);
+    return diagnostics.gatherSystemDiagnostics({...sessionStats, ...tabSuspension.stats()});
 });
 
 ipcMain.handle('clear-diagnostics-logs', async () => {
@@ -1584,29 +1608,6 @@ ipcMain.handle('log-diagnostics-event', async (event, data) => {
     }
     return true;
 });
-
-function initializeMemoryWatcher() {
-    setInterval(() => {
-        if (!mainWindow || mainWindow.isDestroyed()) return;
-        const metrics = app.getAppMetrics();
-        let shouldHibernate = false;
-        metrics.forEach(metric => {
-            // Electron returns residentSet in KiB; 200 * 1024 KiB = 200 MB
-            if (metric.type === 'Renderer' && metric.memory.residentSet > 200 * 1024) {
-                const wc = webContents.fromId(metric.webContentsId);
-                if (wc && !wc.isFocused()) {
-                    shouldHibernate = true;
-                }
-            }
-        });
-        if (shouldHibernate) {
-            mainWindow.webContents.send('master-shortcut', 'hibernate-inactive-tabs');
-            if (typeof global.gc === 'function') {
-                setTimeout(() => { try { global.gc(); } catch (e) {} }, 1000);
-            }
-        }
-    }, 15000);
-}
 
 ipcMain.handle('compact-memory', () => {
     if (typeof global.gc === 'function') {
@@ -1653,7 +1654,7 @@ function buildSettingsSubmenu(cfg) {
         },
         { type: 'separator' },
         {
-            label: 'Tab Hibernation (Sleep Timeout)',
+            label: 'Tab Suspension',
             submenu: [
                 { minutes: 5, label: '5 minutes' },
                 { minutes: 15, label: '15 minutes (Default)' },
@@ -1663,9 +1664,9 @@ function buildSettingsSubmenu(cfg) {
             ].map(opt => ({
                 label: opt.label,
                 type: 'radio',
-                checked: (cfg.tab_sleep_timeout_minutes ?? 15) === opt.minutes,
+                checked: (cfg.tab_suspend_timeout_minutes ?? 15) === opt.minutes,
                 click: () => {
-                    cfg.tab_sleep_timeout_minutes = opt.minutes;
+                    cfg.tab_suspend_timeout_minutes = opt.minutes;
                     if (!fs.existsSync(CONFIG_DIR)) fs.mkdirSync(CONFIG_DIR, { recursive: true });
                     writeConfigFile(cfg);
                 }
@@ -1963,6 +1964,7 @@ app.on('web-contents-created', (event, webContents) => {
     if (webContents.getType() === 'webview') {
         webContents.setMaxListeners(30);
         siteZoom.attach(webContents);
+        tabSuspension.attach(webContents);
 
         const rewriteSignIn = (event, details) => {
             const url = event.url || (typeof details === 'string' ? details : details?.url);
@@ -2278,7 +2280,7 @@ if (gotSingleInstanceLock) {
         }
         createWindow();
         process.removeListener('uncaughtException', failStartup);
-        initializeMemoryWatcher();
+        tabSuspension.start();
     }).catch(failStartup);
 }
 

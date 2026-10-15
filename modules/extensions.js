@@ -84,7 +84,7 @@ export function loadWebviewSource(webview, workspace, src) {
     }
 
     const finish = () => {
-        // A tab can be closed or hibernated while its extension starts.
+        // A tab can be closed while its extension starts.
         if (webview.isConnected && webview.__flyPendingNavigation === navigation) webview.setAttribute('src', src);
     };
     window.flyAPI.extensionsEnsure(workspace, partition).then(finish, finish);

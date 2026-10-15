@@ -17,7 +17,7 @@ Fly wraps the Chromium engine in a lean Electron shell. Every browser action can
 
 ## Key Highlights
 
-* **True Tab Hibernation**: Detaches idle `<webview>` tags completely from the DOM across all workspaces, terminating idle Chromium renderer processes and reducing RAM usage by 60% or more. Live URLs, page titles, and scroll offsets are restored on demand.
+* **Tab Suspension**: Pauses eligible background pages in memory to save CPU and battery. Selecting a tab resumes the same document without reloading or discarding its page state.
 * **Auto-Collapsing Vertical Strip**: The vertical sidebar collapses into a 36px icon strip displaying workspace badges and tab favicons, expanding smoothly as an overlay on hover or via shortcut without triggering webview layout shifts.
 * **Multi-Account Container Partitions**: Each workspace runs in its own isolated Electron persistent partition (`persist:work`, `persist:personal`), preventing cookie cross-contamination across accounts.
 * **Mouse-Free Navigation**: Complete keyboard control via Link Hints, floating address bar with search aliases, and customisable browser shortcuts and Vim-style page keys in **Preferences → Keyboard** (new-profile default: **Ctrl+,**).
@@ -93,7 +93,7 @@ User guides and configuration references live in [`docs/`](docs/):
 * [Getting Started & Philosophy](docs/guide/getting-started.md)
 * [Mouse-Free Navigation & Link Hints](docs/guide/navigation.md)
 * [Workspaces & Multi-Account Containers](docs/guide/workspaces-and-containers.md)
-* [True Tab Hibernation Guide](docs/guide/tab-hibernation.md)
+* [Tab Suspension Guide](docs/guide/tab-hibernation.md)
 * [Local User Scripts & Styles Guide](docs/guide/user-scripts-and-styles.md)
 * [Terminal Security & Oversight Scanner](docs/guide/terminal-oversight.md)
 * [Keyboard Shortcuts Reference](docs/reference/keybinds.md)

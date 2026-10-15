@@ -502,16 +502,16 @@ async function browseScenario(configName, round, base) {
                 const tabsSettled = snapshot(instance.dir);
                 const tabsIdle = await cpuOver(instance.dir, idleMs);
                 const tabsIdleSnapshot = snapshot(instance.dir);
-                let hibernated = null;
+                let suspended = null;
                 if (host) {
-                    await evaluate(instance.cdp, host.sessionId, `import('./modules/webview.js').then(async m => {await m.hibernateInactiveTabs(); return true;})`);
+                    await evaluate(instance.cdp, host.sessionId, `import('./modules/tabSuspension.js').then(async m => {await m.suspendInactiveTabs(); return true;})`);
                     await pause(10000);
-                    hibernated = snapshot(instance.dir);
+                    suspended = snapshot(instance.dir);
                 }
                 await closeTabsExceptFirst(instance, host, tabIds);
                 await pause(10000);
                 const afterClose = snapshot(instance.dir);
-                Object.assign(data, {sites: sites.map(({bucket, ...rest}) => ({...rest, total: {...bucket}})), browseCpuMs, browseWallMs, browsePeakPssMiB, tabsSettled, tabsIdle, tabsIdleSnapshot, hibernated, afterClose});
+                Object.assign(data, {sites: sites.map(({bucket, ...rest}) => ({...rest, total: {...bucket}})), browseCpuMs, browseWallMs, browsePeakPssMiB, tabsSettled, tabsIdle, tabsIdleSnapshot, suspended, afterClose});
             }
             result[phase] = data;
             await close(instance);
@@ -661,7 +661,7 @@ function report(file) {
         ['Anonymous memory (cgroup), MiB', s => s.warm.tabsSettled.cgroup.anonMiB, 0],
         ['Processes', s => s.warm.tabsSettled.processes, 0],
         [`Idle CPU with all tabs open, % of one core`, s => s.warm.tabsIdle.cpuPercentOfOneCore, 2],
-        ['PSS after Fly hibernates inactive tabs, MiB', s => s.warm.hibernated.pssMiB, 0],
+        ['PSS after Fly background-tab policy, MiB', s => (s.warm.suspended || s.warm.hibernated).pssMiB, 0],
         ['PSS 10 s after closing all but one tab, MiB', s => s.warm.afterClose.pssMiB, 0],
         ['Processes after closing', s => s.warm.afterClose.processes, 0],
         ['Profile on disk after browsing, MiB', s => s.warmProfileMiB, 1]

@@ -2,7 +2,7 @@
 // Chrome extension support for Fly Browser. Bundled uBlock is enabled by default.
 // Extensions are scoped to the workspaces that enable them. They load when such a
 // workspace gets its first live tab and unload after a grace period once every tab
-// in it has been closed or hibernated, so an idle workspace costs nothing.
+// in it has been closed, so an idle workspace costs nothing.
 //
 // Chrome APIs that Electron lacks (tabs, windows, action, contextMenus, commands)
 // come from electron-chrome-extensions, which is only required once the first
@@ -371,7 +371,7 @@ function ensureApiLayer(ctrl) {
             sendToRenderer('extension-select-tab', wc.id);
         },
         removeTab: (wc) => {
-            // Also called when a tab is destroyed by hibernation; only act on live tabs
+            // Also called when a tab is destroyed; only act on live tabs
             if (!wc || wc.isDestroyed() || popupWebContents.has(wc.id)) return;
             sendToRenderer('extension-close-tab', wc.id);
         }

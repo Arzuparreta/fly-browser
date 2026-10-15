@@ -4,8 +4,8 @@ export function transferTab(state, source, index, target, requestedIndex) {
     if (source === target || !Object.hasOwn(workspaces, source) || !Object.hasOwn(workspaces, target) || !Number.isInteger(index) || index < 0 || index >= workspaces[source].length) return null;
     const sourceCount = workspaces[source].length, targetCount = workspaces[target].length;
     const fields = [
+        ['tabRestoreStates', null, 'tab_restore_states'],
         ['activeViewsCache', null], ['activeTitlesCache', '', 'tab_titles'],
-        ['tabSleepStates', null, 'tab_sleep_states'], ['tabActivityTimestamps', 0],
         ['tabMediaAudible', false], ['tabAudioMuted', false], ['tabPinned', false, 'tab_pinned'],
         ['tabFavicons', null, 'tab_favicons']
     ];

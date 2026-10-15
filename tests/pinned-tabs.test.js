@@ -73,13 +73,12 @@ console.log('Running Fly pinned tabs regression tests...');
         sessionState: {
             workspaces: { Default: ['url-0', 'url-1', 'url-2', 'url-3'] },
             tab_titles: { Default: ['t-0', 't-1', 't-2', 't-3'] },
-            tab_sleep_states: { Default: [null, null, null, null] },
+            tab_restore_states: { Default: [null, null, null, null] },
             tab_pinned: { Default: [true, false, false, false] }
         },
         activeViewsCache: { Default: ['v-0', 'v-1', 'v-2', 'v-3'] },
         activeTitlesCache: { Default: ['t-0', 't-1', 't-2', 't-3'] },
-        tabSleepStates: { Default: [null, null, null, null] },
-        tabActivityTimestamps: { Default: [100, 200, 300, 400] },
+        tabRestoreStates: { Default: [null, null, null, null] },
         tabMediaAudible: { Default: [false, false, false, false] },
         tabAudioMuted: { Default: [false, false, false, false] },
         tabPinned: { Default: [true, false, false, false] },
@@ -106,13 +105,12 @@ console.log('Running Fly pinned tabs regression tests...');
         moveInArray(mockState.sessionState.workspaces[ws], '');
         moveInArray(mockState.activeViewsCache[ws], null);
         moveInArray(mockState.activeTitlesCache[ws], 'Loading...');
-        moveInArray(mockState.tabSleepStates[ws], null);
-        moveInArray(mockState.tabActivityTimestamps[ws], 0);
+        moveInArray(mockState.tabRestoreStates[ws], null);
         moveInArray(mockState.tabMediaAudible[ws], false);
         moveInArray(mockState.tabAudioMuted[ws], false);
         moveInArray(mockState.tabPinned[ws], false);
         moveInArray(mockState.sessionState.tab_titles[ws], 'Loading...');
-        moveInArray(mockState.sessionState.tab_sleep_states[ws], null);
+        moveInArray(mockState.sessionState.tab_restore_states[ws], null);
         moveInArray(mockState.sessionState.tab_pinned[ws], false);
 
         if (mockState.tabHistory && Array.isArray(mockState.tabHistory[ws])) {
@@ -199,7 +197,7 @@ console.log('Running Fly pinned tabs regression tests...');
     const sleeping = ['first', 'second', 'third', null];
     const pinned = [false, true, false, false];
     const titles = ['one', 'two', 'three', 'four'];
-    const state = {tabSleepStates: {Work: sleeping}, tabPinned: {Work: pinned}, activeTitlesCache: {Work: titles}, sessionState: {tab_sleep_states: {Work: sleeping}, tab_pinned: {Work: pinned}}};
+    const state = {tabRestoreStates: {Work: sleeping}, tabPinned: {Work: pinned}, activeTitlesCache: {Work: titles}, sessionState: {tab_restore_states: {Work: sleeping}, tab_pinned: {Work: pinned}}};
     vm.runInNewContext(fn + '; removeTabMetadata("Work", 1);', {state});
     assert.deepEqual(sleeping, ['first', 'third', null]);
     assert.deepEqual(pinned, [false, false, false]);

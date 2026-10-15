@@ -3,6 +3,9 @@ const { contextBridge, ipcRenderer } = require('electron');
 
 // Preload private API exposure
 contextBridge.exposeInMainWorld('flyAPI', {
+    setTabSuspensionPolicy: (id, policy) => ipcRenderer.invoke('set-tab-suspension-policy', id, policy),
+    resumeTab: id => ipcRenderer.invoke('resume-tab', id),
+    suspendInactiveTabs: () => ipcRenderer.invoke('suspend-inactive-tabs'),
     changeSiteZoom: (id, action) => ipcRenderer.invoke('change-site-zoom', id, action),
     getSession: () => ipcRenderer.invoke('get-session'),
     getSessionRecoveryStatus: () => ipcRenderer.invoke('get-session-recovery-status'),

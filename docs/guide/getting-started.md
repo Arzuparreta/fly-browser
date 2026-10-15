@@ -11,7 +11,7 @@ Typical desktop browsers consume gigabytes of memory across dozens of background
 ## Design Principles
 
 - **Keyboard First**: Every single feature, tab switch, link click, and setting can be reached without touching a mouse.
-- **Resource Respect**: Idle tabs hibernate and detach completely from memory, keeping fanless systems cool and responsive.
+- **Resource Respect**: Eligible background pages pause without unloading, saving CPU and battery while preserving page state.
 - **Strict Privacy Isolation**: Workspaces operate in isolated container partitions. Work and personal profiles never leak cookies or storage.
 - **Crash & Session Resilience**: Atomic disk writes, rolling backup journals, and clean-exit sentinels protect active workspaces against power cuts or sudden terminations.
 - **Air-Gapped Security**: Untrusted scripts and shell commands are never blindly executed; they pass through clipboard verification.

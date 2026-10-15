@@ -1,8 +1,9 @@
 // modules/splitView.js
 // Dual-split view controller for side-by-side (1x2) or stacked comparison
 
+import { resumeView } from './tabSuspension.js';
 import { state } from './state.js';
-import { wakeTab, renderWorkspaceUI, spawnNewBlankTab, switchTabFocus } from './webview.js';
+import { ensureTabLoaded, renderWorkspaceUI, spawnNewBlankTab, switchTabFocus } from './webview.js';
 import { loadWebviewSource } from './extensions.js';
 
 export function getSplitState(wsName) {
@@ -72,11 +73,11 @@ export function applySplitLayout() {
     }
 
     // Ensure both split webviews are awake
-    if (state.tabSleepStates[currentWS]?.[split.primaryIdx]) {
-        wakeTab(currentWS, split.primaryIdx);
+    if (!state.activeViewsCache[currentWS]?.[split.primaryIdx]) {
+        ensureTabLoaded(currentWS, split.primaryIdx);
     }
-    if (state.tabSleepStates[currentWS]?.[split.secondaryIdx]) {
-        wakeTab(currentWS, split.secondaryIdx);
+    if (!state.activeViewsCache[currentWS]?.[split.secondaryIdx]) {
+        ensureTabLoaded(currentWS, split.secondaryIdx);
     }
 
     // Apply layout classes to webview container
@@ -169,14 +170,18 @@ export function applySplitLayout() {
     // Ensure focus is given to active pane
     const activeIdx = (split.activePane === 'secondary') ? split.secondaryIdx : split.primaryIdx;
     if (currentWSViews[activeIdx]) {
-        setTimeout(() => {
+        setTimeout(async () => {
             const currentFocused = document.activeElement;
             const sidebarHasFocus = document.getElementById('Sidebar')?.contains(currentFocused);
             const addressBar = document.getElementById('WideAddressBar');
             const addressBarIsActive = addressBar && (addressBar.style.display === 'block' || currentFocused === addressBar);
 
             if (!sidebarHasFocus && !state.paletteActive && !state.helpActive && !addressBarIsActive) {
-                currentWSViews[activeIdx].focus();
+                const view = currentWSViews[activeIdx];
+                await resumeView(view);
+                if (state.sessionState.current_workspace === currentWS && getSplitState(currentWS).enabled &&
+                    currentWSViews[activeIdx] === view && document.querySelectorAll('#TabList li')[activeIdx]?.classList.contains('selected') &&
+                    view.isConnected && view.getClientRects().length) view.focus();
             }
         }, 30);
     }
@@ -343,7 +348,7 @@ export async function openUrlInSplit(url) {
         if (wv && typeof wv.setAttribute === 'function') {
             loadWebviewSource(wv, currentWS, url);
         } else {
-            wakeTab(currentWS, targetIdx);
+            ensureTabLoaded(currentWS, targetIdx);
         }
         applySplitLayout();
         return;
@@ -356,10 +361,8 @@ export async function openUrlInSplit(url) {
     window.flyAPI.saveSession(state.sessionState);
 
     const newTargetIdx = state.sessionState.workspaces[currentWS].length - 1;
-    if (!state.tabSleepStates[currentWS]) state.tabSleepStates[currentWS] = [];
-    state.tabSleepStates[currentWS][newTargetIdx] = null;
-    if (!state.tabActivityTimestamps[currentWS]) state.tabActivityTimestamps[currentWS] = [];
-    state.tabActivityTimestamps[currentWS][newTargetIdx] = Date.now();
+    if (!state.tabRestoreStates[currentWS]) state.tabRestoreStates[currentWS] = [];
+    state.tabRestoreStates[currentWS][newTargetIdx] = null;
     if (!state.tabMediaAudible[currentWS]) state.tabMediaAudible[currentWS] = [];
     state.tabMediaAudible[currentWS][newTargetIdx] = false;
     if (!state.tabPinned[currentWS]) state.tabPinned[currentWS] = [];

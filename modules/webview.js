@@ -14,6 +14,7 @@ import {
     handleGuestPassthroughState,
     updateReaderViewButtonUI
 } from './statusBar.js';
+import { resumeView } from './tabSuspension.js';
 import { buildUserScriptWrapper } from './userScriptShim.js';
 
 export function applyCSSThemeToView() {
@@ -119,8 +120,6 @@ export function createWebView(url, currentWS, idx) {
             state.sessionState.workspaces[currentWS][liveIdx] = cleanUrl;
             window.flyAPI.saveSession(state.sessionState);
         }
-        if (!state.tabActivityTimestamps[currentWS]) state.tabActivityTimestamps[currentWS] = [];
-        state.tabActivityTimestamps[currentWS][liveIdx] = Date.now();
         const targetLi = document.querySelectorAll('#TabList li')[liveIdx];
         if (targetLi) {
             const domain = targetLi.querySelector('.tab-domain');
@@ -144,8 +143,6 @@ export function createWebView(url, currentWS, idx) {
             state.sessionState.workspaces[currentWS][liveIdx] = cleanUrl;
             window.flyAPI.saveSession(state.sessionState);
         }
-        if (!state.tabActivityTimestamps[currentWS]) state.tabActivityTimestamps[currentWS] = [];
-        state.tabActivityTimestamps[currentWS][liveIdx] = Date.now();
         const targetLi = document.querySelectorAll('#TabList li')[liveIdx];
         if (targetLi) {
             const domain = targetLi.querySelector('.tab-domain');
@@ -206,19 +203,17 @@ export function createWebView(url, currentWS, idx) {
             document.querySelectorAll('#TabList li')[idx]?.classList.contains('selected');
         removeWebview(webview);
         state.activeViewsCache[currentWS][idx] = null;
-        if (!state.tabSleepStates[currentWS]) state.tabSleepStates[currentWS] = [];
-        state.tabSleepStates[currentWS][idx] = {
+        if (!state.tabRestoreStates[currentWS]) state.tabRestoreStates[currentWS] = [];
+        state.tabRestoreStates[currentWS][idx] = {
             url: state.sessionState.workspaces[currentWS]?.[idx],
             title: state.activeTitlesCache[currentWS]?.[idx] || 'Tab',
             scrollX: 0,
             scrollY: 0,
             sessionStorage: null,
-            hibernatedAt: Date.now()
         };
-        state.sessionState.tab_sleep_states = state.tabSleepStates;
+        state.sessionState.tab_restore_states = state.tabRestoreStates;
         window.flyAPI.saveSession(state.sessionState);
         if (selected && !state.dashboardActive) switchTabFocus(idx);
-        else if (currentWS === state.sessionState.current_workspace) updateTabSleepUI(idx, true);
     });
 
     webview.addEventListener('render-process-gone', (e) => {
@@ -264,13 +259,12 @@ export function createWebView(url, currentWS, idx) {
         if (webview.__flyInjectedScriptIds) webview.__flyInjectedScriptIds.clear();
         const liveIdx = getLiveTabIndex(webview, currentWS, idx);
         if (liveIdx >= 0) {
-            if (!state.tabActivityTimestamps[currentWS]) state.tabActivityTimestamps[currentWS] = [];
-            state.tabActivityTimestamps[currentWS][liveIdx] = Date.now();
             updateTabMediaIndicator(currentWS, liveIdx, false, false);
         }
     });
 
     webview.addEventListener('dom-ready', async () => {
+        document.dispatchEvent(new Event('fly-guest-ready'));
         webview.__flyKeyboardMode = {};
         refreshNewTab(webview);
         webview.style.opacity = '1';
@@ -685,16 +679,15 @@ export function renderWorkspaceUI(targetTabToFocus = null) {
 
     if (!state.activeViewsCache[currentWS]) state.activeViewsCache[currentWS] = [];
     if (!state.activeTitlesCache[currentWS]) state.activeTitlesCache[currentWS] = [];
-    if (!state.tabSleepStates[currentWS]) state.tabSleepStates[currentWS] = [];
-    if (!state.tabActivityTimestamps[currentWS]) state.tabActivityTimestamps[currentWS] = [];
+    if (!state.tabRestoreStates[currentWS]) state.tabRestoreStates[currentWS] = [];
     if (!state.tabMediaAudible[currentWS]) state.tabMediaAudible[currentWS] = [];
     if (!state.tabFavicons) state.tabFavicons = {};
     if (!state.tabFavicons[currentWS]) state.tabFavicons[currentWS] = [];
     urls.forEach((url, idx) => {
         let cachedTitle = state.activeTitlesCache[currentWS]?.[idx];
         if (!cachedTitle || cachedTitle === 'Loading...') {
-            if (state.tabSleepStates[currentWS]?.[idx]?.title) {
-                cachedTitle = state.tabSleepStates[currentWS][idx].title;
+            if (state.tabRestoreStates[currentWS]?.[idx]?.title) {
+                cachedTitle = state.tabRestoreStates[currentWS][idx].title;
                 if (!state.activeTitlesCache[currentWS]) state.activeTitlesCache[currentWS] = [];
                 state.activeTitlesCache[currentWS][idx] = cachedTitle;
             } else {
@@ -714,7 +707,6 @@ export function renderWorkspaceUI(targetTabToFocus = null) {
         if (!cachedTitle) {
             cachedTitle = isNewTab(url) ? "New tab · Fly" : "Loading...";
         }
-        const isSleeping = !!state.tabSleepStates[currentWS][idx];
         const cachedFavicon = state.tabFavicons[currentWS]?.[idx] || null;
 
         const li = document.createElement('li');
@@ -723,7 +715,6 @@ export function renderWorkspaceUI(targetTabToFocus = null) {
         const isPinned = !!state.tabPinned?.[currentWS]?.[idx];
         li.className = 'tab-item';
         li.title = `${cachedTitle}\n${url}`;
-        if (isSleeping) li.classList.add('tab-sleeping');
         if (isPinned) li.classList.add('tab-pinned');
 
         // Favicon wrapper
@@ -737,11 +728,6 @@ export function renderWorkspaceUI(targetTabToFocus = null) {
         const favFallback = document.createElement('i');
         favFallback.className = 'fa-solid fa-globe tab-fallback-icon';
 
-        const sleepDot = document.createElement('span');
-        sleepDot.className = 'tab-sleep-dot';
-        sleepDot.title = 'Sleeping tab';
-        sleepDot.innerHTML = '<i class="fa-solid fa-moon"></i>';
-
         const audioDot = document.createElement('span');
         audioDot.className = 'tab-audio-dot';
         audioDot.title = 'Playing audio';
@@ -754,7 +740,6 @@ export function renderWorkspaceUI(targetTabToFocus = null) {
 
         favWrapper.appendChild(favImg);
         favWrapper.appendChild(favFallback);
-        if (isSleeping) favWrapper.appendChild(sleepDot);
         if (state.tabMediaAudible[currentWS]?.[idx]) favWrapper.appendChild(audioDot);
         if (isPinned) favWrapper.appendChild(pinDot);
 
@@ -786,19 +771,6 @@ export function renderWorkspaceUI(targetTabToFocus = null) {
         try { domain.textContent = isNewTab(url) ? 'fly / new tab' : new URL(url).hostname || 'local page'; } catch { domain.textContent = ''; }
         copy.append(titleSpan, domain);
         li.appendChild(copy);
-        const flight = document.createElement('span');
-        flight.className = 'tab-flight-state';
-        flight.setAttribute('aria-hidden', 'true');
-        li.appendChild(flight);
-
-        if (isSleeping) {
-            const sleepBadge = document.createElement('span');
-            sleepBadge.className = 'tab-sleep-badge';
-            sleepBadge.title = 'Sleeping tab to save memory (click to wake)';
-            sleepBadge.innerHTML = '<i class="fa-solid fa-moon"></i>';
-            li.appendChild(sleepBadge);
-        }
-
         if (isPinned) {
             const pinBadge = document.createElement('span');
             pinBadge.className = 'tab-pin-badge';
@@ -876,13 +848,6 @@ export function renderWorkspaceUI(targetTabToFocus = null) {
 
         tabList.appendChild(li);
 
-        if (isSleeping) {
-            state.activeViewsCache[currentWS][idx] = null;
-        } else if (!state.activeViewsCache[currentWS][idx]) {
-            const webview = createWebView(url, currentWS, idx);
-            container.appendChild(webview);
-            state.activeViewsCache[currentWS][idx] = webview;
-        }
     });
 
     if (!state.dashboardActive) {
@@ -937,8 +902,8 @@ export function switchTabFocus(targetIdx) {
         }
     });
 
-    if (!state.activeViewsCache[currentWS]?.[targetIdx] || state.tabSleepStates[currentWS]?.[targetIdx]) {
-        wakeTab(currentWS, targetIdx);
+    if (!state.activeViewsCache[currentWS]?.[targetIdx] || state.tabRestoreStates[currentWS]?.[targetIdx]) {
+        ensureTabLoaded(currentWS, targetIdx);
     }
 
     const currentWSViews = state.activeViewsCache[currentWS] || [];
@@ -950,12 +915,11 @@ export function switchTabFocus(targetIdx) {
         currentWSViews[targetIdx].style.display = 'flex';
         refreshNewTab(currentWSViews[targetIdx]);
         
-        if (!state.tabActivityTimestamps[currentWS]) state.tabActivityTimestamps[currentWS] = [];
-        state.tabActivityTimestamps[currentWS][targetIdx] = Date.now();
 
         const targetView = currentWSViews[targetIdx];
         clearTimeout(pendingTabFocus);
-        pendingTabFocus = setTimeout(() => {
+        pendingTabFocus = setTimeout(async () => {
+            await resumeView(targetView);
             pendingTabFocus = null;
             // A click inside a page already moved focus there; a second focus request racing it
             // leaves Chromium routing keys to the host while the page looks focused.
@@ -988,10 +952,8 @@ export async function spawnNewBlankTab() {
     window.flyAPI.saveSession(state.sessionState);
     
     const newTargetIdx = state.sessionState.workspaces[currentWS].length - 1;
-    if (!state.tabSleepStates[currentWS]) state.tabSleepStates[currentWS] = [];
-    state.tabSleepStates[currentWS][newTargetIdx] = null;
-    if (!state.tabActivityTimestamps[currentWS]) state.tabActivityTimestamps[currentWS] = [];
-    state.tabActivityTimestamps[currentWS][newTargetIdx] = Date.now();
+    if (!state.tabRestoreStates[currentWS]) state.tabRestoreStates[currentWS] = [];
+    state.tabRestoreStates[currentWS][newTargetIdx] = null;
     if (!state.tabMediaAudible[currentWS]) state.tabMediaAudible[currentWS] = [];
     state.tabMediaAudible[currentWS][newTargetIdx] = false;
     if (!state.tabPinned[currentWS]) state.tabPinned[currentWS] = [];
@@ -1027,10 +989,8 @@ export function spawnTabWithUrl(url) {
     window.flyAPI.saveSession(state.sessionState);
     
     const newTargetIdx = state.sessionState.workspaces[currentWS].length - 1;
-    if (!state.tabSleepStates[currentWS]) state.tabSleepStates[currentWS] = [];
-    state.tabSleepStates[currentWS][newTargetIdx] = null;
-    if (!state.tabActivityTimestamps[currentWS]) state.tabActivityTimestamps[currentWS] = [];
-    state.tabActivityTimestamps[currentWS][newTargetIdx] = Date.now();
+    if (!state.tabRestoreStates[currentWS]) state.tabRestoreStates[currentWS] = [];
+    state.tabRestoreStates[currentWS][newTargetIdx] = null;
     if (!state.tabMediaAudible[currentWS]) state.tabMediaAudible[currentWS] = [];
     state.tabMediaAudible[currentWS][newTargetIdx] = false;
     if (!state.tabPinned[currentWS]) state.tabPinned[currentWS] = [];
@@ -1058,13 +1018,13 @@ export function reopenClosedTab() {
     spawnTabWithUrl(tab.url);
 }
 
-// Session metadata can share arrays with the live caches after hibernation or saving.
+// Session metadata can share arrays with live caches after saving.
 function removeTabMetadata(workspace, index) {
     const arrays = new Set([
-        state.activeTitlesCache, state.tabSleepStates, state.tabActivityTimestamps,
+        state.activeTitlesCache, state.tabRestoreStates,
         state.tabMediaAudible, state.tabAudioMuted,
         state.tabFavicons, state.tabPinned, state.sessionState.tab_titles,
-        state.sessionState.tab_sleep_states,
+        state.sessionState.tab_restore_states,
         state.sessionState.tab_favicons, state.sessionState.tab_pinned
     ].map(cache => cache?.[workspace]).filter(Array.isArray));
     for (const array of arrays) array.splice(index, 1);
@@ -1118,8 +1078,7 @@ export function handleTabRemoval(explicitIdx) {
                     delete state.activeViewsCache[wsName];
                 }
                 delete state.activeTitlesCache[wsName];
-                delete state.tabSleepStates[wsName];
-                delete state.tabActivityTimestamps[wsName];
+                delete state.tabRestoreStates[wsName];
                 delete state.tabMediaAudible[wsName];
                 delete state.tabAudioMuted[wsName];
                 delete state.tabFavicons?.[wsName];
@@ -1127,7 +1086,7 @@ export function handleTabRemoval(explicitIdx) {
                 delete state.tabPinned?.[wsName];
                 if (state.sessionState.tab_pinned?.[wsName]) delete state.sessionState.tab_pinned[wsName];
                 if (state.sessionState.tab_titles?.[wsName]) delete state.sessionState.tab_titles[wsName];
-                if (state.sessionState.tab_sleep_states?.[wsName]) delete state.sessionState.tab_sleep_states[wsName];
+                if (state.sessionState.tab_restore_states?.[wsName]) delete state.sessionState.tab_restore_states[wsName];
                 if (state.sessionState.tab_favicons?.[wsName]) delete state.sessionState.tab_favicons[wsName];
                 delete state.sessionState.workspaces[wsName];
                 delete state.sessionState.workspace_partitions?.[wsName];
@@ -1195,14 +1154,14 @@ export function handleTabRemoval(explicitIdx) {
             // Prioritise returning to an already awake tab from recent history
             for (let i = updatedHistory.length - 1; nextTargetIdx === null && i >= 0; i--) {
                 const candidate = updatedHistory[i];
-                const isAwake = state.activeViewsCache[currentWS]?.[candidate] && !state.tabSleepStates[currentWS]?.[candidate];
+                const isAwake = state.activeViewsCache[currentWS]?.[candidate] && !state.tabRestoreStates[currentWS]?.[candidate];
                 if (isAwake) {
                     nextTargetIdx = candidate;
                     break;
                 }
             }
 
-            // Fallback to the most recently visited tab in history even if sleeping
+            // Fallback to the most recently visited tab in history even if not loaded
             if (nextTargetIdx === null && updatedHistory.length > 0) {
                 nextTargetIdx = updatedHistory[updatedHistory.length - 1];
             }
@@ -1211,7 +1170,7 @@ export function handleTabRemoval(explicitIdx) {
         // If no tab in history was found, look for any tab that is already awake
         if (nextTargetIdx === null) {
             for (let i = 0; i < tabs.length; i++) {
-                const isAwake = state.activeViewsCache[currentWS]?.[i] && !state.tabSleepStates[currentWS]?.[i];
+                const isAwake = state.activeViewsCache[currentWS]?.[i] && !state.tabRestoreStates[currentWS]?.[i];
                 if (isAwake) {
                     nextTargetIdx = i;
                     break;
@@ -1371,20 +1330,19 @@ export function moveTabState(ws, fromIdx, toIdx) {
     moveInArray(state.sessionState.workspaces[ws], '');
     moveInArray(state.activeViewsCache[ws], null);
     moveInArray(state.activeTitlesCache[ws], 'Loading...');
-    moveInArray(state.tabSleepStates[ws], null);
-    moveInArray(state.tabActivityTimestamps[ws], 0);
+    moveInArray(state.tabRestoreStates[ws], null);
     moveInArray(state.tabMediaAudible[ws], false);
     moveInArray(state.tabAudioMuted[ws], false);
     if (state.tabFavicons) moveInArray(state.tabFavicons[ws], null);
     if (state.tabPinned) moveInArray(state.tabPinned[ws], false);
 
     if (state.sessionState.tab_titles) moveInArray(state.sessionState.tab_titles[ws], 'Loading...');
-    if (state.sessionState.tab_sleep_states) moveInArray(state.sessionState.tab_sleep_states[ws], null);
+    if (state.sessionState.tab_restore_states) moveInArray(state.sessionState.tab_restore_states[ws], null);
     if (state.sessionState.tab_favicons) moveInArray(state.sessionState.tab_favicons[ws], null);
     if (state.sessionState.tab_pinned) moveInArray(state.sessionState.tab_pinned[ws], false);
 
     state.sessionState.tab_titles = state.activeTitlesCache;
-    state.sessionState.tab_sleep_states = state.tabSleepStates;
+    state.sessionState.tab_restore_states = state.tabRestoreStates;
     state.sessionState.tab_favicons = state.tabFavicons;
     state.sessionState.tab_pinned = state.tabPinned;
 
@@ -1496,50 +1454,23 @@ export function updateTabMediaIndicator(workspaceId, tabIdx, isAudible, isMutedO
     }
 }
 
-export function updateTabSleepUI(tabIdx, isSleeping) {
-    const tabList = document.querySelectorAll('#TabList li');
-    const targetLi = tabList[tabIdx];
-    if (!targetLi) return;
-
-    if (isSleeping) {
-        targetLi.classList.add('tab-sleeping');
-        let sleepBadge = targetLi.querySelector('.tab-sleep-badge');
-        if (!sleepBadge) {
-            sleepBadge = document.createElement('span');
-            sleepBadge.className = 'tab-sleep-badge';
-            sleepBadge.title = 'Sleeping tab to save memory (click to wake)';
-            sleepBadge.innerHTML = '<i class="fa-solid fa-moon"></i>';
-            targetLi.appendChild(sleepBadge);
-        }
-    } else {
-        targetLi.classList.remove('tab-sleeping');
-        const sleepBadge = targetLi.querySelector('.tab-sleep-badge');
-        if (sleepBadge) {
-            sleepBadge.remove();
-        }
-    }
-}
-
-export function wakeTab(currentWS, idx) {
+export function ensureTabLoaded(currentWS, idx) {
     if (!currentWS) currentWS = state.sessionState.current_workspace;
     const urls = state.sessionState.workspaces[currentWS];
     if (!urls || idx < 0 || idx >= urls.length) return null;
 
     if (state.activeViewsCache[currentWS]?.[idx]) {
-        if (state.tabSleepStates[currentWS]) {
-            state.tabSleepStates[currentWS][idx] = null;
-        }
-        if (currentWS === state.sessionState.current_workspace) {
-            updateTabSleepUI(idx, false);
+        if (state.tabRestoreStates[currentWS]) {
+            state.tabRestoreStates[currentWS][idx] = null;
         }
         return state.activeViewsCache[currentWS][idx];
     }
 
-    const sleepRecord = state.tabSleepStates[currentWS]?.[idx];
-    const targetUrl = sleepRecord?.url || urls[idx];
-    const scrollX = sleepRecord?.scrollX || 0;
-    const scrollY = sleepRecord?.scrollY || 0;
-    const savedSessionStorage = sleepRecord?.sessionStorage || null;
+    const restoreRecord = state.tabRestoreStates[currentWS]?.[idx];
+    const targetUrl = restoreRecord?.url || urls[idx];
+    const scrollX = restoreRecord?.scrollX || 0;
+    const scrollY = restoreRecord?.scrollY || 0;
+    const savedSessionStorage = restoreRecord?.sessionStorage || null;
 
     const container = document.getElementById('webview-container');
     const webview = createWebView(targetUrl, currentWS, idx);
@@ -1572,227 +1503,13 @@ export function wakeTab(currentWS, idx) {
     state.activeViewsCache[currentWS][idx] = webview;
     container.appendChild(webview);
 
-    if (state.tabSleepStates[currentWS]) {
-        state.tabSleepStates[currentWS][idx] = null;
+    if (state.tabRestoreStates[currentWS]) {
+        state.tabRestoreStates[currentWS][idx] = null;
     }
 
-    if (!state.tabActivityTimestamps[currentWS]) state.tabActivityTimestamps[currentWS] = [];
-    state.tabActivityTimestamps[currentWS][idx] = Date.now();
 
-    if (currentWS === state.sessionState.current_workspace) {
-        const tabList = document.querySelectorAll('#TabList li');
-        const targetLi = tabList[idx];
-        if (targetLi) {
-            updateTabSleepUI(idx, false);
-        }
-    }
-
-    state.sessionState.tab_sleep_states = state.tabSleepStates;
+    state.sessionState.tab_restore_states = state.tabRestoreStates;
     window.flyAPI.saveSession(state.sessionState);
 
     return webview;
-}
-
-export async function hibernateTab(currentWS, idx) {
-    if (!currentWS) currentWS = state.sessionState.current_workspace;
-    const urls = state.sessionState.workspaces[currentWS];
-    if (!urls || idx < 0 || idx >= urls.length) return false;
-
-    if (state.tabSleepStates[currentWS] && state.tabSleepStates[currentWS][idx]) {
-        return false;
-    }
-
-    if (currentWS === state.sessionState.current_workspace) {
-        const tabItems = document.querySelectorAll('#TabList li');
-        const activeLi = document.querySelector('#TabList li.selected');
-        const activeIdx = activeLi ? Array.from(tabItems).indexOf(activeLi) : -1;
-        if (idx === activeIdx && !state.dashboardActive) {
-            return false;
-        }
-    }
-
-    if (state.tabMediaAudible[currentWS]?.[idx]) {
-        return false;
-    }
-
-    const webview = state.activeViewsCache[currentWS]?.[idx];
-    if (webview) {
-        // A webview before dom-ready throws here and cannot be playing audio yet.
-        let audible = false;
-        try { audible = typeof webview.isCurrentlyAudible === 'function' && webview.isCurrentlyAudible(); } catch (err) {}
-        if (audible) {
-            if (!state.tabMediaAudible[currentWS]) state.tabMediaAudible[currentWS] = [];
-            state.tabMediaAudible[currentWS][idx] = true;
-            return false;
-        }
-    }
-
-    let scrollX = 0;
-    let scrollY = 0;
-    let finalUrl = urls[idx];
-    let finalTitle = state.activeTitlesCache[currentWS]?.[idx] || 'Tab';
-    let savedSessionStorage = null;
-
-    if (webview) {
-        try {
-            const scrollPos = await webview.executeJavaScript(`[window.scrollX || window.pageXOffset || 0, window.scrollY || window.pageYOffset || 0]`);
-            if (Array.isArray(scrollPos)) {
-                scrollX = scrollPos[0] || 0;
-                scrollY = scrollPos[1] || 0;
-            }
-        } catch (err) {}
-
-        try {
-            const rawSession = await webview.executeJavaScript(`(function() {
-                try {
-                    const data = {};
-                    for (let i = 0; i < window.sessionStorage.length; i++) {
-                        const key = window.sessionStorage.key(i);
-                        data[key] = window.sessionStorage.getItem(key);
-                    }
-                    return JSON.stringify(data);
-                } catch (e) {
-                    return null;
-                }
-            })()`);
-            if (rawSession && rawSession !== '{}') {
-                savedSessionStorage = rawSession;
-            }
-        } catch (err) {}
-
-        try {
-            const liveUrl = webview.getURL();
-            if (liveUrl && !liveUrl.startsWith('about:blank')) {
-                finalUrl = liveUrl;
-                urls[idx] = finalUrl;
-            }
-            const liveTitle = webview.getTitle();
-            if (liveTitle) {
-                finalTitle = liveTitle;
-                if (!state.activeTitlesCache[currentWS]) state.activeTitlesCache[currentWS] = [];
-                state.activeTitlesCache[currentWS][idx] = finalTitle;
-            }
-        } catch (err) {}
-
-        try {
-            if (window.flyAPI && typeof window.flyAPI.flushSessionStore === 'function') {
-                await window.flyAPI.flushSessionStore({ workspace: currentWS });
-            }
-        } catch (err) {}
-
-        try {
-            removeWebview(webview);
-        } catch (err) {}
-        state.activeViewsCache[currentWS][idx] = null;
-    }
-
-    if (!state.tabSleepStates[currentWS]) state.tabSleepStates[currentWS] = [];
-    state.tabSleepStates[currentWS][idx] = {
-        url: finalUrl,
-        title: finalTitle,
-        scrollX,
-        scrollY,
-        sessionStorage: savedSessionStorage,
-        hibernatedAt: Date.now()
-    };
-
-    if (currentWS === state.sessionState.current_workspace) {
-        updateTabSleepUI(idx, true);
-    }
-
-    state.sessionState.tab_sleep_states = state.tabSleepStates;
-    state.sessionState.tab_titles = state.activeTitlesCache;
-    window.flyAPI.saveSession(state.sessionState);
-
-    return true;
-}
-
-export async function hibernateInactiveTabs() {
-    const currentWS = state.sessionState.current_workspace;
-    const tabItems = document.querySelectorAll('#TabList li');
-    const activeLi = document.querySelector('#TabList li.selected');
-    const activeIdx = activeLi ? Array.from(tabItems).indexOf(activeLi) : -1;
-    const splitActive = isSplitActive(currentWS);
-    const split = getSplitState(currentWS);
-
-    for (const wsName of Object.keys(state.sessionState.workspaces || {})) {
-        const urls = state.sessionState.workspaces[wsName] || [];
-        for (let i = 0; i < urls.length; i++) {
-            if (wsName === currentWS && !state.dashboardActive) {
-                if (i === activeIdx) continue;
-                if (splitActive && (i === split.primaryIdx || i === split.secondaryIdx)) continue;
-            }
-            if (state.tabPinned?.[wsName]?.[i]) {
-                continue;
-            }
-            if (state.tabSleepStates[wsName] && state.tabSleepStates[wsName][i]) {
-                continue;
-            }
-            if (state.tabMediaAudible[wsName]?.[i]) {
-                continue;
-            }
-            await hibernateTab(wsName, i);
-        }
-    }
-
-    if (window.flyAPI && typeof window.flyAPI.compactMemory === 'function') {
-        window.flyAPI.compactMemory().catch(() => {});
-    }
-}
-
-export function wakeAllTabsInWorkspace(wsName) {
-    if (!wsName) wsName = state.sessionState.current_workspace;
-    const urls = state.sessionState.workspaces[wsName] || [];
-    urls.forEach((_, idx) => {
-        if (state.tabSleepStates[wsName]?.[idx]) {
-            wakeTab(wsName, idx);
-        }
-    });
-}
-
-let sleepTimerId = null;
-
-export function initializeTabSleepManager() {
-    if (sleepTimerId) clearInterval(sleepTimerId);
-
-    sleepTimerId = setInterval(async () => {
-        try {
-            const cfg = (await window.flyAPI.getBrowserSettings()) || {};
-            const timeoutMinutes = cfg.tab_sleep_timeout_minutes !== undefined ? parseInt(cfg.tab_sleep_timeout_minutes, 10) : 15;
-            if (timeoutMinutes <= 0) return;
-
-            const timeoutMs = timeoutMinutes * 60 * 1000;
-            const now = Date.now();
-            const currentWS = state.sessionState.current_workspace;
-
-            const tabItems = document.querySelectorAll('#TabList li');
-            const activeLi = document.querySelector('#TabList li.selected');
-            const activeIdx = activeLi ? Array.from(tabItems).indexOf(activeLi) : -1;
-            const splitActive = isSplitActive(currentWS);
-            const split = getSplitState(currentWS);
-
-            for (const wsName of Object.keys(state.sessionState.workspaces || {})) {
-                const urls = state.sessionState.workspaces[wsName] || [];
-                for (let i = 0; i < urls.length; i++) {
-                    if (wsName === currentWS && !state.dashboardActive) {
-                        if (i === activeIdx) continue;
-                        if (splitActive && (i === split.primaryIdx || i === split.secondaryIdx)) continue;
-                    }
-                    if (state.tabPinned?.[wsName]?.[i]) {
-                        continue;
-                    }
-                    if (state.tabSleepStates[wsName] && state.tabSleepStates[wsName][i]) {
-                        continue;
-                    }
-                    if (state.tabMediaAudible[wsName]?.[i]) {
-                        continue;
-                    }
-                    const lastActive = state.tabActivityTimestamps[wsName]?.[i] || 0;
-                    if (lastActive > 0 && (now - lastActive) >= timeoutMs) {
-                        hibernateTab(wsName, i);
-                    }
-                }
-            }
-        } catch (err) {}
-    }, 30000);
 }

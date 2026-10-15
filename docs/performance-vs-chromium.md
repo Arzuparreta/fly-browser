@@ -1,5 +1,8 @@
 # Fly vs Chromium resource use
 
+> Historical measurements below used the former destructive tab hibernation. Current Fly preserves live documents with [tab suspension](/guide/tab-hibernation); the old post-hibernation memory and process counts do not describe suspension. Historical result files are retained unchanged.
+
+
 > Historical baseline: the samples below precede the removal of Ghostery and per-tab shields. Their original configurations and results are preserved. Current Fly uses the included uBlock Origin for blocking; reruns use the current defaults. See the [follow-up measurements](./performance-shields-removal) for the fixes, their costs and remaining limitations.
 
 Measured on 15 October 2026 against `main` at `c199317` (the latest release). Fly runs on Electron 44.7.2, which embeds Chromium 152.0.7977.149. It is compared with the distribution's Chromium 153.0.8010.52 (Arch Linux package) and, as a reference, Google's Chrome for Testing 153.0.8010.12.

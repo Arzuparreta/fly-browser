@@ -1,9 +1,10 @@
+import { suspendInactiveTabs, resumeWorkspaceTabs } from '../tabSuspension.js';
 import { prepareOverlay, hasActiveOverlay } from '../focus.js';
 import { initialiseKeyboardEditor, showKeyboardEditor, hideKeyboardEditor } from '../keyboardSettings.js';
 import { initialiseSettingsNav, showSettingsPane, currentSettingsPane, clearSettingsSearch } from '../settingsNav.js';
 import { state } from '../state.js';
 import { focusActiveWebview, getActiveWebview, isTargetScript, isDarkMode, escapeHtml } from '../utils.js';
-import { renderWorkspaceUI, switchTabFocus, spawnTabWithUrl, spawnNewBlankTab, handleTabRemoval, hibernateInactiveTabs, wakeAllTabsInWorkspace } from '../webview.js';
+import { renderWorkspaceUI, switchTabFocus, spawnTabWithUrl, spawnNewBlankTab, handleTabRemoval } from '../webview.js';
 import { toggleBookmarksOverlay, promptQuickmark, addCurrentPageToBookmarks } from './bookmarks.js';
 import { syncVisualSettingsInputs, setupVisualSettingsListeners } from '../theme.js';
 import { getExtensionPaletteCommands, prepareExtensionPaletteCommands, syncExtensionsPreferences, setupExtensionsPreferencesListeners } from '../extensions.js';
@@ -44,7 +45,7 @@ export const COMMAND_DEFINITIONS = [
         id: 'toggle-dashboard',
         title: 'Toggle Workspace Dashboard',
         desc: 'Full-page tree view of all workspaces, tabs, and windows',
-        details: 'Renders an expansive visual hierarchy of every workspace, active tab, and sleeping webview across the session with bulk management controls.',
+        details: 'Renders an expansive visual hierarchy of every workspace, active tab, and page across the session with bulk management controls.',
         tip: 'Use the binding shown here, or customise this action in Keyboard controls.',
         category: 'Tabs & Navigation',
         icon: 'fa-solid fa-layer-group',
@@ -164,7 +165,7 @@ export const COMMAND_DEFINITIONS = [
         id: 'toggle-pin-tab',
         title: 'Pin / Unpin Active Tab',
         desc: 'Pin essential tab to the top of workspace or unpin it',
-        details: 'Pinned tabs stay anchored at the top of the tab list, are protected from accidental closure, and are exempted from automatic memory hibernation.',
+        details: 'Pinned tabs stay anchored at the top of the tab list, are protected from accidental closure, and are exempted from automatic suspension.',
         tip: 'Use the binding shown here, or customise this action in Keyboard controls.',
         category: 'Tabs & Navigation',
         icon: 'fa-solid fa-thumbtack',
@@ -315,25 +316,25 @@ export const COMMAND_DEFINITIONS = [
     // Performance & Memory
     {
         id: 'hibernate-tabs',
-        title: 'Hibernate Inactive Tabs',
-        desc: 'Detach idle background tabs from DOM to free CPU and system RAM',
-        details: 'Detaches background webview renderers from the active DOM tree, suspending JavaScript execution and releasing system RAM while saving tab URLs.',
-        tip: 'Run this periodically during heavy research sessions to keep memory usage under 600 MB.',
+        title: 'Suspend Inactive Tabs',
+        desc: 'Pause eligible background pages without unloading them',
+        details: 'Freezes eligible pages in memory, preserving their document and JavaScript state. Busy pages remain running.',
+        tip: 'Suspension saves CPU and battery; pages remain in memory.',
         category: 'Performance & Memory',
         icon: 'fa-solid fa-bed',
-        keywords: ['ram', 'memory', 'sleep', 'hibernate', 'clean', 'suspend', 'free'],
-        action: () => hibernateInactiveTabs()
+        keywords: ['pause', 'background', 'suspend', 'battery'],
+        action: () => suspendInactiveTabs()
     },
     {
         id: 'wake-all-tabs',
-        title: 'Wake All Tabs in Workspace',
-        desc: 'Reload and restore all hibernating tabs in active workspace',
-        details: 'Iterates through all sleeping tabs in the active workspace, reattaching them to the DOM and re-establishing renderer connections.',
+        title: 'Resume Tabs in Workspace',
+        desc: 'Resume suspended pages in the active workspace without reloading',
+        details: 'Resumes existing pages. Tabs not yet opened since startup remain unloaded.',
         tip: 'Use this when resuming work on a project after an extended idle period.',
         category: 'Performance & Memory',
         icon: 'fa-solid fa-bolt',
-        keywords: ['wake', 'reload', 'restore', 'tabs', 'all'],
-        action: () => wakeAllTabsInWorkspace(state.sessionState.current_workspace)
+        keywords: ['resume', 'background', 'tabs', 'workspace'],
+        action: () => resumeWorkspaceTabs(state.sessionState.current_workspace)
     },
 
     // Tools
@@ -711,7 +712,7 @@ export async function syncPreferencesUI() {
             const throttleToggle = document.getElementById('setting-throttling-toggle');
             const processSelect = document.getElementById('setting-process-limit');
             const emailSelect = document.getElementById('setting-email-handler');
-            const sleepSelect = document.getElementById('setting-sleep-timeout');
+            const suspendSelect = document.getElementById('setting-suspend-timeout');
             const sidebarToggle = document.getElementById('setting-sidebar-collapse-toggle');
             const spellSelect = document.getElementById('setting-spellchecker-language');
 
@@ -719,7 +720,7 @@ export async function syncPreferencesUI() {
             if (throttleToggle) throttleToggle.checked = !!cfg.background_throttling;
             if (processSelect) processSelect.value = String(cfg.process_limit || 3);
             if (emailSelect) emailSelect.value = cfg.email_handler || 'system';
-            if (sleepSelect) sleepSelect.value = String(cfg.tab_sleep_timeout_minutes ?? 15);
+            if (suspendSelect) suspendSelect.value = String(cfg.tab_suspend_timeout_minutes ?? 15);
             if (sidebarToggle) sidebarToggle.checked = cfg.sidebar_auto_collapse !== false;
             if (spellSelect) spellSelect.value = cfg.spellchecker_language || 'en-GB';
 
@@ -812,7 +813,7 @@ export function setupPreferencesListeners() {
             const throttleToggle = document.getElementById('setting-throttling-toggle');
             const processSelect = document.getElementById('setting-process-limit');
             const emailSelect = document.getElementById('setting-email-handler');
-            const sleepSelect = document.getElementById('setting-sleep-timeout');
+            const suspendSelect = document.getElementById('setting-suspend-timeout');
             const sidebarToggle = document.getElementById('setting-sidebar-collapse-toggle');
             const spellSelect = document.getElementById('setting-spellchecker-language');
             const windowControlsToggle = document.getElementById('setting-window-controls-toggle');
@@ -821,7 +822,7 @@ export function setupPreferencesListeners() {
                 disable_gpu: gpuToggle ? !gpuToggle.checked : false,
                 background_throttling: throttleToggle ? throttleToggle.checked : true,
                 process_limit: processSelect ? parseInt(processSelect.value, 10) : 3,
-                tab_sleep_timeout_minutes: sleepSelect ? parseInt(sleepSelect.value, 10) : 15,
+                tab_suspend_timeout_minutes: suspendSelect ? parseInt(suspendSelect.value, 10) : 15,
                 sidebar_auto_collapse: sidebarToggle ? sidebarToggle.checked : true,
                 email_handler: emailSelect ? emailSelect.value : 'system',
                 spellchecker_language: spellSelect ? spellSelect.value : 'en-GB',
@@ -885,13 +886,13 @@ export function setupPreferencesListeners() {
         };
     }
 
-    const liveSleepSelect = document.getElementById('setting-sleep-timeout');
-    if (liveSleepSelect) {
-        liveSleepSelect.onchange = async () => {
-            const timeoutMinutes = parseInt(liveSleepSelect.value, 10);
+    const liveSuspendSelect = document.getElementById('setting-suspend-timeout');
+    if (liveSuspendSelect) {
+        liveSuspendSelect.onchange = async () => {
+            const timeoutMinutes = parseInt(liveSuspendSelect.value, 10);
             if (window.flyAPI && typeof window.flyAPI.getBrowserSettings === 'function') {
                 const cfg = (await window.flyAPI.getBrowserSettings()) || {};
-                cfg.tab_sleep_timeout_minutes = timeoutMinutes;
+                cfg.tab_suspend_timeout_minutes = timeoutMinutes;
                 await window.flyAPI.updateBrowserSettings(cfg);
             }
         };

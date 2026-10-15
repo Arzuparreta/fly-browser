@@ -21,7 +21,7 @@ const root = path.resolve(__dirname, '..');
             await page.evaluate(url => window.executeBrowserAction('spawn-tab-with-url', url), `http://127.0.0.1:${server.address().port}/${index}`);
             await page.waitForTimeout(150);
         }
-        await page.evaluate(async () => { const {hibernateInactiveTabs} = await import('./modules/webview.js'); await hibernateInactiveTabs(); });
+
         await page.waitForFunction(() => {
             try {
                 const view = [...document.querySelectorAll('webview')].find(view => view.getClientRects().length);
@@ -30,7 +30,7 @@ const root = path.resolve(__dirname, '..');
         });
         const snapshot = () => page.evaluate(() => ({views: document.querySelectorAll('webview').length, selected: [...document.querySelectorAll('#TabList li')].findIndex(item => item.classList.contains('selected')), focused: [...document.querySelectorAll('#TabList li')].indexOf(document.activeElement)}));
         const initial = await snapshot();
-        assert.equal(initial.views, 1);
+        assert.equal(initial.views, 4);
         for (const pinned of [false, true]) {
             await page.evaluate(pinned => window.applySidebarMode(!pinned), pinned);
             for (const key of ['s', 'Alt+s']) {
@@ -81,12 +81,12 @@ const root = path.resolve(__dirname, '..');
         assert.deepEqual(await snapshot(), {...initial, focused: 2});
         await page.keyboard.press('k');
         assert.deepEqual(await snapshot(), {...initial, focused: 1});
-        // Closing a sleeping cursor target must preserve the active page and its one view.
+        // Closing a background cursor target must preserve the active page.
         await page.keyboard.press('x');
         await page.waitForFunction(() => document.querySelectorAll('#TabList li').length === 3);
-        assert.deepEqual(await snapshot(), {views: 1, selected: initial.selected - 1, focused: 1});
+        assert.deepEqual(await snapshot(), {views: initial.views - 1, selected: initial.selected - 1, focused: 1});
         await page.keyboard.press('Enter');
-        await page.waitForFunction(() => document.querySelectorAll('webview').length === 2);
+        await page.waitForFunction(() => document.querySelectorAll('webview').length === 3);
         assert.equal((await snapshot()).selected, 1);
         assert.equal((await snapshot()).focused, 1);
         // Ctrl+1 and bare digits no longer select tabs, and tabs carry no number badges.
@@ -100,7 +100,7 @@ const root = path.resolve(__dirname, '..');
         await page.keyboard.press('Alt+9');
         await page.waitForFunction(() => document.querySelector('#TabList li:last-child').classList.contains('selected'));
         assert.deepEqual(errors, []);
-        console.log('Sidebar cursor: neutral entry, explicit keyboard focus, natural exit, sleeping navigation, closing without waking, activation and Alt tab selection passed.');
+        console.log('Sidebar cursor: neutral entry, explicit keyboard focus, natural exit, background navigation, closing without activation, activation and Alt tab selection passed.');
     } finally {
         if (application) await application.close();
         await new Promise(resolve => server.close(resolve));
