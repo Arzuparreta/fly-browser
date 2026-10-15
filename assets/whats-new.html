@@ -223,8 +223,22 @@
                 </a>
             </div>
             <h1>What's New in Fly</h1>
-            <p class="subtitle">Fly now lands in your launcher however you install it: from the AUR on Arch, or as an AppImage that adds itself to your menu, sets itself as the default browser and updates in place. Quick Notes has been removed.</p>
+            <p class="subtitle">A terminal installer that installs, finds, updates and removes Fly on any Linux distribution, menu entry included. Below it, what came in 0.17: Fly in your launcher however you install it, AppImage updates in place, and Quick Notes removed.</p>
         </header>
+
+        <section class="feature-card">
+            <h2 class="feature-title">fly-install</h2>
+            <p class="feature-desc">
+                One command to install Fly and keep every copy of it in order.
+            </p>
+            <ul class="feature-points">
+                <li><kbd>fly-install install</kbd> builds the <kbd>fly-browser-bin</kbd> package on Arch-based systems and installs the AppImage anywhere else, checked against the release's checksums.</li>
+                <li>An AppImage it installs goes straight into your applications menu, Rofi and other launchers, with the same entry Fly writes itself, so Preferences → About can still manage it.</li>
+                <li><kbd>fly-install status</kbd> lists every copy of Fly on the machine and whether it is current; <kbd>fly-install update</kbd> updates them all.</li>
+                <li><kbd>fly-install uninstall</kbd> removes the package or an AppImage together with the menu entry and icons added for it. Your profile is kept.</li>
+                <li>Get it from the installation guide, linked from the GitHub release.</li>
+            </ul>
+        </section>
 
         <section class="feature-card">
             <h2 class="feature-title">In Your Launcher, Like Any Browser</h2>
