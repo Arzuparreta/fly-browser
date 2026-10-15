@@ -13,6 +13,9 @@ export async function loadBookmarksAndQuickmarks() {
 export function promptQuickmark(mode) {
     state.quickmarkMode = mode;
     state.awaitingQuickmarkKey = true;
+    // The prompt ends by focusing the page, which would leave an open surface such as the
+    // address bar on screen without focus.
+    prepareOverlay(null);
 
     if (document.activeElement) {
         document.activeElement.blur();
