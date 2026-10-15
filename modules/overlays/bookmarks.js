@@ -2,6 +2,7 @@ import { prepareOverlay } from '../focus.js';
 import { state } from '../state.js';
 import { escapeHtml, focusActiveWebview, getActiveWebview } from '../utils.js';
 import { renderWorkspaceUI, switchTabFocus, spawnTabWithUrl, spawnNewBlankTab, handleTabRemoval } from '../webview.js';
+import { dismissAddressBar } from '../navigation.js';
 
 export async function loadBookmarksAndQuickmarks() {
     if (window.flyAPI) {
@@ -13,6 +14,9 @@ export async function loadBookmarksAndQuickmarks() {
 export function promptQuickmark(mode) {
     state.quickmarkMode = mode;
     state.awaitingQuickmarkKey = true;
+    // The prompt ends by focusing the page from the body, which raises no focusout, so an
+    // open address bar would stay on screen without focus. Other surfaces stay as they were.
+    dismissAddressBar();
 
     if (document.activeElement) {
         document.activeElement.blur();

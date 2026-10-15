@@ -203,6 +203,9 @@ export function setupAddressBarAutocomplete() {
 
     if (!addressBar || !suggestionsList) return;
 
+    // Presses on the list keep focus in the bar, so a later page click still closes it.
+    suggestionsList.addEventListener('mousedown', e => e.preventDefault());
+
     addressBar.addEventListener('input', async (e) => {
         const query = e.target.value.trim();
         if (!query) {
@@ -432,6 +435,14 @@ export async function selectSuggestion(item) {
     }
 
     handleNavigation(item.value);
+    hideSuggestions();
+}
+
+// Hides the bar and its suggestions without moving focus, for callers that already own it.
+// Reopening replaces the typed text with the tab address.
+export function dismissAddressBar() {
+    const addressBar = document.getElementById('WideAddressBar');
+    if (addressBar) addressBar.style.display = 'none';
     hideSuggestions();
 }
 

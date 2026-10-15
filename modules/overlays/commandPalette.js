@@ -1,4 +1,4 @@
-import { prepareOverlay } from '../focus.js';
+import { prepareOverlay, hasActiveOverlay } from '../focus.js';
 import { initialiseKeyboardEditor, showKeyboardEditor, hideKeyboardEditor } from '../keyboardSettings.js';
 import { initialiseSettingsNav, showSettingsPane, currentSettingsPane, clearSettingsSearch } from '../settingsNav.js';
 import { state } from '../state.js';
@@ -1383,12 +1383,13 @@ export function executePaletteSelection(rawInputText) {
         }
         if (typeof targetCommand.action === 'function') {
             targetCommand.action();
-            if (!state.preferencesActive && !state.dashboardActive && !state.bookmarksActive && !state.historyActive && !state.diagnosticsActive) returnFocusToWebview();
+            // An action that opened a surface, such as the address bar, keeps the focus it gave it.
+            if (!hasActiveOverlay()) returnFocusToWebview();
             return;
         }
         if (typeof targetCommand === 'string' && commandRegistry[targetCommand]) {
             commandRegistry[targetCommand]();
-            returnFocusToWebview();
+            if (!hasActiveOverlay()) returnFocusToWebview();
             return;
         }
     }
