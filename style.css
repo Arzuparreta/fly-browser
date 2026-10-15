@@ -7,6 +7,9 @@
     --selected: #1b1a18;
     --sidebar-opacity: 100%;
     --overlay-opacity: 100%;
+    --motion-fast: 120ms;
+    --motion-normal: 180ms;
+    --motion-ease: cubic-bezier(0.2, 0, 0, 1);
 }
 
 body.light-mode {
@@ -44,18 +47,16 @@ body, html {
     display: flex;
     flex-direction: column;
     padding: 10px;
-    transition: width 0.22s cubic-bezier(0.2, 0, 0, 1),
-                min-width 0.22s cubic-bezier(0.2, 0, 0, 1),
-                max-width 0.22s cubic-bezier(0.2, 0, 0, 1),
-                box-shadow 0.22s ease,
-                padding 0.22s ease;
 }
 
 /* Auto-collapse 36px strip mode */
 body.sidebar-auto-collapse #Sidebar {
-    width: 36px;
-    min-width: 36px;
-    max-width: 36px;
+    /* Keep the surface stable: only its visible clip moves each frame. */
+    width: 260px;
+    min-width: 260px;
+    max-width: 260px;
+    clip-path: inset(0 224px 0 0);
+    transition: clip-path var(--motion-normal) var(--motion-ease);
     position: absolute;
     top: 0;
     left: 0;
@@ -70,7 +71,6 @@ body.sidebar-auto-collapse #Sidebar {
 body.sidebar-auto-collapse #right-content {
     margin-left: 36px;
     width: calc(100vw - 36px);
-    transition: margin-left 0.22s cubic-bezier(0.2, 0, 0, 1), width 0.22s cubic-bezier(0.2, 0, 0, 1);
 }
 
 /* Smooth expansion on retained pointer presence, focus, or the shortcut */
@@ -81,8 +81,27 @@ body.sidebar-auto-collapse #Sidebar:focus-within {
     min-width: 260px;
     max-width: 260px;
     padding: 10px 10px 42px;
+    clip-path: inset(0 -32px 0 0);
     box-shadow: 6px 0 28px rgba(0, 0, 0, 0.65);
     overflow-y: auto;
+}
+
+/* Clip also excludes hidden content from pointer hit testing. Layout changes
+   once at the state boundary, never on every animation frame. */
+body.sidebar-auto-collapse #Sidebar:not(.pointer-inside):not(.expanded):not(:focus-within) > :not(.bottom-theme-layout) {
+    width: 28px;
+    max-width: 28px;
+}
+
+body.sidebar-auto-collapse #Sidebar:not(.pointer-inside):not(.expanded):not(:focus-within)::after {
+    content: "";
+    position: absolute;
+    left: 35px;
+    top: 0;
+    bottom: 0;
+    width: 1px;
+    background: var(--border);
+    pointer-events: none;
 }
 
 /* Pinned (expanded) mode */
@@ -115,7 +134,7 @@ body.sidebar-pinned #right-content {
     opacity: 1;
     z-index: 0;
     pointer-events: none;
-    transition: opacity 0.22s ease;
+    transition: opacity var(--motion-normal) var(--motion-ease);
 }
 
 body.sidebar-auto-collapse #Sidebar:not(.pointer-inside):not(.expanded):not(:focus-within)::before {
@@ -131,7 +150,6 @@ body.sidebar-auto-collapse #Sidebar:not(.pointer-inside):not(.expanded):not(:foc
     margin-bottom: 6px;
     border-bottom: 1px solid var(--border);
     flex-shrink: 0;
-    transition: padding 0.18s ease, margin 0.18s ease;
 }
 
 .window-controls-brand {
@@ -171,7 +189,7 @@ body.sidebar-auto-collapse #Sidebar:not(.pointer-inside):not(.expanded):not(:foc
     justify-content: center;
     font-size: 11px;
     outline: none;
-    transition: background-color 0.15s ease, border-color 0.15s ease, color 0.15s ease;
+    transition: background-color var(--motion-fast) var(--motion-ease), border-color var(--motion-fast) var(--motion-ease), color var(--motion-fast) var(--motion-ease);
 }
 
 .win-btn:hover {
@@ -220,7 +238,7 @@ body.sidebar-auto-collapse #Sidebar:not(.pointer-inside):not(.expanded):not(:foc
     padding: 3px 2px;
     cursor: pointer;
     border-radius: 6px;
-    transition: background 0.15s ease;
+    transition: background-color var(--motion-fast) var(--motion-ease);
     flex-shrink: 0;
     min-height: 34px;
 }
@@ -246,7 +264,7 @@ body.sidebar-auto-collapse #Sidebar:not(.pointer-inside):not(.expanded):not(:foc
     text-transform: uppercase;
     box-shadow: 0 1px 3px rgba(0,0,0,0.3);
     margin: 0 auto;
-    transition: margin 0.2s ease, border-color 0.2s ease;
+    transition: border-color var(--motion-fast) var(--motion-ease);
 }
 
 #WorkspaceLabel {
@@ -259,7 +277,7 @@ body.sidebar-auto-collapse #Sidebar:not(.pointer-inside):not(.expanded):not(:foc
     opacity: 0;
     max-width: 0;
     display: none;
-    transition: opacity 0.18s ease, max-width 0.18s ease;
+    transition: opacity var(--motion-fast) var(--motion-ease);
 }
 
 body.sidebar-auto-collapse #Sidebar.pointer-inside #WorkspaceLabel,
@@ -279,6 +297,7 @@ body.sidebar-pinned #WorkspaceBadge {
 }
 
 .nav-action-layout {
+    flex-shrink: 0;
     display: flex;
     gap: 6px;
     padding: 0;
@@ -287,7 +306,7 @@ body.sidebar-pinned #WorkspaceBadge {
     max-height: 0;
     overflow: hidden;
     pointer-events: none;
-    transition: opacity 0.18s ease, max-height 0.18s ease, margin 0.18s ease;
+    transition: opacity var(--motion-fast) var(--motion-ease);
     margin: 0;
 }
 
@@ -316,7 +335,7 @@ body.sidebar-pinned .nav-action-layout {
     align-items: center;
     justify-content: center;
     outline: none;
-    transition: background-color 0.15s ease, border-color 0.15s ease, color 0.15s ease;
+    transition: background-color var(--motion-fast) var(--motion-ease), border-color var(--motion-fast) var(--motion-ease), color var(--motion-fast) var(--motion-ease);
 }
 
 .nav-icon-button:not(#pin-sidebar-btn):hover, .nav-icon-button:not(#pin-sidebar-btn):focus-visible {
@@ -327,19 +346,10 @@ body.sidebar-pinned .nav-action-layout {
 #update-indicator-btn {
     color: var(--accent);
     border-color: var(--accent);
-    animation: updatePulse 2.5s infinite ease-in-out;
-}
-
-@keyframes updatePulse {
-    0%, 100% {
-        box-shadow: 0 0 0 0 rgba(122, 162, 247, 0.4);
-    }
-    50% {
-        box-shadow: 0 0 0 4px rgba(122, 162, 247, 0);
-    }
 }
 
 #TabList {
+    min-height: 0;
     list-style: none;
     flex-grow: 1;
     overflow-y: auto;
@@ -354,6 +364,7 @@ body.sidebar-pinned .nav-action-layout {
 }
 
 #TabList li {
+    flex-shrink: 0;
     padding: 6px 8px;
     border-radius: 6px;
     font-size: 13px;
@@ -366,7 +377,7 @@ body.sidebar-pinned .nav-action-layout {
     align-items: center;
     gap: 8px;
     position: relative;
-    transition: background 0.15s ease, border-color 0.15s ease, width 0.2s ease, padding 0.2s ease;
+    transition: background-color var(--motion-fast) var(--motion-ease), border-color var(--motion-fast) var(--motion-ease);
     border: 1px solid transparent;
 }
 
@@ -470,7 +481,7 @@ body.sidebar-auto-collapse #Sidebar:not(.pointer-inside):not(.expanded):not(:foc
     z-index: 6;
     opacity: 0;
     pointer-events: none;
-    transition: opacity 0.15s ease, transform 0.15s ease;
+    transition: opacity var(--motion-fast) var(--motion-ease), transform var(--motion-fast) var(--motion-ease);
 }
 
 #Sidebar:focus-within .tab-index-badge,
@@ -619,7 +630,7 @@ webview {
     left: 0;
     display: none;
     background-color: #121211;
-    transition: opacity 0.15s ease-in-out;
+    transition: opacity var(--motion-fast) var(--motion-ease);
 }
 
 /* Dual-Split View Layouts (1x2 Side-by-Side and Stacked) */
@@ -876,7 +887,7 @@ webview {
     border: 1px solid var(--border);
     border-radius: 6px;
     padding: 0 14px;
-    transition: border-color 0.15s ease, box-shadow 0.15s ease;
+    transition: border-color var(--motion-fast) var(--motion-ease), box-shadow var(--motion-fast) var(--motion-ease);
 }
 
 .palette-input-wrapper:focus-within {
@@ -926,7 +937,7 @@ webview {
     font-size: 11.5px;
     font-weight: 500;
     cursor: pointer;
-    transition: all 0.12s ease;
+    transition: background-color var(--motion-fast) var(--motion-ease), border-color var(--motion-fast) var(--motion-ease), color var(--motion-fast) var(--motion-ease);
     user-select: none;
 }
 
@@ -1014,7 +1025,7 @@ webview {
     border-radius: 6px;
     cursor: pointer;
     color: var(--text);
-    transition: background-color 0.1s ease, border-color 0.1s ease;
+    transition: background-color var(--motion-fast) var(--motion-ease), border-color var(--motion-fast) var(--motion-ease);
     border-left: 3px solid transparent;
     min-height: 38px;
     box-sizing: border-box;
@@ -1215,7 +1226,7 @@ webview {
     align-items: center;
     justify-content: center;
     gap: 8px;
-    transition: opacity 0.15s ease;
+    transition: opacity var(--motion-fast) var(--motion-ease);
 }
 
 .palette-inspector-execute-btn:hover {
@@ -1702,7 +1713,7 @@ webview {
     font-size: 12px;
     color: var(--accent);
     opacity: 0;
-    transition: opacity 0.2s ease;
+    transition: opacity var(--motion-normal) var(--motion-ease);
 }
 
 .settings-save-note.visible {
@@ -1778,7 +1789,7 @@ webview {
     background-color: var(--bg-main);
     border: 1px solid var(--border);
     border-radius: 22px;
-    transition: .2s;
+    transition: background-color var(--motion-fast) var(--motion-ease), border-color var(--motion-fast) var(--motion-ease);
 }
 
 .toggle-slider:before {
@@ -1790,7 +1801,7 @@ webview {
     bottom: 3px;
     background-color: var(--text);
     border-radius: 50%;
-    transition: .2s;
+    transition: transform var(--motion-normal) var(--motion-ease), background-color var(--motion-fast) var(--motion-ease);
 }
 
 .toggle-switch input:checked + .toggle-slider {
@@ -1817,7 +1828,7 @@ webview {
     padding: 6px 8px;
     border-bottom: 1px solid rgba(255, 255, 255, 0.05);
     border-radius: 4px;
-    transition: background-color 0.15s ease;
+    transition: background-color var(--motion-fast) var(--motion-ease);
 }
 
 .shortcut-row:hover {
@@ -1983,7 +1994,7 @@ webview {
     justify-content: center;
     outline: none;
     font-size: 14px;
-    transition: all 0.15s ease;
+    transition: background-color var(--motion-fast) var(--motion-ease), border-color var(--motion-fast) var(--motion-ease), color var(--motion-fast) var(--motion-ease), opacity var(--motion-fast) var(--motion-ease), transform var(--motion-fast) var(--motion-ease);
 }
 
 .history-action-btn:hover, .history-action-btn:focus {
@@ -2013,7 +2024,7 @@ webview {
     border-radius: 4px;
     cursor: pointer;
     border-bottom: 1px solid var(--border);
-    transition: background 0.15s;
+    transition: background-color var(--motion-fast) var(--motion-ease);
 }
 
 .history-item:hover {
@@ -2094,7 +2105,7 @@ webview {
     align-items: center;
     justify-content: center;
     padding: 0 4px;
-    transition: color 0.15s ease;
+    transition: color var(--motion-fast) var(--motion-ease);
 }
 
 .close-btn:hover {
@@ -2128,7 +2139,7 @@ webview {
     display: none;
     box-shadow: 0 8px 24px rgba(0, 0, 0, 0.4);
     pointer-events: auto;
-    transition: border-color 0.15s ease, box-shadow 0.15s ease;
+    transition: border-color var(--motion-fast) var(--motion-ease), box-shadow var(--motion-fast) var(--motion-ease);
 }
 
 #WideAddressBar:focus {
@@ -2183,7 +2194,7 @@ webview {
     color: var(--text);
     border-bottom: 1px solid var(--border);
     gap: 12px;
-    transition: background-color 0.15s ease;
+    transition: background-color var(--motion-fast) var(--motion-ease);
 }
 
 .suggestion-item:last-child {
@@ -2269,7 +2280,7 @@ webview {
     padding: 10px 12px;
     font-size: 14px;
     outline: none;
-    transition: border-color 0.15s ease;
+    transition: border-color var(--motion-fast) var(--motion-ease);
 }
 
 #BookmarkSearchInput:focus {
@@ -2293,7 +2304,7 @@ webview {
     padding: 16px;
     overflow: hidden;
     max-height: calc(100vh - 160px);
-    transition: border-color 0.15s ease;
+    transition: border-color var(--motion-fast) var(--motion-ease);
 }
 
 .bookmarks-column-pane.active-pane {
@@ -2319,7 +2330,7 @@ webview {
     border: 1px solid var(--border);
     border-radius: 4px;
     cursor: pointer;
-    transition: background-color 0.15s ease, border-color 0.15s ease;
+    transition: background-color var(--motion-fast) var(--motion-ease), border-color var(--motion-fast) var(--motion-ease);
 }
 
 .bookmark-item-row:hover {
@@ -2348,7 +2359,7 @@ webview {
     opacity: 0.6;
     padding: 6px 10px;
     border-radius: 4px;
-    transition: all 0.15s ease;
+    transition: background-color var(--motion-fast) var(--motion-ease), border-color var(--motion-fast) var(--motion-ease), color var(--motion-fast) var(--motion-ease), opacity var(--motion-fast) var(--motion-ease), transform var(--motion-fast) var(--motion-ease);
     flex-shrink: 0;
 }
 
@@ -2420,7 +2431,7 @@ webview {
     justify-content: center;
     cursor: pointer;
     color: var(--accent);
-    transition: opacity 0.15s ease, background 0.15s ease, color 0.15s ease;
+    transition: opacity var(--motion-fast) var(--motion-ease), background-color var(--motion-fast) var(--motion-ease), color var(--motion-fast) var(--motion-ease);
 }
 
 .tab-media-badge:hover {
@@ -2450,7 +2461,7 @@ webview {
     justify-content: center;
     cursor: pointer;
     color: var(--warning);
-    transition: opacity 0.15s ease, background 0.15s ease, color 0.15s ease;
+    transition: opacity var(--motion-fast) var(--motion-ease), background-color var(--motion-fast) var(--motion-ease), color var(--motion-fast) var(--motion-ease);
 }
 
 .tab-pin-badge:hover {
@@ -2475,7 +2486,7 @@ webview {
     justify-content: center;
     cursor: pointer;
     visibility: hidden;
-    transition: background 0.15s ease, color 0.15s ease;
+    transition: background-color var(--motion-fast) var(--motion-ease), color var(--motion-fast) var(--motion-ease);
 }
 
 #TabList li:hover .tab-close-btn,
@@ -2675,7 +2686,7 @@ webview {
     flex-direction: column;
     align-items: center;
     gap: 6px;
-    transition: all 0.15s ease;
+    transition: background-color var(--motion-fast) var(--motion-ease), border-color var(--motion-fast) var(--motion-ease), color var(--motion-fast) var(--motion-ease), opacity var(--motion-fast) var(--motion-ease), transform var(--motion-fast) var(--motion-ease);
 }
 
 .welcome-shortcut-card:hover {
@@ -2791,7 +2802,7 @@ webview {
     justify-content: center;
     font-size: 12px;
     opacity: 0.75;
-    transition: background-color 0.15s ease, opacity 0.15s ease, border-color 0.15s ease;
+    transition: background-color var(--motion-fast) var(--motion-ease), opacity var(--motion-fast) var(--motion-ease), border-color var(--motion-fast) var(--motion-ease);
 }
 
 .download-shelf-icon-btn:hover {
@@ -2815,7 +2826,7 @@ webview {
     flex-shrink: 0;
     position: relative;
     overflow: hidden;
-    transition: border-color 0.15s ease, background-color 0.15s ease;
+    transition: border-color var(--motion-fast) var(--motion-ease), background-color var(--motion-fast) var(--motion-ease);
 }
 
 body.light-mode .download-card {
@@ -2903,7 +2914,10 @@ body.light-mode .download-card-progress-track {
 .download-card-progress-bar {
     height: 100%;
     background-color: var(--accent);
-    transition: width 0.25s ease;
+    width: 100%;
+    transform-origin: left;
+    transform: scaleX(0);
+    transition: transform var(--motion-normal) var(--motion-ease);
 }
 
 .download-card-actions {
@@ -2926,7 +2940,7 @@ body.light-mode .download-card-progress-track {
     justify-content: center;
     font-size: 11px;
     opacity: 0.7;
-    transition: opacity 0.15s ease, background-color 0.15s ease, color 0.15s ease;
+    transition: opacity var(--motion-fast) var(--motion-ease), background-color var(--motion-fast) var(--motion-ease), color var(--motion-fast) var(--motion-ease);
 }
 
 .download-action-btn:hover {
@@ -2956,7 +2970,7 @@ body.light-mode .download-action-btn:hover {
     border-radius: 50%;
     border: 2px solid var(--border);
     cursor: pointer;
-    transition: transform 0.15s ease, border-color 0.15s ease, box-shadow 0.15s ease;
+    transition: transform var(--motion-fast) var(--motion-ease), border-color var(--motion-fast) var(--motion-ease), box-shadow var(--motion-fast) var(--motion-ease);
     padding: 0;
 }
 
@@ -3105,7 +3119,7 @@ body.light-mode .download-action-btn:hover {
     line-height: 14px;
     flex-shrink: 0;
     cursor: default;
-    transition: background-color 0.15s ease, border-color 0.15s ease, color 0.15s ease;
+    transition: background-color var(--motion-fast) var(--motion-ease), border-color var(--motion-fast) var(--motion-ease), color var(--motion-fast) var(--motion-ease);
 }
 
 .status-badge i {
@@ -3269,7 +3283,7 @@ body.light-mode .download-action-btn:hover {
     font-variant-numeric: tabular-nums;
     user-select: none;
     cursor: pointer;
-    transition: background-color 0.15s ease, border-color 0.15s ease;
+    transition: background-color var(--motion-fast) var(--motion-ease), border-color var(--motion-fast) var(--motion-ease);
 }
 
 .sidebar-clock:hover {
@@ -3491,7 +3505,7 @@ i.spinning {
     display: flex;
     align-items: center;
     gap: 8px;
-    transition: all 0.15s ease;
+    transition: background-color var(--motion-fast) var(--motion-ease), border-color var(--motion-fast) var(--motion-ease), color var(--motion-fast) var(--motion-ease), opacity var(--motion-fast) var(--motion-ease), transform var(--motion-fast) var(--motion-ease);
 }
 
 .diag-nav-tab:hover {
@@ -3511,7 +3525,7 @@ i.spinning {
 }
 
 .diag-tab-content {
-    animation: diag-fade-in 0.15s ease-in-out;
+    animation: diag-fade-in var(--motion-fast) var(--motion-ease);
 }
 
 @keyframes diag-fade-in {
@@ -3674,7 +3688,7 @@ i.spinning {
     display: inline-flex;
     align-items: center;
     gap: 8px;
-    transition: all 0.15s ease;
+    transition: background-color var(--motion-fast) var(--motion-ease), border-color var(--motion-fast) var(--motion-ease), color var(--motion-fast) var(--motion-ease), opacity var(--motion-fast) var(--motion-ease), transform var(--motion-fast) var(--motion-ease);
 }
 
 .diag-btn-action:hover {
@@ -3767,7 +3781,7 @@ i.spinning {
     font-size: 12px;
     font-weight: 600;
     cursor: pointer;
-    transition: all 0.15s ease;
+    transition: background-color var(--motion-fast) var(--motion-ease), border-color var(--motion-fast) var(--motion-ease), color var(--motion-fast) var(--motion-ease), opacity var(--motion-fast) var(--motion-ease), transform var(--motion-fast) var(--motion-ease);
 }
 
 .diag-filter-chip:hover {
@@ -4043,7 +4057,7 @@ i.spinning {
     cursor: pointer;
     padding: 4px 6px;
     border-radius: 4px;
-    transition: all 0.15s ease;
+    transition: background-color var(--motion-fast) var(--motion-ease), border-color var(--motion-fast) var(--motion-ease), color var(--motion-fast) var(--motion-ease), opacity var(--motion-fast) var(--motion-ease), transform var(--motion-fast) var(--motion-ease);
 }
 
 .search-alias-delete-btn:hover {
@@ -4384,4 +4398,14 @@ body.sidebar-auto-collapse #Sidebar:not(.pointer-inside):not(.expanded):not(:foc
     background: var(--panel);
     color: var(--text);
     border: 1px solid var(--accent);
+}
+
+/* Native controls and diagnostic indicators follow the OS motion preference.
+   No permanent will-change layers or JavaScript animation loop are needed. */
+@media (prefers-reduced-motion: reduce) {
+    *, *::before, *::after {
+        transition: none !important;
+        animation: none !important;
+        scroll-behavior: auto !important;
+    }
 }

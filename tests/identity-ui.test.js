@@ -15,6 +15,7 @@ const root = path.resolve(__dirname, '..');
     try {
         app = await _electron.launch({executablePath:path.join(root, 'node_modules/electron/dist/electron'), args:['--no-sandbox', '--disable-gpu', '--ozone-platform=x11', createElectronFixture(root, temporary)]});
         const page = await app.firstWindow();
+        await require('./sidebar-geometry')(page);
         page.setDefaultTimeout(15000);
         const errors = [];
         page.on('pageerror', error => errors.push(error.message));
@@ -27,7 +28,7 @@ const root = path.resolve(__dirname, '..');
         assert(await page.evaluate(() => document.fonts.check('16px "Font Awesome 6 Free"')));
         assert.equal(await page.locator('link[href^="https:"]').count(), 0);
         await page.evaluate(async () => { if (!document.body.classList.contains('sidebar-pinned')) await window.toggleSidebarPin(); });
-        await page.waitForFunction(() => Math.abs(document.getElementById('Sidebar').getBoundingClientRect().width - 260) < 1);
+        await page.waitForFunction(() => Math.abs(window.__sidebarVisibleWidth() - 260) < 1);
         await page.waitForTimeout(300);
         assert.equal(await page.locator('#Sidebar .fly-brand').count(), 0);
         assert.equal(await page.locator('#WindowControls img').count(), 0);
@@ -37,9 +38,9 @@ const root = path.resolve(__dirname, '..');
         await page.evaluate(() => window.executeBrowserAction('toggle-window-controls', false));
         await page.evaluate(async () => { await window.toggleSidebarPin(); document.activeElement?.blur(); });
         await page.mouse.move(700, 500);
-        await page.waitForFunction(() => document.getElementById('Sidebar').getBoundingClientRect().width <= 37);
+        await page.waitForFunction(() => window.__sidebarVisibleWidth() <= 37);
         await page.evaluate(() => window.toggleSidebarPin());
-        await page.waitForFunction(() => document.getElementById('Sidebar').getBoundingClientRect().width >= 259);
+        await page.waitForFunction(() => window.__sidebarVisibleWidth() >= 259);
         await page.screenshot({path:'/tmp/fly-identity-chasis.png'});
         await page.evaluate(async () => {
             document.body.classList.remove('dark-mode');

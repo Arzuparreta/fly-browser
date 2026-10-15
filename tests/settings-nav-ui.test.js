@@ -13,6 +13,7 @@ const root = path.resolve(__dirname, '..');
     try {
         application = await _electron.launch({executablePath: path.join(root, 'node_modules/electron/dist/electron'), args: ['--no-sandbox', '--disable-gpu', `--ozone-platform=${process.env.FLY_TEST_OZONE_PLATFORM || 'x11'}`, entry]});
         const page = await application.firstWindow();
+        await require('./sidebar-geometry')(page);
         const errors = []; page.on('pageerror', error => errors.push(error.message));
         await page.waitForFunction(() => !!window.executeBrowserAction && document.getElementById('KeyboardStatus').textContent === 'All changes saved');
         const active = () => page.evaluate(() => document.activeElement.id);
@@ -153,7 +154,7 @@ const root = path.resolve(__dirname, '..');
         await page.locator('#PreferencesOverlay').waitFor({state: 'hidden'});
         await page.evaluate(async () => {const {displayUpdateNotification} = await import('./renderer.js'); displayUpdateNotification({updateAvailable: true, currentVersion: '0.14.0', latestVersion: '99.0.0', releaseUrl: 'https://example.invalid/release'});});
         await page.locator('#menu-btn').focus();
-        await page.waitForFunction(() => document.getElementById('Sidebar').offsetWidth === 260);
+        await page.waitForFunction(() => window.__sidebarVisibleWidth() === 260);
         await page.locator('#update-indicator-btn').click();
         await page.locator('#PreferencesOverlay').waitFor({state: 'visible'});
         assert.deepEqual(await visiblePanes(), ['SettingsPane-about']);

@@ -16,6 +16,7 @@ const root = path.resolve(__dirname, '..');
     try {
         application = await _electron.launch({executablePath: path.join(root, 'node_modules/electron/dist/electron'), args: ['--no-sandbox', '--disable-gpu', `--ozone-platform=${process.env.FLY_TEST_OZONE_PLATFORM || 'x11'}`, entry]});
         const page = await application.firstWindow();
+        await require('./sidebar-geometry')(page);
         const errors = []; page.on('pageerror', error => errors.push(error.message));
         await page.waitForFunction(() => !!window.executeBrowserAction);
         await page.waitForFunction(() => {try {return [...document.querySelectorAll('webview')].find(view => view.getClientRects().length)?.getWebContentsId() > 0;} catch {return false;}});
@@ -24,11 +25,11 @@ const root = path.resolve(__dirname, '..');
         const expand = async () => {
             await page.mouse.move(500, await page.evaluate(() => innerHeight - 10));
             await page.mouse.move(10, 100);
-            await page.waitForFunction(() => document.getElementById('Sidebar').offsetWidth === 260);
+            await page.waitForFunction(() => document.body.classList.contains('sidebar-pinned') || window.__sidebarVisibleWidth() >= 259);
         };
         const contract = async () => {
             await page.mouse.move(500, await page.evaluate(() => innerHeight - 10));
-            await page.waitForFunction(() => document.getElementById('Sidebar').offsetWidth === 36);
+            await page.waitForFunction(() => window.__sidebarVisibleWidth() <= 37);
             assert.equal(await page.evaluate(() => document.getElementById('Sidebar').contains(document.activeElement)), false);
         };
         const click = async selector => {
@@ -71,7 +72,7 @@ const root = path.resolve(__dirname, '..');
             await page.keyboard.press(key);
             await page.mouse.move(500, 400);
             assert.equal(await page.evaluate(() => document.activeElement.id), 'SidebarClock');
-            assert.equal(await page.locator('#Sidebar').evaluate(el => el.offsetWidth), 260);
+            assert.equal(await page.locator('#Sidebar').evaluate(() => window.__sidebarVisibleWidth()), 260);
         }
         // A pointer click releases focus even when keyboard navigation preceded it.
         await click('#SidebarClock');
