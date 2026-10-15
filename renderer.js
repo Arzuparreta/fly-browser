@@ -163,7 +163,6 @@ window.toggleSidebarExpansion = toggleSidebarPin;
 window.toggleSidebarPin = toggleSidebarPin;
 window.applySidebarMode = applySidebarMode;
 window.toggleInterfaceTheme = toggleInterfaceTheme;
-window.toggleWebviewTheme = toggleWebviewTheme;
 window.applyThemeVisuals = applyThemeVisuals;
 window.togglePreferencesView = togglePreferencesView;
 window.openPreferencesPane = openPreferencesPane;
@@ -448,18 +447,8 @@ async function initializeBrowser() {
 
     applyThemeVisuals(initialCfg, savedTheme);
 
-    currentWebviewTheme = initialCfg?.webview_theme || 'dark';
-    updateWebviewThemeButtonUI(currentWebviewTheme);
-
-    const container = document.getElementById('webview-container');
-    if (container) {
-        container.classList.remove('theme-light', 'theme-dark');
-        container.classList.add(currentWebviewTheme === 'light' ? 'theme-light' : 'theme-dark');
-    }
-
-    if (window.flyAPI && typeof window.flyAPI.setNativeTheme === 'function') {
-        window.flyAPI.setNativeTheme(currentWebviewTheme);
-    }
+    syncWebsiteTheme = initialCfg?.sync_website_theme !== false;
+    applyWebsiteTheme(syncWebsiteTheme ? savedTheme : 'light');
 
     setupEventListeners();
     renderWorkspaceUI();
@@ -568,7 +557,6 @@ function setupEventListeners() {
     });
 
     document.getElementById('reader-view-btn')?.addEventListener('click', toggleReaderViewOnActiveTab);
-    document.getElementById('theme-toggle-btn').addEventListener('click', toggleWebviewTheme);
     document.getElementById('toggle-nav-btn').addEventListener('click', displayAddressOverlay);
     document.getElementById('split-toggle-btn')?.addEventListener('click', () => toggleSplitView());
     document.getElementById('split-toggle-btn')?.addEventListener('contextmenu', (e) => {
@@ -741,7 +729,6 @@ function setupEventListeners() {
             }
             case 'print-page': getActiveWebview()?.print(); break;
             case 'toggle-notifications': document.getElementById('noti-toggle-btn').click(); break;
-            case 'toggle-webview-theme': toggleWebviewTheme(); break;
             case 'force-reload-tab': getActiveWebview()?.reloadIgnoringCache(); break;
             case 'stop-loading': getActiveWebview()?.stop(); break;
             case 'zoom-in':
@@ -972,7 +959,7 @@ function setupEventListeners() {
         });
     });
 
-    const bottomButtons = ['pin-sidebar-btn', 'reader-view-btn', 'theme-toggle-btn', 'noti-toggle-btn', 'settings-btn'];
+    const bottomButtons = ['pin-sidebar-btn', 'reader-view-btn', 'noti-toggle-btn', 'settings-btn'];
     bottomButtons.forEach((id, idx) => {
         const btn = document.getElementById(id);
         if (!btn) return;
@@ -1224,55 +1211,31 @@ function triggerLinkHints() {
     }
 }
   
-let currentWebviewTheme = 'dark';
+// Websites follow the interface theme through prefers-color-scheme unless turned off in Preferences.
+// Only pages that declare their own dark mode react; nothing is forced on the rest.
+let syncWebsiteTheme = true;
 
-function updateWebviewThemeButtonUI(theme) {
-    const button = document.getElementById('theme-toggle-btn');
-    if (!button) return;
-    if (theme === 'light') {
-        button.innerHTML = '<i class="fa-solid fa-sun"></i>';
-        button.title = 'Toggle Website Dark/Light Theme (Website Light active)';
-    } else {
-        button.innerHTML = '<i class="fa-solid fa-moon"></i>';
-        button.title = 'Toggle Website Dark/Light Theme (Website Dark active)';
-    }
-}
-
-let webviewThemeSaveTimer = null;
-
-function toggleWebviewTheme() {
-    currentWebviewTheme = (currentWebviewTheme === 'light') ? 'dark' : 'light';
-    updateWebviewThemeButtonUI(currentWebviewTheme);
-
+function applyWebsiteTheme(theme) {
+    const websiteTheme = theme === 'light' ? 'light' : 'dark';
     const container = document.getElementById('webview-container');
     if (container) {
         container.classList.remove('theme-light', 'theme-dark');
-        container.classList.add(currentWebviewTheme === 'light' ? 'theme-light' : 'theme-dark');
+        container.classList.add(`theme-${websiteTheme}`);
     }
-
-    const activeView = getActiveWebview();
-    if (activeView) {
-        activeView.style.opacity = '0.75';
-        setTimeout(() => {
-            activeView.style.opacity = '1';
-        }, 140);
-    }
-
     if (window.flyAPI && typeof window.flyAPI.setNativeTheme === 'function') {
-        window.flyAPI.setNativeTheme(currentWebviewTheme);
+        window.flyAPI.setNativeTheme(websiteTheme);
     }
-
-    if (webviewThemeSaveTimer) clearTimeout(webviewThemeSaveTimer);
-    webviewThemeSaveTimer = setTimeout(() => {
-        if (window.flyAPI && typeof window.flyAPI.getBrowserSettings === 'function') {
-            window.flyAPI.getBrowserSettings().then((cfg) => {
-                const currentCfg = cfg || {};
-                currentCfg.webview_theme = currentWebviewTheme;
-                return window.flyAPI.updateBrowserSettings(currentCfg);
-            }).catch(() => {});
-        }
-    }, 400);
 }
+
+function setWebsiteThemeSync(enabled) {
+    syncWebsiteTheme = enabled;
+    const interfaceTheme = document.body.classList.contains('light-mode') ? 'light' : 'dark';
+    applyWebsiteTheme(enabled ? interfaceTheme : 'light');
+    if (window.flyAPI && typeof window.flyAPI.updateBrowserSettings === 'function') {
+        window.flyAPI.updateBrowserSettings({ sync_website_theme: enabled }).catch(() => {});
+    }
+}
+window.setWebsiteThemeSync = setWebsiteThemeSync;
 
 function toggleInterfaceTheme() {
     const body = document.body;
@@ -1291,6 +1254,7 @@ function toggleInterfaceTheme() {
     // Synchronously apply visual theme variables and sync inputs with zero latency
     applyThemeVisuals(null, newTheme);
     syncVisualSettingsInputs(null);
+    if (syncWebsiteTheme) applyWebsiteTheme(newTheme);
 
     // Keep Preferences checkbox switch in sync if open
     const themeToggle = document.getElementById('setting-theme-toggle');

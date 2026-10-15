@@ -306,8 +306,7 @@ Object.assign(ACTION_METADATA, {
     'move-tab-right': {label: 'Move tab right', category: 'Tabs'},
     'toggle-fullscreen': {label: 'Toggle full screen', category: 'System'},
     'print-page': {label: 'Print active page', category: 'Web Interaction'},
-    'toggle-notifications': {label: 'Toggle web notifications', category: 'System'},
-    'toggle-webview-theme': {label: 'Toggle website light or dark theme', category: 'Web Interaction'}
+    'toggle-notifications': {label: 'Toggle web notifications', category: 'System'}
 });
 for (const duplicate of ['mute-tab', 'toggle-sidebar-expansion', 'open-preferences']) delete ACTION_METADATA[duplicate];
 Object.assign(DEFAULT_KEYBINDS, {
@@ -348,7 +347,7 @@ const sequence = value => value.trim().split(/\s+/).map(keyboard.normalise).join
 const combosOf = table => Object.values(table).flatMap(listOf).filter(value => typeof value === 'string').map(sequence);
 const known = (table, id) => Object.hasOwn(table, id) ? table[id] : [];
 // Actions that no longer exist; files written by earlier versions may still list them.
-const RETIRED_ACTIONS = new Set(['toggle-site-shields', 'toggle-notes', 'export-reader-to-notes', 'export-reader-to-external', 'open-notes-external']);
+const RETIRED_ACTIONS = new Set(['toggle-site-shields', 'toggle-notes', 'export-reader-to-notes', 'export-reader-to-external', 'open-notes-external', 'toggle-webview-theme']);
 // True when an earlier version wrote this value without the user choosing it.
 function storedDefault(scope, id, value, legacy) {
     const values = listOf(value);

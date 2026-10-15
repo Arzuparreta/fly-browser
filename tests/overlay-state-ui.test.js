@@ -32,7 +32,7 @@ const root = path.resolve(__dirname, '..');
         const checkSidebarShortcut = async (pinned = false) => {
             await page.mouse.move(500, 400);
             await page.evaluate(() => document.activeElement.blur());
-            for (const target of ['#TabList li.selected', '#back-btn', '#theme-toggle-btn']) {
+            for (const target of ['#TabList li.selected', '#back-btn', '#reader-view-btn']) {
                 if (await page.locator(target).count() === 0) continue;
                 await page.keyboard.press('Alt+s');
                 await page.waitForFunction(() => document.getElementById('Sidebar').contains(document.activeElement));
