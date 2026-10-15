@@ -222,11 +222,12 @@ body.sidebar-auto-collapse #Sidebar:not(.pointer-inside, .expanded, :focus-withi
 
 /* One row holds the workspace badge, which opens the dashboard, and the
    navigation buttons, spread like the footer's. Only the badge sits in the
-   rail; the buttons are uniform 28px squares beside it. */
+   rail; the navigation actions sit beside it. */
 .sidebar-top-row {
     display: flex;
     align-items: center;
     justify-content: space-between;
+    gap: 26px;
     width: 245px;
     margin: 0 0 6px 4px;
     flex-shrink: 0;
@@ -261,11 +262,12 @@ body.sidebar-auto-collapse #Sidebar:not(.pointer-inside, .expanded, :focus-withi
     transition: background-color var(--motion-fast) var(--motion-ease), border-color var(--motion-fast) var(--motion-ease);
 }
 
-/* Five 28px controls over 245px: the gaps are 26-27px, ending in line with
-   the tab rows. */
+/* History shares one pill at the right edge, in line with the tab rows. */
 .nav-action-layout {
     display: flex;
-    gap: 26px;
+    flex: 1;
+    justify-content: space-between;
+    gap: 12px;
     align-items: center;
 }
 
@@ -294,6 +296,33 @@ body.sidebar-auto-collapse #Sidebar:not(.pointer-inside, .expanded, :focus-withi
 .nav-icon-button:not(#pin-sidebar-btn):hover, .nav-icon-button:not(#pin-sidebar-btn):focus-visible {
     background-color: var(--selected);
     border-color: var(--accent);
+}
+
+.nav-history-group {
+    display: flex;
+    flex: none;
+    border: 1px solid var(--border);
+    border-radius: 999px;
+    overflow: hidden;
+    transition: border-color var(--motion-fast) var(--motion-ease);
+}
+
+.nav-history-group:hover, .nav-history-group:focus-within {
+    border-color: var(--accent);
+}
+
+.nav-history-group .nav-icon-button {
+    height: 26px;
+    border: 0;
+    border-radius: 0;
+}
+
+.nav-history-group .nav-icon-button + .nav-icon-button {
+    border-left: 1px solid var(--border);
+}
+
+.nav-history-group .nav-icon-button:focus-visible {
+    box-shadow: inset 0 0 0 1px var(--accent);
 }
 
 #update-indicator-btn {
