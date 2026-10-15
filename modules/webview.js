@@ -1653,7 +1653,10 @@ export async function hibernateTab(currentWS, idx) {
 
     const webview = state.activeViewsCache[currentWS]?.[idx];
     if (webview) {
-        if (typeof webview.isCurrentlyAudible === 'function' && webview.isCurrentlyAudible()) {
+        // A webview before dom-ready throws here and cannot be playing audio yet.
+        let audible = false;
+        try { audible = typeof webview.isCurrentlyAudible === 'function' && webview.isCurrentlyAudible(); } catch (err) {}
+        if (audible) {
             if (!state.tabMediaAudible[currentWS]) state.tabMediaAudible[currentWS] = [];
             state.tabMediaAudible[currentWS][idx] = true;
             return false;
