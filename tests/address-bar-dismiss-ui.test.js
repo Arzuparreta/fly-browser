@@ -32,16 +32,19 @@ const root = path.resolve(__dirname, '..');
         };
         const guestValue = () => page.evaluate(() => [...document.querySelectorAll('webview')].find(view => view.getClientRects().length).executeJavaScript('document.getElementById("editable").value'));
 
-        // Focus reaching the page from other browser chrome also closes the bar. Alt+S moves focus
-        // from the open bar to the sidebar only before the page has held focus, so this runs first.
+        // Focus reaching the page from other browser chrome also closes the bar.
         await page.mouse.move(700, 400);
-        await open();
-        await page.keyboard.press('Alt+s');
-        await page.waitForTimeout(300);
-        assert(await page.evaluate(() => document.getElementById('Sidebar').contains(document.activeElement)), 'Alt+S moves focus to the sidebar');
-        assert(await bar.isVisible());
-        await page.mouse.click(700, 400);
-        await bar.waitFor({state: 'hidden'});
+        for (let round = 0; round < 3; round++) {
+            // Alt+S straight after the bar takes focus must not be undone by its pending select().
+            await page.keyboard.press('Control+l');
+            await page.waitForFunction(() => document.activeElement.id === 'WideAddressBar');
+            await page.keyboard.press('Alt+s');
+            await page.waitForTimeout(300);
+            assert(await page.evaluate(() => document.getElementById('Sidebar').contains(document.activeElement)), 'Alt+S moves focus to the sidebar');
+            assert(await bar.isVisible());
+            await page.mouse.click(700, 400);
+            await bar.waitFor({state: 'hidden'});
+        }
 
         // A click in the page closes the bar and the page keeps the click and the typing.
         await open();
@@ -59,7 +62,8 @@ const root = path.resolve(__dirname, '..');
             await page.locator('webview:visible').click({position: {x: 100, y}});
             await bar.waitFor({state: 'hidden'});
         }
-        // Browser keys are not seen inside a cross-origin frame, so return to the page document.
+        // Playwright's synthetic keys skip before-input-event, so inside a cross-origin frame they
+        // never reach Fly's shortcuts (real keys do); return to the page document first.
         await page.locator('webview:visible').click({position: {x: 100, y: 50}});
 
         // Clicks inside the bar keep it open; reopening after a page click starts from the page address.
