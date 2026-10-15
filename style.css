@@ -331,11 +331,11 @@ body.sidebar-auto-collapse #Sidebar:not(.pointer-inside, .expanded, :focus-withi
     border-color: var(--accent);
 }
 
-/* The clock follows the last tab; a list too long to fit scrolls instead of
-   squeezing its rows. */
+/* The list fills the free height, keeping the clock above the footer; a list
+   too long to fit scrolls instead of squeezing its rows. */
 #TabList {
     list-style: none;
-    flex: 0 1 auto;
+    flex: 1 1 0;
     min-height: 0;
     width: 259px;
     padding-left: 4px;
