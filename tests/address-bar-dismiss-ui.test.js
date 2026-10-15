@@ -9,7 +9,11 @@ const root = path.resolve(__dirname, '..');
 (async () => {
     const temporary = fs.mkdtempSync(path.join(os.tmpdir(), 'fly-address-dismiss-'));
     const entry = createElectronFixture(root, temporary);
-    const server = http.createServer((_request, response) => response.end('<!doctype html><title>Dismiss fixture</title><input id="editable" style="margin:200px 0 0 300px">'));
+    const server = http.createServer((request, response) => {
+        if (request.url === '/frame') return response.end('<!doctype html><body style="margin:0;background:#ccc">Cross-origin frame</body>');
+        // Plain text, a press whose default is cancelled and a cross-origin frame all move focus into the guest.
+        response.end(`<!doctype html><title>Dismiss fixture</title><body style="margin:0"><p style="height:100px;margin:0">Plain text</p><div style="height:100px" onmousedown="event.preventDefault()">Cancelled press</div><iframe src="http://localhost:${server.address().port}/frame" style="width:300px;height:100px;border:0;display:block"></iframe><input id="editable" style="margin:40px 0 0 300px"></body>`);
+    });
     await new Promise(resolve => server.listen(0, '127.0.0.1', resolve));
     let application;
     try {
@@ -38,10 +42,25 @@ const root = path.resolve(__dirname, '..');
         assert.equal(await guestValue(), 'ok');
         assert.equal(await page.locator('#AddressSuggestions').isVisible(), false);
 
+        await page.keyboard.press('Escape');
+        for (const y of [50, 150, 250]) {
+            await open();
+            await page.locator('webview:visible').click({position: {x: 100, y}});
+            await bar.waitFor({state: 'hidden'});
+        }
+        // Browser keys are not seen inside a cross-origin frame, so return to the page document.
+        await page.locator('webview:visible').click({position: {x: 100, y: 50}});
+
         // A click on browser chrome outside the bar closes it and still runs that control.
         await open();
         await page.mouse.move(10, 100);
         await page.locator('#back-btn').click();
+        await bar.waitFor({state: 'hidden'});
+        // The navigation button that opens the bar also closes it.
+        await page.mouse.move(10, 100);
+        await page.locator('#toggle-nav-btn').click();
+        await page.waitForFunction(() => document.activeElement.id === 'WideAddressBar');
+        await page.locator('#toggle-nav-btn').click();
         await bar.waitFor({state: 'hidden'});
 
         // Clicks inside the bar keep it open; reopening starts from the page address, not the discarded text.
