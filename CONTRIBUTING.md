@@ -107,6 +107,7 @@ That label is how the next version number is chosen; see [Versioning and release
 * Merge with whichever button you like (squash or merge commit).
 * CI runs `npm test` only. A missing label shows a red `impact_label` check until you add one; nothing blocks merging.
 * Never edit a version number by hand: releases set it.
+* The What's New page Fly opens after an upgrade is written from merged pull requests when a release is prepared. Your title is what users see there; to say more, add an optional `## What's New` section to the description ([format](docs/releasing.md#the-whats-new-page)).
 
 ***
 

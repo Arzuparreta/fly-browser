@@ -40,9 +40,9 @@ assert.equal(release.nextVersion('0.16.0-rc.2', 'patch'), '0.16.0');
 // Labels: the highest impact wins, unknown impact labels are ignored, and an
 // unlabelled pull request counts as a patch but stays recognisable as such.
 const pull = (number, ...labels) => release.classify({number, title: `PR ${number}`, labels: labels.map(name => ({name}))});
-assert.deepEqual(pull(1, 'impact:minor', 'bug'), {number: 1, title: 'PR 1', impact: 'minor', labelled: true});
+assert.deepEqual(pull(1, 'impact:minor', 'bug'), {number: 1, title: 'PR 1', body: '', impact: 'minor', labelled: true});
 assert.equal(pull(2, 'impact:none', 'impact:major').impact, 'major');
-assert.deepEqual(pull(3, 'impact:huge'), {number: 3, title: 'PR 3', impact: 'patch', labelled: false});
+assert.deepEqual(pull(3, 'impact:huge'), {number: 3, title: 'PR 3', body: '', impact: 'patch', labelled: false});
 assert.equal(release.highestImpact([pull(4, 'impact:none'), pull(5, 'impact:patch'), pull(6, 'impact:minor')]), 'minor');
 assert.equal(release.highestImpact([pull(7, 'impact:none')]), 'none');
 assert.equal(release.highestImpact([pull(8)]), 'patch');
@@ -92,4 +92,57 @@ try {
     throws(() => versionSync.sync('0.2.0', {check: true, root: temporary}), /layout changed/);
 } finally { fs.rmSync(temporary, {recursive: true, force: true}); }
 
-console.log('Release tooling derives versions from impact labels and keeps every copy of the version in agreement.');
+// What's New is written from the pull requests a release ships.
+const whatsNew = require('../scripts/whats-new');
+assert.equal(whatsNew.extractNote('## What changed\n\nInternals.'), null, 'The section is optional');
+assert.deepEqual(whatsNew.extractNote([
+    '## What changed', 'Internal detail.', '',
+    "## What's New", '<!-- for users -->', '### Websites follow the interface',
+    'Pages with their own dark mode', 'switch with Chasis and Papel.', '',
+    '- Turn it off in `Preferences` → Appearance.', '- Pages without one', '  are never changed.',
+    '## Validation', '- npm test'
+].join('\r\n')), {
+    title: 'Websites follow the interface',
+    text: ['Pages with their own dark mode switch with Chasis and Papel.'],
+    points: ['Turn it off in `Preferences` → Appearance.', 'Pages without one are never changed.']
+});
+assert.equal(whatsNew.extractNote('## What’s new\nCurly apostrophe and any case.').text[0], 'Curly apostrophe and any case.');
+
+const shipped = [
+    {number: 5, title: 'Fix a crash', impact: 'patch', body: ''},
+    {number: 3, title: 'Version 0.1.0', impact: 'none', body: ''},
+    {number: 4, title: 'Add a feature', impact: 'minor', body: "## What's New\n- It does a thing."},
+    {number: 6, title: 'Remove a workflow', impact: 'major', body: ''}
+];
+const entry = whatsNew.releaseEntry('0.2.0', '2026-10-15', shipped);
+assert.deepEqual(entry.changes.map(change => change.number), [6, 4, 5], 'Most important first, nothing a user cannot see');
+assert.deepEqual(entry.changes[1], {impact: 'minor', number: 4, title: 'Add a feature', text: [], points: ['It does a thing.']});
+
+const notes = fs.mkdtempSync(path.join(os.tmpdir(), 'fly-whats-new-'));
+try {
+    const file = path.join(notes, 'whats-new-releases.js');
+    whatsNew.recordRelease('0.2.0-rc.1', [shipped[0]], {date: '2026-10-14', file});
+    whatsNew.recordRelease('0.2.0-rc.2', [shipped[2]], {date: '2026-10-15', file});
+    whatsNew.recordRelease('0.2.0', [shipped[3]], {date: '2026-10-16', file});
+    let releases = whatsNew.readReleases(file);
+    assert.deepEqual(releases.map(release => release.version), ['0.2.0'], 'A release absorbs its candidates');
+    assert.deepEqual(releases[0].changes.map(change => change.number), [6, 4, 5]);
+    whatsNew.recordRelease('0.2.1', [shipped[0]], {date: '2026-10-17', file});
+    whatsNew.recordRelease('0.2.1', [shipped[0], shipped[2]], {date: '2026-10-17', file});
+    releases = whatsNew.readReleases(file);
+    assert.deepEqual(releases.map(release => release.version), ['0.2.1', '0.2.0'], 'Preparing again replaces, newest first');
+    assert.equal(releases[0].changes.length, 2);
+    fs.writeFileSync(file, 'window.FLY_RELEASES = [];');
+    assert.throws(() => whatsNew.readReleases(file), /not written by/);
+} finally { fs.rmSync(notes, {recursive: true, force: true}); }
+
+// The bundled history must load and follow the shape the page renders.
+for (const release of whatsNew.readReleases()) {
+    assert.match(release.version, /^\d+\.\d+\.\d+(-rc\.\d+)?$/);
+    assert.match(release.date, /^\d{4}-\d{2}-\d{2}$/);
+    for (const change of release.changes) {
+        assert.ok(['major', 'minor', 'patch'].includes(change.impact) && change.title && Array.isArray(change.text) && Array.isArray(change.points));
+    }
+}
+
+console.log("Release tooling derives versions from impact labels, keeps every copy of the version in agreement and writes What's New from what ships.");

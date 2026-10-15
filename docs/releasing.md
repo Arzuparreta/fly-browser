@@ -63,6 +63,27 @@ In Claude Code, `/release` runs these steps and waits between them.
 
 `--rc` cuts a release candidate. `--version X.Y.Z` overrides the derived number, which is how 1.0 will eventually happen: a label cannot decide that.
 
+## The What's New page
+
+After an upgrade Fly opens `assets/whats-new.html`, listing every release since the version that profile last ran. Opened by hand (command palette → Show What's New) it lists the latest release.
+
+Nobody writes it. `prepare` records the release in `assets/whats-new-releases.js` from the pull requests going out, with `scripts/whats-new.js`, and the bump pull request carries that change. Each pull request labelled `major`, `minor` or `patch` becomes an entry under its title: `major` ones are marked *Action needed*, `minor` and `major` ones get a card each, and `patch` ones are gathered under *Fixes*. `impact:none` is left out.
+
+To say more than the title, a pull request adds an optional section to its description:
+
+```markdown
+## What's New
+
+### Websites follow the interface theme
+
+Switching between Chasis and Papel also switches websites that have their own dark mode.
+
+- Turn it off in Preferences → Appearance → Match websites to the interface.
+- Pages without a dark mode are never changed.
+```
+
+The `###` line replaces the title, plain lines become the description and `- ` lines the points. Text in backticks shows as a key. The section ends at the next `#` or `##` heading. `plan` lists the pull requests that have no such section, so the title is what readers will see. A release absorbs the entries of its own release candidates, and preparing the same version again replaces its entry.
+
 ## What a tag builds
 
 `release.yml` checks the tag against `package.json`, builds every package and publishes one GitHub Release with all of them, a `SHA256SUMS.txt` and notes generated from the merged pull requests, grouped by impact. The packages are unsigned.

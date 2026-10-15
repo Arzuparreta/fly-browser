@@ -11,8 +11,11 @@ $ARGUMENTS may contain `--rc` (cut a release candidate) or `--version X.Y.Z`
 1. `node scripts/release.js plan $ARGUMENTS`: show the user the number and
    what is going into it. If any merged pull request has no impact label, say
    so plainly: it is being counted as a patch and that may be wrong.
-2. If `assets/whats-new.html` still describes an older version, say so: it is
-   the page Fly opens after an upgrade and nothing writes it automatically.
+2. `plan` lists the pull requests that have no `## What's New` section in
+   their description: the What's New page will show only their title. If a
+   title would not make sense to a user, add the section to that pull
+   request's description (`gh pr edit N --body-file ...`) before `prepare`,
+   which writes the page from those descriptions.
 3. `node scripts/release.js prepare $ARGUMENTS`: opens the bump pull request,
    waits for its checks and merges it. Run it in the background; the checks
    take a few minutes.
