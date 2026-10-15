@@ -181,6 +181,7 @@ Fly Browser provides a Vim-inspired modal navigation engine that frees you from 
 * **Non-Disruptive Sidebar Cursor Navigation**: Moving with **j** / **k** or **Down** / **Up** moves the cursor highlight across tabs without waking sleeping tabs into memory. Press **Enter**, **Space**, or **l** / **Right** to activate the highlighted tab.
 * **Workspace Badges**: The top of the strip displays a compact letter or number badge for the current workspace (such as `W1` or `P`). Clicking the workspace badge opens the Workspace Dashboard (**Ctrl + Shift + W**).
 * **Favicons & Indicators**: Each tab renders its website favicon with smart local and remote caching. Sleeping tabs display a subtle moon indicator, while tabs playing audio render a green audio badge.
+* **Closing Tabs with the Mouse**: Hover a tab in the expanded sidebar and click its **×** button, or middle-click the tab, to close it without selecting it first. The selected tab always shows its **×**. Pinned tabs have no close button and ignore middle-click; unpin them first.
 * **New Windows and Sign-In Popups**: Links that open a new window, and plain `window.open` calls, open as tabs in the current workspace. Popups a page opens with a size, such as "Continue with Google", open as a small window above Fly in the same workspace container, so the sign-in can report back to the page; **Ctrl + W** closes it. A page that closes itself, as many sign-in callbacks do, closes its tab; a pinned tab reloads instead.
 
 ***

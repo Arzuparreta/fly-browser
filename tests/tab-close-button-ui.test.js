@@ -7,7 +7,7 @@ const http = require('node:http');
 const createElectronFixture = require('./electron-fixture');
 const root = path.resolve(__dirname, '..');
 
-// The close button on a sidebar tab closes that tab, keeps the selection elsewhere and spares pinned tabs.
+// The close button and middle click on a sidebar tab close that tab, keep the selection elsewhere and spare pinned tabs.
 (async () => {
     const temporary = fs.mkdtempSync(path.join(os.tmpdir(), 'fly-tab-close-button-'));
     const entry = createElectronFixture(root, temporary);
@@ -67,10 +67,23 @@ const root = path.resolve(__dirname, '..');
         assert.deepEqual(await urls(), [`${fixture}/two`]);
         assert.equal(await selectedIndex(), 0);
 
-        // Pinned tabs cannot be closed, so they offer no close button
+        // Middle click closes a tab without selecting it first
+        await page.evaluate(url => window.executeBrowserAction('spawn-tab-with-url', url), `${fixture}/four`);
+        await page.waitForFunction(() => document.querySelectorAll('#TabList li').length === 2);
+        await hover(0);
+        await tab(0).click({button: 'middle'});
+        await page.waitForFunction(() => document.querySelectorAll('#TabList li').length === 1);
+        assert.deepEqual(await urls(), [`${fixture}/four`]);
+        assert.equal(await selectedIndex(), 0);
+
+        // Pinned tabs cannot be closed, so they offer no close button and ignore middle click
         await page.evaluate(() => window.togglePinActiveTab());
         await page.waitForFunction(() => document.querySelector('#TabList li').classList.contains('tab-pinned'));
         assert.equal(await tab(0).locator('.tab-close-btn').count(), 0);
+        await hover(0);
+        await tab(0).click({button: 'middle'});
+        await page.waitForTimeout(200);
+        assert.equal(await page.locator('#TabList li').count(), 1);
         await page.evaluate(() => window.togglePinActiveTab());
         await page.waitForFunction(() => !!document.querySelector('#TabList li .tab-close-btn'));
         await hover(0);
@@ -79,7 +92,7 @@ const root = path.resolve(__dirname, '..');
         await tab(0).locator('.tab-close-btn').click();
         await page.waitForFunction(() => document.querySelectorAll('#TabList li').length === 0);
         assert.deepEqual(errors, []);
-        console.log('Tab close buttons close background, selected and last tabs; pinned tabs have none.');
+        console.log('Tab close buttons and middle click close background, selected and last tabs; pinned tabs stay.');
     } finally {
         if (application) await application.close();
         await new Promise(resolve => server.close(resolve));

@@ -856,6 +856,19 @@ export function renderWorkspaceUI(targetTabToFocus = null) {
             switchTabFocus(idx);
         });
 
+        // Middle click closes the tab, as in other browsers; mousedown is cancelled so Linux does not start autoscroll.
+        li.addEventListener('mousedown', (e) => {
+            if (e.button === 1) e.preventDefault();
+        });
+        li.addEventListener('auxclick', (e) => {
+            if (e.button !== 1) return;
+            e.preventDefault();
+            if (state.dashboardActive && typeof window.toggleDashboardView === 'function') {
+                window.toggleDashboardView();
+            }
+            handleTabRemoval(idx);
+        });
+
         li.addEventListener('keydown', (e) => {
             if (e.key === 'Enter') {
                 if (state.dashboardActive && typeof window.toggleDashboardView === 'function') {
