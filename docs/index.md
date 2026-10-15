@@ -31,8 +31,8 @@ features:
     details: Every workspace runs inside an isolated persistent Chromium partition. Run multiple corporate and personal logins simultaneously with zero cookie cross-contamination.
   - title: Mouse-Free Navigation
     details: Full Vim-inspired link hints (f), customisable quickmark actions, floating omnibar, and browser and page-key customisation in Preferences.
-  - title: Native Privacy Shields
-    details: Built-in Ghostery request filtering stops trackers, cryptominers, and analytics at the network layer. Trusted domains bypass fingerprint farbling on banking portals.
+  - title: uBlock Origin
+    details: Included ad and tracker blocking for persistent workspaces, with filter lists and site exceptions managed in uBlock Origin.
   - title: Clipboard-Mediated Oversight
     details: Web commands and script executions stage safely onto your system clipboard. External terminal scanning tools like Oversight can inspect actions before execution.
   - title: User Scripts & Styles Engine
@@ -72,7 +72,7 @@ Keep your hands on the home row. Every major workflow is reachable via concise, 
 | `Ctrl + L` / `o` | Omnibar | Open floating address bar with search engine aliases |
 | `Ctrl + Shift + H` | History Overlay | Search, reopen, or purge visited history records |
 | `Ctrl + Shift + P` | Private Window | Open zero-trace volatile browsing container |
-| `Ctrl + H` | Preferences | Adjust hardware flags, sleep timeouts, and site shields |
+| `Ctrl + H` | Preferences | Adjust hardware flags, sleep timeouts, and site permissions |
 
 ---
 

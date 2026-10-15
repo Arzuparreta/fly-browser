@@ -10,6 +10,7 @@ const state = {sessionState: {current_workspace: 'A', workspaces: {A: ['old']}},
 const view = {setAttribute: (name, value) => events.push(['navigate', name, value])};
 state.activeViewsCache.A[0] = view;
 const context = {
+    loadWebviewSource: (view, _workspace, url) => view.setAttribute('src', url),
     resolveSearchAliasUrl, prepareOverlay: () => {}, state, document: {getElementById: id => id === 'WideAddressBar' ? address : null, querySelector: () => selected, querySelectorAll: () => [selected]},
     window: {flyAPI: {saveSession: () => events.push(['save']), getBrowserSettings: async () => ({search_engine: 'https://duckduckgo.com/?q=%s'})}},
     focusActiveWebview: () => {assert.equal(address.style.display, 'none'); events.push(['focus', state.activeViewsCache.A[0]]);},

@@ -742,7 +742,6 @@ function setupEventListeners() {
             case 'print-page': getActiveWebview()?.print(); break;
             case 'toggle-notifications': document.getElementById('noti-toggle-btn').click(); break;
             case 'toggle-webview-theme': toggleWebviewTheme(); break;
-            case 'toggle-site-shields': document.querySelector('#TabList li.selected .tab-shield-btn')?.click(); break;
             case 'force-reload-tab': getActiveWebview()?.reloadIgnoringCache(); break;
             case 'stop-loading': getActiveWebview()?.stop(); break;
             case 'zoom-in':

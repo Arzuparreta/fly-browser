@@ -5,6 +5,7 @@ import { renderWorkspaceUI, switchTabFocus, spawnTabWithUrl, spawnNewBlankTab, h
 import { formatSearchUrl, resolveSearchAliasUrl, getEffectiveSearchAliases } from './overlays/searchEngine.js';
 import { evaluateMathExpression } from './calculator.js';
 import { setTargetUrl } from './statusBar.js';
+import { loadWebviewSource } from './extensions.js';
 
 export const POPULAR_BANGS = {
     '!w': 'Wikipedia',
@@ -75,7 +76,7 @@ function applyTargetUrl(targetUrl) {
     const effectiveLoadUrl = isPdfUrl(targetUrl) ? getPdfViewerUrl(targetUrl) : targetUrl;
 
     if (state.activeViewsCache[currentWS] && state.activeViewsCache[currentWS][currentIdx]) {
-        state.activeViewsCache[currentWS][currentIdx].setAttribute('src', effectiveLoadUrl);
+        loadWebviewSource(state.activeViewsCache[currentWS][currentIdx], currentWS, effectiveLoadUrl);
     } else {
         wakeTab(currentWS, currentIdx);
     }

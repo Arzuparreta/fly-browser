@@ -1,4 +1,4 @@
-// Renderer side of opt-in Chrome extension support. See extensions.js in the main
+// Renderer side of Chrome extension support. See extensions.js in the main
 // process for the lifecycle. With extensions disabled, every entry point here
 // returns after a single property check.
 
@@ -7,7 +7,6 @@ import { getWorkspacePartition, escapeHtml } from './utils.js';
 import { setTargetUrl } from './statusBar.js';
 import { spawnTabWithUrl, switchTabFocus, handleTabRemoval } from './webview.js';
 
-const ENSURE_TIMEOUT_MS = 1500;
 const POPUP_MIN = { width: 200, height: 60 };
 const POPUP_MAX = { width: 800, height: 600 };
 const POPUP_MEASURE_DELAYS_MS = [0, 150, 400, 900, 1800];
@@ -61,19 +60,18 @@ function isPersistentPartition(partition) {
 // scripts declared for document_start apply to the first navigation. Without
 // extensions for this workspace the source is set synchronously, as before.
 export function loadWebviewSource(webview, workspace, src) {
+    const navigation = {};
+    webview.__flyPendingNavigation = navigation;
     const partition = webview.getAttribute('partition');
     if (!isPersistentPartition(partition) || !workspaceHasExtensions(workspace)) {
         webview.setAttribute('src', src);
         return;
     }
 
-    let done = false;
     const finish = () => {
-        if (done) return;
-        done = true;
-        webview.setAttribute('src', src);
+        // A tab can be closed or hibernated while its extension starts.
+        if (webview.isConnected && webview.__flyPendingNavigation === navigation) webview.setAttribute('src', src);
     };
-    setTimeout(finish, ENSURE_TIMEOUT_MS);
     window.flyAPI.extensionsEnsure(workspace, partition).then(finish, finish);
 }
 
@@ -291,7 +289,7 @@ export function getExtensionPaletteCommands() {
         id: 'extensions-open-settings',
         title: 'Extension Settings',
         desc: 'Enable Chrome extensions per workspace and see what they cost',
-        details: 'Opens the Extensions section in Preferences. Extensions are off by default, load only in the workspaces you choose and unload when those workspaces go idle.',
+        details: 'Opens the Extensions section in Preferences. uBlock Origin is enabled by default in new profiles. Extensions load in selected workspaces and unload when those workspaces go idle.',
         tip: 'Unpacked extensions live in ~/.config/fly-browser/extensions/, one folder each.',
         category: 'Extensions',
         icon: 'fa-solid fa-puzzle-piece',

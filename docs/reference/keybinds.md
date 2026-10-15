@@ -133,7 +133,6 @@ Existing legacy profiles retain their explicit assignments, including empty and 
 | Toggle Audio Mute on Active Tab | `Ctrl+Shift+M` / `F8` | `m` |
 | Toggle Link Hints Overlay | `Alt+F` | `f` |
 | Toggle Reader View on Active Tab | `F9` | `e` |
-| Toggle shields for the active site | Unassigned | Unassigned |
 | Toggle website light or dark theme | Unassigned | Unassigned |
 | Zoom in | `Ctrl+Plus` / `Ctrl+=` | Unassigned |
 | Zoom out | `Ctrl+-` | Unassigned |

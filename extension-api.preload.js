@@ -15,38 +15,36 @@
   // src/renderer/event.ts
   var import_electron = __require("electron");
   var formatIpcName = (name) => `crx-${name}`;
-  var listenerMap = /* @__PURE__ */ new Map();
+  var listenerMap = new Map();
   var addExtensionListener = (extensionId, name, callback) => {
-    const listenerCount = listenerMap.get(name) || 0;
-    if (listenerCount === 0) {
+    let callbacks = listenerMap.get(name);
+    if (!callbacks) {
+      callbacks = new Map();
+      listenerMap.set(name, callbacks);
       import_electron.ipcRenderer.send("crx-add-listener", extensionId, name);
     }
-    listenerMap.set(name, listenerCount + 1);
-    import_electron.ipcRenderer.addListener(formatIpcName(name), function(event, ...args) {
-      if (true) {
-        console.log(name, "(result)", ...args);
-      }
-      callback(...args);
-    });
+    if (callbacks.has(callback)) return;
+    const listener = (_event, ...args) => callback(...args);
+    callbacks.set(callback, listener);
+    import_electron.ipcRenderer.on(formatIpcName(name), listener);
   };
   var removeExtensionListener = (extensionId, name, callback) => {
-    if (listenerMap.has(name)) {
-      const listenerCount = listenerMap.get(name) || 0;
-      if (listenerCount <= 1) {
-        listenerMap.delete(name);
-        import_electron.ipcRenderer.send("crx-remove-listener", extensionId, name);
-      } else {
-        listenerMap.set(name, listenerCount - 1);
-      }
+    const callbacks = listenerMap.get(name);
+    const listener = callbacks?.get(callback);
+    if (!listener) return;
+    import_electron.ipcRenderer.removeListener(formatIpcName(name), listener);
+    callbacks.delete(callback);
+    if (callbacks.size === 0) {
+      listenerMap.delete(name);
+      import_electron.ipcRenderer.send("crx-remove-listener", extensionId, name);
     }
-    import_electron.ipcRenderer.removeListener(formatIpcName(name), callback);
   };
 
   // src/renderer/index.ts
   var injectExtensionAPIs = () => {
     const invokeExtension = async function(extensionId, fnName, options = {}, ...args) {
       const callback = typeof args[args.length - 1] === "function" ? args.pop() : void 0;
-      if (true) {
+      if (false) {
         console.log(fnName, args);
       }
       if (options.noop) {
@@ -64,7 +62,7 @@
         console.error(e);
         result = void 0;
       }
-      if (true) {
+      if (false) {
         console.log(fnName, "(result)", result);
       }
       if (callback) {

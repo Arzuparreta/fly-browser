@@ -42,8 +42,7 @@ fanless Linux hardware:
 4. **Native Handling of Core Capabilities**:
    When analysing what users actually install extensions for, four use cases
    dominate:
-   * **Ad & Tracker Blocking**: Handled natively in Fly with network engine
-     blocking via `@ghostery/adblocker-electron`.
+   * **Ad & Tracker Blocking**: Handled by the included uBlock Origin extension.
    * **Tab Suspension**: Handled natively via Fly true tab hibernation.
    * **Custom Styling**: Handled cleanly via local `~/.config/fly-browser/styles/`.
    * **Page Script Tweaks**: Handled cleanly via local `~/.config/fly-browser/scripts/`.

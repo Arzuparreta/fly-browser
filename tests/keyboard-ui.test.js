@@ -84,6 +84,7 @@ const root = path.resolve(__dirname, '..');
   await page.locator('#KeyboardSearch').focus();
   await page.keyboard.press('Escape');
   assert.equal(await page.locator('.keyboard-row').count(), 0, 'Closing Preferences releases its rows');
+  await page.waitForFunction(() => {try {return [...document.querySelectorAll('webview')].find(view => view.getClientRects().length)?.getWebContentsId() > 0;} catch {return false;}});
   await page.evaluate(url=>{const view=[...document.querySelectorAll('webview')].find(view=>view.getClientRects().length); return view.loadURL(url);},fixture);
   await page.waitForTimeout(600);
   const guest=await app.evaluate(({webContents})=>webContents.getAllWebContents().find(w=>w.getType()==='webview' && w.getURL().startsWith('http://127.0.0.1')).id);

@@ -187,4 +187,33 @@ console.log('Running Fly authentication & network security tests...');
     console.log('✓ Scripted popup classification verified');
 }
 
+// A network extension owns the whole session's request hooks. Reconfiguring
+// preferences must not silently take that ownership back from uBlock.
+{
+    const listeners = new Map();
+    const target = {
+        webRequest: {},
+        setPermissionRequestHandler() {},
+        setPermissionCheckHandler() {}
+    };
+    for (const event of ['onBeforeRequest', 'onBeforeSendHeaders', 'onSendHeaders', 'onHeadersReceived',
+        'onResponseStarted', 'onBeforeRedirect', 'onCompleted', 'onErrorOccurred']) {
+        target.webRequest[event] = (...args) => listeners.set(event, args.at(-1));
+    }
+    security.hardenSession(target);
+    assert.equal(typeof listeners.get('onBeforeRequest'), 'function');
+    security.setNetworkExtensions(target, true);
+    assert.equal(security.hasNetworkExtensions(target), true);
+    assert([...listeners.values()].every(listener => listener === null));
+    security.setTrustedDomains(['example.org']);
+    security.hardenSession(target);
+    assert([...listeners.values()].every(listener => listener === null), 'Settings must not suppress extension filtering');
+    security.setNetworkExtensions(target, false);
+    assert.equal(security.hasNetworkExtensions(target), false);
+    for (const event of ['onBeforeRequest', 'onBeforeSendHeaders', 'onHeadersReceived']) {
+        assert.equal(typeof listeners.get(event), 'function');
+    }
+    console.log('✓ Network extension ownership survives session and permission updates');
+}
+
 console.log('\nAll authentication & network security tests passed successfully!\n');

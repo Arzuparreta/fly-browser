@@ -6,6 +6,9 @@ const { exec, spawn, execSync, spawnSync } = require('child_process');
 const v8 = require('v8');
 const vm = require('vm');
 
+// Include extension background pages in Chromium’s renderer sandbox.
+app.enableSandbox();
+
 // Output written after Fly's terminal closes must not end in an error dialog.
 require('./closedOutput').ignoreClosedOutput();
 
@@ -126,8 +129,8 @@ const DEFAULT_CONFIG = {
     last_seen_version: null,
     // Set once an AppImage start has asked to add Fly to the applications menu.
     desktop_integration_offered: false,
-    // Opt-in Chrome extensions, see extensions.js and docs/guide/extensions.md
-    extensions_enabled: false,
+    // The included uBlock Origin is the default blocker. Saved choices are preserved.
+    extensions_enabled: true,
     extensions_by_workspace: {},
     extensions_bundled: {},
     extensions_disabled: [],
@@ -1820,10 +1823,6 @@ function createWindow() {
                 }
             } catch (e) {}
         }, 6000);
-    });
-
-    ipcMain.on('is-trusted-domain', (event, hostname) => {
-        event.returnValue = security.isTrustedDomain(hostname);
     });
 
     ipcMain.on('get-google-signin-user-agent', (event, hostname) => {

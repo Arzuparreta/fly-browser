@@ -82,9 +82,13 @@ async function run(root, round, url) {
         }
         const readyMs = performance.now() - start;
         const viewport = await page.evaluate(() => ({width: innerWidth, height: innerHeight, screenWidth: screen.width, screenHeight: screen.height}));
-        for (let i = 0; !fs.existsSync(path.join(temporary, 'data/adblock_cache.bin')); i++) {
-            if (i === 600) throw new Error('Filter cache did not initialise');
-            await pause(50);
+        // Old measured revisions create a Ghostery cache; current Fly waits for
+        // uBlock during first navigation and no longer creates that file.
+        if (fs.existsSync(path.join(root, 'adblocker-build.js'))) {
+            for (let i = 0; !fs.existsSync(path.join(temporary, 'data/adblock_cache.bin')); i++) {
+                if (i === 600) throw new Error('Filter cache did not initialise');
+                await pause(50);
+            }
         }
         await pause(2000);
         const pid = application.process().pid;
@@ -167,7 +171,8 @@ async function run(root, round, url) {
         const sleeping = processes(pid);
         const views = await page.locator('webview').count();
         assert.equal(views, 1, 'Hibernation must leave only the selected view');
-        assert.equal(heavyExtensionModule, false, 'Disabled extensions must not load the compatibility library');
+        const cfg = await page.evaluate(() => window.flyAPI.getBrowserSettings());
+        if (!cfg.extensions_enabled) assert.equal(heavyExtensionModule, false, 'Disabled extensions must not load the compatibility library');
         assert.deepEqual(errors, []);
         const result = {root, round, viewport, readyMs, idleCpuMs, idleCpuPercent, settled: before, idle: after, hostHeapMiB: memory.JSHeapUsedSize / 1048576, dom, preferences, mutationMs, hintsMessages, hintsTransitions, messagesBefore, messagesAfter, tabs, slowSwitchMs, live, sleeping, views, filterFetches, gpuFeatureStatus, gpuInfo, heavyExtensionModule};
         samples.push(result);

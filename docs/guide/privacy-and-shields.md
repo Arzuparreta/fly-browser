@@ -1,60 +1,31 @@
-# Privacy & Trusted Sites
+# Privacy & ad blocking
 
-Fly is engineered to provide strong privacy defaults while ensuring that modern web applications, banking portals, and checkout flows work without artificial roadblocks.
+Fly includes uBlock Origin for ad and tracker blocking. Its popup, filter lists and site exceptions provide one place to control filtering. The former Ghostery blocker and per-tab shields have been removed: running separate request blockers caused conflicts, and a blocked CNN video configuration request triggered an unbounded retry loop.
 
----
+## uBlock Origin
 
-## Native Tracker & Ad Blocking
+New profiles enable uBlock by default. Upgrades preserve saved extension settings: if extensions were disabled, enable them in Preferences to use uBlock. Individual disables, removals and workspace selections are preserved.
 
-Fly integrates an in-process network request blocker powered by Ghostery's block engine:
+Open **Preferences → Extensions** to enable or disable uBlock Origin and choose its workspaces. Open its popup from the status bar to pause blocking on a site, or its options to manage lists and custom rules. Fly's trusted-site list does not change uBlock's filtering.
 
-- Blocks known marketing trackers, advertising networks, and telemetry collectors natively before outbound network requests leave the browser.
-- Operates at the network intercept layer, conserving CPU cycles and network bandwidth on slow or metered connections.
-- Requires no external extensions or third-party web store plugins.
+New tabs wait for uBlock's filters to become ready before navigating. Existing tabs need a reload after enabling an extension to receive its content scripts.
 
----
+Extensions run only in persistent workspace sessions. **Private browsing has no ad blocker**: Electron cannot load extensions in the in-memory private session. Disabling extensions, disabling or removing uBlock, or deselecting it in a workspace also leaves that session without ad blocking.
 
-## Global Private Browsing (`Ctrl + Shift + P`)
+## Private browsing (`Ctrl + Shift + P`)
 
-For volatile browsing sessions where no trace should remain:
+Navigation uses the in-memory `FlyPrivateProfile` partition. Its cookies, cache and site storage are discarded when that session ends. Workspaces use separate persistent sessions for ordinary browsing.
 
-- Press **Ctrl + Shift + P** to toggle Private Browsing Mode.
-- All new navigation routes through an in-memory profile partition (`FlyPrivateProfile`).
-- Cookies, cache files, and site storage created during private mode are wiped completely when the session ends or when the browser closes.
+## Browser identity and page APIs
 
----
+Fly removes its application and Electron tokens from its default User-Agent. Google's sign-in page receives Electron's original identity for compatibility. Fly sends Do Not Track and Global Privacy Control preferences to pages; sites decide whether to honour them.
 
-## Fingerprint Protection & Farbling
+Fly leaves Canvas, WebGL, audio, hardware concurrency, language and time zone APIs intact. The former shield layer modified page data and could interfere with rendering, media and site compatibility. Fly does not claim fingerprint anonymity.
 
-Fly actively protects against passive browser fingerprinting:
+## Site permission exceptions
 
-- **User Agent Standardisation**: Strips internal Electron and Fly application tokens from HTTP headers and JavaScript `navigator` properties (`userAgent`, `appVersion`, and `userAgentData` client hints), matching a clean Chromium release. The one exception is Google's sign-in page (`accounts.google.com`), which receives Electron's own User-Agent, because Google refuses sign-in from the standardised profile.
-- **Canvas & WebGL Farbling**: Applies subtle, imperceptible noise to Canvas data exports (`toDataURL`, `toBlob`, `getImageData`) and rotates WebGL extension order. Fingerprinting auditors such as EFF Cover Your Tracks recognise this as a randomised, non-trackable fingerprint.
-- **Hardware Profile Masking**: Standardises `hardwareConcurrency` (8 cores), `deviceMemory` (8 GB), and WebGL unmasked vendor/renderer to a common Brave/Chromium baseline to blend into large anonymity pools.
-- **Trusted Domains Exemption**: Any domain added to Trusted Sites automatically bypasses farbling, ensuring sensitive fraud-detection checks (like banking) see consistent device metrics.
+In **Preferences → Privacy & security**, the trusted-site list controls permission exceptions for capabilities such as camera, microphone and location. Entries include subdomains. Existing entries remain saved when upgrading. This list is independent of uBlock's allowlist.
 
----
+## Clear site data
 
-## Trusted Sites (Online Banking & Shopping)
-
-![Preferences Privacy and security section with trusted sites](/screenshots/preferences-3.webp)
-
-Modern online banks, Google authentication, and e-commerce sites (such as Amazon or checkout payment gateways) employ sophisticated anti-fraud algorithms. When a browser randomises fingerprints, alters user-agent client hints, or strips verification headers, fraud systems flag the session as suspicious and block logins or payments.
-
-Fly resolves this through the **Trusted Sites** architecture:
-
-- **Shield Indicator**: Every tab in the vertical sidebar features a shield button.
-  - **Shield Active (Half Shield)**: Full protection, tracker blocking, and strict isolation are active.
-  - **Shield Down (Full Shield)**: The domain is in your Trusted Sites list. Fraud detection signals are kept intact to ensure seamless logins and payment processing.
-- **One-Click Whitelisting**: Click the shield icon in any sidebar tab to toggle trust status for that domain immediately. Fly updates your configuration and reloads the tab.
-- **Managing Trusted Domains**: In Preferences (**Ctrl + H**), select **Privacy & security** in the section index and use the **Trusted sites** text area. Enter one domain per line (e.g. `amazon.co.uk`, `accounts.google.com`). All subdomains are covered automatically without requiring a browser restart.
-
----
-
-## Active Site Data Clearing
-
-When debugging web applications or purging lingering sessions:
-
-1. Open **Preferences** (**Ctrl + H**) and select **Privacy & security** in the section index.
-2. **Clear Site Cookies**: Surgically deletes cookies specifically matching the active tab's domain without logging you out of unrelated sites in other tabs.
-3. **Clear Cache**: Flushes the local Chromium disk and memory cache.
+In **Preferences → Privacy & security**, use **Clear site cookies** for the active domain, or **Clear cache** for the current session.

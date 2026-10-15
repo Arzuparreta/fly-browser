@@ -56,9 +56,9 @@ Fly Browser is designed with multiple defence-in-depth layers:
 * Sensitive hardware capabilities (microphone, camera, geolocation, and MIDI) are denied by default.
 * Web notifications require explicit user opt-in via the interface toggle button.
 
-### Native Request Filtering
-* Network requests are intercepted in-process via Ghostery's blocking engine before departing the local machine.
-* Known malicious hosts, tracking scripts, and cryptominers are dropped at the network interceptor layer.
+### Request Filtering
+* Ad and tracker filtering belongs to the included uBlock Origin extension in selected persistent workspaces. Fly leaves network hooks available to it.
+* Disabling extensions or uBlock removes ad blocking. The in-memory private session cannot load extensions and has no ad blocker.
 
 ### Session & Data Storage Architecture
 * **Transparent Plaintext User Data:** Configuration (`config.json`), keybindings (`keybinds.json`), workspaces (`session.json`), history (`history.json`), and bookmarks (`bookmarks.json`) are stored in transparent, human-readable JSON files under `~/.config/fly-browser/`, protected by standard user-only filesystem permissions (`0600`/`0700`). Users retain full ownership to inspect, edit, or back up files using standard tools.

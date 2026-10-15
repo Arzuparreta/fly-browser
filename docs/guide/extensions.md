@@ -1,24 +1,32 @@
-# Chrome Extensions (Opt-in)
+# Chrome Extensions
 
-Fly keeps extensions **off by default**. Native ad blocking, tab suspension and [user scripts and styles](/guide/user-scripts-and-styles) remain available without enabling extension support. **uBlock Origin 1.75.0** is included as a normal preinstalled Chromium extension. Dark Reader is not included and its former native CSS toggle has been removed; install its Chrome build yourself if wanted.
+Fly enables the included uBlock Origin **by default** in persistent workspaces. Tab suspension and [user scripts and styles](/guide/user-scripts-and-styles) remain available without enabling extension support. **uBlock Origin 1.75.0** is included as a normal preinstalled Chromium extension. Dark Reader is not included and its former native CSS toggle has been removed; install its Chrome build yourself if wanted.
 
 Fly loads **unpacked Chrome extensions** with these rules:
 
-* **Off by default.** While disabled, no extension code, library or process is loaded.
+* **uBlock enabled by default.** A saved global disable, individual disable, removal or empty workspace selection is preserved on upgrade. While disabled, no extension code, library or process is loaded and there is no ad blocker.
 * **Per workspace.** Included extensions are selected in workspaces without a saved selection. You can change each workspace’s selection, including selecting none. Manually installed extensions run only where selected.
 * **Only while needed.** Extensions load when an opted-in workspace gets its first live tab and unload once every tab in it has been closed or hibernated, after a grace period (60 seconds by default).
 * **Local only.** There is no extension store. Included extensions are copied into your profile; Fly releases can update managed copies. Manually installed folders are never overwritten.
-* **Never in private browsing.** Electron refuses to load extensions into in-memory sessions.
+* **Never in private browsing.** Electron refuses to load extensions into in-memory sessions. Private browsing therefore has no ad blocker.
 
 ---
 
 ## Included uBlock Origin
 
-Open **Preferences → Extensions** and turn on **Enable Chrome extensions**. uBlock Origin is already listed, with popup, options, commands, workspace selection and resource usage. Reload existing tabs to apply its content scripts; newly opened tabs receive them immediately.
+Open **Preferences → Extensions** to manage **Enable Chrome extensions**. New profiles enable it; existing profiles keep their saved setting. uBlock Origin is already listed, with popup, options, commands, workspace selection and resource usage. Reload existing tabs to apply its content scripts; newly opened tabs receive them immediately.
 
 The **Enabled** checkbox switches an extension off everywhere while retaining its files, storage and workspace selections. **Remove** unloads it and deletes its profile folder. Both choices persist across restarts and Fly updates. Deleting an included folder manually also records its removal on the next scan or enabled launch. An explicit empty workspace selection stays empty after updates. Turning the global extension switch back on never reverses an individual disable or removal.
 
 To reinstall a removed extension deliberately, place its unpacked Chrome build in the extensions directory again, enable it and choose its workspaces. Fly does not silently restore removed bundles. Reinstalling at the same path retains the extension’s identity and workspace storage.
+
+## Why the full uBlock Origin, not Lite?
+
+[uBlock Origin Lite](https://github.com/uBlockOrigin/uBOL-home) is the Manifest V3 blocker for current Chrome/Chromium. The [full uBlock Origin](https://github.com/gorhill/uBlock) remains maintained for browsers that support Manifest V2, including Fly's current Electron runtime. The bundled copy matches the latest stable upstream release checked during this change.
+
+Electron supports only a [subset of extension APIs](https://www.electronjs.org/docs/latest/api/extensions/). On Fly's installed runtime, a standalone Manifest V3 extension with an enabled static `declarativeNetRequest` blocking rule still lets its matching script reach a local server and execute. Loading an extension or finding its API object does not prove enforcement. Lite relies on this mechanism, so Fly retains the working full uBlock until real declarative blocking is available and verified. There is no guarantee of future Manifest V2 support; switching safely requires that runtime capability, not just replacing the extension files.
+
+Managed bundled updates arrive through Fly releases; filter lists update through uBlock. Manually installed copies remain the user's responsibility. Recheck upstream releases and network enforcement when updating Electron.
 
 ## Installing an Extension
 
@@ -86,8 +94,9 @@ Content scripts scale with the number of **live** tabs that match, which tab hib
 
 Extension APIs come from Electron plus the [electron-chrome-extensions](https://github.com/samuelmaddock/electron-browser-shell/tree/master/packages/electron-chrome-extensions) library (GPL-3.0). Most extensions that modify pages work. Known limits:
 
-* **`declarativeNetRequest` rules are not enforced.** Electron exposes the API but its rules never block anything, so rule based blockers such as uBlock Origin Lite load without effect. Fly's built-in blocker covers this.
-* **Network extensions take over filtering in their workspace.** Electron chooses either native handlers or extension handlers for the whole session: even a native header listener prevents extension request blocking. Fly detaches its native blocker and request header rules while a `webRequest` extension is loaded, and restores them when the last one unloads. Configure trusted sites in uBlock itself; Fly’s native shield exceptions and header standardisation do not apply during this handover. Session isolation and permission controls remain active. PDF URLs still use the built-in viewer; MIME-only PDF responses are recognised on the generated PDF document and routed to the same viewer. Google sign-in navigation rewriting stays available, but native subresource header rewriting does not.
+* **`declarativeNetRequest` rules are not enforced.** Electron exposes the API but its rules never block anything, so rule based blockers such as uBlock Origin Lite load without effect. Use the included full uBlock Origin for blocking; uBlock Origin Lite cannot replace it here.
+* **Network filtering belongs to extensions.** Fly leaves native request hooks detached while a `webRequest` extension is loaded. uBlock Origin is the only included blocker; the former Ghostery engine and per-tab shields have been removed. Configure site exceptions in uBlock itself. Session isolation and permission controls remain active. PDF URLs and MIME-only PDF responses still route to the built-in viewer, and Google sign-in navigation rewriting remains available.
+* **First navigation waits for uBlock's filters.** A loaded background page is not enough: Fly waits for uBlock's final startup marker so restored media requests are not cancelled during initialisation.
 * **`runtime.onInstalled` does not fire** for unpacked extensions in Electron. Anything an extension only sets up there, most often its context menu items, will be missing. Items created when the extension starts do appear.
 * **No side panels, native messaging hosts or Chrome sync.**
 * **Firefox builds**: there is no Gecko engine, so `.xpi` files are not supported as such. Cross-browser extensions often work when their Firefox build is unpacked, but the Chrome build is the safer choice.

@@ -124,8 +124,6 @@ export function createWebView(url, currentWS, idx) {
         if (targetLi) {
             const domain = targetLi.querySelector('.tab-domain');
             if (domain) { try { domain.textContent = isNewTab(webview.getURL()) ? 'fly / new tab' : new URL(webview.getURL()).hostname || 'local page'; } catch {} }
-            const cfg = (await window.flyAPI.getBrowserSettings()) || {};
-            updateTabShieldStatus(targetLi, cleanUrl, cfg.trusted_domains || []);
         }
         if (state.sessionState.current_workspace === currentWS) {
             const activeListItem = document.querySelector('#TabList li.selected');
@@ -151,8 +149,6 @@ export function createWebView(url, currentWS, idx) {
         if (targetLi) {
             const domain = targetLi.querySelector('.tab-domain');
             if (domain) { try { domain.textContent = isNewTab(webview.getURL()) ? 'fly / new tab' : new URL(webview.getURL()).hostname || 'local page'; } catch {} }
-            const cfg = (await window.flyAPI.getBrowserSettings()) || {};
-            updateTabShieldStatus(targetLi, cleanUrl, cfg.trusted_domains || []);
         }
         if (state.sessionState.current_workspace === currentWS) {
             const activeListItem = document.querySelector('#TabList li.selected');
@@ -284,8 +280,6 @@ export function createWebView(url, currentWS, idx) {
         if (targetLi) {
             const domain = targetLi.querySelector('.tab-domain');
             if (domain) { try { domain.textContent = isNewTab(webview.getURL()) ? 'fly / new tab' : new URL(webview.getURL()).hostname || 'local page'; } catch {} }
-            const cfg = (await window.flyAPI.getBrowserSettings()) || {};
-            updateTabShieldStatus(targetLi, webview.getURL(), cfg.trusted_domains || []);
         }
 
         try {
@@ -530,29 +524,6 @@ function extractHostname(url) {
     }
 }
 
-export function updateTabShieldStatus(tabLi, url, trustedDomains = []) {
-    const shieldBtn = tabLi.querySelector('.tab-shield-btn');
-    if (!shieldBtn) return;
-
-    const host = extractHostname(url);
-    if (!host || url.startsWith('about:') || url.startsWith('file:')) {
-        shieldBtn.style.display = 'none';
-        return;
-    }
-
-    shieldBtn.style.display = 'inline-flex';
-    const isTrusted = trustedDomains.some(d => host === d || host.endsWith('.' + d));
-    const icon = shieldBtn.querySelector('i');
-
-    if (isTrusted) {
-        icon.className = 'fa-solid fa-shield shield-off';
-        shieldBtn.title = 'Shields Down (Site is in Trusted Sites)';
-    } else {
-        icon.className = 'fa-solid fa-shield-halved shield-on';
-        shieldBtn.title = 'Shields Active (Full Protection)';
-    }
-}
-
 export async function injectMatchingUserContent(webview) {
     if (!webview || typeof webview.getURL !== 'function') return;
     const currentUrl = webview.getURL();
@@ -641,35 +612,6 @@ export async function reapplyActiveUserStyles() {
             }
         } catch (err) {}
     }
-}
-
-export function attachShieldToggleListener(tabLi, webview) {
-    const shieldBtn = tabLi.querySelector('.tab-shield-btn');
-    if (!shieldBtn) return;
-
-    shieldBtn.addEventListener('click', async (e) => {
-        e.stopPropagation();
-        const currentUrl = webview.getURL();
-        const host = extractHostname(currentUrl);
-        if (!host) return;
-
-        const cfg = (await window.flyAPI.getBrowserSettings()) || {};
-        let domains = Array.isArray(cfg.trusted_domains) ? [...cfg.trusted_domains] : [];
-
-        const isTrusted = domains.some(d => host === d || host.endsWith('.' + d));
-
-        if (isTrusted) {
-            domains = domains.filter(d => d !== host && !host.endsWith('.' + d));
-        } else {
-            domains.push(host);
-        }
-
-        cfg.trusted_domains = domains;
-        await window.flyAPI.updateBrowserSettings(cfg);
-
-        updateTabShieldStatus(tabLi, currentUrl, domains);
-        webview.reload();
-    });
 }
 
 export function getWorkspaceBadgeText(wsName) {
@@ -888,13 +830,8 @@ export function renderWorkspaceUI(targetTabToFocus = null) {
             li.appendChild(mediaBadge);
         }
 
-        const shieldBtn = document.createElement('button');
-        shieldBtn.className = 'tab-shield-btn';
-        shieldBtn.innerHTML = '<i class="fa-solid fa-shield-halved shield-on"></i>';
-        li.appendChild(shieldBtn);
-        
         li.addEventListener('click', (e) => {
-            if (e.target.closest('.tab-shield-btn') || e.target.closest('.tab-media-badge') || e.target.closest('.tab-pin-badge')) return;
+            if (e.target.closest('.tab-media-badge') || e.target.closest('.tab-pin-badge')) return;
             if (state.dashboardActive && typeof window.toggleDashboardView === 'function') {
                 window.toggleDashboardView();
             }
@@ -914,20 +851,10 @@ export function renderWorkspaceUI(targetTabToFocus = null) {
 
         if (isSleeping) {
             state.activeViewsCache[currentWS][idx] = null;
-            window.flyAPI.getBrowserSettings().then(cfg => {
-                updateTabShieldStatus(li, url, cfg?.trusted_domains || []);
-            }).catch(() => {});
         } else if (!state.activeViewsCache[currentWS][idx]) {
             const webview = createWebView(url, currentWS, idx);
-            attachShieldToggleListener(li, webview);
             container.appendChild(webview);
             state.activeViewsCache[currentWS][idx] = webview;
-        } else {
-            const existingWebview = state.activeViewsCache[currentWS][idx];
-            attachShieldToggleListener(li, existingWebview);
-            window.flyAPI.getBrowserSettings().then(cfg => {
-                updateTabShieldStatus(li, existingWebview.getURL(), cfg?.trusted_domains || []);
-            }).catch(() => {});
         }
     });
 
@@ -1548,12 +1475,7 @@ export function updateTabMediaIndicator(workspaceId, tabIdx, isAudible, isMutedO
         if (!mediaBadge) {
             mediaBadge = document.createElement('span');
             mediaBadge.className = 'tab-media-badge' + (isMuted ? ' is-muted' : '');
-            const shieldBtn = targetLi.querySelector('.tab-shield-btn');
-            if (shieldBtn) {
-                targetLi.insertBefore(mediaBadge, shieldBtn);
-            } else {
-                targetLi.appendChild(mediaBadge);
-            }
+            targetLi.appendChild(mediaBadge);
         } else {
             mediaBadge.className = 'tab-media-badge' + (isMuted ? ' is-muted' : '');
         }
@@ -1592,12 +1514,7 @@ export function updateTabSleepUI(tabIdx, isSleeping) {
             sleepBadge.className = 'tab-sleep-badge';
             sleepBadge.title = 'Sleeping tab to save memory (click to wake)';
             sleepBadge.innerHTML = '<i class="fa-solid fa-moon"></i>';
-            const shieldBtn = targetLi.querySelector('.tab-shield-btn');
-            if (shieldBtn) {
-                targetLi.insertBefore(sleepBadge, shieldBtn);
-            } else {
-                targetLi.appendChild(sleepBadge);
-            }
+            targetLi.appendChild(sleepBadge);
         }
     } else {
         targetLi.classList.remove('tab-sleeping');
@@ -1671,7 +1588,6 @@ export function wakeTab(currentWS, idx) {
         const tabList = document.querySelectorAll('#TabList li');
         const targetLi = tabList[idx];
         if (targetLi) {
-            attachShieldToggleListener(targetLi, webview);
             updateTabSleepUI(idx, false);
         }
     }
