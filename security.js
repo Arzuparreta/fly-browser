@@ -1,29 +1,13 @@
 // security.js
 // Decoupled security configuration module for the Fly browser
 
-const { ElectronBlocker } = require('@ghostery/adblocker-electron');
-const fs = require('fs');
 const path = require('path');
 const crypto = require('crypto');
-const { app, ipcMain } = require('electron');
 
-let blockerInstance = null;
-let blockerInitialisation = null;
-let ipcInitialized = false;
 const networkExtensionSessions = new WeakSet();
 
-// Domains the user has explicitly marked as trusted (e.g. their bank, their
-// usual checkout sites). Anti-fingerprinting and ad/tracker blocking are
-// relaxed ONLY for these domains so the sites' fraud-detection checks pass.
-// Every other site keeps full protection.
+// Permission exceptions are independent of uBlock's site allowlist.
 let trustedDomains = [];
-let appliedExceptionFilters = [];
-
-// Define a permanent location for the compiled adblocker cache file
-const userDataDir = (app && typeof app.getPath === 'function')
-    ? app.getPath('userData')
-    : path.join(require('os').tmpdir(), 'fly-browser');
-const CACHE_PATH = path.join(userDataDir, 'adblock_cache.bin');
 
 // Infrastructure domains required for Google authentication and bot detection
 const GOOGLE_AUTH_DOMAINS = [
@@ -85,26 +69,6 @@ function isTrustedDomain(hostname) {
     });
 }
 
-function buildExceptionFilters(domains) {
-    const filters = [];
-    const allDomains = new Set();
-
-    domains.forEach(entry => {
-        const domain = String(entry || '').toLowerCase().trim();
-        if (domain) allDomains.add(domain);
-    });
-
-    allDomains.forEach(domain => {
-        // Whitelist all sub-resources, scripts, beacons, and websocket frames
-        filters.push(`@@||${domain}^$important`);
-        filters.push(`@@||${domain}^`);
-        // Disable cosmetic CSS/DOM element hiding
-        filters.push(`${domain}#@#*`);
-    });
-
-    return filters;
-}
-
 function applySpellcheckerLanguage(targetSession, languageCode) {
     if (!targetSession) return;
     try {
@@ -131,7 +95,6 @@ function applySpellcheckerLanguage(targetSession, languageCode) {
 
 function hardenSession(targetSession, spellLang = 'en-GB') {
     applySpellcheckerLanguage(targetSession, spellLang);
-    initialiseAdblocker(targetSession);
 
     // Prevent WebRTC from probing non-default local interfaces
     if (typeof targetSession.setWebRTCIPHandlingPolicy === 'function') {
@@ -240,20 +203,15 @@ function setNetworkExtensions(targetSession, enabled) {
     if (networkExtensionSessions.has(targetSession) === enabled) return;
     if (enabled) {
         networkExtensionSessions.add(targetSession);
-        if (blockerInstance && blockerInstance.isBlockingEnabled(targetSession)) {
-            blockerInstance.disableBlockingInSession(targetSession);
-            attachAdblockerIpc();
-        }
         for (const event of ['onBeforeRequest', 'onBeforeSendHeaders', 'onSendHeaders',
             'onHeadersReceived', 'onResponseStarted', 'onBeforeRedirect', 'onCompleted', 'onErrorOccurred']) {
             targetSession.webRequest[event](null);
         }
     } else {
         networkExtensionSessions.delete(targetSession);
-        // Restore synchronous rules immediately; initialise cosmetics afterwards.
+        // Restore compatibility rules when no network extension owns the session.
         attachNetworkHandlers(targetSession);
         attachHeaderHandler(targetSession);
-        initialiseAdblocker(targetSession);
     }
 }
 
@@ -261,13 +219,9 @@ function hasNetworkExtensions(targetSession) {
     return networkExtensionSessions.has(targetSession);
 }
 
-// Electron keeps a single listener per webRequest event, so the ad-blocker's
-// onBeforeRequest and onHeadersReceived would replace ours. Register one
-// listener for each that runs Fly's rules first, then hands over to the blocker.
+// Compatibility hooks are used only when no network extension owns the session.
 function attachNetworkHandlers(targetSession) {
     if (!targetSession.webRequest || networkExtensionSessions.has(targetSession)) return;
-
-    const blockingEnabled = () => blockerInstance && blockerInstance.isBlockingEnabled(targetSession);
 
     targetSession.webRequest.onBeforeRequest({ urls: ['<all_urls>'] }, (details, callback) => {
         // Route Google authentication requests through the WebLite sign-in flow
@@ -275,7 +229,6 @@ function attachNetworkHandlers(targetSession) {
         if (url.includes('flowName=GlifWebSignIn') && /^https?:\/\/accounts\.google\.com\//i.test(url)) {
             return callback({ redirectURL: url.replaceAll('flowName=GlifWebSignIn', 'flowName=WebLiteSignIn') });
         }
-        if (blockingEnabled()) return blockerInstance.onBeforeRequest(details, callback);
         callback({});
     });
 
@@ -302,108 +255,12 @@ function attachNetworkHandlers(targetSession) {
                 }
             }
         }
-        if (blockingEnabled()) return blockerInstance.onHeadersReceived(details, callback);
         callback({ responseHeaders: details.responseHeaders });
     });
 }
 
-async function applyTrustedDomainExceptions() {
-    if (!blockerInstance) return;
-    const newFilters = buildExceptionFilters(trustedDomains);
-    try {
-        blockerInstance.updateFromDiff({
-            removed: appliedExceptionFilters,
-            added: newFilters
-        });
-        appliedExceptionFilters = newFilters;
-    } catch (err) {
-        console.warn('Failed to update trusted-domain ad-blocker exceptions:', err);
-    }
-}
-
 function setTrustedDomains(domains) {
-    const clean = Array.isArray(domains) ? domains.filter(Boolean) : [];
-    if (trustedDomains.length === clean.length && trustedDomains.every((d, i) => d === clean[i])) {
-        return;
-    }
-    trustedDomains = clean;
-    applyTrustedDomainExceptions();
-}
-
-// Known IPC channels registered internally by @ghostery/adblocker-electron
-const GHOSTERY_IPC_CHANNELS = [
-    '@ghostery/adblocker/inject-cosmetic-filters',
-    '@ghostery/adblocker/is-mutation-observer-enabled',
-    '@ghostery/adblocker/cosmetic-filters'
-];
-
-// Ghostery removes these process-wide handlers when disabling one session.
-// Keep them available for other workspaces and scope calls to native sessions.
-function attachAdblockerIpc() {
-    GHOSTERY_IPC_CHANNELS.forEach(channel => {
-        try { ipcMain.removeHandler(channel); } catch (e) {}
-    });
-    const nativeSender = event => event.sender &&
-        !networkExtensionSessions.has(event.sender.session) &&
-        blockerInstance.isBlockingEnabled(event.sender.session);
-    ipcMain.handle('@ghostery/adblocker/inject-cosmetic-filters', (event, ...args) => {
-        if (nativeSender(event)) return blockerInstance.onInjectCosmeticFilters(event, ...args);
-    });
-    ipcMain.handle('@ghostery/adblocker/is-mutation-observer-enabled', event =>
-        nativeSender(event) ? blockerInstance.onIsMutationObserverEnabled(event) : false);
-}
-
-// Sessions start together on a clean profile. Share the pending engine build so
-// they cannot download, deserialize and retain separate copies of the filter set.
-function getAdblocker() {
-    if (!blockerInitialisation) {
-        blockerInitialisation = (async () => {
-            if (fs.existsSync(CACHE_PATH)) {
-                try {
-                    blockerInstance = ElectronBlocker.deserialize(fs.readFileSync(CACHE_PATH));
-                } catch (_) {
-                    console.warn('Adblocker cache version mismatch or corrupted file. Rebuilding cache...');
-                    fs.unlinkSync(CACHE_PATH);
-                }
-            }
-            if (!blockerInstance) {
-                const built = await require('./adblocker-build')();
-                blockerInstance = built.blocker;
-                fs.writeFileSync(CACHE_PATH, built.cacheBytes);
-            }
-            blockerInstance.updateFromDiff({added: [
-                'youtube.com#@#+js()',
-                'x.com#@#+js()',
-                'twitter.com#@#+js()'
-            ]});
-            await applyTrustedDomainExceptions();
-            return blockerInstance;
-        })().catch(err => {
-            blockerInstance = null;
-            blockerInitialisation = null;
-            console.error('Failed to instantiate network filters:', err);
-            return null;
-        });
-    }
-    return blockerInitialisation;
-}
-
-async function initialiseAdblocker(targetSession) {
-    if (!await getAdblocker() || networkExtensionSessions.has(targetSession)) return;
-
-    try {
-        if (ipcInitialized) {
-            GHOSTERY_IPC_CHANNELS.forEach(channel => {
-                try { ipcMain.removeHandler(channel); } catch (e) {}
-            });
-        }
-        blockerInstance.enableBlockingInSession(targetSession);
-        attachAdblockerIpc();
-        attachNetworkHandlers(targetSession);
-        ipcInitialized = true;
-    } catch (err) {
-        console.error('Failed to attach network filters to session:', err);
-    }
+    trustedDomains = Array.isArray(domains) ? domains.filter(Boolean) : [];
 }
 
 function hardenWebviewPreferences(webPreferences) {

@@ -24,17 +24,12 @@ const asar = require('@electron/asar');
         assert(paths.data.startsWith(temporary + path.sep), 'Packaged smoke test must use a disposable profile');
         assert(paths.app.endsWith('app.asar'), 'Test must execute the real packaged application');
         assert.match(asar.extractFile(paths.app, 'extensions.js').toString(), /function initializeExtensions/, 'Required local extension runtime must be in the archive');
-        for (const name of ['adblocker-build.js', 'adblocker-worker.js', 'modules/newTab.js', 'assets/new-tab.html', 'assets/new-tab.js', 'assets/fonts/doto-0.woff2', 'assets/identity/memory-papel@2x.png', 'assets/vendor/fontawesome/webfonts/fa-solid-900.woff2']) assert(asar.extractFile(paths.app, name).length > 0, `${name} must be packaged`);
-        const cache = path.join(paths.data, 'adblock_cache.bin');
-        for (let attempt = 0; !fs.existsSync(cache); attempt++) {
-            if (attempt === 600) throw new Error('Packaged cold filter compiler did not create its cache');
-            await new Promise(resolve => setTimeout(resolve, 50));
-        }
+        for (const name of ['modules/newTab.js', 'assets/new-tab.html', 'assets/new-tab.js', 'assets/fonts/doto-0.woff2', 'assets/identity/memory-papel@2x.png', 'assets/vendor/fontawesome/webfonts/fa-solid-900.woff2']) assert(asar.extractFile(paths.app, name).length > 0, `${name} must be packaged`);
         const page = await application.firstWindow();
         const errors = []; page.on('pageerror', error => errors.push(error.message));
         await page.waitForFunction(() => !!window.executeBrowserAction && document.querySelectorAll('#TabList li').length === 1);
         assert.equal((await page.evaluate(() => window.flyAPI.getAppVersion())).version, version);
-        assert.equal((await page.evaluate(() => window.flyAPI.getBrowserSettings())).extensions_enabled, false);
+        assert.equal((await page.evaluate(() => window.flyAPI.getBrowserSettings())).extensions_enabled, true);
         assert.deepEqual(errors, []);
         const extensionState = await page.evaluate(() => window.flyAPI.extensionsGetState({ scan: true }));
         assert.deepEqual(extensionState.installed.map(info => info.folder), ['ublock-origin']);
@@ -48,7 +43,7 @@ const asar = require('@electron/asar');
             return window.flyAPI.extensionsEnsure('Smoke', 'persist:smoke');
         });
         assert.equal(loaded.active, true, 'Packaged API preload and bundled extension must load together');
-        console.log('Packaged ASAR, cold filter worker/cache, application startup, version, disabled startup, bundled uBlock copying/loading and disposable paths passed.');
+        console.log('Packaged ASAR, application startup, version, default uBlock copying/loading and disposable paths passed.');
     } finally {
         if (application) await application.close();
         fs.rmSync(temporary, {recursive: true, force: true});

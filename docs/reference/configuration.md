@@ -87,9 +87,9 @@ Controls hardware switches, process limits, privacy whitelists, and search prefe
   - **`text`**: Primary text and icon foreground colour.
   - **`sidebar_opacity`**: Sidebar background translucency percentage (40% to 100%) without backdrop blur.
   - **`overlay_opacity`**: Modal and overlay translucency percentage (50% to 100%) for Command Palette, Notes, and Preferences.
-- **`trusted_domains`**: Array of domains exempted from tracker blocking and fingerprint spoofing.
-- **`extensions_enabled`**: Master switch for [opt-in Chrome extensions](/guide/extensions). `false` by default; while `false` nothing extension related runs.
-- **`extensions_by_workspace`**: Map of workspace name to the extension folders (inside `~/.config/fly-browser/extensions/`) allowed to run there, e.g. `{ "Work": ["darkreader"] }`. Workspaces not listed load nothing.
+- **`trusted_domains`**: Array of domains allowed restricted site permissions, including subdomains. Independent of uBlock Origin’s allowlist.
+- **`extensions_enabled`**: Master switch for [Chrome extensions](/guide/extensions). `true` by default so the included uBlock Origin can block ads. A saved `false` is preserved on upgrade; while `false` no extension runs and there is no ad blocking.
+- **`extensions_by_workspace`**: Map of workspace name to the extension folders (inside `~/.config/fly-browser/extensions/`) allowed to run there, e.g. `{ "Work": ["darkreader"] }`. Workspaces without a saved selection use the included extensions; an explicit empty selection loads none.
 - **`extensions_unload_grace_seconds`**: How long a workspace keeps its extensions loaded after its last live tab closes or hibernates (default `60`).
 - **`custom_search_aliases`**: Key-value map of custom search prefixes and URL templates (with `%s` query placeholder). Typing `<alias> <query>` in the address bar (such as `aur hyprland` or `gh mise`) bypasses fallback engines and routes queries straight to the destination. Users can configure, override, or extend default built-ins directly in Preferences.
 

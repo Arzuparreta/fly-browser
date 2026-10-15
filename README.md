@@ -22,7 +22,7 @@ Fly wraps the Chromium engine in a lean Electron shell. Every browser action can
 * **Multi-Account Container Partitions**: Each workspace runs in its own isolated Electron persistent partition (`persist:work`, `persist:personal`), preventing cookie cross-contamination across accounts.
 * **Mouse-Free Navigation**: Complete keyboard control via Link Hints, floating address bar with search aliases, and customisable browser shortcuts and Vim-style page keys in **Preferences → Keyboard** (new-profile default: **Ctrl+,**).
 * **Clipboard-Mediated Terminal Oversight**: High-risk script execution and raw web commands trigger a clipboard-mediated security handshake, sanitising and staging vetted commands to your clipboard for deliberate user review and execution in an external terminal.
-* **Native Privacy & Trusted Sites**: Built-in request interception blocks trackers, telemetry, and advertisements without heavy third-party extensions, while allowing selective whitelisting for trusted banking and shopping services.
+* **uBlock Origin**: Included ad and tracker blocking, with filter lists and site exceptions managed in uBlock. Workspaces keep separate cookies and extension settings.
 * **Local User Scripts & Styles**: Direct native injection of `.user.js` and `.user.css` files directly from `~/.config/fly-browser/` with inotify watching and live CSS hot-reloading, avoiding the heavy memory overhead of full WebExtensions.
 * **Power Tools**: Integrated bookmarks, quickmarks, actionable history overlay, and a full-page Command Centre.
 

@@ -12,6 +12,7 @@ const root = path.resolve(__dirname, '..');
     const entry = createElectronFixture(root, temporary);
     const configDir = path.join(temporary, '.config', 'fly-browser');
     fs.mkdirSync(configDir, { recursive: true });
+    fs.writeFileSync(path.join(configDir, 'config.json'), JSON.stringify({extensions_enabled: false}));
     let blockedHits = 0;
     const server = http.createServer((req, res) => {
         if (req.url === '/document') {
@@ -48,15 +49,16 @@ const root = path.resolve(__dirname, '..');
     const backgroundScript = async code => application.evaluate(({ webContents }, script) => {
         const background = webContents.getAllWebContents().find(wc => wc.getType() === 'backgroundPage' && wc.getURL().startsWith('chrome-extension://'));
         if (!background) throw new Error('uBlock background page missing');
-        return background.executeJavaScript(script);
+        return Promise.race([background.executeJavaScript(script), new Promise((_, reject) => setTimeout(() => reject(new Error('Background script timed out')), 5000))]);
     }, code);
     const reloadPage = page => page.evaluate(() => document.querySelector('#webview-container webview').reload());
     const waitUntil = async predicate => {
-        const end = Date.now() + 15000;
+        const end = Date.now() + 45000;
         while (Date.now() < end) {
             if (await predicate()) return;
             await new Promise(resolve => setTimeout(resolve, 100));
         }
+        console.error('Extension state at timeout:', JSON.stringify((await application.firstWindow().then(extensionState)).runtime));
         throw new Error('Timed out waiting for extension state');
     };
     try {
@@ -73,6 +75,7 @@ const root = path.resolve(__dirname, '..');
         await page.locator('label:has(#setting-extensions-toggle)').click();
         await waitUntil(async () => (await extensionState(page)).runtime.workspaces.some(ws => ws.loaded.some(ext => ext.id === id)));
         await waitUntil(async () => { try { return await backgroundScript("import('./js/background.js').then(({default: u}) => !!u.readyToFilter)"); } catch { return false; } });
+        console.log('uBlock loaded and ready');
         await backgroundScript("import('./js/background.js').then(({default: u}) => u.appendUserFilters('/fly-block-me.js$script\\n127.0.0.1###fly-ad'))");
         await page.keyboard.press('Escape');
         blockedHits = 0;

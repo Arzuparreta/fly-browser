@@ -487,7 +487,7 @@
                             <section id="SettingsPane-privacy" class="settings-pane" role="tabpanel" aria-labelledby="SettingsTab-privacy" hidden>
                                 <header class="settings-pane-header">
                                     <h2>Privacy &amp; security</h2>
-                                    <p>Private browsing, site data and shield exceptions.</p>
+                                    <p>Private browsing, site data and permission exceptions.</p>
                                 </header>
 
                                 <div class="settings-group">
@@ -519,10 +519,10 @@
                                 <div class="settings-group">
                                     <h3>Trusted sites</h3>
                                     <div class="settings-card">
-                                        <div class="setting-item setting-item-stacked" data-keywords="trusted sites whitelist allowlist bank shopping shields fingerprint tracker">
+                                        <div class="setting-item setting-item-stacked" data-keywords="trusted sites permissions bank shopping camera microphone location">
                                             <div class="setting-info">
-                                                <label class="setting-label" for="setting-trusted-domains">Banking and shopping exceptions</label>
-                                                <span class="setting-desc">Listed sites skip fingerprint randomisation, tracker blocking and permission blocking, which banks and checkouts treat as fraud signals. Every other site keeps full protection. One domain per line; subdomains are included. Applies immediately.</span>
+                                                <label class="setting-label" for="setting-trusted-domains">Site permission exceptions</label>
+                                                <span class="setting-desc">Listed sites can use restricted permissions such as camera, microphone and location. One domain per line; subdomains are included. Applies immediately. Configure ad blocking exceptions in uBlock Origin.</span>
                                             </div>
                                             <textarea id="setting-trusted-domains" class="settings-textarea" rows="4" placeholder="yourbank.co.uk&#10;amazon.co.uk"></textarea>
                                             <div class="settings-actions">
@@ -539,7 +539,7 @@
                                 <div id="ExtensionsSettingsSection">
                                     <header class="settings-pane-header">
                                         <h2>Extensions <span class="settings-tag">Experimental</span></h2>
-                                        <p>uBlock Origin included; Chrome extensions are off by default. Only install code you trust: extensions can read every page they match.</p>
+                                        <p>uBlock Origin is included and enabled by default in new profiles. Only install code you trust: extensions can read every page they match.</p>
                                     </header>
 
                                     <div class="settings-group">

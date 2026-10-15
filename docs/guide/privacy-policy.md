@@ -59,14 +59,13 @@ Pressing **Ctrl + Shift + P** activates Private Browsing Mode:
 
 ---
 
-## Built-in Shields & Fingerprint Mitigation
+## Ad Blocking & Browser Identity
 
-Fly actively protects your privacy against third-party web trackers:
-
-* **In-Process Request Blocking:** Network requests are filtered locally using Ghostery's block engine to neutralise marketing trackers, ads, and telemetry scripts before packets leave your machine.
-* **Fingerprint Farbling:** Injects subtle, domain-bound mathematical noise into Canvas, WebGL, and Audio API outputs to disrupt passive browser fingerprinting.
-* **Identity Standardisation:** Strips internal Electron and Fly identifiers from user-agent headers and Client Hints, presenting a standardised Linux Chromium profile. The one exception is Google's sign-in page (`accounts.google.com`), which receives Electron's own User-Agent, because Google refuses sign-in from the standardised profile.
-* **Trusted Domains Bypass:** Explicitly whitelisted domains (e.g. banking portals and payment checkouts) bypass fingerprint farbling to prevent fraud-detection false positives.
+* **uBlock Origin:** The included extension filters ads and trackers locally in selected persistent workspaces. Its popup and options control exceptions and filter lists. Disabling extensions or uBlock leaves those workspaces without ad blocking.
+* **Private browsing:** Electron does not load extensions in the in-memory private session, so private browsing has no ad blocker.
+* **Page APIs:** Fly leaves Canvas, WebGL, audio, hardware, language and time zone APIs intact. It does not claim fingerprint anonymity. Pages receive Do Not Track and Global Privacy Control preferences.
+* **Identity:** Fly removes application and Electron tokens from its default User-Agent; Google's sign-in page receives Electron's original identity for compatibility. Native header adjustments yield to network extensions.
+* **Trusted domains:** The saved list controls permission exceptions, independently of uBlock's site allowlist.
 
 ---
 

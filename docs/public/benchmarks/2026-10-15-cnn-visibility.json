@@ -1,0 +1,286 @@
+{
+  "date": "2026-10-15T10:57:54.360Z",
+  "source": "25b81677940ad1b73ec59149ba31886ad74e3218",
+  "engine": {
+    "electron": "44.7.2",
+    "chromium": "152.0.7977.149"
+  },
+  "method": "One fresh profile per config; 15s local settling, CNN load plus 15s settling, 10s foreground CPU, switch to local tab plus 3s settling, 10s background CPU; root-frame network observation only",
+  "notes": "Chromium sample retained from the initial launcher. That launcher then failed before collecting Fly data because it expected about:blank instead of Fly\u2019s local new-tab URL. The corrected launcher identifies the newly created target by id; both Fly samples use it. These are exploratory single-run controls, not a repeated browser ranking.",
+  "samples": [
+    {
+      "config": "chromium",
+      "foreground": {
+        "cpuMs": 9919.947,
+        "cpuPercentOfOneCore": 99.0291588603587,
+        "byTypePercent": {
+          "crashpad": 0,
+          "zygote": 0,
+          "gpu-process": 7.986265157292369,
+          "utility:NetworkService": 0,
+          "utility:StorageService": 0,
+          "renderer:browser-ui": 0,
+          "renderer": 91.14325110759916,
+          "broker": 0
+        }
+      },
+      "background": {
+        "cpuMs": 262.185,
+        "cpuPercentOfOneCore": 2.62186671518687,
+        "byTypePercent": {
+          "crashpad": 0,
+          "zygote": 0,
+          "gpu-process": 0,
+          "utility:NetworkService": 0.10000063753406449,
+          "utility:StorageService": 0,
+          "renderer:browser-ui": 0,
+          "renderer": 2.5000159383516123,
+          "broker": 0
+        }
+      },
+      "media": {
+        "hidden": false,
+        "videos": [
+          {
+            "paused": false,
+            "muted": true,
+            "width": 1920,
+            "height": 1080,
+            "time": 4.445163,
+            "error": null,
+            "quality": {}
+          },
+          {
+            "paused": false,
+            "muted": true,
+            "width": 1600,
+            "height": 900,
+            "time": 9.313465,
+            "error": null,
+            "quality": {}
+          },
+          {
+            "paused": true,
+            "muted": true,
+            "width": 0,
+            "height": 0,
+            "time": 0,
+            "error": null,
+            "quality": {}
+          },
+          {
+            "paused": false,
+            "muted": true,
+            "width": 1920,
+            "height": 1080,
+            "time": 12.202647,
+            "error": null,
+            "quality": {}
+          },
+          {
+            "paused": false,
+            "muted": true,
+            "width": 1920,
+            "height": 1080,
+            "time": 1.725525,
+            "error": null,
+            "quality": {}
+          },
+          {
+            "paused": false,
+            "muted": true,
+            "width": 1920,
+            "height": 1080,
+            "time": 0.388507,
+            "error": null,
+            "quality": {}
+          }
+        ]
+      },
+      "backgroundHidden": true,
+      "rootRequests": 129,
+      "brightlineRequests": 2,
+      "pss": 870.478515625
+    },
+    {
+      "config": "fly",
+      "foreground": {
+        "cpuMs": 8667.19,
+        "cpuPercentOfOneCore": 86.46986408778645,
+        "byTypePercent": {
+          "zygote": 0,
+          "gpu-process": 6.784148908665298,
+          "utility:NetworkService": 0,
+          "renderer:fly-ui-or-extension": 0,
+          "broker": 0,
+          "renderer": 79.61398278110158
+        }
+      },
+      "background": {
+        "cpuMs": 244.587,
+        "cpuPercentOfOneCore": 2.4440695109381094,
+        "byTypePercent": {
+          "zygote": 0,
+          "gpu-process": 0.0999263865593065,
+          "utility:NetworkService": 0,
+          "renderer:fly-ui-or-extension": 0.199852773118613,
+          "broker": 0,
+          "renderer": 2.0984541177454368
+        }
+      },
+      "media": {
+        "hidden": false,
+        "videos": [
+          {
+            "paused": false,
+            "muted": true,
+            "width": 1920,
+            "height": 1080,
+            "time": 5.015702,
+            "error": null,
+            "quality": {}
+          },
+          {
+            "paused": false,
+            "muted": true,
+            "width": 1600,
+            "height": 900,
+            "time": 10.089076,
+            "error": null,
+            "quality": {}
+          },
+          {
+            "paused": true,
+            "muted": true,
+            "width": 0,
+            "height": 0,
+            "time": 0,
+            "error": null,
+            "quality": {}
+          },
+          {
+            "paused": false,
+            "muted": true,
+            "width": 1920,
+            "height": 1080,
+            "time": 12.689906,
+            "error": null,
+            "quality": {}
+          },
+          {
+            "paused": false,
+            "muted": true,
+            "width": 1920,
+            "height": 1080,
+            "time": 2.217718,
+            "error": null,
+            "quality": {}
+          },
+          {
+            "paused": false,
+            "muted": true,
+            "width": 1920,
+            "height": 1080,
+            "time": 0.948617,
+            "error": null,
+            "quality": {}
+          }
+        ]
+      },
+      "backgroundHidden": false,
+      "rootRequests": 114,
+      "brightlineRequests": 0,
+      "pss": 884.515625
+    },
+    {
+      "config": "fly-noblock",
+      "foreground": {
+        "cpuMs": 8739.734,
+        "cpuPercentOfOneCore": 87.23189589900602,
+        "byTypePercent": {
+          "zygote": 0,
+          "gpu-process": 7.086559623930691,
+          "utility:NetworkService": 0,
+          "renderer:fly-ui-or-extension": 0,
+          "renderer": 80.04818054073823,
+          "broker": 0
+        }
+      },
+      "background": {
+        "cpuMs": 256.529,
+        "cpuPercentOfOneCore": 2.5643337530197994,
+        "byTypePercent": {
+          "zygote": 0,
+          "gpu-process": 0.09996272363045891,
+          "utility:NetworkService": 0,
+          "renderer:fly-ui-or-extension": 0.19992544726091782,
+          "renderer": 2.199179919870096,
+          "broker": 0
+        }
+      },
+      "media": {
+        "hidden": false,
+        "videos": [
+          {
+            "paused": false,
+            "muted": true,
+            "width": 1920,
+            "height": 1080,
+            "time": 4.901853,
+            "error": null,
+            "quality": {}
+          },
+          {
+            "paused": false,
+            "muted": true,
+            "width": 1600,
+            "height": 900,
+            "time": 9.827374,
+            "error": null,
+            "quality": {}
+          },
+          {
+            "paused": true,
+            "muted": true,
+            "width": 0,
+            "height": 0,
+            "time": 0,
+            "error": null,
+            "quality": {}
+          },
+          {
+            "paused": false,
+            "muted": true,
+            "width": 1920,
+            "height": 1080,
+            "time": 12.677801,
+            "error": null,
+            "quality": {}
+          },
+          {
+            "paused": false,
+            "muted": true,
+            "width": 1920,
+            "height": 1080,
+            "time": 2.19546,
+            "error": null,
+            "quality": {}
+          },
+          {
+            "paused": false,
+            "muted": true,
+            "width": 1920,
+            "height": 1080,
+            "time": 0.911718,
+            "error": null,
+            "quality": {}
+          }
+        ]
+      },
+      "backgroundHidden": false,
+      "rootRequests": 138,
+      "brightlineRequests": 2,
+      "pss": 843.2099609375
+    }
+  ]
+}

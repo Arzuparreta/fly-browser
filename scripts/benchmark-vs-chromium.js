@@ -65,14 +65,12 @@ const CONFIGS = {
     'cft-ubol': {browser: 'chromium', args: [], binary: 'cft', ubol: true},
     // Diagnostic: Chromium with the renderer process cap Fly sets by default.
     'chromium-limit4': {browser: 'chromium', args: ['--renderer-process-limit=4']},
-    // Fly with default settings: built-in Ghostery blocker, extensions off.
+    // Current Fly defaults: the included uBlock Origin, extensions enabled.
     'fly': {browser: 'fly', config: {}},
-    // Fly with extensions enabled: the bundled uBlock Origin loads and Ghostery steps
-    // aside in that session (both cannot own webRequest).
+    // Explicit extension-enabled configuration; retained for historical comparisons.
     'fly-ext': {browser: 'fly', config: {extensions_enabled: true}},
-    // Diagnostic: Fly with the built-in blocker disabled, to separate the shell's cost
-    // from the blocker's. Not a configuration users can select.
-    'fly-noblock': {browser: 'fly', config: {}, noBlocker: true}
+    // Fly with extensions disabled. There is no native blocker fallback.
+    'fly-noblock': {browser: 'fly', config: {extensions_enabled: false}}
 };
 const configNames = (process.env.FLY_VS_CONFIGS || Object.keys(CONFIGS).filter(name => cftBinary || CONFIGS[name].binary !== 'cft').join(',')).split(',');
 const scenarios = (process.env.FLY_VS_SCENARIOS || 'browse,video,speedometer').split(',');
@@ -161,9 +159,9 @@ function processType(cmdline) {
     if (cmdline.includes('--extension-process')) return 'renderer:extension';
     if (cmdline.includes('--top-chrome-webui')) return 'renderer:browser-ui';
     if (cmdline.includes('--app-path=') && !cmdline.includes('--enable-blink-features')) {
-        // In Electron, tabs (webviews) carry the guest blink switches; of the rest,
-        // extension background pages are the ones started without --enable-sandbox.
-        return cmdline.includes('--enable-sandbox') ? 'renderer:fly-ui' : 'renderer:extension';
+        // Both Fly's UI and extension backgrounds now run sandboxed. Their
+        // command lines cannot reliably distinguish them; keep a combined bucket.
+        return 'renderer:fly-ui-or-extension';
     }
     return 'renderer';
 }
@@ -244,8 +242,7 @@ function flyWrapper(profile, cfg) {
     const app = path.join(profile, 'app');
     fs.mkdirSync(app, {recursive: true});
     fs.writeFileSync(path.join(app, 'package.json'), JSON.stringify({name: 'fly-browser', version: require(path.join(root, 'package.json')).version, main: 'main.js'}));
-    const disableBlocker = cfg.noBlocker ? `{const Module=require('module');const file=${JSON.stringify(path.join(root, 'adblocker-build.js'))};const m=new Module(file);m.filename=file;m.loaded=true;m.exports=async()=>{throw new Error('benchmark: built-in blocker disabled');};require.cache[file]=m;}` : '';
-    fs.writeFileSync(path.join(app, 'main.js'), `const {app}=require('electron');app.setAppPath(${JSON.stringify(root)});app.setPath('home',${JSON.stringify(profile)});app.setPath('userData',${JSON.stringify(path.join(profile, '.config/fly-browser'))});${disableBlocker}require(${JSON.stringify(path.join(root, 'main.js'))});`);
+    fs.writeFileSync(path.join(app, 'main.js'), `const {app}=require('electron');app.setAppPath(${JSON.stringify(root)});app.setPath('home',${JSON.stringify(profile)});app.setPath('userData',${JSON.stringify(path.join(profile, '.config/fly-browser'))});require(${JSON.stringify(path.join(root, 'main.js'))});`);
     return app;
 }
 

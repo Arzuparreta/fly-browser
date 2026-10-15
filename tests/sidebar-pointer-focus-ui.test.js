@@ -43,7 +43,7 @@ const root = path.resolve(__dirname, '..');
         await page.evaluate(url => window.executeBrowserAction('spawn-tab-with-url', url), `http://127.0.0.1:${server.address().port}/second`);
         await page.waitForFunction(() => document.querySelectorAll('#TabList li').length >= 2);
         // Exercise real actions, including clicks on nested clock text and icon targets.
-        for (const selector of ['#SidebarClockDate', '#SidebarClockTime', '#SidebarClock i', '#split-toggle-btn', '#TabList li.selected .split-tab-badge', '#split-toggle-btn', '#reader-view-btn', '#theme-toggle-btn', '#noti-toggle-btn', '#TabList li.selected .tab-title', '#TabList li.selected .tab-shield-btn']) {
+        for (const selector of ['#SidebarClockDate', '#SidebarClockTime', '#SidebarClock i', '#split-toggle-btn', '#TabList li.selected .split-tab-badge', '#split-toggle-btn', '#reader-view-btn', '#theme-toggle-btn', '#noti-toggle-btn', '#TabList li.selected .tab-title']) {
             await click(selector);
             await contract();
             console.log('Pointer action contracts:', selector);

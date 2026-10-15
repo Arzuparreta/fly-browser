@@ -141,8 +141,8 @@ function writeExtension(folder, manifest, files = {}) {
     assert(!topLevelRequires.some(line => line.includes("require('electron')")), 'electron APIs are resolved lazily so tests and startup stay cheap');
 
     const main = fs.readFileSync(path.join(__dirname, '..', 'main.js'), 'utf8');
-    assert(/extensions_enabled: false/.test(main), 'extensions are disabled in DEFAULT_CONFIG');
-    console.log('✓ API layer loads lazily and the feature ships disabled');
+    assert(/extensions_enabled: true/.test(main), 'uBlock support is enabled in DEFAULT_CONFIG');
+    console.log('✓ API layer loads lazily and uBlock support ships enabled');
 }
 
 // 7. The keyboard action exists but takes no key from pages by default
@@ -218,3 +218,67 @@ console.log('All extension support tests passed.');
     assert.equal(router.listeners.length, 0);
     console.log('Extension hosts share one destruction observer and retain complete cleanup.');
 }
+
+// Listener removal must release the registered wrapper, preserve other callbacks
+// and unsubscribe the host only after its last callback has gone.
+{
+    const {EventEmitter} = require('node:events');
+    const vm = require('node:vm');
+    const source = fs.readFileSync(path.join(__dirname, '../extension-api.preload.js'), 'utf8');
+    const start = source.indexOf('  var listenerMap =');
+    const end = source.indexOf('  // src/renderer/index.ts', start);
+    const ipcRenderer = new EventEmitter(), subscriptions = [];
+    ipcRenderer.send = (...args) => subscriptions.push(args);
+    const context = {import_electron: {ipcRenderer}, formatIpcName: name => `crx-${name}`};
+    vm.createContext(context);
+    vm.runInContext(source.slice(start, end), context);
+    let a = 0, b = 0;
+    const first = value => {a += value;}, second = value => {b += value;};
+    for (let i = 0; i < 100; i++) {
+        context.addExtensionListener('extension', 'tabs.onUpdated', first);
+    }
+    context.addExtensionListener('extension', 'tabs.onUpdated', second);
+    assert.equal(ipcRenderer.listenerCount('crx-tabs.onUpdated'), 2);
+    ipcRenderer.emit('crx-tabs.onUpdated', {}, 1);
+    assert.deepEqual([a, b], [1, 1]);
+    context.removeExtensionListener('extension', 'tabs.onUpdated', first);
+    context.removeExtensionListener('extension', 'tabs.onUpdated', first);
+    ipcRenderer.emit('crx-tabs.onUpdated', {}, 1);
+    assert.deepEqual([a, b], [1, 2]);
+    context.removeExtensionListener('extension', 'tabs.onUpdated', second);
+    assert.equal(ipcRenderer.listenerCount('crx-tabs.onUpdated'), 0);
+    assert.deepEqual(subscriptions, [
+        ['crx-add-listener', 'extension', 'tabs.onUpdated'],
+        ['crx-remove-listener', 'extension', 'tabs.onUpdated']
+    ]);
+    console.log('Extension callbacks deduplicate and detach without leaving wrappers or host subscriptions.');
+}
+
+// An address entered while uBlock starts must win over the restored address.
+// Closing or hibernating a waiting view must not start it later.
+(async () => {
+    const vm = require('node:vm');
+    const source = fs.readFileSync(path.join(__dirname, '../modules/extensions.js'), 'utf8');
+    const start = source.indexOf('export function loadWebviewSource');
+    const end = source.indexOf('// Called whenever the active view changes', start);
+    const pending = [], navigations = [];
+    const context = {
+        workspaceHasExtensions: () => true,
+        isPersistentPartition: partition => partition.startsWith('persist:'),
+        window: {flyAPI: {extensionsEnsure: () => new Promise(resolve => pending.push(resolve))}}
+    };
+    vm.createContext(context);
+    vm.runInContext(source.slice(start, end).replace('export ', ''), context);
+    const view = {isConnected: true, getAttribute: () => 'persist:work', setAttribute: (_name, url) => navigations.push(url)};
+    context.loadWebviewSource(view, 'Work', 'https://restored.example/');
+    context.loadWebviewSource(view, 'Work', 'https://typed.example/');
+    assert.equal(navigations.length, 0, 'Navigation waits for the extension without a bypass timer');
+    pending[1](); await Promise.resolve();
+    pending[0](); await Promise.resolve();
+    assert.deepEqual(navigations, ['https://typed.example/']);
+    context.loadWebviewSource(view, 'Work', 'https://closed.example/');
+    view.isConnected = false;
+    pending[2](); await Promise.resolve();
+    assert.deepEqual(navigations, ['https://typed.example/']);
+    console.log('Startup navigation waits for filtering, preserves the latest address and leaves closed views alone.');
+})().catch(error => {console.error(error); process.exitCode = 1;});

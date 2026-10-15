@@ -1,5 +1,5 @@
 // extensions.js
-// Opt-in Chrome extension support for Fly Browser. Disabled by default.
+// Chrome extension support for Fly Browser. Bundled uBlock is enabled by default.
 // Extensions are scoped to the workspaces that enable them. They load when such a
 // workspace gets its first live tab and unload after a grace period once every tab
 // in it has been closed or hibernated, so an idle workspace costs nothing.
@@ -99,7 +99,7 @@ function collectWarnings(manifest) {
         warnings.push('Uses declarativeNetRequest. Electron exposes the API but does not enforce its rules, so they will not apply.');
     }
     if (perms.includes('webRequestBlocking')) {
-        warnings.push('While loaded, network extensions replace Fly’s native blocker and request header rules.');
+        warnings.push('Network filtering is handled by this extension; Fly leaves request hooks available to it.');
     }
     if (perms.includes('nativeMessaging')) {
         warnings.push('Native messaging hosts are not configured for Fly and will probably fail.');
@@ -464,7 +464,7 @@ function updateNetworkExtensions(ctrl) {
     setNetworkExtensions(ctrl.session, [...ctrl.loaded.values()].some(entry => entry.network));
 }
 
-async function initialiseBackgroundPage(ctrl, extension) {
+async function initialiseBackgroundPage(ctrl, extension, folder) {
     if (extension.manifest.manifest_version !== 2 || classifyBackground(extension.manifest) !== 'persistent') return;
     const extensionId = extension.id;
     let page;
@@ -477,8 +477,33 @@ async function initialiseBackgroundPage(ctrl, extension) {
     }
     if (!page) throw new Error('Extension background page unavailable');
     const hasApis = () => page.executeJavaScript('!!(globalThis.chrome && chrome.contextMenus && chrome.windows)');
-    if (await hasApis()) return;
-    throw new Error('Extension background APIs unavailable');
+    if (!await hasApis()) throw new Error('Extension background APIs unavailable');
+    // loadExtension only means that the background page can start. uBlock cancels
+    // requests until its lists are ready. Check its final startup marker (including
+    // unsuspending network requests) before navigating restored pages. A bounded
+    // startup probe also tolerates uBlock replacing its first background document.
+    if (folder === 'ublock-origin') {
+        const deadline = Date.now() + 30000;
+        while (Date.now() < deadline) {
+            const background = electron().webContents.getAllWebContents().find(wc =>
+                !wc.isDestroyed() && wc.getType() === 'backgroundPage' && wc.session === ctrl.session &&
+                wc.getURL().startsWith(`chrome-extension://${extensionId}/`));
+            if (background) {
+                let timer;
+                try {
+                    const ready = await Promise.race([
+                        background.executeJavaScript("import('./js/background.js').then(({default: u}) => u.readyToFilter && u.supportStats.allReadyAfter !== '?' && vAPI.net.suspendDepth === 0)"),
+                        new Promise(resolve => { timer = setTimeout(() => resolve(false), 1000); })
+                    ]).catch(() => false);
+                    if (ready) return;
+                } finally {
+                    clearTimeout(timer);
+                }
+            }
+            await new Promise(resolve => setTimeout(resolve, 25));
+        }
+        throw new Error('uBlock Origin did not finish initialising');
+    }
 }
 
 async function syncController(ctrl, wanted) {
@@ -495,10 +520,12 @@ async function syncController(ctrl, wanted) {
         ensureApiLayer(ctrl);
         const started = Date.now();
         try {
-            const ext = await ctrl.session.extensions.loadExtension(extPath, { allowFileAccess: false });
-            const network = (ext.manifest.permissions || []).includes('webRequest');
+            const manifest = JSON.parse(fs.readFileSync(path.join(extPath, 'manifest.json'), 'utf8'));
+            const network = (manifest.permissions || []).includes('webRequest');
+            // Release native hooks before the extension registers its listeners.
             if (network) setNetworkExtensions(ctrl.session, true);
-            try { await initialiseBackgroundPage(ctrl, ext); } catch (error) {
+            const ext = await ctrl.session.extensions.loadExtension(extPath, { allowFileAccess: false });
+            try { await initialiseBackgroundPage(ctrl, ext, folder); } catch (error) {
                 ctrl.session.extensions.removeExtension(ext.id);
                 throw error;
             }

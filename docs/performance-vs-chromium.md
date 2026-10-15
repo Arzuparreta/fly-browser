@@ -1,5 +1,7 @@
 # Fly vs Chromium resource use
 
+> Historical baseline: the samples below precede the removal of Ghostery and per-tab shields. Their original configurations and results are preserved. Current Fly uses the included uBlock Origin for blocking; reruns use the current defaults. See the [follow-up measurements](./performance-shields-removal) for the fixes, their costs and remaining limitations.
+
 Measured on 15 October 2026 against `main` at `c199317` (the latest release). Fly runs on Electron 44.7.2, which embeds Chromium 152.0.7977.149. It is compared with the distribution's Chromium 153.0.8010.52 (Arch Linux package) and, as a reference, Google's Chrome for Testing 153.0.8010.12.
 
 The script is [`scripts/benchmark-vs-chromium.js`](https://github.com/Arzuparreta/fly-browser/blob/main/scripts/benchmark-vs-chromium.js). Raw samples: [run 1](/benchmarks/2026-10-15-vs-chromium-run1.json) (5 rounds), [run 2](/benchmarks/2026-10-15-vs-chromium-run2.json) (3 rounds, adds Chrome for Testing) and [run 3](/benchmarks/2026-10-15-vs-chromium-no-cnn.json) (3 rounds, browsing without CNN). Values are medians with [min–max] across rounds. Configurations within a round run back to back, in alternating order.

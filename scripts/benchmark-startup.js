@@ -49,7 +49,7 @@ app.setAppPath(${JSON.stringify(root)}); app.setPath('home',${JSON.stringify(tem
 app.commandLine.appendSwitch('proxy-server','http://127.0.0.1:9'); app.commandLine.appendSwitch('proxy-bypass-list','<-loopback>;127.0.0.1');
 globalThis.__benchProtected=new WeakSet(); globalThis.__benchFetches=0;
 const originalFetch=globalThis.fetch; globalThis.fetch=(...args)=>{globalThis.__benchFetches++;return originalFetch(...args);};
-const {ElectronBlocker}=require(${JSON.stringify(require.resolve('@ghostery/adblocker-electron'))});
+${fs.existsSync(path.join(root, 'adblocker-build.js')) ? `const {ElectronBlocker}=require(${JSON.stringify(require.resolve('@ghostery/adblocker-electron', {paths: [root]}))});` : 'const ElectronBlocker={prototype:{enableBlockingInSession(){}}};'}
 const originalEnable=ElectronBlocker.prototype.enableBlockingInSession;
 ElectronBlocker.prototype.enableBlockingInSession=function(session){const result=originalEnable.call(this,session);globalThis.__benchProtected.add(session);return result;};
 require(${JSON.stringify(path.join(root, 'main.js'))});`);
@@ -69,7 +69,14 @@ require(${JSON.stringify(path.join(root, 'main.js'))});`);
                 }
                 const localReadyMs = performance.now() - start;
                 for (let attempt = 0; ; attempt++) {
-                    const protectedGuest = await application.evaluate(({webContents}) => webContents.getAllWebContents().some(contents => contents.getType() === 'webview' && globalThis.__benchProtected.has(contents.session)));
+                    const protectedGuest = await application.evaluate(async ({webContents}) => {
+                        const all = webContents.getAllWebContents();
+                        if (all.some(w => w.getType() === 'webview' && globalThis.__benchProtected.has(w.session))) return true;
+                        for (const w of all.filter(w => w.getType() === 'backgroundPage')) {
+                            if (await w.executeJavaScript("import('./js/background.js').then(({default: u}) => u.readyToFilter && u.supportStats.allReadyAfter !== '?')").catch(() => false)) return true;
+                        }
+                        return false;
+                    });
                     if (protectedGuest) break;
                     if (attempt === 1000) throw new Error('Guest filtering did not attach');
                     await page.waitForTimeout(20);

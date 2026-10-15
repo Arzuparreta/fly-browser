@@ -3,6 +3,7 @@
 
 import { state } from './state.js';
 import { wakeTab, renderWorkspaceUI } from './webview.js';
+import { loadWebviewSource } from './extensions.js';
 
 export function getSplitState(wsName) {
     if (!wsName) wsName = state.sessionState.current_workspace;
@@ -337,7 +338,7 @@ export async function openUrlInSplit(url) {
 
         const wv = state.activeViewsCache[currentWS]?.[targetIdx];
         if (wv && typeof wv.setAttribute === 'function') {
-            wv.setAttribute('src', url);
+            loadWebviewSource(wv, currentWS, url);
         } else {
             wakeTab(currentWS, targetIdx);
         }
