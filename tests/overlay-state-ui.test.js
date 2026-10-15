@@ -249,6 +249,25 @@ const root = path.resolve(__dirname, '..');
         assert(await sidebarEdge() >= 259, 'The empty-workspace sidebar must also remain expanded outside the window');
         await page.mouse.move(500, 400);
         await page.waitForFunction(() => document.getElementById('Sidebar').getBoundingClientRect().right <= 37);
+        for (const pinned of [false, true]) {
+            await page.evaluate(pinned => window.applySidebarMode(!pinned), pinned);
+            for (const key of ['s', 'Alt+s']) {
+                await page.keyboard.press(key);
+                await page.waitForFunction(() => document.activeElement.id === 'Sidebar');
+                await page.waitForFunction(() => document.getElementById('Sidebar').getBoundingClientRect().right >= 259);
+                assert.equal(await page.locator('#Sidebar button:focus').count(), 0, 'Opening an empty sidebar must not select a toolbar action');
+                assert.equal(await page.locator('#Sidebar').evaluate(sidebar => getComputedStyle(sidebar).outlineStyle), 'none');
+                await page.keyboard.press('Tab');
+                assert.equal(await page.evaluate(() => document.activeElement.id), 'WorkspaceHeader', 'Tab starts at the first sidebar control');
+                await page.keyboard.press('Tab');
+                assert.equal(await page.evaluate(() => document.activeElement.id), 'toggle-nav-btn');
+                assert(await page.locator('#toggle-nav-btn').evaluate(button => button.matches(':focus-visible')), 'Explicit keyboard navigation keeps visible focus feedback');
+                await page.keyboard.press(key);
+                await page.waitForFunction(() => !document.getElementById('Sidebar').contains(document.activeElement));
+                await page.waitForFunction(pinned => document.getElementById('Sidebar').getBoundingClientRect().right === (pinned ? 260 : 36), pinned);
+            }
+        }
+        await page.evaluate(() => window.applySidebarMode(true));
         for (const button of ['back-btn', 'forward-btn']) {
             await page.mouse.move(10, 100);
             await page.locator('#' + button).click();

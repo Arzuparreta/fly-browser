@@ -222,7 +222,7 @@ export function focusSidebar() {
         return;
     }
     const selectedTab = document.querySelector('#TabList li.selected') || document.querySelector('#TabList li');
-    const target = selectedTab || document.getElementById('back-btn') || document.getElementById('toggle-nav-btn');
+    const target = selectedTab || sidebar;
     target?.focus();
 }
 

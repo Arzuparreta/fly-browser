@@ -53,6 +53,11 @@ body, html {
     border-right: 1px solid var(--border);
 }
 
+/* Empty workspaces focus the container without selecting a toolbar action. */
+#Sidebar:focus-visible {
+    outline: none !important;
+}
+
 .sidebar-viewport {
     position: absolute;
     inset: 0;
@@ -331,33 +336,25 @@ body.sidebar-auto-collapse #Sidebar:not(.pointer-inside, .expanded, :focus-withi
 }
 
 .nav-history-group {
-    position: relative;
     display: flex;
     flex: none;
 }
 
-.nav-history-group::after {
-    content: "";
-    position: absolute;
-    top: 1px;
-    bottom: 1px;
-    left: 50%;
-    width: 1px;
-    background-color: var(--border);
-    pointer-events: none;
-}
-
 .nav-history-group .nav-icon-button {
+    position: relative;
     width: 34px;
     height: 30px;
     border-radius: 999px 0 0 999px;
-    border-right-width: 0;
 }
 
 .nav-history-group .nav-icon-button + .nav-icon-button {
     border-radius: 0 999px 999px 0;
-    border-right-width: 1px;
-    border-left-width: 0;
+    margin-left: -1px;
+}
+
+/* Both halves own a complete border; the active half paints the shared edge. */
+.nav-history-group .nav-icon-button:is(:hover, :focus-visible) {
+    z-index: 1;
 }
 
 #update-indicator-btn {
