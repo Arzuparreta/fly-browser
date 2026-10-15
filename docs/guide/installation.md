@@ -8,6 +8,33 @@ Fly is designed to be efficient, modular, and easy to run across Linux, macOS, a
 
 Official releases and cryptographic checksums are published for every tagged version on the [GitHub Releases page](https://github.com/Arzuparreta/fly-browser/releases).
 
+### Installer script (any distribution)
+
+The quickest way to install Fly on Linux. Paste this into a terminal:
+
+```bash
+mkdir -p ~/.local/bin
+curl -fsSL https://raw.githubusercontent.com/Arzuparreta/fly-browser/main/scripts/fly-install -o ~/.local/bin/fly-install
+chmod +x ~/.local/bin/fly-install
+~/.local/bin/fly-install install
+```
+
+The same `fly-install` command then finds every copy of Fly on the machine, updates them and uninstalls them:
+
+```bash
+fly-install status       # every installation found, its version, and whether it is current
+fly-install update       # brings every installation to the latest release
+fly-install uninstall package|PATH|all
+```
+
+If your shell does not find `fly-install`, `~/.local/bin` is not in your `PATH`: run it as `~/.local/bin/fly-install`, or add that folder to `PATH` in your shell's startup file.
+
+- On Arch-based systems, `install` and `update` build `fly-browser-bin` from the release's `PKGBUILD` in a temporary directory, which they remove afterwards, so downloads do not pile up. `--appimage` installs the AppImage there instead.
+- Elsewhere, the AppImage goes into `~/Applications`, checked against the release's `SHA256SUMS.txt`.
+- An AppImage is added to the applications menu in the standard XDG locations that every Linux desktop and launcher reads: the desktop entry goes in `~/.local/share/applications`, and the icons go in the `hicolor` theme. Fly recognises that entry as its own, keeps it pointing at the AppImage, and can remove it from Preferences.
+- `status` looks in `~/Applications`, `~/.local/bin`, `~/bin`, `~/Desktop`, `~/Downloads` and the AppImage the menu starts, so stray copies show up. `update` brings each of them up to date.
+- `uninstall` removes the package with pacman, or deletes an AppImage together with the menu entry and icons that were added for it. Your profile in `~/.config/fly-browser` is kept.
+
 ### Arch Linux and derivatives
 
 On Arch Linux, CachyOS, EndeavourOS, Manjaro and other Arch-based systems, install the `fly-browser-bin` package. Every stable release carries its `PKGBUILD`:
@@ -23,27 +50,6 @@ The package installs Fly to `/opt/fly-browser`, the `fly-browser` command, a des
 `fly-browser-bin` is also going to the AUR, where it will update with your system (`paru -Syu`). AUR account registration is paused at the moment; once the package is published there, `paru -S fly-browser-bin` replaces the commands above, and an installation made with them carries over as it is.
 
 Flags you want on every launch, such as `--ozone-platform=wayland`, go in `~/.config/fly-browser-flags.conf`, one or more per line; `#` starts a comment.
-
-### Installer script (any distribution)
-
-`fly-install` installs Fly, finds every copy on the machine, updates them and uninstalls them, from the terminal:
-
-```bash
-mkdir -p ~/.local/bin
-curl -fsSL https://raw.githubusercontent.com/Arzuparreta/fly-browser/main/scripts/fly-install -o ~/.local/bin/fly-install
-chmod +x ~/.local/bin/fly-install
-
-fly-install install      # the Arch package where makepkg exists, otherwise the AppImage
-fly-install status       # every installation found, its version, and whether it is current
-fly-install update       # brings every installation to the latest release
-fly-install uninstall package|PATH|all
-```
-
-- On Arch-based systems, `install` and `update` build `fly-browser-bin` from the release's `PKGBUILD` in a temporary directory, which they remove afterwards, so downloads do not pile up. `--appimage` installs the AppImage there instead.
-- Elsewhere, the AppImage goes into `~/Applications`, checked against the release's `SHA256SUMS.txt`.
-- An AppImage is added to the applications menu in the standard XDG locations that every Linux desktop and launcher reads: the desktop entry goes in `~/.local/share/applications`, and the icons go in the `hicolor` theme. Fly recognises that entry as its own, keeps it pointing at the AppImage, and can remove it from Preferences.
-- `status` looks in `~/Applications`, `~/.local/bin`, `~/bin`, `~/Desktop`, `~/Downloads` and the AppImage the menu starts, so stray copies show up. `update` brings each of them up to date.
-- `uninstall` removes the package with pacman, or deletes an AppImage together with the menu entry and icons that were added for it. Your profile in `~/.config/fly-browser` is kept.
 
 ### Linux (Distro-Agnostic AppImage)
 
