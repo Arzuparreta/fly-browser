@@ -138,11 +138,12 @@ body.sidebar-pinned #right-content {
    sidebar, as keyboard routes into the navigation buttons expect. */
 body.sidebar-auto-collapse .sidebar-content::before,
 body.sidebar-auto-collapse .bottom-theme-layout::before,
-body.sidebar-auto-collapse :is(.window-controls, .nav-action-layout, .sidebar-clock-row) {
+body.sidebar-auto-collapse #WorkspaceHeader::before,
+body.sidebar-auto-collapse :is(.window-controls, .nav-action-layout, .sidebar-clock-row, #WorkspaceLabel) {
     transition: opacity var(--motion-normal) var(--motion-ease);
 }
 
-body.sidebar-auto-collapse :is(#reader-view-btn, #noti-toggle-btn, #settings-btn) {
+body.sidebar-auto-collapse :is(#reader-view-btn, #split-toggle-btn, #noti-toggle-btn, #settings-btn) {
     transition: opacity var(--motion-normal) var(--motion-ease),
                 background-color var(--motion-fast) var(--motion-ease),
                 border-color var(--motion-fast) var(--motion-ease),
@@ -151,7 +152,8 @@ body.sidebar-auto-collapse :is(#reader-view-btn, #noti-toggle-btn, #settings-btn
 
 body.sidebar-auto-collapse #Sidebar:not(.pointer-inside, .expanded, :focus-within) .sidebar-content::before,
 body.sidebar-auto-collapse #Sidebar:not(.pointer-inside, .expanded, :focus-within) .bottom-theme-layout::before,
-body.sidebar-auto-collapse #Sidebar:not(.pointer-inside, .expanded, :focus-within) :is(.window-controls, .nav-action-layout, .sidebar-clock-row, #reader-view-btn, #noti-toggle-btn, #settings-btn) {
+body.sidebar-auto-collapse #Sidebar:not(.pointer-inside, .expanded, :focus-within) #WorkspaceHeader::before,
+body.sidebar-auto-collapse #Sidebar:not(.pointer-inside, .expanded, :focus-within) :is(.window-controls, .nav-action-layout, .sidebar-clock-row, #WorkspaceLabel, #reader-view-btn, #split-toggle-btn, #noti-toggle-btn, #settings-btn) {
     opacity: 0;
     pointer-events: none;
 }
@@ -220,23 +222,45 @@ body.sidebar-auto-collapse #Sidebar:not(.pointer-inside, .expanded, :focus-withi
     color: #ffffff;
 }
 
-/* One row holds the workspace badge, which opens the dashboard, and the
-   navigation buttons, spread like the footer's. Only the badge sits in the
-   rail; the navigation actions sit beside it. */
+/* The workspace control fills the space beside the compact navigation group.
+   Its badge stays centred on the rail when the sidebar collapses. */
 .sidebar-top-row {
     display: flex;
     align-items: center;
     justify-content: space-between;
-    gap: 26px;
+    gap: 8px;
     width: 245px;
     margin: 0 0 6px 4px;
     flex-shrink: 0;
 }
 
 #WorkspaceHeader {
+    position: relative;
+    isolation: isolate;
     display: flex;
-    flex: none;
+    align-items: center;
+    flex: 1;
+    min-width: 0;
+    min-height: 34px;
+    gap: 8px;
+    padding: 3px 4px 3px 0;
     cursor: pointer;
+}
+
+#WorkspaceHeader::before {
+    content: "";
+    position: absolute;
+    inset: 0;
+    z-index: -1;
+    border: 1px solid var(--border);
+    border-radius: 2px;
+    background-color: var(--panel);
+    pointer-events: none;
+    transition: background-color var(--motion-fast) var(--motion-ease);
+}
+
+#WorkspaceHeader:hover::before {
+    background-color: var(--selected);
 }
 
 #WorkspaceHeader:hover #WorkspaceBadge {
@@ -262,12 +286,20 @@ body.sidebar-auto-collapse #Sidebar:not(.pointer-inside, .expanded, :focus-withi
     transition: background-color var(--motion-fast) var(--motion-ease), border-color var(--motion-fast) var(--motion-ease);
 }
 
+#WorkspaceLabel {
+    color: var(--text);
+    font-weight: bold;
+    font-size: 13px;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
 /* History shares one pill at the right edge, in line with the tab rows. */
 .nav-action-layout {
     display: flex;
-    flex: 1;
-    justify-content: space-between;
-    gap: 12px;
+    flex: none;
+    gap: 8px;
     align-items: center;
 }
 
