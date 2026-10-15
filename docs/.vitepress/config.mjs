@@ -45,12 +45,12 @@ export default defineConfig({
           { text: 'Mouse-Free Navigation', link: '/guide/navigation' },
           { text: 'Workspaces & Containers', link: '/guide/workspaces-and-containers' },
           { text: 'True Tab Hibernation', link: '/guide/tab-hibernation' },
-          { text: 'Privacy & Trusted Sites', link: '/guide/privacy-and-shields' },
+          { text: 'Privacy & Ad Blocking', link: '/guide/privacy-and-shields' },
           { text: 'Bookmarks, Quickmarks & History', link: '/guide/bookmarks-and-history' },
           { text: 'Terminal Security & Oversight', link: '/guide/terminal-oversight' },
           { text: 'User Scripts & Styles', link: '/guide/user-scripts-and-styles' },
           { text: 'Community Scripts', link: '/guide/community-scripts' },
-          { text: 'Chrome Extensions (Opt-in)', link: '/guide/extensions' }
+          { text: 'Chrome Extensions', link: '/guide/extensions' }
         ]
       },
       {
@@ -69,6 +69,7 @@ export default defineConfig({
           { text: 'Versioning & Releases', link: '/releasing' },
           { text: 'Fork Performance Audit', link: '/performance-audit' },
           { text: 'Fly vs Chromium Resource Use', link: '/performance-vs-chromium' },
+          { text: 'Ad Blocking Follow-up', link: '/performance-shields-removal' },
           { text: 'Adoption and Review', link: '/adoption-review' }
         ]
       }

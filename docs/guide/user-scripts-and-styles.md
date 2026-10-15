@@ -36,8 +36,8 @@ fanless Linux hardware:
    Centralised extension stores suffer from a chronic security problem: popular
    extensions are regularly bought by data-collection companies and updated
    silently with tracking code. Fly enforces a strictly local-only policy.
-   Only scripts and styles you explicitly save into your local config directory
-   can ever execute.
+   Included uBlock updates arrive through Fly releases. Additional scripts, styles
+   and extensions come from files you place in your local config directory.
 
 4. **Native Handling of Core Capabilities**:
    When analysing what users actually install extensions for, four use cases
@@ -47,12 +47,12 @@ fanless Linux hardware:
    * **Custom Styling**: Handled cleanly via local `~/.config/fly-browser/styles/`.
    * **Page Script Tweaks**: Handled cleanly via local `~/.config/fly-browser/scripts/`.
 
-By handling core browser mechanics in the engine and letting users drop in
-clean `.user.js` and `.user.css` files, Fly delivers the exact customisations
-users want while maintaining a near-zero idle resource footprint.
+Local `.user.js` and `.user.css` files cover many customisations without another
+extension background process. The included uBlock Origin has its own startup
+and memory costs, described in the [extension guide](/guide/extensions).
 
 ::: info WHEN A USERSCRIPT IS NOT ENOUGH
-For the rare extension with no userscript equivalent, Fly offers [opt-in Chrome extensions](/guide/extensions): disabled by default, enabled per workspace, and unloaded automatically when that workspace goes idle. Userscripts remain the recommended path.
+Fly also supports [Chrome extensions](/guide/extensions) per workspace, unloading them when the workspace goes idle. The included uBlock Origin is enabled by default in new profiles; manually installed extensions run only where selected.
 :::
 
 ::: tip COMMUNITY SCRIPTS & STYLES
