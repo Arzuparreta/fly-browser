@@ -416,10 +416,15 @@ function getActionForInput(input, includeRepeat = false) {
     if (!includeRepeat && input.isAutoRepeat && !keyboard.repeatable(action)) return null;
     return action || null;
 }
+// Modifier chords of the tab selection shortcuts (Alt by default); holding one shows the tab numbers.
+function tabNumberModifiers() {
+    const combos = Array.from({length: 9}, (_, index) => active.shortcuts[`tab-${index + 1}`] || []).flat();
+    return new Set(combos.map(combo => combo.split('+').slice(0, -1).join('+')).filter(Boolean));
+}
 function getKeyboardConfig() { return {...clone(active), ...(configurationWarning ? {warning: configurationWarning} : {})}; }
 function getKeybinds() { return clone(active.shortcuts); }
 function getActionMetadata() { return clone(ACTION_METADATA); }
 module.exports = {DEFAULT_KEYBINDS, DEFAULT_NORMAL, ACTION_METADATA, initializeKeybinds,
-    saveKeybinds, getActionForInput, getKeybinds, getKeyboardConfig, getActionMetadata,
+    saveKeybinds, getActionForInput, tabNumberModifiers, getKeybinds, getKeyboardConfig, getActionMetadata,
     getDefaults: () => clone(defaults), resolveKeybinds: raw => initialiseCandidate(raw), normalizeKeyCombination: keyboard.normalise,
     inputEventToKeyCombination: keyboard.eventCombo};

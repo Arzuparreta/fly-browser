@@ -212,7 +212,9 @@ keybinds.initializeKeybinds(path.join(os.tmpdir(), 'fly-nonexistent-keyboard-pro
 const mainSource = fs.readFileSync(path.join(__dirname, '..', 'main.js'), 'utf8');
 const nativeHandlers = {}, nativeActions = [], nativeMessages = [];
 const contents = {on: (name, callback) => { nativeHandlers[name] = callback; }, send: (...args) => nativeMessages.push(args)};
-const nativeContext = {keybinds, keyboard, webContents: contents, guestPassthrough: new WeakMap(), guestRightAlt: new WeakMap(), handleAppAction: action => nativeActions.push(action)};
+const tracked = [];
+const nativeContext = {keybinds, keyboard, webContents: contents, guestPassthrough: new WeakMap(), guestRightAlt: new WeakMap(), handleAppAction: action => nativeActions.push(action),
+    tabNumbers: {track: (input, passthrough) => tracked.push([input.key, !!passthrough])}};
 vm.createContext(nativeContext);
 vm.runInContext(mainSource.slice(mainSource.indexOf('        // Native interception'), mainSource.indexOf("        webContents.on('render-process-gone'")), nativeContext);
 function nativePress(key, extra = {}) {
@@ -231,6 +233,7 @@ assert(nativePress('Escape', {shift: true}).consumed);
 assert(nativePress('w', {control: true}).consumed);
 assert(!nativePress('w', {control: true, isComposing: true}).consumed);
 assert(!nativePress('j').consumed, 'Native interception must never consume bare page keys');
+assert.deepEqual(tracked, [['w', false], ['w', false], ['Escape', false], ['w', true], ['Escape', true], ['w', false], ['w', false], ['j', false]], 'Every page key reaches the tab numbers with its passthrough state');
 console.log('Native guest chord and passthrough routing passed.');
 const statusSource = fs.readFileSync(path.join(__dirname, '..', 'modules/statusBar.js'), 'utf8').replace(/^import .*;\n/gm, '').replace(/export /g, '');
 const tabA = {}, tabB = {}, listA = {}, listB = {};

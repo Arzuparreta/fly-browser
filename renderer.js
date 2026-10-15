@@ -1046,6 +1046,7 @@ function setupEventListeners() {
             if (event.target === sidebar) focusActiveWebview();
         }
     });
+    window.flyAPI.onTabNumbers(shown => document.body.classList.toggle('show-tab-numbers', shown));
 
     const findInput = document.getElementById('FindInput');
     if (findInput) {

@@ -504,6 +504,28 @@ body.sidebar-auto-collapse #Sidebar:not(.pointer-inside, .expanded, :focus-withi
     opacity: 1;
 }
 
+/* Tab numbers for the tab selection shortcuts, painted over the favicon while their modifier is held
+   (tabNumbers.js). Tabs 1–8 carry their position; 9 marks the last tab, which Alt+9 selects. */
+#TabList { counter-reset: tab; }
+#TabList > li { counter-increment: tab; }
+body.show-tab-numbers #TabList > li:nth-child(-n+8) .tab-favicon-wrapper::after,
+body.show-tab-numbers #TabList > li:nth-child(n+9):last-child .tab-favicon-wrapper::after {
+    content: counter(tab);
+    position: absolute;
+    inset: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font: 600 15px/1 'IBM Plex Sans', sans-serif;
+    color: var(--text);
+    /* A hairline of the sidebar colour keeps the digit legible on any favicon without hiding it. */
+    -webkit-text-stroke: 3px var(--bg-sidebar);
+    paint-order: stroke fill;
+    pointer-events: none;
+    z-index: 7;
+}
+body.show-tab-numbers #TabList > li:nth-child(n+9):last-child .tab-favicon-wrapper::after { content: '9'; }
+
 /* Sleeping tab styling */
 #TabList li.tab-sleeping .tab-favicon {
     opacity: 0.55;

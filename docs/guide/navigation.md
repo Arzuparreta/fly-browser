@@ -176,7 +176,7 @@ Fly Browser provides a Vim-inspired modal navigation engine that frees you from 
 
 ## Workspace Badges, Tab Selection & Favicons
 
-* **Selecting Tabs by Position**: Press **Alt + 1** through **Alt + 8** to select tabs 1 through 8 from anywhere, or the last tab when fewer exist. **Alt + 9** always selects the last tab.
+* **Selecting Tabs by Position**: Press **Alt + 1** through **Alt + 8** to select tabs 1 through 8 from anywhere, or the last tab when fewer exist. **Alt + 9** always selects the last tab. Hold the left **Alt** key on its own to see these numbers painted over the tab icons: 1 to 8 on the first eight tabs and 9 on the last one. They disappear when you release Alt or press any other key.
 * **Non-Disruptive Sidebar Cursor Navigation**: Moving with **j** / **k** or **Down** / **Up** moves the cursor highlight across tabs without waking sleeping tabs into memory. Press **Enter**, **Space**, or **l** / **Right** to activate the highlighted tab.
 * **Workspace Badges**: The top of the strip displays a compact letter or number badge for the current workspace (such as `W1` or `P`). Clicking the workspace badge opens the Workspace Dashboard (**Ctrl + Shift + W**). It shares the top row of the sidebar with the Back, Forward, New Tab and Split View buttons; hover it to see the workspace's full name.
 * **Favicons & Indicators**: Each tab renders its website favicon with smart local and remote caching. Sleeping tabs display a subtle moon indicator, while tabs playing audio render a green audio badge.

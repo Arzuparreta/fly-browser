@@ -7,7 +7,7 @@
   "license": "GPL-3.0-or-later",
   "scripts": {
     "start": "install-electron && electron . --log-level=3",
-    "test": "node tests/auth-security.test.js && node tests/closed-output.test.js && node tests/clock.test.js && node tests/audio-controls.test.js && node tests/pinned-tabs.test.js && node tests/search-aliases.test.js && node tests/config-writes.test.js && node tests/profile-migration.test.js && node tests/workspace-partitions.test.js && node tests/keyboard.test.js && node scripts/sync-keyboard.js --check && node scripts/generate-keybind-docs.js --check && node tests/navigation-focus.test.js && node tests/overlay-state.test.js && node tests/extensions.test.js && node tests/focus-recovery.test.js && node tests/sidebar-pointer.test.js && node scripts/generate-extension-preload.js --check && node tests/launcher.test.js && node tests/release-tooling.test.js && node tests/aur-package.test.js && node tests/desktop-integration.test.js && node tests/appimage-update.test.js && node tests/fly-install.test.js && node scripts/version-sync.js --check",
+    "test": "node tests/auth-security.test.js && node tests/closed-output.test.js && node tests/clock.test.js && node tests/audio-controls.test.js && node tests/pinned-tabs.test.js && node tests/search-aliases.test.js && node tests/config-writes.test.js && node tests/profile-migration.test.js && node tests/workspace-partitions.test.js && node tests/keyboard.test.js && node scripts/sync-keyboard.js --check && node scripts/generate-keybind-docs.js --check && node tests/navigation-focus.test.js && node tests/overlay-state.test.js && node tests/extensions.test.js && node tests/tab-numbers.test.js && node tests/focus-recovery.test.js && node tests/sidebar-pointer.test.js && node scripts/generate-extension-preload.js --check && node tests/launcher.test.js && node tests/release-tooling.test.js && node tests/aur-package.test.js && node tests/desktop-integration.test.js && node tests/appimage-update.test.js && node tests/fly-install.test.js && node scripts/version-sync.js --check",
     "docs:dev": "vitepress dev docs",
     "docs:build": "vitepress build docs",
     "docs:preview": "vitepress preview docs",
@@ -16,7 +16,7 @@
     "dist": "electron-builder",
     "dist:linux": "electron-builder --linux",
     "dist:dir": "electron-builder --dir",
-    "test:keyboard-ui": "node tests/desktop-integration-ui.test.js && node tests/split-view-ui.test.js && node tests/address-bar-dismiss-ui.test.js && node tests/appimage-update-ui.test.js && node tests/keyboard-ui.test.js && node tests/empty-search-ui.test.js && node tests/navigation-focus-ui.test.js && node tests/overlay-state-ui.test.js && node tests/sidebar-pointer-focus-ui.test.js && node tests/settings-nav-ui.test.js && node tests/interface-scale-ui.test.js && node tests/website-theme-ui.test.js && node tests/whats-new-ui.test.js && node tests/tab-close-typing-ui.test.js && node tests/tab-close-button-ui.test.js && node tests/sidebar-cursor-ui.test.js && node tests/legacy-keybinds-ui.test.js && node tests/oauth-popup-ui.test.js && node tests/self-closing-tab-ui.test.js && node tests/motion-ui.test.js && node tests/quickmark-ui.test.js && node tests/workspace-partitions-ui.test.js",
+    "test:keyboard-ui": "node tests/desktop-integration-ui.test.js && node tests/split-view-ui.test.js && node tests/address-bar-dismiss-ui.test.js && node tests/appimage-update-ui.test.js && node tests/keyboard-ui.test.js && node tests/empty-search-ui.test.js && node tests/navigation-focus-ui.test.js && node tests/overlay-state-ui.test.js && node tests/sidebar-pointer-focus-ui.test.js && node tests/settings-nav-ui.test.js && node tests/interface-scale-ui.test.js && node tests/website-theme-ui.test.js && node tests/whats-new-ui.test.js && node tests/tab-close-typing-ui.test.js && node tests/tab-close-button-ui.test.js && node tests/sidebar-cursor-ui.test.js && node tests/tab-numbers-ui.test.js && node tests/legacy-keybinds-ui.test.js && node tests/oauth-popup-ui.test.js && node tests/self-closing-tab-ui.test.js && node tests/motion-ui.test.js && node tests/quickmark-ui.test.js && node tests/workspace-partitions-ui.test.js",
     "test:identity-ui": "node tests/identity-ui.test.js",
     "test:blocking-ui": "node tests/extensions-ui.test.js && node tests/blocking-startup-ui.test.js"
   },
@@ -41,6 +41,7 @@
       "profileMigration.js",
       "workspacePartitions.js",
       "closedOutput.js",
+      "tabNumbers.js",
       "userContent.js",
       "diagnostics.js",
       "desktopIntegration.js",

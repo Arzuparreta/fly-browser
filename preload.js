@@ -107,6 +107,11 @@ contextBridge.exposeInMainWorld('flyAPI', {
     toggleMaximizeWindow: () => ipcRenderer.send('window-toggle-maximize'),
     closeWindow: () => ipcRenderer.send('window-close'),
     isWindowMaximized: () => ipcRenderer.invoke('window-is-maximized'),
+    onTabNumbers: callback => {
+        const handler = (event, shown) => callback(shown);
+        ipcRenderer.on('tab-numbers', handler);
+        return () => ipcRenderer.removeListener('tab-numbers', handler);
+    },
     onWindowMaximizedChange: (callback) => {
         const handler = (event, isMax) => callback(isMax);
         ipcRenderer.on('window-maximized-state', handler);
