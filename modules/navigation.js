@@ -438,7 +438,8 @@ export async function selectSuggestion(item) {
     hideSuggestions();
 }
 
-// Hides the bar and discards its text without moving focus, for callers that already own it.
+// Hides the bar and its suggestions without moving focus, for callers that already own it.
+// Reopening replaces the typed text with the tab address.
 export function dismissAddressBar() {
     const addressBar = document.getElementById('WideAddressBar');
     if (addressBar) addressBar.style.display = 'none';
