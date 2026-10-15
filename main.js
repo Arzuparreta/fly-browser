@@ -61,6 +61,15 @@ const sessionPath = path.join(CONFIG_DIR, 'session.json');
 const sessionBackupPath = path.join(CONFIG_DIR, 'session.json.bak');
 const sentinelPath = path.join(CONFIG_DIR, 'session_sentinel.json');
 const historyPath = path.join(CONFIG_DIR, 'history.json');
+const siteZoom = require('./siteZoom').createSiteZoom(path.join(CONFIG_DIR, 'site-zoom.json'));
+
+ipcMain.handle('change-site-zoom', (event, id, action) => {
+    if (!mainWindow || event.sender !== mainWindow.webContents || !Number.isInteger(id)) return;
+    const guest = webContents.fromId(id);
+    if (guest && guest.getType() === 'webview' && guest.hostWebContents === event.sender) {
+        siteZoom.change(guest, action);
+    }
+});
 
 let isCrashRecovery = false;
 
@@ -1886,9 +1895,9 @@ function createWindow() {
     let attachingWebviewSrc = '';
     mainWindow.webContents.on('will-attach-webview', (event, webPreferences, params) => {
         security.hardenWebviewPreferences(webPreferences);
-        // Keep page zoom independent across navigation and interface size changes.
+        // Site zoom is restored by hostname, independently of the interface scale.
         webPreferences.zoomFactor = 1;
-        webPreferences.zoomMode = 'isolated';
+        webPreferences.zoomMode = 'manual';
         const partitionStr = (webPreferences && webPreferences.partition) || (params && params.partition);
         if (partitionStr) {
             configureAndHardenSession(session.fromPartition(partitionStr));
@@ -1951,6 +1960,7 @@ app.on('web-contents-created', (event, webContents) => {
 
     if (webContents.getType() === 'webview') {
         webContents.setMaxListeners(30);
+        siteZoom.attach(webContents);
 
         const rewriteSignIn = (event, details) => {
             const url = event.url || (typeof details === 'string' ? details : details?.url);
