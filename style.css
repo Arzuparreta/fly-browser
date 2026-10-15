@@ -383,7 +383,8 @@ body.sidebar-auto-collapse #Sidebar:not(.pointer-inside):not(.expanded):not(:foc
 body.sidebar-auto-collapse #Sidebar:not(.pointer-inside):not(.expanded):not(:focus-within) #TabList li .tab-title,
 body.sidebar-auto-collapse #Sidebar:not(.pointer-inside):not(.expanded):not(:focus-within) #TabList li .tab-sleep-badge,
 body.sidebar-auto-collapse #Sidebar:not(.pointer-inside):not(.expanded):not(:focus-within) #TabList li .tab-media-badge,
-body.sidebar-auto-collapse #Sidebar:not(.pointer-inside):not(.expanded):not(:focus-within) #TabList li .tab-pin-badge {
+body.sidebar-auto-collapse #Sidebar:not(.pointer-inside):not(.expanded):not(:focus-within) #TabList li .tab-pin-badge,
+body.sidebar-auto-collapse #Sidebar:not(.pointer-inside):not(.expanded):not(:focus-within) #TabList li .tab-close-btn {
     display: none !important;
 }
 
@@ -2453,6 +2454,36 @@ webview {
 .tab-pin-badge:hover {
     opacity: 1;
     background: rgba(224, 175, 104, 0.15);
+}
+
+/* Shown on the hovered or selected tab so the list stays quiet otherwise */
+.tab-close-btn {
+    flex-shrink: 0;
+    width: 20px;
+    height: 20px;
+    padding: 0;
+    margin-left: 2px;
+    border: none;
+    border-radius: 4px;
+    background: transparent;
+    color: var(--dim, var(--text));
+    font-size: 12px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+    visibility: hidden;
+    transition: background 0.15s ease, color 0.15s ease;
+}
+
+#TabList li:hover .tab-close-btn,
+#TabList li.selected .tab-close-btn {
+    visibility: visible;
+}
+
+.tab-close-btn:hover {
+    color: var(--text);
+    background: rgba(247, 118, 142, 0.18);
 }
 
 #TabList li.tab-pinned {
