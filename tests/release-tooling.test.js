@@ -98,12 +98,12 @@ assert.equal(whatsNew.extractNote('## What changed\n\nInternals.'), null, 'The s
 assert.deepEqual(whatsNew.extractNote([
     '## What changed', 'Internal detail.', '',
     "## What's New", '<!-- for users -->', '### Websites follow the interface',
-    'Pages with their own dark mode', 'switch with Chasis and Papel.', '',
+    'Pages with their own dark mode', 'switch between dark and light.', '',
     '- Turn it off in `Preferences` → Appearance.', '- Pages without one', '  are never changed.',
     '## Validation', '- npm test'
 ].join('\r\n')), {
     title: 'Websites follow the interface',
-    text: ['Pages with their own dark mode switch with Chasis and Papel.'],
+    text: ['Pages with their own dark mode switch between dark and light.'],
     points: ['Turn it off in `Preferences` → Appearance.', 'Pages without one are never changed.']
 });
 assert.equal(whatsNew.extractNote('## What’s new\nCurly apostrophe and any case.').text[0], 'Curly apostrophe and any case.');

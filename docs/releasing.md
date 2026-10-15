@@ -76,7 +76,7 @@ To say more than the title, a pull request adds an optional section to its descr
 
 ### Websites follow the interface theme
 
-Switching between Chasis and Papel also switches websites that have their own dark mode.
+Switching between dark and light also switches websites that have their own dark mode.
 
 - Turn it off in Preferences → Appearance → Match websites to the interface.
 - Pages without a dark mode are never changed.
