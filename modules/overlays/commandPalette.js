@@ -1383,13 +1383,14 @@ export function executePaletteSelection(rawInputText) {
         }
         if (typeof targetCommand.action === 'function') {
             targetCommand.action();
-            // An action that opened a surface, such as the address bar, keeps the focus it gave it.
-            if (!hasActiveOverlay()) returnFocusToWebview();
+            // An action that opened a surface, such as the address bar, keeps the focus it gave it,
+            // and a quickmark prompt reads its key in the host, not in the page.
+            if (!hasActiveOverlay() && !state.awaitingQuickmarkKey) returnFocusToWebview();
             return;
         }
         if (typeof targetCommand === 'string' && commandRegistry[targetCommand]) {
             commandRegistry[targetCommand]();
-            if (!hasActiveOverlay()) returnFocusToWebview();
+            if (!hasActiveOverlay() && !state.awaitingQuickmarkKey) returnFocusToWebview();
             return;
         }
     }
