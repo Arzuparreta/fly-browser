@@ -5,7 +5,7 @@ Fly enables the included uBlock Origin **by default** in persistent workspaces. 
 Fly loads **unpacked Chrome extensions** with these rules:
 
 * **uBlock enabled by default.** A saved global disable, individual disable, removal or empty workspace selection is preserved on upgrade. While disabled, no extension code, library or process is loaded and there is no ad blocker.
-* **Per workspace.** Included extensions are selected in workspaces without a saved selection. You can change each workspace’s selection, including selecting none. Manually installed extensions run only where selected.
+* **Per workspace.** Included extensions are selected in workspaces without a saved selection. You can change each workspace’s selection, including selecting none. A renamed workspace keeps its selection. Manually installed extensions run only where selected.
 * **Only while needed.** Extensions load when an opted-in workspace gets its first live tab and unload once every tab in it has been closed or hibernated, after a grace period (60 seconds by default).
 * **Local only.** There is no extension store. Included extensions are copied into your profile; Fly releases can update managed copies. Manually installed folders are never overwritten.
 * **Never in private browsing.** Electron refuses to load extensions into in-memory sessions. Private browsing therefore has no ad blocker.

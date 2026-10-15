@@ -66,11 +66,12 @@ function createWorkspacePartitions(partitionsDir) {
     return {
         // Completes a loaded session in place and reports whether its partitions changed
         load(sessionData) {
-            const before = JSON.stringify(sessionData.workspace_partitions);
+            const before = sessionData.workspace_partitions;
             const stored = sessionData.workspace_partitions && typeof sessionData.workspace_partitions === 'object' ? sessionData.workspace_partitions : {};
             sessionData.workspace_partitions = assignPartitions({ ...sessionData, workspace_partitions: { ...current, ...stored } });
             current = { ...sessionData.workspace_partitions };
-            return JSON.stringify(sessionData.workspace_partitions) !== before;
+            const after = Object.entries(sessionData.workspace_partitions);
+            return !before || typeof before !== 'object' || Object.keys(before).length !== after.length || after.some(([name, partition]) => before[name] !== partition);
         },
         // Follows renames and removals in a session the renderer saves
         save(sessionData) {

@@ -394,7 +394,7 @@ export async function selectSuggestion(item) {
     if (!item) return;
 
     if (item.value.startsWith('ws:')) {
-        const targetWs = item.value.split('ws:')[1];
+        const targetWs = item.value.slice('ws:'.length);
         state.sessionState.current_workspace = targetWs;
         window.flyAPI.saveSession(state.sessionState);
         renderWorkspaceUI(0);

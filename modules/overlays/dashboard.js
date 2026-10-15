@@ -2,6 +2,7 @@ import { prepareOverlay } from '../focus.js';
 import { transferTab } from '../tabTransfer.js';
 import { state } from '../state.js';
 import { focusActiveWebview, getWorkspacePartition } from '../utils.js';
+import { renameWorkspaceExtensions } from '../extensions.js';
 import { renderWorkspaceUI, switchTabFocus, spawnTabWithUrl, spawnNewBlankTab, handleTabRemoval, moveTabState } from '../webview.js';
 
 export function toggleDashboardView() {
@@ -33,6 +34,7 @@ export function renameWorkspace(oldName, newName) {
     delete state.sessionState.workspaces[oldName];
     state.sessionState.workspace_partitions[trimmed] = state.sessionState.workspace_partitions[oldName];
     delete state.sessionState.workspace_partitions[oldName];
+    renameWorkspaceExtensions(oldName, trimmed);
 
     // Dispose cached webviews so they are re-created under the new workspace name
     if (state.activeViewsCache[oldName]) {

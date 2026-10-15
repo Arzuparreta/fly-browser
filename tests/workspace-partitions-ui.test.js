@@ -14,6 +14,7 @@ const root = path.resolve(__dirname, '..');
     const entry = createElectronFixture(root, temporary);
     const configDir = path.join(temporary, '.config', 'fly-browser');
     fs.mkdirSync(configDir, { recursive: true });
+    fs.writeFileSync(path.join(configDir, 'config.json'), JSON.stringify({ extensions_enabled: true, extensions_by_workspace: { trabajo: ['ublock-origin'], Trabajo: [] } }));
     // A folder a deleted workspace left behind
     fs.mkdirSync(path.join(temporary, 'data', 'Partitions', 'trabajo-2'), { recursive: true });
     const server = http.createServer((req, res) => {
@@ -42,6 +43,14 @@ const root = path.resolve(__dirname, '..');
         }), title);
         return page.locator('webview:visible').getAttribute('partition');
     };
+    const extensionWorkspaces = page => page.evaluate(() => window.flyAPI.extensionsGetState().then(state => state.runtime.workspaces.map(ws => [ws.workspace, ws.partition, ws.loaded.map(ext => ext.folder)])));
+    const waitFor = async (check, message) => {
+        const end = Date.now() + 45000;
+        while (!(await check())) {
+            if (Date.now() > end) throw new Error(message);
+            await new Promise(resolve => setTimeout(resolve, 100));
+        }
+    };
     const header = (page, partition) => page.locator('.workspace-tree-header').filter({ has: page.locator('.workspace-container-tag', { hasText: new RegExp(`^${partition}$`) }) });
     try {
         let page = await launch();
@@ -52,6 +61,7 @@ const root = path.resolve(__dirname, '..');
         assert.equal(await visiblePartition(page, '/lower'), 'persist:trabajo--2');
         assert.deepEqual(await cookies('persist:trabajo'), ['upper']);
         assert.deepEqual(await cookies('persist:trabajo--2'), ['lower'], 'Workspaces whose names differ in case must not share cookies');
+        await waitFor(async () => JSON.stringify(await extensionWorkspaces(page)) === JSON.stringify([['trabajo', 'persist:trabajo--2', ['ublock-origin']]]), 'uBlock must load only in the workspace that selected it');
 
         // A new workspace skips the assigned partitions and the left-behind folder.
         await page.evaluate(() => window.executeBrowserAction('new-workspace'));
@@ -68,6 +78,10 @@ const root = path.resolve(__dirname, '..');
         await header(page, 'trabajo-3').getByTitle('Delete Workspace').click();
         await page.waitForFunction(() => !document.querySelector('.dashboard-rename-input'));
         assert.deepEqual(await partitions(page), { Trabajo: 'persist:trabajo', Personal: 'persist:trabajo--2' });
+        // The renamed workspace keeps its extension selection and its loaded extensions.
+        const config = JSON.parse(fs.readFileSync(path.join(configDir, 'config.json'), 'utf8'));
+        assert.deepEqual(config.extensions_by_workspace, { Trabajo: [], Personal: ['ublock-origin'] });
+        await waitFor(async () => JSON.stringify(await extensionWorkspaces(page)) === JSON.stringify([['Personal', 'persist:trabajo--2', ['ublock-origin']]]), 'The loaded extensions must follow the renamed workspace');
         await page.evaluate(() => window.executeBrowserAction('new-workspace'));
         await page.locator('#NewWorkspaceTitleInput').fill('TRABAJO');
         await page.locator('#NewWorkspaceTitleInput').press('Enter');
@@ -82,6 +96,23 @@ const root = path.resolve(__dirname, '..');
         assert.deepEqual(await cookies('persist:trabajo--2'), ['lower']);
         await page.evaluate(() => window.executeBrowserAction('previous-workspace'));
         assert.equal(await visiblePartition(page, '/lower'), 'persist:trabajo--2');
+
+        // A workspace suggestion switches to the full name, even when it contains "ws:".
+        await page.evaluate(() => window.executeBrowserAction('new-workspace'));
+        await page.locator('#NewWorkspaceTitleInput').fill('News: Tech');
+        await page.locator('#NewWorkspaceTitleInput').press('Enter');
+        await page.locator('#WorkspaceInputBox').waitFor({ state: 'hidden' });
+        await page.evaluate(() => window.executeBrowserAction('previous-workspace'));
+        await page.evaluate(() => window.executeBrowserAction('toggle-address'));
+        await page.locator('#WideAddressBar').fill('ws news');
+        await page.locator('#AddressSuggestions').getByText('Switch to Workspace: News: Tech').click();
+        await page.waitForFunction(() => document.getElementById('WideAddressBar').style.display === 'none');
+        const switched = await page.evaluate(() => window.flyAPI.getSession());
+        assert.equal(switched.current_workspace, 'News: Tech');
+        assert.deepEqual(Object.keys(switched.workspaces), ['Trabajo', 'Personal', 'TRABAJO', 'News: Tech']);
+        assert.equal(switched.workspace_partitions['News: Tech'], 'persist:news-tech');
+        await page.evaluate(() => window.executeBrowserAction('toggle-dashboard'));
+        await page.locator('#DashboardOverlay').waitFor({ state: 'visible' });
         assert.deepEqual(pageErrors, []);
         console.log('Workspace partitions stay separate across migration, creation, renames, deletion and restarts.');
     } finally {

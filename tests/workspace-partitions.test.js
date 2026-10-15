@@ -48,6 +48,8 @@ try {
     assert.equal(partitions.load(session), true, 'Completing a session reports the change so it is written');
     assert.deepEqual(session.workspace_partitions, {'Trabajo': 'persist:trabajo', 'trabajo': 'persist:trabajo--2'});
     assert.equal(partitions.load(JSON.parse(JSON.stringify(session))), false);
+    const reordered = {...session, workspace_partitions: Object.fromEntries(Object.entries(session.workspace_partitions).reverse())};
+    assert.equal(partitions.load(reordered), false, 'Key order alone is not a change');
     assert.equal(partitions.get('trabajo'), 'persist:trabajo--2');
     assert.equal(partitions.get('Unknown'), null);
     // A launch that could not save the assignment, and has since filled its folders, makes
