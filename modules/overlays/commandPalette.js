@@ -751,8 +751,10 @@ export async function syncPreferencesUI() {
         }
     } catch (err) {}
 
-    const themeToggle = document.getElementById('setting-theme-toggle');
-    if (themeToggle) themeToggle.checked = document.body.classList.contains('dark-mode');
+    const currentTheme = document.body.classList.contains('light-mode') ? 'light' : 'dark';
+    document.querySelectorAll('[data-theme-choice]').forEach((button) => {
+        button.setAttribute('aria-pressed', String(button.dataset.themeChoice === currentTheme));
+    });
 
     const websiteThemeToggle = document.getElementById('setting-website-theme-toggle');
     if (websiteThemeToggle) websiteThemeToggle.checked = cfg?.sync_website_theme !== false;
@@ -791,12 +793,12 @@ export function setupPreferencesListeners() {
         };
     }
 
-    const themeToggle = document.getElementById('setting-theme-toggle');
-    if (themeToggle) {
-        themeToggle.onchange = () => {
-            if (window.toggleInterfaceTheme) window.toggleInterfaceTheme();
+    document.querySelectorAll('[data-theme-choice]').forEach((button) => {
+        button.onclick = () => {
+            const currentTheme = document.body.classList.contains('light-mode') ? 'light' : 'dark';
+            if (button.dataset.themeChoice !== currentTheme && window.toggleInterfaceTheme) window.toggleInterfaceTheme();
         };
-    }
+    });
 
     const websiteThemeToggle = document.getElementById('setting-website-theme-toggle');
     if (websiteThemeToggle) {

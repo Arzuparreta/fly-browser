@@ -309,13 +309,12 @@
                                     <div class="settings-card">
                                         <div class="setting-item" data-keywords="theme mode light dark night colour color">
                                             <div class="setting-info">
-                                                <label class="setting-label" for="setting-theme-toggle">Dark mode</label>
-                                                <span class="setting-desc">Dark when on, light when off.</span>
+                                                <span class="setting-label" id="setting-theme-label">Theme</span>
                                             </div>
-                                            <label class="toggle-switch">
-                                                <input type="checkbox" id="setting-theme-toggle">
-                                                <span class="toggle-slider"></span>
-                                            </label>
+                                            <div class="setting-actions" role="group" aria-labelledby="setting-theme-label">
+                                                <button type="button" class="settings-action-btn" data-theme-choice="light" aria-pressed="false">Light</button>
+                                                <button type="button" class="settings-action-btn" data-theme-choice="dark" aria-pressed="false">Dark</button>
+                                            </div>
                                         </div>
                                         <div class="setting-item" data-keywords="theme mode light dark night website page sync prefers-color-scheme">
                                             <div class="setting-info">

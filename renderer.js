@@ -1257,11 +1257,10 @@ function toggleInterfaceTheme() {
     syncVisualSettingsInputs(null);
     if (syncWebsiteTheme) applyWebsiteTheme(newTheme);
 
-    // Keep Preferences checkbox switch in sync if open
-    const themeToggle = document.getElementById('setting-theme-toggle');
-    if (themeToggle) {
-        themeToggle.checked = (newTheme === 'dark');
-    }
+    // Keep the Preferences theme buttons in sync if open
+    document.querySelectorAll('[data-theme-choice]').forEach((button) => {
+        button.setAttribute('aria-pressed', String(button.dataset.themeChoice === newTheme));
+    });
     
     // Persist setting to disk asynchronously in the background without blocking the UI
     if (window.flyAPI && typeof window.flyAPI.getBrowserSettings === 'function') {
