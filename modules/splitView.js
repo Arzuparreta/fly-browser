@@ -2,7 +2,7 @@
 // Dual-split view controller for side-by-side (1x2) or stacked comparison
 
 import { state } from './state.js';
-import { wakeTab, renderWorkspaceUI } from './webview.js';
+import { wakeTab, renderWorkspaceUI, spawnNewBlankTab, switchTabFocus } from './webview.js';
 import { loadWebviewSource } from './extensions.js';
 
 export function getSplitState(wsName) {
@@ -33,6 +33,7 @@ export function applySplitLayout() {
     const currentWSViews = state.activeViewsCache[currentWS] || [];
 
     if (!split.enabled || urls.length < 2 || state.dashboardActive) {
+        const leavingSplit = !!container?.classList.contains('split-active');
         if (container) {
             container.classList.remove('split-active', 'split-vertical', 'split-horizontal');
         }
@@ -55,6 +56,11 @@ export function applySplitLayout() {
 
         if (typeof window.recalculateStatusMode === 'function') {
             window.recalculateStatusMode();
+        }
+        // Both panes keep display: flex, so the later one in the DOM would cover the selected tab.
+        if (leavingSplit && !state.dashboardActive) {
+            const selectedIdx = [...document.querySelectorAll('#TabList li')].findIndex(li => li.classList.contains('selected'));
+            if (selectedIdx >= 0) switchTabFocus(selectedIdx);
         }
         return false;
     }
@@ -189,9 +195,7 @@ export async function toggleSplitView(modeOverride = null) {
     const split = getSplitState(currentWS);
 
     if (urls.length < 2) {
-        if (typeof window.spawnNewBlankTab === 'function') {
-            await window.spawnNewBlankTab();
-        }
+        await spawnNewBlankTab();
         const updatedUrls = state.sessionState.workspaces[currentWS] || [];
         if (updatedUrls.length >= 2) {
             split.enabled = true;
