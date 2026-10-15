@@ -78,15 +78,18 @@ Keep your hands on the home row. Every major workflow is reachable via concise, 
 
 ## Quick Start on Linux
 
-On Arch Linux and its derivatives (CachyOS, EndeavourOS, Manjaro), build the `fly-browser-bin` package from the release's `PKGBUILD` (it moves to the AUR once AUR registration reopens):
+Paste this into a terminal:
 
 ```bash
-mkdir fly-browser-bin && cd fly-browser-bin
-curl -LO https://github.com/Arzuparreta/fly-browser/releases/latest/download/PKGBUILD
-makepkg -si
+mkdir -p ~/.local/bin
+curl -fsSL https://raw.githubusercontent.com/Arzuparreta/fly-browser/main/scripts/fly-install -o ~/.local/bin/fly-install
+chmod +x ~/.local/bin/fly-install
+~/.local/bin/fly-install install
 ```
 
-On any other distribution, download the self-contained AppImage from GitHub Releases and run it:
+On Arch-based systems (CachyOS, EndeavourOS, Manjaro) it installs the `fly-browser-bin` package; anywhere else, the AppImage. Either way Fly lands in your applications menu, Rofi and other launchers. `fly-install update` keeps it current and `fly-install uninstall` removes it. See [Installation](/guide/installation) for every option.
+
+Or download the self-contained AppImage from GitHub Releases yourself and run it:
 
 ```bash
 # Make executable and launch

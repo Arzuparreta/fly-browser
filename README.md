@@ -41,19 +41,20 @@ Security, isolation, and upstream dependency freshness are foundational principl
 
 ***
 
-## Downloads
+## Install
 
-On Arch Linux and its derivatives, install the `fly-browser-bin` package from the release's `PKGBUILD`. It adds Fly to your application launcher:
+On Linux, paste this into a terminal:
 
 ```bash
-mkdir fly-browser-bin && cd fly-browser-bin
-curl -LO https://github.com/Arzuparreta/fly-browser/releases/latest/download/PKGBUILD
-makepkg -si
+mkdir -p ~/.local/bin
+curl -fsSL https://raw.githubusercontent.com/Arzuparreta/fly-browser/main/scripts/fly-install -o ~/.local/bin/fly-install
+chmod +x ~/.local/bin/fly-install
+~/.local/bin/fly-install install
 ```
 
-The package is going to the AUR, where it will update with the rest of the system, as soon as AUR registration reopens.
+On Arch-based systems (CachyOS, EndeavourOS, Manjaro) it builds and installs the `fly-browser-bin` package, which asks for your password; anywhere else it installs the AppImage. Either way Fly appears in your applications menu, Rofi and other launchers. Later, `fly-install update` updates it, `fly-install status` lists every copy on the machine and `fly-install uninstall` removes it (see the [installation guide](docs/guide/installation.md#installer-script-any-distribution)).
 
-On any distribution, the [`fly-install`](docs/guide/installation.md#installer-script-any-distribution) script installs, finds, updates and uninstalls Fly from the terminal, applications menu entry included.
+`fly-browser-bin` is going to the AUR, where it will update with the rest of the system, as soon as AUR registration reopens.
 
 Every release also publishes Linux (AppImage, tar.gz), macOS and Windows packages with SHA-256 checksums on the [Releases page](https://github.com/Arzuparreta/fly-browser/releases).
 
