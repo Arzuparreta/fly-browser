@@ -62,6 +62,16 @@ const root = path.resolve(__dirname, '..');
 
         await page.evaluate(() => window.executeBrowserAction('toggle-help'));
         await page.locator('#SettingsTab-appearance').click();
+        const pressed = () => page.evaluate(() => [...document.querySelectorAll('[data-theme-choice]')].map(b => `${b.textContent}:${b.getAttribute('aria-pressed')}`).join(' '));
+        assert.equal(await pressed(), 'Light:false Dark:true', 'The theme buttons show the current theme');
+        await page.locator('[data-theme-choice="light"]').click();
+        await waitScheme(page, aware, 'light');
+        assert.equal(await pressed(), 'Light:true Dark:false', 'Choosing Light deselects Dark');
+        await page.locator('[data-theme-choice="light"]').click();
+        assert.equal(await page.evaluate(() => document.body.classList.contains('light-mode')), true, 'Choosing the current theme again keeps it');
+        await page.locator('[data-theme-choice="dark"]').click();
+        await waitScheme(page, aware, 'dark');
+        assert.equal(await pressed(), 'Light:false Dark:true', 'Choosing Dark deselects Light');
         const setting = page.locator('#setting-website-theme-toggle');
         assert.equal(await setting.isChecked(), true, 'Matching is on by default');
         await page.locator('label.toggle-switch:has(#setting-website-theme-toggle)').click();

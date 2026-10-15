@@ -1662,14 +1662,16 @@ webview {
     background-color: color-mix(in srgb, var(--accent) 12%, transparent);
 }
 
-.settings-action-btn.primary {
+.settings-action-btn.primary,
+.settings-action-btn[aria-pressed="true"] {
     background-color: var(--accent);
     border-color: var(--accent);
     color: var(--bg-main);
     font-weight: 600;
 }
 
-.settings-action-btn.primary:hover:not(:disabled) {
+.settings-action-btn.primary:hover:not(:disabled),
+.settings-action-btn[aria-pressed="true"]:hover:not(:disabled) {
     background-color: color-mix(in srgb, var(--accent) 85%, var(--text));
 }
 
@@ -4378,7 +4380,7 @@ body.sidebar-auto-collapse #Sidebar:not(.pointer-inside):not(.expanded):not(:foc
 #EmptyWorkspaceWelcome { background-image: radial-gradient(var(--border) .7px, transparent .7px); background-size: 16px 16px; }
 .welcome-card { background: var(--bg-main); border-radius: 2px; }
 .welcome-title { font-family: 'Doto', monospace; font-weight: 900; }
-.palette-inspector-execute-btn, .settings-action-btn.primary, .diag-btn-action.primary, .palette-filter-chip.active {
+.palette-inspector-execute-btn, .settings-action-btn.primary, .settings-action-btn[aria-pressed="true"], .diag-btn-action.primary, .palette-filter-chip.active {
     background: var(--panel);
     color: var(--text);
     border: 1px solid var(--accent);
