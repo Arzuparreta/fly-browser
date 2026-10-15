@@ -15,7 +15,6 @@ let logSearchQuery = '';
  * Return keyboard focus to active webview when closing overlay.
  */
 function returnFocusToWebview() {
-    window.flyAllowWebviewFocus = true;
     focusActiveWebview();
 }
 

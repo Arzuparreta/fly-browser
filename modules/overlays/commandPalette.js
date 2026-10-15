@@ -11,7 +11,6 @@ import { renderSearchAliasesUI } from './searchEngine.js';
 import { syncDesktopIntegration, setupDesktopIntegrationListeners } from '../desktopIntegration.js';
 
 function returnFocusToWebview() {
-    window.flyAllowWebviewFocus = true;
     focusActiveWebview();
 }
 
@@ -195,16 +194,13 @@ export const COMMAND_DEFINITIONS = [
         id: 'focus-sidebar',
         title: 'Toggle Sidebar Focus',
         desc: 'Move focus between the sidebar and the active page',
-        details: 'Opens and focuses the tab list. Run again from any sidebar control to return to the page and collapse an unpinned sidebar. A pinned sidebar stays open.',
+        details: 'Opens the sidebar without focusing a tab or button. Use Tab or the arrow keys to navigate. Run again to return to the page and collapse an unpinned sidebar. A pinned sidebar stays open.',
         tip: 'Use the binding shown here, or customise this action in Keyboard controls.',
         category: 'Tabs & Navigation',
         icon: 'fa-solid fa-bars',
         actionId: 'focus-sidebar',
         keywords: ['sidebar', 'tabs', 'focus', 'list'],
-        action: () => {
-            const selectedTab = document.querySelector('#TabList li.selected') || document.querySelector('#TabList li');
-            if (selectedTab) selectedTab.focus();
-        }
+        action: () => window.focusSidebar?.()
     },
     {
         id: 'focus-nav-buttons',
@@ -1383,14 +1379,13 @@ export function executePaletteSelection(rawInputText) {
         }
         if (typeof targetCommand.action === 'function') {
             targetCommand.action();
-            // An action that opened a surface, such as the address bar, keeps the focus it gave it,
-            // and a quickmark prompt reads its key in the host, not in the page.
-            if (!hasActiveOverlay() && !state.awaitingQuickmarkKey) returnFocusToWebview();
+            // Surfaces, sidebar focus actions and pending prompts keep their chosen focus.
+            if (!hasActiveOverlay() && !state.awaitingQuickmarkKey && !document.getElementById('Sidebar')?.contains(document.activeElement)) returnFocusToWebview();
             return;
         }
         if (typeof targetCommand === 'string' && commandRegistry[targetCommand]) {
             commandRegistry[targetCommand]();
-            if (!hasActiveOverlay() && !state.awaitingQuickmarkKey) returnFocusToWebview();
+            if (!hasActiveOverlay() && !state.awaitingQuickmarkKey && !document.getElementById('Sidebar')?.contains(document.activeElement)) returnFocusToWebview();
             return;
         }
     }

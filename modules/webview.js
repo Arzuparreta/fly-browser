@@ -458,12 +458,7 @@ export function handleNormalModeAction(action, extra, webview, currentWS, idx) {
             }
             break;
         case 'focus-sidebar':
-            if (typeof window.focusSidebar === 'function') {
-                window.focusSidebar();
-            } else {
-                const selectedTab = document.querySelector('#TabList li.selected') || document.querySelector('#TabList li');
-                if (selectedTab) selectedTab.focus();
-            }
+            window.focusSidebar?.();
             break;
         case 'yank-url': {
             const urlToYank = extra || (webview && typeof webview.getURL === 'function' ? webview.getURL() : '') || (state.sessionState.workspaces[currentWS]?.[idx]);
@@ -981,7 +976,6 @@ export function switchTabFocus(targetIdx) {
 
             // A pending quickmark prompt reads its key in the host, so the page must not take it.
             if (!sidebarHasFocus && !hasActiveOverlay() && !addressBarIsActive && !state.awaitingQuickmarkKey) {
-                window.flyAllowWebviewFocus = true;
                 targetView.focus();
             }
         }, 50);
@@ -1216,7 +1210,6 @@ export function handleTabRemoval(explicitIdx) {
 
     state.sessionState.tab_pinned = state.tabPinned;
     window.flyAPI.saveSession(state.sessionState);
-    window.flyAllowWebviewFocus = true;
 
     const selectedIdx = tabElements.indexOf(activeListItem);
     let nextTargetIdx = selectedIdx >= 0 && selectedIdx !== currentIdx

@@ -176,7 +176,6 @@ export function applySplitLayout() {
             const addressBarIsActive = addressBar && (addressBar.style.display === 'block' || currentFocused === addressBar);
 
             if (!sidebarHasFocus && !state.paletteActive && !state.helpActive && !addressBarIsActive) {
-                window.flyAllowWebviewFocus = true;
                 currentWSViews[activeIdx].focus();
             }
         }, 30);

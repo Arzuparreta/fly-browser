@@ -53,7 +53,7 @@ body, html {
     border-right: 1px solid var(--border);
 }
 
-/* Empty workspaces focus the container without selecting a toolbar action. */
+/* Opening the sidebar focuses its container without selecting a control. */
 #Sidebar:focus-visible {
     outline: none !important;
 }
