@@ -32,6 +32,17 @@ const root = path.resolve(__dirname, '..');
         };
         const guestValue = () => page.evaluate(() => [...document.querySelectorAll('webview')].find(view => view.getClientRects().length).executeJavaScript('document.getElementById("editable").value'));
 
+        // Focus reaching the page from other browser chrome also closes the bar. Alt+S moves focus
+        // from the open bar to the sidebar only before the page has held focus, so this runs first.
+        await page.mouse.move(700, 400);
+        await open();
+        await page.keyboard.press('Alt+s');
+        await page.waitForTimeout(300);
+        assert(await page.evaluate(() => document.getElementById('Sidebar').contains(document.activeElement)), 'Alt+S moves focus to the sidebar');
+        assert(await bar.isVisible());
+        await page.mouse.click(700, 400);
+        await bar.waitFor({state: 'hidden'});
+
         // A click in the page closes the bar and the page keeps the click and the typing.
         await open();
         const point = await page.evaluate(() => [...document.querySelectorAll('webview')].find(view => view.getClientRects().length).executeJavaScript('(()=>{const r=document.getElementById("editable").getBoundingClientRect(); return {x:r.x+10,y:r.y+10};})()'));
@@ -50,18 +61,6 @@ const root = path.resolve(__dirname, '..');
         }
         // Browser keys are not seen inside a cross-origin frame, so return to the page document.
         await page.locator('webview:visible').click({position: {x: 100, y: 50}});
-
-        // A click on browser chrome outside the bar closes it and still runs that control.
-        await open();
-        await page.mouse.move(10, 100);
-        await page.locator('#back-btn').click();
-        await bar.waitFor({state: 'hidden'});
-        // The navigation button that opens the bar also closes it.
-        await page.mouse.move(10, 100);
-        await page.locator('#toggle-nav-btn').click();
-        await page.waitForFunction(() => document.activeElement.id === 'WideAddressBar');
-        await page.locator('#toggle-nav-btn').click();
-        await bar.waitFor({state: 'hidden'});
 
         // Clicks inside the bar keep it open; reopening after a page click starts from the page address.
         await open();
@@ -94,6 +93,19 @@ const root = path.resolve(__dirname, '..');
         assert.equal(await page.evaluate(() => document.activeElement.id), 'WideAddressBar');
         await page.keyboard.press('Escape');
 
+        // A click on browser chrome outside the bar closes it and still runs that control; going back leaves the fixture page, so this runs last.
+        await open();
+        await page.mouse.move(10, 100);
+        const before = await page.evaluate(() => [...document.querySelectorAll('webview')].find(view => view.getClientRects().length).getURL());
+        await page.locator('#back-btn').click();
+        await bar.waitFor({state: 'hidden'});
+        await page.waitForFunction(before => [...document.querySelectorAll('webview')].find(view => view.getClientRects().length).getURL() !== before, before);
+        // The navigation button that opens the bar also closes it.
+        await page.mouse.move(10, 100);
+        await page.locator('#toggle-nav-btn').click();
+        await page.waitForFunction(() => document.activeElement.id === 'WideAddressBar');
+        await page.locator('#toggle-nav-btn').click();
+        await bar.waitFor({state: 'hidden'});
         assert.deepEqual(errors, []);
         console.log('Address bar dismiss UI checks passed');
     } finally {

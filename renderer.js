@@ -613,14 +613,15 @@ function setupEventListeners() {
     });
 
     // A press outside the bar discards it like Escape. A press in a page reaches only the
-    // guest, so the bar handing its focus to a webview stands in for that press. The webview
-    // becomes active only after the blur; leaving the window keeps the bar active and open.
+    // guest, so focus leaving browser chrome for a webview stands in for that press: the bar
+    // never stays open, unreachable by Escape, while a page holds the keyboard. The webview
+    // becomes active only after the focusout; leaving the window keeps the active element.
     const dismissAddressBar = () => { addressBar.style.display = 'none'; hideSuggestions(); };
     // The navigation button toggles the bar on click, so it closes the bar itself.
     document.addEventListener('mousedown', event => {
         if (addressBar.style.display === 'block' && !event.target.closest('#AddressBarContainer, #toggle-nav-btn')) dismissAddressBar();
     }, true);
-    addressBar.addEventListener('blur', () => setTimeout(() => {
+    document.addEventListener('focusout', () => setTimeout(() => {
         if (addressBar.style.display === 'block' && document.activeElement?.tagName === 'WEBVIEW') dismissAddressBar();
     }));
 
