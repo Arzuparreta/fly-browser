@@ -61,7 +61,9 @@ const sessionPath = path.join(CONFIG_DIR, 'session.json');
 const sessionBackupPath = path.join(CONFIG_DIR, 'session.json.bak');
 const sentinelPath = path.join(CONFIG_DIR, 'session_sentinel.json');
 const historyPath = path.join(CONFIG_DIR, 'history.json');
-const siteZoom = require('./siteZoom').createSiteZoom(path.join(CONFIG_DIR, 'site-zoom.json'));
+const siteZoom = require('./siteZoom').createSiteZoom(path.join(CONFIG_DIR, 'site-zoom.json'), {
+    isPrivate: guest => guest.session === session.fromPartition('FlyPrivateProfile')
+});
 
 ipcMain.handle('change-site-zoom', (event, id, action) => {
     if (!mainWindow || event.sender !== mainWindow.webContents || !Number.isInteger(id)) return;

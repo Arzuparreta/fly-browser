@@ -44,7 +44,7 @@ The shortcuts below are new-profile defaults. The palette shows your saved assig
 | **Close Current Tab** | `Ctrl+W` | `remove-tab` | Disposes of active webview and reclaims allocated V8 heap memory. |
 | **Pin / Unpin Active Tab** | `Ctrl+Shift+X` / `F4` | `toggle-pin-tab` | Pins essential tab to the top of the workspace or unpins it. |
 | **Mute / Unmute Active Tab** | — | — | Toggles Chromium audio output for the active tab without pausing playback. |
-| **Reset Tab Zoom Level** | — | — | Restores webview zoom factor back to 100% default. |
+| **Reset Site Zoom Level** | — | — | Restores 100% zoom for the hostname across open tabs and clears its saved preference. Private tabs reset only their separate in-memory preference. |
 | **Focus Sidebar Tab List** | `Alt+S` | `focus-sidebar` | Moves keyboard focus directly into the vertical tab list. |
 | **Focus Navigation Buttons** | `Alt+N` | `focus-nav-buttons` | Cycles keyboard focus across toolbar navigation controls. |
 | **Focus Active Webview** | `Alt+W` | `focus-webview` | Returns keyboard and typing focus directly to the guest webpage. |

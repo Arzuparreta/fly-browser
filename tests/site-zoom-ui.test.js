@@ -61,6 +61,28 @@ const root = path.resolve(__dirname, '..');
             guest.emit('zoom-changed', {}, 'in');
         }, url + 'restart');
         await page.waitForFunction(url => [...document.querySelectorAll('webview')].filter(v => { try { return v.getURL().startsWith(url); } catch { return false; } }).every(v => v.getZoomLevel() === 1), url);
+        const preferenceFile = path.join(temporary, '.config', 'fly-browser', 'site-zoom.json');
+        const saved = fs.readFileSync(preferenceFile, 'utf8');
+        await page.evaluate(url => {
+            for (const id of ['private-zoom-first', 'private-zoom-peer']) {
+                const view = document.createElement('webview');
+                view.id = id;
+                view.setAttribute('partition', 'FlyPrivateProfile');
+                view.src = url + id;
+                document.body.appendChild(view);
+            }
+        }, url);
+        await page.waitForFunction(() => ['private-zoom-first', 'private-zoom-peer'].every(id => {
+            try { const view = document.getElementById(id); return !view.isLoading() && view.getURL().startsWith('http:') && view.getZoomLevel() === 0; } catch { return false; }
+        }));
+        await page.evaluate(() => window.flyAPI.changeSiteZoom(document.getElementById('private-zoom-first').getWebContentsId(), 'zoom-in'));
+        await page.waitForFunction(() => ['private-zoom-first', 'private-zoom-peer'].every(id => document.getElementById(id).getZoomLevel() === 0.5));
+        assert.equal(fs.readFileSync(preferenceFile, 'utf8'), saved, 'Private zoom must leave disk unchanged');
+        assert.equal(await page.evaluate(url => [...document.querySelectorAll('webview')].find(v => v.getURL() === url).getZoomLevel(), url + 'restart'), 1, 'Private zoom must not affect normal tabs');
+        await page.evaluate(() => window.flyAPI.changeSiteZoom(document.getElementById('private-zoom-peer').getWebContentsId(), 'reset-zoom'));
+        await page.waitForFunction(() => ['private-zoom-first', 'private-zoom-peer'].every(id => document.getElementById(id).getZoomLevel() === 0));
+        assert.equal(fs.readFileSync(preferenceFile, 'utf8'), saved, 'Private reset must leave disk unchanged');
+        await page.evaluate(() => ['private-zoom-first', 'private-zoom-peer'].forEach(id => document.getElementById(id).remove()));
         await page.evaluate(() => window.executeBrowserAction('reset-zoom'));
         await page.waitForFunction(() => [...document.querySelectorAll('webview')].every(v => { try { return v.getZoomLevel() === 0; } catch { return true; } }));
         console.log('Site zoom UI passed');

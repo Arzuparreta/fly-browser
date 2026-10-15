@@ -10,7 +10,7 @@ All Fly configurations are stored in standard JSON and Markdown format within yo
 
 ## 1. Engine & Preferences (`config.json`)
 
-Use **Settings → Appearance → Interface scale** to choose **Normal (100%)** or **Large (125%)**. Large enlarges text, icons and controls immediately and is remembered across restarts. Website zoom remains independent for each live tab, including across navigation. This uses native rendering rather than stretching a bitmap, and adds no background work. Native operating-system window decorations and menus still follow system settings.
+Use **Settings → Appearance → Interface scale** to choose **Normal (100%)** or **Large (125%)**. Large enlarges text, icons and controls immediately and is remembered across restarts. Website zoom is independent of interface scale and is shared by HTTP/HTTPS tabs with the same hostname, across workspaces and restarts. Subdomains have separate preferences; schemes and ports share them. This uses native rendering rather than stretching a bitmap, and adds no background work. Native operating-system window decorations and menus still follow system settings.
 
 The `interface_scale` preference accepts `"normal"` (default) or `"large"`; unknown values fall back to Normal.
 
@@ -146,3 +146,8 @@ Maintains persistent workspaces, URLs, titles and sleeping tab scroll offsets ac
 
 - **`bookmarks.json`**: An array of saved bookmark objects containing `title`, `url`, and creation timestamp.
 - **`quickmarks.json`**: A key-value dictionary mapping single alphanumeric keys to URLs (e.g. `"g": "https://github.com"`).
+
+
+## 5. Website Zoom (`site-zoom.json`)
+
+Stores HTTP/HTTPS zoom levels by hostname. Reset Site Zoom Level restores 100% in every open normal tab on that hostname and removes its saved preference. Private tabs share separate zoom preferences held only in memory for the current run; they neither read nor change saved website zoom. Reset in a private tab affects only private tabs. Internal and local pages do not save zoom preferences.
