@@ -2,7 +2,7 @@ const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const os = require('node:os');
 const path = require('node:path');
-const {spawnSync} = require('node:child_process');
+const {spawn, spawnSync} = require('node:child_process');
 const temporary = fs.mkdtempSync(path.join(os.tmpdir(), 'fly-launcher-'));
 try {
     fs.copyFileSync(path.join(__dirname, '../launch.sh'), path.join(temporary, 'launch.sh'));
@@ -17,4 +17,24 @@ try {
     assert.equal(run.stdout, '.\n--log-level=3\nhttps://example.org/a b\n');
     assert.equal(run.stderr, 'diagnostic\n');
     console.log('Source launcher preserves arguments, diagnostics and Electron exit status without backgrounding.');
+
+    // A Fly running from this checkout must not have node_modules reinstalled under it.
+    const real = fs.realpathSync(temporary);
+    fs.mkdirSync(path.join(real, 'node_modules/electron/dist'), {recursive:true});
+    fs.symlinkSync(fs.realpathSync(spawnSync('sh', ['-c', 'command -v sleep'], {encoding:'utf8'}).stdout.trim()), path.join(real, 'node_modules/electron/dist/electron'));
+    fs.mkdirSync(path.join(real, 'bin'));
+    fs.writeFileSync(path.join(real, 'bin/npm'), '#!/bin/sh\necho npm-ran\nexit 0\n', {mode:0o755});
+    const past = new Date(Date.now()-10000);
+    fs.utimesSync(path.join(real, 'node_modules/.package-lock.json'), past, past);
+    const running = spawn(path.join(real, 'node_modules/electron/dist/electron'), ['30'], {stdio:'ignore'});
+    try {
+        const env = {...process.env, PATH:`${path.join(real, 'bin')}:${process.env.PATH}`};
+        const blocked = spawnSync('bash', [path.join(real, 'launch.sh')], {encoding:'utf8', env});
+        assert.equal(blocked.status, 1, 'Launcher must refuse to reinstall while Fly runs from this checkout');
+        assert.doesNotMatch(blocked.stdout, /npm-ran/);
+        assert.match(blocked.stderr, /already running from this folder/);
+    } finally { running.kill(); }
+    const free = spawnSync('bash', [path.join(real, 'launch.sh')], {encoding:'utf8', env:{...process.env, PATH:`${path.join(real, 'bin')}:${process.env.PATH}`}});
+    assert.match(free.stdout, /npm-ran/, 'Launcher must reinstall once Fly is closed');
+    console.log('Source launcher does not reinstall dependencies under a running Fly.');
 } finally { fs.rmSync(temporary, {recursive:true, force:true}); }

@@ -10,6 +10,14 @@ if [ ! -x "$electron" ] || [ ! -f "$installed" ] || [ package-lock.json -nt "$in
         echo "Fly needs Node.js and npm to run from source: https://nodejs.org/" >&2
         exit 1
     fi
+    # Reinstalling deletes node_modules, which would pull the files out from under a Fly
+    # already running from this checkout and leave it broken while it holds the
+    # single-instance lock. ENVIRON keeps the path out of awk's own arguments.
+    if ps -eo args= 2>/dev/null |
+        FLY_ELECTRON_DIR="$(pwd -P)/node_modules/electron/dist/" awk 'index($0, ENVIRON["FLY_ELECTRON_DIR"]) == 1 { found = 1 } END { exit !found }'; then
+        echo "Fly is already running from this folder. Close it so its dependencies can be updated, then run launch.sh again." >&2
+        exit 1
+    fi
     echo "Installing Fly's dependencies (first run or after an update)..."
     npm ci --no-audit --no-fund || { echo "Could not install Fly's dependencies." >&2; exit 1; }
 fi
