@@ -53,6 +53,8 @@ makepkg -si
 
 The package is going to the AUR, where it will update with the rest of the system, as soon as AUR registration reopens.
 
+On any distribution, the [`fly-install`](docs/guide/installation.md#installer-script-any-distribution) script installs, finds, updates and uninstalls Fly from the terminal, applications menu entry included.
+
 Every release also publishes Linux (AppImage, tar.gz), macOS and Windows packages with SHA-256 checksums on the [Releases page](https://github.com/Arzuparreta/fly-browser/releases).
 
 For platform notes, see the [Installation Guide](docs/guide/installation.md).
