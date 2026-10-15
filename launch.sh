@@ -25,5 +25,12 @@ fi
 # Electron 44 no longer downloads its binary during installation; fetch it once here.
 ./node_modules/.bin/install-electron || { echo "Could not download Electron." >&2; exit 1; }
 
+# Without a display Electron exits silently, since --log-level=3 hides its error. This
+# happens over SSH, or in a tmux pane opened from SSH, where DISPLAY is not set.
+if [ -z "${DISPLAY:-}" ] && [ -z "${WAYLAND_DISPLAY:-}" ]; then
+    echo "Fly needs a graphical session, but neither DISPLAY nor WAYLAND_DISPLAY is set in this terminal. To open Fly on this machine's screen from SSH or tmux, run: DISPLAY=:0 ./launch.sh" >&2
+    exit 1
+fi
+
 # Use the project's pinned Electron rather than letting npx fetch an arbitrary version.
 exec "$electron" . --log-level=3 "$@"
