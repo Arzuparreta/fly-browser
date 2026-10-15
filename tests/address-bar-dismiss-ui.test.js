@@ -62,7 +62,8 @@ const root = path.resolve(__dirname, '..');
             await page.locator('webview:visible').click({position: {x: 100, y}});
             await bar.waitFor({state: 'hidden'});
         }
-        // Browser keys are not seen inside a cross-origin frame, so return to the page document.
+        // Playwright's synthetic keys skip before-input-event, so inside a cross-origin frame they
+        // never reach Fly's shortcuts (real keys do); return to the page document first.
         await page.locator('webview:visible').click({position: {x: 100, y: 50}});
 
         // Clicks inside the bar keep it open; reopening after a page click starts from the page address.
