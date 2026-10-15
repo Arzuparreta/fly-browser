@@ -21,7 +21,7 @@ Controls hardware switches, process limits, privacy whitelists, and search prefe
     "disable_gpu": false,
     "background_throttling": true,
     "process_limit": 1,
-    "tab_sleep_timeout_minutes": 15,
+    "tab_suspend_timeout_minutes": 15,
     "sidebar_auto_collapse": true,
     "show_status_bar": true,
     "show_window_controls": false,
@@ -69,7 +69,7 @@ Controls hardware switches, process limits, privacy whitelists, and search prefe
 - **`disable_gpu`**: Set to `true` to disable hardware GPU acceleration on systems with problematic graphics drivers.
 - **`background_throttling`**: Throttles timers and delays tasks in background tabs to conserve CPU cycles.
 - **`process_limit`**: Hard cap on Chromium renderer process forks (1 to 5).
-- **`tab_sleep_timeout_minutes`**: Inactivity timeout before background tabs detach and hibernate (5, 15, 30, 60, or 0 to disable).
+- **`tab_suspend_timeout_minutes`**: Continuous background time before eligible pages freeze in memory (5, 15, 30, 60, or 0 to disable; default 15). The old `tab_sleep_timeout_minutes` setting migrates automatically.
 - **`sidebar_auto_collapse`**: When `true`, collapses the vertical sidebar into a 36px icon strip, expanding smoothly on hover or via shortcut.
 - **`show_status_bar`**: When `true`, displays the 22px footer status bar with modal state, real-time link hover preview, and TLS security status.
 - **`show_window_controls`**: When `true`, displays window action buttons (minimise, maximise/restore, close) at the top of the sidebar for desktop environments without native window decorations.
@@ -90,7 +90,7 @@ Controls hardware switches, process limits, privacy whitelists, and search prefe
 - **`trusted_domains`**: Array of domains allowed restricted site permissions, including subdomains. Independent of uBlock Origin’s allowlist.
 - **`extensions_enabled`**: Master switch for [Chrome extensions](/guide/extensions). `true` by default so the included uBlock Origin can block ads. A saved `false` is preserved on upgrade; while `false` no extension runs and there is no ad blocking.
 - **`extensions_by_workspace`**: Map of workspace name to the extension folders (inside `~/.config/fly-browser/extensions/`) allowed to run there, e.g. `{ "Work": ["darkreader"] }`. Workspaces without a saved selection use the included extensions; an explicit empty selection loads none.
-- **`extensions_unload_grace_seconds`**: How long a workspace keeps its extensions loaded after its last live tab closes or hibernates (default `60`).
+- **`extensions_unload_grace_seconds`**: How long a workspace keeps its extensions loaded after its last live tab closes (default `60`).
 - **`custom_search_aliases`**: Key-value map of custom search prefixes and URL templates (with `%s` query placeholder). Typing `<alias> <query>` in the address bar (such as `aur hyprland` or `gh mise`) bypasses fallback engines and routes queries straight to the destination. Users can configure, override, or extend default built-ins directly in Preferences.
 
 ---
@@ -103,7 +103,7 @@ Version 2 stores separate `shortcuts` and `normal` tables for browser chords and
 
 ## 3. Session State (`session.json`, `session.json.bak`, `session_sentinel.json`)
 
-Maintains persistent workspaces, URLs, titles and sleeping tab scroll offsets across restarts:
+Maintains persistent workspaces, URLs, titles and legacy startup restoration data across restarts:
 
 ```json
 {
@@ -120,14 +120,13 @@ Maintains persistent workspaces, URLs, titles and sleeping tab scroll offsets ac
         "Work": ["Notifications"],
         "Personal": ["Hacker News"]
     },
-    "tab_sleep_states": {
+    "tab_restore_states": {
         "Personal": [
             {
                 "url": "https://news.ycombinator.com",
                 "title": "Hacker News",
                 "scrollX": 0,
-                "scrollY": 840,
-                "hibernatedAt": 1727299000000
+                "scrollY": 840
             }
         ]
     }
@@ -138,7 +137,7 @@ Maintains persistent workspaces, URLs, titles and sleeping tab scroll offsets ac
 
 - **`session.json`**: The primary session state file. To prevent data corruption during sudden system shutdowns or power cuts, Fly writes updates to a temporary file (`session.json.tmp`) and swaps it via an atomic POSIX rename operation.
 - **`session.json.bak`**: A rolling backup journal automatically updated before every primary session flush. If `session.json` is missing or corrupted, Fly automatically recovers the previous state from this journal.
-- **`session_sentinel.json`**: A lifecycle sentinel file recording whether the previous browser process terminated cleanly (`"clean_exit": true`). If an abrupt crash, kill signal, or power failure occurs, the sentinel detects `clean_exit: false` on startup, engages crash recovery mode, forces background tabs to sleep to avert memory spikes, and displays a status bar notice.
+- **`session_sentinel.json`**: A lifecycle sentinel file recording whether the previous browser process terminated cleanly (`"clean_exit": true`). If an abrupt crash, kill signal, or power failure occurs, the sentinel detects `clean_exit: false` on startup, engages crash recovery mode, restores background tabs on demand to avert memory spikes, and displays a status bar notice.
 
 ---
 

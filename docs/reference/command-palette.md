@@ -68,8 +68,8 @@ The shortcuts below are new-profile defaults. The palette shows your saved assig
 
 | Command Title | Shortcut | Action ID | Description |
 | :--- | :--- | :--- | :--- |
-| **Hibernate Inactive Tabs** | — | — | Detaches background webviews from DOM to free CPU cycles and RAM. |
-| **Wake All Tabs in Workspace** | — | — | Restores and reconnects all sleeping tabs in the active workspace. |
+| **Suspend Inactive Tabs** | — | — | Pauses eligible background pages in memory without reloading. |
+| **Resume Tabs in Workspace** | — | — | Resumes existing pages in the active workspace without reloading. |
 
 ### Tools
 

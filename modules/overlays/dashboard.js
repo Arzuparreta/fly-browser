@@ -47,13 +47,9 @@ export function renameWorkspace(oldName, newName) {
         delete state.activeTitlesCache[oldName];
     }
 
-    if (state.tabSleepStates[oldName]) {
-        state.tabSleepStates[trimmed] = state.tabSleepStates[oldName];
-        delete state.tabSleepStates[oldName];
-    }
-    if (state.tabActivityTimestamps[oldName]) {
-        state.tabActivityTimestamps[trimmed] = state.tabActivityTimestamps[oldName];
-        delete state.tabActivityTimestamps[oldName];
+    if (state.tabRestoreStates[oldName]) {
+        state.tabRestoreStates[trimmed] = state.tabRestoreStates[oldName];
+        delete state.tabRestoreStates[oldName];
     }
     if (state.tabMediaAudible[oldName]) {
         state.tabMediaAudible[trimmed] = state.tabMediaAudible[oldName];
@@ -75,9 +71,9 @@ export function renameWorkspace(oldName, newName) {
         state.sessionState.tab_titles[trimmed] = state.sessionState.tab_titles[oldName];
         delete state.sessionState.tab_titles[oldName];
     }
-    if (state.sessionState.tab_sleep_states?.[oldName]) {
-        state.sessionState.tab_sleep_states[trimmed] = state.sessionState.tab_sleep_states[oldName];
-        delete state.sessionState.tab_sleep_states[oldName];
+    if (state.sessionState.tab_restore_states?.[oldName]) {
+        state.sessionState.tab_restore_states[trimmed] = state.sessionState.tab_restore_states[oldName];
+        delete state.sessionState.tab_restore_states[oldName];
     }
 
     if (state.sessionState.current_workspace === oldName) {
@@ -103,14 +99,13 @@ export function deleteWorkspace(wsName) {
         delete state.activeViewsCache[wsName];
     }
     delete state.activeTitlesCache[wsName];
-    delete state.tabSleepStates[wsName];
-    delete state.tabActivityTimestamps[wsName];
+    delete state.tabRestoreStates[wsName];
     delete state.tabMediaAudible[wsName];
     delete state.tabPinned[wsName];
     delete state.tabAudioMuted[wsName];
     if (state.sessionState.tab_pinned?.[wsName]) delete state.sessionState.tab_pinned[wsName];
     if (state.sessionState.tab_titles?.[wsName]) delete state.sessionState.tab_titles[wsName];
-    if (state.sessionState.tab_sleep_states?.[wsName]) delete state.sessionState.tab_sleep_states[wsName];
+    if (state.sessionState.tab_restore_states?.[wsName]) delete state.sessionState.tab_restore_states[wsName];
     delete state.sessionState.workspaces[wsName];
     delete state.sessionState.workspace_partitions?.[wsName];
     
@@ -273,11 +268,9 @@ export function buildDashboardTree() {
             const tabItem = document.createElement('div');
             tabItem.className = 'dashboard-tab-item';
             const cachedTitle = (state.activeTitlesCache[wsName] && state.activeTitlesCache[wsName][idx]) || url;
-            const isSleeping = state.tabSleepStates[wsName] && state.tabSleepStates[wsName][idx];
             const isPinned = !!state.tabPinned?.[wsName]?.[idx];
             const pinBadge = isPinned ? ' 📌' : '';
-            const sleepBadge = isSleeping ? ' 🌙' : '';
-            tabItem.textContent = `- ${cachedTitle}${pinBadge}${sleepBadge}`;
+            tabItem.textContent = `- ${cachedTitle}${pinBadge}`;
             
             tabItem.setAttribute('draggable', 'true');
 

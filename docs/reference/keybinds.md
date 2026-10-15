@@ -68,8 +68,8 @@ Existing legacy profiles retain their explicit assignments, including empty and 
 | Scroll left | Unassigned | `h` |
 | Scroll right | Unassigned | `l` |
 | Scroll up | Unassigned | `k` |
-| Hibernate Inactive Tabs | Unassigned | Unassigned |
-| Wake All Tabs in Workspace | Unassigned | Unassigned |
+| Resume Tabs in Workspace | Unassigned | Unassigned |
+| Suspend Inactive Tabs | Unassigned | Unassigned |
 | Check for Updates | Unassigned | Unassigned |
 | Open Diagnostics & Health Hub | Unassigned | Unassigned |
 | Test Clean Google Sign-In Flow | Unassigned | Unassigned |

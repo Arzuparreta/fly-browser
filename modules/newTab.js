@@ -34,7 +34,6 @@ export async function refreshNewTab(view) {
             linksHint: window.describeKeyboardAction?.('trigger-hints', 'Link hints') || '',
             search: config?.search_engine || 'https://duckduckgo.com/?q=%s',
             sites: [...sites.values()].sort((a, b) => b.count - a.count).slice(0, 5),
-            landed: Object.values(state.tabSleepStates).flat().filter(Boolean).length,
             memory: Math.round((diagnostics?.processes || []).reduce((sum, process) => sum + (Number.isFinite(process.residentSetKB) ? process.residentSetKB : 0), 0) / 1024)
         };
         await view.executeJavaScript(`if (location.href === ${JSON.stringify(NEW_TAB_URL)}) window.updateFlyNewTab?.(${JSON.stringify(data)})`);

@@ -564,7 +564,7 @@
                                             <div class="setting-item" data-keywords="addons plugins chrome extensions">
                                                 <div class="setting-info">
                                                     <label class="setting-label" for="setting-extensions-toggle">Enable Chrome extensions</label>
-                                                    <span class="setting-desc">Loads only in the workspaces you tick below and only while they have live tabs. Unloads <span id="ExtensionsGraceSeconds">60</span> seconds after a workspace's last tab closes or hibernates. Never active in private browsing; while disabled no extension code runs.</span>
+                                                    <span class="setting-desc">Loads only in the workspaces you tick below and only while they have live tabs. Unloads <span id="ExtensionsGraceSeconds">60</span> seconds after a workspace's last live tab closes. Never active in private browsing; while disabled no extension code runs.</span>
                                                 </div>
                                                 <label class="toggle-switch">
                                                     <input type="checkbox" id="setting-extensions-toggle">
@@ -599,18 +599,18 @@
                             <section id="SettingsPane-performance" class="settings-pane" role="tabpanel" aria-labelledby="SettingsTab-performance" hidden>
                                 <header class="settings-pane-header">
                                     <h2>Performance</h2>
-                                    <p>Memory and engine limits for low-resource hardware.</p>
+                                    <p>Background activity and engine limits.</p>
                                 </header>
 
                                 <div class="settings-group">
-                                    <h3>Memory</h3>
+                                    <h3>Background pages</h3>
                                     <div class="settings-card">
-                                        <div class="setting-item" data-keywords="sleep hibernate hibernation memory ram idle unload">
+                                        <div class="setting-item" data-keywords="suspend pause background battery idle">
                                             <div class="setting-info">
-                                                <label class="setting-label" for="setting-sleep-timeout">Tab hibernation</label>
-                                                <span class="setting-desc">Unloads idle background tabs, keeping URL, title and scroll position. Applies immediately.</span>
+                                                <label class="setting-label" for="setting-suspend-timeout">Tab suspension</label>
+                                                <span class="setting-desc">Pauses eligible background pages without unloading them. Preserves page state; uses more memory than unloading. Applies immediately.</span>
                                             </div>
-                                            <select id="setting-sleep-timeout" class="settings-select">
+                                            <select id="setting-suspend-timeout" class="settings-select">
                                                 <option value="5">After 5 minutes</option>
                                                 <option value="15">After 15 minutes (default)</option>
                                                 <option value="30">After 30 minutes</option>

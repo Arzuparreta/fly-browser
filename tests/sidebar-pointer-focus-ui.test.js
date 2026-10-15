@@ -77,13 +77,10 @@ const root = path.resolve(__dirname, '..');
         await click('#SidebarClock');
         await contract();
         await page.evaluate(async () => {
-            const {hibernateTab} = await import('./modules/webview.js');
-            const {state} = await import('./modules/state.js');
-            const items = [...document.querySelectorAll('#TabList li')];
-            const inactive = items.findIndex(li => !li.classList.contains('selected'));
-            await hibernateTab(state.sessionState.current_workspace, inactive);
+            const {suspendInactiveTabs} = await import('./modules/tabSuspension.js');
+            await suspendInactiveTabs();
         });
-        await click('#TabList li.tab-sleeping .tab-sleep-badge');
+        await click('#TabList li:not(.selected) .tab-title');
         await contract();
         // Newly rendered pin/media badges stop click propagation but share the policy.
         await page.evaluate(() => window.executeBrowserAction('toggle-pin-tab'));

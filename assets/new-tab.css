@@ -16,7 +16,7 @@ input::placeholder { color:var(--dim); } button { background:none; color:var(--t
 #sites a::before { content:'↗'; color:var(--dim); margin-right:16px; } #empty { color:var(--dim); font-size:12px; }
 .specimen { position:relative; margin:0; width:100%; min-height:420px; aspect-ratio:1; } .specimen img { width:86%; height:100%; position:absolute; top:0; left:7%; object-fit:contain; } .specimen-number { position:absolute; top:0; left:0; }
 .annotation { position:absolute; border-top:1px solid var(--accent); padding-top:9px; min-width:100px; } .annotation::before { content:''; position:absolute; height:25px; border-left:1px solid var(--accent); top:-25px; left:0; } .annotation span { display:block; font:700 22px 'Doto',monospace; } .annotation small { display:block; font-size:8px; margin-top:5px; }
-.memory { right:0; top:24%; } .landed { left:0; top:60%; } .telemetry { right:0; bottom:5%; }
+.memory { right:0; top:24%; } .telemetry { right:0; bottom:5%; }
 footer { padding:16px 32px; border-top:1px solid var(--border); font-size:9px; }
 .sr-only { position:absolute; width:1px; height:1px; overflow:hidden; clip-path:inset(50%); }
 @media(max-width:750px) { main { grid-template-columns:1fr; max-width:580px; padding-top:30px; } .specimen { min-height:300px; max-width:400px; margin:auto; } #clock { font-size:72px; } }

@@ -255,7 +255,7 @@ console.log('All extension support tests passed.');
 }
 
 // An address entered while uBlock starts must win over the restored address.
-// Closing or hibernating a waiting view must not start it later.
+// Closing a waiting view must not start it later.
 (async () => {
     const vm = require('node:vm');
     const source = fs.readFileSync(path.join(__dirname, '../modules/extensions.js'), 'utf8');

@@ -1,3 +1,5 @@
+import { initializeTabSuspension } from './modules/tabSuspension.js';
+import { migrateTabRestoration } from './modules/tabRestoration.js';
 import { recordSidebarPointerEntry } from './modules/sidebarPointer.js';
 import { openWorkspaceMoveDialog } from './modules/tabActions.js';
 import { initialiseOverlayFocus, initialiseSidebarPointerFocus, prepareOverlay, hasActiveOverlay } from './modules/focus.js';
@@ -36,10 +38,6 @@ import {
     toggleGlobalAudioMute,
     togglePinTab,
     togglePinActiveTab,
-    initializeTabSleepManager,
-    hibernateInactiveTabs,
-    wakeTab,
-    wakeAllTabsInWorkspace,
     reapplyActiveUserStyles,
     toggleReaderViewOnActiveTab,
 } from './modules/webview.js';
@@ -335,7 +333,7 @@ async function initializeBrowser() {
         }
     } catch (e) {}
 
-    // Restore cached titles, sleeping tab states, and favicons
+    // Restore cached titles and favicons
     if (state.sessionState.tab_titles) {
         state.activeTitlesCache = { ...state.sessionState.tab_titles };
     }
@@ -346,51 +344,8 @@ async function initializeBrowser() {
         state.tabPinned = { ...state.sessionState.tab_pinned };
     }
 
-    if (state.sessionState.tab_sleep_states && !isCrashRecovery) {
-        state.tabSleepStates = { ...state.sessionState.tab_sleep_states };
-        // Initialise any awake background tabs as sleeping on boot to conserve memory
-        Object.keys(state.sessionState.workspaces || {}).forEach(ws => {
-            const urls = state.sessionState.workspaces[ws] || [];
-            if (!state.tabSleepStates[ws]) state.tabSleepStates[ws] = [];
-            urls.forEach((u, i) => {
-                if (ws !== state.sessionState.current_workspace || i !== 0) {
-                    if (!state.tabSleepStates[ws][i]) {
-                        state.tabSleepStates[ws][i] = {
-                            url: u,
-                            title: state.activeTitlesCache[ws]?.[i] || u,
-                            scrollX: 0,
-                            scrollY: 0,
-                            hibernatedAt: Date.now()
-                        };
-                    }
-                } else {
-                    state.tabSleepStates[ws][i] = null;
-                }
-            });
-        });
-    } else {
-        // Crash recovery or initial cold boot: force ALL background tabs to sleep to eliminate memory spikes
-        Object.keys(state.sessionState.workspaces || {}).forEach(ws => {
-            const urls = state.sessionState.workspaces[ws] || [];
-            const previousSleep = state.sessionState.tab_sleep_states?.[ws] || [];
-            if (!state.tabSleepStates[ws]) state.tabSleepStates[ws] = [];
-            urls.forEach((u, i) => {
-                if (ws !== state.sessionState.current_workspace || i !== 0) {
-                    const prev = previousSleep[i];
-                    state.tabSleepStates[ws][i] = {
-                        url: prev?.url || u,
-                        title: prev?.title || state.activeTitlesCache[ws]?.[i] || u,
-                        scrollX: prev?.scrollX || 0,
-                        scrollY: prev?.scrollY || 0,
-                        sessionStorage: prev?.sessionStorage || null,
-                        hibernatedAt: Date.now()
-                    };
-                } else {
-                    state.tabSleepStates[ws][i] = null;
-                }
-            });
-        });
-    }
+    // Startup restoration is lazy; runtime suspension never removes a guest.
+    state.tabRestoreStates = migrateTabRestoration(state.sessionState);
 
     // Load persisted theme and sidebar preferences from configuration
     let savedTheme = 'dark';
@@ -451,7 +406,7 @@ async function initializeBrowser() {
 
     setupEventListeners();
     renderWorkspaceUI();
-    initializeTabSleepManager();
+    initializeTabSuspension();
     setupAddressBarAutocomplete();
     setupBookmarkOverlayListeners();
     setupDiagnosticsListeners();
@@ -715,7 +670,6 @@ function setupEventListeners() {
                 handlePrivateBrowsingStateShift(state.globalPrivateModeActive);
                 break;
             }
-            case 'hibernate-inactive-tabs': hibernateInactiveTabs(); break;
             case 'move-tab-to-workspace': openWorkspaceMoveDialog(); break;
             case 'reopen-closed-tab': reopenClosedTab(); break;
             case 'move-tab-left': case 'move-tab-right': {

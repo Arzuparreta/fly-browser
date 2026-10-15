@@ -1,7 +1,7 @@
 import { prepareOverlay } from './focus.js';
 import { state } from './state.js';
 import { escapeHtml, focusActiveWebview, getActiveWebview, isPdfUrl, getPdfViewerUrl } from './utils.js';
-import { renderWorkspaceUI, switchTabFocus, spawnTabWithUrl, spawnNewBlankTab, handleTabRemoval, wakeTab } from './webview.js';
+import { renderWorkspaceUI, switchTabFocus, spawnTabWithUrl, spawnNewBlankTab, handleTabRemoval, ensureTabLoaded } from './webview.js';
 import { formatSearchUrl, resolveSearchAliasUrl, getEffectiveSearchAliases } from './overlays/searchEngine.js';
 import { evaluateMathExpression } from './calculator.js';
 import { setTargetUrl } from './statusBar.js';
@@ -78,7 +78,7 @@ function applyTargetUrl(targetUrl) {
     if (state.activeViewsCache[currentWS] && state.activeViewsCache[currentWS][currentIdx]) {
         loadWebviewSource(state.activeViewsCache[currentWS][currentIdx], currentWS, effectiveLoadUrl);
     } else {
-        wakeTab(currentWS, currentIdx);
+        ensureTabLoaded(currentWS, currentIdx);
     }
 
     hideSuggestions();

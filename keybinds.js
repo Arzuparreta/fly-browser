@@ -104,12 +104,13 @@ Object.assign(ACTION_METADATA, {
         "label": "Close Split View",
         "category": "Split View"
     },
+    // Keep these stored binding IDs compatible; their actions now preserve documents.
     "hibernate-tabs": {
-        "label": "Hibernate Inactive Tabs",
+        "label": "Suspend Inactive Tabs",
         "category": "Performance & Memory"
     },
     "wake-all-tabs": {
-        "label": "Wake All Tabs in Workspace",
+        "label": "Resume Tabs in Workspace",
         "category": "Performance & Memory"
     },
     "open-scripts-dir": {

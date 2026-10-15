@@ -6,7 +6,7 @@ Fly loads **unpacked Chrome extensions** with these rules:
 
 * **uBlock enabled by default.** A saved global disable, individual disable, removal or empty workspace selection is preserved on upgrade. While disabled, no extension code, library or process is loaded and there is no ad blocker.
 * **Per workspace.** Included extensions are selected in workspaces without a saved selection. You can change each workspace’s selection, including selecting none. A renamed workspace keeps its selection. Manually installed extensions run only where selected.
-* **Only while needed.** Extensions load when an opted-in workspace gets its first live tab and unload once every tab in it has been closed or hibernated, after a grace period (60 seconds by default).
+* **Only while needed.** Extensions load when an opted-in workspace gets its first live tab and unload once every tab in it has been closed, after a grace period (60 seconds by default).
 * **Local only.** There is no extension store. Included extensions are copied into your profile; Fly releases can update managed copies. Manually installed folders are never overwritten.
 * **Never in private browsing.** Electron refuses to load extensions into in-memory sessions. Private browsing therefore has no ad blocker.
 
@@ -78,7 +78,7 @@ Preferences shows live numbers for your machine under **Live resource usage**. A
 | **Event page** | MV2 lazy background page | Loaded on demand. |
 | **Persistent** | MV2 background page | A process that stays alive for as long as the extension is loaded. |
 
-Content scripts scale with the number of **live** tabs that match, which tab hibernation already keeps low. Background processes scale with the number of **workspaces** that have the extension loaded at the same time.
+Content scripts scale with the number of **live** tabs that match, including suspended pages, which retain their document and extension state. Background processes scale with the number of **workspaces** that have the extension loaded at the same time.
 
 ---
 
@@ -100,7 +100,7 @@ Extension APIs come from Electron plus the [electron-chrome-extensions](https://
 * **`runtime.onInstalled` does not fire** for unpacked extensions in Electron. Anything an extension only sets up there, most often its context menu items, will be missing. Items created when the extension starts do appear.
 * **No side panels, native messaging hosts or Chrome sync.**
 * **Firefox builds**: there is no Gecko engine, so `.xpi` files are not supported as such. Cross-browser extensions often work when their Firefox build is unpacked, but the Chrome build is the safer choice.
-* **Hibernation** closes a tab's renderer, so an extension sees the tab close and a new one open when it wakes. Extensions that keep per-tab state start fresh for that tab.
+* **Suspension** keeps the renderer and extension tab identity alive. It does not trigger tab-close/tab-open events or unload the workspace's extensions.
 * In NORMAL mode Fly keeps keystrokes for its own shortcuts, so extension keyboard handlers inside pages only receive keys in INSERT or PASSTHROUGH mode.
 
 ---

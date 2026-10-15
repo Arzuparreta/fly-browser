@@ -1,5 +1,8 @@
 # Fork performance audit
 
+> Historical measurements below used the former destructive tab hibernation. Current Fly preserves live documents with [tab suspension](/guide/tab-hibernation); the old post-hibernation memory and process counts do not describe suspension. Historical result files are retained unchanged.
+
+
 > Historical audit. Ghostery and its cold-filter compiler have since been removed. Reproduce the filter-specific probes from the measured revision; their results do not describe current Fly.
 
 > Recorded before the browser was renamed from Mise to Fly. The benchmark scripts now read `FLY_*` environment variables instead of the `MISE_*` names used below; the measurements are unchanged.

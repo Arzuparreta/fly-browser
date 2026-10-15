@@ -139,7 +139,7 @@ async function run(root, round, url) {
         const hintsTransitions = await page.evaluate(() => window.__benchHintsMessages) - hintsMessages;
         const messagesAfter = await application.evaluate(() => ({...globalThis.__flyBenchMessages}));
         const tabs = await page.evaluate(async url => {
-            const {spawnTabWithUrl, switchTabFocus, hibernateInactiveTabs} = await import('./modules/webview.js');
+            const {spawnTabWithUrl, switchTabFocus} = await import('./modules/webview.js');
             const times = [];
             for (let i = 0; i < 5; i++) {
                 const start = performance.now(); spawnTabWithUrl(url);
@@ -166,15 +166,15 @@ async function run(root, round, url) {
             return times;
         });
         await cdp.send('Emulation.setCPUThrottlingRate', {rate: 1});
-        await page.evaluate(async () => {const {hibernateInactiveTabs} = await import('./modules/webview.js'); await hibernateInactiveTabs();});
+        await page.evaluate(async () => {const {suspendInactiveTabs} = await import('./modules/tabSuspension.js'); await suspendInactiveTabs();});
         await pause(1000);
-        const sleeping = processes(pid);
+        const suspended = processes(pid);
         const views = await page.locator('webview').count();
-        assert.equal(views, 1, 'Hibernation must leave only the selected view');
+        assert.equal(views, 6, 'Suspension must preserve every loaded view');
         const cfg = await page.evaluate(() => window.flyAPI.getBrowserSettings());
         if (!cfg.extensions_enabled) assert.equal(heavyExtensionModule, false, 'Disabled extensions must not load the compatibility library');
         assert.deepEqual(errors, []);
-        const result = {root, round, viewport, readyMs, idleCpuMs, idleCpuPercent, settled: before, idle: after, hostHeapMiB: memory.JSHeapUsedSize / 1048576, dom, preferences, mutationMs, hintsMessages, hintsTransitions, messagesBefore, messagesAfter, tabs, slowSwitchMs, live, sleeping, views, filterFetches, gpuFeatureStatus, gpuInfo, heavyExtensionModule};
+        const result = {root, round, viewport, readyMs, idleCpuMs, idleCpuPercent, settled: before, idle: after, hostHeapMiB: memory.JSHeapUsedSize / 1048576, dom, preferences, mutationMs, hintsMessages, hintsTransitions, messagesBefore, messagesAfter, tabs, slowSwitchMs, live, suspended, views, filterFetches, gpuFeatureStatus, gpuInfo, heavyExtensionModule};
         samples.push(result);
         fs.writeFileSync(output, JSON.stringify({sources, environment: {date: new Date().toISOString(), node: process.version, platform: os.release(), display: process.env.DISPLAY || null, displayDescription: process.env.FLY_BENCH_DISPLAY_DESCRIPTION || 'unspecified X11 display', cpu: os.cpus()[0].model, memoryGiB: os.totalmem()/2**30, idleMs, rounds, seededFilterCache: !!process.env.FLY_BENCH_CACHE, filterCacheSha256, gpu: process.env.FLY_BENCH_GPU === '1'}, samples}, null, 2) + '\n');
         console.log(JSON.stringify({root, round, readyMs, idleCpuPercent, idlePssMiB: after.pssMiB, hostHeapMiB: result.hostHeapMiB, nodes: dom.nodes, filterFetches, hintsMessages, hintsTransitions}));

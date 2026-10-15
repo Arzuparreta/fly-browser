@@ -14,7 +14,7 @@ const context = {
     resolveSearchAliasUrl, prepareOverlay: () => {}, state, document: {getElementById: id => id === 'WideAddressBar' ? address : null, querySelector: () => selected, querySelectorAll: () => [selected]},
     window: {flyAPI: {saveSession: () => events.push(['save']), getBrowserSettings: async () => ({search_engine: 'https://duckduckgo.com/?q=%s'})}},
     focusActiveWebview: () => {assert.equal(address.style.display, 'none'); events.push(['focus', state.activeViewsCache.A[0]]);},
-    wakeTab: () => {state.activeViewsCache.A[0] = view; events.push(['wake']);},
+    ensureTabLoaded: () => {state.activeViewsCache.A[0] = view; events.push(['wake']);},
     spawnTabWithUrl: url => {state.sessionState.workspaces.A.push(url); address.style.display = 'none'; events.push(['spawn', url]);},
     isPdfUrl: () => false, evaluateMathExpression: () => null, formatSearchUrl: (query, template) => template.replace('%s', encodeURIComponent(query)),
     requestAnimationFrame: callback => callback()

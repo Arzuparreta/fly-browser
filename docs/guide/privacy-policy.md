@@ -25,7 +25,7 @@ All data created during your browsing sessions is stored strictly on your local 
 | File | Purpose | Storage Format |
 | :--- | :--- | :--- |
 | `config.json` | Hardware settings, sleep timeout, trusted domains, split view ratio | Plaintext JSON |
-| `session.json` | Workspaces, active tab URLs, titles, hibernate scroll offsets, split view state | Plaintext JSON |
+| `session.json` | Workspaces, active tab URLs, titles, legacy startup restoration data, split view state | Plaintext JSON |
 | `history.json` | Browsing history with page titles and visit timestamps | Plaintext JSON |
 | `bookmarks.json` | Saved bookmarks and custom folder trees | Plaintext JSON |
 | `quickmarks.json` | Single-key speed-dial navigation mappings | Plaintext JSON |

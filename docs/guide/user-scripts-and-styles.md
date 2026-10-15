@@ -43,7 +43,7 @@ fanless Linux hardware:
    When analysing what users actually install extensions for, four use cases
    dominate:
    * **Ad & Tracker Blocking**: Handled by the included uBlock Origin extension.
-   * **Tab Suspension**: Handled natively via Fly true tab hibernation.
+   * **Tab Suspension**: Handled natively via Fly tab suspension.
    * **Custom Styling**: Handled cleanly via local `~/.config/fly-browser/styles/`.
    * **Page Script Tweaks**: Handled cleanly via local `~/.config/fly-browser/scripts/`.
 
