@@ -22,9 +22,58 @@ const root = path.resolve(__dirname, '..');
             await page.waitForTimeout(150);
         }
         await page.evaluate(async () => { const {hibernateInactiveTabs} = await import('./modules/webview.js'); await hibernateInactiveTabs(); });
+        await page.waitForFunction(() => {
+            try {
+                const view = [...document.querySelectorAll('webview')].find(view => view.getClientRects().length);
+                return view?.getWebContentsId() > 0 && view.getURL().startsWith('http://127.0.0.1:') && !view.isLoading();
+            } catch { return false; }
+        });
         const snapshot = () => page.evaluate(() => ({views: document.querySelectorAll('webview').length, selected: [...document.querySelectorAll('#TabList li')].findIndex(item => item.classList.contains('selected')), focused: [...document.querySelectorAll('#TabList li')].indexOf(document.activeElement)}));
         const initial = await snapshot();
         assert.equal(initial.views, 1);
+        for (const pinned of [false, true]) {
+            await page.evaluate(pinned => window.applySidebarMode(!pinned), pinned);
+            for (const key of ['s', 'Alt+s']) {
+                await page.mouse.move(500, 400);
+                await page.evaluate(() => window.executeBrowserAction('focus-webview'));
+                await page.waitForFunction(() => document.activeElement.tagName === 'WEBVIEW');
+                await page.keyboard.press(key);
+                await page.waitForFunction(() => document.activeElement.id === 'Sidebar');
+                assert.deepEqual(await snapshot(), {...initial, focused: -1}, 'Opening focuses the sidebar without selecting or waking a tab');
+                assert.equal(await page.locator('#Sidebar :focus').count(), 0, 'No tab or toolbar control acquires focus on entry');
+                assert.equal(await page.locator('#Sidebar').evaluate(sidebar => getComputedStyle(sidebar).outlineStyle), 'none');
+                await page.keyboard.press('k');
+                assert.deepEqual(await snapshot(), {...initial, focused: initial.selected - 1}, 'Page-key navigation starts from the selected tab without waking the cursor target');
+                assert.notEqual(await page.locator('#TabList li:focus').evaluate(tab => getComputedStyle(tab).outlineStyle), 'none');
+                await page.keyboard.press('ArrowDown');
+                assert.deepEqual(await snapshot(), {...initial, focused: initial.selected});
+                await page.keyboard.press(key);
+                await page.waitForFunction(() => document.activeElement.tagName === 'WEBVIEW');
+                await page.waitForFunction(pinned => document.getElementById('Sidebar').getBoundingClientRect().right === (pinned ? 260 : 36), pinned);
+
+                await page.keyboard.press(key);
+                await page.waitForFunction(() => document.activeElement.id === 'Sidebar');
+                await page.keyboard.press('Tab');
+                assert.equal(await page.evaluate(() => document.activeElement.id), 'WorkspaceHeader');
+                await page.keyboard.press('ArrowDown');
+                assert.deepEqual(await snapshot(), {...initial, focused: initial.selected});
+                // Leaving the sidebar must not force focus back onto the selected tab.
+                await page.locator('webview:visible').evaluate(view => view.focus());
+                await page.waitForFunction(() => document.activeElement.tagName === 'WEBVIEW');
+                await page.keyboard.press(key);
+                await page.waitForFunction(() => document.activeElement.id === 'Sidebar');
+                await page.keyboard.press('Enter');
+                await page.waitForFunction(() => document.activeElement.tagName === 'WEBVIEW');
+            }
+        }
+        await page.evaluate(() => window.applySidebarMode(true));
+        await page.keyboard.press('Control+p');
+        await page.locator('#PaletteInput').fill('Toggle Sidebar Focus');
+        await page.keyboard.press('Enter');
+        await page.waitForFunction(() => document.activeElement.id === 'Sidebar');
+        assert.deepEqual(await snapshot(), {...initial, focused: -1}, 'Palette entry uses the same neutral sidebar focus');
+        await page.keyboard.press('Escape');
+        await page.waitForFunction(() => document.activeElement.tagName === 'WEBVIEW');
         await page.locator('#TabList li').first().focus();
         await page.keyboard.press('j');
         assert.deepEqual(await snapshot(), {...initial, focused: 1});
@@ -50,7 +99,7 @@ const root = path.resolve(__dirname, '..');
         await page.keyboard.up('Control');
         assert(!(await page.evaluate(() => document.body.classList.contains('show-tab-badges'))));
         assert.deepEqual(errors, []);
-        console.log('Sidebar cursor: sleeping navigation, closing without waking, activation, merged shortcuts and badge cleanup passed.');
+        console.log('Sidebar cursor: neutral entry, explicit keyboard focus, natural exit, sleeping navigation, closing without waking, activation, merged shortcuts and badge cleanup passed.');
     } finally {
         if (application) await application.close();
         await new Promise(resolve => server.close(resolve));

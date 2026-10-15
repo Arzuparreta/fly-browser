@@ -247,7 +247,6 @@ function showPopup(url, partition, anchorRect) {
     webview.addEventListener('close', closeExtensionPopup);
     webview.addEventListener('did-finish-load', () => {
         POPUP_MEASURE_DELAYS_MS.forEach(delay => setTimeout(() => measurePopup(webview), delay));
-        window.flyAllowWebviewFocus = true;
         webview.focus();
     });
 

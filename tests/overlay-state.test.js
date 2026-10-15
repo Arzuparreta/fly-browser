@@ -86,5 +86,12 @@ console.log('Shared sidebar pointer policy preserves overlays and native editing
     paletteContext.state.paletteMatches = [{id: 'toggle-address', action() {paletteContext.addressBarOpen = true;}}];
     paletteContext.executePaletteSelection('toggle-address');
     assert.equal(pageFocus, focusBefore + 1, 'Opening the address bar from the palette keeps page focus untouched');
+    paletteContext.addressBarOpen = false;
+    const lookup = paletteContext.document.getElementById;
+    paletteContext.document.getElementById = id => id === 'Sidebar' ? {contains: element => element === 'sidebar'} : lookup(id);
+    paletteContext.state.paletteActive = true;
+    paletteContext.state.paletteMatches = [{id: 'focus-sidebar', action() {paletteContext.document.activeElement = 'sidebar';}}];
+    paletteContext.executePaletteSelection('focus-sidebar');
+    assert.equal(pageFocus, focusBefore + 1, 'A sidebar focus action must not be undone by returning focus to the page');
     console.log('Overlay cancellation ownership, transition focus suppression and palette races passed.');
 })().catch(error => {console.error(error); process.exitCode = 1;});

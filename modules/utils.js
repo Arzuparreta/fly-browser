@@ -51,7 +51,6 @@ export function focusActiveWebview() {
     if (activeListItem) {
         const currentIdx = Array.from(document.querySelectorAll('#TabList li')).indexOf(activeListItem);
         if (state.activeViewsCache[currentWS] && state.activeViewsCache[currentWS][currentIdx]) {
-            window.flyAllowWebviewFocus = true;
             state.activeViewsCache[currentWS][currentIdx].focus();
         }
     }

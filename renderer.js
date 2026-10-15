@@ -221,9 +221,7 @@ export function focusSidebar() {
         focusActiveWebview();
         return;
     }
-    const selectedTab = document.querySelector('#TabList li.selected') || document.querySelector('#TabList li');
-    const target = selectedTab || sidebar;
-    target?.focus();
+    sidebar?.focus();
 }
 
 export function displayUpdateNotification(updateInfo) {
@@ -903,7 +901,7 @@ function setupEventListeners() {
         }
         const combo = window.FlyKeyboard.eventCombo(event);
         let action = browserKeys.get(combo);
-        if (!action && !hasActiveOverlay() && !event.target.closest('input, textarea, select, [contenteditable], [role="textbox"], [role="searchbox"], [role="combobox"]') && document.getElementById('TabList').contains(event.target) &&
+        if (!action && !hasActiveOverlay() && !event.target.closest('input, textarea, select, [contenteditable], [role="textbox"], [role="searchbox"], [role="combobox"]') && (event.target === sidebar || document.getElementById('TabList').contains(event.target)) &&
             handleSidebarPageAction(pageKeys.get(combo))) {
             event.preventDefault(); event.stopImmediatePropagation(); return;
         }
@@ -969,9 +967,7 @@ function setupEventListeners() {
                 if (notiBtn) notiBtn.focus();
             } else if (e.key === 'Escape') {
                 e.preventDefault();
-                const sidebar = document.getElementById('Sidebar');
-                if (sidebar) sidebar.classList.remove('expanded');
-                focusActiveWebview();
+                focusSidebar();
             }
         });
     });
@@ -1002,16 +998,20 @@ function setupEventListeners() {
                 }
             } else if (e.key === 'Escape') {
                 e.preventDefault();
-                const sidebar = document.getElementById('Sidebar');
-                if (sidebar) sidebar.classList.remove('expanded');
-                focusActiveWebview();
+                focusSidebar();
             }
         });
     });
 
     const tabListContainer = document.getElementById('TabList');
+    // The selected tab anchors navigation, but receives focus only on user input.
+    function getSidebarCursorItem() {
+        return document.activeElement === sidebar
+            ? tabListContainer.querySelector('li.selected') || tabListContainer.querySelector('li')
+            : document.activeElement?.closest('#TabList li');
+    }
     function handleSidebarPageAction(action) {
-        const item = document.activeElement?.closest('#TabList li');
+        const item = getSidebarCursorItem();
         if (!item) return false;
         const items = [...tabListContainer.querySelectorAll('li')];
         const index = items.indexOf(item);
@@ -1036,23 +1036,26 @@ function setupEventListeners() {
         } else return false;
         return true;
     }
-    tabListContainer.addEventListener('keydown', event => {
+    sidebar.addEventListener('keydown', event => {
+        if (event.target !== sidebar && !tabListContainer.contains(event.target)) return;
         if (hasActiveOverlay() || event.target.closest('input, textarea, select, [contenteditable]')) return;
         if (event.target.tagName === 'BUTTON' && (event.key === 'Enter' || event.key === ' ')) return;
         if (event.key === 'Escape') {
             event.preventDefault();
-            document.getElementById('Sidebar').classList.remove('expanded');
-            focusActiveWebview();
+            focusSidebar();
             return;
         }
-        const item = event.target.closest('li');
+        const item = getSidebarCursorItem();
         const items = [...tabListContainer.querySelectorAll('li')];
         if (!item) return;
         const index = items.indexOf(item);
         const structural = {ArrowDown: 'scroll-down', ArrowUp: 'scroll-up', ArrowLeft: 'scroll-left', ArrowRight: 'scroll-right', Delete: 'remove-tab'}[event.key];
         if (structural && handleSidebarPageAction(structural)) event.preventDefault();
-        else if (event.key === 'Enter' || event.key === ' ') { event.preventDefault(); switchTabFocus(index); }
-        else if (!event.ctrlKey && !event.altKey && !event.metaKey && !event.shiftKey && /^[1-9]$/.test(event.key)) {
+        else if (event.key === 'Enter' || event.key === ' ') {
+            event.preventDefault();
+            switchTabFocus(index);
+            if (event.target === sidebar) focusActiveWebview();
+        } else if (!event.ctrlKey && !event.altKey && !event.metaKey && !event.shiftKey && /^[1-9]$/.test(event.key)) {
             event.preventDefault(); jumpToTabByIndex(Number(event.key));
         }
     });
@@ -1122,32 +1125,6 @@ function setupEventListeners() {
         }
     });
 
-    document.getElementById('Sidebar').addEventListener('focusout', (e) => {
-        if (e.relatedTarget && !document.getElementById('Sidebar').contains(e.relatedTarget)) {
-            if (state.dashboardActive || state.paletteActive || state.preferencesActive || state.bookmarksActive || state.historyActive || state.diagnosticsActive) return;
-            
-            const overlayIds = [
-                'WideAddressBar', 'AddressSuggestions', 'PaletteInput', 'PaletteList', 'PreferencesOverlay',
-                'BookmarksOverlay', 'BookmarkSearchInput', 'HistoryOverlay',
-                'HistorySearchInput',
-                'DashboardOverlay', 'ShareModalOverlay', 'FindBarOverlay',
-                'DiagnosticsOverlay'
-            ];
-            for (const id of overlayIds) {
-                const el = document.getElementById(id);
-                if (el && (e.relatedTarget === el || el.contains(e.relatedTarget))) return;
-            }
-
-            if (window.flyAllowWebviewFocus) {
-                window.flyAllowWebviewFocus = false;
-                return;
-            }
-            e.preventDefault();
-            const selectedTab = document.querySelector('#TabList li.selected');
-            if (selectedTab) selectedTab.focus();
-        }
-    });
-
     const historySearchInput = document.getElementById('HistorySearchInput');
     historySearchInput.addEventListener('input', (e) => {
         filterHistoryItems(e.target.value.trim());
@@ -1204,7 +1181,6 @@ async function executeSurgicalCookieWipe() {
     const isTargetPrivate = state.globalPrivateModeActive || isTargetPrivateDomain(urlStr);
     await window.flyAPI.clearDomainCookies({ urlStr, isPrivate: isTargetPrivate, workspace: currentWS });
     
-    window.flyAllowWebviewFocus = true;
     focusActiveWebview();
 }
 
@@ -1212,7 +1188,6 @@ async function executeGlobalCacheWipe() {
     const currentWS = state.sessionState.current_workspace;
     await window.flyAPI.clearActiveCache({ isPrivate: state.globalPrivateModeActive, workspace: currentWS });
     
-    window.flyAllowWebviewFocus = true;
     focusActiveWebview();
 }
 
@@ -1303,7 +1278,6 @@ document.getElementById('noti-toggle-btn').addEventListener('click', async () =>
         btn.innerHTML = '<i class="fa-solid fa-bell-slash"></i>';
     }
 
-    window.flyAllowWebviewFocus = true;
     focusActiveWebview();
 });
 
