@@ -34,16 +34,7 @@ const DEFAULT_KEYBINDS = {
     'switch-split-focus': 'Ctrl+O',
     'swap-split-panes': 'Ctrl+\\',
     'toggle-reader-view': 'F9',
-    'toggle-pin-tab': ['Ctrl+Shift+X', 'F4'],
-    'jump-to-tab-1': 'Ctrl+1',
-    'jump-to-tab-2': 'Ctrl+2',
-    'jump-to-tab-3': 'Ctrl+3',
-    'jump-to-tab-4': 'Ctrl+4',
-    'jump-to-tab-5': 'Ctrl+5',
-    'jump-to-tab-6': 'Ctrl+6',
-    'jump-to-tab-7': 'Ctrl+7',
-    'jump-to-tab-8': 'Ctrl+8',
-    'jump-to-tab-9': 'Ctrl+9'
+    'toggle-pin-tab': ['Ctrl+Shift+X', 'F4']
 };
 
 const ACTION_METADATA = {
@@ -81,16 +72,7 @@ const ACTION_METADATA = {
     'toggle-reader-view': { label: 'Toggle Reader View on Active Tab', category: 'Web Interaction' },
     'toggle-pin-tab': { label: 'Pin / Unpin Active Tab', category: 'Navigation & Workspaces' },
     // Unbound by default so the key stays free for pages; add it to keybinds.json to use it
-    'open-extension-actions': { label: 'Open Extension Actions (Popups, Commands, Options)', category: 'Web Interaction' },
-    'jump-to-tab-1': { label: 'Jump to Tab 1', category: 'Navigation & Workspaces' },
-    'jump-to-tab-2': { label: 'Jump to Tab 2', category: 'Navigation & Workspaces' },
-    'jump-to-tab-3': { label: 'Jump to Tab 3', category: 'Navigation & Workspaces' },
-    'jump-to-tab-4': { label: 'Jump to Tab 4', category: 'Navigation & Workspaces' },
-    'jump-to-tab-5': { label: 'Jump to Tab 5', category: 'Navigation & Workspaces' },
-    'jump-to-tab-6': { label: 'Jump to Tab 6', category: 'Navigation & Workspaces' },
-    'jump-to-tab-7': { label: 'Jump to Tab 7', category: 'Navigation & Workspaces' },
-    'jump-to-tab-8': { label: 'Jump to Tab 8', category: 'Navigation & Workspaces' },
-    'jump-to-tab-9': { label: 'Jump to Tab 9 (or Last Tab)', category: 'Navigation & Workspaces' }
+    'open-extension-actions': { label: 'Open Extension Actions (Popups, Commands, Options)', category: 'Web Interaction' }
 };
 
 Object.assign(ACTION_METADATA, {
@@ -347,7 +329,8 @@ const sequence = value => value.trim().split(/\s+/).map(keyboard.normalise).join
 const combosOf = table => Object.values(table).flatMap(listOf).filter(value => typeof value === 'string').map(sequence);
 const known = (table, id) => Object.hasOwn(table, id) ? table[id] : [];
 // Actions that no longer exist; files written by earlier versions may still list them.
-const RETIRED_ACTIONS = new Set(['toggle-site-shields', 'toggle-notes', 'export-reader-to-notes', 'export-reader-to-external', 'open-notes-external', 'toggle-webview-theme']);
+const RETIRED_ACTIONS = new Set(['toggle-site-shields', 'toggle-notes', 'export-reader-to-notes', 'export-reader-to-external', 'open-notes-external', 'toggle-webview-theme',
+    ...Array.from({length: 9}, (_, index) => `jump-to-tab-${index + 1}`)]);
 // True when an earlier version wrote this value without the user choosing it.
 function storedDefault(scope, id, value, legacy) {
     const values = listOf(value);

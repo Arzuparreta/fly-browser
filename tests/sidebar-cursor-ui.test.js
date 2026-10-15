@@ -89,17 +89,18 @@ const root = path.resolve(__dirname, '..');
         await page.waitForFunction(() => document.querySelectorAll('webview').length === 2);
         assert.equal((await snapshot()).selected, 1);
         assert.equal((await snapshot()).focused, 1);
+        // Ctrl+1 and bare digits no longer select tabs, and tabs carry no number badges.
         await page.keyboard.press('Control+1');
+        await page.keyboard.press('1');
+        await page.waitForTimeout(200);
+        assert.equal((await snapshot()).selected, 1);
+        assert.equal(await page.locator('.tab-index-badge').count(), 0);
+        await page.keyboard.press('Alt+1');
         await page.waitForFunction(() => document.querySelector('#TabList li').classList.contains('selected'));
-        assert.equal((await snapshot()).focused, 0);
         await page.keyboard.press('Alt+9');
         await page.waitForFunction(() => document.querySelector('#TabList li:last-child').classList.contains('selected'));
-        await page.keyboard.down('Control');
-        assert(await page.evaluate(() => document.body.classList.contains('show-tab-badges')));
-        await page.keyboard.up('Control');
-        assert(!(await page.evaluate(() => document.body.classList.contains('show-tab-badges'))));
         assert.deepEqual(errors, []);
-        console.log('Sidebar cursor: neutral entry, explicit keyboard focus, natural exit, sleeping navigation, closing without waking, activation, merged shortcuts and badge cleanup passed.');
+        console.log('Sidebar cursor: neutral entry, explicit keyboard focus, natural exit, sleeping navigation, closing without waking, activation and Alt tab selection passed.');
     } finally {
         if (application) await application.close();
         await new Promise(resolve => server.close(resolve));

@@ -8,6 +8,7 @@ const keybinds = require('../keybinds');
 const clone = value => JSON.parse(JSON.stringify(value));
 const defaults = keyboard.validateConfig(keybinds.getDefaults(), keybinds.ACTION_METADATA).config;
 assert(defaults, 'Every shipped default must be valid and conflict-free');
+assert(defaults.shortcuts['focus-sidebar'].includes('Alt+S'), 'Merged defaults retain sidebar focus');
 
 assert.equal(keyboard.normalise('control+shift+a'), 'Ctrl+Shift+A');
 assert.equal(keyboard.normalise('Meta+Ctrl+return'), 'Ctrl+Meta+Enter');
@@ -100,11 +101,12 @@ try {
     keybinds.initializeKeybinds(directory);
     assert.equal(keybinds.getActionForInput({type: 'keyDown', key: 'Tab', control: true}), 'focus-nav-buttons');
     // Bindings for removed actions are dropped instead of rejecting the whole profile.
-    fs.writeFileSync(legacyFile, JSON.stringify({version: 2, changesOnly: true, shortcuts: {'toggle-site-shields': ['Ctrl+Shift+Y'], 'toggle-notes': ['Alt+N'], 'export-reader-to-notes': ['Ctrl+Shift+E'], 'open-notes-external': ['Ctrl+Shift+O'], 'export-reader-to-external': ['Alt+Shift+X'], 'remove-tab': ['Ctrl+Q']}, normal: {}}));
+    fs.writeFileSync(legacyFile, JSON.stringify({version: 2, changesOnly: true, shortcuts: {'toggle-site-shields': ['Ctrl+Shift+Y'], 'toggle-notes': ['Alt+N'], 'export-reader-to-notes': ['Ctrl+Shift+E'], 'open-notes-external': ['Ctrl+Shift+O'], 'export-reader-to-external': ['Alt+Shift+X'], 'jump-to-tab-1': ['Ctrl+Shift+1'], 'remove-tab': ['Ctrl+Q']}, normal: {}}));
     keybinds.initializeKeybinds(directory);
     assert.equal(keybinds.getKeyboardConfig().warning, undefined);
     assert.deepEqual(keybinds.getKeybinds()['remove-tab'], ['Ctrl+Q']);
-    for (const id of ['toggle-site-shields', 'toggle-notes', 'export-reader-to-notes', 'open-notes-external', 'export-reader-to-external']) assert(!Object.hasOwn(keybinds.getKeybinds(), id));
+    for (const id of ['toggle-site-shields', 'toggle-notes', 'export-reader-to-notes', 'open-notes-external', 'export-reader-to-external', 'jump-to-tab-1']) assert(!Object.hasOwn(keybinds.getKeybinds(), id));
+    assert.equal(keybinds.getActionForInput({type: 'keyDown', key: '1', code: 'Digit1', control: true}), null, 'Ctrl+1 is no longer a browser shortcut');
     // A choice that collides with a default takes the chord instead of rejecting the whole profile.
     fs.writeFileSync(legacyFile, JSON.stringify({version: 2, changesOnly: true, shortcuts: {'focus-sidebar': ['Ctrl+PageDown']}, normal: {'trigger-hints': ['G'], 'toggle-find': ['J']}}));
     keybinds.initializeKeybinds(directory);

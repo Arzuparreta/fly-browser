@@ -2,7 +2,7 @@ import { isCurrentGuestPointerEntry } from './sidebarPointer.js';
 import { NEW_TAB_URL, isNewTab, refreshNewTab } from './newTab.js';
 import { hasActiveOverlay } from './focus.js';
 import { state } from './state.js';
-import { getActiveWebview, focusActiveWebview, removeWebview, getWorkspacePartition, isDarkMode, isPdfUrl, getPdfViewerUrl, extractOriginalUrl, isTargetPrivateDomain } from './utils.js';
+import { getActiveWebview, removeWebview, getWorkspacePartition, isDarkMode, isPdfUrl, getPdfViewerUrl, extractOriginalUrl, isTargetPrivateDomain } from './utils.js';
 import { loadWebviewSource } from './extensions.js';
 import { isSplitActive, applySplitLayout, handleSplitTabSelection, handleTabRemovalInSplit, getSplitState } from './splitView.js';
 import { 
@@ -757,12 +757,6 @@ export function renderWorkspaceUI(targetTabToFocus = null) {
         if (isSleeping) favWrapper.appendChild(sleepDot);
         if (state.tabMediaAudible[currentWS]?.[idx]) favWrapper.appendChild(audioDot);
         if (isPinned) favWrapper.appendChild(pinDot);
-        if (idx < 9) {
-            const indexBadge = document.createElement('span');
-            indexBadge.className = 'tab-index-badge';
-            indexBadge.textContent = String(idx + 1);
-            favWrapper.appendChild(indexBadge);
-        }
 
         const initialFav = cachedFavicon || getFaviconUrl(url);
         if (initialFav) {
@@ -982,38 +976,6 @@ export function switchTabFocus(targetIdx) {
     }
 
     updateStatusBarFromActiveView();
-}
-
-export function jumpToTabByIndex(oneBasedIdx) {
-    const currentWS = state.sessionState.current_workspace;
-    const tabs = state.sessionState.workspaces[currentWS] || [];
-    if (tabs.length === 0) return;
-
-    let targetIdx = oneBasedIdx - 1;
-    // Standard browser convention: 9 jumps to 9th tab, or last tab if fewer than 9
-    if (oneBasedIdx === 9 && targetIdx >= tabs.length) {
-        targetIdx = tabs.length - 1;
-    }
-
-    if (targetIdx < 0 || targetIdx >= tabs.length) return;
-
-    if (state.dashboardActive && typeof window.toggleDashboardView === 'function') {
-        window.toggleDashboardView();
-    }
-
-    switchTabFocus(targetIdx);
-
-    const tabItems = document.querySelectorAll('#TabList li');
-    if (tabItems && tabItems[targetIdx]) {
-        tabItems.forEach((item, idx) => item.setAttribute('tabindex', idx === targetIdx ? '0' : '-1'));
-        const sidebar = document.getElementById('Sidebar');
-        const isSidebarFocused = document.activeElement && sidebar && sidebar.contains(document.activeElement);
-        if (isSidebarFocused) {
-            tabItems[targetIdx].focus();
-        } else {
-            focusActiveWebview();
-        }
-    }
 }
 
 export async function spawnNewBlankTab() {

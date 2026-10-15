@@ -28,8 +28,7 @@ const root = path.resolve(__dirname, '..');
         }
         const state = () => page.evaluate(() => ({
             selected: [...document.querySelectorAll('#TabList li')].findIndex(item => item.classList.contains('selected')),
-            sidebarFocused: document.getElementById('Sidebar').matches(':focus-within'),
-            badges: document.body.classList.contains('show-tab-badges')
+            sidebarFocused: document.getElementById('Sidebar').matches(':focus-within')
         }));
         const count = await page.locator('#TabList li').count();
         const before = await state();
@@ -37,7 +36,7 @@ const root = path.resolve(__dirname, '..');
         await page.evaluate(() => document.activeElement?.blur());
         await page.keyboard.press('Control+Tab');
         await page.waitForFunction(previous => [...document.querySelectorAll('#TabList li')].findIndex(item => item.classList.contains('selected')) !== previous, before.selected, {timeout: 10000}).catch(() => {});
-        assert.deepEqual(await state(), {selected: (before.selected + 1) % count, sidebarFocused: false, badges: false},
+        assert.deepEqual(await state(), {selected: (before.selected + 1) % count, sidebarFocused: false},
             'Ctrl+Tab cycles tabs instead of focusing the sidebar navigation');
         // Importing a complete table from an earlier release keeps only its changes, and saving stores only changes.
         const complete = JSON.parse(fs.readFileSync(path.join(__dirname, 'fixtures', 'fork-keybinds-079b538.json'), 'utf8'));

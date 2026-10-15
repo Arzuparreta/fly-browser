@@ -174,10 +174,9 @@ Fly Browser provides a Vim-inspired modal navigation engine that frees you from 
 
 ***
 
-## Workspace Badges, Tab Jumping & Favicons
+## Workspace Badges, Tab Selection & Favicons
 
-* **Direct Tab Jumping**: Press **Ctrl + 1** through **Ctrl + 8** to jump straight to tabs 1 through 8 from anywhere, or **Ctrl + 9** to switch to the ninth tab (the last when fewer than nine exist). **Alt + 9** always selects the last tab. Alternatively, focus the sidebar (**Alt + S** or **s**) and type **1** through **9** to jump immediately without waking intermediate tabs.
-* **Dynamic Tab Number Badges**: Small index badges (`1` to `9`) appear over tab favicons whenever the sidebar has keyboard focus or the `Ctrl` key is held, showing the exact number to jump to.
+* **Selecting Tabs by Position**: Press **Alt + 1** through **Alt + 8** to select tabs 1 through 8 from anywhere, or the last tab when fewer exist. **Alt + 9** always selects the last tab.
 * **Non-Disruptive Sidebar Cursor Navigation**: Moving with **j** / **k** or **Down** / **Up** moves the cursor highlight across tabs without waking sleeping tabs into memory. Press **Enter**, **Space**, or **l** / **Right** to activate the highlighted tab.
 * **Workspace Badges**: The top of the strip displays a compact letter or number badge for the current workspace (such as `W1` or `P`). Clicking the workspace badge opens the Workspace Dashboard (**Ctrl + Shift + W**). It shares the top row of the sidebar with the Back, Forward, New Tab and Split View buttons; hover it to see the workspace's full name.
 * **Favicons & Indicators**: Each tab renders its website favicon with smart local and remote caching. Sleeping tabs display a subtle moon indicator, while tabs playing audio render a green audio badge.
