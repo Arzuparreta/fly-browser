@@ -262,13 +262,31 @@ let normalKeys = FlyKeyboard.compile(keyboardConfig?.normal || {});
 let normalPrefixes = new Set([...normalKeys.keys()].filter(key => key.includes(' ')).map(key => key.split(' ')[0]));
 let pendingStroke = '';
 let pendingTime = 0;
+const keyboardConfigListeners = [];
 ipcRenderer.on('keyboard-config-changed', (_event, config) => {
     keyboardConfig = config;
     globalKeys = FlyKeyboard.compile(config.shortcuts);
     normalKeys = FlyKeyboard.compile(config.normal);
     normalPrefixes = new Set([...normalKeys.keys()].filter(key => key.includes(' ')).map(key => key.split(' ')[0]));
     pendingStroke = '';
+    for (const listener of keyboardConfigListeners) try { listener(); } catch (err) {}
 });
+
+// The bundled What's New page shows the reader's own bindings for the actions it names.
+try {
+    const isWhatsNewPage = window.location.protocol === 'file:' &&
+        (window.location.pathname || '').replace(/\\/g, '/').endsWith('/assets/whats-new.html');
+    if (isWhatsNewPage && contextBridge && typeof contextBridge.exposeInMainWorld === 'function') {
+        const bindings = actions => Object.fromEntries(actions.filter(action => typeof action === 'string').map(action => [action, {
+            shortcuts: [...(keyboardConfig?.shortcuts?.[action] || [])],
+            page: (keyboardConfig?.normal?.[action] || []).map(key => FlyKeyboard.display(key, 'normal'))
+        }]));
+        contextBridge.exposeInMainWorld('__flyWhatsNewKeys', {
+            bindings: actions => bindings(Array.isArray(actions) ? actions : []),
+            onChange: callback => { if (typeof callback === 'function') keyboardConfigListeners.push(callback); }
+        });
+    }
+} catch (err) {}
 
 // Host passthrough mode synchronisation
 ipcRenderer.on('set-passthrough-mode', (_event, enabled) => {

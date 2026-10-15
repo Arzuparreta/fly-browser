@@ -3,6 +3,46 @@
 //
 // `?from=X.Y.Z` is the version Fly ran before this upgrade: every release
 // after it is shown. Without it, only the latest release is.
+
+// Fly closes the tab of a page that calls window.close(). Escape is left to
+// whatever already handled it, such as link hints or reader view.
+(() => {
+    const close = () => window.close();
+    for (const button of document.querySelectorAll('[data-close]')) button.addEventListener('click', close);
+    document.addEventListener('keydown', event => {
+        if (event.key === 'Escape' && !event.defaultPrevented && !event.repeat) close();
+    });
+
+    // The footer names the reader's own bindings; Fly's preload provides them.
+    const keys = window.__flyWhatsNewKeys;
+    const footer = document.getElementById('Shortcuts');
+    if (!keys || !footer) return;
+    const actions = [['remove-tab', 'Close'], ['toggle-help', 'Preferences'], ['toggle-palette', 'Palette'], ['toggle-address', 'Address']];
+    const kbd = text => {
+        const node = document.createElement('kbd');
+        node.textContent = text;
+        return node;
+    };
+    const render = () => {
+        const bindings = keys.bindings(actions.map(([action]) => action));
+        footer.replaceChildren();
+        for (const [action, label] of actions) {
+            const {shortcuts = [], page = []} = bindings[action] || {};
+            const note = document.createElement('span');
+            note.className = 'footer-note';
+            note.append(`${label}: `);
+            const parts = [...shortcuts.map(key => [kbd(key)]), ...page.map(key => [kbd(key), ' in NORMAL mode'])];
+            if (action === 'remove-tab') parts.unshift([kbd('Escape')]);
+            if (!parts.length) note.append('unassigned');
+            parts.forEach((part, index) => note.append(...(index ? [' / '] : []), ...part));
+            footer.append(note);
+        }
+        footer.hidden = false;
+    };
+    render();
+    keys.onChange(render);
+})();
+
 (() => {
     const releases = Array.isArray(window.FLY_RELEASES) ? window.FLY_RELEASES : [];
     const releasesRoot = document.getElementById('Releases');

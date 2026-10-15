@@ -221,10 +221,37 @@
             color: var(--text-muted);
         }
 
+        .footer-shortcuts[hidden] {
+            display: none;
+        }
+
         .footer-shortcuts {
             display: flex;
             gap: 12px;
             flex-wrap: wrap;
+        }
+
+        .close-button {
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+            background-color: var(--bg-card);
+            border: 1px solid var(--border);
+            border-radius: 6px;
+            color: var(--text-main);
+            cursor: pointer;
+            font-family: inherit;
+            font-size: 12px;
+            font-weight: 500;
+            padding: 5px 12px;
+            transition: border-color 0.15s ease, color 0.15s ease;
+        }
+
+        .close-button:hover,
+        .close-button:focus-visible {
+            border-color: var(--accent);
+            color: var(--accent);
+            outline: none;
         }
 
         kbd {
@@ -247,6 +274,7 @@
                 <a href="https://github.com/Arzuparreta/fly-browser/releases" target="_blank" rel="noopener noreferrer" class="github-link">
                     Full Release on GitHub ↗
                 </a>
+                <button type="button" class="close-button" data-close title="Close What's New (Escape)">Close <span aria-hidden="true">✕</span></button>
             </div>
             <h1>What's New in Fly</h1>
             <p class="subtitle" id="ReleaseSummary"></p>
@@ -259,13 +287,9 @@
                 <a href="https://github.com/Arzuparreta/fly-browser/releases" target="_blank" rel="noopener noreferrer" class="github-button">
                     View Full Release on GitHub ↗
                 </a>
-                <span class="footer-note">Close this tab (<kbd>Ctrl + X</kbd>) whenever you are finished reading.</span>
+                <button type="button" class="close-button" data-close title="Close What's New (Escape)">Close <span aria-hidden="true">✕</span></button>
             </div>
-            <div class="footer-shortcuts">
-                <span class="footer-note">Preferences: <kbd>Ctrl + H</kbd></span>
-                <span class="footer-note">Palette: <kbd>Ctrl + P</kbd></span>
-                <span class="footer-note">Address: <kbd>!</kbd></span>
-            </div>
+            <div class="footer-shortcuts" id="Shortcuts" hidden></div>
         </footer>
     </div>
     <script src="whats-new-releases.js"></script>
