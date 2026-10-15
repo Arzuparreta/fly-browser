@@ -57,7 +57,7 @@ body:
     id: fly_version
     attributes:
       label: Fly Browser Version
-      description: Found in the Preferences overlay (F1) or package.json (e.g. v0.15.0 or git main).
+      description: Found in the Preferences overlay (Ctrl+H) or package.json (e.g. v0.15.0 or git main).
       placeholder: "e.g. v0.15.0"
     validations:
       required: true
