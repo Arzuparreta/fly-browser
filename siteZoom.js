@@ -8,7 +8,8 @@ function hostname(url) {
     } catch { return ''; }
 }
 
-function createSiteZoom(file) {
+function createSiteZoom(file, { isPrivate = () => false } = {}) {
+    const privateLevels = Object.create(null);
     let levels = Object.create(null);
     try {
         const stored = JSON.parse(fs.readFileSync(file, 'utf8'));
@@ -19,26 +20,30 @@ function createSiteZoom(file) {
         if (error.code !== 'ENOENT') console.warn('Could not read site zoom preferences:', error.message);
     }
     const guests = new Set();
-    const apply = guest => guest.setZoomLevel(levels[hostname(guest.getURL())] || 0);
+    const preferences = guest => isPrivate(guest) ? privateLevels : levels;
+    const apply = guest => guest.setZoomLevel(preferences(guest)[hostname(guest.getURL())] || 0);
     function change(guest, action) {
         if (!['zoom-in', 'zoom-out', 'reset-zoom'].includes(action)) return;
         const host = hostname(guest.getURL());
         const level = action === 'reset-zoom' ? 0 : Math.max(-5, Math.min(5, guest.getZoomLevel() + (action === 'zoom-in' ? 0.5 : -0.5)));
         if (!host) { guest.setZoomLevel(level); return; }
-        const next = Object.assign(Object.create(null), levels);
+        const privateGuest = isPrivate(guest);
+        const next = privateGuest ? privateLevels : Object.assign(Object.create(null), levels);
         if (level === 0) delete next[host];
         else next[host] = level;
-        try {
-            fs.mkdirSync(path.dirname(file), { recursive: true });
-            const temporary = `${file}.${process.pid}.tmp`;
-            fs.writeFileSync(temporary, JSON.stringify(next, null, 2));
-            fs.renameSync(temporary, file);
-        } catch (error) {
-            console.warn('Could not save site zoom preferences:', error.message);
+        if (!privateGuest) {
+            try {
+                fs.mkdirSync(path.dirname(file), { recursive: true });
+                const temporary = `${file}.${process.pid}.tmp`;
+                fs.writeFileSync(temporary, JSON.stringify(next, null, 2));
+                fs.renameSync(temporary, file);
+            } catch (error) {
+                console.warn('Could not save site zoom preferences:', error.message);
+            }
+            levels = next;
         }
-        levels = next;
         for (const target of guests) {
-            if (!target.isDestroyed() && hostname(target.getURL()) === host) apply(target);
+            if (!target.isDestroyed() && isPrivate(target) === privateGuest && hostname(target.getURL()) === host) apply(target);
         }
     }
     function attach(guest) {
