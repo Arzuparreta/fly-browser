@@ -504,40 +504,27 @@ body.sidebar-auto-collapse #Sidebar:not(.pointer-inside, .expanded, :focus-withi
     opacity: 1;
 }
 
-/* Dynamic Tab Jump Index Badge */
-.tab-index-badge {
+/* Tab numbers for the tab selection shortcuts, painted over the favicon while their modifier is held
+   (tabNumbers.js). Tabs 1–8 carry their position; 9 marks the last tab, which Alt+9 selects. */
+#TabList { counter-reset: tab; }
+#TabList > li { counter-increment: tab; }
+body.show-tab-numbers #TabList > li:nth-child(-n+8) .tab-favicon-wrapper::after,
+body.show-tab-numbers #TabList > li:nth-child(n+9):last-child .tab-favicon-wrapper::after {
+    content: counter(tab);
     position: absolute;
-    top: 50%;
-    left: 50%;
-    transform: translate(-50%, -50%) scale(0.7);
-    width: 16px;
-    height: 16px;
-    border-radius: 4px;
-    background-color: var(--accent);
-    color: var(--bg-main);
-    font-size: 10px;
-    font-weight: 800;
-    line-height: 16px;
-    text-align: center;
-    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.45);
-    z-index: 6;
-    opacity: 0;
+    inset: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font: 600 15px/1 'IBM Plex Sans', sans-serif;
+    color: var(--text);
+    /* A hairline of the sidebar colour keeps the digit legible on any favicon without hiding it. */
+    -webkit-text-stroke: 3px var(--bg-sidebar);
+    paint-order: stroke fill;
     pointer-events: none;
-    transition: opacity var(--motion-fast) var(--motion-ease), transform var(--motion-fast) var(--motion-ease);
+    z-index: 7;
 }
-
-#Sidebar:focus-within .tab-index-badge,
-body.show-tab-badges .tab-index-badge {
-    opacity: 1;
-    transform: translate(-50%, -50%) scale(1);
-}
-
-#Sidebar:focus-within .tab-index-badge ~ .tab-favicon,
-body.show-tab-badges .tab-index-badge ~ .tab-favicon,
-#Sidebar:focus-within .tab-index-badge ~ .tab-fallback-icon,
-body.show-tab-badges .tab-index-badge ~ .tab-fallback-icon {
-    opacity: 0.15;
-}
+body.show-tab-numbers #TabList > li:nth-child(n+9):last-child .tab-favicon-wrapper::after { content: '9'; }
 
 /* Sleeping tab styling */
 #TabList li.tab-sleeping .tab-favicon {
@@ -4111,9 +4098,9 @@ i.spinning {
 .keyboard-search input:focus { border-color: var(--accent); }
 .keyboard-filter { display: flex; align-items: center; gap: 6px; font-size: 12px; cursor: pointer; }
 #KeyboardCount { font-size: 12px; opacity: .6; }
-.keyboard-row { display: flex; align-items: center; justify-content: space-between; gap: 14px; padding: 7px 4px; border-bottom: 1px solid var(--border); }
-.keyboard-row strong { font-size: 13px; font-weight: 600; }
-.keyboard-row small { display: block; margin-top: 2px; font-size: 11px; opacity: .6; }
+.keyboard-row, .keyboard-setting { display: flex; align-items: center; justify-content: space-between; gap: 14px; padding: 7px 4px; border-bottom: 1px solid var(--border); }
+.keyboard-row strong, .keyboard-setting strong { font-size: 13px; font-weight: 600; }
+.keyboard-row small, .keyboard-setting small { display: block; margin-top: 2px; font-size: 11px; opacity: .6; }
 .keyboard-bindings { display: flex; flex-wrap: wrap; justify-content: end; align-items: center; gap: 6px; }
 .keyboard-bindings button { background: var(--bg-sidebar); color: var(--text); border: 1px solid var(--border); border-radius: 5px; padding: 4px 8px; font-size: 12px; cursor: pointer; }
 .keyboard-bindings button:hover:not(:disabled) { border-color: var(--accent); }
@@ -4132,7 +4119,7 @@ i.spinning {
 .keyboard-recorder-actions { display: flex; flex-wrap: wrap; gap: 8px; }
 .keyboard-recorder :focus-visible { outline: 2px solid var(--accent); outline-offset: 3px; }
 .keyboard-editor button:disabled { opacity: .45; cursor: default; }
-@media (max-width: 900px) { .keyboard-row { align-items: start; flex-direction: column; } .keyboard-menus { width: 100%; } .keyboard-bindings { justify-content: start; } }
+@media (max-width: 900px) { .keyboard-row, .keyboard-setting { align-items: start; flex-direction: column; } .keyboard-menus { width: 100%; } .keyboard-bindings { justify-content: start; } }
 .history-item { display: block; width: 100%; text-align: left; font: inherit; color: inherit; background: transparent; border: 0; }
 .history-item-title, .history-item-url { display: block; }
 [role="button"]:focus-visible, .history-item:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }

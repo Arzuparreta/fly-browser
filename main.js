@@ -50,6 +50,7 @@ const diagnostics = require('./diagnostics');
 const { createDesktopIntegration } = require('./desktopIntegration');
 const { downloadAndReplace, restartInto } = require('./appImageUpdate');
 const { createWorkspacePartitions } = require('./workspacePartitions');
+const { createTabNumbers } = require('./tabNumbers');
 
 // NATIVE CONFIG UTILITIES
 const CONFIG_DIR = path.join(app.getPath('home'), '.config', 'fly-browser');
@@ -254,6 +255,10 @@ function initializeEngineSwitches() {
 initializeEngineSwitches();
 
 let mainWindow;
+const tabNumbers = createTabNumbers({
+    modifier: () => keybinds.tabModifier(),
+    send: shown => { if (mainWindow && !mainWindow.isDestroyed()) mainWindow.webContents.send('tab-numbers', shown); }
+});
 let privateBrowsingEnabled = false;
 const MAX_HISTORY_ITEMS = 500;
 
@@ -1811,6 +1816,8 @@ function createWindow() {
     security.setTrustedDomains(loadBrowserConfig().trusted_domains || []);
 
     mainWindow.loadFile('index.html');
+    mainWindow.webContents.on('before-input-event', (_event, input) => tabNumbers.track(input));
+    mainWindow.on('blur', tabNumbers.hide);
 
     mainWindow.on('close', () => {
         markSentinelState(true);
@@ -2171,6 +2178,7 @@ app.on('web-contents-created', (event, webContents) => {
         // Native interception reaches focused iframes as well as the top document.
         // Bare page keys stay in the preload where editable and hints state is known.
         webContents.on('before-input-event', (event, input) => {
+            tabNumbers.track(input, guestPassthrough.get(webContents));
             if (input.code === 'AltRight' || input.key === 'AltGraph') guestRightAlt.set(webContents, input.type === 'keyDown');
             if (guestRightAlt.get(webContents) && input.control && input.alt) return;
             const action = keybinds.getActionForInput(input, true);

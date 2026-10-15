@@ -34,16 +34,7 @@ const DEFAULT_KEYBINDS = {
     'switch-split-focus': 'Ctrl+O',
     'swap-split-panes': 'Ctrl+\\',
     'toggle-reader-view': 'F9',
-    'toggle-pin-tab': ['Ctrl+Shift+X', 'F4'],
-    'jump-to-tab-1': 'Ctrl+1',
-    'jump-to-tab-2': 'Ctrl+2',
-    'jump-to-tab-3': 'Ctrl+3',
-    'jump-to-tab-4': 'Ctrl+4',
-    'jump-to-tab-5': 'Ctrl+5',
-    'jump-to-tab-6': 'Ctrl+6',
-    'jump-to-tab-7': 'Ctrl+7',
-    'jump-to-tab-8': 'Ctrl+8',
-    'jump-to-tab-9': 'Ctrl+9'
+    'toggle-pin-tab': ['Ctrl+Shift+X', 'F4']
 };
 
 const ACTION_METADATA = {
@@ -81,16 +72,7 @@ const ACTION_METADATA = {
     'toggle-reader-view': { label: 'Toggle Reader View on Active Tab', category: 'Web Interaction' },
     'toggle-pin-tab': { label: 'Pin / Unpin Active Tab', category: 'Navigation & Workspaces' },
     // Unbound by default so the key stays free for pages; add it to keybinds.json to use it
-    'open-extension-actions': { label: 'Open Extension Actions (Popups, Commands, Options)', category: 'Web Interaction' },
-    'jump-to-tab-1': { label: 'Jump to Tab 1', category: 'Navigation & Workspaces' },
-    'jump-to-tab-2': { label: 'Jump to Tab 2', category: 'Navigation & Workspaces' },
-    'jump-to-tab-3': { label: 'Jump to Tab 3', category: 'Navigation & Workspaces' },
-    'jump-to-tab-4': { label: 'Jump to Tab 4', category: 'Navigation & Workspaces' },
-    'jump-to-tab-5': { label: 'Jump to Tab 5', category: 'Navigation & Workspaces' },
-    'jump-to-tab-6': { label: 'Jump to Tab 6', category: 'Navigation & Workspaces' },
-    'jump-to-tab-7': { label: 'Jump to Tab 7', category: 'Navigation & Workspaces' },
-    'jump-to-tab-8': { label: 'Jump to Tab 8', category: 'Navigation & Workspaces' },
-    'jump-to-tab-9': { label: 'Jump to Tab 9 (or Last Tab)', category: 'Navigation & Workspaces' }
+    'open-extension-actions': { label: 'Open Extension Actions (Popups, Commands, Options)', category: 'Web Interaction' }
 };
 
 Object.assign(ACTION_METADATA, {
@@ -257,42 +239,6 @@ Object.assign(ACTION_METADATA, {
     "page-bottom": {
         "label": "Go to page bottom",
         "category": "Page scrolling"
-    },
-    "tab-1": {
-        "label": "Select tab 1",
-        "category": "Tabs"
-    },
-    "tab-2": {
-        "label": "Select tab 2",
-        "category": "Tabs"
-    },
-    "tab-3": {
-        "label": "Select tab 3",
-        "category": "Tabs"
-    },
-    "tab-4": {
-        "label": "Select tab 4",
-        "category": "Tabs"
-    },
-    "tab-5": {
-        "label": "Select tab 5",
-        "category": "Tabs"
-    },
-    "tab-6": {
-        "label": "Select tab 6",
-        "category": "Tabs"
-    },
-    "tab-7": {
-        "label": "Select tab 7",
-        "category": "Tabs"
-    },
-    "tab-8": {
-        "label": "Select tab 8",
-        "category": "Tabs"
-    },
-    "tab-9": {
-        "label": "Select last tab",
-        "category": "Tabs"
     }
 });
 
@@ -320,7 +266,6 @@ Object.assign(DEFAULT_KEYBINDS, {
     'next-workspace': 'Alt+PageDown', 'previous-workspace': 'Alt+PageUp',
     'toggle-passthrough': 'Shift+Escape'
 });
-for (let i = 1; i <= 9; i++) DEFAULT_KEYBINDS[`tab-${i}`] = `Alt+${i}`;
 const DEFAULT_NORMAL = {
     'scroll-down': 'J', 'scroll-up': 'K', 'scroll-left': 'H', 'scroll-right': 'L',
     'half-page-down': 'D', 'half-page-up': 'U', 'page-top': 'G G', 'page-bottom': 'Shift+G',
@@ -335,11 +280,13 @@ for (const id of Object.keys(ACTION_METADATA)) {
     DEFAULT_KEYBINDS[id] ??= [];
     DEFAULT_NORMAL[id] ??= [];
 }
-const defaults = { version: 2, shortcuts: DEFAULT_KEYBINDS, normal: DEFAULT_NORMAL };
+// Modifier for selecting tabs by number (keyboard.js tabChords): Alt+1–8 select that tab, Alt+9 the last.
+const DEFAULT_TABS = 'Alt';
+const defaults = { version: 2, shortcuts: DEFAULT_KEYBINDS, normal: DEFAULT_NORMAL, tabs: DEFAULT_TABS };
 const baseline = keyboard.validateConfig(defaults, ACTION_METADATA).config;
 let active = keyboard.validateConfig(defaults, ACTION_METADATA).config;
 let configurationWarning = '';
-let compiled = keyboard.compile(active.shortcuts);
+let compiled = keyboard.compile(active.shortcuts, active.tabs);
 const clone = value => JSON.parse(JSON.stringify(value));
 
 const listOf = value => value === '' || value === null ? [] : Array.isArray(value) ? value : [value];
@@ -347,7 +294,9 @@ const sequence = value => value.trim().split(/\s+/).map(keyboard.normalise).join
 const combosOf = table => Object.values(table).flatMap(listOf).filter(value => typeof value === 'string').map(sequence);
 const known = (table, id) => Object.hasOwn(table, id) ? table[id] : [];
 // Actions that no longer exist; files written by earlier versions may still list them.
-const RETIRED_ACTIONS = new Set(['toggle-site-shields', 'toggle-notes', 'export-reader-to-notes', 'export-reader-to-external', 'open-notes-external', 'toggle-webview-theme']);
+// The nine tab-N actions became one tabs modifier; their individual bindings are dropped.
+const RETIRED_ACTIONS = new Set(['toggle-site-shields', 'toggle-notes', 'export-reader-to-notes', 'export-reader-to-external', 'open-notes-external', 'toggle-webview-theme',
+    ...Array.from({length: 9}, (_, index) => [`jump-to-tab-${index + 1}`, `tab-${index + 1}`]).flat()]);
 // True when an earlier version wrote this value without the user choosing it.
 function storedDefault(scope, id, value, legacy) {
     const values = listOf(value);
@@ -362,13 +311,17 @@ function storedDefault(scope, id, value, legacy) {
 }
 // User choices take precedence; defaults only give up the chords that would collide with them.
 function withDefaults(chosen) {
-    const taken = new Set(combosOf(chosen.shortcuts));
+    const tabChords = tabs => [...keyboard.compile({}, tabs).keys()];
+    const taken = new Set([...combosOf(chosen.shortcuts), ...tabChords(chosen.tabs)]);
     const pageStrokes = new Set(combosOf(chosen.normal).flatMap(combo => combo.split(' ')));
+    // Tab selection is one modifier for all nine digits, so a collision turns the default off.
+    const tabs = Object.hasOwn(chosen, 'tabs') ? chosen.tabs :
+        tabChords(DEFAULT_TABS).some(combo => taken.has(combo) || pageStrokes.has(combo)) ? '' : DEFAULT_TABS;
     const shortcuts = {...chosen.shortcuts};
     for (const [id, value] of Object.entries(DEFAULT_KEYBINDS)) if (!Object.hasOwn(shortcuts, id)) {
         shortcuts[id] = listOf(value).filter(combo => !taken.has(sequence(combo)) && !pageStrokes.has(sequence(combo)));
     }
-    const globals = new Set(combosOf(shortcuts));
+    const globals = new Set([...combosOf(shortcuts), ...tabChords(tabs)]);
     const pages = combosOf(chosen.normal);
     const collides = combo => combo.split(' ').some(stroke => globals.has(stroke)) ||
         pages.some(other => other === combo || other.startsWith(combo + ' ') || combo.startsWith(other + ' '));
@@ -376,7 +329,7 @@ function withDefaults(chosen) {
     for (const [id, value] of Object.entries(DEFAULT_NORMAL)) if (!Object.hasOwn(normal, id)) {
         normal[id] = listOf(value).filter(combo => !collides(sequence(combo)));
     }
-    return keyboard.validateConfig({version: 2, shortcuts, normal}, ACTION_METADATA);
+    return keyboard.validateConfig({version: 2, shortcuts, normal, tabs}, ACTION_METADATA);
 }
 // Explicit candidates come from the editor, where every listed value is the user's current choice.
 function initialiseCandidate(raw, explicit = false) {
@@ -388,7 +341,7 @@ function initialiseCandidate(raw, explicit = false) {
     // Files without the changesOnly marker also contain values that earlier versions wrote as defaults.
     const recorded = !explicit && (legacy || candidate.changesOnly !== true);
     const chosen = scope => Object.fromEntries(Object.entries(candidate[scope]).filter(([id, value]) => !RETIRED_ACTIONS.has(id) && !(recorded && storedDefault(scope, id, value, legacy))));
-    return withDefaults({shortcuts: chosen('shortcuts'), normal: chosen('normal')});
+    return withDefaults({shortcuts: chosen('shortcuts'), normal: chosen('normal'), ...(Object.hasOwn(candidate, 'tabs') ? {tabs: candidate.tabs} : {})});
 }
 function initializeKeybinds(configDir) {
     configurationWarning = '';
@@ -404,7 +357,7 @@ function initializeKeybinds(configDir) {
         console.error('Invalid keyboard configuration; using defaults:', err.message);
         active = keyboard.validateConfig(defaults, ACTION_METADATA).config;
     }
-    compiled = keyboard.compile(active.shortcuts);
+    compiled = keyboard.compile(active.shortcuts, active.tabs);
     return getKeybinds();
 }
 function saveKeybinds(configDir, candidate) {
@@ -420,7 +373,7 @@ function saveKeybinds(configDir, candidate) {
         fs.renameSync(temporary, file);
         active = result.config;
         configurationWarning = '';
-        compiled = keyboard.compile(active.shortcuts);
+        compiled = keyboard.compile(active.shortcuts, active.tabs);
         return {ok: true, config: getKeyboardConfig()};
     } catch (err) {
         try { fs.unlinkSync(temporary); } catch (_) {}
@@ -437,6 +390,6 @@ function getKeyboardConfig() { return {...clone(active), ...(configurationWarnin
 function getKeybinds() { return clone(active.shortcuts); }
 function getActionMetadata() { return clone(ACTION_METADATA); }
 module.exports = {DEFAULT_KEYBINDS, DEFAULT_NORMAL, ACTION_METADATA, initializeKeybinds,
-    saveKeybinds, getActionForInput, getKeybinds, getKeyboardConfig, getActionMetadata,
+    saveKeybinds, getActionForInput, tabModifier: () => active.tabs, getKeybinds, getKeyboardConfig, getActionMetadata,
     getDefaults: () => clone(defaults), resolveKeybinds: raw => initialiseCandidate(raw), normalizeKeyCombination: keyboard.normalise,
     inputEventToKeyCombination: keyboard.eventCombo};

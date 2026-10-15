@@ -191,4 +191,19 @@ console.log('Running Fly pinned tabs regression tests...');
     console.log('✓ Accidental closure guard logic verified');
 }
 
+// Closing must splice each shared session/live array exactly once.
+{
+    const vm = require('node:vm');
+    const source = require('node:fs').readFileSync(require.resolve('../modules/webview.js'), 'utf8');
+    const fn = source.slice(source.indexOf('function removeTabMetadata'), source.indexOf('export function handleTabRemoval'));
+    const sleeping = ['first', 'second', 'third', null];
+    const pinned = [false, true, false, false];
+    const titles = ['one', 'two', 'three', 'four'];
+    const state = {tabSleepStates: {Work: sleeping}, tabPinned: {Work: pinned}, activeTitlesCache: {Work: titles}, sessionState: {tab_sleep_states: {Work: sleeping}, tab_pinned: {Work: pinned}}};
+    vm.runInNewContext(fn + '; removeTabMetadata("Work", 1);', {state});
+    assert.deepEqual(sleeping, ['first', 'third', null]);
+    assert.deepEqual(pinned, [false, false, false]);
+    assert.deepEqual(titles, ['one', 'three', 'four']);
+}
+
 console.log('\nAll pinned tabs & keybind tests passed successfully!\n');

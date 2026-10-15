@@ -8,6 +8,7 @@ const keybinds = require('../keybinds');
 const clone = value => JSON.parse(JSON.stringify(value));
 const defaults = keyboard.validateConfig(keybinds.getDefaults(), keybinds.ACTION_METADATA).config;
 assert(defaults, 'Every shipped default must be valid and conflict-free');
+assert(defaults.shortcuts['focus-sidebar'].includes('Alt+S'), 'Merged defaults retain sidebar focus');
 
 assert.equal(keyboard.normalise('control+shift+a'), 'Ctrl+Shift+A');
 assert.equal(keyboard.normalise('Meta+Ctrl+return'), 'Ctrl+Meta+Enter');
@@ -22,6 +23,11 @@ assert.equal(keyboard.eventCombo({key: 'Dead', ctrlKey: true}), '');
 assert.equal(keyboard.eventCombo({key: 'a', isComposing: true}), '');
 assert.equal(keyboard.eventCombo({key: '@', ctrlKey: true, altKey: true, getModifierState: key => key === 'AltGraph'}), '');
 
+assert.equal(defaults.tabs, 'Alt');
+assert.equal(keyboard.compile(defaults.shortcuts, defaults.tabs).get('Alt+9'), 'tab-9');
+assert.equal(keyboard.validateConfig({...clone(defaults), tabs: 'shift+ctrl'}, keybinds.ACTION_METADATA).config.tabs, 'Ctrl+Shift');
+assert.equal(keyboard.validateConfig({...clone(defaults), tabs: ''}, keybinds.ACTION_METADATA).config.tabs, '');
+assert.match(keyboard.validateConfig({...clone(defaults), shortcuts: {...clone(defaults).shortcuts, 'spawn-tab': ['Alt+3']}}, keybinds.ACTION_METADATA).error, /Select tab by number/);
 for (const mutate of [
     config => { config.shortcuts['spawn-tab'] = 'Ctrl+W'; },
     config => { config.normal['scroll-up'] = 'G'; },
@@ -29,7 +35,11 @@ for (const mutate of [
     config => { config.shortcuts['spawn-tab'] = 'A'; },
     config => { config.normal['scroll-down'] = 'Escape'; },
     config => { config.shortcuts.fake = 'Ctrl+A'; },
-    config => { config.shortcuts['spawn-tab'] = [42]; }
+    config => { config.shortcuts['spawn-tab'] = [42]; },
+    config => { config.tabs = 'Shift'; },
+    config => { config.tabs = 'Alt+5'; },
+    config => { config.tabs = 7; },
+    config => { config.normal['scroll-down'] = ['Alt+1']; }
 ]) {
     const config = clone(defaults); mutate(config);
     assert.equal(keyboard.validateConfig(config, keybinds.ACTION_METADATA).ok, false);
@@ -100,11 +110,31 @@ try {
     keybinds.initializeKeybinds(directory);
     assert.equal(keybinds.getActionForInput({type: 'keyDown', key: 'Tab', control: true}), 'focus-nav-buttons');
     // Bindings for removed actions are dropped instead of rejecting the whole profile.
-    fs.writeFileSync(legacyFile, JSON.stringify({version: 2, changesOnly: true, shortcuts: {'toggle-site-shields': ['Ctrl+Shift+Y'], 'toggle-notes': ['Alt+N'], 'export-reader-to-notes': ['Ctrl+Shift+E'], 'open-notes-external': ['Ctrl+Shift+O'], 'export-reader-to-external': ['Alt+Shift+X'], 'remove-tab': ['Ctrl+Q']}, normal: {}}));
+    fs.writeFileSync(legacyFile, JSON.stringify({version: 2, changesOnly: true, shortcuts: {'toggle-site-shields': ['Ctrl+Shift+Y'], 'toggle-notes': ['Alt+N'], 'export-reader-to-notes': ['Ctrl+Shift+E'], 'open-notes-external': ['Ctrl+Shift+O'], 'export-reader-to-external': ['Alt+Shift+X'], 'jump-to-tab-1': ['Ctrl+Shift+1'], 'remove-tab': ['Ctrl+Q']}, normal: {}}));
     keybinds.initializeKeybinds(directory);
     assert.equal(keybinds.getKeyboardConfig().warning, undefined);
     assert.deepEqual(keybinds.getKeybinds()['remove-tab'], ['Ctrl+Q']);
-    for (const id of ['toggle-site-shields', 'toggle-notes', 'export-reader-to-notes', 'open-notes-external', 'export-reader-to-external']) assert(!Object.hasOwn(keybinds.getKeybinds(), id));
+    for (const id of ['toggle-site-shields', 'toggle-notes', 'export-reader-to-notes', 'open-notes-external', 'export-reader-to-external', 'jump-to-tab-1']) assert(!Object.hasOwn(keybinds.getKeybinds(), id));
+    assert.equal(keybinds.getActionForInput({type: 'keyDown', key: '1', code: 'Digit1', control: true}), null, 'Ctrl+1 is no longer a browser shortcut');
+    // Tab selection is one modifier for all nine digits. Per-number bindings from earlier versions are dropped.
+    fs.writeFileSync(legacyFile, JSON.stringify({version: 2, changesOnly: true, shortcuts: {'tab-2': ['Ctrl+2'], 'tab-9': [], 'remove-tab': ['Ctrl+Q']}, normal: {'tab-1': ['1']}}));
+    keybinds.initializeKeybinds(directory);
+    assert.equal(keybinds.getKeyboardConfig().warning, undefined);
+    assert.equal(keybinds.getKeyboardConfig().tabs, 'Alt');
+    assert.equal(keybinds.getActionForInput({type: 'keyDown', key: '2', code: 'Digit2', control: true}), null);
+    assert.equal(keybinds.getActionForInput({type: 'keyDown', key: '9', code: 'Digit9', alt: true}), 'tab-9');
+    // A binding of yours on a default tab chord turns tab selection off instead of losing the binding.
+    fs.writeFileSync(legacyFile, JSON.stringify({version: 2, changesOnly: true, shortcuts: {'spawn-tab': ['Alt+3']}, normal: {}}));
+    keybinds.initializeKeybinds(directory);
+    assert.equal(keybinds.getKeyboardConfig().warning, undefined);
+    assert.equal(keybinds.getKeyboardConfig().tabs, '');
+    assert.equal(keybinds.getActionForInput({type: 'keyDown', key: '3', code: 'Digit3', alt: true}), 'spawn-tab');
+    // A chosen modifier takes its chords from the defaults.
+    fs.writeFileSync(legacyFile, JSON.stringify({version: 2, changesOnly: true, shortcuts: {}, normal: {}, tabs: 'Ctrl'}));
+    keybinds.initializeKeybinds(directory);
+    assert.equal(keybinds.getActionForInput({type: 'keyDown', key: '4', code: 'Digit4', control: true}), 'tab-4');
+    assert.equal(keybinds.getActionForInput({type: 'keyDown', key: '4', code: 'Digit4', alt: true}), null);
+    assert.deepEqual(keyboard.changesFrom(keybinds.getKeyboardConfig(), defaults), {shortcuts: {}, normal: {}, tabs: 'Ctrl'});
     // A choice that collides with a default takes the chord instead of rejecting the whole profile.
     fs.writeFileSync(legacyFile, JSON.stringify({version: 2, changesOnly: true, shortcuts: {'focus-sidebar': ['Ctrl+PageDown']}, normal: {'trigger-hints': ['G'], 'toggle-find': ['J']}}));
     keybinds.initializeKeybinds(directory);
@@ -210,7 +240,9 @@ keybinds.initializeKeybinds(path.join(os.tmpdir(), 'fly-nonexistent-keyboard-pro
 const mainSource = fs.readFileSync(path.join(__dirname, '..', 'main.js'), 'utf8');
 const nativeHandlers = {}, nativeActions = [], nativeMessages = [];
 const contents = {on: (name, callback) => { nativeHandlers[name] = callback; }, send: (...args) => nativeMessages.push(args)};
-const nativeContext = {keybinds, keyboard, webContents: contents, guestPassthrough: new WeakMap(), guestRightAlt: new WeakMap(), handleAppAction: action => nativeActions.push(action)};
+const tracked = [];
+const nativeContext = {keybinds, keyboard, webContents: contents, guestPassthrough: new WeakMap(), guestRightAlt: new WeakMap(), handleAppAction: action => nativeActions.push(action),
+    tabNumbers: {track: (input, passthrough) => tracked.push([input.key, !!passthrough])}};
 vm.createContext(nativeContext);
 vm.runInContext(mainSource.slice(mainSource.indexOf('        // Native interception'), mainSource.indexOf("        webContents.on('render-process-gone'")), nativeContext);
 function nativePress(key, extra = {}) {
@@ -229,6 +261,7 @@ assert(nativePress('Escape', {shift: true}).consumed);
 assert(nativePress('w', {control: true}).consumed);
 assert(!nativePress('w', {control: true, isComposing: true}).consumed);
 assert(!nativePress('j').consumed, 'Native interception must never consume bare page keys');
+assert.deepEqual(tracked, [['w', false], ['w', false], ['Escape', false], ['w', true], ['Escape', true], ['w', false], ['w', false], ['j', false]], 'Every page key reaches the tab numbers with its passthrough state');
 console.log('Native guest chord and passthrough routing passed.');
 const statusSource = fs.readFileSync(path.join(__dirname, '..', 'modules/statusBar.js'), 'utf8').replace(/^import .*;\n/gm, '').replace(/export /g, '');
 const tabA = {}, tabB = {}, listA = {}, listB = {};

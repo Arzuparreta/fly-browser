@@ -54,8 +54,12 @@
         if (scope !== 'normal') return value;
         return value.split(' ').map(stroke => stroke.length === 1 && stroke.toLowerCase() !== stroke.toUpperCase() ? stroke.toLowerCase() : stroke).join(' ');
     }
-    function compile(table) {
-        const result = new Map();
+    // One modifier chord selects tabs by number: with it, 1–8 select that tab and 9 the last one.
+    function tabChords(tabs) {
+        return tabs ? Array.from({length: 9}, (_, index) => [`${tabs}+${index + 1}`, `tab-${index + 1}`]) : [];
+    }
+    function compile(table, tabs = '') {
+        const result = new Map(tabChords(tabs));
         for (const [action, values] of Object.entries(table)) {
             for (const value of Array.isArray(values) ? values : [values]) if (value) result.set(value, action);
         }
@@ -66,11 +70,14 @@
     }
     function validateConfig(input, metadata) {
         if (!input || input.version !== 2 || typeof input !== 'object') return {ok: false, error: 'Unsupported keyboard configuration.'};
-        const config = {version: 2, shortcuts: {}, normal: {}};
+        // An empty tabs value turns tab selection by number off.
+        const tabs = input.tabs ? normalise(`${input.tabs}+1`).replace(/\+1$/, '') : '';
+        if (input.tabs && !/(^|\+)(Ctrl|Alt|Meta)(\+|$)/.test(tabs)) return {ok: false, error: 'Selecting tabs by number needs Ctrl, Alt or Meta.'};
+        const config = {version: 2, shortcuts: {}, normal: {}, tabs};
         for (const scope of ['shortcuts', 'normal']) {
             const table = input[scope];
             if (!table || typeof table !== 'object' || Array.isArray(table)) return {ok: false, error: `Invalid ${scope} table.`};
-            const occupied = new Map();
+            const occupied = new Map(scope === 'shortcuts' ? tabChords(tabs) : []);
             for (const [id, raw] of Object.entries(table)) {
                 if (!Object.hasOwn(metadata, id)) return {ok: false, error: `Unknown action: ${id}`};
                 const values = raw === '' || raw === null ? [] : Array.isArray(raw) ? raw : [raw];
@@ -88,7 +95,7 @@
                     if (normalised.includes(combo)) continue;
                     for (const [other, owner] of occupied) {
                         if (other === combo || other.startsWith(combo + ' ') || combo.startsWith(other + ' ')) {
-                            return {ok: false, error: `${combo} conflicts with ${metadata[owner].label} (${scope === 'normal' ? 'page keys' : 'browser shortcuts'}).`};
+                            return {ok: false, error: `${combo} conflicts with ${metadata[owner]?.label || 'Select tab by number'} (${scope === 'normal' ? 'page keys' : 'browser shortcuts'}).`};
                         }
                     }
                     occupied.set(combo, id);
@@ -99,7 +106,7 @@
         }
         if (!config.shortcuts['toggle-passthrough']?.length) return {ok: false, error: 'Keep a browser shortcut for passthrough so you can return to NORMAL mode.'};
         // Global chords take precedence; reject page bindings that would never be delivered.
-        const globals = compile(config.shortcuts);
+        const globals = compile(config.shortcuts, tabs);
         for (const values of Object.values(config.normal)) for (const combo of values) {
             if (combo.split(' ').some(stroke => globals.has(stroke))) return {ok: false, error: `${combo} is already a browser shortcut. Remove that assignment first.`};
         }
@@ -111,6 +118,7 @@
         for (const scope of ['shortcuts', 'normal']) for (const [id, values] of Object.entries(config[scope])) {
             if (JSON.stringify(values) !== JSON.stringify(defaults[scope][id] || [])) changes[scope][id] = values;
         }
+        if ((config.tabs || '') !== (defaults.tabs || '')) changes.tabs = config.tabs || '';
         return changes;
     }
     return {normalise, eventCombo, display, compile, repeatable, validateConfig, changesFrom};

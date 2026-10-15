@@ -24,7 +24,6 @@ import {
     moveTabState,
     reopenClosedTab,
     clearClosedTabs,
-    jumpToTabByIndex,
     spawnNewBlankTab, 
     spawnTabWithUrl, 
     handleTabRemoval, 
@@ -665,16 +664,6 @@ function setupEventListeners() {
             case 'toggle-tab-audio-mute': toggleActiveTabAudioMute(); break;
             case 'toggle-global-audio-mute': toggleGlobalAudioMute(); break;
             case 'toggle-pin-tab': togglePinActiveTab(); break;
-            case 'jump-to-tab-1': jumpToTabByIndex(1); break;
-            case 'jump-to-tab-2': jumpToTabByIndex(2); break;
-            case 'jump-to-tab-3': jumpToTabByIndex(3); break;
-            case 'jump-to-tab-4': jumpToTabByIndex(4); break;
-            case 'jump-to-tab-5': jumpToTabByIndex(5); break;
-            case 'jump-to-tab-6': jumpToTabByIndex(6); break;
-            case 'jump-to-tab-7': jumpToTabByIndex(7); break;
-            case 'jump-to-tab-8': jumpToTabByIndex(8); break;
-            case 'jump-to-tab-9': jumpToTabByIndex(9); break;
-            case 'jump-to-tab': jumpToTabByIndex(args[0]); break;
             case 'toggle-split': toggleSplitView(); break;
             case 'switch-split-focus': switchSplitFocus(); break;
             case 'swap-split-panes': swapSplitPanes(); break;
@@ -847,8 +836,8 @@ function setupEventListeners() {
     window.addEventListener('blur', () => { pageStroke = ''; });
     window.addEventListener('focusin', () => { pageStroke = ''; });
     const applyKeyboardConfig = config => {
-        keyboardActions = new Set(Object.keys(config.shortcuts));
-        browserKeys = window.FlyKeyboard.compile(config.shortcuts);
+        browserKeys = window.FlyKeyboard.compile(config.shortcuts, config.tabs);
+        keyboardActions = new Set([...Object.keys(config.shortcuts), ...browserKeys.values()]);
         pageKeys = window.FlyKeyboard.compile(config.normal);
         pagePrefixes = new Set([...pageKeys.keys()].filter(key => key.includes(' ')).map(key => key.split(' ')[0]));
         pageStroke = '';
@@ -1055,17 +1044,9 @@ function setupEventListeners() {
             event.preventDefault();
             switchTabFocus(index);
             if (event.target === sidebar) focusActiveWebview();
-        } else if (!event.ctrlKey && !event.altKey && !event.metaKey && !event.shiftKey && /^[1-9]$/.test(event.key)) {
-            event.preventDefault(); jumpToTabByIndex(Number(event.key));
         }
     });
-    window.addEventListener('keydown', event => {
-        if (event.key === 'Control') document.body.classList.add('show-tab-badges');
-    });
-    window.addEventListener('keyup', event => {
-        if (event.key === 'Control') document.body.classList.remove('show-tab-badges');
-    });
-    window.addEventListener('blur', () => document.body.classList.remove('show-tab-badges'));
+    window.flyAPI.onTabNumbers(shown => document.body.classList.toggle('show-tab-numbers', shown));
 
     const findInput = document.getElementById('FindInput');
     if (findInput) {
