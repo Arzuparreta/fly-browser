@@ -20,6 +20,13 @@ const altUp = key('keyUp', 'Alt', 'AltLeft');
     shortcuts['tab-9'].push('F2');
     assert.equal(keybinds.saveKeybinds(directory, {version: 2, shortcuts: {...keybinds.getKeybinds(), ...shortcuts}, normal: keybinds.getKeyboardConfig().normal}).ok, true);
     assert.deepEqual([...keybinds.tabNumberModifiers()], ['Ctrl+Shift'], 'Rebound shortcuts move the numbers to their modifier; function keys have none');
+    const config = () => ({version: 2, shortcuts: {...keybinds.getKeybinds(), ...shortcuts}, normal: keybinds.getKeyboardConfig().normal});
+    shortcuts['tab-2'] = ['Ctrl+Alt+2'];
+    assert.equal(keybinds.saveKeybinds(directory, config()).ok, true);
+    assert.deepEqual([...keybinds.tabNumberModifiers()], [], 'A modifier only some tab shortcuts use shows no numbers');
+    shortcuts['tab-2'] = ['Ctrl+Alt+2', 'Ctrl+Shift+2'];
+    assert.equal(keybinds.saveKeybinds(directory, config()).ok, true);
+    assert.deepEqual([...keybinds.tabNumberModifiers()], ['Ctrl+Shift']);
 
     let modifiers = new Set(['Alt']);
     const sent = [];

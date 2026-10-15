@@ -416,10 +416,12 @@ function getActionForInput(input, includeRepeat = false) {
     if (!includeRepeat && input.isAutoRepeat && !keyboard.repeatable(action)) return null;
     return action || null;
 }
-// Modifier chords of the tab selection shortcuts (Alt by default); holding one shows the tab numbers.
+// Modifier chords shared by all nine tab selection shortcuts (Alt by default); holding one shows the
+// tab numbers. A modifier only some of them use would advertise numbers that go to the page.
 function tabNumberModifiers() {
-    const combos = Array.from({length: 9}, (_, index) => active.shortcuts[`tab-${index + 1}`] || []).flat();
-    return new Set(combos.map(combo => combo.split('+').slice(0, -1).join('+')).filter(Boolean));
+    const [first, ...rest] = Array.from({length: 9}, (_, index) => new Set((active.shortcuts[`tab-${index + 1}`] || [])
+        .map(combo => combo.split('+').slice(0, -1).join('+')).filter(Boolean)));
+    return new Set([...first].filter(modifier => rest.every(modifiers => modifiers.has(modifier))));
 }
 function getKeyboardConfig() { return {...clone(active), ...(configurationWarning ? {warning: configurationWarning} : {})}; }
 function getKeybinds() { return clone(active.shortcuts); }
