@@ -49,6 +49,7 @@ const extensions = require('./extensions');
 const diagnostics = require('./diagnostics');
 const { createDesktopIntegration } = require('./desktopIntegration');
 const { downloadAndReplace, restartInto } = require('./appImageUpdate');
+const { createWorkspacePartitions } = require('./workspacePartitions');
 
 // NATIVE CONFIG UTILITIES
 const CONFIG_DIR = path.join(app.getPath('home'), '.config', 'fly-browser');
@@ -382,11 +383,11 @@ function sendSystemNotification(title, body) {
 
 let globalNotificationsEnabled = true;
 
-// Generates a filesystem-safe persistent container partition string for a workspace
+const workspacePartitions = createWorkspacePartitions(path.join(app.getPath('userData'), 'Partitions'));
+
+// The persistent partition the session assigned to a workspace, or null for an unknown name
 function getWorkspacePartition(workspaceName) {
-    if (!workspaceName) return 'persist:default';
-    const clean = String(workspaceName).trim().toLowerCase().replace(/[^a-z0-9_-]/gi, '-').replace(/-+/g, '-').replace(/^-|-$/g, '');
-    return `persist:${clean || 'default'}`;
+    return workspacePartitions.get(workspaceName);
 }
 
 function getSessionForContext(context) {
@@ -396,7 +397,8 @@ function getSessionForContext(context) {
     if (context && typeof context === 'object') {
         if (context.isPrivate) return session.fromPartition('FlyPrivateProfile');
         if (context.partition) return session.fromPartition(context.partition);
-        if (context.workspace) return session.fromPartition(getWorkspacePartition(context.workspace));
+        const workspacePartition = context.workspace && getWorkspacePartition(context.workspace);
+        if (workspacePartition) return session.fromPartition(workspacePartition);
     }
     if (context === true) return session.fromPartition('FlyPrivateProfile');
     return session.defaultSession;
@@ -1081,6 +1083,10 @@ ipcMain.handle('get-workspace-partition', (event, name) => {
     return getWorkspacePartition(name);
 });
 
+ipcMain.handle('allocate-workspace-partition', (event, name) => {
+    return workspacePartitions.allocate(name);
+});
+
 ipcMain.on('toggle-active-devtools', () => {
     if (!mainWindow) return;
     mainWindow.webContents.send('master-shortcut', 'toggle-devtools');
@@ -1265,39 +1271,8 @@ ipcMain.handle('get-session-recovery-status', async () => {
     return { wasCrash: isCrashRecovery };
 });
 
-ipcMain.handle('get-session', async () => {
+function writeSession(sessionData) {
     try {
-        if (fs.existsSync(sessionPath)) {
-            const raw = fs.readFileSync(sessionPath, 'utf8');
-            const parsed = JSON.parse(raw);
-            if (parsed && typeof parsed.workspaces === 'object' && parsed.current_workspace) {
-                return parsed;
-            }
-        }
-    } catch (err) {
-        diagnostics.logEvent('warn', 'session', 'Failed to parse primary session file, attempting recovery from backup', { error: err.message });
-    }
-
-    // Resilient fallback: attempt recovery from rolling backup journal
-    try {
-        if (fs.existsSync(sessionBackupPath)) {
-            const rawBackup = fs.readFileSync(sessionBackupPath, 'utf8');
-            const parsedBackup = JSON.parse(rawBackup);
-            if (parsedBackup && typeof parsedBackup.workspaces === 'object' && parsedBackup.current_workspace) {
-                diagnostics.logEvent('info', 'session', 'Successfully recovered session state from session.json.bak');
-                return parsedBackup;
-            }
-        }
-    } catch (backupErr) {
-        diagnostics.logEvent('error', 'session', 'Failed to recover session from backup', { error: backupErr.message });
-    }
-
-    return { current_workspace: "Workspace 1", workspaces: { "Workspace 1": ["about:blank"] } };
-});
-
-ipcMain.handle('save-session', async (event, sessionData) => {
-    try {
-        if (!sessionData || typeof sessionData !== 'object') return false;
         const dir = path.dirname(sessionPath);
         if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
 
@@ -1321,6 +1296,51 @@ ipcMain.handle('save-session', async (event, sessionData) => {
         diagnostics.logEvent('error', 'session', 'Failed to save session atomically', { error: err.message });
         return false;
     }
+}
+
+// Gives every workspace its own partition. A changed assignment is written at once, so a
+// workspace keeps the partition it was given even if nothing else saves the session.
+function withWorkspacePartitions(sessionData) {
+    if (workspacePartitions.load(sessionData)) writeSession(sessionData);
+    return sessionData;
+}
+
+ipcMain.handle('get-session', async () => {
+    try {
+        if (fs.existsSync(sessionPath)) {
+            const raw = fs.readFileSync(sessionPath, 'utf8');
+            const parsed = JSON.parse(raw);
+            if (parsed && typeof parsed.workspaces === 'object' && parsed.current_workspace) {
+                return withWorkspacePartitions(parsed);
+            }
+        }
+    } catch (err) {
+        diagnostics.logEvent('warn', 'session', 'Failed to parse primary session file, attempting recovery from backup', { error: err.message });
+    }
+
+    // Resilient fallback: attempt recovery from rolling backup journal
+    try {
+        if (fs.existsSync(sessionBackupPath)) {
+            const rawBackup = fs.readFileSync(sessionBackupPath, 'utf8');
+            const parsedBackup = JSON.parse(rawBackup);
+            if (parsedBackup && typeof parsedBackup.workspaces === 'object' && parsedBackup.current_workspace) {
+                diagnostics.logEvent('info', 'session', 'Successfully recovered session state from session.json.bak');
+                return withWorkspacePartitions(parsedBackup);
+            }
+        }
+    } catch (backupErr) {
+        diagnostics.logEvent('error', 'session', 'Failed to recover session from backup', { error: backupErr.message });
+    }
+
+    const freshSession = { current_workspace: "Workspace 1", workspaces: { "Workspace 1": ["about:blank"] } };
+    workspacePartitions.load(freshSession);
+    return freshSession;
+});
+
+ipcMain.handle('save-session', async (event, sessionData) => {
+    if (!sessionData || typeof sessionData !== 'object') return false;
+    workspacePartitions.save(sessionData);
+    return writeSession(sessionData);
 });
 
 ipcMain.handle('search-history', async (event, query) => {
@@ -1779,8 +1799,11 @@ function createWindow() {
         if (!initialSession && fs.existsSync(sessionBackupPath)) {
             try { initialSession = JSON.parse(fs.readFileSync(sessionBackupPath, 'utf8')); } catch (e) {}
         }
-        const activeWs = (initialSession && initialSession.current_workspace) || 'default';
-        configureAndHardenSession(session.fromPartition(getWorkspacePartition(activeWs)));
+        if (initialSession && typeof initialSession === 'object') {
+            workspacePartitions.load(initialSession);
+            const activePartition = getWorkspacePartition(initialSession.current_workspace);
+            if (activePartition) configureAndHardenSession(session.fromPartition(activePartition));
+        }
     } catch (err) {
         console.error('Failed to initialise active workspace session:', err);
     }

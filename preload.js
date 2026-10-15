@@ -47,6 +47,7 @@ contextBridge.exposeInMainWorld('flyAPI', {
     getActionMetadata: () => ipcRenderer.invoke('get-action-metadata'),
     reloadKeybinds: () => ipcRenderer.invoke('reload-keybinds'),
     getWorkspacePartition: (name) => ipcRenderer.invoke('get-workspace-partition', name),
+    allocateWorkspacePartition: (name) => ipcRenderer.invoke('allocate-workspace-partition', name),
     flushSessionStore: (context) => ipcRenderer.invoke('flush-session-store', context),
     onDownloadStarted: (callback) => {
         const handler = (event, data) => callback(data);

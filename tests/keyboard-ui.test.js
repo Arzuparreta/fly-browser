@@ -126,6 +126,7 @@ const root = path.resolve(__dirname, '..');
   await page.evaluate(()=>window.executeBrowserAction('new-workspace'));
   await page.locator('#NewWorkspaceTitleInput').fill('Transfer target');
   await page.locator('#NewWorkspaceTitleInput').press('Enter');
+  await page.locator('#WorkspaceInputBox').waitFor({state:'hidden'});
   await page.evaluate(()=>{window.executeBrowserAction('previous-workspace'); window.executeBrowserAction('tab-9');});
   await page.evaluate(()=>window.executeBrowserAction('move-tab-to-workspace'));
   await page.locator('#WorkspaceMoveDialog').waitFor({state:'visible'});

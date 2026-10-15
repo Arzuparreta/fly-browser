@@ -64,11 +64,10 @@ export function removeWebview(view) {
     view.remove();
 }
 
-// Generates a filesystem-safe persistent container partition string for a workspace
+// The persistent partition the session assigned to a workspace. Main assigns one to every
+// workspace it loads and to every workspace created since (workspacePartitions.js).
 export function getWorkspacePartition(workspaceName) {
-    if (!workspaceName) return 'persist:default';
-    const clean = String(workspaceName).trim().toLowerCase().replace(/[^a-z0-9_-]/gi, '-').replace(/-+/g, '-').replace(/^-|-$/g, '');
-    return `persist:${clean || 'default'}`;
+    return state.sessionState.workspace_partitions?.[workspaceName];
 }
 
 export function isPdfUrl(url) {

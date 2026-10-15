@@ -28,11 +28,13 @@ export function renameWorkspace(oldName, newName) {
     const trimmed = newName ? newName.trim() : '';
     if (!trimmed || trimmed === oldName || state.sessionState.workspaces[trimmed]) return;
 
-    // Migrate workspace tabs and references
+    // Migrate workspace tabs and references. The workspace keeps its partition and logins.
     state.sessionState.workspaces[trimmed] = state.sessionState.workspaces[oldName];
     delete state.sessionState.workspaces[oldName];
+    state.sessionState.workspace_partitions[trimmed] = state.sessionState.workspace_partitions[oldName];
+    delete state.sessionState.workspace_partitions[oldName];
 
-    // Dispose cached webviews so they are re-created with the new container partition
+    // Dispose cached webviews so they are re-created under the new workspace name
     if (state.activeViewsCache[oldName]) {
         state.activeViewsCache[oldName].forEach(wv => { if (wv) wv.remove(); });
         delete state.activeViewsCache[oldName];
@@ -108,6 +110,7 @@ export function deleteWorkspace(wsName) {
     if (state.sessionState.tab_titles?.[wsName]) delete state.sessionState.tab_titles[wsName];
     if (state.sessionState.tab_sleep_states?.[wsName]) delete state.sessionState.tab_sleep_states[wsName];
     delete state.sessionState.workspaces[wsName];
+    delete state.sessionState.workspace_partitions?.[wsName];
     
     window.flyAPI.saveSession(state.sessionState);
     renderWorkspaceUI();
@@ -383,12 +386,15 @@ export function hideWorkspaceInputDialog() {
     else focusActiveWebview();
 }
 
-export function processWorkspaceCreation() {
+export async function processWorkspaceCreation() {
     const input = document.getElementById('NewWorkspaceTitleInput');
     const name = input.value.trim();
     if (!name) return;
 
-    if (!state.sessionState.workspaces[name]) {
+    // A new workspace never shares a partition, even with a deleted workspace of a similar name
+    const partition = state.sessionState.workspaces[name] ? null : await window.flyAPI.allocateWorkspacePartition(name);
+    if (partition && !state.sessionState.workspaces[name]) {
+        state.sessionState.workspace_partitions[name] = partition;
         state.sessionState.workspaces[name] = [];
         state.sessionState.current_workspace = name;
         window.flyAPI.saveSession(state.sessionState);
