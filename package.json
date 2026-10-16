@@ -1,6 +1,6 @@
 {
   "name": "fly-browser",
-  "version": "0.24.0",
+  "version": "0.24.1",
   "description": "A small, minimal Linux browser with full keyboard control and a polished experience for mouse users.",
   "main": "main.js",
   "desktopName": "fly-browser.desktop",
