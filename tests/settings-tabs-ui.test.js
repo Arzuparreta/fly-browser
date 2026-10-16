@@ -60,6 +60,17 @@ const root = path.resolve(__dirname, '..');
         await page.evaluate(() => window.executeBrowserAction('remove-tab'));
         await page.locator('#PreferencesOverlay').waitFor({ state: 'visible' });
 
+        // All generic creation paths preserve the one-settings-tab invariant.
+        await page.evaluate(async () => {
+            const tabs = await import('./modules/webview.js');
+            tabs.spawnTabWithUrl('fly://settings#extensions');
+        });
+        assert.equal(await settingsTab().count(), 1, 'Duplicate reuses the existing settings tab');
+        await page.evaluate(() => window.executeBrowserAction('remove-tab'));
+        await page.evaluate(() => window.openPreferencesPane('extensions'));
+        await page.evaluate(async () => (await import('./modules/webview.js')).reopenClosedTab());
+        assert.equal(await settingsTab().count(), 1, 'Reopen reuses the existing settings tab');
+
         // Embedded options are a dialog above the same settings tab.
         await page.locator('.ext-options-btn[data-folder="embedded"]').click();
         await page.locator('.extension-options-overlay [role="dialog"]').waitFor();
@@ -80,6 +91,18 @@ const root = path.resolve(__dirname, '..');
         await page.locator('.ext-options-btn[data-folder="embedded"]').click();
         await page.locator('.extension-options-close').click();
         await page.locator('#ExtensionPopupOverlay').waitFor({ state: 'detached' });
+
+        await page.locator('.ext-options-btn[data-folder="embedded"]').click();
+        await page.locator('#ExtensionPopupOverlay').waitFor();
+        await page.evaluate(async () => (await import('./modules/webview.js')).switchTabFocus(0));
+        await page.locator('#ExtensionPopupOverlay').waitFor({ state: 'detached' });
+        await settingsTab().click();
+        await page.locator('.ext-options-btn[data-folder="embedded"]').click();
+        await page.locator('#ExtensionPopupOverlay').waitFor();
+        await page.evaluate(async () => (await import('./modules/navigation.js')).handleNavigation('ws Other'));
+        await page.locator('#ExtensionPopupOverlay').waitFor({ state: 'detached' });
+        await page.evaluate(async () => (await import('./modules/navigation.js')).handleNavigation('ws Work'));
+        await settingsTab().click();
 
         // Switching away and back retains the selected pane, including after restarting.
         await page.locator('#SettingsTab-privacy').click();
