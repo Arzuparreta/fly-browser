@@ -282,3 +282,28 @@ console.log('All extension support tests passed.');
     assert.deepEqual(navigations, ['https://typed.example/']);
     console.log('Startup navigation waits for filtering, preserves the latest address and leaves closed views alone.');
 })().catch(error => {console.error(error); process.exitCode = 1;});
+
+// Toolbar actions without a popup open options, including extensions with no options page.
+(async () => {
+    const vm = require('node:vm');
+    const source = fs.readFileSync(path.join(__dirname, '../modules/extensions.js'), 'utf8');
+    const start = source.indexOf('export async function activateExtension');
+    const end = source.indexOf('\nfunction showStatusNote', start);
+    const opened = [];
+    let installed = [{ id: 'fixture', optionsPage: 'settings.html' }];
+    const context = {
+        currentPartition: () => 'persist:work',
+        window: { flyAPI: { extensionsActivate: async () => ({ kind: 'options' }) } },
+        ensureInstalledCache: async () => installed,
+        closeExtensionPopup: () => {},
+        openExtensionOptions: info => opened.push(info.optionsPage),
+        openExtensionsPreferences: () => opened.push('preferences'),
+        refreshStatusBarActions: () => {}, setTimeout: () => {}
+    };
+    vm.createContext(context);
+    vm.runInContext(source.slice(start, end).replace('export ', ''), context);
+    await context.activateExtension('fixture');
+    installed = [{ id: 'fixture' }];
+    await context.activateExtension('fixture');
+    assert.deepEqual(opened, ['settings.html', 'preferences']);
+})().catch(error => { console.error(error); process.exitCode = 1; });

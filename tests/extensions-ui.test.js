@@ -88,8 +88,25 @@ const root = path.resolve(__dirname, '..');
         await page.locator('#StatusBarExtensions button').click();
         await page.locator('#ExtensionPopupOverlay').waitFor({ state: 'visible' });
         await page.waitForFunction(() => document.activeElement === document.querySelector('#ExtensionPopupOverlay webview'));
+        await page.waitForFunction(() => {
+            const popup = document.querySelector('.extension-popup');
+            const guest = popup.querySelector('webview');
+            const bounds = popup.getBoundingClientRect();
+            const content = guest.getBoundingClientRect();
+            return bounds.width >= 200 && bounds.height >= 60 &&
+                bounds.width >= content.width && bounds.height >= content.height &&
+                bounds.top >= 0 && bounds.right <= innerWidth &&
+                document.elementFromPoint(content.x + 10, content.y + 10) === guest;
+        });
+        await waitUntil(async () => page.evaluate(() => document.querySelector('#ExtensionPopupOverlay webview')
+            .executeJavaScript("document.body.innerText.length > 10")));
         await page.evaluate(() => document.querySelector('#ExtensionPopupOverlay webview').sendInputEvent({ type: 'keyDown', keyCode: 'Escape' }));
         await page.locator('#ExtensionPopupOverlay').waitFor({ state: 'detached' });
+        await backgroundScript("chrome.browserAction.setPopup({ popup: '' })");
+        await page.locator('#StatusBarExtensions button').click();
+        await waitUntil(async () => page.evaluate(() => [...document.querySelectorAll('#webview-container webview')]
+            .some(guest => guest.getAttribute('src')?.includes('/dashboard.html'))));
+        assert.equal(await page.locator('#ExtensionPopupOverlay').count(), 0, 'An action without a popup opens its options in a tab');
         await page.evaluate(target => document.querySelector('#webview-container webview').setAttribute('src', target + 'document'), url);
         await waitUntil(async () => page.evaluate(() => document.querySelector('#webview-container webview').getURL().includes('/assets/pdfjs/viewer.html')));
         await page.evaluate(target => document.querySelector('#webview-container webview').setAttribute('src', target), url);
