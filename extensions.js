@@ -174,6 +174,7 @@ function describeExtension(folder, extPath) {
         hasAction: !!action,
         hasPopup: !!(action && action.default_popup),
         optionsPage,
+        optionsOpenInTab: manifest.options_ui ? manifest.options_ui.open_in_tab === true : true,
         commands,
         warnings: collectWarnings(manifest),
         icon: readIconDataUrl(extPath, pickIconPath(manifest))
@@ -309,6 +310,7 @@ function createController(workspace, partition) {
         loaded: new Map(),
         errors: {},
         tabs: new Set(),
+        popups: new Set(),
         activeTabId: null,
         graceTimer: null,
         pendingCreates: [],
@@ -432,10 +434,10 @@ function cancelGrace(ctrl) {
 }
 
 function scheduleUnload(ctrl) {
-    if (ctrl.graceTimer || ctrl.loaded.size === 0) return;
+    if (ctrl.graceTimer || ctrl.loaded.size === 0 || ctrl.popups.size > 0) return;
     ctrl.graceTimer = setTimeout(() => {
         ctrl.graceTimer = null;
-        if (ctrl.tabs.size === 0) {
+        if (ctrl.tabs.size === 0 && ctrl.popups.size === 0) {
             enqueue(ctrl, () => unloadAll(ctrl, 'no live tabs'));
         }
     }, getGraceMs(getConfig()));
@@ -573,7 +575,7 @@ async function ensureForWorkspace(workspace, partition) {
 
     await enqueue(ctrl, () => syncController(ctrl, wanted));
     // Protects against a tab that never attaches; attaching cancels it again
-    if (ctrl.tabs.size === 0) scheduleUnload(ctrl);
+    if (ctrl.tabs.size === 0 && ctrl.popups.size === 0) scheduleUnload(ctrl);
     return { active: ctrl.loaded.size > 0, count: ctrl.loaded.size };
 }
 
@@ -596,7 +598,7 @@ function attachTabWebContents(wc) {
     wc.once('destroyed', () => {
         ctrl.tabs.delete(id);
         if (ctrl.activeTabId === id) ctrl.activeTabId = null;
-        if (ctrl.tabs.size === 0) scheduleUnload(ctrl);
+        if (ctrl.tabs.size === 0 && ctrl.popups.size === 0) scheduleUnload(ctrl);
     });
 
     const pending = ctrl.pendingCreates.shift();
@@ -644,10 +646,27 @@ function resolveActionTarget(extensionId, partition) {
     return { kind: 'options' };
 }
 
+function resolveOptionsTarget(extensionId, partition) {
+    const ctrl = controllers.get(partition);
+    const loaded = ctrl && findLoaded(ctrl, extensionId);
+    if (!loaded) return { error: 'Extension is not loaded in this workspace' };
+    const info = describeExtension(loaded.folder, path.join(extensionsDir, loaded.folder));
+    if (!info.optionsPage) return { kind: 'preferences' };
+    const url = new URL(info.optionsPage, `chrome-extension://${extensionId}/`).href;
+    if (!url.startsWith(`chrome-extension://${extensionId}/`)) return { error: 'Invalid extension options page' };
+    if (!info.optionsOpenInTab) openPopup = { partition, extensionId, url };
+    return { kind: info.optionsOpenInTab ? 'tab' : 'embedded', url, partition, name: info.name };
+}
+
 function attachPopupWebContents(wc) {
+    const attachedPopup = openPopup;
     popupWebContents.add(wc.id);
     const ctrl = controllerForSession(wc.session);
-    if (ctrl && ctrl.tabs.has(wc.id)) ctrl.tabs.delete(wc.id);
+    if (ctrl) {
+        ctrl.tabs.delete(wc.id);
+        ctrl.popups.add(wc.id);
+        cancelGrace(ctrl);
+    }
     wc.on('before-input-event', (event, input) => {
         if (input.type === 'keyDown' && input.key === 'Escape') {
             event.preventDefault();
@@ -657,7 +676,11 @@ function attachPopupWebContents(wc) {
     const id = wc.id;
     wc.once('destroyed', () => {
         popupWebContents.delete(id);
-        openPopup = null;
+        if (ctrl) {
+            ctrl.popups.delete(id);
+            if (ctrl.tabs.size === 0 && ctrl.popups.size === 0) scheduleUnload(ctrl);
+        }
+        if (openPopup === attachedPopup) openPopup = null;
     });
     return true;
 }
@@ -917,6 +940,7 @@ function initializeExtensions(options) {
     ipcMain.handle('extensions-ensure', guard((workspace, partition) => ensureForWorkspace(String(workspace || ''), String(partition || ''))));
     ipcMain.handle('extensions-rename-workspace', guard((from, to) => renameWorkspace(String(from), String(to))));
     ipcMain.on('extensions-tab-focused', (event, wcId) => { if (fromMainWindow(event)) focusTab(wcId); });
+    ipcMain.handle('extensions-options', guard((extensionId, partition) => resolveOptionsTarget(String(extensionId), String(partition))));
     ipcMain.handle('extensions-activate', guard((extensionId, partition) => resolveActionTarget(String(extensionId), String(partition))));
     ipcMain.handle('extensions-run-command', guard((extensionId, partition, name) => runCommand(String(extensionId), String(partition), String(name))));
     ipcMain.handle('extensions-get-actions', guard((partition) => getActionStates(String(partition))));

@@ -84,6 +84,15 @@ function writeExtension(folder, manifest, files = {}) {
     assert.strictEqual(info.background, 'worker');
     assert.strictEqual(info.hasPopup, true);
     assert.strictEqual(info.optionsPage, 'options.html');
+    assert.strictEqual(info.optionsOpenInTab, false, 'Options embed by default when options_ui omits open_in_tab');
+    const tabManifest = JSON.parse(fs.readFileSync(path.join(dir, 'manifest.json'), 'utf8'));
+    tabManifest.options_ui.open_in_tab = true;
+    fs.writeFileSync(path.join(dir, 'manifest.json'), JSON.stringify(tabManifest));
+    assert.strictEqual(extensions.describeExtension('sample', dir).optionsOpenInTab, true);
+    delete tabManifest.options_ui;
+    tabManifest.options_page = 'options.html';
+    fs.writeFileSync(path.join(dir, 'manifest.json'), JSON.stringify(tabManifest));
+    assert.strictEqual(extensions.describeExtension('sample', dir).optionsOpenInTab, true, 'Legacy options_page uses a tab');
     assert.deepStrictEqual(info.commands, [{ name: 'toggle', description: 'Toggle it' }], 'reserved _execute_ commands are hidden');
     assert(info.warnings.some(w => w.includes('declarativeNetRequest')), 'unsupported DNR is flagged');
     assert(info.icon && info.icon.startsWith('data:image/png;base64,'), 'icon picks the 32px entry');
@@ -292,6 +301,7 @@ console.log('All extension support tests passed.');
     const opened = [];
     let installed = [{ id: 'fixture', optionsPage: 'settings.html' }];
     const context = {
+        state: { sessionState: { current_workspace: 'Work' } },
         currentPartition: () => 'persist:work',
         window: { flyAPI: { extensionsActivate: async () => ({ kind: 'options' }) } },
         ensureInstalledCache: async () => installed,
@@ -306,4 +316,53 @@ console.log('All extension support tests passed.');
     installed = [{ id: 'fixture' }];
     await context.activateExtension('fixture');
     assert.deepEqual(opened, ['settings.html', 'preferences']);
+    let release;
+    context.window.flyAPI.extensionsActivate = () => new Promise(resolve => { release = resolve; });
+    const pendingActivation = context.activateExtension('fixture');
+    context.state.sessionState.current_workspace = 'Other';
+    release({ kind: 'options' });
+    await pendingActivation;
+    assert.equal(context.state.sessionState.current_workspace, 'Other', 'A delayed click never changes workspace');
+    assert.deepEqual(opened, ['settings.html', 'preferences'], 'A delayed click never opens UI in the newly selected workspace');
+    context.state.sessionState.current_workspace = 'Work';
+    context.window.flyAPI.extensionsActivate = async () => ({ kind: 'options' });
+    context.ensureInstalledCache = () => new Promise(resolve => { release = resolve; });
+    release = null;
+    const pendingScan = context.activateExtension('fixture');
+    await new Promise(setImmediate);
+    assert.equal(typeof release, 'function');
+    context.state.sessionState.current_workspace = 'Other';
+    release([{ id: 'fixture', optionsPage: 'settings.html' }]);
+    await pendingScan;
+    assert.deepEqual(opened, ['settings.html', 'preferences'], 'Changing workspace during the metadata scan also cancels opening');
+})().catch(error => { console.error(error); process.exitCode = 1; });
+
+// An options IPC arriving after a workspace switch must have no side effects.
+(async () => {
+    const vm = require('node:vm');
+    const source = fs.readFileSync(path.join(__dirname, '../modules/extensions.js'), 'utf8');
+    const start = source.indexOf('async function openExtensionOptions');
+    const end = source.indexOf('// PREFERENCES', start);
+    for (const kind of ['tab', 'embedded', 'preferences']) {
+        let release;
+        const opened = [];
+        const context = {
+            state: { sessionState: { current_workspace: 'Work', workspaces: { Work: [], Other: [] } } },
+            currentPartition: () => `persist:${context.state.sessionState.current_workspace}`,
+            closeExtensionPopup: () => {},
+            window: { flyAPI: { extensionsEnsure: async () => {}, extensionsOptions: () => new Promise(resolve => { release = resolve; }) } },
+            showPopup: () => opened.push('popup'), spawnTabWithUrl: () => opened.push('tab'),
+            openExtensionsPreferences: () => opened.push('preferences'), showStatusNote: () => opened.push('note')
+        };
+        vm.createContext(context);
+        vm.runInContext(source.slice(start, end), context);
+        const pending = context.openExtensionOptions({ id: 'fixture' });
+        await new Promise(setImmediate);
+        assert.equal(typeof release, 'function');
+        context.state.sessionState.current_workspace = 'Other';
+        release({ kind, url: 'chrome-extension://fixture/options.html' });
+        await pending;
+        assert.equal(context.state.sessionState.current_workspace, 'Other');
+        assert.deepEqual(opened, [], `${kind} options cannot open after switching workspace`);
+    }
 })().catch(error => { console.error(error); process.exitCode = 1; });

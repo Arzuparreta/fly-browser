@@ -1,3 +1,4 @@
+import { isSettingsTab } from './settingsTab.js';
 // modules/splitView.js
 // Dual-split view controller for side-by-side (1x2) or stacked comparison
 
@@ -33,6 +34,7 @@ export function applySplitLayout() {
     const urls = state.sessionState.workspaces[currentWS] || [];
     const currentWSViews = state.activeViewsCache[currentWS] || [];
 
+    if (isSettingsTab(urls[split.primaryIdx]) || isSettingsTab(urls[split.secondaryIdx])) split.enabled = false;
     if (!split.enabled || urls.length < 2 || state.dashboardActive) {
         const leavingSplit = !!container?.classList.contains('split-active');
         if (container) {

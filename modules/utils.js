@@ -46,6 +46,13 @@ export function getActiveWebview() {
 
 export function focusActiveWebview() {
     if (isOverlayTransition()) return;
+    const selectedIndex = [...document.querySelectorAll('#TabList li')].findIndex(tab => tab.classList.contains('selected'));
+    const selectedUrl = state.sessionState.workspaces[state.sessionState.current_workspace]?.[selectedIndex];
+    if (selectedUrl === 'fly://settings' || selectedUrl?.startsWith('fly://settings#')) {
+        window.setPreferencesTabVisible?.(true, selectedUrl);
+        document.querySelector('#SettingsIndex [aria-selected="true"]')?.focus({preventScroll: true});
+        return;
+    }
     const currentWS = state.sessionState.current_workspace;
     const activeListItem = document.querySelector('#TabList li.selected');
     if (activeListItem) {

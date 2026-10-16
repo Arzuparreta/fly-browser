@@ -4453,3 +4453,22 @@ body.light-mode .sidebar-content::before { background-image: url('assets/identit
 @media (prefers-reduced-motion: reduce) {
     .status-zoom { transition: none; }
 }
+
+/* Embedded extension options retain their parent settings tab underneath. */
+.extension-options-overlay {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: rgb(0 0 0 / 35%) !important;
+}
+.extension-options-overlay .extension-popup {
+    position: relative;
+    flex-direction: column;
+    max-width: calc(100vw - 26px);
+    max-height: calc(100vh - 26px);
+}
+.extension-options-close {
+    align-self: flex-end;
+    margin: 6px;
+    padding: 4px 12px;
+}

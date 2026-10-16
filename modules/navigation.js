@@ -1,3 +1,4 @@
+import { isSettingsTab } from './settingsTab.js';
 import { prepareOverlay } from './focus.js';
 import { state } from './state.js';
 import { escapeHtml, focusActiveWebview, getActiveWebview, isPdfUrl, getPdfViewerUrl } from './utils.js';
@@ -70,6 +71,7 @@ function applyTargetUrl(targetUrl) {
 
     const currentIdx = Array.from(document.querySelectorAll('#TabList li')).indexOf(activeListItem);
 
+    const wasSettings = isSettingsTab(state.sessionState.workspaces[currentWS][currentIdx]);
     state.sessionState.workspaces[currentWS][currentIdx] = targetUrl;
     window.flyAPI.saveSession(state.sessionState);
 
@@ -81,6 +83,7 @@ function applyTargetUrl(targetUrl) {
         ensureTabLoaded(currentWS, currentIdx);
     }
 
+    if (wasSettings) renderWorkspaceUI(currentIdx);
     hideSuggestions();
     const addressBar = document.getElementById('WideAddressBar');
     if (addressBar) addressBar.style.display = 'none';

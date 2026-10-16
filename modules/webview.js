@@ -1,10 +1,11 @@
+import { isSettingsTab } from './settingsTab.js';
 import { isCurrentGuestPointerEntry } from './sidebarPointer.js';
 import { NEW_TAB_URL, isNewTab, refreshNewTab } from './newTab.js';
 import { hasActiveOverlay } from './focus.js';
 import { state } from './state.js';
 import { getActiveWebview, removeWebview, getWorkspacePartition, isDarkMode, isPdfUrl, getPdfViewerUrl, extractOriginalUrl, isTargetPrivateDomain } from './utils.js';
 import { loadWebviewSource } from './extensions.js';
-import { isSplitActive, applySplitLayout, handleSplitTabSelection, handleTabRemovalInSplit, getSplitState } from './splitView.js';
+import { isSplitActive, applySplitLayout, handleSplitTabSelection, handleTabRemovalInSplit, getSplitState, closeSplitView } from './splitView.js';
 import { 
     setTargetUrl, 
     updateSecurityStatus, 
@@ -668,6 +669,7 @@ export function renderWorkspaceUI(targetTabToFocus = null) {
     allWebviews.forEach((wv) => wv.style.display = 'none');
 
     if (urls.length === 0) {
+        window.setPreferencesTabVisible?.(false);
         if (welcomeEl) {
             welcomeEl.style.display = 'flex';
             const nameEl = document.getElementById('WelcomeWorkspaceName');
@@ -711,6 +713,7 @@ export function renderWorkspaceUI(targetTabToFocus = null) {
         if (!cachedTitle) {
             cachedTitle = isNewTab(url) ? "New tab · Fly" : "Loading...";
         }
+        if (isSettingsTab(url)) cachedTitle = "Settings · Fly";
         const cachedFavicon = state.tabFavicons[currentWS]?.[idx] || null;
 
         const li = document.createElement('li');
@@ -730,7 +733,7 @@ export function renderWorkspaceUI(targetTabToFocus = null) {
         favImg.alt = '';
 
         const favFallback = document.createElement('i');
-        favFallback.className = 'fa-solid fa-globe tab-fallback-icon';
+        favFallback.className = isSettingsTab(url) ? 'fa-solid fa-gear tab-fallback-icon' : 'fa-solid fa-globe tab-fallback-icon';
 
         const audioDot = document.createElement('span');
         audioDot.className = 'tab-audio-dot';
@@ -747,7 +750,7 @@ export function renderWorkspaceUI(targetTabToFocus = null) {
         if (state.tabMediaAudible[currentWS]?.[idx]) favWrapper.appendChild(audioDot);
         if (isPinned) favWrapper.appendChild(pinDot);
 
-        const initialFav = cachedFavicon || getFaviconUrl(url);
+        const initialFav = isSettingsTab(url) ? null : cachedFavicon || getFaviconUrl(url);
         if (initialFav) {
             favImg.src = initialFav;
             favImg.onload = () => {
@@ -864,10 +867,10 @@ export function renderWorkspaceUI(targetTabToFocus = null) {
     });
 
     if (!state.dashboardActive) {
-        if (isSplitActive(currentWS)) {
+        const focusIdx = targetTabToFocus !== null ? targetTabToFocus : 0;
+        if (isSplitActive(currentWS) && !isSettingsTab(urls[focusIdx])) {
             applySplitLayout();
         } else {
-            const focusIdx = targetTabToFocus !== null ? targetTabToFocus : 0;
             switchTabFocus(focusIdx);
         }
     }
@@ -889,6 +892,9 @@ export function switchTabFocus(targetIdx) {
     if (targetIdx < 0) {
         targetIdx = 0;
     }
+
+    const settingsSelected = isSettingsTab(state.sessionState.workspaces[currentWS]?.[targetIdx]);
+    if (settingsSelected && isSplitActive(currentWS)) closeSplitView();
 
     if (!state.tabHistory) state.tabHistory = {};
     if (!Array.isArray(state.tabHistory[currentWS])) state.tabHistory[currentWS] = [];
@@ -915,7 +921,9 @@ export function switchTabFocus(targetIdx) {
         }
     });
 
-    if (!state.activeViewsCache[currentWS]?.[targetIdx] || state.tabRestoreStates[currentWS]?.[targetIdx]) {
+    window.setPreferencesTabVisible?.(settingsSelected, state.sessionState.workspaces[currentWS]?.[targetIdx]);
+
+    if (!settingsSelected && (!state.activeViewsCache[currentWS]?.[targetIdx] || state.tabRestoreStates[currentWS]?.[targetIdx])) {
         ensureTabLoaded(currentWS, targetIdx);
     }
 
@@ -1222,7 +1230,7 @@ export function handleTabRemoval(explicitIdx) {
             // Prioritise returning to an already awake tab from recent history
             for (let i = updatedHistory.length - 1; nextTargetIdx === null && i >= 0; i--) {
                 const candidate = updatedHistory[i];
-                const isAwake = state.activeViewsCache[currentWS]?.[candidate] && !state.tabRestoreStates[currentWS]?.[candidate];
+                const isAwake = isSettingsTab(tabs[candidate]) || (state.activeViewsCache[currentWS]?.[candidate] && !state.tabRestoreStates[currentWS]?.[candidate]);
                 if (isAwake) {
                     nextTargetIdx = candidate;
                     break;
@@ -1523,7 +1531,7 @@ export function updateTabMediaIndicator(workspaceId, tabIdx, isAudible, isMutedO
 export function ensureTabLoaded(currentWS, idx) {
     if (!currentWS) currentWS = state.sessionState.current_workspace;
     const urls = state.sessionState.workspaces[currentWS];
-    if (!urls || idx < 0 || idx >= urls.length) return null;
+    if (!urls || idx < 0 || idx >= urls.length || isSettingsTab(urls[idx])) return null;
 
     if (state.activeViewsCache[currentWS]?.[idx]) {
         if (state.tabRestoreStates[currentWS]) {

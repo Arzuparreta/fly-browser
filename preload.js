@@ -131,6 +131,7 @@ contextBridge.exposeInMainWorld('flyAPI', {
     extensionsEnsure: (workspace, partition) => ipcRenderer.invoke('extensions-ensure', workspace, partition),
     extensionsRenameWorkspace: (from, to) => ipcRenderer.invoke('extensions-rename-workspace', from, to),
     extensionsTabFocused: (webContentsId) => ipcRenderer.send('extensions-tab-focused', webContentsId),
+    extensionsOptions: (extensionId, partition) => ipcRenderer.invoke('extensions-options', extensionId, partition),
     extensionsActivate: (extensionId, partition) => ipcRenderer.invoke('extensions-activate', extensionId, partition),
     extensionsRunCommand: (extensionId, partition, name) => ipcRenderer.invoke('extensions-run-command', extensionId, partition, name),
     extensionsGetActions: (partition) => ipcRenderer.invoke('extensions-get-actions', partition),
