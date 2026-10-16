@@ -11,7 +11,7 @@ Fly wraps the Chromium engine in a lean Electron shell. Every browser action can
 
 📦 **Packages**: [Releases](https://github.com/Arzuparreta/fly-browser/releases) • [Running from source](#quick-start-running-from-source)
 
-![Fly Browser Dual-Split View](docs/public/screenshots/split-view.webp)
+![Fly Browser New Tab](docs/public/screenshots/new-tab.webp)
 
 ***
 
