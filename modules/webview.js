@@ -867,10 +867,10 @@ export function renderWorkspaceUI(targetTabToFocus = null) {
     });
 
     if (!state.dashboardActive) {
-        if (isSplitActive(currentWS)) {
+        const focusIdx = targetTabToFocus !== null ? targetTabToFocus : 0;
+        if (isSplitActive(currentWS) && !isSettingsTab(urls[focusIdx])) {
             applySplitLayout();
         } else {
-            const focusIdx = targetTabToFocus !== null ? targetTabToFocus : 0;
             switchTabFocus(focusIdx);
         }
     }
@@ -893,6 +893,9 @@ export function switchTabFocus(targetIdx) {
         targetIdx = 0;
     }
 
+    const settingsSelected = isSettingsTab(state.sessionState.workspaces[currentWS]?.[targetIdx]);
+    if (settingsSelected && isSplitActive(currentWS)) closeSplitView();
+
     if (!state.tabHistory) state.tabHistory = {};
     if (!Array.isArray(state.tabHistory[currentWS])) state.tabHistory[currentWS] = [];
     const history = state.tabHistory[currentWS];
@@ -902,8 +905,6 @@ export function switchTabFocus(targetIdx) {
     }
     history.push(targetIdx);
 
-    const settingsSelected = isSettingsTab(state.sessionState.workspaces[currentWS]?.[targetIdx]);
-    if (settingsSelected && isSplitActive(currentWS)) closeSplitView();
     if (isSplitActive(currentWS)) {
         if (handleSplitTabSelection(targetIdx)) {
             return;

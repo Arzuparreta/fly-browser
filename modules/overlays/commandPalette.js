@@ -2,7 +2,7 @@ import { SETTINGS_URL, isSettingsTab } from '../settingsTab.js';
 import { suspendInactiveTabs, resumeWorkspaceTabs } from '../tabSuspension.js';
 import { prepareOverlay, hasActiveOverlay } from '../focus.js';
 import { initialiseKeyboardEditor, showKeyboardEditor, hideKeyboardEditor } from '../keyboardSettings.js';
-import { initialiseSettingsNav, showSettingsPane, currentSettingsPane } from '../settingsNav.js';
+import { initialiseSettingsNav, showSettingsPane, currentSettingsPane, clearSettingsSearch } from '../settingsNav.js';
 import { state } from '../state.js';
 import { focusActiveWebview, getActiveWebview, isTargetScript, isDarkMode, escapeHtml } from '../utils.js';
 import { renderWorkspaceUI, switchTabFocus, spawnTabWithUrl, spawnNewBlankTab, handleTabRemoval } from '../webview.js';
@@ -1026,7 +1026,7 @@ export async function togglePreferencesView() {
         handleTabRemoval();
         return;
     }
-    await openPreferencesPane(currentSettingsPane());
+    await openPreferencesPane();
 }
 
 // Keep one settings tab per workspace. Selecting a section updates its saved URL.
@@ -1036,8 +1036,11 @@ export async function openPreferencesPane(pane) {
     const urls = state.sessionState.workspaces[workspace] || [];
     const existing = urls.findIndex(isSettingsTab);
     if (existing >= 0) switchTabFocus(existing);
-    else spawnTabWithUrl(`${SETTINGS_URL}#${pane}`);
-    showSettingsPane(pane);
+    else {
+        clearSettingsSearch();
+        spawnTabWithUrl(`${SETTINGS_URL}#${pane || currentSettingsPane()}`);
+    }
+    if (pane) showSettingsPane(pane);
 }
 
 let activeCategoryFilter = 'all';
