@@ -4195,6 +4195,26 @@ i.spinning {
     gap: 6px;
 }
 
+.ext-install-actions {
+    display: flex;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 8px;
+    margin-bottom: 10px;
+}
+
+.ext-install-actions input {
+    flex: 1 1 240px;
+    min-width: 0;
+    padding: 8px 10px;
+    color: var(--text);
+    background: var(--bg);
+    border: 1px solid var(--border);
+    border-radius: 4px;
+}
+
+#ExtensionsInstallStatus:empty { display: none; }
+
 .ext-card-error {
     border-color: var(--accent);
 }

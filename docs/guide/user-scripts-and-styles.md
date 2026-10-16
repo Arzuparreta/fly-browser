@@ -35,9 +35,11 @@ fanless Linux hardware:
 3. **Supply-Chain Security Risks**:
    Centralised extension stores suffer from a chronic security problem: popular
    extensions are regularly bought by data-collection companies and updated
-   silently with tracking code. Fly enforces a strictly local-only policy.
-   Included uBlock updates arrive through Fly releases. Additional scripts, styles
-   and extensions come from files you place in your local config directory.
+   silently with tracking code. Fly shows extension permissions before installation
+   and asks before applying updates requested through its extension manager.
+   Included uBlock updates arrive through Fly releases. Additional extensions can
+   come from Chrome Web Store or local packages; user scripts and styles remain
+   local files in your config directory.
 
 4. **Native Handling of Core Capabilities**:
    When analysing what users actually install extensions for, four use cases

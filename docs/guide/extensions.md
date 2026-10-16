@@ -7,7 +7,7 @@ Fly loads **unpacked Chrome extensions** with these rules:
 * **uBlock enabled by default.** A saved global disable, individual disable, removal or empty workspace selection is preserved on upgrade. While disabled, no extension code, library or process is loaded and there is no ad blocker.
 * **Per workspace.** Included extensions are selected in workspaces without a saved selection. You can change each workspace’s selection, including selecting none. A renamed workspace keeps its selection. Manually installed extensions run only where selected.
 * **Only while needed.** Extensions load when an opted-in workspace gets its first live tab and unload once every tab in it has been closed, after a grace period (60 seconds by default).
-* **Local only.** There is no extension store. Included extensions are copied into your profile; Fly releases can update managed copies. Manually installed folders are never overwritten.
+* **Chrome Web Store and local packages.** Browse and install directly from the store, paste a store link or ID, or select a ZIP, CRX or unpacked folder. Fly copies installations into your profile and manages them through the same workspace controls.
 * **Never in private browsing.** Electron refuses to load extensions into in-memory sessions. Private browsing therefore has no ad blocker.
 
 ---
@@ -26,30 +26,33 @@ To reinstall a removed extension deliberately, place its unpacked Chrome build i
 
 Electron supports only a [subset of extension APIs](https://www.electronjs.org/docs/latest/api/extensions/). On Fly's installed runtime, a standalone Manifest V3 extension with an enabled static `declarativeNetRequest` blocking rule still lets its matching script reach a local server and execute. Loading an extension or finding its API object does not prove enforcement. Lite relies on this mechanism, so Fly retains the working full uBlock until real declarative blocking is available and verified. There is no guarantee of future Manifest V2 support; switching safely requires that runtime capability, not just replacing the extension files.
 
-Managed bundled updates arrive through Fly releases; filter lists update through uBlock. Manually installed copies remain the user's responsibility. Recheck upstream releases and network enforcement when updating Electron.
+Managed bundled updates arrive through Fly releases; filter lists update through uBlock. Store installations have a **Check for update** button. Local installations are updated by selecting the updated package or original folder again. Recheck upstream releases and network enforcement when updating Electron.
 
 ## Installing an Extension
 
-1. Download the extension's **Chrome build** as a `.zip` (most open source extensions publish one on their GitHub releases page) and unpack it.
-2. Move the unpacked folder into `~/.config/fly-browser/extensions/`, so that `manifest.json` sits directly inside it:
-   ```text
-   ~/.config/fly-browser/extensions/
-   └── darkreader/
-       ├── manifest.json
-       └── ...
-   ```
-3. Open **Preferences** (`Ctrl + H`) and select **Extensions** in the section index, or run *Extension Settings* from the Command Palette. The installed list and usage figures are scanned only while this section is shown.
-4. Turn on **Enable Chrome Extensions**, then tick the workspaces the extension may run in.
+Open **Preferences → Extensions** (`Ctrl + H`, or *Extension Settings* in the Command Palette).
+
+* **Chrome Web Store:** click **Browse Chrome Web Store**, find an extension and use the store's install button. Alternatively, paste its store detail link or ID into **Store link or ID** and click **Install**.
+* **ZIP or CRX:** click **Install ZIP or CRX** and select the extension's built Chrome package. ZIPs may contain `manifest.json` at the root or inside one wrapper folder. A repository source ZIP that requires a build is not an installable package.
+* **Unpacked:** click **Load unpacked folder** and select the folder containing `manifest.json`. Fly copies it into the profile; editing the original folder does not change the installed copy. Select that same source folder again to update it.
+
+Fly downloads or copies the package, validates it, then shows its name, version, permissions, site access and known compatibility warnings before asking you to install. CRX signatures are checked and store downloads must match the requested extension ID. Packages are limited to 64 MB compressed and 256 MB expanded, with no symbolic links. Unpacked folders have the same expanded-size limit and cannot contain symbolic links.
+
+New installations are selected for the current workspace. Tick other workspaces in the installed card if wanted. A globally disabled extension system stays disabled; installing does not turn it on. Extensions cannot run or install from the store in private browsing.
 
 Tabs that were already open in that workspace need a reload before content scripts appear in them. New tabs get the extension immediately.
 
 ::: warning RENAMING THE FOLDER
-An unpacked extension's identity is derived from its folder path. Renaming or moving the folder gives it a new identity and its saved settings stay behind with the old one. Keep the folder name stable when updating.
+An unpacked extension without a manifest `key` derives its identity from its installed folder path. Fly keeps that path stable during updates. For unkeyed local packages, choose the same source file or folder path when updating. Renaming the installed folder manually gives it a new identity and its saved settings stay behind with the old one.
 :::
 
 ### Updating
 
-Replace the folder contents with the new version and run **Reload Extensions** (Preferences or Command Palette). Open tabs keep the old content scripts until reloaded.
+Store installations show their source link and **Check for update**. This downloads the current store package and reports when the installed version is already current. An available update shows its complete permissions and site access for approval before replacing any files. Fly does not run an automatic update timer.
+
+For a local installation, choose the updated ZIP/CRX or original unpacked source folder again. Signed packages and extensions with a manifest `key` retain their identity even if their source file moves. Existing workspace selections, individual disables and extension storage are preserved. If loading the replacement fails in an active workspace, Fly restores the previous files. Installation does not prove that every extension feature works: Electron's API limits still apply.
+
+Folders placed manually under `~/.config/fly-browser/extensions/` remain supported. Replace their contents and run **Reload Extensions** after updating them. Open tabs keep old content scripts until reloaded; the same applies to updates through the installer.
 
 ---
 

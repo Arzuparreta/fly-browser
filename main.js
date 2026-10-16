@@ -660,6 +660,7 @@ function configureAndHardenSession(targetSession) {
     security.hardenSession(targetSession, cfg.spellchecker_language || 'en-GB');
     configureSessionPermissions(targetSession);
     configureDownloads(targetSession);
+    require('./extensionStore').registerStoreSession(targetSession);
 }
 
 function configureSessionPermissions(targetSession) {
@@ -1906,6 +1907,9 @@ function createWindow() {
         setNetworkExtensions: security.setNetworkExtensions,
         getMainWindow: () => mainWindow,
         getWorkspacePartition,
+        getWorkspaces: () => {
+            try { return JSON.parse(fs.readFileSync(sessionPath, 'utf8')).workspaces || {}; } catch { return {}; }
+        },
         logEvent: (level, category, message) => diagnostics.logEvent(level, category, message)
     });
 

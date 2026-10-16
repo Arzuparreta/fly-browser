@@ -280,6 +280,7 @@ function scanExtensions() {
     return entries
         .filter(entry => entry.isDirectory() && isValidFolderName(entry.name))
         .map(entry => ({ ...describeExtension(entry.name, path.join(extensionsDir, entry.name)),
+            source: getConfig().extensions_sources?.[entry.name] || null,
             bundled: !!getConfig().extensions_bundled?.[entry.name],
             enabled: !(getConfig().extensions_disabled || []).includes(entry.name) }))
         .sort((a, b) => String(a.name).localeCompare(String(b.name)));
@@ -787,8 +788,10 @@ async function removeExtension(folder) {
     if (records[folder]) records[folder] = { ...records[folder], removed: true };
     const byWorkspace = Object.fromEntries(Object.entries(cfg.extensions_by_workspace || {})
         .map(([ws, list]) => [ws, Array.isArray(list) ? list.filter(item => item !== folder) : []]));
+    const sources = { ...(cfg.extensions_sources || {}) };
+    delete sources[folder];
     // Persist first so interrupted removals cannot reinstall bundled code.
-    saveConfig({ ...cfg, extensions_bundled: records, extensions_by_workspace: byWorkspace,
+    saveConfig({ ...cfg, extensions_bundled: records, extensions_by_workspace: byWorkspace, extensions_sources: sources,
         extensions_disabled: [...new Set([...(cfg.extensions_disabled || []), folder])] });
     await applyConfig();
     try {
@@ -898,10 +901,21 @@ function initializeExtensions(options) {
     partitionForWorkspace = options.getWorkspacePartition;
     logEvent = options.logEvent || logEvent;
     if (isEnabled(getConfig())) provisionBundles();
+    require('./extensionStore').initializeStore({
+        ...options, directory: extensionsDir, describe: describeExtension, scan: scanExtensions,
+        validFolder: isValidFolderName, apply: applyConfig, ensure: ensureForWorkspace, remove: removeExtension,
+        unload: async folder => {
+            await Promise.all([...controllers.values()].map(ctrl => enqueue(ctrl, () => {
+                unloadOne(ctrl, folder);
+                delete ctrl.errors[folder];
+            })));
+        },
+        loadError: folder => [...controllers.values()].map(ctrl => ctrl.errors[folder]).find(Boolean)
+    });
 
     const fromMainWindow = (event) => {
         const win = getMainWindow();
-        return !!(win && !win.isDestroyed() && event.sender === win.webContents);
+        return !!(win && !win.isDestroyed() && event.sender === win.webContents && event.senderFrame === event.sender.mainFrame);
     };
     const guard = (handler) => (event, ...args) => (fromMainWindow(event) ? handler(...args) : null);
 
@@ -927,7 +941,7 @@ function initializeExtensions(options) {
             runtime: getRuntimeState(!!options.metrics)
         };
     }));
-    ipcMain.handle('extensions-remove', guard((folder) => removeExtension(String(folder || ''))));
+    ipcMain.handle('extensions-remove', guard((folder) => require('./extensionStore').serialize(() => removeExtension(String(folder || '')))));
     ipcMain.handle('extensions-apply-config', guard(() => applyConfig()));
     ipcMain.handle('extensions-reload', guard(() => reloadAll()));
     ipcMain.handle('extensions-open-dir', guard(async () => {
