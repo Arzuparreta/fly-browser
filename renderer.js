@@ -764,7 +764,7 @@ function setupEventListeners() {
         WideAddressBar: {active: () => addressBar.style.display === 'block', close: displayAddressOverlay},
         FindBarOverlay: {active: () => findActive, close: toggleInPageSearch},
         DashboardOverlay: {active: () => state.dashboardActive, close: toggleDashboardView},
-        PreferencesOverlay: {active: () => state.preferencesActive, close: togglePreferencesView},
+        PreferencesOverlay: {active: () => state.preferencesActive, close: () => window.setPreferencesTabVisible(false)},
         CommandPaletteOverlay: {active: () => state.paletteActive, close: toggleCommandPaletteView},
         BookmarksOverlay: {active: () => state.bookmarksActive, close: toggleBookmarksOverlay},
         HistoryOverlay: {active: () => state.historyActive, close: toggleHistoryOverlay},
@@ -838,6 +838,9 @@ function setupEventListeners() {
             return;
         }
         if (document.querySelector('dialog[open]') || !event.isTrusted || event.isComposing || event.defaultPrevented || state.awaitingQuickmarkKey) return;
+        if (event.key === 'Escape' && document.getElementById('ExtensionPopupOverlay')) {
+            event.preventDefault(); event.stopImmediatePropagation(); closeExtensionPopup(); return;
+        }
         if (event.key === 'Escape' && addressBar.style.display === 'block') {
             event.preventDefault(); event.stopImmediatePropagation(); displayAddressOverlay(); return;
         }

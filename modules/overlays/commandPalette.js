@@ -1,7 +1,8 @@
+import { SETTINGS_URL, isSettingsTab } from '../settingsTab.js';
 import { suspendInactiveTabs, resumeWorkspaceTabs } from '../tabSuspension.js';
 import { prepareOverlay, hasActiveOverlay } from '../focus.js';
 import { initialiseKeyboardEditor, showKeyboardEditor, hideKeyboardEditor } from '../keyboardSettings.js';
-import { initialiseSettingsNav, showSettingsPane, currentSettingsPane, clearSettingsSearch } from '../settingsNav.js';
+import { initialiseSettingsNav, showSettingsPane, currentSettingsPane } from '../settingsNav.js';
 import { state } from '../state.js';
 import { focusActiveWebview, getActiveWebview, isTargetScript, isDarkMode, escapeHtml } from '../utils.js';
 import { renderWorkspaceUI, switchTabFocus, spawnTabWithUrl, spawnNewBlankTab, handleTabRemoval } from '../webview.js';
@@ -769,6 +770,13 @@ export function setupPreferencesListeners() {
     initialiseKeyboardEditor();
     setupDesktopIntegrationListeners();
     initialiseSettingsNav(pane => {
+        const workspace = state.sessionState.current_workspace;
+        const urls = state.sessionState.workspaces[workspace] || [];
+        const index = [...document.querySelectorAll('#TabList li')].findIndex(tab => tab.classList.contains('selected'));
+        if (isSettingsTab(urls[index])) {
+            urls[index] = `${SETTINGS_URL}#${pane}`;
+            window.flyAPI.saveSession(state.sessionState);
+        }
         if (pane === 'keyboard') showKeyboardEditor(); else hideKeyboardEditor();
         if (pane === 'extensions' && preferencesActive) syncExtensionsPreferences();
     });
@@ -991,32 +999,45 @@ export function setupPreferencesListeners() {
     setupExtensionsPreferencesListeners();
 }
 
-export async function togglePreferencesView() {
+export function setPreferencesTabVisible(visible, url = '') {
     const overlay = document.getElementById('PreferencesOverlay');
     if (!overlay) return;
-
-    preferencesActive = !preferencesActive;
-    state.preferencesActive = preferencesActive;
-    if (preferencesActive) {
-        prepareOverlay('PreferencesOverlay');
-
-        overlay.style.display = 'block';
+    const wasVisible = preferencesActive;
+    preferencesActive = visible;
+    state.preferencesActive = visible;
+    overlay.style.display = visible ? 'block' : 'none';
+    if (visible) {
+        const pane = url.split('#')[1];
+        if (pane && pane !== currentSettingsPane()) showSettingsPane(pane);
         if (currentSettingsPane() === 'keyboard') showKeyboardEditor();
-        const tab = document.querySelector('#SettingsIndex [aria-selected="true"]');
-        (tab || overlay).focus({preventScroll: true});
-        await syncPreferencesUI();
+        if (!wasVisible) {
+            const tab = document.querySelector('#SettingsIndex [aria-selected="true"]');
+            (tab || overlay).focus({preventScroll: true});
+            syncPreferencesUI();
+        }
     } else {
-        overlay.style.display = 'none';
         hideKeyboardEditor();
-        clearSettingsSearch();
-        returnFocusToWebview();
     }
 }
+window.setPreferencesTabVisible = setPreferencesTabVisible;
 
-// Opens Preferences on a given pane, or switches pane when already open.
+export async function togglePreferencesView() {
+    if (preferencesActive) {
+        handleTabRemoval();
+        return;
+    }
+    await openPreferencesPane(currentSettingsPane());
+}
+
+// Keep one settings tab per workspace. Selecting a section updates its saved URL.
 export async function openPreferencesPane(pane) {
+    prepareOverlay('PreferencesOverlay');
+    const workspace = state.sessionState.current_workspace;
+    const urls = state.sessionState.workspaces[workspace] || [];
+    const existing = urls.findIndex(isSettingsTab);
+    if (existing >= 0) switchTabFocus(existing);
+    else spawnTabWithUrl(`${SETTINGS_URL}#${pane}`);
     showSettingsPane(pane);
-    if (!preferencesActive) await togglePreferencesView();
 }
 
 let activeCategoryFilter = 'all';

@@ -3,7 +3,7 @@
 // returns after a single property check.
 
 import { state } from './state.js';
-import { getWorkspacePartition, escapeHtml } from './utils.js';
+import { getWorkspacePartition, escapeHtml, focusActiveWebview } from './utils.js';
 import { setTargetUrl } from './statusBar.js';
 import { spawnTabWithUrl, switchTabFocus, handleTabRemoval } from './webview.js';
 
@@ -217,6 +217,7 @@ export async function refreshStatusBarActions() {
     let actions = [];
     try { actions = (await window.flyAPI.extensionsGetActions(currentPartition())) || []; } catch (e) {}
     const installed = await ensureInstalledCache();
+    if (workspace !== state.sessionState.current_workspace) return;
     const visible = actions.filter(a => installed.find(i => i.id === a.id && i.hasAction));
 
     if (!visible.length) {
@@ -245,9 +246,10 @@ export async function refreshStatusBarActions() {
 
 export function closeExtensionPopup() {
     if (!popupState) return;
-    const { overlay } = popupState;
+    const { overlay, optionsName } = popupState;
     popupState = null;
     try { overlay.remove(); } catch (e) {}
+    if (optionsName) focusActiveWebview();
 }
 
 function placePopup(container, anchorRect) {
@@ -273,13 +275,25 @@ async function measurePopup(webview) {
     } catch (e) {}
 }
 
-function showPopup(url, partition, anchorRect) {
+function showPopup(url, partition, anchorRect, optionsName = null) {
     closeExtensionPopup();
 
     const overlay = document.createElement('div');
     overlay.id = 'ExtensionPopupOverlay';
     const container = document.createElement('div');
     container.className = 'extension-popup';
+    if (optionsName) {
+        overlay.classList.add('extension-options-overlay');
+        container.setAttribute('role', 'dialog');
+        container.setAttribute('aria-modal', 'true');
+        container.setAttribute('aria-label', `${optionsName} settings`);
+        const close = document.createElement('button');
+        close.type = 'button';
+        close.className = 'extension-options-close';
+        close.textContent = 'Close';
+        close.onclick = closeExtensionPopup;
+        container.appendChild(close);
+    }
     const webview = document.createElement('webview');
     webview.setAttribute('partition', partition);
     webview.style.width = `${POPUP_MIN.width}px`;
@@ -298,15 +312,17 @@ function showPopup(url, partition, anchorRect) {
     webview.setAttribute('src', url);
     container.appendChild(webview);
     overlay.appendChild(container);
-    placePopup(container, anchorRect);
+    if (!optionsName) placePopup(container, anchorRect);
     document.body.appendChild(overlay);
-    popupState = { overlay, webview };
+    popupState = { overlay, webview, optionsName };
 }
 
 export async function activateExtension(extensionId, anchorRect = null) {
+    const workspace = state.sessionState.current_workspace;
     const partition = currentPartition();
     let res = null;
     try { res = await window.flyAPI.extensionsActivate(extensionId, partition); } catch (e) {}
+    if (workspace !== state.sessionState.current_workspace || partition !== currentPartition()) return;
     if (!res || res.error) {
         showStatusNote((res && res.error) || 'Extension is not available in this workspace.');
         return;
@@ -315,7 +331,8 @@ export async function activateExtension(extensionId, anchorRect = null) {
     if (res.kind === 'options') {
         closeExtensionPopup();
         const info = (await ensureInstalledCache()).find(item => item.id === extensionId);
-        if (info?.optionsPage) openExtensionOptions(info);
+        if (workspace !== state.sessionState.current_workspace || partition !== currentPartition()) return;
+        if (info?.optionsPage) await openExtensionOptions(info);
         else openExtensionsPreferences();
     }
     setTimeout(refreshStatusBarActions, 300);
@@ -426,10 +443,29 @@ export function getExtensionPaletteCommands() {
     return commands;
 }
 
-function openExtensionOptions(info) {
-    const page = String(info.optionsPage || '').replace(/^\//, '');
-    if (!page) return;
-    spawnTabWithUrl(`chrome-extension://${info.id}/${page}`);
+async function openExtensionOptions(info) {
+    closeExtensionPopup();
+    const workspace = state.sessionState.current_workspace;
+    const partition = currentPartition();
+    try {
+        await window.flyAPI.extensionsEnsure(workspace, partition);
+        if (workspace !== state.sessionState.current_workspace || partition !== currentPartition()) return;
+        const target = await window.flyAPI.extensionsOptions(info.id, partition);
+        if (workspace !== state.sessionState.current_workspace || partition !== currentPartition()) return;
+        if (!target || target.error) {
+            showStatusNote(target?.error || 'Extension settings are unavailable.');
+        } else if (target.kind === 'embedded') {
+            showPopup(target.url, target.partition, null, target.name);
+        } else if (target.kind === 'tab') {
+            const existing = (state.sessionState.workspaces[workspace] || []).findIndex(url => url.split('#')[0] === target.url.split('#')[0]);
+            if (existing >= 0) switchTabFocus(existing);
+            else spawnTabWithUrl(target.url);
+        } else {
+            openExtensionsPreferences();
+        }
+    } catch (error) {
+        if (workspace === state.sessionState.current_workspace && partition === currentPartition()) showStatusNote(error.message);
+    }
 }
 
 // PREFERENCES
@@ -540,7 +576,6 @@ function renderInstalledList(res) {
                 setPreferencesNote('Enable this extension for the current workspace to open its options.');
                 return;
             }
-            if (typeof window.togglePreferencesView === 'function') window.togglePreferencesView();
             openExtensionOptions(info);
         };
     });

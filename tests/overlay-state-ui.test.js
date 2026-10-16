@@ -76,6 +76,10 @@ const root = path.resolve(__dirname, '..');
         for (const [sourceKey, source] of surfaces) {
             for (const [destinationKey, destination] of surfaces) {
                 if (source === destination) continue;
+                // Closing another overlay can reveal the selected settings tab again.
+                await page.evaluate(() => {
+                    if (document.getElementById('PreferencesOverlay').style.display !== 'none') window.togglePreferencesView();
+                });
                 // Find inside Preferences searches the settings and keeps Preferences open.
                 if (source === 'PreferencesOverlay' && destination === 'FindBarOverlay') {
                     await page.keyboard.press(sourceKey); await focused(source);

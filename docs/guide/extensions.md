@@ -62,9 +62,11 @@ Folders placed manually under `~/.config/fly-browser/extensions/` remain support
 | :--- | :--- |
 | **Popup** | Click the extension icon on the right of the status bar, or run `Extension Name: Open Popup` from the Command Palette. Close it with `Esc` or by clicking outside. |
 | **Extension shortcuts** | Commands an extension declares (for example Dark Reader's *Toggle current site*) appear in the Command Palette under **Extensions** and run against the active tab. |
-| **Options page** | `Extension Name: Options` in the Command Palette, or the Options button in Preferences. It opens as a normal tab in the current workspace. |
+| **Options page** | `Extension Name: Options` in the Command Palette, or the Options button in Preferences. The extension chooses a normal tab (uBlock Origin) or an embedded dialog. Fly keeps its Settings tab open underneath; closing the options tab returns to the previously selected tab. Reopening options reuses an existing tab in the same workspace. |
 | **Context menu** | Items added by extensions appear in the right-click menu of pages in that workspace (see the `onInstalled` note under Compatibility). |
 | **Keyboard** | Bind `open-extension-actions` in `keybinds.json` to jump straight to the Extensions category of the Command Palette. It has no default key so pages keep every shortcut. |
+
+Extensions without a popup open their options when clicked; if they have no options page, Fly opens extension preferences. Switching workspace while an opening request is pending cancels that request.
 
 Popups render inside the Fly window rather than as separate windows, so they behave the same on X11, Wayland, Hyprland and sway.
 
