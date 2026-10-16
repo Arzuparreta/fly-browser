@@ -881,6 +881,15 @@
                     <span id="StatusBarUrl" class="status-target-url" title="Link Target Preview"></span>
                 </div>
                 <div class="status-bar-right">
+                    <button id="StatusBarZoom" class="status-zoom" type="button" popovertarget="ZoomControls" aria-label="Page zoom" title="Page zoom" aria-expanded="false">
+                        <i class="fa-solid fa-magnifying-glass" aria-hidden="true"></i>
+                        <span id="StatusBarZoomValue">100%</span>
+                    </button>
+                    <div id="ZoomControls" class="zoom-controls" popover aria-label="Page zoom controls">
+                        <button type="button" data-zoom-action="zoom-out" aria-label="Zoom out" title="Zoom out">−</button>
+                        <button type="button" data-zoom-action="reset-zoom" aria-label="Reset zoom to 100%" title="Reset zoom to 100%">100%</button>
+                        <button type="button" data-zoom-action="zoom-in" aria-label="Zoom in" title="Zoom in">+</button>
+                    </div>
                     <span id="StatusBarExtensions" class="status-extensions" hidden></span>
                     <span id="StatusBarSecurity" class="status-badge status-badge-security security-neutral" title="Connection Security State">
                         <i class="fa-solid fa-circle-minus"></i>

@@ -2,7 +2,7 @@
 // Status and mode bar controller for link target previews, connection security, container partition badges, and modal states
 
 import { state } from './state.js';
-import { getWorkspacePartition } from './utils.js';
+import { getWorkspacePartition, getActiveWebview } from './utils.js';
 import { isSplitActive, getSplitState } from './splitView.js';
 import { notifyActiveView } from './extensions.js';
 
@@ -21,6 +21,38 @@ let isHintsModeActive = false;
 let isPassthroughModeActive = false;
 let targetUrlClearTimer = null;
 let currentMode = 'NORMAL';
+let zoomFlashTimer = null;
+let zoomGuestId = null;
+
+function updateZoomIndicator(flash = false, percent = null) {
+    const button = document.getElementById('StatusBarZoom');
+    const value = document.getElementById('StatusBarZoomValue');
+    const controls = document.getElementById('ZoomControls');
+    if (!button || !value || !controls) return;
+    const active = getActiveWebview();
+    let id = null;
+    try {
+        if (active) {
+            id = active.getWebContentsId();
+            percent ??= Math.round(active.getZoomFactor() * 100);
+        }
+    } catch { /* A waking or closing guest may not be ready yet. */ }
+    if (id !== zoomGuestId) {
+        if (controls.matches(':popover-open')) controls.hidePopover();
+        clearTimeout(zoomFlashTimer);
+        button.classList.remove('zoom-feedback');
+    }
+    zoomGuestId = id;
+    button.disabled = id === null;
+    value.textContent = `${percent ?? 100}%`;
+    button.setAttribute('aria-label', `Page zoom: ${value.textContent}`);
+    button.title = `Page zoom: ${value.textContent}`;
+    if (flash) {
+        clearTimeout(zoomFlashTimer);
+        button.classList.add('zoom-feedback');
+        zoomFlashTimer = setTimeout(() => button.classList.remove('zoom-feedback'), 1600);
+    }
+}
 
 export function initStatusBar() {
     statusBarEl = document.getElementById('StatusBar');
@@ -30,6 +62,28 @@ export function initStatusBar() {
     partitionBadgeEl = document.getElementById('StatusBarPartition');
 
     if (!statusBarEl) return;
+
+    window.flyAPI.onSiteZoomChanged((id, percent) => {
+        const active = getActiveWebview();
+        if (!active || active.getWebContentsId() !== id) return;
+        updateZoomIndicator(true, percent);
+    });
+    const zoomButton = document.getElementById('StatusBarZoom');
+    const zoomControls = document.getElementById('ZoomControls');
+    zoomControls.addEventListener('beforetoggle', event => {
+        if (event.newState !== 'open') return;
+        const rect = zoomButton.getBoundingClientRect();
+        zoomControls.style.left = `${Math.max(8, Math.min(rect.left, window.innerWidth - 170))}px`;
+        zoomControls.style.bottom = `${window.innerHeight - rect.top + 6}px`;
+    });
+    zoomControls.addEventListener('toggle', () => {
+        zoomButton.setAttribute('aria-expanded', String(zoomControls.matches(':popover-open')));
+    });
+    zoomControls.addEventListener('click', event => {
+        const action = event.target.closest('[data-zoom-action]')?.dataset.zoomAction;
+        const active = getActiveWebview();
+        if (action && active) window.flyAPI.changeSiteZoom(active.getWebContentsId(), action);
+    });
 
     for (const badge of [partitionBadgeEl, modeBadgeEl]) {
         if (!badge) continue;
@@ -283,6 +337,7 @@ export function handleGuestHintsState(isActive, wsName, tabIdx) {
 }
 
 export function updateStatusBarFromActiveView() {
+    updateZoomIndicator();
     const currentWS = state.sessionState.current_workspace;
     const isPrivate = !!state.globalPrivateModeActive;
     updatePartitionBadge(currentWS, isPrivate);

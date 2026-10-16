@@ -8,7 +8,7 @@ function hostname(url) {
     } catch { return ''; }
 }
 
-function createSiteZoom(file, { isPrivate = () => false } = {}) {
+function createSiteZoom(file, { isPrivate = () => false, onChange = () => {} } = {}) {
     const privateLevels = Object.create(null);
     let levels = Object.create(null);
     try {
@@ -26,7 +26,7 @@ function createSiteZoom(file, { isPrivate = () => false } = {}) {
         if (!['zoom-in', 'zoom-out', 'reset-zoom'].includes(action)) return;
         const host = hostname(guest.getURL());
         const level = action === 'reset-zoom' ? 0 : Math.max(-5, Math.min(5, guest.getZoomLevel() + (action === 'zoom-in' ? 0.5 : -0.5)));
-        if (!host) { guest.setZoomLevel(level); return; }
+        if (!host) { guest.setZoomLevel(level); onChange(guest, level); return; }
         const privateGuest = isPrivate(guest);
         const next = privateGuest ? privateLevels : Object.assign(Object.create(null), levels);
         if (level === 0) delete next[host];
@@ -45,6 +45,7 @@ function createSiteZoom(file, { isPrivate = () => false } = {}) {
         for (const target of guests) {
             if (!target.isDestroyed() && isPrivate(target) === privateGuest && hostname(target.getURL()) === host) apply(target);
         }
+        onChange(guest, level);
     }
     function attach(guest) {
         guests.add(guest);
