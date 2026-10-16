@@ -6,7 +6,6 @@ window.updateFlyNewTab = data => {
     document.getElementById('memory').textContent = `${data.memory} MB`;
     searchTemplate = data.search;
     document.getElementById('address-hint').textContent = data.addressHint;
-    document.getElementById('links-hint').textContent = data.linksHint;
     const sites = document.getElementById('sites');
     sites.replaceChildren();
     for (const site of data.sites) {

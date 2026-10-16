@@ -31,7 +31,6 @@ export async function refreshNewTab(view) {
         const data = {
             light: document.body.classList.contains('light-mode'), colours,
             addressHint: window.describeKeyboardAction?.('toggle-address', 'Address bar') || '',
-            linksHint: window.describeKeyboardAction?.('trigger-hints', 'Link hints') || '',
             search: config?.search_engine || 'https://duckduckgo.com/?q=%s',
             sites: [...sites.values()].sort((a, b) => b.count - a.count).slice(0, 5),
             memory: Math.round((diagnostics?.processes || []).reduce((sum, process) => sum + (Number.isFinite(process.residentSetKB) ? process.residentSetKB : 0), 0) / 1024)
