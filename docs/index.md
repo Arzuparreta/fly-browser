@@ -43,7 +43,7 @@ features:
     details: An Arch package and a distro-agnostic AppImage for everything else. Zero telemetry, zero usage tracking, and anonymous GitHub release notifications for effortless updates.
 ---
 
-![Fly Browser Dual-Split View](/screenshots/split-view.webp)
+![Fly Browser New Tab](/screenshots/new-tab.webp)
 
 ## Why Fly Browser?
 
