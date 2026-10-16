@@ -141,6 +141,7 @@ export function notifyActiveView(webview, workspace) {
             webview.addEventListener('did-attach', send, { once: true });
         }
     } else {
+        try { window.flyAPI.extensionsTabFocused(0); } catch (e) {}
         refreshStatusBarActions();
     }
 }

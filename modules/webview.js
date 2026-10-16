@@ -4,7 +4,7 @@ import { NEW_TAB_URL, isNewTab, refreshNewTab } from './newTab.js';
 import { hasActiveOverlay } from './focus.js';
 import { state } from './state.js';
 import { getActiveWebview, removeWebview, getWorkspacePartition, isDarkMode, isPdfUrl, getPdfViewerUrl, extractOriginalUrl, isTargetPrivateDomain } from './utils.js';
-import { loadWebviewSource } from './extensions.js';
+import { loadWebviewSource, closeExtensionPopup } from './extensions.js';
 import { isSplitActive, applySplitLayout, handleSplitTabSelection, handleTabRemovalInSplit, getSplitState, closeSplitView } from './splitView.js';
 import { 
     setTargetUrl, 
@@ -638,6 +638,7 @@ export function getFaviconUrl(urlStr) {
 }
 
 export function renderWorkspaceUI(targetTabToFocus = null) {
+    closeExtensionPopup();
     const currentWS = state.sessionState.current_workspace;
     const wsLabel = document.getElementById('WorkspaceLabel');
     if (wsLabel) {
@@ -881,6 +882,7 @@ let pendingTabFocus = null;
 if (typeof window !== 'undefined') window.addEventListener('blur', () => { clearTimeout(pendingTabFocus); pendingTabFocus = null; });
 
 export function switchTabFocus(targetIdx) {
+    closeExtensionPopup();
     const tabItems = document.querySelectorAll('#TabList li');
     const currentWS = state.sessionState.current_workspace;
 
@@ -1006,6 +1008,13 @@ export function spawnTabWithUrl(url, requestedIndex = null) {
 
     const currentWS = state.sessionState.current_workspace;
     if (!state.sessionState.workspaces[currentWS]) state.sessionState.workspaces[currentWS] = [];
+    if (isSettingsTab(url)) {
+        const existing = state.sessionState.workspaces[currentWS].findIndex(isSettingsTab);
+        if (existing >= 0) {
+            switchTabFocus(existing);
+            return;
+        }
+    }
     state.sessionState.workspaces[currentWS].push(url || "https://duckduckgo.com");
     
     const newTargetIdx = state.sessionState.workspaces[currentWS].length - 1;
