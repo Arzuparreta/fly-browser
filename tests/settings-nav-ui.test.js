@@ -218,6 +218,28 @@ const root = path.resolve(__dirname, '..');
         await page.mouse.move(690, 580);
         await page.waitForTimeout(400);
         await page.screenshot({path: '/tmp/fly-upstream-settings.png'});
+        // Footer shortcut opens Extensions directly and reuses the Settings tab.
+        await page.evaluate(() => window.toggleSidebarPin());
+        await page.locator('#CloseSettingsBtn').click();
+        await page.locator('#PreferencesOverlay').waitFor({state: 'hidden'});
+        await page.locator('#noti-toggle-btn').focus();
+        await page.keyboard.press('ArrowRight');
+        assert.equal(await active(), 'extensions-btn');
+        await page.keyboard.press('ArrowRight');
+        assert.equal(await active(), 'settings-btn');
+        await page.locator('#extensions-btn').click();
+        assert.deepEqual(await visiblePanes(), ['SettingsPane-extensions']);
+        assert.equal(await active(), 'SettingsTab-extensions');
+        const settingsTabs = await page.locator('#TabList li').count();
+        await page.locator('#SettingsTab-general').click();
+        await page.locator('#extensions-btn').click();
+        assert.deepEqual(await visiblePanes(), ['SettingsPane-extensions']);
+        assert.equal(await page.locator('#TabList li').count(), settingsTabs);
+        const footer = await page.locator('.bottom-theme-layout').boundingBox();
+        const shortcut = await page.locator('#extensions-btn').boundingBox();
+        const settings = await page.locator('#settings-btn').boundingBox();
+        assert(shortcut.x + shortcut.width <= settings.x);
+        assert(settings.x + settings.width <= footer.x + footer.width + 1);
         assert.deepEqual(errors, []);
         console.log('Preferences index, search, keyboard navigation, single-pane layout, lazy extension scan and entry points passed.');
     } finally {
