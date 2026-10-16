@@ -4,6 +4,7 @@ const os = require('node:os');
 const path = require('node:path');
 const crypto = require('node:crypto');
 const Module = require('node:module');
+const vm = require('node:vm');
 const Zip = require('adm-zip');
 const packages = require('../extensionPackages');
 const extensions = require('../extensions');
@@ -85,7 +86,7 @@ const { initializeStore, registerStoreSession } = require('../extensionStore');
         assert.equal((await invoke('chromeWebstore.beginInstall', storeEvent, { id })).result, 'user_cancelled');
         assert.equal(scan().length, 0);
         accept = true;
-        assert.equal((await invoke('chromeWebstore.beginInstall', storeEvent, { id, manifest: '{"permissions":[]}' })).result, 'success');
+        assert.equal((await invoke('chromeWebstore.beginInstall', storeEvent, { id, manifest: '{"permissions":[]}' })).result, '');
         assert.match(lastPrompt.detail, /storage/, 'Confirmation uses the downloaded manifest, not store-page data');
         assert.equal(cfg.extensions_enabled, false);
         assert.equal(cfg.unrelated, 'kept');
@@ -118,6 +119,38 @@ const { initializeStore, registerStoreSession } = require('../extensionStore');
         assert.equal((await invoke('chromeWebstore.beginInstall', storeEvent, { id })).result, 'install_error');
         assert.equal(scan()[0].version, '2.0');
         assert.deepEqual(fs.readdirSync(directory), [id], 'Cancelled and failed operations leave no staging directories');
+        // Execute the real preload: functions must never cross the IPC clone boundary,
+        // and the empty begin-install success sentinel must survive both API forms.
+        let bridge, response = { result: '' };
+        const calls = [];
+        vm.runInNewContext(fs.readFileSync(path.join(__dirname, '../extension-store.preload.js'), 'utf8'), {
+            location: { origin: 'https://chromewebstore.google.com' }, process: { isMainFrame: true }, console,
+            require: name => {
+                assert.equal(name, 'electron');
+                return {
+                    contextBridge: { exposeInMainWorld: (_name, value) => { bridge = value; } },
+                    ipcRenderer: { invoke: async (channel, ...args) => {
+                        structuredClone(args);
+                        calls.push([channel, ...args]);
+                        return channel === 'chromeWebstore.beginInstall' ? response : 'success';
+                    } },
+                    webFrame: { executeJavaScript: async () => {} }
+                };
+            }
+        });
+        let callbackResult;
+        assert.equal(await bridge.api.beginInstallWithManifest3({ id }, result => { callbackResult = result; }), '');
+        assert.equal(callbackResult, '');
+        response = { result: 'user_cancelled' };
+        assert.equal(await bridge.api.beginInstallWithManifest3({ id }), 'user_cancelled');
+        response = null;
+        assert.equal(await bridge.api.beginInstallWithManifest3({ id }), 'unknown_error');
+        callbackResult = undefined;
+        await bridge.api.install(id, result => { callbackResult = result; });
+        assert.equal(callbackResult, 'success');
+        assert.deepEqual(calls.at(-1), ['chromeWebstore.install', id]);
+        assert.equal(await bridge.api.install(id), 'success');
+        assert.deepEqual(calls.at(-1), ['chromeWebstore.install', id]);
         console.log('Extension manager: IPC trust boundary, actual-package permissions, cancelled/disabled installs, scoped selections, store sources, update checks/downgrades, stable identity and rollback passed.');
     } finally {
         Module._load = originalLoad;

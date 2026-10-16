@@ -136,7 +136,7 @@ const root = path.resolve(__dirname, '..');
             globalThis.fetch = async (url, options) => String(url).startsWith('https://clients2.google.com/service/update2/crx')
                 ? new Response(Buffer.from(bytes, 'base64')) : globalThis.realFetch(url, options);
             ses.protocol.handle('https', request => request.url.startsWith('https://chromewebstore.google.com/')
-                ? new Response(`<!doctype html><title>Store fixture</title><button id="install">Add to Fly</button><p id="result"></p><script>document.getElementById('install').onclick=async()=>{document.getElementById('result').textContent=await chrome.webstorePrivate.beginInstallWithManifest3({id:'${storeId}'});};</script>`, { headers: { 'content-type': 'text/html' } })
+                ? new Response(`<!doctype html><title>Store fixture</title><button id="install">Add to Fly</button><p id="result"></p><script>document.getElementById('install').onclick=async()=>{const result=await chrome.webstorePrivate.beginInstallWithManifest3({id:'${storeId}'});document.getElementById('result').textContent=result === '' ? await chrome.webstorePrivate.completeInstall('${storeId}') : result;};</script>`, { headers: { 'content-type': 'text/html' } })
                 : net.fetch(request, { bypassCustomProtocolHandlers: true }));
         }, { partition, storeId, bytes: crxBytes.toString('base64') });
         await page.locator('#setting-extensions-store-btn').click();
@@ -158,7 +158,7 @@ const root = path.resolve(__dirname, '..');
         await inStore(`new Promise(resolve => chrome.management.uninstall('${storeId}', {}, resolve))`);
         assert(!(await state(page)).installed.some(item => item.id === storeId));
         assert.equal((await page.evaluate(() => window.flyAPI.getBrowserSettings())).extensions_sources[stored.folder], undefined);
-        assert.equal(await inStore(`chrome.webstorePrivate.beginInstallWithManifest3({id:'${storeId}'})`), 'success');
+        assert.equal(await inStore(`chrome.webstorePrivate.beginInstallWithManifest3({id:'${storeId}'})`), '');
         await inStore(`chrome.management.setEnabled('${storeId}', false)`);
 
         if (process.env.FLY_TEST_LIVE_STORE === '1') {

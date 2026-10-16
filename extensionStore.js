@@ -174,7 +174,7 @@ function initializeStore(options) {
                 if (result.cancelled) return { result: 'user_cancelled' };
                 const item = findStore(result.id);
                 if (item && !event.senderFrame.isDestroyed()) event.senderFrame.send('chrome.management.onInstalled', managementInfo(item));
-                return { result: 'success' };
+                return { result: '' };
             } catch (error) { return { result: 'install_error', message: error.message }; }
         }),
         'chromeWebstore.completeInstall': (_event, id) => findStore(id) ? 'success' : 'install_error',
