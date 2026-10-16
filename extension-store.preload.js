@@ -21,10 +21,10 @@ if (location.origin === 'https://chromewebstore.google.com' && process.isMainFra
     for (const [method, count] of Object.entries({ completeInstall: 1, getExtensionStatus: 2, getFullChromeVersion: 0,
         getMV2DeprecationStatus: 0, getBrowserLogin: 0, getStoreLogin: 0, setStoreLogin: 1, getIsLauncherEnabled: 0,
         enableAppLauncher: 1, getReferrerChain: 0, getWebGLStatus: 0, isInIncognitoMode: 0,
-        isPendingCustodianApproval: 1, install: 2 })) api[method] = call(`chromeWebstore.${method}`, count);
+        isPendingCustodianApproval: 1, install: 1 })) api[method] = call(`chromeWebstore.${method}`, count);
     api.beginInstallWithManifest3 = async (details, callback) => {
         const response = await ipcRenderer.invoke('chromeWebstore.beginInstall', details);
-        const result = response?.result || 'unknown_error';
+        const result = response?.result ?? 'unknown_error';
         await webFrame.executeJavaScript(`chrome.runtime.lastError = chrome.extension.lastError = ${JSON.stringify(response?.message ? { message: response.message } : null)}; void 0;`);
         if (typeof callback === 'function') callback(result);
         return result;
