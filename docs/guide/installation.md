@@ -194,3 +194,22 @@ If Fly is already running, a new launch prints `Fly is already running; asked it
 - Electron can print `ExtensionLoadWarning` for uBlock's Manifest V2 and permissions. Fly supplies context menus and navigation APIs through its compatibility layer, but does not claim complete Chrome compatibility. These warnings stay visible. The existing blocking test checks actual network and cosmetic filtering.
 - `colorreload-gtk-module` is an optional desktop GTK module. A reference in `~/.config/gtk-3.0/settings.ini` with no installed module produces a GTK warning. Repair the desktop package or remove the stale module entry; it is not a Fly resource.
 - Mesa/GBM errors originate in the graphics stack. Check Diagnostics and reproduce with a disposable profile before changing drivers or GPU settings. Do not remove Electron's sandbox or broadly change system library permissions to silence them.
+
+### Build space on Arch
+
+`fly-install` builds packages in a private temporary directory under
+`${XDG_CACHE_HOME:-$HOME/.cache}/fly-install`, including makepkg's extraction
+and staging files. This avoids filling a small RAM-backed `/tmp`. It checks
+for at least 2 GiB free before downloading the package sources and removes
+its build directory on success, failure or interruption. Other processes can
+still consume space during the build; the check does not reserve it.
+
+To use another disk, set `XDG_CACHE_HOME` for the command:
+
+```bash
+XDG_CACHE_HOME=/path/to/cache fly-install update
+```
+
+An existing standalone `fly-install` script needs to be downloaded again using
+the installation command above to receive installer fixes; updating Fly itself
+does not replace that script. AUR helpers choose their own build directories.

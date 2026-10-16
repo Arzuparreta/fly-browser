@@ -179,8 +179,21 @@ install_package() {
     local version=$1
     have makepkg || die "makepkg is missing; this needs an Arch-based system (or use --appimage)"
     (
-        tmp=$(mktemp -d)
+        local cache=${XDG_CACHE_HOME:-$HOME/.cache}/fly-install
+        mkdir -p "$cache" || die "could not create build cache: $cache"
+        tmp=$(mktemp -d "$cache/build.XXXXXXXXXX") || die "could not create build directory in $cache"
         trap 'rm -rf "$tmp"' EXIT
+        trap 'exit 130' INT
+        trap 'exit 143' TERM
+        # Download, extracted source, package staging and compressed output coexist.
+        # This is a conservative minimum, not a reservation against other writers.
+        local available
+        available=$(LC_ALL=C df -Pk "$tmp" | awk 'END {print $4}')
+        [[ $available =~ ^[0-9]+$ ]] || die "could not check free space in $cache"
+        [ "$available" -ge 2097152 ] || die "not enough space in $cache: at least 2 GiB free is needed; free space or set XDG_CACHE_HOME to a disk with room"
+        export TMPDIR=$tmp
+        # Keep makepkg's extraction/staging here even if its config uses /tmp.
+        export BUILDDIR=$tmp
         say "Building $PACKAGE $version with makepkg in $tmp ..."
         curl -fsSL -o "$tmp/PKGBUILD" "$DOWNLOAD/v$version/PKGBUILD" || die "this release has no PKGBUILD"
         cd "$tmp"
