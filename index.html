@@ -574,9 +574,25 @@
                                         </div>
                                     </div>
 
+                                    <div class="settings-group" data-keywords="install zip crx unpacked folder chrome web store addons">
+                                        <h3>Find and install</h3>
+                                        <p class="settings-group-desc">Browse Chrome Web Store or install a built extension from your computer. Fly shows permissions before installing. Electron supports a subset of Chrome APIs; installation does not guarantee compatibility.</p>
+                                        <div class="ext-install-actions">
+                                            <button id="setting-extensions-store-btn" type="button" class="settings-action-btn primary">Browse Chrome Web Store</button>
+                                            <button id="setting-extensions-package-btn" type="button" class="settings-action-btn">Install ZIP or CRX</button>
+                                            <button id="setting-extensions-folder-btn" type="button" class="settings-action-btn">Load unpacked folder</button>
+                                        </div>
+                                        <form id="ExtensionsStoreForm" class="ext-install-actions">
+                                            <label for="ExtensionsStoreLink">Store link or ID</label>
+                                            <input id="ExtensionsStoreLink" type="text" placeholder="https://chromewebstore.google.com/detail/…" autocomplete="off" spellcheck="false">
+                                            <button type="submit" class="settings-action-btn">Install</button>
+                                        </form>
+                                        <p id="ExtensionsInstallStatus" class="settings-group-desc" role="status" aria-live="polite"></p>
+                                    </div>
+
                                     <div class="settings-group">
                                         <h3>Installed</h3>
-                                        <p class="settings-group-desc">Included extensions can be disabled or removed here and stay that way after updates. Install other unpacked extensions in <code id="ExtensionsDirectoryPath">~/.config/fly-browser/extensions</code>. Each workspace keeps its own extension settings and storage, like cookies.</p>
+                                        <p class="settings-group-desc">New extensions are selected for the current workspace. Each workspace keeps its own extension settings and storage, like cookies. Unpacked folders are copied into <code id="ExtensionsDirectoryPath">~/.config/fly-browser/extensions</code>. Disables and removals persist across Fly updates.</p>
                                         <div id="ExtensionsInstalledList" class="extensions-list"></div>
                                     </div>
 

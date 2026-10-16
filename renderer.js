@@ -99,6 +99,7 @@ import { initSearchEnginePreference, renderSearchAliasesUI } from './modules/ove
 import { initDownloadShelf, toggleDownloadShelf } from './modules/downloads.js';
 import {
     setExtensionsConfig,
+    handleExtensionsInstalledChanged,
     handleExtensionSelectTab,
     handleExtensionCloseTab,
     refreshStatusBarActions,
@@ -753,6 +754,7 @@ function setupEventListeners() {
             case 'extension-select-tab': handleExtensionSelectTab(args[0]); break;
             case 'extension-close-tab': handleExtensionCloseTab(args[0]); break;
             case 'extensions-actions-updated': refreshStatusBarActions(); break;
+            case 'extensions-installed-changed': handleExtensionsInstalledChanged(); break;
             case 'close-extension-popup': closeExtensionPopup(); break;
         }
     };

@@ -20,6 +20,35 @@ const BACKGROUND_LABELS = {
 
 let installedCache = [];
 let popupState = null;
+let installBusy = false;
+
+export async function handleExtensionsInstalledChanged() {
+    installedCache = [];
+    setExtensionsConfig(await window.flyAPI.getBrowserSettings());
+    await ensureLiveWorkspaces();
+    if (!document.getElementById('SettingsPane-extensions')?.hidden) await syncExtensionsPreferences();
+    await refreshStatusBarActions();
+}
+
+async function runInstall(operation) {
+    if (installBusy) return;
+    installBusy = true;
+    const status = document.getElementById('ExtensionsInstallStatus');
+    const buttons = document.querySelectorAll('.ext-install-actions button, .ext-update-btn');
+    buttons.forEach(button => { button.disabled = true; });
+    if (status) status.textContent = 'Preparing extension… A permission dialog will appear before installation.';
+    try {
+        const result = await operation();
+        if (status) status.textContent = result?.error ? result.error : result?.cancelled ? 'Installation cancelled.' : result?.unchanged
+            ? `${result.name} is up to date.` : `${result?.name || 'Extension'} installed. Reload already open tabs to apply its content scripts.`;
+        await handleExtensionsInstalledChanged();
+    } catch (error) {
+        if (status) status.textContent = error.message;
+    } finally {
+        installBusy = false;
+        document.querySelectorAll('.ext-install-actions button, .ext-update-btn').forEach(button => { button.disabled = false; });
+    }
+}
 
 // CONFIG STATE
 
@@ -304,7 +333,7 @@ export function getExtensionPaletteCommands() {
         title: 'Extension Settings',
         desc: 'Enable Chrome extensions per workspace and see what they cost',
         details: 'Opens the Extensions section in Preferences. uBlock Origin is enabled by default in new profiles. Extensions load in selected workspaces and unload when those workspaces go idle.',
-        tip: 'Unpacked extensions live in ~/.config/fly-browser/extensions/, one folder each.',
+        tip: 'Install from Chrome Web Store, a ZIP or CRX package, or an unpacked folder.',
         category: 'Extensions',
         icon: 'fa-solid fa-puzzle-piece',
         keywords: ['extensions', 'addons', 'chrome', 'plugins', 'settings'],
@@ -437,7 +466,7 @@ function renderInstalledList(res) {
     if (!list) return;
     const workspaces = Object.keys(state.sessionState.workspaces || {});
     if (!res.installed.length) {
-        list.innerHTML = `<div class="ext-empty">No extensions found. Put each unpacked extension in its own folder inside <code>${escapeHtml(res.directory)}</code>.</div>`;
+        list.innerHTML = '<div class="ext-empty">No extensions installed. Browse Chrome Web Store or choose a package or folder above.</div>';
         return;
     }
 
@@ -454,12 +483,22 @@ function renderInstalledList(res) {
         }).join('');
         const options = info.optionsPage ? `<button type="button" class="settings-action-btn ext-options-btn" data-folder="${escapeHtml(info.folder)}">Options</button>` : '';
         const controls = `<label class="ext-ws-chip"><input type="checkbox" class="ext-enabled-toggle" data-folder="${escapeHtml(info.folder)}"${info.enabled ? ' checked' : ''}> Enabled</label><button type="button" class="settings-action-btn ext-remove-btn" data-folder="${escapeHtml(info.folder)}">Remove</button>`;
+        const source = info.source?.type === 'store' ? `<a href="https://chromewebstore.google.com/detail/${escapeHtml(info.source.id)}" class="ext-source-link">Chrome Web Store</a> <button type="button" class="settings-action-btn ext-update-btn" data-folder="${escapeHtml(info.folder)}"${installBusy ? ' disabled' : ''}>Check for update</button>` : info.bundled ? 'Included with Fly' : 'Local installation · install the updated package or original folder again to update';
+        const errors = res.runtime.workspaces.filter(ws => ws.errors?.[info.folder]).map(ws => `<div class="ext-warning">${escapeHtml(ws.workspace)}: ${escapeHtml(ws.errors[info.folder])}</div>`).join('');
         return `<div class="ext-card" data-extension-folder="${escapeHtml(info.folder)}">
             <div class="ext-card-head">${icon}<span class="ext-name">${escapeHtml(info.name)}</span><span class="ext-version">${escapeHtml(info.version)} · MV${escapeHtml(String(info.manifestVersion || '?'))}</span><span class="ext-kind ${kind.cls}" title="${escapeHtml(kind.title)}">${kind.text}</span>${info.bundled ? '<span class="ext-kind">Included</span>' : ''}${options}${controls}</div>
-            ${warnings}
+            <div class="ext-source">${source}</div>
+            ${warnings}${errors}
             <div class="ext-ws-chips"><span class="ext-ws-label">Active in:</span>${chips}</div>
         </div>`;
     }).join('');
+
+    list.querySelectorAll('.ext-source-link').forEach(link => {
+        link.onclick = event => { event.preventDefault(); if (typeof window.togglePreferencesView === 'function') window.togglePreferencesView(); spawnTabWithUrl(link.href); };
+    });
+    list.querySelectorAll('.ext-update-btn').forEach(button => {
+        button.onclick = () => runInstall(() => window.flyAPI.extensionsUpdate(button.dataset.folder, state.sessionState.current_workspace));
+    });
 
     list.querySelectorAll('input[type="checkbox"][data-workspace]').forEach(box => {
         box.onchange = () => saveWorkspaceSelection(box.dataset.workspace, box.dataset.folder, box.checked);
@@ -555,6 +594,21 @@ async function saveWorkspaceSelection(workspace, folder, enabled) {
 }
 
 export function setupExtensionsPreferencesListeners() {
+    const browse = document.getElementById('setting-extensions-store-btn');
+    if (browse) browse.onclick = () => {
+        if (typeof window.togglePreferencesView === 'function') window.togglePreferencesView();
+        spawnTabWithUrl('https://chromewebstore.google.com/');
+    };
+    for (const kind of ['package', 'folder']) {
+        const button = document.getElementById(`setting-extensions-${kind}-btn`);
+        if (button) button.onclick = () => runInstall(() => window.flyAPI.extensionsInstall({ kind, workspace: state.sessionState.current_workspace }));
+    }
+    const form = document.getElementById('ExtensionsStoreForm');
+    if (form) form.onsubmit = event => {
+        event.preventDefault();
+        const input = document.getElementById('ExtensionsStoreLink').value.trim();
+        runInstall(() => window.flyAPI.extensionsInstall({ kind: 'store', input, workspace: state.sessionState.current_workspace }));
+    };
     const toggle = document.getElementById('setting-extensions-toggle');
     if (toggle) {
         toggle.onchange = async () => {

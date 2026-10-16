@@ -137,6 +137,8 @@ contextBridge.exposeInMainWorld('flyAPI', {
     extensionsGetState: (options) => ipcRenderer.invoke('extensions-get-state', options),
     extensionsApplyConfig: () => ipcRenderer.invoke('extensions-apply-config'),
     extensionsRemove: (folder) => ipcRenderer.invoke('extensions-remove', folder),
+    extensionsInstall: (request) => ipcRenderer.invoke('extensions-install', request),
+    extensionsUpdate: (folder, workspace) => ipcRenderer.invoke('extensions-update', folder, workspace),
     extensionsReload: () => ipcRenderer.invoke('extensions-reload'),
     extensionsOpenDir: () => ipcRenderer.invoke('extensions-open-dir')
 });
