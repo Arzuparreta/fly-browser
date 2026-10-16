@@ -1,6 +1,7 @@
 // modules/statusBar.js
 // Status and mode bar controller for link target previews, connection security, container partition badges, and modal states
 
+import { prepareOverlay } from './focus.js';
 import { state } from './state.js';
 import { getWorkspacePartition, getActiveWebview } from './utils.js';
 import { isSplitActive, getSplitState } from './splitView.js';
@@ -72,9 +73,17 @@ export function initStatusBar() {
     const zoomControls = document.getElementById('ZoomControls');
     zoomControls.addEventListener('beforetoggle', event => {
         if (event.newState !== 'open') return;
+        prepareOverlay('ZoomControls');
         const rect = zoomButton.getBoundingClientRect();
-        zoomControls.style.left = `${Math.max(8, Math.min(rect.left, window.innerWidth - 170))}px`;
+        zoomControls.style.left = `${rect.left + rect.width / 2}px`;
         zoomControls.style.bottom = `${window.innerHeight - rect.top + 6}px`;
+    });
+    // Guest clicks cross a separate document, outside native popover light-dismiss.
+    document.addEventListener('focus', event => {
+        if (event.target.tagName === 'WEBVIEW' && zoomControls.matches(':popover-open')) zoomControls.hidePopover();
+    }, true);
+    window.addEventListener('resize', () => {
+        if (zoomControls.matches(':popover-open')) zoomControls.hidePopover();
     });
     zoomControls.addEventListener('toggle', () => {
         zoomButton.setAttribute('aria-expanded', String(zoomControls.matches(':popover-open')));

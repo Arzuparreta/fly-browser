@@ -4405,6 +4405,7 @@ body.light-mode .sidebar-content::before { background-image: url('assets/identit
     outline-offset: 2px;
 }
 .zoom-controls {
+    translate: -50% 0;
     position: fixed;
     inset: auto;
     margin: 0;

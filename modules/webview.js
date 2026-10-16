@@ -355,7 +355,10 @@ export function createWebView(url, currentWS, idx) {
         const liveIdx = getLiveTabIndex(webview, currentWS, idx);
         if (liveIdx < 0) return;
 
-        if (e.channel === 'guest-pointer-enter') {
+        if (e.channel === 'guest-pointer-down') {
+            const zoomControls = document.getElementById('ZoomControls');
+            if (zoomControls?.matches(':popover-open')) zoomControls.hidePopover();
+        } else if (e.channel === 'guest-pointer-enter') {
             const sidebar = document.getElementById('Sidebar');
             // Guest IPC can arrive after the pointer has already returned to the
             // host. Never let an old guest entry reverse a current sidebar hover.
