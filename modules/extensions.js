@@ -266,8 +266,8 @@ async function measurePopup(webview) {
     if (!popupState || popupState.webview !== webview) return;
     try {
         const [w, h] = await webview.executeJavaScript('[document.documentElement.scrollWidth, document.documentElement.scrollHeight]');
-        const width = Math.min(POPUP_MAX.width, Math.max(POPUP_MIN.width, Number(w) || 0));
-        const height = Math.min(POPUP_MAX.height, Math.max(POPUP_MIN.height, Number(h) || 0));
+        const width = Math.min(POPUP_MAX.width, window.innerWidth - 26, Math.max(POPUP_MIN.width, Number(w) || 0));
+        const height = Math.min(POPUP_MAX.height, window.innerHeight - 80, Math.max(POPUP_MIN.height, Number(h) || 0));
         webview.style.width = `${width}px`;
         webview.style.height = `${height}px`;
     } catch (e) {}
@@ -312,6 +312,12 @@ export async function activateExtension(extensionId, anchorRect = null) {
         return;
     }
     if (res.kind === 'popup') showPopup(res.url, res.partition, anchorRect);
+    if (res.kind === 'options') {
+        closeExtensionPopup();
+        const info = (await ensureInstalledCache()).find(item => item.id === extensionId);
+        if (info?.optionsPage) openExtensionOptions(info);
+        else openExtensionsPreferences();
+    }
     setTimeout(refreshStatusBarActions, 300);
 }
 
@@ -377,8 +383,8 @@ export function getExtensionPaletteCommands() {
         if (info.hasAction) {
             commands.push({
                 id: `extension-activate-${info.id}`,
-                title: `${info.name}: ${info.hasPopup ? 'Open Popup' : 'Run Action'}`,
-                desc: info.hasPopup ? 'Open the extension popup for the active tab' : 'Trigger the extension button for the active tab',
+                title: `${info.name}: ${info.hasPopup ? 'Open Popup' : 'Open Settings'}`,
+                desc: info.hasPopup ? 'Open the extension popup for the active tab' : 'Open extension options or extension preferences',
                 details: `${info.name} ${info.version}`,
                 tip: 'Press Esc or click outside the popup to close it.',
                 category: 'Extensions',

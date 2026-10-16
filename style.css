@@ -4171,6 +4171,8 @@ i.spinning {
 }
 
 .extension-popup webview {
+    position: relative;
+    flex: none;
     display: flex;
 }
 

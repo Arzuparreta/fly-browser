@@ -641,12 +641,7 @@ function resolveActionTarget(extensionId, partition) {
         openPopup = { partition, extensionId, url: popupUrl };
         return { kind: 'popup', url: popupUrl, partition };
     }
-    try {
-        browserAction.activateClick({ eventType: 'click', extensionId, tabId });
-        return { kind: 'clicked' };
-    } catch (err) {
-        return { error: err.message };
-    }
+    return { kind: 'options' };
 }
 
 function attachPopupWebContents(wc) {
