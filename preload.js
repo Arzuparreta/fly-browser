@@ -7,6 +7,11 @@ contextBridge.exposeInMainWorld('flyAPI', {
     resumeTab: id => ipcRenderer.invoke('resume-tab', id),
     suspendInactiveTabs: () => ipcRenderer.invoke('suspend-inactive-tabs'),
     changeSiteZoom: (id, action) => ipcRenderer.invoke('change-site-zoom', id, action),
+    onSiteZoomChanged: callback => {
+        const handler = (_event, id, percent) => callback(id, percent);
+        ipcRenderer.on('site-zoom-changed', handler);
+        return () => ipcRenderer.removeListener('site-zoom-changed', handler);
+    },
     getSession: () => ipcRenderer.invoke('get-session'),
     getSessionRecoveryStatus: () => ipcRenderer.invoke('get-session-recovery-status'),
     saveSession: (sessionData) => ipcRenderer.invoke('save-session', sessionData),

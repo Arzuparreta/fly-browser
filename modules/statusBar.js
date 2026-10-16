@@ -2,7 +2,7 @@
 // Status and mode bar controller for link target previews, connection security, container partition badges, and modal states
 
 import { state } from './state.js';
-import { getWorkspacePartition } from './utils.js';
+import { getWorkspacePartition, getActiveWebview } from './utils.js';
 import { isSplitActive, getSplitState } from './splitView.js';
 import { notifyActiveView } from './extensions.js';
 
@@ -21,6 +21,15 @@ let isHintsModeActive = false;
 let isPassthroughModeActive = false;
 let targetUrlClearTimer = null;
 let currentMode = 'NORMAL';
+let zoomHideTimer = null;
+let zoomGuestId = null;
+
+function hideZoomIndicator() {
+    clearTimeout(zoomHideTimer);
+    const indicator = document.getElementById('StatusBarZoom');
+    if (indicator) indicator.hidden = true;
+    zoomGuestId = null;
+}
 
 export function initStatusBar() {
     statusBarEl = document.getElementById('StatusBar');
@@ -30,6 +39,18 @@ export function initStatusBar() {
     partitionBadgeEl = document.getElementById('StatusBarPartition');
 
     if (!statusBarEl) return;
+
+    window.flyAPI.onSiteZoomChanged((id, percent) => {
+        const active = getActiveWebview();
+        if (!active || active.getWebContentsId() !== id) return;
+        const indicator = document.getElementById('StatusBarZoom');
+        if (!indicator) return;
+        clearTimeout(zoomHideTimer);
+        zoomGuestId = id;
+        indicator.textContent = `Zoom ${percent}%`;
+        indicator.hidden = false;
+        zoomHideTimer = setTimeout(hideZoomIndicator, 1600);
+    });
 
     for (const badge of [partitionBadgeEl, modeBadgeEl]) {
         if (!badge) continue;
@@ -283,6 +304,7 @@ export function handleGuestHintsState(isActive, wsName, tabIdx) {
 }
 
 export function updateStatusBarFromActiveView() {
+    if (zoomGuestId !== null && getActiveWebview()?.getWebContentsId() !== zoomGuestId) hideZoomIndicator();
     const currentWS = state.sessionState.current_workspace;
     const isPrivate = !!state.globalPrivateModeActive;
     updatePartitionBadge(currentWS, isPrivate);

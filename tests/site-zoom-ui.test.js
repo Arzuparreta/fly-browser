@@ -50,6 +50,8 @@ const root = path.resolve(__dirname, '..');
         'isolated', 'Page scaling must use native isolated zoom, with hostname sharing managed by Fly');
         const guestZoom = () => page.evaluate(url => [...document.querySelectorAll('webview')].find(v => v.getURL() === url).getZoomFactor(), url);
         const viewportWidth = () => page.evaluate(url => [...document.querySelectorAll('webview')].find(v => v.getURL() === url).executeJavaScript('window.innerWidth'), url);
+        let indicator = page.locator('#StatusBarZoom');
+        await indicator.waitFor({ state: 'hidden' });
         const originalWidth = await viewportWidth();
         assert(originalWidth > 100, `Fixture needs a laid-out viewport, got ${originalWidth}`);
         const expectRenderedZoom = async factor => {
@@ -61,12 +63,23 @@ const root = path.resolve(__dirname, '..');
         await page.evaluate(() => window.executeBrowserAction('zoom-in'));
         await page.waitForFunction(url => [...document.querySelectorAll('webview')].find(v => v.getURL() === url).getZoomLevel() === 0.5, url);
         await expectRenderedZoom(Math.pow(1.2, 0.5));
+        await page.waitForFunction(() => {
+            const indicator = document.getElementById('StatusBarZoom');
+            return !indicator.hidden && indicator.textContent === 'Zoom 110%';
+        });
         await page.evaluate(() => window.executeBrowserAction('zoom-out'));
         await expectRenderedZoom(1);
         await page.evaluate(() => window.executeBrowserAction('zoom-out'));
         await expectRenderedZoom(Math.pow(1.2, -0.5));
+        await page.waitForFunction(() => document.getElementById('StatusBarZoom').textContent === 'Zoom 91%');
         await page.evaluate(() => window.executeBrowserAction('reset-zoom'));
         await expectRenderedZoom(1);
+        await page.waitForFunction(() => document.getElementById('StatusBarZoom').textContent === 'Zoom 100%');
+        const barBounds = await page.locator('#StatusBar').boundingBox();
+        const zoomBounds = await indicator.boundingBox();
+        assert(Math.abs(zoomBounds.x + zoomBounds.width / 2 - barBounds.x - barBounds.width / 2) < 1, 'Zoom feedback must be centered in the bar');
+        if (process.env.FLY_ZOOM_SCREENSHOT) await page.screenshot({ path: process.env.FLY_ZOOM_SCREENSHOT });
+        await indicator.waitFor({ state: 'hidden' });
         await page.evaluate(() => window.executeBrowserAction('zoom-in'));
         await expectRenderedZoom(Math.pow(1.2, 0.5));
         await application.evaluate(({ webContents }, url) => {
@@ -86,6 +99,7 @@ const root = path.resolve(__dirname, '..');
         assert(Math.abs(await guestZoom() - Math.pow(1.2, 0.5)) < 0.001);
         await application.close(); application = null;
         page = await launch();
+        indicator = page.locator('#StatusBarZoom');
         await application.evaluate(({ BrowserWindow }, url) => BrowserWindow.getAllWindows()[0].webContents.send('master-shortcut', 'spawn-tab-with-url', url), url + 'restart');
         await page.waitForFunction(url => [...document.querySelectorAll('webview')].some(v => { try { return v.getURL() === url && !v.isLoading() && v.getZoomLevel() === 0.5; } catch { return false; } }), url + 'restart');
         await application.evaluate(async ({ webContents }, url) => {
@@ -97,8 +111,10 @@ const root = path.resolve(__dirname, '..');
             guest.emit('zoom-changed', {}, 'in');
         }, url + 'restart');
         await page.waitForFunction(url => [...document.querySelectorAll('webview')].filter(v => { try { return v.getURL().startsWith(url); } catch { return false; } }).every(v => v.getZoomLevel() === 1), url);
+        await page.waitForFunction(() => !document.getElementById('StatusBarZoom').hidden && document.getElementById('StatusBarZoom').textContent === 'Zoom 120%');
         const preferenceFile = path.join(temporary, '.config', 'fly-browser', 'site-zoom.json');
         const saved = fs.readFileSync(preferenceFile, 'utf8');
+        await indicator.waitFor({ state: 'hidden' });
         await page.evaluate(url => {
             for (const id of ['private-zoom-first', 'private-zoom-peer']) {
                 const view = document.createElement('webview');
@@ -114,6 +130,7 @@ const root = path.resolve(__dirname, '..');
         await page.evaluate(() => window.flyAPI.changeSiteZoom(document.getElementById('private-zoom-first').getWebContentsId(), 'zoom-in'));
         await page.waitForFunction(() => ['private-zoom-first', 'private-zoom-peer'].every(id => document.getElementById(id).getZoomLevel() === 0.5));
         assert.equal(fs.readFileSync(preferenceFile, 'utf8'), saved, 'Private zoom must leave disk unchanged');
+        assert(await indicator.isHidden(), 'Background zoom must not show feedback for the active tab');
         assert.equal(await page.evaluate(url => [...document.querySelectorAll('webview')].find(v => v.getURL() === url).getZoomLevel(), url + 'restart'), 1, 'Private zoom must not affect normal tabs');
         await page.evaluate(() => window.flyAPI.changeSiteZoom(document.getElementById('private-zoom-peer').getWebContentsId(), 'reset-zoom'));
         await page.waitForFunction(() => ['private-zoom-first', 'private-zoom-peer'].every(id => document.getElementById(id).getZoomLevel() === 0));

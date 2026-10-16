@@ -3042,6 +3042,7 @@ body.light-mode .download-action-btn:hover {
 
 /* Status and Mode Bar */
 .status-bar {
+    position: relative;
     height: 22px;
     min-height: 22px;
     max-height: 22px;
@@ -4377,4 +4378,32 @@ body.light-mode .sidebar-content::before { background-image: url('assets/identit
         animation: none !important;
         scroll-behavior: auto !important;
     }
+}
+
+/* Transient feedback stays centered independently of the side badges. */
+.status-zoom {
+    position: absolute;
+    left: 50%;
+    top: 50%;
+    transform: translate(-50%, -50%);
+    padding: 1px 8px;
+    border-radius: 3px;
+    background: var(--bg-sidebar);
+    color: var(--text);
+    font-family: 'IBM Plex Mono', monospace;
+    font-size: 11px;
+    font-variant-numeric: tabular-nums;
+    pointer-events: none;
+    animation: zoom-status-appear 140ms ease-out;
+}
+
+.status-zoom[hidden] { display: none; }
+
+@keyframes zoom-status-appear {
+    from { opacity: 0; }
+    to { opacity: 1; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .status-zoom { animation: none; }
 }
