@@ -1,5 +1,5 @@
 // preload.js
-const { contextBridge, ipcRenderer } = require('electron');
+const { contextBridge, ipcRenderer, webFrame } = require('electron');
 
 // Preload private API exposure
 contextBridge.exposeInMainWorld('flyAPI', {
@@ -127,6 +127,7 @@ contextBridge.exposeInMainWorld('flyAPI', {
         ipcRenderer.on('window-maximized-state', handler);
         return () => ipcRenderer.removeListener('window-maximized-state', handler);
     },
+    getInterfaceZoomFactor: () => webFrame.getZoomFactor(),
     // Opt-in Chrome extensions (extensions.js)
     extensionsEnsure: (workspace, partition) => ipcRenderer.invoke('extensions-ensure', workspace, partition),
     extensionsRenameWorkspace: (from, to) => ipcRenderer.invoke('extensions-rename-workspace', from, to),

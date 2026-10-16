@@ -7,9 +7,8 @@ import { getWorkspacePartition, escapeHtml, focusActiveWebview } from './utils.j
 import { setTargetUrl } from './statusBar.js';
 import { spawnTabWithUrl, switchTabFocus, handleTabRemoval } from './webview.js';
 
-const POPUP_MIN = { width: 200, height: 60 };
+const POPUP_MIN = { width: 25, height: 25 };
 const POPUP_MAX = { width: 800, height: 600 };
-const POPUP_MEASURE_DELAYS_MS = [0, 150, 400, 900, 1800];
 
 const BACKGROUND_LABELS = {
     none: { text: 'No background', cls: 'ext-kind-light', title: 'Content scripts only. No process of its own.' },
@@ -265,15 +264,47 @@ function placePopup(container, anchorRect) {
     }
 }
 
-async function measurePopup(webview) {
-    if (!popupState || popupState.webview !== webview) return;
-    try {
-        const [w, h] = await webview.executeJavaScript('[document.documentElement.scrollWidth, document.documentElement.scrollHeight]');
-        const width = Math.min(POPUP_MAX.width, window.innerWidth - 26, Math.max(POPUP_MIN.width, Number(w) || 0));
-        const height = Math.min(POPUP_MAX.height, window.innerHeight - 80, Math.max(POPUP_MIN.height, Number(h) || 0));
-        webview.style.width = `${width}px`;
-        webview.style.height = `${height}px`;
-    } catch (e) {}
+// Measure an intrinsic root box instead of the root scroll area (which is at
+// least the current viewport size). Observe layout changes, including shrinkage,
+// rather than sampling the viewport again on a sequence of timers.
+async function watchPopupSize(webview) {
+    const scale = window.flyAPI.getInterfaceZoomFactor();
+    const maxWidth = Math.min(POPUP_MAX.width, window.innerWidth - 26) * scale;
+    const measure = `(() => {
+        if (!window.__flyPopupSize) {
+            const root = document.documentElement;
+            root.style.setProperty('width', 'max-content', 'important');
+            root.style.setProperty('max-width', '${maxWidth}px', 'important');
+            root.style.setProperty('height', 'max-content', 'important');
+            root.style.setProperty('min-width', '0', 'important');
+            root.style.setProperty('min-height', '0', 'important');
+            const state = window.__flyPopupSize = { last: '', resolve: null };
+            const report = () => {
+                const rect = root.getBoundingClientRect();
+                const size = [Math.ceil(rect.width), Math.ceil(rect.height)];
+                const key = size.join(',');
+                if (state.last === key) return;
+                state.last = key;
+                state.size = size;
+                if (state.resolve) { state.resolve(size); state.resolve = null; }
+            };
+            new ResizeObserver(report).observe(root);
+            report();
+        }
+        const state = window.__flyPopupSize;
+        if (state.size) { const size = state.size; state.size = null; return size; }
+        return new Promise(resolve => { state.resolve = size => { state.size = null; resolve(size); }; });
+    })()`;
+    while (popupState?.webview === webview) {
+        try {
+            const [w, h] = await webview.executeJavaScript(measure);
+            if (popupState?.webview !== webview) return;
+            const width = Math.min(POPUP_MAX.width, window.innerWidth - 26, Math.max(POPUP_MIN.width, w / scale));
+            const height = Math.min(POPUP_MAX.height, window.innerHeight - 80, Math.max(POPUP_MIN.height, h / scale));
+            webview.style.width = `${width}px`;
+            webview.style.height = `${height}px`;
+        } catch (e) { return; }
+    }
 }
 
 function showPopup(url, partition, anchorRect, optionsName = null) {
@@ -305,7 +336,7 @@ function showPopup(url, partition, anchorRect, optionsName = null) {
     });
     webview.addEventListener('close', closeExtensionPopup);
     webview.addEventListener('did-finish-load', () => {
-        POPUP_MEASURE_DELAYS_MS.forEach(delay => setTimeout(() => measurePopup(webview), delay));
+        watchPopupSize(webview);
         webview.focus();
     });
 
