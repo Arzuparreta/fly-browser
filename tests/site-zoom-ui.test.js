@@ -22,6 +22,11 @@ const root = path.resolve(__dirname, '..');
             args: ['--no-sandbox', '--disable-gpu', `--ozone-platform=${process.env.FLY_TEST_OZONE_PLATFORM || 'x11'}`, entry]
         });
         const page = await application.firstWindow();
+        await application.evaluate(({ BrowserWindow }) => {
+            const window = BrowserWindow.getAllWindows()[0];
+            window.unmaximize();
+            window.setBounds({ x: 0, y: 0, width: 1280, height: 900 });
+        });
         page.setDefaultTimeout(15000);
         await page.waitForFunction(() => !!window.executeBrowserAction && document.getElementById('KeyboardStatus').textContent === 'All changes saved');
         return page;
@@ -40,9 +45,40 @@ const root = path.resolve(__dirname, '..');
         assert.equal(await zoom(), 1);
         await application.evaluate(({ BrowserWindow }, url) => BrowserWindow.getAllWindows()[0].webContents.send('master-shortcut', 'spawn-tab-with-url', url), url);
         await page.waitForFunction(url => [...document.querySelectorAll('webview')].some(v => { try { return v.getURL() === url && !v.isLoading(); } catch { return false; } }), url);
+        assert.equal(await application.evaluate(({ webContents }, url) =>
+            webContents.getAllWebContents().find(v => v.getType() === 'webview' && v.getURL() === url).getZoomMode(), url),
+        'isolated', 'Page scaling must use native isolated zoom, with hostname sharing managed by Fly');
         const guestZoom = () => page.evaluate(url => [...document.querySelectorAll('webview')].find(v => v.getURL() === url).getZoomFactor(), url);
+        const viewportWidth = () => page.evaluate(url => [...document.querySelectorAll('webview')].find(v => v.getURL() === url).executeJavaScript('window.innerWidth'), url);
+        const originalWidth = await viewportWidth();
+        assert(originalWidth > 100, `Fixture needs a laid-out viewport, got ${originalWidth}`);
+        const expectRenderedZoom = async factor => {
+            await page.waitForFunction(async ({ url, width }) => {
+                const view = [...document.querySelectorAll('webview')].find(v => v.getURL() === url);
+                return Math.abs(await view.executeJavaScript('window.innerWidth') - width) <= 2;
+            }, { url, width: originalWidth / factor });
+        };
         await page.evaluate(() => window.executeBrowserAction('zoom-in'));
         await page.waitForFunction(url => [...document.querySelectorAll('webview')].find(v => v.getURL() === url).getZoomLevel() === 0.5, url);
+        await expectRenderedZoom(Math.pow(1.2, 0.5));
+        await page.evaluate(() => window.executeBrowserAction('zoom-out'));
+        await expectRenderedZoom(1);
+        await page.evaluate(() => window.executeBrowserAction('zoom-out'));
+        await expectRenderedZoom(Math.pow(1.2, -0.5));
+        await page.evaluate(() => window.executeBrowserAction('reset-zoom'));
+        await expectRenderedZoom(1);
+        await page.evaluate(() => window.executeBrowserAction('zoom-in'));
+        await expectRenderedZoom(Math.pow(1.2, 0.5));
+        await application.evaluate(({ webContents }, url) => {
+            const guest = webContents.getAllWebContents().find(v => v.getType() === 'webview' && v.getURL() === url);
+            for (let i = 0; i < 9; i++) guest.emit('zoom-changed', {}, 'in');
+            if (guest.getZoomLevel() !== 5) throw new Error(`Rapid zoom lost steps: ${guest.getZoomLevel()}`);
+        }, url);
+        await expectRenderedZoom(Math.pow(1.2, 5));
+        await page.evaluate(() => window.executeBrowserAction('reset-zoom'));
+        await expectRenderedZoom(1);
+        await page.evaluate(() => window.executeBrowserAction('zoom-in'));
+        await expectRenderedZoom(Math.pow(1.2, 0.5));
         await application.evaluate(({ BrowserWindow }, url) => BrowserWindow.getAllWindows()[0].webContents.send('master-shortcut', 'spawn-tab-with-url', url), url + 'second');
         await page.waitForFunction(url => [...document.querySelectorAll('webview')].some(v => { try { return v.getURL() === url && v.getZoomLevel() === 0.5; } catch { return false; } }), url + 'second');
         await openSettings(page);

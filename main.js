@@ -1910,7 +1910,7 @@ function createWindow() {
         security.hardenWebviewPreferences(webPreferences);
         // Site zoom is restored by hostname, independently of the interface scale.
         webPreferences.zoomFactor = 1;
-        webPreferences.zoomMode = 'manual';
+        webPreferences.zoomMode = 'isolated';
         const partitionStr = (webPreferences && webPreferences.partition) || (params && params.partition);
         if (partitionStr) {
             configureAndHardenSession(session.fromPartition(partitionStr));

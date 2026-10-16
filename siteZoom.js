@@ -48,9 +48,9 @@ function createSiteZoom(file, { isPrivate = () => false } = {}) {
     }
     function attach(guest) {
         guests.add(guest);
-        // Manual mode prevents Chromium's per-origin zoom from competing with
-        // Firefox-style hostname preferences (shared across schemes and ports).
-        guest.setZoomMode('manual');
+        // Isolate Chromium's per-origin zoom while keeping native page scaling
+        // enabled. Hostname preferences are shared explicitly above.
+        guest.setZoomMode('isolated');
         guest.on('did-navigate', () => apply(guest));
         guest.on('dom-ready', () => apply(guest));
         guest.on('zoom-changed', (_event, direction) => change(guest, direction === 'in' ? 'zoom-in' : 'zoom-out'));
