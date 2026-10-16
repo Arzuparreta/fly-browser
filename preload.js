@@ -17,6 +17,7 @@ contextBridge.exposeInMainWorld('flyAPI', {
     readHinterCode: () => ipcRenderer.invoke('read-hinter-code'),
     readReaderCode: () => ipcRenderer.invoke('read-reader-code'),
     showContextMenu: (params) => ipcRenderer.send('show-context-menu', params),
+    showTabContextMenu: options => ipcRenderer.invoke('show-tab-context-menu', options),
     getBrowserSettings: () => ipcRenderer.invoke('get-browser-settings'),
     saveBrowserSettings: (cfg) => ipcRenderer.invoke('save-browser-settings', cfg),
     updateBrowserSettings: (cfg) => ipcRenderer.invoke('update-browser-settings', cfg),

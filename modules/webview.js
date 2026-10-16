@@ -259,7 +259,7 @@ export function createWebView(url, currentWS, idx) {
         if (webview.__flyInjectedScriptIds) webview.__flyInjectedScriptIds.clear();
         const liveIdx = getLiveTabIndex(webview, currentWS, idx);
         if (liveIdx >= 0) {
-            updateTabMediaIndicator(currentWS, liveIdx, false, false);
+            updateTabMediaIndicator(currentWS, liveIdx, false);
         }
     });
 
@@ -270,6 +270,7 @@ export function createWebView(url, currentWS, idx) {
         webview.style.opacity = '1';
         const liveIdx = getLiveTabIndex(webview, currentWS, idx);
         if (liveIdx < 0) return;
+        webview.setAudioMuted(!!state.tabAudioMuted[currentWS]?.[liveIdx]);
 
         const targetLi = document.querySelectorAll('#TabList li')[liveIdx];
         if (targetLi) {
@@ -824,6 +825,15 @@ export function renderWorkspaceUI(targetTabToFocus = null) {
             switchTabFocus(idx);
         });
 
+        li.addEventListener('contextmenu', event => {
+            event.preventDefault();
+            event.stopPropagation();
+            showTabContextMenu(li, currentWS, idx).catch(error => {
+                console.error('Could not perform tab menu action:', error);
+                setTargetUrl('Could not perform tab action', 3000);
+            });
+        });
+
         // Middle click closes the tab, as in other browsers; mousedown is cancelled so Linux does not start autoscroll.
         li.addEventListener('mousedown', (e) => {
             if (e.button === 1) e.preventDefault();
@@ -965,7 +975,7 @@ export async function spawnNewBlankTab() {
     }
 }
 
-export function spawnTabWithUrl(url) {
+export function spawnTabWithUrl(url, requestedIndex = null) {
     if (state.dashboardActive && typeof window.toggleDashboardView === 'function') {
         window.toggleDashboardView();
     }
@@ -986,7 +996,6 @@ export function spawnTabWithUrl(url) {
     const currentWS = state.sessionState.current_workspace;
     if (!state.sessionState.workspaces[currentWS]) state.sessionState.workspaces[currentWS] = [];
     state.sessionState.workspaces[currentWS].push(url || "https://duckduckgo.com");
-    window.flyAPI.saveSession(state.sessionState);
     
     const newTargetIdx = state.sessionState.workspaces[currentWS].length - 1;
     if (!state.tabRestoreStates[currentWS]) state.tabRestoreStates[currentWS] = [];
@@ -996,11 +1005,67 @@ export function spawnTabWithUrl(url) {
     if (!state.tabPinned[currentWS]) state.tabPinned[currentWS] = [];
     state.tabPinned[currentWS][newTargetIdx] = false;
 
-    renderWorkspaceUI(newTargetIdx);
+    const destination = Number.isInteger(requestedIndex)
+        ? Math.max(state.tabPinned[currentWS].filter(Boolean).length, Math.min(newTargetIdx, requestedIndex)) : newTargetIdx;
+    moveTabState(currentWS, newTargetIdx, destination);
+    window.flyAPI.saveSession(state.sessionState);
+    renderWorkspaceUI(destination);
 }
 
 // Closed tabs are kept only in memory and cleared when private mode changes.
 const closedTabs = [];
+
+async function showTabContextMenu(row, workspace, index) {
+    const urls = state.sessionState.workspaces[workspace];
+    const pinned = state.tabPinned[workspace] || [];
+    const closable = urls.map((_, i) => i).filter(i => !pinned[i] && i !== index);
+    const action = await window.flyAPI.showTabContextMenu({
+        pinned: !!pinned[index],
+        muted: !!state.tabAudioMuted[workspace]?.[index],
+        canCloseOthers: closable.length > 0,
+        canCloseRight: closable.some(i => i > index),
+        canReopen: closedTabs.length > 0
+    });
+    // A tab can disappear or move while the native popup is open. Never act on its replacement.
+    if (!action || !row.isConnected || state.sessionState.current_workspace !== workspace) return;
+    if (state.dashboardActive && typeof window.toggleDashboardView === 'function') window.toggleDashboardView();
+    switch (action) {
+        case 'new-tab':
+        case 'duplicate': {
+            const url = action === 'new-tab' ? 'about:blank' : urls[index];
+            const destination = Math.max(index + 1, pinned.filter(Boolean).length);
+            spawnTabWithUrl(url, destination);
+            if (action === 'new-tab') window.displayAddressOverlay?.();
+            break;
+        }
+        case 'reload': {
+            const existing = state.activeViewsCache[workspace]?.[index];
+            const view = ensureTabLoaded(workspace, index);
+            if (existing && view) { await resumeView(view); if (view.isConnected) view.reload(); }
+            break;
+        }
+        case 'pin': {
+            const selected = [...document.querySelectorAll('#TabList li')].findIndex(li => li.classList.contains('selected'));
+            const destination = pinned.filter((value, i) => value && i !== index).length;
+            togglePinTab(workspace, index);
+            const remapped = selected === index ? destination
+                : selected + (index > selected && destination <= selected ? 1 : index < selected && destination >= selected ? -1 : 0);
+            renderWorkspaceUI(remapped);
+            break;
+        }
+        case 'mute': toggleTabAudioMute(workspace, index); break;
+        case 'close': handleTabRemoval(index); break;
+        case 'close-others':
+        case 'close-right':
+            // Descending indices keep each remaining target stable and preserve pinned tabs.
+            for (const target of closable.reverse()) {
+                if (action === 'close-others' || target > index) handleTabRemoval(target);
+            }
+            break;
+        case 'reopen': reopenClosedTab(); break;
+    }
+}
+
 function rememberClosedTab(workspace, index) {
     const url = state.sessionState.workspaces[workspace]?.[index];
     if (!url) return;
@@ -1242,18 +1307,16 @@ export function toggleGlobalMediaPlayback() {
 
 export function toggleTabAudioMute(workspaceId, tabIdx) {
     const ws = workspaceId || state.sessionState.current_workspace;
-    const views = state.activeViewsCache[ws];
-    if (!views || !views[tabIdx]) return;
-
-    const wv = views[tabIdx];
-    if (!wv || typeof wv.setAudioMuted !== 'function') return;
+    if (!state.sessionState.workspaces[ws] || tabIdx < 0 || tabIdx >= state.sessionState.workspaces[ws].length) return;
+    const wv = state.activeViewsCache[ws]?.[tabIdx];
 
     if (!state.tabAudioMuted[ws]) state.tabAudioMuted[ws] = [];
-    const currentlyMuted = typeof wv.isAudioMuted === 'function' ? wv.isAudioMuted() : !!state.tabAudioMuted[ws][tabIdx];
+    const currentlyMuted = !!state.tabAudioMuted[ws][tabIdx];
     const newMutedState = !currentlyMuted;
 
-    wv.setAudioMuted(newMutedState);
     state.tabAudioMuted[ws][tabIdx] = newMutedState;
+    // A restored tab may not have a guest yet; dom-ready applies the desired state.
+    try { wv?.setAudioMuted(newMutedState); } catch (_) {}
 
     const isAudible = state.tabMediaAudible[ws]?.[tabIdx] || false;
     updateTabMediaIndicator(ws, tabIdx, isAudible, newMutedState);

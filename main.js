@@ -1447,6 +1447,16 @@ function isKeyboardHost(event) {
     return mainWindow && !mainWindow.isDestroyed() && event.sender === mainWindow.webContents &&
         event.senderFrame === mainWindow.webContents.mainFrame;
 }
+ipcMain.handle('show-tab-context-menu', (event, options) => {
+    if (!isKeyboardHost(event) || !options ||
+        !['pinned', 'muted', 'canCloseOthers', 'canCloseRight', 'canReopen'].every(key => typeof options[key] === 'boolean')) return null;
+    return new Promise(resolve => {
+        let selected = null;
+        const template = require('./tabContextMenu').buildTabContextMenu(options, action => { selected = action; });
+        // Finish native popup teardown before a command can remove guests or change focus.
+        Menu.buildFromTemplate(template).popup({window: mainWindow, callback: () => resolve(selected)});
+    });
+});
 function broadcastKeyboardConfig() {
     const config = keybinds.getKeyboardConfig();
     if (mainWindow && !mainWindow.isDestroyed()) mainWindow.webContents.send('keyboard-config-changed', config);
