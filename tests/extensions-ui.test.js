@@ -12,7 +12,7 @@ const root = path.resolve(__dirname, '..');
     const entry = createElectronFixture(root, temporary);
     const configDir = path.join(temporary, '.config', 'fly-browser');
     fs.mkdirSync(configDir, { recursive: true });
-    fs.writeFileSync(path.join(configDir, 'config.json'), JSON.stringify({extensions_enabled: false}));
+    fs.writeFileSync(path.join(configDir, 'config.json'), JSON.stringify({extensions_enabled: false, interface_scale: process.env.FLY_POPUP_TEST_SCALE || 'normal'}));
     let blockedHits = 0;
     const server = http.createServer((req, res) => {
         if (req.url === '/document') {
@@ -93,13 +93,50 @@ const root = path.resolve(__dirname, '..');
             const guest = popup.querySelector('webview');
             const bounds = popup.getBoundingClientRect();
             const content = guest.getBoundingClientRect();
-            return bounds.width >= 200 && bounds.height >= 60 &&
+            return bounds.width >= 25 && bounds.height >= 25 &&
                 bounds.width >= content.width && bounds.height >= content.height &&
                 bounds.top >= 0 && bounds.right <= innerWidth &&
                 document.elementFromPoint(content.x + 10, content.y + 10) === guest;
         });
         await waitUntil(async () => page.evaluate(() => document.querySelector('#ExtensionPopupOverlay webview')
             .executeJavaScript("document.body.innerText.length > 10")));
+        // Replace the loaded popup with deterministic extension content. Root scroll
+        // dimensions include the viewport, so the old polling approach cannot shrink
+        // and adds body margins again on each tick.
+        const setPopupContent = (width, height) => page.evaluate(([width, height]) =>
+            document.querySelector('#ExtensionPopupOverlay webview').executeJavaScript(`
+                document.querySelectorAll('style, link[rel="stylesheet"]').forEach(node => node.remove());
+                document.body.style.cssText = 'margin: 8px; height: auto';
+                document.body.innerHTML = '<div style="width: ${width}px; height: ${height}px; background: white"></div>';
+            `), [width, height]);
+        const expectPopupSize = async (width, height) => {
+            const scale = process.env.FLY_POPUP_TEST_SCALE === 'large' ? 1.25 : 1;
+            width /= scale;
+            height /= scale;
+            await page.waitForFunction(([width, height]) => {
+                const rect = document.querySelector('#ExtensionPopupOverlay webview').getBoundingClientRect();
+                return Math.abs(rect.width - width) < 1 && Math.abs(rect.height - height) < 1;
+            }, [width, height]);
+            // Cover all of the former delayed measurements and assert no creeping growth.
+            await page.waitForTimeout(2000);
+            const rect = await page.locator('#ExtensionPopupOverlay webview').boundingBox();
+            assert(Math.abs(rect.width - width) < 1 && Math.abs(rect.height - height) < 1,
+                `Popup drifted: ${JSON.stringify(rect)}; expected ${width} x ${height}`);
+        };
+        await setPopupContent(320, 180);
+        await expectPopupSize(336, 196);
+        await setPopupContent(480, 280);
+        await expectPopupSize(496, 296);
+        await setPopupContent(240, 100);
+        await expectPopupSize(256, 116);
+        await setPopupContent(80, 30);
+        await expectPopupSize(96, 46);
+        await setPopupContent(1100, 900);
+        const limits = await page.evaluate(() => [Math.min(800, innerWidth - 26), Math.min(600, innerHeight - 80)]);
+        const scale = process.env.FLY_POPUP_TEST_SCALE === 'large' ? 1.25 : 1;
+        await expectPopupSize(limits[0] * scale, limits[1] * scale);
+        await setPopupContent(320, 180);
+        await expectPopupSize(336, 196);
         await page.evaluate(() => document.querySelector('#ExtensionPopupOverlay webview').sendInputEvent({ type: 'keyDown', keyCode: 'Escape' }));
         await page.locator('#ExtensionPopupOverlay').waitFor({ state: 'detached' });
         await backgroundScript("chrome.browserAction.setPopup({ popup: '' })");

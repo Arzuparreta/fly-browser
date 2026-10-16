@@ -4171,6 +4171,7 @@ i.spinning {
 }
 
 .extension-popup webview {
+    background-color: #ffffff;
     position: relative;
     flex: none;
     display: flex;
