@@ -29,6 +29,8 @@ try {
     const log = path.join(fake, 'log');
     const tool = (name, body) => fs.writeFileSync(path.join(bin, name), `#!/bin/sh\n${body}\n`, { mode: 0o755 });
 
+    tool('df', `printf 'Filesystem 1024-blocks Used Available Capacity Mounted on\\nmock 9999999 0 %s 0%% /\\n' \"$(cat '${fake}/space' 2>/dev/null || echo 9999999)\"`);
+
     // GitHub: URLs map to files in the fake release directory.
     tool('curl', `out=; url=
 while [ $# -gt 0 ]; do case $1 in -o) out=$2; shift;; -*) ;; *) url=$1;; esac; shift; done
@@ -43,6 +45,8 @@ case $1 in
   -R) rm -f "${fake}/installed" ;;
 esac`);
     tool('makepkg', `echo "makepkg $* in $PWD" >> "${log}"
+[ "$BUILDDIR" = "$PWD" ] && [ "$TMPDIR" = "$PWD" ] || exit 90
+[ ! -f "${fake}/fail-build" ] || exit 1
 sed -n 's/^pkgver=//p' PKGBUILD > "${fake}/installed"`);
     tool('sudo', `echo "sudo $*" >> "${log}"; exec "$@"`);
     tool('vercmp', `[ "$1" = "$2" ] && echo 0 && exit; [ "$(printf '%s\\n%s\\n' "$1" "$2" | sort -V | head -n1)" = "$1" ] && echo -1 || echo 1`);
@@ -149,9 +153,22 @@ sed -n 's/^pkgver=//p' PKGBUILD > "${fake}/installed"`);
 
     // Package (the default where makepkg exists): built in a temporary directory that is removed.
     publish('0.18.0');
+    fs.writeFileSync(path.join(fake, 'space'), '100');
+    result = run('install');
+    assert.notEqual(result.status, 0);
+    assert.match(result.stderr, /not enough space.*at least 2 GiB/);
+    assert.doesNotMatch(result.calls, /makepkg|PKGBUILD/);
+    assert.deepEqual(fs.readdirSync(path.join(home, '.cache/fly-install')), []);
+    fs.unlinkSync(path.join(fake, 'space'));
+    fs.writeFileSync(path.join(fake, 'fail-build'), '');
+    result = run('install');
+    assert.notEqual(result.status, 0);
+    assert.deepEqual(fs.readdirSync(path.join(home, '.cache/fly-install')), []);
+    fs.unlinkSync(path.join(fake, 'fail-build'));
     result = ok('install');
-    const build = /makepkg -si in (\S+)/.exec(result.calls);
+    const build = /makepkg -si in (.+)/.exec(result.calls);
     assert.ok(build, result.calls);
+    assert.ok(build[1].startsWith(path.join(home, '.cache/fly-install/build.')), build[1]);
     assert.equal(fs.existsSync(build[1]), false, 'The build directory is removed');
     assert.match(result.calls, /curl https:\/\/github\.com\/Arzuparreta\/fly-browser\/releases\/download\/v0\.18\.0\/PKGBUILD/);
     assert.match(ok('status').stdout, /package {3}fly-browser-bin 0\.18\.0 .*up to date/);
