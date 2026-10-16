@@ -884,6 +884,7 @@ function setupEventListeners() {
 
     paletteInput.addEventListener('keydown', handlePaletteInputNavigation);
 
+    document.getElementById('extensions-btn').onclick = () => openPreferencesPane('extensions');
     document.getElementById('settings-btn').onclick = () => togglePreferencesView();
 
     const pinSidebarBtn = document.getElementById('pin-sidebar-btn');
@@ -921,7 +922,7 @@ function setupEventListeners() {
         });
     });
 
-    const bottomButtons = ['pin-sidebar-btn', 'split-toggle-btn', 'reader-view-btn', 'noti-toggle-btn', 'settings-btn'];
+    const bottomButtons = ['pin-sidebar-btn', 'split-toggle-btn', 'reader-view-btn', 'noti-toggle-btn', 'extensions-btn', 'settings-btn'];
     bottomButtons.forEach((id, idx) => {
         const btn = document.getElementById(id);
         if (!btn) return;
