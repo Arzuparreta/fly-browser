@@ -758,6 +758,7 @@ function setupEventListeners() {
     };
     window.flyAPI.onMasterShortcut(window.executeBrowserAction);
     initialiseOverlayFocus({
+        ZoomControls: {active: () => document.getElementById('ZoomControls').matches(':popover-open'), close: () => document.getElementById('ZoomControls').hidePopover()},
         WideAddressBar: {active: () => addressBar.style.display === 'block', close: displayAddressOverlay},
         FindBarOverlay: {active: () => findActive, close: toggleInPageSearch},
         DashboardOverlay: {active: () => state.dashboardActive, close: toggleDashboardView},
