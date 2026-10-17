@@ -24,3 +24,8 @@ footer a { color:inherit; text-decoration:underline; text-underline-offset:2px; 
 @media(max-width:750px) { main { grid-template-columns:1fr; max-width:580px; padding-top:30px; } .specimen { min-height:300px; max-width:400px; margin:auto; } #clock { font-size:72px; } }
 
 .key-hint { font:10px 'IBM Plex Mono',monospace; color:var(--dim); line-height:1.6; }
+
+.site-row { display:flex; align-items:center; border-bottom:1px solid var(--border); }
+#sites .site-row a { flex:1; min-width:0; border-bottom:0; }
+.site-row button { color:var(--dim); font-size:18px; padding:8px 12px; }
+.site-row button:hover, .site-row button:focus-visible { color:var(--accent); }

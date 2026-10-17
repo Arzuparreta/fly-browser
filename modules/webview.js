@@ -356,7 +356,15 @@ export function createWebView(url, currentWS, idx) {
         const liveIdx = getLiveTabIndex(webview, currentWS, idx);
         if (liveIdx < 0) return;
 
-        if (e.channel === 'guest-pointer-down') {
+        if (e.channel === 'hide-frequent-site') {
+            if (webview.getURL() !== NEW_TAB_URL || webview.getAttribute('partition') === 'FlyPrivateProfile') return;
+            window.flyAPI.hideFrequentSite(e.args?.[0]).then(async removed => {
+                if (removed) {
+                    const { refreshNewTabs } = await import('./newTab.js');
+                    await refreshNewTabs();
+                }
+            });
+        } else if (e.channel === 'guest-pointer-down') {
             const zoomControls = document.getElementById('ZoomControls');
             if (zoomControls?.matches(':popover-open')) zoomControls.hidePopover();
         } else if (e.channel === 'guest-pointer-enter') {

@@ -31,6 +31,8 @@ contextBridge.exposeInMainWorld('flyAPI', {
     clearDomainCookies: (data) => ipcRenderer.invoke('clear-domain-cookies', data),
     clearActiveCache: (options) => ipcRenderer.invoke('clear-active-cache', options),
     executeTerminalCommand: (commandStr) => ipcRenderer.send('execute-terminal-command', commandStr),
+    getFrequentSites: () => ipcRenderer.invoke('get-frequent-sites'),
+    hideFrequentSite: url => ipcRenderer.invoke('hide-frequent-site', url),
     searchHistory: (query) => ipcRenderer.invoke('search-history', query),
     purgeHistory: () => ipcRenderer.invoke('purge-history'),
     setNativeTheme: (mode) => ipcRenderer.send('set-native-theme', mode),

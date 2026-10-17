@@ -354,6 +354,7 @@ extractUrlsFromArgs(process.argv).forEach(url => pendingUrls.push(url));
 
 let inMemoryHistory = null;
 let historyFlushTimer = null;
+const frequentSites = require('./frequentSites').createFrequentSites(path.join(CONFIG_DIR, 'hidden-sites.json'), getHistoryCache);
 
 function getHistoryCache() {
     if (inMemoryHistory === null) {
@@ -407,6 +408,7 @@ function logVisit(title, url) {
     if (history.length > MAX_HISTORY_ITEMS) {
         history.length = MAX_HISTORY_ITEMS;
     }
+    frequentSites.invalidate();
     scheduleHistoryFlush();
 }
 
@@ -1388,6 +1390,9 @@ ipcMain.handle('save-session', async (event, sessionData) => {
     return writeSession(sessionData);
 });
 
+ipcMain.handle('get-frequent-sites', () => frequentSites.get());
+ipcMain.handle('hide-frequent-site', (_event, url) => frequentSites.hide(url));
+
 ipcMain.handle('search-history', async (event, query) => {
     const history = getHistoryCache();
     if (!query || !query.trim()) return history;
@@ -1402,6 +1407,7 @@ ipcMain.handle('search-history', async (event, query) => {
 ipcMain.handle('purge-history', async () => {
     try {
         inMemoryHistory = [];
+        frequentSites.invalidate();
         if (historyFlushTimer) {
             clearTimeout(historyFlushTimer);
             historyFlushTimer = null;
@@ -2011,7 +2017,7 @@ app.on('web-contents-created', (event, webContents) => {
         });
 
         webContents.on('did-navigate', (navEvent, url) => {
-            logVisit(webContents.getTitle(), url);
+            if (webContents.session !== session.fromPartition('FlyPrivateProfile')) logVisit(webContents.getTitle(), url);
             if (url) {
                 try {
                     const parsedUrl = new URL(url);
@@ -2026,7 +2032,7 @@ app.on('web-contents-created', (event, webContents) => {
         });
 
         webContents.on('did-navigate-in-page', (navEvent, url) => {
-            logVisit(webContents.getTitle(), url);
+            if (webContents.session !== session.fromPartition('FlyPrivateProfile')) logVisit(webContents.getTitle(), url);
         });
 
         webContents.on('context-menu', (contextEvent, params) => {
