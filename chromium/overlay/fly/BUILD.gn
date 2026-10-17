@@ -18,6 +18,8 @@ source_set("commands") {
     "commands/command_service.cc",
     "commands/command_service.h",
     "commands/generated_contract.h",
+    "commands/hint_codes.cc",
+    "commands/hint_codes.h",
     "commands/keyboard_config.cc",
     "commands/keyboard_config.h",
     "commands/keyboard_router.cc",
@@ -45,6 +47,7 @@ test("fly_unittests") {
   sources = [
     "commands/command_service_unittest.cc",
     "commands/keyboard_config_unittest.cc",
+    "commands/hint_codes_unittest.cc",
     "workspaces/workspace_service_unittest.cc",
   ]
   deps = [

@@ -15,11 +15,13 @@
 #include "components/input/native_web_keyboard_event.h"
 #include "components/tabs/public/split_tab_data.h"
 #include "content/public/browser/navigation_handle.h"
+#include "content/public/browser/render_widget_host_view.h"
 #include "content/public/browser/web_contents.h"
 #include "content/public/browser/web_contents_observer.h"
 #include "content/public/browser/web_contents_user_data.h"
 #include "fly/commands/keyboard_router.h"
 #include "fly/ui/fly_window_controller.h"
+#include "fly/ui/hint_controller.h"
 #include "ui/base/clipboard/clipboard_buffer.h"
 #include "ui/base/clipboard/scoped_clipboard_writer.h"
 #include "ui/events/keycodes/dom/dom_code.h"
@@ -175,6 +177,10 @@ bool SplitCommand(BrowserWindowInterface* browser, std::string_view action) {
 }
 }  // namespace
 
+std::string NativeEventStroke(const input::NativeWebKeyboardEvent& event) {
+  return EventStroke(event);
+}
+
 content::KeyboardEventProcessingResult RouteNativePageKey(
     BrowserWindowInterface* browser,
     const input::NativeWebKeyboardEvent& event,
@@ -186,6 +192,9 @@ content::KeyboardEventProcessingResult RouteNativePageKey(
   auto* contents = browser->GetTabStripModel()->GetActiveWebContents();
   if (!contents)
     return Result::NOT_HANDLED;
+  auto& window = FlyWindowController::Get();
+  if (window.hints().HandleKey(contents, event))
+    return Result::HANDLED;
   PageKeyboardState::CreateForWebContents(contents);
   auto& router = PageKeyboardState::FromWebContents(contents)->router();
   const auto key = router.Route(
@@ -199,6 +208,7 @@ content::KeyboardEventProcessingResult RouteNativePageKey(
                                         blink::WebInputEvent::kAltGrKey)),
        .editable =
            browser_ui_editable || contents->IsFocusedElementEditable()});
+  window.UpdateModeLabel();
   if (key.kind == KeyResultKind::kPass)
     return Result::NOT_HANDLED;
   if (key.kind == KeyResultKind::kExitInsert) {
@@ -209,6 +219,23 @@ content::KeyboardEventProcessingResult RouteNativePageKey(
     FlyWindowController::Get().RunCommand(browser, key.action);
   }
   return Result::HANDLED;
+}
+
+std::u16string NativePageModeLabel(BrowserWindowInterface* browser) {
+  if (browser && browser->IsDeleteScheduled())
+    return u"NORMAL";
+  auto* contents =
+      browser ? browser->GetTabStripModel()->GetActiveWebContents() : nullptr;
+  auto* state =
+      contents ? PageKeyboardState::FromWebContents(contents) : nullptr;
+  if (state && state->router().mode() == KeyboardMode::kPassthrough)
+    return u"PASSTHROUGH";
+  if ((state && state->router().mode() == KeyboardMode::kInsert) ||
+      (contents && contents->IsFocusedElementEditable() &&
+       contents->GetRenderWidgetHostView() &&
+       contents->GetRenderWidgetHostView()->HasFocus()))
+    return u"INSERT";
+  return u"NORMAL";
 }
 
 bool ExecuteNativeCommand(BrowserWindowInterface* browser,

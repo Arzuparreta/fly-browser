@@ -3,6 +3,7 @@
 // Fly repository.
 #include "fly/sessions/tab_identity.h"
 #include "fly/ui/fly_window_controller.h"
+#include "fly/ui/hint_controller.h"
 #include "fly/ui/native_commands.h"
 #include "fly/ui/tab_sidebar.h"
 
@@ -32,6 +33,7 @@
 #include "ui/aura/window.h"
 #include "ui/aura/window_tree_host.h"
 #include "ui/base/base_window.h"
+#include "ui/events/test/event_generator.h"
 #include "ui/views/controls/button/button.h"
 #include "ui/views/test/button_test_api.h"
 
@@ -384,6 +386,63 @@ IN_PROC_BROWSER_TEST_F(FlyWorkspaceBrowserTest,
     EXPECT_EQ(data->FindInt("tabId"), data->FindInt("activeTabId"));
     EXPECT_EQ(data->FindInt("tabId"), data->FindInt("activated"));
   }
+}
+
+IN_PROC_BROWSER_TEST_F(FlyWorkspaceBrowserTest,
+                       NativeHintKeysActivateWithoutHidingOrBlurringPage) {
+  ASSERT_TRUE(ui_test_utils::NavigateToURL(
+      browser(), embedded_test_server()->GetURL("/title1.html")));
+  auto* contents = Active(browser());
+  ASSERT_TRUE(content::ExecJs(contents, R"js(
+    document.body.innerHTML = '<button id="only">Hint fixture</button>';
+    document.querySelector('#only').onclick = () => document.title = 'hint activated';
+    window.visibilityEvents = 0;
+    document.addEventListener('visibilitychange', () => visibilityEvents++);
+  )js"));
+  auto& window = FlyWindowController::Get();
+  window.Select(browser(), true);
+  ui::test::EventGenerator keys(window.desktop_widget()->GetNativeWindow());
+  keys.PressKey(ui::VKEY_F, ui::EF_ALT_DOWN);
+  ASSERT_TRUE(base::test::RunUntil([&] {
+    return window.hints().active() &&
+           window.hints().target_count_for_testing() == 1;
+  }));
+  EXPECT_EQ("visible", content::EvalJs(contents, "document.visibilityState"));
+  EXPECT_EQ(true, content::EvalJs(contents, "document.hasFocus()"));
+  EXPECT_EQ(0, content::EvalJs(contents, "visibilityEvents"));
+  content::TitleWatcher title(contents, u"hint activated");
+  keys.PressKey(ui::VKEY_Q, ui::EF_NONE);
+  EXPECT_EQ(u"hint activated", title.WaitAndGetTitle());
+  EXPECT_FALSE(window.hints().active());
+  EXPECT_EQ(0, content::EvalJs(contents, "visibilityEvents"));
+}
+
+IN_PROC_BROWSER_TEST_F(FlyWorkspaceBrowserTest,
+                       EmptyDesktopSurvivesAndNewTabKeyReopensWorkspace) {
+  auto& window = FlyWindowController::Get();
+  auto original = browser()->GetWeakPtr();
+  ASSERT_TRUE(ExecuteNativeCommand(browser(), "remove-tab"));
+  ASSERT_TRUE(base::test::RunUntil([&] { return !original; }));
+  ASSERT_EQ(&window, FlyWindowController::GetIfCreated());
+  EXPECT_EQ(nullptr, window.selected_browser_for_testing());
+  EXPECT_TRUE(window.desktop_widget()->IsVisible());
+  ui::test::EventGenerator keys(window.desktop_widget()->GetNativeWindow());
+  keys.PressKey(ui::VKEY_T, ui::EF_CONTROL_DOWN);
+  ASSERT_TRUE(base::test::RunUntil(
+      [&] { return window.selected_browser_for_testing() != nullptr; }));
+  EXPECT_EQ(1,
+            window.selected_browser_for_testing()->GetTabStripModel()->count());
+  auto* reopened = window.selected_browser_for_testing();
+  auto reopened_lifetime = reopened->GetWeakPtr();
+  ASSERT_TRUE(ExecuteNativeCommand(reopened, "remove-tab"));
+  ASSERT_TRUE(base::test::RunUntil([&] { return !reopened_lifetime; }));
+  auto* new_tab = static_cast<views::Button*>(
+      window.tab_sidebar_for_testing()->children().front());
+  views::test::ButtonTestApi(new_tab).NotifyDefaultMouseClick();
+  ASSERT_TRUE(base::test::RunUntil(
+      [&] { return window.selected_browser_for_testing() != nullptr; }));
+  EXPECT_EQ(1,
+            window.selected_browser_for_testing()->GetTabStripModel()->count());
 }
 
 }  // namespace
