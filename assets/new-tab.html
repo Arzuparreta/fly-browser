@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
 <meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
-<meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' data:; connect-src 'none'">
+<meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' data: https: http:; connect-src 'none'">
 <title>New tab · Fly</title>
 <link rel="icon" href="identity/pixel-32.png"><link rel="stylesheet" href="fonts/fonts.css"><link rel="stylesheet" href="new-tab.css">
 <script src="new-tab.js" defer></script>
@@ -12,14 +12,13 @@
 <section class="navigation" aria-label="New tab">
 <time id="clock" aria-label="Current time"></time><div id="date"></div>
 <form id="search-form"><label class="sr-only" for="search">Search or enter address</label><input id="search" placeholder="Search or enter address" autocomplete="off" spellcheck="false"><button type="submit" aria-label="Go">↗</button></form><p id="address-hint" class="key-hint"></p>
-<section id="saved-bookmarks" aria-label="Bookmarks" hidden>
-<div class="eyebrow sites-label">BOOKMARKS</div>
-<nav id="bookmarks" aria-label="Saved bookmarks"></nav>
-<p id="bookmarks-empty">Save pages to bookmarks to see them here.</p>
-</section>
 <section id="frequent-sites" aria-label="Frequent sites">
 <div class="eyebrow sites-label">FREQUENT SITES</div><nav id="sites" aria-label="Frequent sites"></nav>
 <p id="empty">Your frequent sites will appear here as you browse.</p>
+</section>
+<section id="saved-bookmarks" aria-label="Bookmarks" hidden>
+<nav id="bookmarks" aria-label="Saved bookmarks"></nav>
+<p id="bookmarks-empty">Save pages to bookmarks to see them here.</p>
 </section>
 </section>
 <figure class="specimen" aria-label="Fly specimen and browser statistics">

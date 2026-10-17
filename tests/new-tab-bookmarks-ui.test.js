@@ -8,7 +8,7 @@ const root = path.resolve(__dirname, '..');
 const createFixture = require('./electron-fixture');
 (async () => {
     const directory = fs.mkdtempSync(path.join(os.tmpdir(), 'fly-new-tab-bookmarks-'));
-    const server = http.createServer((_req, res) => res.end('<!doctype html><title>Saved destination</title>Bookmark opened'));
+    const server = http.createServer((req, res) => req.url === '/favicon.ico' ? (res.writeHead(200, {'Content-Type':'image/svg+xml'}), res.end('<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16"><rect width="16" height="16" fill="red"/></svg>')) : res.end('<!doctype html><title>Saved destination</title>Bookmark opened'));
     await new Promise(resolve => server.listen(0, '127.0.0.1', resolve));
     const destination = `http://127.0.0.1:${server.address().port}/saved`;
     const configDir = path.join(directory, '.config/fly-browser');
@@ -29,6 +29,8 @@ const createFixture = require('./electron-fixture');
         const refresh = () => page.evaluate(async () => (await import('./modules/newTab.js')).refreshNewTabs());
         const guest = expression => page.evaluate(expression => document.querySelector('webview').executeJavaScript(expression), expression);
         await refresh();
+        await page.waitForFunction(async () => document.querySelector('webview').executeJavaScript('!!document.querySelector("#bookmarks img")?.naturalWidth'));
+        assert(await guest('document.getElementById("saved-bookmarks").getBoundingClientRect().top >= document.getElementById("frequent-sites").getBoundingClientRect().bottom'));
         const newTabUrl = await page.evaluate(() => document.querySelector('webview').getURL());
         assert.equal(await guest('document.querySelectorAll("#bookmarks a").length'), 22);
         assert.equal(await guest('document.querySelectorAll("#bookmarks script").length'), 0);
@@ -47,7 +49,9 @@ const createFixture = require('./electron-fixture');
             await document.querySelector('webview').loadURL(url);
         }, newTabUrl);
         await refresh();
-        assert.equal(await guest('document.querySelector("#bookmarks a").textContent'), 'Updated bookmark');
+        assert.equal(await guest('document.querySelector("#bookmarks a .bookmark-title").textContent'), 'Updated bookmark');
+        assert(await guest('Math.abs((document.querySelector("#bookmarks a").getBoundingClientRect().left + document.querySelector("#bookmarks a").getBoundingClientRect().right - document.getElementById("bookmarks").getBoundingClientRect().left - document.getElementById("bookmarks").getBoundingClientRect().right) / 2) < 2'));
+        if (process.env.FLY_BOOKMARKS_SCREENSHOT) await page.screenshot({path:process.env.FLY_BOOKMARKS_SCREENSHOT});
         await page.evaluate(async () => { await window.flyAPI.saveBookmarks([]); await (await import('./modules/newTab.js')).refreshNewTabs(); });
         assert.equal(await guest('document.getElementById("bookmarks-empty").hidden'), false);
         await page.evaluate(url => new Promise(resolve => {

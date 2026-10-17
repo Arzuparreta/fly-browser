@@ -1,3 +1,4 @@
+let bookmarkSnapshot;
 let searchTemplate = 'https://duckduckgo.com/?q=%s';
 window.updateFlyNewTab = data => {
     document.body.classList.toggle('light', data.light);
@@ -7,14 +8,36 @@ window.updateFlyNewTab = data => {
     searchTemplate = data.search;
     document.getElementById('address-hint').textContent = data.addressHint;
     document.getElementById('saved-bookmarks').hidden = !data.showBookmarks;
-    const bookmarks = document.getElementById('bookmarks');
-    bookmarks.replaceChildren();
-    for (const bookmark of data.bookmarks || []) {
-        const link = document.createElement('a');
-        link.href = bookmark.url;
-        link.textContent = bookmark.title;
-        link.title = `${bookmark.title} — ${bookmark.url}`;
-        bookmarks.append(link);
+    const bookmarkData = JSON.stringify(data.bookmarks || []);
+    if (bookmarkSnapshot !== bookmarkData) {
+        bookmarkSnapshot = bookmarkData;
+        const bookmarks = document.getElementById('bookmarks');
+        bookmarks.replaceChildren();
+        for (const bookmark of data.bookmarks || []) {
+            const link = document.createElement('a');
+            link.href = bookmark.url;
+            link.title = `${bookmark.title} — ${bookmark.url}`;
+            const icon = document.createElement('span');
+            icon.className = 'bookmark-icon';
+            icon.setAttribute('aria-hidden', 'true');
+            const fallback = document.createElement('span');
+            fallback.textContent = '☆';
+            const image = document.createElement('img');
+            image.alt = '';
+            image.hidden = true;
+            image.loading = 'lazy';
+            image.decoding = 'async';
+            image.referrerPolicy = 'no-referrer';
+            image.addEventListener('load', () => { image.hidden = false; fallback.hidden = true; });
+            image.addEventListener('error', () => image.remove());
+            image.src = new URL('/favicon.ico', bookmark.url).href;
+            icon.append(fallback, image);
+            const title = document.createElement('span');
+            title.className = 'bookmark-title';
+            title.textContent = bookmark.title;
+            link.append(icon, title);
+            bookmarks.append(link);
+        }
     }
     document.getElementById('bookmarks-empty').hidden = (data.bookmarks || []).length > 0;
     document.getElementById('frequent-sites').hidden = !data.showSites;
