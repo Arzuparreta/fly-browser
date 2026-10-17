@@ -5,23 +5,23 @@ No native application, migration or package has passed acceptance yet.
 
 ## Current checkpoint
 
-PR [#112](https://github.com/Arzuparreta/fly-browser/pull/112) merged as
-`1b82cc5` after its latest-head ordinary checks and explicit native matrix passed.
-[Run 39071709021](https://github.com/Arzuparreta/fly-browser/actions/runs/39071709021)
-built and executed 26 native service tests on **Linux, macOS and Windows**, and
-passed all 27 Python tooling contracts on all three platforms. Downloaded
+PR [#113](https://github.com/Arzuparreta/fly-browser/pull/113) merged as
+`3a34888` after latest-head ordinary checks and the explicit native matrix passed.
+[Run 39075312206](https://github.com/Arzuparreta/fly-browser/actions/runs/39075312206)
+built and executed all 26 native service tests on **Linux, macOS and Windows**;
+all 27 Python tooling contracts also passed on all three. Downloaded
 `native-core-tests.json` files each contain 26 SUCCESS results, under external
-`evidence/ci-native-units-final/`. These are service tests, not browser acceptance.
+`evidence/ci-sidebar-final/`. These are service tests, not browser acceptance.
 
-The sidebar branch `codex/chromium-native-sidebar` is now based on that merged
-main. Its nine browser tests are source-checked but unexecuted. The dependent
-`codex/chromium-native-hints` branch is already committed/pushed at `003b2fd`;
-it adds native accessibility hints, empty-window input/lifetime handling and two
-more browser tests, with 28 service tests passing in the local bootstrap runner.
-It must be rebased after the sidebar PR merges. Further native page-scroll work
-is in `codex/chromium-native-page-scroll` in the managed hints worktree; inspect
-its status before switching branches. No source overlay has been applied to the
-active control checkout.
+The follow-up work is consolidated on `codex/chromium-browser-test-runner`,
+rebased onto that merged main: native hints, empty-window handling, focused page
+scrolling, command palette and a scoped browser-test executable. This replaces
+the earlier dependent-branch delivery sequence; the old pushed branches preserve
+intermediate checkpoints. The combined branch has 15 browser tests awaiting
+execution, 31 service tests passing in the pinned local partial runner, and
+successful full native GN generation/header checks in an isolated source shadow.
+An updated official 31-test CI matrix is still required. No source overlay has
+been applied to the active control checkout; its user service continues building.
 
 ## Source and working state
 
@@ -189,12 +189,12 @@ extension probe. The active log is `/mnt/storage/fly-chromium/build-systemd.log`
 inspect `.fly-engine-operation/owner.json` and the live processes before running
 another engine operation. Do not modify that source tree while it builds.
 
-Open/validate the sidebar PR, wait for its latest-head checks and manual native
-validation, then squash-merge and pull main. Rebase the dependent hints branch
-from its old sidebar base `65ce772` onto that merged main. Preserve the separate
-page-scroll work before switching its worktree. The retained Electron
-recorder/editable-page suite passed with a disposable profile and no page errors;
-its external log is `evidence/command-integration-electron-keyboard.log`.
+Open/validate the combined follow-up PR from
+`codex/chromium-browser-test-runner`, wait for all latest-head checks and the
+explicit native matrix, then squash-merge and pull main. The retained Electron
+recorder/editable-page suite passed in a private Xvfb display with a disposable
+profile and no page errors; its latest log is
+`evidence/palette-electron-keyboard-xvfb.log`.
 
 After the control passes, run the same-pin control fixtures, apply the complete
 managed overlay, configure/build the native browser, then run
