@@ -48,6 +48,23 @@ for (const mutate of [
 const directory = fs.mkdtempSync(path.join(os.tmpdir(), 'fly-keyboard-test-'));
 try {
     const legacyFile = path.join(directory, 'keybinds.json');
+    for (const profile of [
+        {'set-quickmark': 'Ctrl+Alt+Q', 'jump-quickmark': 'Ctrl+Alt+J', 'focus-webview': 'Ctrl+Shift+Y'},
+        {version:2, changesOnly:true, shortcuts:{'set-quickmark':['Ctrl+Alt+Q'], 'jump-quickmark':['Ctrl+Alt+J'], 'focus-webview':['Ctrl+Shift+Y']}, normal:{'jump-quickmark':['G Q']}}
+    ]) {
+        fs.writeFileSync(legacyFile, JSON.stringify(profile));
+        keybinds.initializeKeybinds(directory);
+        const migrated = keybinds.getKeyboardConfig();
+        assert.equal(migrated.warning, undefined);
+        assert.deepEqual(migrated.shortcuts['focus-webview'], ['Ctrl+Shift+Y']);
+        for (const id of ['set-quickmark', 'jump-quickmark']) {
+            assert.equal(keybinds.ACTION_METADATA[id], undefined);
+            assert.equal(migrated.shortcuts[id], undefined);
+            assert.equal(migrated.normal[id], undefined);
+        }
+        assert.equal(keybinds.getActionForInput({type:'keyDown', key:'j', control:true}), null);
+    }
+
     fs.writeFileSync(legacyFile, JSON.stringify({
         'focus-webview': 'Ctrl+Shift+Y', 'remove-tab': 'Ctrl+Q', 'focus-nav-buttons': ['Ctrl+Tab'],
         'reload-active-tab': '', 'trigger-hints': ['Ctrl+F', 'Ctrl+G']

@@ -810,19 +810,15 @@
                 <!-- Actionable Bookmarks Overlay -->
                 <div id="BookmarksOverlay" tabindex="0" style="display: none;">
                     <div class="bookmarks-overlay-header">
-                        <div class="dashboard-title"><i class="fa-solid fa-bookmark"></i> Bookmarks & Quickmarks Manager</div>
+                        <div class="dashboard-title"><i class="fa-solid fa-bookmark"></i> Bookmarks Manager</div>
                         <div class="bookmarks-header-actions">
-                            <input type="text" id="BookmarkSearchInput" placeholder="Search bookmarks and quickmarks..." autocomplete="off">
+                            <input type="text" id="BookmarkSearchInput" placeholder="Search bookmarks..." autocomplete="off">
                             <button id="CloseBookmarksBtn" class="history-action-btn" tabindex="-1" title="Close (Esc)"><i class="fa-solid fa-xmark"></i> Close</button>
                         </div>
                     </div>
-                    <div class="bookmarks-columns-container">
-                        <div class="bookmarks-column-pane">
-                            <div class="quickmarks-section-title">Quickmarks (Ctrl + J + [key])</div>
-                            <div id="QuickmarksResultsList" class="bookmarks-results-list" tabindex="0"></div>
-                        </div>
-                        <div class="bookmarks-column-pane">
-                            <div class="quickmarks-section-title">Bookmarks</div>
+                    <div class="bookmarks-list-container">
+                        <div class="bookmarks-list-pane">
+                            <div class="bookmarks-section-title">Bookmarks</div>
                             <div id="BookmarksResultsList" class="bookmarks-results-list" tabindex="0"></div>
                         </div>
                     </div>

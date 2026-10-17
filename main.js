@@ -59,7 +59,6 @@ const { createTabNumbers } = require('./tabNumbers');
 const CONFIG_DIR = path.join(app.getPath('home'), '.config', 'fly-browser');
 const CONFIG_PATH = path.join(CONFIG_DIR, 'config.json');
 const BOOKMARKS_PATH = path.join(CONFIG_DIR, 'bookmarks.json');
-const QUICKMARKS_PATH = path.join(CONFIG_DIR, 'quickmarks.json');
 const sessionPath = path.join(CONFIG_DIR, 'session.json');
 const sessionBackupPath = path.join(CONFIG_DIR, 'session.json.bak');
 const sentinelPath = path.join(CONFIG_DIR, 'session_sentinel.json');
@@ -1516,20 +1515,6 @@ ipcMain.handle('read-bookmarks', async () => {
 ipcMain.handle('save-bookmarks', async (event, data) => {
     try {
         fs.writeFileSync(BOOKMARKS_PATH, JSON.stringify(data, null, 4), 'utf-8');
-        return true;
-    } catch (err) { return false; }
-});
-
-ipcMain.handle('read-quickmarks', async () => {
-    try {
-        if (!fs.existsSync(QUICKMARKS_PATH)) fs.writeFileSync(QUICKMARKS_PATH, JSON.stringify({}), 'utf-8');
-        return JSON.parse(fs.readFileSync(QUICKMARKS_PATH, 'utf-8'));
-    } catch (err) { return {}; }
-});
-
-ipcMain.handle('save-quickmarks', async (event, data) => {
-    try {
-        fs.writeFileSync(QUICKMARKS_PATH, JSON.stringify(data, null, 4), 'utf-8');
         return true;
     } catch (err) { return false; }
 });

@@ -142,10 +142,9 @@ Maintains persistent workspaces, URLs, titles and legacy startup restoration dat
 
 ---
 
-## 4. Bookmarks & Quickmarks
+## 4. Bookmarks
 
 - **`bookmarks.json`**: An array of saved bookmark objects containing `title`, `url`, and creation timestamp.
-- **`quickmarks.json`**: A key-value dictionary mapping single alphanumeric keys to URLs (e.g. `"g": "https://github.com"`).
 
 
 ## 5. Website Zoom (`site-zoom.json`)

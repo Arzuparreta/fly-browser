@@ -44,7 +44,7 @@ Existing legacy profiles retain their explicit assignments, including empty and 
 | Go forward | `Alt+ArrowRight` | `Shift+L` |
 | New Blank Tab | `Ctrl+T` | `t` |
 | Next workspace | `Alt+PageDown` | Unassigned |
-| Open Bookmarks and Quickmarks | `Ctrl+Shift+B` | Unassigned |
+| Open Bookmarks | `Ctrl+Shift+B` | Unassigned |
 | Pin / Unpin Active Tab | `Ctrl+Shift+X` / `F4` | `p` |
 | Previous workspace | `Alt+PageUp` | Unassigned |
 | Reload Active Tab | `Ctrl+R` / `F5` | `r` |
@@ -103,12 +103,10 @@ Existing legacy profiles retain their explicit assignments, including empty and 
 | Add Current Page to Bookmarks | `Ctrl+D` | Unassigned |
 | Copy page URL | Unassigned | `y` |
 | Find In Page | `Ctrl+F` / `F3` | `/` |
-| Jump to Quickmark | `Ctrl+J` | Unassigned |
 | Open Extension Actions (Popups, Commands, Options) | Unassigned | Unassigned |
 | Play/Pause Media Playback Globally | `Ctrl+Shift+0` / `F10` | Unassigned |
 | Print active page | Unassigned | Unassigned |
 | Reload without cache | `Ctrl+Shift+R` | `Shift+R` |
-| Set Quickmark | `Ctrl+Shift+Q` | Unassigned |
 | Stop loading | Unassigned | Unassigned |
 | Toggle Active Webview DevTools | `Ctrl+Shift+I` / `F12` | Unassigned |
 | Toggle Audio Mute Globally (All Tabs) | Unassigned | `Shift+M` |

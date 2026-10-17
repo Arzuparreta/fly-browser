@@ -22,8 +22,6 @@ export const state = {
     globalPrivateModeActive: false,
     bookmarksActive: false,
     diagnosticsActive: false,
-    awaitingQuickmarkKey: false,
-    quickmarkMode: null,
 
     // Overlay Data Caches
     dashboardItems: [],
@@ -35,12 +33,8 @@ export const state = {
     addressSelectionIdx: -1,
     customSearchAliases: {},
     
-    // Bookmarks and Quickmarks State
-    quickmarks: {},
+    // Bookmarks State
     bookmarks: [],
-    bookmarkActiveColumn: 'quickmarks',
-    quickmarkSelectionIdx: 0,
     bookmarkSelectionIdx: 0,
-    filteredQuickmarksCache: [],
     filteredBookmarksCache: []
 };

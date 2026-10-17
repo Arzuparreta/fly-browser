@@ -2237,7 +2237,7 @@ webview {
     font-weight: 600;
 }
 
-/* Full Page Bookmarks & Quickmarks Overlay Setup */
+/* Full Page Bookmarks Overlay Setup */
 #BookmarksOverlay {
     position: absolute;
     top: 0;
@@ -2287,14 +2287,14 @@ webview {
     border-color: var(--accent);
 }
 
-.bookmarks-columns-container {
+.bookmarks-list-container {
     display: flex;
     gap: 24px;
     flex: 1;
     min-height: 0;
 }
 
-.bookmarks-column-pane {
+.bookmarks-list-pane {
     flex: 1;
     display: flex;
     flex-direction: column;
@@ -2307,9 +2307,6 @@ webview {
     transition: border-color var(--motion-fast) var(--motion-ease);
 }
 
-.bookmarks-column-pane.active-pane {
-    border-color: var(--accent);
-}
 
 .bookmarks-results-list {
     flex: 1;
@@ -2375,7 +2372,7 @@ webview {
     opacity: 1;
     background-color: rgba(239, 68, 68, 0.1);
 }
-.quickmarks-section-title {
+.bookmarks-section-title {
     font-size: 11px;
     font-weight: bold;
     text-transform: uppercase;
@@ -2386,38 +2383,6 @@ webview {
     margin-bottom: 6px;
 }
 
-.quickmark-key-badge {
-    background-color: var(--selected);
-    color: var(--accent);
-    border: 1px solid var(--border);
-    border-radius: 4px;
-    padding: 2px 8px;
-    font-weight: bold;
-    font-size: 12px;
-    margin-right: 10px;
-    font-family: 'IBM Plex Mono', monospace;
-}.quickmarks-section-title {
-    font-size: 11px;
-    font-weight: bold;
-    text-transform: uppercase;
-    color: var(--accent);
-    padding: 8px 4px 4px 4px;
-    letter-spacing: 0.5px;
-    border-bottom: 1px dashed var(--border);
-    margin-bottom: 6px;
-}
-
-.quickmark-key-badge {
-    background-color: var(--selected);
-    color: var(--accent);
-    border: 1px solid var(--border);
-    border-radius: 4px;
-    padding: 2px 8px;
-    font-weight: bold;
-    font-size: 12px;
-    margin-right: 10px;
-    font-family: 'IBM Plex Mono', monospace;
-}
 
 .tab-media-badge {
     font-size: 0.8em;

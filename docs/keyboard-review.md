@@ -13,7 +13,7 @@ Reviewed the action catalogue, renderer keyboard listeners, sandboxed guest prel
 | Page interaction | Hints, find, reader, copy URL, zoom, print | Assignable actions; hint labels and native controls are contextual. PDF URL copying retains the original document URL. |
 | Modes | Insert, Escape cancellation, passthrough/recovery | Assignable entry/toggle; at least one browser recovery chord required. Guest mode is retained per tab. |
 | Split view | Side-by-side/stacked, orientation, focus, swap, close | Existing distinct palette actions are assignable; native tab selection remains available. |
-| Bookmarks/quickmarks | Open/add/set/jump actions, arrows, Enter/Delete, search, native buttons | Configurable actions; Tab reaches controls rather than switching columns. |
+| Bookmarks | Open/add actions, arrows, Enter/Delete, search, native buttons | Configurable actions; Tab reaches controls rather than switching columns. |
 | History | Open, native result buttons, search, purge and close | Configurable opener; results work with Tab and Enter/Space. |
 | Downloads | Open/toggle actions and native action buttons | Customisable openers and focus containment. |
 | Preferences | Direct keyboard-settings action, vertical section index (↑/↓/Home/End with roving Tab stop), / or find shortcut for settings search, native fields/buttons, Escape (clears search first) | One section shown at a time; search filters all sections in place. Search/filter/record/reassign/reset/import/export/save without text-file editing. Drafts survive closing settings. |

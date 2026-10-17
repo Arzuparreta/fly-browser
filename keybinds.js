@@ -21,8 +21,6 @@ const DEFAULT_KEYBINDS = {
     'toggle-find': ['Ctrl+F', 'F3'],
     'toggle-devtools': ['Ctrl+Shift+I', 'F12'],
     'toggle-zen-mode': 'Ctrl+Shift+Z',
-    'set-quickmark': 'Ctrl+Shift+Q',
-    'jump-quickmark': 'Ctrl+J',
     'add-bookmark': 'Ctrl+D',
     'toggle-bookmarks': 'Ctrl+Shift+B',
     'toggle-global-media': ['Ctrl+Shift+0', 'F10'],
@@ -54,10 +52,8 @@ const ACTION_METADATA = {
     'toggle-find': { label: 'Find In Page', category: 'Web Interaction' },
     'toggle-devtools': { label: 'Toggle Active Webview DevTools', category: 'Web Interaction' },
     'toggle-zen-mode': { label: 'Toggle Sidebar Expansion (Pin / Unpin)', category: 'Navigation & Workspaces' },
-    'set-quickmark': { label: 'Set Quickmark', category: 'Web Interaction' },
-    'jump-quickmark': { label: 'Jump to Quickmark', category: 'Web Interaction' },
     'add-bookmark': { label: 'Add Current Page to Bookmarks', category: 'Web Interaction' },
-    'toggle-bookmarks': { label: 'Open Bookmarks and Quickmarks', category: 'Navigation & Workspaces' },
+    'toggle-bookmarks': { label: 'Open Bookmarks', category: 'Navigation & Workspaces' },
     'toggle-global-media': { label: 'Play/Pause Media Playback Globally', category: 'Web Interaction' },
     'toggle-tab-audio-mute': { label: 'Toggle Audio Mute on Active Tab', category: 'Web Interaction' },
     'toggle-global-audio-mute': { label: 'Toggle Audio Mute Globally (All Tabs)', category: 'Web Interaction' },
@@ -296,7 +292,7 @@ const combosOf = table => Object.values(table).flatMap(listOf).filter(value => t
 const known = (table, id) => Object.hasOwn(table, id) ? table[id] : [];
 // Actions that no longer exist; files written by earlier versions may still list them.
 // The nine tab-N actions became one tabs modifier; their individual bindings are dropped.
-const RETIRED_ACTIONS = new Set(['toggle-site-shields', 'toggle-notes', 'export-reader-to-notes', 'export-reader-to-external', 'open-notes-external', 'toggle-webview-theme',
+const RETIRED_ACTIONS = new Set(['set-quickmark', 'jump-quickmark', 'toggle-site-shields', 'toggle-notes', 'export-reader-to-notes', 'export-reader-to-external', 'open-notes-external', 'toggle-webview-theme',
     ...Array.from({length: 9}, (_, index) => [`jump-to-tab-${index + 1}`, `tab-${index + 1}`]).flat()]);
 // True when an earlier version wrote this value without the user choosing it.
 function storedDefault(scope, id, value, legacy) {

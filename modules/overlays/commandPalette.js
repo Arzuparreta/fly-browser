@@ -6,7 +6,7 @@ import { initialiseSettingsNav, showSettingsPane, currentSettingsPane, clearSett
 import { state } from '../state.js';
 import { focusActiveWebview, getActiveWebview, isTargetScript, isDarkMode, escapeHtml } from '../utils.js';
 import { renderWorkspaceUI, switchTabFocus, spawnTabWithUrl, spawnNewBlankTab, handleTabRemoval } from '../webview.js';
-import { toggleBookmarksOverlay, promptQuickmark, addCurrentPageToBookmarks } from './bookmarks.js';
+import { toggleBookmarksOverlay, addCurrentPageToBookmarks } from './bookmarks.js';
 import { syncVisualSettingsInputs, setupVisualSettingsListeners } from '../theme.js';
 import { getExtensionPaletteCommands, prepareExtensionPaletteCommands, syncExtensionsPreferences, setupExtensionsPreferencesListeners } from '../extensions.js';
 import { renderSearchAliasesUI } from './searchEngine.js';
@@ -341,14 +341,14 @@ export const COMMAND_DEFINITIONS = [
     // Tools
     {
         id: 'toggle-bookmarks',
-        title: 'Bookmarks & Quickmarks Manager',
-        desc: 'Open bookmarks manager and single-key jump quickmarks',
-        details: 'Displays your saved bookmarks ledger and configured quickmarks with real-time filtering, editing, and deletion controls.',
+        title: 'Bookmarks Manager',
+        desc: 'Open your saved bookmarks',
+        details: 'Displays your saved bookmarks with filtering and deletion controls.',
         tip: 'Use the binding shown here, or customise this action in Keyboard controls.',
         category: 'Tools',
         icon: 'fa-solid fa-bookmark',
         actionId: 'toggle-bookmarks',
-        keywords: ['bookmarks', 'quickmarks', 'saved', 'favorites'],
+        keywords: ['bookmarks', 'saved', 'favorites'],
         action: () => toggleBookmarksOverlay()
     },
     {
@@ -362,30 +362,6 @@ export const COMMAND_DEFINITIONS = [
         actionId: 'add-bookmark',
         keywords: ['bookmark', 'save', 'favorite', 'page', 'add'],
         action: () => addCurrentPageToBookmarks()
-    },
-    {
-        id: 'set-quickmark',
-        title: 'Set Quickmark',
-        desc: 'Assign active webpage to a single alphanumeric shortcut key',
-        details: 'Associates the active URL with a single keyboard character (e.g. g for GitHub), enabling instant one-key navigation.',
-        tip: 'Use the binding shown here, or customise this action in Keyboard controls.',
-        category: 'Tools',
-        icon: 'fa-solid fa-bolt-lightning',
-        actionId: 'set-quickmark',
-        keywords: ['quickmark', 'shortcut', 'letter', 'mark', 'set'],
-        action: () => promptQuickmark('set')
-    },
-    {
-        id: 'jump-quickmark',
-        title: 'Jump to Quickmark',
-        desc: 'Navigate instantly to a designated quickmark key',
-        details: 'Prompts for a quickmark identifier key and immediately routes the active webview to the associated URL.',
-        tip: 'Use the binding shown here, or customise this action in Keyboard controls.',
-        category: 'Tools',
-        icon: 'fa-solid fa-location-arrow',
-        actionId: 'jump-quickmark',
-        keywords: ['quickmark', 'jump', 'go', 'navigate', 'key'],
-        action: () => promptQuickmark('jump')
     },
     {
         id: 'toggle-downloads',
@@ -1422,12 +1398,12 @@ export function executePaletteSelection(rawInputText) {
         if (typeof targetCommand.action === 'function') {
             targetCommand.action();
             // Surfaces, sidebar focus actions and pending prompts keep their chosen focus.
-            if (!hasActiveOverlay() && !state.awaitingQuickmarkKey && !document.getElementById('Sidebar')?.contains(document.activeElement)) returnFocusToWebview();
+            if (!hasActiveOverlay() && !document.getElementById('Sidebar')?.contains(document.activeElement)) returnFocusToWebview();
             return;
         }
         if (typeof targetCommand === 'string' && commandRegistry[targetCommand]) {
             commandRegistry[targetCommand]();
-            if (!hasActiveOverlay() && !state.awaitingQuickmarkKey && !document.getElementById('Sidebar')?.contains(document.activeElement)) returnFocusToWebview();
+            if (!hasActiveOverlay() && !document.getElementById('Sidebar')?.contains(document.activeElement)) returnFocusToWebview();
             return;
         }
     }
