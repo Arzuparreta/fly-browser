@@ -5,9 +5,9 @@ on:
   workflow_dispatch:
     inputs:
       depth:
-        description: 'Configure only, or build control + native browser and unit tests'
+        description: 'Tooling contracts, source configuration, or complete control/native builds'
         type: choice
-        options: [configure, build]
+        options: [contracts, configure, build]
         default: configure
       platforms:
         description: 'Platforms to validate'
@@ -46,6 +46,7 @@ jobs:
         run: node --check tests/chromium/control-smoke.js
 
   engine:
+    if: inputs.depth != 'contracts'
     name: Pinned engine (${{ matrix.platform }}, ${{ inputs.depth }})
     runs-on: ${{ matrix.os }}
     timeout-minutes: 350

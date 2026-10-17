@@ -18,7 +18,7 @@ spec.loader.exec_module(engine)
 class EngineTests(unittest.TestCase):
     def setUp(self):
         self.temporary = tempfile.TemporaryDirectory(prefix='fly-engine-test-')
-        self.root = Path(self.temporary.name)
+        self.root = Path(self.temporary.name).resolve()
         self.addCleanup(self.temporary.cleanup)
 
     def repository(self):
