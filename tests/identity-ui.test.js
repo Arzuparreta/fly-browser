@@ -52,13 +52,12 @@ const root = path.resolve(__dirname, '..');
         assert(await page.evaluate(() => document.querySelector('webview').executeJavaScript('document.documentElement.scrollWidth <= innerWidth')));
         await page.screenshot({path:'/tmp/fly-identity-papel.png'});
         fs.writeFileSync('/tmp/fly-identity-guest.png', Buffer.from(await app.evaluate(async ({webContents}) => { const view = webContents.getAllWebContents().find(w => w.getType() === 'webview'); return (await view.capturePage()).toPNG().toString('base64'); }), 'base64'));
-        // The local new tab honours the configured search engine and saves navigation.
-        await page.evaluate(async fixture => {
-            await window.flyAPI.updateBrowserSettings({search_engine:fixture+'/?q=%s'});
-            const {refreshNewTabs} = await import('./modules/newTab.js'); await refreshNewTabs();
-        }, fixture);
-        assert.equal(await page.evaluate(() => document.querySelector('webview').executeJavaScript('searchTemplate')), fixture+'/?q=%s');
-        await page.evaluate(() => document.querySelector('webview').executeJavaScript('document.getElementById("search").value="fly identity"; document.getElementById("search-form").requestSubmit()'));
+        // Searches use the browser address bar; the local page has no duplicate search.
+        assert.equal(await page.evaluate(() => document.querySelector('webview').executeJavaScript('document.querySelectorAll("form, input").length')), 0);
+        await page.evaluate(async fixture => window.flyAPI.updateBrowserSettings({search_engine:fixture+'/?q=%s'}), fixture);
+        await page.keyboard.press('Control+l');
+        await page.locator('#WideAddressBar').fill('fly identity');
+        await page.keyboard.press('Enter');
         await page.waitForFunction(fixture => document.querySelector('webview').getURL() === fixture+'/?q=fly%20identity', fixture);
         await page.waitForFunction(() => document.querySelector('.tab-domain')?.textContent === '127.0.0.1');
         const session = await page.evaluate(() => window.flyAPI.getSession());

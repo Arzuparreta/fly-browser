@@ -20,8 +20,6 @@ export async function refreshNewTab(view) {
         const colours = Object.fromEntries(['--bg-main', '--text', '--accent', '--panel', '--cell', '--border', '--dim', '--link'].map(key => [key, style.getPropertyValue(key).trim()]));
         const data = {
             light: document.body.classList.contains('light-mode'), colours,
-            addressHint: window.describeKeyboardAction?.('toggle-address', 'Address bar') || '',
-            search: config?.search_engine || 'https://duckduckgo.com/?q=%s',
             sites, showSites,
             showBookmarks: view.getAttribute('partition') !== 'FlyPrivateProfile',
             bookmarks: (Array.isArray(savedBookmarks) ? savedBookmarks : []).flatMap(bookmark => {
