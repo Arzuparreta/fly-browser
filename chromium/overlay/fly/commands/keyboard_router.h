@@ -40,6 +40,8 @@ class KeyboardRouter {
   KeyboardRouter& operator=(const KeyboardRouter&) = delete;
   void Configure(const KeyboardConfig& config);
   KeyResult Route(const KeyContext& context);
+  // Trusted native UI actions share mode transitions with keyboard dispatch.
+  KeyResult Invoke(std::string action);
   void ClearPending();
   KeyboardMode mode() const { return mode_; }
 

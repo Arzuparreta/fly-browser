@@ -17,6 +17,9 @@ std::u16string NativePageModeLabel(BrowserWindowInterface* browser);
 
 // Runs through the existing profile-bound tab/window services. False denotes an
 // action that still needs Fly UI, never a successful no-op.
+bool InvokeNativeCommand(BrowserWindowInterface* browser, std::string action);
+bool NativeCommandAvailable(BrowserWindowInterface* browser,
+                            std::string_view action);
 bool ExecuteNativeCommand(BrowserWindowInterface* browser,
                           std::string_view action);
 content::KeyboardEventProcessingResult RouteNativePageKey(
