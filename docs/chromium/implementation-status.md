@@ -660,3 +660,29 @@ build record with matching GN argument and executable hashes; changing args or
 losing/replacing the executable cannot reuse an earlier success marker. Two new
 transaction guards bring the Python suite to 29 passing tests. HLS/live Twitch, real Pie, DRM, hardware decode and platform
 packages remain unverified.
+
+## Multiple native window models in one workspace
+
+The dependent `codex/chromium-native-workspace-windows` branch keeps multiple
+normal BrowserWindowInterfaces created inside the same profile accessible in
+Fly's single desktop. A workspace with multiple native windows exposes a separate
+choice for each model, in creation order, using weak native identities. Opening
+a workspace returns to its last selected live model instead of whichever raw
+pointer happened to sort first. Closing its selected model prefers another live
+model in the same workspace before switching profiles. Native extension window
+and tab IDs remain untouched; no tab models or stores are combined.
+
+Workspace-button rebuilding is coalesced into a non-nestable task. Profile
+creation or close may complete inside a native button callback, so the callback's
+own view must survive until dispatch finishes. Closed/expired models are removed
+from the remembered choices. This changes selection memory only; automatic
+multi-workspace session startup is still pending.
+
+Two additional browser cases (18 total on this branch) cover pointer switching,
+remembering a workspace's selected native window, closing/removing that model,
+and a real MV3 service worker creating a normal window through chrome.windows.
+The latter must share Fly's OS host and remain selectable from its workspace.
+Both cases are syntax-checked but unexecuted; no M1 acceptance is claimed.
+Pinned-header source checks pass for the controller, embedded native widget and
+updated browser-test source. Logs: external `workspace-windows-syntax.log` and
+`workspace-windows-browser-syntax.log`.

@@ -9,8 +9,11 @@
 #include "fly/ui/tab_sidebar.h"
 #include "ui/views/controls/textfield/textfield.h"
 
+#include <algorithm>
+
 #include "base/command_line.h"
 #include "base/json/json_reader.h"
+#include "base/strings/utf_string_conversions.h"
 #include "base/test/run_until.h"
 #include "base/test/test_future.h"
 #include "base/uuid.h"
@@ -25,6 +28,7 @@
 #include "chrome/browser/ui/browser_commands.h"
 #include "chrome/browser/ui/browser_window/public/create_browser_window.h"
 #include "chrome/browser/ui/tabs/tab_strip_model.h"
+#include "chrome/test/base/browser_created_waiter.h"
 #include "chrome/test/base/in_process_browser_test.h"
 #include "chrome/test/base/ui_test_utils.h"
 #include "content/public/browser/render_frame_host.h"
@@ -40,6 +44,7 @@
 #include "ui/base/base_window.h"
 #include "ui/events/test/event_generator.h"
 #include "ui/views/controls/button/button.h"
+#include "ui/views/controls/button/md_text_button.h"
 #include "ui/views/test/button_test_api.h"
 
 namespace fly {
@@ -428,6 +433,110 @@ IN_PROC_BROWSER_TEST_F(FlyWorkspaceBrowserTest,
   auto* view = Active(first)->GetRenderWidgetHostView();
   ASSERT_TRUE(view);
   EXPECT_LT(view->GetViewBounds().width(), requested.width());
+}
+
+IN_PROC_BROWSER_TEST_F(FlyWorkspaceBrowserTest,
+                       WorkspaceWindowChoicesRememberAndDropClosedModels) {
+  auto* first = browser();
+  auto& window = FlyWindowController::Get();
+  base::test::TestFuture<BrowserWindowInterface*> future;
+  BrowserWindowCreateParams params(*first->GetProfile(), true);
+  params.should_trigger_session_restore = false;
+  CreateBrowserWindow(std::move(params), future.GetCallback());
+  auto* second = future.Get();
+  ASSERT_TRUE(second);
+  chrome::NewTab(second, NewTabTypes::kNewTabCommand);
+  window.Select(second, true);
+  auto* other = SecondWorkspace();
+  ASSERT_TRUE(other);
+  WorkspaceService service(*g_browser_process->local_state());
+  const auto catalog = service.Read();
+  ASSERT_TRUE(catalog);
+  auto workspace_name = [&](BrowserWindowInterface* target) {
+    const auto directory =
+        target->GetProfile()->GetPath().BaseName().AsUTF8Unsafe();
+    const auto item = std::ranges::find(catalog->items, directory,
+                                        &Workspace::profile_directory);
+    EXPECT_NE(item, catalog->items.end());
+    return item == catalog->items.end() ? std::u16string()
+                                        : base::UTF8ToUTF16(item->name);
+  };
+  const auto first_name = workspace_name(first);
+  const auto other_name = workspace_name(other);
+  auto click = [&](std::u16string_view text, bool prefix = false) {
+    views::MdTextButton* target = nullptr;
+    if (!base::test::RunUntil([&] {
+          for (const auto& child :
+               window.workspace_buttons_for_testing()->children()) {
+            auto* button = static_cast<views::MdTextButton*>(child.get());
+            if (prefix ? button->GetText().starts_with(text)
+                       : button->GetText() == text) {
+              target = button;
+              return true;
+            }
+          }
+          return false;
+        }))
+      return false;
+    views::test::ButtonTestApi(target).NotifyDefaultMouseClick();
+    return true;
+  };
+  ASSERT_TRUE(click(first_name));
+  ASSERT_TRUE(base::test::RunUntil([&] { return window.IsSelected(second); }));
+  ASSERT_TRUE(click(u"Window 1 ·", true));
+  ASSERT_TRUE(base::test::RunUntil([&] { return window.IsSelected(first); }));
+  ASSERT_TRUE(click(other_name));
+  ASSERT_TRUE(base::test::RunUntil([&] { return window.IsSelected(other); }));
+  ASSERT_TRUE(click(first_name));
+  ASSERT_TRUE(base::test::RunUntil([&] { return window.IsSelected(first); }));
+  first->GetWindow()->Close();
+  ASSERT_TRUE(base::test::RunUntil([&] { return window.IsSelected(second); }));
+  ASSERT_TRUE(base::test::RunUntil([&] {
+    return window.workspace_buttons_for_testing()->children().size() == 2;
+  }));
+}
+
+IN_PROC_BROWSER_TEST_F(
+    FlyWorkspaceBrowserTest,
+    ExtensionCreatedNormalWindowUsesExistingDesktopAndPicker) {
+  auto* first = browser();
+  extensions::TestExtensionDir directory;
+  directory.WriteManifest(
+      base::DictValue()
+          .Set("manifest_version", 3)
+          .Set("name", "Fly native window creation probe")
+          .Set("version", std::string(version_info::GetVersionNumber()))
+          .Set("background",
+               base::DictValue().Set("service_worker", "worker.js")));
+  directory.WriteFile(
+      FILE_PATH_LITERAL("worker.js"),
+      content::JsReplace(
+          "chrome.runtime.onInstalled.addListener(() => "
+          "chrome.windows.create({url:$1}));",
+          embedded_test_server()->GetURL("/title1.html").spec()));
+  BrowserCreatedWaiter created;
+  extensions::ChromeTestExtensionLoader loader(first->GetProfile());
+  ASSERT_TRUE(loader.LoadExtension(directory.UnpackedPath()));
+  auto* second = created.Wait();
+  ASSERT_TRUE(second);
+  auto& window = FlyWindowController::Get();
+  ASSERT_TRUE(base::test::RunUntil([&] { return window.IsSelected(second); }));
+  EXPECT_EQ(first->GetProfile(), second->GetProfile());
+  EXPECT_NE(first->GetSessionID(), second->GetSessionID());
+  EXPECT_EQ(window.desktop_widget()->GetNativeWindow()->GetHost(),
+            second->GetWindow()->GetNativeWindow()->GetHost());
+  ASSERT_TRUE(base::test::RunUntil([&] {
+    return window.workspace_buttons_for_testing()->children().size() == 3;
+  }));
+  auto* choice = static_cast<views::Button*>(
+      window.workspace_buttons_for_testing()->children()[1]);
+  views::test::ButtonTestApi(choice).NotifyDefaultMouseClick();
+  ASSERT_TRUE(base::test::RunUntil([&] { return window.IsSelected(first); }));
+  second->GetWindow()->Close();
+  ASSERT_TRUE(base::test::RunUntil([&] {
+    return window.workspace_buttons_for_testing()->children().size() == 1;
+  }));
+  EXPECT_TRUE(window.IsSelected(first));
 }
 
 IN_PROC_BROWSER_TEST_F(FlyWorkspaceBrowserTest,
