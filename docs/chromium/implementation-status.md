@@ -21,9 +21,17 @@ No native application, migration or package has passed acceptance yet.
 - Source fetch, dependency sync and hooks passed. The actual 249 dependency
   records (168 Git repositories plus content-pinned packages/objects) are in
   external `evidence/dependency-revisions.json`, hashed by `evidence/sync.json`.
-- `gn gen out/FlyControl --check` is running. No compiled browser exists yet.
+- M0 infrastructure merged as `d91ab27` through PR #107. Follow-up control-build
+  refinements are on `codex/chromium-control-build` (PR/commit recorded below
+  when created).
+- The initial whole-tree `gn gen --check` run was deliberately interrupted after
+  it spent minutes reading upstream headers on the HDD. The control now uses
+  upstream's normal `gn gen out/FlyControl`; compiler/header checks for Fly
+  integration belong to its changed targets. Normal generation passed: 35,976
+  targets from 5,063 files in 57.174 seconds. The full `chrome` build is running;
+  no completed browser executable exists yet.
   The external `.fly-engine-operation/owner.json` identifies the current process;
-  `configure.log` and `build.log` hold generation/build output.
+  `configure-native.log` and `build.log` hold generation/build output.
 
 ## Decisions and topology
 
@@ -35,8 +43,16 @@ Actual upstream ownership seams must be inspected before implementing adapters.
 The [pinned-source audit](./upstream-ownership.md) records the real native seams.
 The generated [parity ledger](./parity-ledger.md) and
 `chromium/baseline-contracts.json` capture 82 actions, 46 explicit palette entries,
-28 preferences, 15 persisted inputs and the full product-feature checklist.
+28 preferences, 16 persisted inputs and the full product-feature checklist.
 Source/test anchors are discovery aids, not claims of native coverage.
+
+Baseline reconciliation: bookmarks are an ordered flat list. Quickmarks and
+their shortcuts have already been retired; `tests/bookmarks-ui.test.js`
+explicitly requires that no quickmark API/UI exists and `quickmarks.json` stays
+untouched. Native parity must retain that behaviour and preserve the unused
+legacy file. The plan's older folder/quickmark wording is not current runtime
+behaviour and must not become an unsupported import promise. Split layout is
+also renderer-memory state, separate from persisted session tab metadata.
 
 ## Migration and recovery
 
@@ -56,7 +72,7 @@ live source or destination data has been modified.
 
 | Milestone | Status | Evidence / remaining gate |
 | --- | --- | --- |
-| M0 | pending | Source/tools/dependencies/hooks and contract capture pass; control generation/build/launch and clean second checkout outstanding |
+| M0 | pending | Source/tools/dependencies/hooks, generation and contract capture pass; control build/launch and clean second checkout outstanding |
 | M1 | pending | Native topology, shell, split and extension probe outstanding |
 | M2 | pending | Commands, preferences and product UI outstanding |
 | M3 | pending | Native services, blocker and user content outstanding |
@@ -108,10 +124,17 @@ The original logs and disposable profiles remain in the external checkout.
   with `FLY_TEST_OZONE_PLATFORM=x11` and the available Playwright module.
   Logs: external `baseline-keyboard-x11.log`, `baseline-workspaces-x11.log`,
   `baseline-split-x11.log`. Disposable fixtures only.
+- `tests/bookmarks-ui.test.js`: also passed on X11, verifying the single list,
+  retired shortcuts, unmodified unused legacy file and editable-page input.
+  External log: `baseline-bookmarks-x11.log`.
 - Those same three baseline tests failed under headless Ozone (visibility/focus
   timeouts). A later screenshot-capture repeat of the keyboard test timed out
-  attaching to Electron while GN generation was running; no screenshot from
-  that attempt exists. Do not treat it as a passing capture.
+  attaching to Electron while GN generation was running. A subsequent retry
+  passed and saved external `evidence/electron-keyboard.png` (956 × 1052),
+  visually inspected as the actual Electron Preferences/Keyboard baseline.
+  Its narrow viewport shows a horizontal scrollbar; it is not a native Fly UI.
+  Log: `baseline-keyboard-capture-retry.log`. The earlier failure remains in
+  the evidence record and is not counted as a passing capture.
 - `tests/chromium/control-smoke.js` on `/usr/bin/chromium`, X11, fresh profiles:
   passed both without and with the generated MV3 visibility/ID probe. Evidence:
   external `fixture-evidence/control-smoke-pt2Je3/result.json` and
@@ -136,10 +159,13 @@ have not been established.
 
 ## Next action
 
-Finish the pinned source/dependency checkout, run upstream hooks, generate and
-build the unmodified `chrome` control, then inspect native browser/profile/Views
-and split-tab ownership at that exact revision. Record every exercised command
-and blocker below as work proceeds.
+Wait for the existing unmodified `chrome` build, inspect its process exit and
+`evidence/build.json`, then run the same-pin control fixture with and without the
+probe. Source/dependencies/hooks/generation are complete; do not repeat source
+sync under the active build. Native browser/profile/Views ownership findings are
+recorded, but the M1 composition adapter and its native browser tests still need
+implementation. No external platform or build failure is being claimed: the
+local compilation is simply unfinished. macOS/Windows hosts remain unestablished.
 
 ## Command evidence
 
@@ -161,10 +187,16 @@ and blocker below as work proceeds.
 - `python3 scripts/chromium/engine.py hooks --root /mnt/storage/fly-chromium`:
   passed; log `hooks.log`.
 - `python3 scripts/chromium/engine.py configure --root /mnt/storage/fly-chromium`:
-  in progress after the bootstrap correction; log `configure.log`.
+  passed with normal upstream generation; log `configure-native.log` and
+  provenance `evidence/configure.json`. It also verified all recorded Git
+  dependency revisions and clean trees. The record honestly marks the Fly
+  tooling working tree as dirty during this development invocation.
+  Earlier wrapper-bootstrap failure and deliberately interrupted full-tree
+  header scan are recorded in `configure.log` and the command history above.
 - A successful configure is chained to
   `python3 scripts/chromium/engine.py build --root /mnt/storage/fly-chromium --jobs 8`.
-  Inspect the live operation lease and `build.log` before launching another command.
+  This full local compile is running. Inspect the live operation lease and
+  `build.log` before launching another command. There is no build pass yet.
 - `python3 scripts/chromium/pin-upstream.py --output /mnt/storage/fly-chromium/evidence/upstream-candidate.json`:
   passed; independent re-resolution verifies source `chrome/VERSION`. This is a
   pin-resolution check, not an engine-update rehearsal.
