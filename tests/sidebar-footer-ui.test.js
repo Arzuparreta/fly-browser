@@ -22,7 +22,7 @@ const root = path.resolve(__dirname, '..');
         const errors = []; page.on('pageerror', error => errors.push(error.message));
         await page.waitForFunction(() => !!window.executeBrowserAction);
         assert.equal(await page.locator('#Sidebar #noti-toggle-btn').count(), 0);
-        assert.equal(await page.locator('#StatusBarSecurity + #noti-toggle-btn + #StatusBarExtensions').count(), 1);
+        assert.equal(await page.locator('#StatusBarExtensions + #noti-toggle-btn + #StatusBarSecurity').count(), 1);
         const bell = page.locator('#noti-toggle-btn');
         assert.equal(await bell.getAttribute('aria-pressed'), 'true');
         await bell.click();
