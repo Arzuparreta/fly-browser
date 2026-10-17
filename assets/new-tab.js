@@ -17,25 +17,10 @@ window.updateFlyNewTab = data => {
             const link = document.createElement('a');
             link.href = bookmark.url;
             link.title = `${bookmark.title} — ${bookmark.url}`;
-            const icon = document.createElement('span');
-            icon.className = 'bookmark-icon';
-            icon.setAttribute('aria-hidden', 'true');
-            const fallback = document.createElement('span');
-            fallback.textContent = '☆';
-            const image = document.createElement('img');
-            image.alt = '';
-            image.hidden = true;
-            image.loading = 'lazy';
-            image.decoding = 'async';
-            image.referrerPolicy = 'no-referrer';
-            image.addEventListener('load', () => { image.hidden = false; fallback.hidden = true; });
-            image.addEventListener('error', () => image.remove());
-            image.src = new URL('/favicon.ico', bookmark.url).href;
-            icon.append(fallback, image);
             const title = document.createElement('span');
             title.className = 'bookmark-title';
             title.textContent = bookmark.title;
-            link.append(icon, title);
+            link.append(title);
             bookmarks.append(link);
         }
     }

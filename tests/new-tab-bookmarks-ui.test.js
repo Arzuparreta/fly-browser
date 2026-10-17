@@ -29,7 +29,8 @@ const createFixture = require('./electron-fixture');
         const refresh = () => page.evaluate(async () => (await import('./modules/newTab.js')).refreshNewTabs());
         const guest = expression => page.evaluate(expression => document.querySelector('webview').executeJavaScript(expression), expression);
         await refresh();
-        await page.waitForFunction(async () => document.querySelector('webview').executeJavaScript('!!document.querySelector("#bookmarks img")?.naturalWidth'));
+        assert.equal(await guest('document.querySelectorAll("#bookmarks img, #bookmarks .bookmark-icon").length'), 0);
+        assert(await guest('Math.abs((document.getElementById("saved-bookmarks").getBoundingClientRect().left + document.getElementById("saved-bookmarks").getBoundingClientRect().right)/2 - document.documentElement.clientWidth/2) < 2'));
         assert(await guest('document.getElementById("saved-bookmarks").getBoundingClientRect().top >= document.getElementById("frequent-sites").getBoundingClientRect().bottom'));
         const newTabUrl = await page.evaluate(() => document.querySelector('webview').getURL());
         assert.equal(await guest('document.querySelectorAll("#bookmarks a").length'), 22);
@@ -39,7 +40,8 @@ const createFixture = require('./electron-fixture');
         for (const width of [1100, 650]) {
             await app.evaluate(({BrowserWindow}, width) => BrowserWindow.getAllWindows()[0].setContentSize(width, 800), width);
             assert(await guest('document.documentElement.scrollWidth <= innerWidth'));
-            assert(await guest('document.getElementById("bookmarks").getBoundingClientRect().height <= 240'));
+            await page.waitForTimeout(100);
+            assert(await guest('Math.abs((document.getElementById("saved-bookmarks").getBoundingClientRect().left + document.getElementById("saved-bookmarks").getBoundingClientRect().right)/2 - document.documentElement.clientWidth/2) < 2'));
         }
         await guest('document.querySelector("#bookmarks a").click()');
         await page.waitForFunction(url => document.querySelector('webview').getURL() === url, destination);
