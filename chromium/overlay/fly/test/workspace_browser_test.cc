@@ -539,6 +539,47 @@ IN_PROC_BROWSER_TEST_F(
   EXPECT_TRUE(window.IsSelected(first));
 }
 
+IN_PROC_BROWSER_TEST_F(
+    FlyWorkspaceBrowserTest,
+    ExtensionBackgroundWindowDoesNotReplaceVisibleWorkspace) {
+  auto* first = browser();
+  auto& window = FlyWindowController::Get();
+  window.Select(first, true);
+  extensions::TestExtensionDir directory;
+  directory.WriteManifest(
+      base::DictValue()
+          .Set("manifest_version", 3)
+          .Set("name", "Fly native background window probe")
+          .Set("version", std::string(version_info::GetVersionNumber()))
+          .Set("background",
+               base::DictValue().Set("service_worker", "worker.js")));
+  directory.WriteFile(
+      FILE_PATH_LITERAL("worker.js"),
+      content::JsReplace(
+          "chrome.runtime.onInstalled.addListener(() => "
+          "chrome.windows.create({url:$1,focused:false}));",
+          embedded_test_server()->GetURL("/title1.html").spec()));
+  BrowserCreatedWaiter created;
+  extensions::ChromeTestExtensionLoader loader(first->GetProfile());
+  ASSERT_TRUE(loader.LoadExtension(directory.UnpackedPath()));
+  auto* second = created.Wait();
+  ASSERT_TRUE(second);
+  ASSERT_TRUE(base::test::RunUntil([&] {
+    return window.workspace_buttons_for_testing()->children().size() == 3 &&
+           second->GetTabStripModel()->count() == 1;
+  }));
+  EXPECT_TRUE(window.IsSelected(first));
+  EXPECT_FALSE(second->GetWindow()->IsActive());
+  ExpectVisible(Active(first), true);
+  ExpectVisible(Active(second), false);
+  auto* choice = static_cast<views::Button*>(
+      window.workspace_buttons_for_testing()->children()[2]);
+  views::test::ButtonTestApi(choice).NotifyDefaultMouseClick();
+  ASSERT_TRUE(base::test::RunUntil([&] { return window.IsSelected(second); }));
+  ExpectVisible(Active(first), false);
+  ExpectVisible(Active(second), true);
+}
+
 IN_PROC_BROWSER_TEST_F(FlyWorkspaceBrowserTest,
                        NativeHintKeysActivateWithoutHidingOrBlurringPage) {
   ASSERT_TRUE(ui_test_utils::NavigateToURL(

@@ -53,6 +53,7 @@ class FlyWindowController : public views::WidgetDelegate,
   void Attach(BrowserWindowInterface* browser, views::Widget* child);
   void Select(BrowserWindowInterface* browser, bool focus);
   bool IsSelected(const BrowserWindowInterface* browser) const;
+  bool has_selected_browser() const { return selected_ != nullptr; }
   views::Widget* desktop_widget() const { return desktop_.get(); }
   CommandService& commands() { return commands_; }
   BrowserWindowInterface* selected_browser_for_testing() { return selected_; }

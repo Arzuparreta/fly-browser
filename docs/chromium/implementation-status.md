@@ -708,3 +708,25 @@ resources, arguments and provenance remain available. The removed-file count and
 observed space reclaimed are recorded. macOS still has no native embedding, so
 its CI record explicitly says native desktop is unsupported rather than claiming
 browser-test coverage. The new full matrix has not completed yet.
+
+## Background native windows
+
+The dependent `codex/chromium-native-background-windows` branch makes native
+ShowInactive respect an already selected browser model. An extension-created
+normal window with focused:false remains a real separate native model but does
+not replace the visible workspace or briefly show its page. The picker can
+activate it later through the ordinary native selection path. No DOM visibility
+state is replaced. A nineteenth browser case installs a real MV3 worker, creates
+that background window, checks native hidden/active state and then selects it
+from the picker. Source checks pass; linked runtime execution remains pending.
+
+Full manual build matrix
+[39080367029](https://github.com/Arzuparreta/fly-browser/actions/runs/39080367029)
+is running at head `2755733` (the preceding 18-case source snapshot). Its tooling
+contracts pass on all three platforms; complete builds/browser results are still
+pending. The local codec-enabled control rebuild is managed by user unit
+`fly-chromium-codec-control-build.service`, log
+`/mnt/storage/fly-chromium/control-codec-systemd.log`. Its independent original
+control output is `src/out/FlyControlInitial`; the copy/configuration preparation
+is recorded in `evidence/control-codec-preparation.json`. The source remains
+unmodified until the matching control and fixtures pass.
