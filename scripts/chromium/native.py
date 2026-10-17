@@ -308,7 +308,7 @@ def execute(args):
             engine.run(['autoninja', '-C', 'out/FlyUnit', '-j', str(args.jobs), 'fly_unittests'], root / 'src', env)
             executable = unit_output / ('fly_unittests.exe' if sys.platform == 'win32' else 'fly_unittests')
             engine.run([executable, '--test-launcher-jobs=2',
-                        '--test-launcher-summary-output=' + str(root / 'evidence/native-core-tests.json')], root / 'src', env)
+                        '--test-launcher-summary-output=' + str(root / 'evidence/native-core-tests.json')], root / 'src', env, foreground=True)
             verify_source(root, lock)
             engine.evidence(root, 'native-test-core', lock, {'fingerprint': manifest['fingerprint']})
         elif args.command == 'verify':
@@ -332,12 +332,12 @@ def execute(args):
             target = {'build': 'chrome', 'test': 'fly_unittests', 'test-browser': 'browser_tests'}[args.command]
             engine.run(['autoninja', '-C', OUTPUT, '-j', str(args.jobs), target], root / 'src', env)
             if args.command == 'test':
-                engine.run([output / ('fly_unittests.exe' if sys.platform == 'win32' else 'fly_unittests')], root / 'src', env)
+                engine.run([output / ('fly_unittests.exe' if sys.platform == 'win32' else 'fly_unittests')], root / 'src', env, foreground=True)
             if args.command == 'test-browser':
                 executable = output / ('browser_tests.exe' if sys.platform == 'win32' else 'browser_tests')
                 engine.run([executable, '--gtest_filter=FlyWorkspaceBrowserTest.*',
                             '--test-launcher-jobs=1',
-                            '--test-launcher-summary-output=' + str(root / 'evidence/native-browser-tests.json')], root / 'src', env)
+                            '--test-launcher-summary-output=' + str(root / 'evidence/native-browser-tests.json')], root / 'src', env, foreground=True)
             verify_source(root, lock)
             engine.evidence(root, 'native-' + args.command, lock, {'fingerprint': manifest['fingerprint']})
 

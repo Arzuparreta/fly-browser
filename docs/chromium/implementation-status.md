@@ -409,3 +409,15 @@ profile-local `chrome.storage`, native tab/window IDs and active-tab query are
 asserted from a real content script/service worker. This is still unexecuted
 browser coverage; extension compatibility, blocking and media acceptance remain
 pending until real runs.
+
+The follow-up manual unit matrix at PR #112 head `534862f`
+([39046264148](https://github.com/Arzuparreta/fly-browser/actions/runs/39046264148))
+compiled and executed all 26 tests successfully on Linux and macOS. Windows
+successfully installed the required SDK and compiled the same test target, but
+all child tests stopped in Chromium's test-suite priority assertion before test
+bodies ran. Evidence is external `evidence/ci-windows-units-sdk.log`. The launcher
+now explicitly creates only Windows test processes at normal priority; it does
+not disable Chromium's assertion or change build/runner priority. This needs a
+fresh matrix at the corrected head. The retained Electron recorder/editable-page
+suite also passed with a disposable profile, no page errors, and its external
+log is `evidence/command-integration-electron-keyboard.log`.
