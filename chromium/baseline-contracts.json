@@ -3142,10 +3142,11 @@
       "nativeEvidence": []
     },
     {
-      "id": "New tab, bookmarks/folders, quickmarks, history, hiding frequent sites",
-      "milestone": "M2",
+      "id": "New tab, flat bookmarks, history, hiding frequent sites; preserve retired quickmark data",
+      "milestone": "M2/M4",
       "acceptance": [
-        "A14"
+        "A14",
+        "A19"
       ],
       "source": [
         "assets/new-tab.js",
@@ -4243,7 +4244,7 @@
     {
       "id": "session.json",
       "root": "legacy-config",
-      "contract": "Workspace URL arrays, stable partition identity and parallel tab metadata",
+      "contract": "Workspace URL arrays, stable partition identity and parallel tab metadata; legacy tab_sleep_states aliases restoration records",
       "fields": [
         "current_workspace",
         "tab_favicons",
@@ -4252,6 +4253,16 @@
         "tab_titles",
         "workspace_partitions",
         "workspaces"
+      ],
+      "legacyFields": [
+        "tab_sleep_states"
+      ],
+      "restoreRecordFields": [
+        "url",
+        "title",
+        "scrollX",
+        "scrollY",
+        "sessionStorage"
       ],
       "milestone": "M4",
       "acceptance": [
@@ -4276,7 +4287,7 @@
     {
       "id": "session_sentinel.json",
       "root": "legacy-config",
-      "contract": "clean_exit and crash recovery; never treat as a clean session snapshot",
+      "contract": "Object: clean_exit, timestamp, pid; never treat as a clean session snapshot",
       "milestone": "M4",
       "acceptance": [
         "A19",
@@ -4288,7 +4299,19 @@
     {
       "id": "bookmarks.json",
       "root": "legacy-config",
-      "contract": "App-wide bookmarks, folders, order, quickmarks and unknown item fields",
+      "contract": "Ordered flat array of title, url, timestamp objects; preserve unknown item fields; no active folders/quickmarks",
+      "milestone": "M4",
+      "acceptance": [
+        "A19",
+        "A20"
+      ],
+      "nativeStatus": "pending",
+      "nativeEvidence": []
+    },
+    {
+      "id": "quickmarks.json",
+      "root": "legacy-config",
+      "contract": "Retired legacy input: current Fly does not load or alter it. Preserve original data; do not resurrect retired bindings",
       "milestone": "M4",
       "acceptance": [
         "A19",
@@ -4300,7 +4323,7 @@
     {
       "id": "history.json",
       "root": "legacy-config",
-      "contract": "App-wide visits, titles, timestamps; private visits excluded",
+      "contract": "Bounded ordered array of title, url, timestamp objects; private visits excluded",
       "milestone": "M4",
       "acceptance": [
         "A19",
@@ -4324,7 +4347,7 @@
     {
       "id": "site-zoom.json",
       "root": "legacy-config",
-      "contract": "Hostname levels; private zoom memory-only",
+      "contract": "Hostname-to-number object; finite levels between -5 and 5, zero omitted; private zoom memory-only",
       "milestone": "M4",
       "acceptance": [
         "A19",
@@ -4336,7 +4359,7 @@
     {
       "id": "hidden-sites.json",
       "root": "legacy-config",
-      "contract": "Hidden frequent-site origins, distinct from history/bookmarks",
+      "contract": "Array of hidden HTTP(S) origins, distinct from history/bookmarks",
       "milestone": "M4",
       "acceptance": [
         "A19",
