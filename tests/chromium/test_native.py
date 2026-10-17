@@ -60,6 +60,26 @@ class NativeOverlayTests(unittest.TestCase):
         self.assertEqual((self.source / 'upstream.cc').read_text(), 'original\n')
         self.assertFalse((self.root / native.MANIFEST).exists())
 
+    def test_core_unit_overlay_does_not_patch_the_browser_or_require_control_binary(self):
+        native.apply_core(self.root, self.lock)
+        manifest = native.verify_source(self.root, self.lock)
+        self.assertEqual(manifest['kind'], 'core')
+        self.assertEqual((self.source / 'upstream.cc').read_text(), 'original\n')
+        self.assertEqual((self.source / 'fly/native.cc').read_text(), 'native\n')
+        native.apply_core(self.root, self.lock)
+        with self.assertRaisesRegex(RuntimeError, 'Core-only overlay'):
+            native.apply(self.root, self.lock)
+        native.revert(self.root, self.lock)
+        self.assertEqual(self.git('status', '--porcelain'), '')
+
+    def test_core_unit_overlay_refuses_existing_unmanaged_sources(self):
+        (self.source / 'fly').mkdir()
+        (self.source / 'fly/native.cc').write_text('keep owner work\n')
+        with self.assertRaisesRegex(RuntimeError, 'Dirty checkout'):
+            native.apply_core(self.root, self.lock)
+        self.assertEqual((self.source / 'fly/native.cc').read_text(), 'keep owner work\n')
+        self.assertFalse((self.root / native.MANIFEST).exists())
+
     def test_late_failed_patch_does_not_install_earlier_patch(self):
         self.series.write_text('first.patch\nsecond.patch\n')
         (self.patches / 'second.patch').write_text(

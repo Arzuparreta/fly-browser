@@ -7,7 +7,7 @@ on:
       depth:
         description: 'Tooling contracts, source configuration, or complete control/native builds'
         type: choice
-        options: [contracts, configure, build]
+        options: [contracts, configure, units, build]
         default: configure
       platforms:
         description: 'Platforms to validate'
