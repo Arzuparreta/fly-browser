@@ -1,0 +1,164 @@
+--- a/chrome/browser/ui/views/frame/browser_window_factory.cc
++++ b/chrome/browser/ui/views/frame/browser_window_factory.cc
+@@ -14,6 +14,10 @@
+ #include "chrome/browser/ui/webui_browser/webui_browser_window.h"
+ #include "chrome/browser/ui/window_feature_controller/window_feature_controller.h"
+ #include "ui/views/widget/widget.h"
++
++#if BUILDFLAG(IS_LINUX) || BUILDFLAG(IS_WIN)
++#include "fly/ui/fly_window_controller.h"
++#endif
+ 
+ #if defined(USE_AURA)
+ #include "ui/aura/client/aura_constants.h"
+@@ -32,7 +36,14 @@
+ BrowserWindow::CreateBrowserWindow(BrowserWindowInterface* browser,
+                                    bool user_gesture,
+                                    bool in_tab_dragging) {
+-  if (webui_browser::IsWebUIBrowserEnabled() &&
++  bool fly_embedded = false;
++#if BUILDFLAG(IS_LINUX) || BUILDFLAG(IS_WIN)
++  fly_embedded = fly::FlyWindowController::ShouldEmbed(browser);
++  if (fly_embedded) {
++    fly::FlyWindowController::Get().Prepare(browser);
++  }
++#endif
++  if (!fly_embedded && webui_browser::IsWebUIBrowserEnabled() &&
+       browser->GetType() == BrowserWindowInterface::Type::TYPE_NORMAL) {
+     return std::unique_ptr<BrowserWindow, BrowserWindowDeleter>(
+         new WebUIBrowserWindow(browser));
+@@ -59,6 +70,11 @@
+     view->browser_widget()->SetTabDragKind(TabDragKind::kAllTabs);
+   }
+   view->browser_widget()->InitBrowserWidget();
++#if BUILDFLAG(IS_LINUX) || BUILDFLAG(IS_WIN)
++  if (fly_embedded) {
++    fly::FlyWindowController::Get().Attach(browser, view->browser_widget());
++  }
++#endif
+ 
+ #if BUILDFLAG(IS_MAC)
+   if (WindowFeatureController::From(view->browser())
+--- a/chrome/browser/ui/views/frame/browser_widget.cc
++++ b/chrome/browser/ui/views/frame/browser_widget.cc
+@@ -51,6 +51,11 @@
+ #include "ui/aura/window.h"
+ #endif
+ 
++#if BUILDFLAG(IS_LINUX) || BUILDFLAG(IS_WIN)
++#include "fly/ui/embedded_browser_frame.h"
++#include "fly/ui/fly_window_controller.h"
++#endif
++
+ #if BUILDFLAG(IS_LINUX)
+ #include "ui/linux/linux_ui.h"
+ #endif
+@@ -132,9 +137,17 @@
+ }
+ 
+ void BrowserWidget::InitBrowserWidget() {
+-  browser_native_widget_ =
+-      BrowserNativeWidgetFactory::CreateBrowserNativeWidget(this,
+-                                                            browser_view_);
++  browser_native_widget_ = nullptr;
++#if BUILDFLAG(IS_LINUX) || BUILDFLAG(IS_WIN)
++  if (fly::FlyWindowController::ShouldEmbed(browser_view_->browser())) {
++    browser_native_widget_ =
++        fly::CreateEmbeddedBrowserNativeWidget(this, browser_view_);
++  }
++#endif
++  if (!browser_native_widget_) {
++    browser_native_widget_ =
++        BrowserNativeWidgetFactory::CreateBrowserNativeWidget(this, browser_view_);
++  }
+   views::Widget::InitParams params = browser_native_widget_->GetWidgetParams(
+       views::Widget::InitParams::CLIENT_OWNS_WIDGET);
+   params.name = "BrowserWidget";
+@@ -322,7 +335,15 @@
+ }
+ 
+ std::unique_ptr<views::FrameView> BrowserWidget::CreateFrameView() {
+-  auto browser_frame_view = chrome::CreateBrowserFrameView(this, browser_view_);
++  std::unique_ptr<BrowserFrameView> browser_frame_view;
++#if BUILDFLAG(IS_LINUX) || BUILDFLAG(IS_WIN)
++  if (fly::FlyWindowController::ShouldEmbed(browser_view_->browser())) {
++    browser_frame_view = fly::CreateEmbeddedBrowserFrame(this, browser_view_);
++  }
++#endif
++  if (!browser_frame_view) {
++    browser_frame_view = chrome::CreateBrowserFrameView(this, browser_view_);
++  }
+   browser_frame_view_ = browser_frame_view.get();
+   return browser_frame_view;
+ }
+--- a/chrome/browser/ui/views/frame/browser_view.cc
++++ b/chrome/browser/ui/views/frame/browser_view.cc
+@@ -1172,8 +1172,10 @@
+   // level NativeView.
+   if (const auto* widget = views::Widget::GetTopLevelWidgetForNativeView(
+           web_contents->GetNativeView())) {
+-    return BrowserView::GetBrowserViewForNativeWindow(
+-        widget->GetNativeWindow());
++    if (auto* view = BrowserView::GetBrowserViewForNativeWindow(
++            widget->GetNativeWindow())) {
++      return view;
++    }
+   }
+   const auto* browser =
+       GlobalBrowserCollection::GetInstance()->FindBrowserWithTab(web_contents);
+--- a/chrome/browser/ui/BUILD.gn
++++ b/chrome/browser/ui/BUILD.gn
+@@ -787,6 +787,14 @@
+     "tab_helpers.cc",
+     "tab_helpers.h",
+   ]
++  if (is_linux || is_win) {
++    sources += [
++      "//fly/ui/embedded_browser_frame.cc",
++      "//fly/ui/embedded_browser_frame.h",
++      "//fly/ui/fly_window_controller.cc",
++      "//fly/ui/fly_window_controller.h",
++    ]
++  }
+ 
+   defines = []
+   libs = []
+@@ -1087,6 +1095,9 @@
+     "//ui/strings",
+     "//ui/webui",
+   ]
++  if (is_linux || is_win) {
++    deps += [ "//fly:workspaces" ]
++  }
+ 
+   allow_circular_includes_from = [
+     # page_load_metrics's :impl includes headers from //chrome/browser/ui that
+--- a/chrome/browser/prefs/browser_prefs.cc
++++ b/chrome/browser/prefs/browser_prefs.cc
+@@ -3,6 +3,8 @@
+ // found in the LICENSE file.
+ 
+ #include "chrome/browser/prefs/browser_prefs.h"
++
++#include "fly/workspaces/workspace_service.h"
+ 
+ #include <array>
+ #include <optional>
+@@ -1413,6 +1415,7 @@
+ }
+ 
+ void RegisterLocalState(PrefRegistrySimple* registry) {
++  fly::WorkspaceService::RegisterLocalStatePrefs(registry);
+   // Call outs to individual subsystems that register Local State (browser-wide)
+   // prefs en masse. See RegisterProfilePrefs for per-profile prefs. Please
+   // keep this list alphabetized.
+--- a/chrome/browser/prefs/BUILD.gn
++++ b/chrome/browser/prefs/BUILD.gn
+@@ -58,6 +58,7 @@
+   ]
+ 
+   deps = [
++    "//fly:workspaces",
+     ":prefs",
+     ":util",
+     "//chrome/browser:browser_process",

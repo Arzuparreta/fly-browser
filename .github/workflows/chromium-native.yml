@@ -1,0 +1,82 @@
+name: Native Chromium validation
+
+# Explicit development validation only. Ordinary pull requests retain npm test.
+on:
+  workflow_dispatch:
+    inputs:
+      depth:
+        description: 'Configure only, or build control + native browser and unit tests'
+        type: choice
+        options: [configure, build]
+        default: configure
+      platforms:
+        description: 'Platforms to validate'
+        type: choice
+        options: [all, linux, macos, windows]
+        default: all
+
+permissions:
+  contents: read
+
+concurrency:
+  group: chromium-native-${{ github.ref }}-${{ inputs.depth }}-${{ inputs.platforms }}
+  cancel-in-progress: false
+
+jobs:
+  contracts:
+    name: Tooling contracts (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest, windows-latest]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Preserve engine source bytes on every host
+        run: git config --global core.autocrlf false
+      - name: Checkout and overlay transaction tests
+        run: python -B -m unittest discover -s tests/chromium -p 'test_*.py'
+      - name: JavaScript harness syntax
+        run: node --check tests/chromium/control-smoke.js
+
+  engine:
+    name: Pinned engine (${{ matrix.platform }}, ${{ inputs.depth }})
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 350
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: ubuntu-latest
+            platform: linux
+          - os: macos-latest
+            platform: macos
+          - os: windows-latest
+            platform: windows
+    steps:
+      - uses: actions/checkout@v4
+        if: inputs.platforms == 'all' || inputs.platforms == matrix.platform
+      - uses: actions/setup-python@v5
+        if: inputs.platforms == 'all' || inputs.platforms == matrix.platform
+        with:
+          python-version: '3.11'
+      - name: Inspect resources and configure the exact upstream control
+        if: inputs.platforms == 'all' || inputs.platforms == matrix.platform
+        env:
+          FLY_CI_ENGINE_ROOT: ${{ runner.temp }}/fly-chromium
+          FLY_CI_DEPTH: ${{ inputs.depth }}
+        run: python scripts/chromium/ci.py
+      - name: Preserve evidence, including failed or resource-limited attempts
+        if: always() && (inputs.platforms == 'all' || inputs.platforms == matrix.platform)
+        uses: actions/upload-artifact@v4
+        with:
+          name: chromium-${{ matrix.platform }}-${{ github.sha }}
+          path: ${{ runner.temp }}/fly-chromium/evidence/
+          if-no-files-found: error
+          retention-days: 7
