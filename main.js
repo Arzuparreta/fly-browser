@@ -160,6 +160,7 @@ const DEFAULT_CONFIG = {
     sidebar_auto_collapse: true,
     show_status_bar: true,
     show_clock: true,
+    show_frequent_sites: true,
     clock_format: 'datetime',
     theme_colors: { ...DEFAULT_THEME_COLORS },
     enable_diagnostics: false,
