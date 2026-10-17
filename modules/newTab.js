@@ -9,8 +9,9 @@ export async function refreshNewTab(view) {
         if (!view || view.getURL() !== NEW_TAB_URL) return;
         const version = (refreshVersions.get(view) || 0) + 1;
         refreshVersions.set(view, version);
-        const [config, diagnostics] = await Promise.all([
-            window.flyAPI.getBrowserSettings(), window.flyAPI.getSystemDiagnostics({})
+        const [config, diagnostics, savedBookmarks] = await Promise.all([
+            window.flyAPI.getBrowserSettings(), window.flyAPI.getSystemDiagnostics({}),
+            view.getAttribute('partition') === 'FlyPrivateProfile' ? [] : window.flyAPI.readBookmarks()
         ]);
         const showSites = config?.show_frequent_sites !== false && view.getAttribute('partition') !== 'FlyPrivateProfile';
         const sites = showSites ? await window.flyAPI.getFrequentSites() : [];
@@ -22,6 +23,13 @@ export async function refreshNewTab(view) {
             addressHint: window.describeKeyboardAction?.('toggle-address', 'Address bar') || '',
             search: config?.search_engine || 'https://duckduckgo.com/?q=%s',
             sites, showSites,
+            showBookmarks: view.getAttribute('partition') !== 'FlyPrivateProfile',
+            bookmarks: (Array.isArray(savedBookmarks) ? savedBookmarks : []).flatMap(bookmark => {
+                try {
+                    const url = new URL(bookmark.url);
+                    return ['https:', 'http:'].includes(url.protocol) ? [{url: url.href, title: typeof bookmark.title === 'string' && bookmark.title.trim() ? bookmark.title : url.host}] : [];
+                } catch { return []; }
+            }),
             memory: Math.round((diagnostics?.processes || []).reduce((sum, process) => sum + (Number.isFinite(process.residentSetKB) ? process.residentSetKB : 0), 0) / 1024)
         };
         await view.executeJavaScript(`if (location.href === ${JSON.stringify(NEW_TAB_URL)}) window.updateFlyNewTab?.(${JSON.stringify(data)})`);

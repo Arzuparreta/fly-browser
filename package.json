@@ -17,6 +17,7 @@
     "dist:linux": "electron-builder --linux",
     "dist:dir": "electron-builder --dir",
     "test:keyboard-ui": "node tests/tab-suspension-ui.test.js && node tests/tab-restoration-ui.test.js && node tests/desktop-integration-ui.test.js && node tests/split-view-ui.test.js && node tests/address-bar-dismiss-ui.test.js && node tests/appimage-update-ui.test.js && node tests/keyboard-ui.test.js && node tests/empty-search-ui.test.js && node tests/navigation-focus-ui.test.js && node tests/overlay-state-ui.test.js && node tests/sidebar-pointer-focus-ui.test.js && node tests/settings-nav-ui.test.js && node tests/settings-tabs-ui.test.js && node tests/interface-scale-ui.test.js && node tests/site-zoom-ui.test.js && node tests/website-theme-ui.test.js && node tests/whats-new-ui.test.js && node tests/tab-close-typing-ui.test.js && node tests/tab-close-button-ui.test.js && node tests/tab-context-menu-ui.test.js && node tests/sidebar-cursor-ui.test.js && node tests/tab-numbers-ui.test.js && node tests/legacy-keybinds-ui.test.js && node tests/oauth-popup-ui.test.js && node tests/self-closing-tab-ui.test.js && node tests/motion-ui.test.js && node tests/bookmarks-ui.test.js && node tests/workspace-partitions-ui.test.js",
+    "test:new-tab-bookmarks-ui": "node tests/new-tab-bookmarks-ui.test.js",
     "test:frequent-sites-ui": "node tests/frequent-sites-ui.test.js",
     "test:identity-ui": "node tests/identity-ui.test.js",
     "test:blocking-ui": "node tests/extensions-ui.test.js && node tests/blocking-startup-ui.test.js",

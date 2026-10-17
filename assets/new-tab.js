@@ -6,6 +6,17 @@ window.updateFlyNewTab = data => {
     document.getElementById('memory').textContent = `${data.memory} MB`;
     searchTemplate = data.search;
     document.getElementById('address-hint').textContent = data.addressHint;
+    document.getElementById('saved-bookmarks').hidden = !data.showBookmarks;
+    const bookmarks = document.getElementById('bookmarks');
+    bookmarks.replaceChildren();
+    for (const bookmark of data.bookmarks || []) {
+        const link = document.createElement('a');
+        link.href = bookmark.url;
+        link.textContent = bookmark.title;
+        link.title = `${bookmark.title} — ${bookmark.url}`;
+        bookmarks.append(link);
+    }
+    document.getElementById('bookmarks-empty').hidden = (data.bookmarks || []).length > 0;
     document.getElementById('frequent-sites').hidden = !data.showSites;
     const sites = document.getElementById('sites');
     sites.replaceChildren();
