@@ -545,3 +545,42 @@ scenario failed at `tests/keyboard-ui.test.js:183` because its test window close
 profile repeat is in progress in `palette-electron-keyboard-retry.log`. Neither
 attempt is native UI acceptance; the earlier retained-runtime pass remains in
 this record, and this branch changes no Electron keyboard implementation.
+
+## Focused native browser-test executable
+
+The dependent `codex/chromium-browser-test-runner` branch defines
+`//fly:fly_browser_tests`. It compiles the same Fly browser acceptance sources
+with Chromium's original `InProcessBrowserTest`, browser-test main, process
+launcher, renderer and extension test support, plus the native browser/resource
+runtime. It avoids building every unrelated upstream browser test merely to run
+Fly's filter. `native.py test-browser` selects this target by default;
+`--browser-target browser_tests` retains the original full-binary path. Both
+choices preserve the same fixture assertions and sandbox policy, and provenance
+records the actual target. The scoped native UI currently exists on Linux and
+Windows; this does not claim macOS native browser coverage.
+
+GN formatting and all declared upstream target labels have been checked against
+the pin. Linking and execution remain pending the full control/native builds.
+
+The complete native GN graph exposed an invalid direct dependency from the UI
+to the visibility-restricted accessibility platform target. The hint integration
+now uses the public `//ui/accessibility` aggregator; upstream visibility rules
+remain intact. Isolated generation with the full patch stack succeeds (35,555
+targets from 4,996 files). This graph validation does not modify the active
+control checkout or count as a native executable build.
+
+The retained Electron keyboard scenario subsequently **passed** in a private
+Xvfb display: recorder, customised bindings, editable input and guest scrolling
+(`errors: []`, 80 pixels). Log: `evidence/palette-electron-keyboard-xvfb.log`.
+The display used an externally extracted Arch package whose detached signature
+was verified against the host's Arch keyring; no system package or owner profile
+was changed. The prior desktop attempts remain recorded. The second was stopped
+after more than four minutes while a key dispatch was pending; its diagnostic
+is `palette-electron-keyboard-retry-timeout.txt`. The passing isolated run is
+baseline evidence only, not native acceptance.
+
+The isolated `gn check` passes for both `//fly:*` and
+`//chrome/browser/ui:ui`, including Fly's new native sources and the scoped test
+target. External evidence: `native-shadow-gn-retry.log` and
+`native-shadow-ui-headers.log`. The initial restricted-dependency failure is
+preserved in `native-shadow-gn.log`.

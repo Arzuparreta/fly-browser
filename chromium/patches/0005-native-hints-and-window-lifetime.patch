@@ -14,7 +14,7 @@
    ]
    if (is_linux || is_win) {
 -    deps += [ "//fly:workspaces", "//fly:commands" ]
-+    deps += [ "//fly:workspaces", "//fly:commands", "//ui/accessibility/platform", "//ui/wm" ]
++    deps += [ "//fly:workspaces", "//fly:commands", "//ui/accessibility", "//ui/wm" ]
    }
    deps += [ "//fly:session_metadata" ]
  
