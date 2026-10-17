@@ -438,3 +438,41 @@ profile-local `chrome.storage`, native tab/window IDs and active-tab query are
 asserted from a real content script/service worker. This is still unexecuted
 browser coverage; extension compatibility, blocking and media acceptance remain
 pending until real runs.
+
+
+## Native accessibility hints and empty-window commands
+
+The dependent `codex/chromium-native-hints` branch is in the managed
+`chromium-native-hints` worktree. It derives the hint alphabet and width-boundary
+fixtures from the retained `hinter.js`; generated-contract checking remains part
+of `npm test`. Two native unit tests verify the cross-language codes, bounded
+allocation, uniqueness and fixed-width prefixes. All 28 service tests pass in the
+external bootstrap runner (`evidence/build-hints-native.py`,
+`evidence/hints-native-tests.log`); an updated official GN run is still needed.
+
+HintController requests native accessibility only for its active WebContents and
+releases the scoped mode on completion/cancellation. Targets use native clipped
+screen-DIP bounds, live tree/node IDs and frame ownership checks. The overlay is
+a non-activating, pointer-transparent NativeWidgetAura child of the existing
+desktop, not a second OS window or page DOM. Selection issues native focus/default
+actions after validating the current node, owner and bounds again. AX notifications
+are coalesced and examined after their update stack unwinds. Navigation, blur,
+hiding, frame removal, window movement/deactivation and teardown cancel hints.
+No page scripts or web API replacements implement this path. Target count is
+bounded and the status label discloses truncation. Native keyboard integration,
+IME/AltGr handling and mode labels are wired, but real desktop acceptance is pending.
+
+The desktop has a distinct Fly keep-alive origin. Chromium intentionally ignores
+browser-only keep-alives when its last browser closes, so reusing BROWSER would
+prematurely start shutdown. A successful native browser close now clears its
+controller/sidebar references through RegisterBrowserDidClose before destruction;
+widget destruction later detaches the native host. The empty desktop routes
+validated bindings without a page and reopens its active workspace with either
+Ctrl+T or the sidebar's New tab button. Browser close still uses upstream unload
+processing and supports cancellation.
+
+Two more browser tests (11 total in this branch) inject native keyboard events to
+activate a hint without hiding/blurring the document, and close/reopen the last
+browser using keyboard and pointer flows. They are unexecuted until the full
+native browser/test link completes. Do not mark M1/M2 or A02/A03/A04/A08 passed
+from source checks or partial service tests.

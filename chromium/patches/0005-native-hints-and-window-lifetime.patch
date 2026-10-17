@@ -1,0 +1,43 @@
+--- a/chrome/browser/ui/BUILD.gn
++++ b/chrome/browser/ui/BUILD.gn
+@@ -798,6 +798,8 @@
+       "//fly/ui/native_commands.h",
+       "//fly/ui/tab_sidebar.cc",
+       "//fly/ui/tab_sidebar.h",
++      "//fly/ui/hint_controller.cc",
++      "//fly/ui/hint_controller.h",
+     ]
+   }
+ 
+@@ -1101,7 +1103,7 @@
+     "//ui/webui",
+   ]
+   if (is_linux || is_win) {
+-    deps += [ "//fly:workspaces", "//fly:commands" ]
++    deps += [ "//fly:workspaces", "//fly:commands", "//ui/accessibility/platform", "//ui/wm" ]
+   }
+   deps += [ "//fly:session_metadata" ]
+ 
+--- a/components/keep_alive_registry/keep_alive_types.h
++++ b/components/keep_alive_registry/keep_alive_types.h
+@@ -95,6 +95,9 @@
+ 
+   // c/b/loader
+   FETCH_KEEPALIVE_REQUEST,
++
++  // Fly desktop: remains usable when its last profile-bound browser closes.
++  FLY_WINDOW,
+ };
+ 
+ // Restart: Allow Chrome to restart when all the registered KeepAlives allow
+--- a/components/keep_alive_registry/keep_alive_types.cc
++++ b/components/keep_alive_registry/keep_alive_types.cc
+@@ -99,6 +99,8 @@
+       return out << "OMNIBOX_EVERYWHERE_UI";
+     case KeepAliveOrigin::OMNIBOX_EVERYWHERE_STARTUP:
+       return out << "OMNIBOX_EVERYWHERE_STARTUP";
++    case KeepAliveOrigin::FLY_WINDOW:
++      return out << "FLY_WINDOW";
+     case KeepAliveOrigin::FETCH_KEEPALIVE_REQUEST:
+       return out << "FETCH_KEEPALIVE_REQUEST";
+   }
