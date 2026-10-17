@@ -34,8 +34,10 @@ footer a { color:inherit; text-decoration:underline; text-underline-offset:2px; 
 
 #saved-bookmarks { grid-area:bookmarks; justify-self:center; width:100%; min-width:0; }
 #saved-bookmarks[hidden] { display:none; }
-#bookmarks { display:flex; justify-content:center; flex-wrap:wrap; gap:8px 24px; padding:5px; }
-#bookmarks a { display:block; max-width:170px; padding:8px 0; color:var(--text); text-decoration:none; font:12px 'IBM Plex Sans',sans-serif; }
-#bookmarks a:hover { text-decoration:underline; text-underline-offset:3px; }
+#bookmarks { display:flex; justify-content:center; flex-wrap:wrap; gap:8px; padding:5px; }
+#bookmarks a { display:block; max-width:170px; padding:10px 16px; border:1px solid var(--border); border-radius:6px; background:var(--panel); color:var(--text); text-decoration:none; font:12px 'IBM Plex Sans',sans-serif; }
+#bookmarks a:hover, #bookmarks a:focus-visible { background:var(--cell); border-color:var(--accent); }
+#bookmarks a:active { background:var(--border); }
+#bookmarks-label { text-align:center; font-weight:400; margin:0 0 12px; }
 .bookmark-title { display:block; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
 #bookmarks-empty { text-align:center; color:var(--dim); font-size:12px; }
