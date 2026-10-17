@@ -1,13 +1,19 @@
 // Copyright Fly Browser contributors. All rights reserved.
 // Use of this source code is governed by the GPL-3.0-or-later license in the
 // Fly repository.
+#include "fly/sessions/tab_identity.h"
 #include "fly/ui/fly_window_controller.h"
 #include "fly/ui/native_commands.h"
+#include "fly/ui/tab_sidebar.h"
 
 #include "base/command_line.h"
+#include "base/json/json_reader.h"
 #include "base/test/run_until.h"
 #include "base/test/test_future.h"
+#include "base/uuid.h"
+#include "base/version_info/version_info.h"
 #include "chrome/browser/browser_process.h"
+#include "chrome/browser/extensions/chrome_test_extension_loader.h"
 #include "chrome/browser/extensions/extension_tab_util.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/profiles/profile_manager.h"
@@ -21,10 +27,13 @@
 #include "content/public/browser/web_contents.h"
 #include "content/public/test/browser_test.h"
 #include "content/public/test/browser_test_utils.h"
+#include "extensions/test/test_extension_dir.h"
 #include "net/test/embedded_test_server/embedded_test_server.h"
 #include "ui/aura/window.h"
 #include "ui/aura/window_tree_host.h"
 #include "ui/base/base_window.h"
+#include "ui/views/controls/button/button.h"
+#include "ui/views/test/button_test_api.h"
 
 namespace fly {
 namespace {
@@ -167,5 +176,215 @@ IN_PROC_BROWSER_TEST_F(FlyWorkspaceBrowserTest,
   EXPECT_FALSE(model->GetSplitForTab(model->active_index()));
   ExpectVisible(Active(browser()), true);
 }
+IN_PROC_BROWSER_TEST_F(FlyWorkspaceBrowserTest,
+                       SidebarUsesTabIdentityAfterMoveAndSwitch) {
+  auto* model = browser()->GetTabStripModel();
+  auto* first = Active(browser());
+  chrome::NewTab(browser(), NewTabTypes::kNewTabCommand);
+  auto* sidebar = FlyWindowController::Get().tab_sidebar_for_testing();
+  ASSERT_TRUE(base::test::RunUntil(
+      [&] { return sidebar->row_count_for_testing() == 2; }));
+  auto* original_row = sidebar->row_for_testing(first);
+  ASSERT_TRUE(original_row);
+  auto* select = static_cast<views::Button*>(original_row->children()[0]);
+  auto* pin = static_cast<views::Button*>(original_row->children()[1]);
+  model->MoveWebContentsAt(model->GetIndexOfWebContents(first), 1, false);
+  // Click before the deferred projection update. A cached index would choose
+  // the other tab; the row must resolve its WebContents in the current model.
+  views::test::ButtonTestApi(select).NotifyDefaultMouseClick();
+  EXPECT_EQ(first, Active(browser()));
+  views::test::ButtonTestApi(pin).NotifyDefaultMouseClick();
+  EXPECT_TRUE(model->IsTabPinned(model->GetIndexOfWebContents(first)));
+  ASSERT_TRUE(base::test::RunUntil([&] {
+    return sidebar->row_for_testing(first) == original_row &&
+           sidebar->row_count_for_testing() == 2;
+  }));
+  auto* second = SecondWorkspace();
+  ASSERT_TRUE(second);
+  ASSERT_TRUE(base::test::RunUntil([&] {
+    return sidebar->row_count_for_testing() == 1 &&
+           sidebar->row_for_testing(Active(second)) != nullptr;
+  }));
+  EXPECT_EQ(nullptr, sidebar->row_for_testing(first));
+  FlyWindowController::Get().Select(browser(), true);
+  ASSERT_TRUE(base::test::RunUntil([&] {
+    return sidebar->row_count_for_testing() == 2 &&
+           sidebar->row_for_testing(first) != nullptr;
+  }));
+}
+
+IN_PROC_BROWSER_TEST_F(FlyWorkspaceBrowserTest,
+                       NativeCloseAndReopenPreserveFlyIdentity) {
+  ASSERT_TRUE(ui_test_utils::NavigateToURL(
+      browser(), embedded_test_server()->GetURL("/title1.html")));
+  auto* first = Active(browser());
+  const std::string id = TabIdentity::Get(first);
+  auto original = first->GetWeakPtr();
+  EXPECT_TRUE(base::Uuid::ParseLowercase(id).is_valid());
+  chrome::NewTab(browser(), NewTabTypes::kNewTabCommand);
+  EXPECT_NE(id, TabIdentity::Get(Active(browser())));
+  auto* model = browser()->GetTabStripModel();
+  model->CloseWebContentsAt(model->GetIndexOfWebContents(first),
+                            TabCloseTypes::CLOSE_USER_GESTURE |
+                                TabCloseTypes::CLOSE_CREATE_HISTORICAL_TAB);
+  ASSERT_TRUE(base::test::RunUntil([&] { return !original; }));
+  ASSERT_TRUE(ExecuteNativeCommand(browser(), "reopen-closed-tab"));
+  ASSERT_TRUE(base::test::RunUntil([&] { return model->count() == 2; }));
+  EXPECT_EQ(id, TabIdentity::Get(Active(browser())));
+}
+
+IN_PROC_BROWSER_TEST_F(FlyWorkspaceBrowserTest,
+                       TabIdentityRejectsLiveCollisionsAndPrivatePersistence) {
+  const std::string id = TabIdentity::Get(Active(browser()));
+  std::map<std::string, std::string> extra{{TabIdentity::kExtraDataKey, id}};
+  auto restored = content::WebContents::Create(
+      content::WebContents::CreateParams(browser()->GetProfile()));
+  TabIdentity::Restore(restored.get(), extra);
+  EXPECT_NE(id, TabIdentity::Get(restored.get()));
+  const std::string replacement = TabIdentity::Get(restored.get());
+  extra[TabIdentity::kExtraDataKey] =
+      base::Uuid::GenerateRandomV4().AsLowercaseString();
+  TabIdentity::Restore(restored.get(), extra);
+  EXPECT_EQ(replacement, TabIdentity::Get(restored.get()));
+  auto invalid = content::WebContents::Create(
+      content::WebContents::CreateParams(browser()->GetProfile()));
+  extra[TabIdentity::kExtraDataKey] = "../invalid-session-id";
+  TabIdentity::Restore(invalid.get(), extra);
+  EXPECT_TRUE(
+      base::Uuid::ParseLowercase(TabIdentity::Get(invalid.get())).is_valid());
+  auto private_tab =
+      content::WebContents::Create(content::WebContents::CreateParams(
+          browser()->GetProfile()->GetPrimaryOTRProfile(
+              /*create_if_needed=*/true)));
+  std::map<std::string, std::string> private_data;
+  TabIdentity::Populate(private_tab.get(), &private_data);
+  EXPECT_TRUE(private_data.empty());
+  TabIdentity::Restore(private_tab.get(), extra);
+  EXPECT_FALSE(TabIdentity::CanPersist(private_tab.get()));
+}
+
+IN_PROC_BROWSER_TEST_F(FlyWorkspaceBrowserTest,
+                       ClosingSelectedWorkspaceReleasesSidebarObservation) {
+  auto* first = browser();
+  auto* second = SecondWorkspace();
+  ASSERT_TRUE(second);
+  auto& window = FlyWindowController::Get();
+  ASSERT_TRUE(window.IsSelected(second));
+  second->GetWindow()->Close();
+  ASSERT_TRUE(base::test::RunUntil([&] {
+    return window.IsSelected(first) &&
+           window.tab_sidebar_for_testing()->row_for_testing(Active(first));
+  }));
+  EXPECT_EQ(first->GetTabStripModel()->count(),
+            static_cast<int>(
+                window.tab_sidebar_for_testing()->row_count_for_testing()));
+}
+
+IN_PROC_BROWSER_TEST_F(FlyWorkspaceBrowserTest,
+                       NativeExtensionIdsEventsAndStorageAreProfileScoped) {
+  extensions::TestExtensionDir directory;
+  directory.WriteManifest(
+      base::DictValue()
+          .Set("manifest_version", 3)
+          .Set("name", "Fly native profile probe")
+          .Set("version", std::string(version_info::GetVersionNumber()))
+          .Set("permissions",
+               base::ListValue().Append("tabs").Append("storage"))
+          .Set("background",
+               base::DictValue().Set("service_worker", "worker.js"))
+          .Set("content_scripts",
+               base::ListValue().Append(
+                   base::DictValue()
+                       .Set("matches",
+                            base::ListValue().Append("http://127.0.0.1/*"))
+                       .Set("js", base::ListValue().Append("probe.js")))));
+  directory.WriteFile(FILE_PATH_LITERAL("worker.js"), R"js(
+    let tail = Promise.resolve();
+    function update(callback) {
+      tail = tail.then(async () => {
+        const state = await chrome.storage.local.get();
+        state.identity ||= crypto.randomUUID();
+        await callback(state);
+        await chrome.storage.local.set(state);
+        return state;
+      });
+      return tail;
+    }
+    chrome.runtime.onInstalled.addListener(event => update(state => {
+      state.installed = event.reason;
+    }));
+    chrome.tabs.onActivated.addListener(event => update(state => {
+      state.activated = event.tabId;
+    }));
+    chrome.runtime.onMessage.addListener((message, sender, reply) => {
+      if (message !== 'fly-native-probe' || !sender.tab) return;
+      update(async state => {
+        const active = await chrome.tabs.query({active: true, currentWindow: true});
+        reply({identity: state.identity, installed: state.installed,
+               tabId: sender.tab.id, windowId: sender.tab.windowId,
+               activeTabId: active[0]?.id, activated: state.activated});
+      });
+      return true;
+    });
+  )js");
+  directory.WriteFile(FILE_PATH_LITERAL("probe.js"), R"js(
+    chrome.runtime.sendMessage('fly-native-probe').then(result => {
+      document.documentElement.dataset.flyNativeProbe = JSON.stringify(result);
+    }).catch(error => {
+      document.documentElement.dataset.flyNativeProbe = JSON.stringify({error: error.message});
+    });
+  )js");
+  auto* second = SecondWorkspace();
+  ASSERT_TRUE(second);
+  extensions::ChromeTestExtensionLoader first_loader(browser()->GetProfile());
+  extensions::ChromeTestExtensionLoader second_loader(second->GetProfile());
+  auto first_extension = first_loader.LoadExtension(directory.UnpackedPath());
+  ASSERT_TRUE(first_extension);
+  auto second_extension = second_loader.LoadExtension(directory.UnpackedPath());
+  ASSERT_TRUE(second_extension);
+  EXPECT_EQ(first_extension->id(), second_extension->id());
+  chrome::NewTab(browser(), NewTabTypes::kNewTabCommand);
+  chrome::NewTab(second, NewTabTypes::kNewTabCommand);
+  auto probe = [&](BrowserWindowInterface* target) {
+    FlyWindowController::Get().Select(target, true);
+    EXPECT_TRUE(ui_test_utils::NavigateToURL(
+        target, embedded_test_server()->GetURL("/title1.html")));
+    return base::JSONReader::ReadDict(
+        content::EvalJs(Active(target), R"js(new Promise(resolve => {
+          const read = () => {
+            const value = document.documentElement.dataset.flyNativeProbe;
+            if (value) { observer?.disconnect(); resolve(value); }
+          };
+          const observer = new MutationObserver(read);
+          observer.observe(document.documentElement, {attributes: true});
+          read();
+        }))js")
+            .ExtractString(),
+        base::JSON_PARSE_RFC);
+  };
+  const auto first_data = probe(browser());
+  const auto second_data = probe(second);
+  ASSERT_TRUE(first_data);
+  ASSERT_TRUE(second_data);
+  ASSERT_TRUE(first_data->FindString("identity"));
+  ASSERT_TRUE(second_data->FindString("identity"));
+  EXPECT_NE(*first_data->FindString("identity"),
+            *second_data->FindString("identity"));
+  for (const auto& [target, data] :
+       {std::pair<BrowserWindowInterface*, const base::DictValue*>(
+            browser(), &*first_data),
+        std::pair<BrowserWindowInterface*, const base::DictValue*>(
+            second, &*second_data)}) {
+    ASSERT_TRUE(data->FindString("installed"));
+    EXPECT_EQ("install", *data->FindString("installed"));
+    EXPECT_EQ(extensions::ExtensionTabUtil::GetTabId(Active(target)),
+              data->FindInt("tabId"));
+    EXPECT_EQ(extensions::ExtensionTabUtil::GetWindowId(target),
+              data->FindInt("windowId"));
+    EXPECT_EQ(data->FindInt("tabId"), data->FindInt("activeTabId"));
+    EXPECT_EQ(data->FindInt("tabId"), data->FindInt("activated"));
+  }
+}
+
 }  // namespace
 }  // namespace fly

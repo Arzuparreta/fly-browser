@@ -3,6 +3,7 @@
 // Fly repository.
 #include "fly/ui/fly_window_controller.h"
 #include "fly/ui/native_commands.h"
+#include "fly/ui/tab_sidebar.h"
 
 #include <algorithm>
 #include <utility>
@@ -79,9 +80,9 @@ FlyWindowController::FlyWindowController()
   auto* layout = root->SetLayoutManager(std::make_unique<views::BoxLayout>(
       views::BoxLayout::Orientation::kHorizontal));
   auto sidebar = std::make_unique<views::View>();
-  sidebar->SetLayoutManager(std::make_unique<views::BoxLayout>(
+  auto* sidebar_layout = sidebar->SetLayoutManager(std::make_unique<views::BoxLayout>(
       views::BoxLayout::Orientation::kVertical, gfx::Insets(8), 6));
-  sidebar->SetPreferredSize(gfx::Size(180, 0));
+  sidebar->SetPreferredSize(gfx::Size(280, 0));
   sidebar->AddChildView(std::make_unique<views::Label>(u"Fly"));
   sidebar->AddChildView(std::make_unique<views::MdTextButton>(
       base::BindRepeating(&FlyWindowController::CreateWorkspace,
@@ -90,6 +91,8 @@ FlyWindowController::FlyWindowController()
   workspace_buttons_ = sidebar->AddChildView(std::make_unique<views::View>());
   workspace_buttons_->SetLayoutManager(std::make_unique<views::BoxLayout>(
       views::BoxLayout::Orientation::kVertical));
+  tab_sidebar_ = sidebar->AddChildView(std::make_unique<TabSidebar>());
+  sidebar_layout->SetFlexForView(tab_sidebar_, 1);
   status_ = sidebar->AddChildView(std::make_unique<views::Label>(u"NORMAL"));
   root->AddChildView(std::move(sidebar));
   content_ = root->AddChildView(std::make_unique<views::View>());
@@ -113,10 +116,15 @@ FlyWindowController::FlyWindowController()
 
 FlyWindowController::~FlyWindowController() {
   CHECK(entries_.empty());
+  weak_factory_.InvalidateWeakPtrs();
   desktop_->GetNativeWindow()->RemovePreTargetHandler(this);
   desktop_->RemoveObserver(this);
   // Destruction is only posted after all profile-bound BrowserWidgets finish
   // their own beforeunload and destruction paths.
+  workspace_buttons_ = nullptr;
+  content_ = nullptr;
+  status_ = nullptr;
+  tab_sidebar_ = nullptr;
   desktop_.reset();
 }
 
@@ -177,6 +185,7 @@ void FlyWindowController::Select(BrowserWindowInterface* browser, bool focus) {
       previous.widget->Hide();
     }
     selected_ = browser;
+    tab_sidebar_->SetBrowser(browser);
     auto& next = it->second;
     next.host->SetVisible(true);
     next.widget->ShowInactive();
@@ -337,8 +346,11 @@ void FlyWindowController::OnWidgetDestroying(views::Widget* widget) {
   }
   widget->RemoveObserver(this);
   const bool was_selected = selected_ == it->first;
+  if (was_selected) {
+    tab_sidebar_->SetBrowser(nullptr);
+  }
   it->second.host->Detach();
-  content_->RemoveChildViewT(it->second.host.get());
+  auto removed_host = content_->RemoveChildViewT(it->second.host.get());
   entries_.erase(it);
   RebuildWorkspaceButtons();
   if (was_selected) {
@@ -372,7 +384,7 @@ bool FlyWindowController::RunCommand(BrowserWindowInterface* browser,
     return true;
   }
   if (action == "focus-sidebar") {
-    workspace_buttons_->GetFocusManager()->AdvanceFocus(false);
+    tab_sidebar_->FocusActiveTab();
     return true;
   }
   if (action == "next-workspace" || action == "previous-workspace") {

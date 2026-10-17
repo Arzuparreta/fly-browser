@@ -3,6 +3,26 @@
 The native port is **incomplete**. Electron remains the production runtime.
 No native application, migration or package has passed acceptance yet.
 
+## Current checkpoint
+
+PR [#112](https://github.com/Arzuparreta/fly-browser/pull/112) merged as
+`1b82cc5` after its latest-head ordinary checks and explicit native matrix passed.
+[Run 39071709021](https://github.com/Arzuparreta/fly-browser/actions/runs/39071709021)
+built and executed 26 native service tests on **Linux, macOS and Windows**, and
+passed all 27 Python tooling contracts on all three platforms. Downloaded
+`native-core-tests.json` files each contain 26 SUCCESS results, under external
+`evidence/ci-native-units-final/`. These are service tests, not browser acceptance.
+
+The sidebar branch `codex/chromium-native-sidebar` is now based on that merged
+main. Its nine browser tests are source-checked but unexecuted. The dependent
+`codex/chromium-native-hints` branch is already committed/pushed at `003b2fd`;
+it adds native accessibility hints, empty-window input/lifetime handling and two
+more browser tests, with 28 service tests passing in the local bootstrap runner.
+It must be rebased after the sidebar PR merges. Further native page-scroll work
+is in `codex/chromium-native-page-scroll` in the managed hints worktree; inspect
+its status before switching branches. No source overlay has been applied to the
+active control checkout.
+
 ## Source and working state
 
 - Planning baseline: `a477efd0cd47c24d8053ce2be013446054268fe9`.
@@ -156,18 +176,31 @@ No native packages, package checksums or performance benchmarks exist yet.
 External stage provenance records exist for bootstrap, sync and hooks.
 Existing `docs/public/benchmarks/` data is historical Electron/control evidence,
 not evidence for this implementation. Native/control/baseline comparisons and
-the Twitch/Pie reproduction have not run. macOS and Windows execution hosts
-have not been established.
+the Twitch/Pie reproduction have not run. Explicit hosted macOS and Windows CI
+has configured and compiled native service tests; interactive/package validation
+on those platforms remains outstanding.
 
 ## Next action
 
-Wait for the existing unmodified `chrome` build, inspect its process exit and
+Wait for the resumed unmodified `chrome` build managed by the user service
+`fly-chromium-control-build.service`, inspect its exit and
 `evidence/build.json`, then run the same-pin control fixture with and without the
-probe. Source/dependencies/hooks/generation are complete; do not repeat source
-sync under the active build. Native browser/profile/Views ownership findings are
-recorded, but the M1 composition adapter and its native browser tests still need
-implementation. No external platform or build failure is being claimed: the
-local compilation is simply unfinished. macOS/Windows hosts remain unestablished.
+extension probe. The active log is `/mnt/storage/fly-chromium/build-systemd.log`;
+inspect `.fly-engine-operation/owner.json` and the live processes before running
+another engine operation. Do not modify that source tree while it builds.
+
+Open/validate the sidebar PR, wait for its latest-head checks and manual native
+validation, then squash-merge and pull main. Rebase the dependent hints branch
+from its old sidebar base `65ce772` onto that merged main. Preserve the separate
+page-scroll work before switching its worktree. The retained Electron
+recorder/editable-page suite passed with a disposable profile and no page errors;
+its external log is `evidence/command-integration-electron-keyboard.log`.
+
+After the control passes, run the same-pin control fixtures, apply the complete
+managed overlay, configure/build the native browser, then run
+`native.py test-browser`. This is the real runtime gate for the native topology;
+no desktop acceptance is claimed yet. Hosted macOS and Windows runners are
+available for explicit CI, while only local Linux supports interactive testing.
 
 ## Command evidence
 
@@ -357,3 +390,51 @@ not disable Chromium's assertion or change build/runner priority. This needs a
 fresh matrix at the corrected head. The retained Electron recorder/editable-page
 suite also passed with a disposable profile, no page errors, and its external
 log is `evidence/command-integration-electron-keyboard.log`.
+## Native tab sidebar implementation
+
+The dependent sidebar branch adds a native, scrollable vertical tab list that
+observes only the selected workspace's actual `TabStripModel`. Native tab creation,
+selection, pinning and close/history/beforeunload use upstream services. Buttons
+resolve weak WebContents identities against the current model when invoked, so
+reordering cannot redirect an existing callback to a different tab. Deferred,
+coalesced updates retain existing row/button objects through title and selection
+changes; closing or switching workspaces removes only obsolete rows. Observation
+is released when the model or view dies.
+
+The third ordered patch suppresses the embedded browser's duplicate tab strip
+through its layout query. It retains upstream navigation/security UI for now;
+the floating address flow, pointer collapse/resizing, row context menus and drag
+ordering still require implementation. Keyboard sidebar focus now targets the
+active tab row. A fifth browser test exercises callbacks across a reorder, native
+pinning and profile switches. These browser tests are source-checked but have not
+run; do not mark A02/A04/A05 passed from their existence.
+
+Stable product tab UUIDs now use Chromium's native session command extra-data
+and closed-tab restore paths. They are separate from extension/native session
+IDs. New/duplicated tabs get a new UUID; restored tabs may reclaim their saved
+UUID after the original is gone. Malformed IDs and live collisions get a fresh
+identity, and a live tab's identity cannot be reassigned. Private tabs never add
+this field to persistent restore data. Two additional browser tests cover native
+close/reopen, collision rejection, malformed input and private exclusion. All
+nine browser tests still await their real linked execution. Automatic reopening
+of all saved workspaces/session startup remains outstanding.
+
+The detached build received another interrupt signal after 5,901 additional
+completed tasks and no failed tasks. Its source/objects were retained and the
+verified stale lease was cleared. The build now runs independently of the chat
+under `systemd-run --user`, unit `fly-chromium-control-build.service`, with output
+in `build-systemd.log`. The interruption record is external
+`evidence/interrupted-control-operation-second.json`.
+
+The sidebar's close/teardown test also covers switching back after its selected
+profile-bound browser closes. The model observer base removes its registration
+before the destruction callback; the sidebar clears its references there without
+removing twice. The desktop controller invalidates pending callbacks and clears
+its non-owning child-view references before destroying the widget tree.
+
+A ninth browser test loads the same real Manifest V3 extension into both native
+profiles through Chromium's extension loader. Its runtime installation event,
+profile-local `chrome.storage`, native tab/window IDs and active-tab query are
+asserted from a real content script/service worker. This is still unexecuted
+browser coverage; extension compatibility, blocking and media acceptance remain
+pending until real runs.
