@@ -71,6 +71,7 @@ Controls hardware switches, process limits, privacy whitelists, and search prefe
 - **`process_limit`**: Hard cap on Chromium renderer process forks (1 to 5).
 - **`tab_suspend_timeout_minutes`**: Continuous background time before eligible pages freeze in memory (5, 15, 30, 60, or 0 to disable; default 15). The old `tab_sleep_timeout_minutes` setting migrates automatically.
 - **`sidebar_auto_collapse`**: When `true`, collapses the vertical sidebar into a 36px icon strip, expanding smoothly on hover or via shortcut.
+- **`show_frequent_sites`**: When `true` (the default), shows frequent sites on new tabs. Turning it off hides the entire section without deleting history or hidden-site preferences.
 - **`show_status_bar`**: When `true`, displays the 22px footer status bar with modal state, real-time link hover preview, and TLS security status.
 - **`show_window_controls`**: When `true`, displays window action buttons (minimise, maximise/restore, close) at the top of the sidebar for desktop environments without native window decorations.
 - **`email_handler`**: Choose between `system` (OS default `mailto:`) or webmail providers (Gmail, Zoho, Outlook, Fastmail, ProtonMail).

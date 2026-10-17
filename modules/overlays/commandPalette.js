@@ -728,6 +728,9 @@ export async function syncPreferencesUI() {
             const statusBarToggle = document.getElementById('setting-status-bar-toggle');
             if (statusBarToggle) statusBarToggle.checked = cfg.show_status_bar !== false;
 
+            const frequentSitesToggle = document.getElementById('setting-frequent-sites-toggle');
+            if (frequentSitesToggle) frequentSitesToggle.checked = cfg.show_frequent_sites !== false;
+
             const clockToggle = document.getElementById('setting-clock-toggle');
             if (clockToggle) clockToggle.checked = cfg.show_clock !== false;
 
@@ -862,6 +865,20 @@ export function setupPreferencesListeners() {
         statusBarToggle.onchange = () => {
             if (typeof window.toggleStatusBar === 'function') {
                 window.toggleStatusBar(statusBarToggle.checked);
+            }
+        };
+    }
+
+    const frequentSitesToggle = document.getElementById('setting-frequent-sites-toggle');
+    if (frequentSitesToggle) {
+        frequentSitesToggle.onchange = async () => {
+            try {
+                const saved = await window.flyAPI.updateBrowserSettings({show_frequent_sites: frequentSitesToggle.checked});
+                if (!saved) { await syncPreferencesUI(); return; }
+                const {refreshNewTabs} = await import('../newTab.js');
+                await refreshNewTabs();
+            } catch {
+                await syncPreferencesUI();
             }
         };
     }
