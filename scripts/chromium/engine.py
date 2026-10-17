@@ -251,6 +251,21 @@ def binary(root):
     return output / ('chrome.exe' if sys.platform == 'win32' else 'chrome')
 
 
+def require_control(root, lock, config):
+    require_stage(root, 'build', lock)
+    details = json.loads((root / 'evidence/build.json').read_text())['details']
+    args = root / 'src/out/FlyControl/args.gn'
+    expected = digest(config)
+    if (details.get('args_sha256') != expected or not args.is_file() or
+            digest(args) != expected):
+        fail('Control build arguments differ from the requested preset; preserve '
+             'the old output and rebuild the source-unmodified control')
+    executable = binary(root)
+    if not executable.is_file() or digest(executable) != details.get('sha256'):
+        fail('Browser executable differs from the successful build record')
+    return details
+
+
 def execute(args):
     lock = read_lock()
     root = engine_root(args.root)
@@ -314,13 +329,13 @@ def execute(args):
                 fail('Control build arguments changed since configuration')
             run(['autoninja', '-C', 'out/FlyControl', '-j', str(args.jobs), 'chrome'], root / 'src', env)
             verify(root, lock)
-            evidence(root, 'build', lock, {'binary': str(binary(root)), 'sha256': digest(binary(root))})
+            evidence(root, 'build', lock, {'binary': str(binary(root)),
+                                          'sha256': digest(binary(root)),
+                                          'args_sha256': digest(CONFIG)})
         elif args.command == 'run':
-            require_stage(root, 'build', lock)
+            require_control(root, lock, CONFIG)
             if not re.fullmatch(r'https?://[^\s]+|about:blank', args.url):
                 fail('Use an HTTP(S) fixture URL or about:blank')
-            if digest(binary(root)) != json.loads((root / 'evidence/build.json').read_text())['details']['sha256']:
-                fail('Browser executable differs from the successful build record')
             profiles = root / 'disposable-profiles'
             profiles.mkdir(exist_ok=True, mode=0o700)
             profile = Path(tempfile.mkdtemp(prefix='control-', dir=profiles))

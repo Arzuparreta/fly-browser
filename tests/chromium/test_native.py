@@ -26,6 +26,7 @@ class NativeOverlayTests(unittest.TestCase):
         (self.source / 'upstream.cc').write_text('original\n')
         self.git('add', 'upstream.cc')
         self.git('commit', '--quiet', '-m', 'upstream')
+        (self.source / '.git/info/exclude').write_text('out/\n')
         self.lock = {'chromium': {'url': self.git('remote', 'get-url', 'origin'),
                                   'revision': self.git('rev-parse', 'HEAD')}}
         self.overlay = self.root / 'product/overlay'
@@ -42,11 +43,46 @@ class NativeOverlayTests(unittest.TestCase):
         self.addCleanup(self.scope.stop)
         self.stage_guard = patch.object(native.engine, 'require_stage')
         self.stage_guard.start()
+        # Tiny build artefacts model integrity gates only; no engine is built.
+        args = self.source / 'out/FlyControl/args.gn'
+        args.parent.mkdir(parents=True)
+        args.write_bytes(native.CONFIG.read_bytes())
+        executable = native.engine.binary(self.root)
+        executable.parent.mkdir(parents=True, exist_ok=True)
+        executable.write_bytes(b'synthetic control fixture')
+        native.engine.atomic_json(self.root / 'evidence/build.json', {
+            'details': {'args_sha256': native.engine.digest(native.CONFIG),
+                        'sha256': native.engine.digest(executable)}})
         self.addCleanup(self.stage_guard.stop)
 
     def git(self, *args):
         return subprocess.run(['git', *args], cwd=self.source, check=True,
                               capture_output=True, text=True).stdout.strip()
+
+    def test_full_overlay_requires_control_with_matching_built_arguments(self):
+        marker = self.root / 'evidence/build.json'
+        original = marker.read_text()
+        data = json.loads(original)
+        data['details']['args_sha256'] = '0' * 64
+        marker.write_text(json.dumps(data))
+        with self.assertRaisesRegex(RuntimeError, 'Control build arguments differ'):
+            native.apply(self.root, self.lock)
+        marker.write_text(original)
+        (self.source / 'out/FlyControl/args.gn').write_text('different arguments')
+        with self.assertRaisesRegex(RuntimeError, 'Control build arguments differ'):
+            native.apply(self.root, self.lock)
+        self.assertEqual(self.git('status', '--porcelain'), '')
+        self.assertFalse((self.root / native.MANIFEST).exists())
+
+    def test_full_overlay_rejects_missing_or_modified_control_executable(self):
+        executable = native.engine.binary(self.root)
+        executable.write_bytes(b'changed executable')
+        with self.assertRaisesRegex(RuntimeError, 'Browser executable differs'):
+            native.apply(self.root, self.lock)
+        executable.unlink()
+        with self.assertRaisesRegex(RuntimeError, 'Browser executable differs'):
+            native.apply(self.root, self.lock)
+        self.assertFalse((self.root / native.MANIFEST).exists())
 
     def test_apply_verify_and_revert_preserve_upstream_identity(self):
         native.apply(self.root, self.lock)
@@ -159,6 +195,7 @@ class NativeOverlayTests(unittest.TestCase):
             native.verify_source(self.root, self.lock)
 
     def test_overlay_requires_completed_control_build(self):
+        (self.root / 'evidence/build.json').unlink()
         self.stage_guard.stop()
         with self.assertRaisesRegex(RuntimeError, 'build has not succeeded'):
             native.apply(self.root, self.lock)

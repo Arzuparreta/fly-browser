@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 'use strict';
-// A headful Chromium fixture check. It does not claim native Fly acceptance.
+// Headful control/native media fixtures; not full native Fly acceptance.
 const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const path = require('node:path');
@@ -26,6 +26,8 @@ async function main() {
     const {values} = parseArgs({options: {
         executable: {type: 'string'}, 'work-dir': {type: 'string'},
         extension: {type: 'boolean', default: false},
+        video: {type: 'boolean', default: false},
+        native: {type: 'boolean', default: false},
         backend: {type: 'string', default: 'x11'},
     }});
     assert(values.executable && values['work-dir'], 'Provide --executable and a dedicated --work-dir');
@@ -35,12 +37,13 @@ async function main() {
     fs.mkdirSync(directory, {recursive: true, mode: 0o700});
     const work = fs.mkdtempSync(path.join(directory, 'control-smoke-'));
     const profile = path.join(work, 'profile');
-    const fixture = await fixtures.serve();
+    const fixture = await fixtures.serve({video: values.video});
     const extension = values.extension ? fixtures.extension(path.join(work, 'extension')) : null;
     const args = ['--user-data-dir=' + profile, '--remote-debugging-port=0',
         '--remote-debugging-address=127.0.0.1', '--no-first-run', '--no-default-browser-check',
         '--ozone-platform=' + values.backend, 'about:blank'];
     if (extension) args.unshift('--load-extension=' + extension.directory);
+    if (values.native) args.unshift('--fly-native');
     const output = fs.openSync(path.join(work, 'browser.log'), 'wx', 0o600);
     const child = spawn(executable, args, {stdio: ['ignore', output, output]});
     let spawnError;
@@ -48,12 +51,14 @@ async function main() {
     fs.closeSync(output);
     let browser;
     let context;
-    const evidence = {role: 'control fixture validation; no native Fly acceptance',
+    const evidence = {role: values.native ? 'native Fly single-profile media fixture' : 'control fixture validation; no native Fly acceptance',
+        native: values.native, media: values.video ? 'H264/AAC MP4' : 'PCM WAV',
+        mediaFixtureSha256: fixture.mediaSha256,
         executable, launcherSha256: crypto.createHash('sha256').update(fs.readFileSync(executable)).digest('hex'),
         args, sandboxDisabled: false, profile, backend: values.backend,
         extensionManifestSha256: extension?.manifestSha256 || null,
-        checks: {}, limitations: ['No native Fly shell/workspace integration',
-            'Audio fixture only; video, Twitch and real Pie untested',
+        checks: {}, limitations: [values.native ? 'Single profile fixture only; full workspace/split/desktop acceptance untested' : 'No native Fly shell/workspace integration',
+            'Real Twitch and real Pie untested; synthetic loopback media only',
             'No minimise/restore, packaged application or platform-wide acceptance']};
     try {
         const activePort = path.join(profile, 'DevToolsActivePort');
@@ -73,7 +78,17 @@ async function main() {
         evidence.focusEmulationDisabled = true;
         page.setDefaultTimeout(15000);
         await page.goto(fixture.url);
-        await page.waitForFunction(() => window.flyFixture && document.querySelector('#media').readyState >= 2);
+        await page.waitForFunction(() => window.flyFixture);
+        evidence.mediaCapabilities = await page.evaluate(() => {
+            const media = document.querySelector('#media');
+            return {type: media.tagName, mp4: media.canPlayType('video/mp4; codecs="avc1.42E01E,mp4a.40.2"')};
+        });
+        if (values.video) assert(evidence.mediaCapabilities.mp4, 'H264/AAC support must be built into the real engine');
+        await page.waitForFunction(() => {
+            const media = document.querySelector('#media');
+            return media.readyState >= 2 || media.error;
+        });
+        assert.equal(await page.evaluate(() => document.querySelector('#media').error?.code || null), null, 'The engine must decode the synthetic media');
         await page.bringToFront();
         await page.waitForFunction(() => !document.hidden);
         const before = await page.evaluate(() => flyFixture.events.filter(event => event.type === 'visibilitychange').length);
@@ -83,6 +98,11 @@ async function main() {
         evidence.checks.editableFocusDoesNotHide = 'pass';
         await page.locator('#play').click();
         await page.waitForFunction(() => !document.querySelector('#media').paused);
+        if (values.video) {
+            await page.waitForFunction(() => document.querySelector('#media').getVideoPlaybackQuality().totalVideoFrames > 0);
+            evidence.videoFrames = await page.evaluate(() => document.querySelector('#media').getVideoPlaybackQuality().totalVideoFrames);
+            evidence.checks.nativeVideoDecode = 'pass';
+        }
         await page.locator('#pause').click();
         const cdp = await browser.newBrowserCDPSession();
         const pendingPage = context.waitForEvent('page');

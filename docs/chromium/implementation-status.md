@@ -20,8 +20,14 @@ the earlier dependent-branch delivery sequence; the old pushed branches preserve
 intermediate checkpoints. The combined branch has 15 browser tests awaiting
 execution, 31 service tests passing in the pinned local partial runner, and
 successful full native GN generation/header checks in an isolated source shadow.
-An updated official 31-test CI matrix is still required. No source overlay has
-been applied to the active control checkout; its user service continues building.
+The updated official 31-test matrix is in progress in run 39078704053.
+No source overlay has been applied to the engine checkout. The initial complete
+control built successfully, matches its recorded executable hash, and passed
+its input/native visibility/pause/background-audio fixtures with and without the
+MV3 probe. H264/AAC video was correctly rejected by that initial configuration;
+the dependent media branch enables real decoding in the common control/native
+GN preset and adds a synthetic MP4 fixture. A matching control rebuild and
+native build/browser tests are the next runtime gates.
 
 ## Source and working state
 
@@ -94,7 +100,7 @@ live source or destination data has been modified.
 
 | Milestone | Status | Evidence / remaining gate |
 | --- | --- | --- |
-| M0 | pending | Source/tools/dependencies/hooks, generation and contract capture pass; control build/launch and clean second checkout outstanding |
+| M0 | pending | Source/tools/dependencies/hooks, generation and contract capture pass; control build/launch and audio/MV3 fixtures pass; codec-matched rebuild and clean second checkout outstanding |
 | M1 | pending | Native topology, shell, split and extension probe outstanding |
 | M2 | pending | Commands, preferences and product UI outstanding |
 | M3 | pending | Native services, blocker and user content outstanding |
@@ -111,7 +117,7 @@ live source or destination data has been modified.
 | A05 | pending | Single-window multi-profile isolation and restart |
 | A06 | pending | Destination-profile moves and in-flight work |
 | A07 | pending | Native split visibility, focused pane and restore |
-| A08 | pending | Same-pin control and native Fly visibility, including minimise/restore |
+| A08 | pending | Same-pin control fixture passes; native Fly and minimise/restore outstanding |
 | A09 | pending | Native media, video and real Twitch/Pie |
 | A10 | pending | Freeze/resume eligibility versus discard |
 | A11 | pending | Native extension lifecycle, IDs, services and isolation |
@@ -182,12 +188,13 @@ on those platforms remains outstanding.
 
 ## Next action
 
-Wait for the resumed unmodified `chrome` build managed by the user service
-`fly-chromium-control-build.service`, inspect its exit and
-`evidence/build.json`, then run the same-pin control fixture with and without the
-extension probe. The active log is `/mnt/storage/fly-chromium/build-systemd.log`;
-inspect `.fly-engine-operation/owner.json` and the live processes before running
-another engine operation. Do not modify that source tree while it builds.
+The initial control build and both audio/extension smoke modes now pass. Preserve
+`out/FlyControl` and its `evidence/control-initial/` records before changing GN
+arguments. Build the codec-enabled source-unmodified control from the media
+branch and run the MP4 fixture, then apply the complete managed native overlay,
+configure/build Fly and execute the scoped native browser tests. Keep the initial
+control executable/output available as an independent checkpoint. Never mutate
+an active engine build's source or output.
 
 Open/validate the combined follow-up PR from
 `codex/chromium-browser-test-runner`, wait for all latest-head checks and the
@@ -618,3 +625,38 @@ query so BrowserWindow's const bounds method can use it without a cast. All
 eight ordered patches preflight cleanly over the original pinned files. Local
 repository/tooling/docs checks pass; these are still source checks rather than
 a linked native run.
+
+## Completed initial control and video coverage
+
+The systemd-managed initial control build completed successfully; the lease was
+released. Its `evidence/build.json` records the pinned source, clean Fly commit
+and executable SHA-256
+`f2dddc7d5ac03794095e779d421ba64f4b5af73476855b1156dfa9c348aa7e4a`.
+The actual executable matches that digest. Both pinned-engine fixture runs pass:
+`fixture-evidence/control-smoke-nULvg6/result.json` (audio) and
+`fixture-evidence/control-smoke-NMaq7o/result.json` (audio plus real MV3 probe).
+They verify same-window native tab visibility, editable focus, preserved pause
+and continuing background audio with sandboxing enabled. Raw logs are
+`evidence/pinned-control-audio.log` and `pinned-control-extension.log`.
+Build/configure/dependency records and original GN arguments are preserved in
+`evidence/control-initial/`. This is actual pinned control evidence, not native
+Fly acceptance or a clean second build.
+
+The dependent `codex/chromium-native-media-fixtures` branch adds a generated
+H264/AAC MP4 and `control-smoke.js --video`; `--native` runs the same single-profile
+fixture through the explicit Fly development gate. The video check requires real
+codec support and decoded video frames, then applies the same pause/background
+checks. No media methods or visibility APIs are replaced. The initial pinned
+control fails this test because its MP4 codec capability is empty (external
+`fixture-evidence/control-smoke-synIpw/result.json`). The existing system Chromium
+passes the new video-plus-MV3 harness in `control-smoke-zNXZ3E/result.json`; this
+validates the harness only and cannot pass pinned/native video acceptance.
+
+The common GN preset now requests `proprietary_codecs` and the upstream Chrome
+FFmpeg codec selection, without enabling Google product branding or credentials.
+It applies identically to future control and native builds. The matching rebuild
+has not completed yet. Full overlay application and control launch now require a
+build record with matching GN argument and executable hashes; changing args or
+losing/replacing the executable cannot reuse an earlier success marker. Two new
+transaction guards bring the Python suite to 29 passing tests. HLS/live Twitch, real Pie, DRM, hardware decode and platform
+packages remain unverified.
