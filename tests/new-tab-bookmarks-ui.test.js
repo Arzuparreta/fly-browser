@@ -17,6 +17,7 @@ const createFixture = require('./electron-fixture');
         {url:'javascript:alert(1)', title:'Unsafe'}, {url:'invalid'}, null,
         ...Array.from({length:20}, (_, index) => ({url:`https://example.com/${index}`, title:'Long bookmark title '.repeat(12)}))];
     fs.writeFileSync(path.join(configDir, 'bookmarks.json'), JSON.stringify(bookmarks));
+    fs.writeFileSync(path.join(configDir, 'history.json'), JSON.stringify([{url:'https://frequent.example', timestamp:Date.now()}]));
     fs.writeFileSync(path.join(configDir, 'config.json'), JSON.stringify({show_frequent_sites:false}));
     let app;
     try {
@@ -31,7 +32,7 @@ const createFixture = require('./electron-fixture');
         await refresh();
         assert.equal(await guest('document.querySelectorAll("#bookmarks img, #bookmarks .bookmark-icon").length'), 0);
         assert.equal(await guest('document.querySelectorAll("form, input, #address-hint").length'), 0);
-        assert(await guest('Math.abs((document.getElementById("saved-bookmarks").getBoundingClientRect().left + document.getElementById("saved-bookmarks").getBoundingClientRect().right)/2 - (document.querySelector(".navigation").getBoundingClientRect().left + document.querySelector(".navigation").getBoundingClientRect().right)/2) < 2'));
+        assert(await guest('Math.abs(document.querySelector("#bookmarks a").getBoundingClientRect().left - document.getElementById("clock").getBoundingClientRect().left) < 2'));
         assert(await guest('!!(document.getElementById("saved-bookmarks").compareDocumentPosition(document.getElementById("frequent-sites")) & Node.DOCUMENT_POSITION_FOLLOWING)'));
         const newTabUrl = await page.evaluate(() => document.querySelector('webview').getURL());
         assert.equal(await guest('document.querySelectorAll("#bookmarks a").length'), 22);
@@ -42,7 +43,7 @@ const createFixture = require('./electron-fixture');
             await app.evaluate(({BrowserWindow}, width) => BrowserWindow.getAllWindows()[0].setContentSize(width, 800), width);
             assert(await guest('document.documentElement.scrollWidth <= innerWidth'));
             await page.waitForTimeout(100);
-            assert(await guest('Math.abs((document.getElementById("saved-bookmarks").getBoundingClientRect().left + document.getElementById("saved-bookmarks").getBoundingClientRect().right)/2 - (document.querySelector(".navigation").getBoundingClientRect().left + document.querySelector(".navigation").getBoundingClientRect().right)/2) < 2'));
+            assert(await guest('Math.abs(document.querySelector("#bookmarks a").getBoundingClientRect().left - document.getElementById("clock").getBoundingClientRect().left) < 2'));
         }
         await guest('document.querySelector("#bookmarks a").click()');
         await page.waitForFunction(url => document.querySelector('webview').getURL() === url, destination);
@@ -53,8 +54,14 @@ const createFixture = require('./electron-fixture');
         }, newTabUrl);
         await refresh();
         assert.equal(await guest('document.querySelector("#bookmarks a .bookmark-title").textContent'), 'Updated bookmark');
-        assert(await guest('Math.abs((document.querySelector("#bookmarks a").getBoundingClientRect().left + document.querySelector("#bookmarks a").getBoundingClientRect().right - document.getElementById("bookmarks").getBoundingClientRect().left - document.getElementById("bookmarks").getBoundingClientRect().right) / 2) < 2'));
-        if (process.env.FLY_BOOKMARKS_SCREENSHOT) await page.screenshot({path:process.env.FLY_BOOKMARKS_SCREENSHOT});
+        assert(await guest('Math.abs(document.querySelector("#bookmarks a").getBoundingClientRect().left - document.getElementById("clock").getBoundingClientRect().left) < 2'));
+        await page.evaluate(async () => { await window.flyAPI.updateBrowserSettings({show_frequent_sites:true}); await (await import('./modules/newTab.js')).refreshNewTabs(); });
+        assert(await guest('Math.abs(document.getElementById("bookmarks-label").getBoundingClientRect().left - document.getElementById("clock").getBoundingClientRect().left) < 2'));
+        assert(await guest('Math.abs(document.querySelector("#bookmarks a").getBoundingClientRect().left - document.getElementById("sites").getBoundingClientRect().left) < 2'));
+        if (process.env.FLY_BOOKMARKS_SCREENSHOT) {
+            const png = await app.evaluate(async ({webContents}) => (await webContents.getAllWebContents().find(view => view.getType() === 'webview').capturePage()).toPNG().toString('base64'));
+            fs.writeFileSync(process.env.FLY_BOOKMARKS_SCREENSHOT, Buffer.from(png, 'base64'));
+        }
         await page.evaluate(async () => { await window.flyAPI.saveBookmarks([]); await (await import('./modules/newTab.js')).refreshNewTabs(); });
         assert.equal(await guest('document.getElementById("bookmarks-empty").hidden'), false);
         await page.evaluate(url => new Promise(resolve => {
