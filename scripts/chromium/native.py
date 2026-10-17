@@ -324,7 +324,7 @@ def execute(args):
             engine.evidence(root, 'native-configure', lock,
                             {'fingerprint': manifest['fingerprint'], 'args_sha256': engine.digest(config)})
         elif args.command in ('build', 'test', 'test-browser'):
-            engine.doctor(root)
+            engine.doctor(root, args.minimum_free_gib)
             engine.require_stage(root, 'native-configure', lock)
             configured = json.loads((root / 'evidence/native-configure.json').read_text())['details']
             if configured['fingerprint'] != manifest['fingerprint'] or engine.digest(output / 'args.gn') != configured['args_sha256']:
@@ -351,10 +351,14 @@ def main():
     parser.add_argument('--browser-target', choices=['fly_browser_tests', 'browser_tests'],
                         default='fly_browser_tests',
                         help='Scoped Fly acceptance runner or the complete upstream test binary')
+    parser.add_argument('--minimum-free-gib', type=int, default=100,
+                        help='explicit free-space floor for native compilation')
     parser.add_argument('--jobs', type=int, default=min(8, os.cpu_count() or 1))
     args = parser.parse_args()
     if args.jobs < 1:
         parser.error('--jobs must be positive')
+    if args.minimum_free_gib < 40:
+        parser.error('--minimum-free-gib must be at least 40')
     try:
         execute(args)
     except (RuntimeError, OSError, subprocess.CalledProcessError, ValueError, KeyError) as error:

@@ -686,3 +686,25 @@ Both cases are syntax-checked but unexecuted; no M1 acceptance is claimed.
 Pinned-header source checks pass for the controller, embedded native widget and
 updated browser-test source. Logs: external `workspace-windows-syntax.log` and
 `workspace-windows-browser-syntax.log`.
+
+## Full manual CI preparation
+
+The dependent `codex/chromium-native-full-ci` branch extends only the existing
+explicit `workflow_dispatch` build depth. Ordinary PR CI remains unchanged.
+The prior hosted runs reported initial free space of 85.7 GiB (Linux), 95.7 GiB
+(macOS) and 146.9 GiB (Windows). The completed component/symbol-free local control
+occupies about 10 GiB. Full CI therefore reserves 80 GiB at initial inspection,
+60 GiB before the remaining dependency sync and 40 GiB for each compilation
+phase, rather than demanding the initial source-plus-two-build budget again
+after the source and control have already consumed part of it. Local native
+commands retain the existing 100-GiB default and accept an explicit floor of at
+least 40 GiB. Actual resource failures remain failures in the evidence.
+
+After compiling the native browser, Linux and Windows build/run the scoped
+browser suite. Linux uses an isolated Xvfb display installed only in that manual
+job. Before native test/build compilation, CI removes only recognised
+compilation-object/static archive files from the control's obj tree; its executable, shared libraries,
+resources, arguments and provenance remain available. The removed-file count and
+observed space reclaimed are recorded. macOS still has no native embedding, so
+its CI record explicitly says native desktop is unsupported rather than claiming
+browser-test coverage. The new full matrix has not completed yet.
