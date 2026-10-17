@@ -3,6 +3,26 @@
 The native port is **incomplete**. Electron remains the production runtime.
 No native application, migration or package has passed acceptance yet.
 
+## Current checkpoint
+
+PR [#112](https://github.com/Arzuparreta/fly-browser/pull/112) merged as
+`1b82cc5` after its latest-head ordinary checks and explicit native matrix passed.
+[Run 39071709021](https://github.com/Arzuparreta/fly-browser/actions/runs/39071709021)
+built and executed 26 native service tests on **Linux, macOS and Windows**, and
+passed all 27 Python tooling contracts on all three platforms. Downloaded
+`native-core-tests.json` files each contain 26 SUCCESS results, under external
+`evidence/ci-native-units-final/`. These are service tests, not browser acceptance.
+
+The sidebar branch `codex/chromium-native-sidebar` is now based on that merged
+main. Its nine browser tests are source-checked but unexecuted. The dependent
+`codex/chromium-native-hints` branch is already committed/pushed at `003b2fd`;
+it adds native accessibility hints, empty-window input/lifetime handling and two
+more browser tests, with 28 service tests passing in the local bootstrap runner.
+It must be rebased after the sidebar PR merges. Further native page-scroll work
+is in `codex/chromium-native-page-scroll` in the managed hints worktree; inspect
+its status before switching branches. No source overlay has been applied to the
+active control checkout.
+
 ## Source and working state
 
 - Planning baseline: `a477efd0cd47c24d8053ce2be013446054268fe9`.
@@ -169,21 +189,18 @@ extension probe. The active log is `/mnt/storage/fly-chromium/build-systemd.log`
 inspect `.fly-engine-operation/owner.json` and the live processes before running
 another engine operation. Do not modify that source tree while it builds.
 
-PR [#112](https://github.com/Arzuparreta/fly-browser/pull/112), head `1e3e192`, has passing ordinary PR checks.
-The explicit [native unit matrix](https://github.com/Arzuparreta/fly-browser/actions/runs/39071709021)
-is still running at the priority-corrected head. Its tooling jobs passed on all three platforms and Windows
-passed installation of the required SDK. Wait for the actual unit results;
-inspect failures before merging. The retained Electron recorder/editable-page
-suite passed with a disposable profile (`tests/keyboard-ui.test.js`), with no
-page errors; external evidence is `evidence/command-integration-electron-keyboard.log`.
+Open/validate the sidebar PR, wait for its latest-head checks and manual native
+validation, then squash-merge and pull main. Rebase the dependent hints branch
+from its old sidebar base `65ce772` onto that merged main. Preserve the separate
+page-scroll work before switching its worktree. The retained Electron
+recorder/editable-page suite passed with a disposable profile and no page errors;
+its external log is `evidence/command-integration-electron-keyboard.log`.
 
-The dependent sidebar implementation is in branch `codex/chromium-native-sidebar`
-in the managed `chromium-native-sidebar` worktree. Finish its validation/PR after
-#112. After the control passes, apply the complete managed overlay, configure and
-build the native browser, then run `native.py test-browser`. This is the first
-real runtime gate for the native topology; no desktop acceptance is claimed yet.
-Hosted macOS and Windows runners are available for explicit CI, while only the
-local Linux host is available for interactive testing.
+After the control passes, run the same-pin control fixtures, apply the complete
+managed overlay, configure/build the native browser, then run
+`native.py test-browser`. This is the real runtime gate for the native topology;
+no desktop acceptance is claimed yet. Hosted macOS and Windows runners are
+available for explicit CI, while only local Linux supports interactive testing.
 
 ## Command evidence
 
