@@ -4,6 +4,7 @@
 #ifndef FLY_UI_FLY_WINDOW_CONTROLLER_H_
 #define FLY_UI_FLY_WINDOW_CONTROLLER_H_
 
+#include <cstdint>
 #include <map>
 #include <memory>
 #include <string>
@@ -61,6 +62,7 @@ class FlyWindowController : public views::WidgetDelegate,
   TabSidebar* tab_sidebar_for_testing() { return tab_sidebar_; }
   void CreateTab();
   void CreateWorkspace();
+  views::View* workspace_buttons_for_testing() { return workspace_buttons_; }
   bool RunCommand(BrowserWindowInterface* browser, std::string_view action);
 
   void OnKeyEvent(ui::KeyEvent* event) override;
@@ -76,9 +78,12 @@ class FlyWindowController : public views::WidgetDelegate,
     raw_ptr<views::NativeViewHost> host;
     std::string workspace_id;
     bool browser_closed = false;
+    uint64_t order = 0;
     base::CallbackListSubscription closed_subscription;
   };
+  void ScheduleWorkspaceRefresh();
   void RebuildWorkspaceButtons();
+  void SelectWindow(base::WeakPtr<BrowserWindowInterface> browser);
   void OpenWorkspace(std::string id);
   void OnProfileReady(std::string id, Profile* profile);
   void OnBrowserDidClose(BrowserWindowInterface* browser);
@@ -101,6 +106,9 @@ class FlyWindowController : public views::WidgetDelegate,
   raw_ptr<TabSidebar> tab_sidebar_ = nullptr;
   std::map<BrowserWindowInterface*, Entry> entries_;
   raw_ptr<BrowserWindowInterface> selected_ = nullptr;
+  std::map<std::string, base::WeakPtr<BrowserWindowInterface>> last_windows_;
+  uint64_t next_window_order_ = 0;
+  bool workspace_refresh_pending_ = false;
   bool closing_ = false;
   bool creating_profile_ = false;
   base::CallbackListSubscription close_subscription_;
