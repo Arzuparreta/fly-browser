@@ -48,15 +48,14 @@
        ":tab_ui_helper",
        "//base",
        "//chrome/browser/apps/app_service",
-@@ -1100,7 +1101,7 @@
-     "//ui/webui",
-   ]
+@@ -1102,6 +1103,7 @@
    if (is_linux || is_win) {
--    deps += [ "//fly:workspaces", "//fly:commands" ]
-+    deps += [ "//fly:workspaces", "//fly:commands", "//fly:session_metadata" ]
+     deps += [ "//fly:workspaces", "//fly:commands" ]
    }
++  deps += [ "//fly:session_metadata" ]
  
    allow_circular_includes_from = [
+     # page_load_metrics's :impl includes headers from //chrome/browser/ui that
 --- a/chrome/browser/sessions/session_service.cc
 +++ b/chrome/browser/sessions/session_service.cc
 @@ -3,6 +3,8 @@
