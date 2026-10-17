@@ -2,10 +2,12 @@
 // Use of this source code is governed by the GPL-3.0-or-later license in the
 // Fly repository.
 #include "fly/sessions/tab_identity.h"
+#include "fly/ui/command_palette.h"
 #include "fly/ui/fly_window_controller.h"
 #include "fly/ui/hint_controller.h"
 #include "fly/ui/native_commands.h"
 #include "fly/ui/tab_sidebar.h"
+#include "ui/views/controls/textfield/textfield.h"
 
 #include "base/command_line.h"
 #include "base/json/json_reader.h"
@@ -445,6 +447,69 @@ IN_PROC_BROWSER_TEST_F(FlyWorkspaceBrowserTest,
       [&] { return window.selected_browser_for_testing() != nullptr; }));
   EXPECT_EQ(1,
             window.selected_browser_for_testing()->GetTabStripModel()->count());
+}
+
+IN_PROC_BROWSER_TEST_F(FlyWorkspaceBrowserTest,
+                       NativePaletteSearchExecutesInItsProfileAfterDismissal) {
+  auto* contents = Active(browser());
+  ASSERT_TRUE(ui_test_utils::NavigateToURL(
+      browser(), embedded_test_server()->GetURL("/title1.html")));
+  ASSERT_TRUE(content::ExecJs(contents,
+                              "document.body.innerHTML = '<input id=editable>';"
+                              "document.querySelector('#editable').focus()"));
+  auto& window = FlyWindowController::Get();
+  window.Select(browser(), true);
+  ui::test::EventGenerator keys(window.desktop_widget()->GetNativeWindow());
+  keys.PressKey(ui::VKEY_P, ui::EF_CONTROL_DOWN);
+  ASSERT_TRUE(base::test::RunUntil([&] { return window.palette().active(); }));
+  for (auto key : {ui::VKEY_D, ui::VKEY_U, ui::VKEY_P, ui::VKEY_L, ui::VKEY_I,
+                   ui::VKEY_C, ui::VKEY_A, ui::VKEY_T, ui::VKEY_E})
+    keys.PressKey(key, ui::EF_NONE);
+  ASSERT_TRUE(base::test::RunUntil([&] {
+    return window.palette().search_for_testing()->GetText() == u"duplicate" &&
+           window.palette().result_count_for_testing() == 1;
+  }));
+  EXPECT_EQ("", content::EvalJs(contents,
+                                "document.querySelector('#editable').value"));
+  const int before = browser()->GetTabStripModel()->count();
+  keys.PressKey(ui::VKEY_RETURN, ui::EF_NONE);
+  ASSERT_TRUE(base::test::RunUntil(
+      [&] { return browser()->GetTabStripModel()->count() == before + 1; }));
+  EXPECT_FALSE(window.palette().active());
+  EXPECT_EQ(browser(), window.selected_browser_for_testing());
+}
+
+IN_PROC_BROWSER_TEST_F(FlyWorkspaceBrowserTest,
+                       NativePaletteCustomBindingCancelAndWorkspaceSwitch) {
+  ASSERT_TRUE(ui_test_utils::NavigateToURL(
+      browser(), embedded_test_server()->GetURL("/title1.html")));
+  auto* contents = Active(browser());
+  ASSERT_TRUE(content::ExecJs(contents,
+                              "document.body.innerHTML = '<input id=editable>';"
+                              "document.querySelector('#editable').focus()"));
+  auto& window = FlyWindowController::Get();
+  window.Select(browser(), true);
+  auto config = DefaultKeyboardConfig().ToValue();
+  config.FindDict("shortcuts")
+      ->Set("toggle-palette", base::ListValue().Append("Alt+P"));
+  ASSERT_TRUE(window.commands().Save(config).config);
+  ui::test::EventGenerator keys(window.desktop_widget()->GetNativeWindow());
+  keys.PressKey(ui::VKEY_P, ui::EF_ALT_DOWN);
+  ASSERT_TRUE(base::test::RunUntil([&] { return window.palette().active(); }));
+  keys.PressKey(ui::VKEY_P, ui::EF_ALT_DOWN);
+  ASSERT_TRUE(base::test::RunUntil(
+      [&] { return window.palette().search_for_testing() == nullptr; }));
+  keys.PressKey(ui::VKEY_J, ui::EF_NONE);
+  ASSERT_TRUE(base::test::RunUntil([&] {
+    return content::EvalJs(contents,
+                           "document.querySelector('#editable').value")
+               .ExtractString() == "j";
+  }));
+  keys.PressKey(ui::VKEY_P, ui::EF_ALT_DOWN);
+  ASSERT_TRUE(base::test::RunUntil([&] { return window.palette().active(); }));
+  ASSERT_TRUE(SecondWorkspace());
+  ASSERT_TRUE(base::test::RunUntil([&] { return !window.palette().active(); }));
+  EXPECT_NE(browser(), window.selected_browser_for_testing());
 }
 
 class FlyPageScrollBrowserTest : public FlyWorkspaceBrowserTest {

@@ -26,6 +26,12 @@ void KeyboardRouter::ClearPending() {
   pending_.clear();
   pending_time_ = {};
 }
+KeyResult KeyboardRouter::Invoke(std::string action) {
+  ClearPending();
+  if (!IsKnownAction(action))
+    return {};
+  return Run(std::move(action), false);
+}
 KeyResult KeyboardRouter::Run(std::string action, bool repeat) {
   if (repeat && !IsRepeatableAction(action)) {
     return {KeyResultKind::kConsume, {}};

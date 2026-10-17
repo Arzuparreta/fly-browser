@@ -503,3 +503,45 @@ Workspace switching also stores/restores native WebContents focus instead of
 unconditionally resetting it. The OOPIF case switches to a second profile and
 back before issuing its native scroll key, to check that the focused frame is
 retained. This remains an unexecuted browser assertion.
+
+## Native command palette
+
+The dependent `codex/chromium-native-palette` branch adds a native Views command
+surface inside the existing desktop Aura host. It searches the generated 46
+explicit palette entries and the remaining action catalogue, retaining explicit
+aliases and all 82 action routes. The displayed global and NORMAL bindings come
+from the current validated keyboard configuration; filtering uses Unicode case
+folding and requires every query word to match. It adds no renderer bridge,
+page scripts or privileged WebUI binding.
+
+The search field supports native typing/IME, arrows, Enter, Escape, pointer
+selection and dismissal outside the panel. The configured palette binding also
+closes it. Unsupported native actions remain disabled during this development
+stage. Selection posts execution until the native surface/row callbacks have
+finished, checks the originating WebContents and current profile again, and
+cancels on profile switch, navigation, tab hiding/destruction or desktop close.
+Cancellation restores the saved native page focus. Trusted native command
+invocation shares mode transitions with keyboard dispatch, so selecting INSERT
+or passthrough does not silently do nothing or apply a transition twice.
+
+The catalogue/filter tests and native-action routing case bring the Linux
+partial service runner to 31 passing C++ tests. This uses the pinned compiler,
+actual GN flags and already-linked upstream libraries; it is separate from the
+official GN test launcher and cannot pass browser acceptance. Evidence:
+`evidence/palette-native-tests-final.log`, `palette-syntax-final.log` and
+`palette-browser-syntax.log`. The UI, controller and dispatcher pass pinned-header
+syntax checks. Two new browser tests (15 total) cover native search/selection,
+editable-page isolation, a customised palette binding, focus restoration and
+cancellation on workspace switch. They have not run in a linked native browser.
+
+The full palette inspector/preferences, recent commands, extension/terminal
+entries and availability of all remaining actions are still pending M2/M3 work.
+This is a development component behind `--fly-native`, not a production cutover.
+
+Local repository checks (`npm test`, 27 Python tooling tests, documentation build
+and whitespace) pass for this branch. A repeat of the retained Electron keyboard
+scenario failed at `tests/keyboard-ui.test.js:183` because its test window closed;
+`evidence/palette-electron-keyboard.log` preserves the failure. A fresh disposable
+profile repeat is in progress in `palette-electron-keyboard-retry.log`. Neither
+attempt is native UI acceptance; the earlier retained-runtime pass remains in
+this record, and this branch changes no Electron keyboard implementation.

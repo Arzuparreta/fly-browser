@@ -24,6 +24,8 @@ source_set("commands") {
     "commands/keyboard_config.h",
     "commands/keyboard_router.cc",
     "commands/keyboard_router.h",
+    "commands/palette_catalog.cc",
+    "commands/palette_catalog.h",
   ]
   public_deps = [
     "//base",
@@ -48,6 +50,7 @@ test("fly_unittests") {
     "commands/command_service_unittest.cc",
     "commands/keyboard_config_unittest.cc",
     "commands/hint_codes_unittest.cc",
+    "commands/palette_catalog_unittest.cc",
     "workspaces/workspace_service_unittest.cc",
   ]
   deps = [

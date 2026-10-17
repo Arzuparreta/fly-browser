@@ -3,6 +3,7 @@
 // Fly repository.
 #include "fly/ui/fly_window_controller.h"
 #include "fly/commands/keyboard_router.h"
+#include "fly/ui/command_palette.h"
 #include "fly/ui/hint_controller.h"
 #include "fly/ui/native_commands.h"
 #include "fly/ui/tab_sidebar.h"
@@ -117,6 +118,28 @@ FlyWindowController::FlyWindowController()
                               window->UpdateModeLabel();
                           },
                           weak_factory_.GetWeakPtr()));
+  palette_ = std::make_unique<CommandPalette>(
+      desktop_.get(),
+      base::BindRepeating(
+          [](base::WeakPtr<FlyWindowController> window,
+             std::string_view action) {
+            if (!window || !window->selected_ || window->closing_)
+              return false;
+            return action == "trigger-hints" || action == "focus-sidebar" ||
+                   action == "new-workspace" || action == "next-workspace" ||
+                   action == "previous-workspace" ||
+                   NativeCommandAvailable(window->selected_, action);
+          },
+          weak_factory_.GetWeakPtr()),
+      base::BindRepeating(
+          [](base::WeakPtr<FlyWindowController> window,
+             content::WebContents* source, std::string action) {
+            if (window && window->selected_ &&
+                window->selected_->GetTabStripModel()->GetActiveWebContents() ==
+                    source)
+              InvokeNativeCommand(window->selected_, std::move(action));
+          },
+          weak_factory_.GetWeakPtr()));
   desktop_->AddObserver(this);
   desktop_->GetNativeWindow()->AddPreTargetHandler(this);
   ArmCloseCallback();
@@ -129,6 +152,7 @@ FlyWindowController::FlyWindowController()
 FlyWindowController::~FlyWindowController() {
   CHECK(entries_.empty());
   weak_factory_.InvalidateWeakPtrs();
+  palette_.reset();
   hints_.reset();
   desktop_->GetNativeWindow()->RemovePreTargetHandler(this);
   desktop_->RemoveObserver(this);
@@ -205,6 +229,7 @@ void FlyWindowController::Select(BrowserWindowInterface* browser, bool focus) {
       previous.widget->Hide();
     }
     hints_->Cancel();
+    palette_->Cancel();
     selected_ = browser;
     tab_sidebar_->SetBrowser(browser);
     auto& next = it->second;
@@ -352,6 +377,7 @@ void FlyWindowController::OnBrowserDidClose(BrowserWindowInterface* browser) {
   it->second.browser = nullptr;
   if (selected_ == browser) {
     hints_->Cancel();
+    palette_->Cancel();
     tab_sidebar_->SetBrowser(nullptr);
     selected_ = nullptr;
     if (it->second.widget) {
@@ -381,6 +407,7 @@ void FlyWindowController::RequestClose(views::Widget::ClosedReason reason) {
     return;
   }
   hints_->Cancel();
+  palette_->Cancel();
   closing_ = true;
   if (entries_.empty()) {
     base::SingleThreadTaskRunner::GetCurrentDefault()->PostTask(
@@ -391,8 +418,10 @@ void FlyWindowController::RequestClose(views::Widget::ClosedReason reason) {
   }
 }
 void FlyWindowController::OnClosingAllBrowsers(bool closing) {
-  if (closing)
+  if (closing) {
     hints_->Cancel();
+    palette_->Cancel();
+  }
   closing_ = closing;
   if (closing && entries_.empty()) {
     base::SingleThreadTaskRunner::GetCurrentDefault()->PostTask(
@@ -451,6 +480,12 @@ bool FlyWindowController::RunCommand(BrowserWindowInterface* browser,
                                      std::string_view action) {
   if (!entries_.contains(browser) || closing_)
     return false;
+  if (action == "toggle-palette") {
+    hints_->Cancel();
+    palette_->Toggle(browser->GetTabStripModel()->GetActiveWebContents(),
+                     commands_.Read().value_or(DefaultKeyboardConfig()));
+    return true;
+  }
   if (action == "trigger-hints") {
     hints_->Toggle(browser->GetTabStripModel()->GetActiveWebContents());
     return true;
@@ -489,6 +524,13 @@ namespace fly {
 void FlyWindowController::OnKeyEvent(ui::KeyEvent* event) {
   if (event->type() != ui::EventType::kKeyPressed || event->is_char())
     return;
+  if (palette_->active()) {
+    if (palette_->HandleOverlayKey(*event)) {
+      event->SetHandled();
+      event->StopPropagation();
+    }
+    return;
+  }
   if (!selected_) {
     if (closing_)
       return;
