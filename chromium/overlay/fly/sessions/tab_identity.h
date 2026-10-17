@@ -1,0 +1,36 @@
+// Copyright Fly Browser contributors. All rights reserved.
+// Use of this source code is governed by the GPL-3.0-or-later license in the
+// Fly repository.
+#ifndef FLY_SESSIONS_TAB_IDENTITY_H_
+#define FLY_SESSIONS_TAB_IDENTITY_H_
+
+#include <map>
+#include <string>
+
+#include "content/public/browser/web_contents_user_data.h"
+
+namespace fly {
+// Product identity, independent of native extension/session IDs. Persisted by
+// Chromium's session command store and closed-tab restore service, never in a
+// competing URL/session file. Private tabs have runtime identities only.
+class TabIdentity : public content::WebContentsUserData<TabIdentity> {
+ public:
+  static constexpr char kExtraDataKey[] = "fly.tab_id";
+  static const std::string& Get(content::WebContents* contents);
+  static bool CanPersist(content::WebContents* contents);
+  static void Populate(content::WebContents* contents,
+                       std::map<std::string, std::string>* extra_data);
+  // Call on new restored contents before insertion. Invalid/colliding IDs get
+  // a fresh identity; an already published identity cannot be reassigned.
+  static void Restore(content::WebContents* contents,
+                      const std::map<std::string, std::string>& extra_data);
+  ~TabIdentity() override;
+
+ private:
+  friend class content::WebContentsUserData<TabIdentity>;
+  TabIdentity(content::WebContents* contents, const std::string& restored_id);
+  std::string id_;
+  WEB_CONTENTS_USER_DATA_KEY_DECL();
+};
+}  // namespace fly
+#endif  // FLY_SESSIONS_TAB_IDENTITY_H_
