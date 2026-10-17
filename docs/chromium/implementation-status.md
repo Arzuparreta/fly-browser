@@ -7,7 +7,10 @@ No native application, migration or package has passed acceptance yet.
 
 - Planning baseline: `a477efd0cd47c24d8053ce2be013446054268fe9`.
 - Starting merged main: `98fc5f9` (planning documents only since the baseline).
-- Implementation branch: `codex/chromium-rework`. Commits and PR: pending.
+- M0 infrastructure branch: `codex/chromium-rework`, initial implementation
+  commit `6de1c9d`; [PR #107](https://github.com/Arzuparreta/fly-browser/pull/107).
+  This PR contains preparatory tooling/contracts, not the finished port. Use
+  `git status --short --branch` and the PR's current remote head for live state.
 - Exact upstream and depot_tools pins: `chromium/upstream.lock.json`, resolved
   from ChromiumDash Stable/Linux and official depot_tools Gitiles. The engine
   version in that file is independent of Fly's version in `package.json`.
@@ -90,6 +93,10 @@ Existing Electron tests and system-Chromium fixture checks are baseline/harness
 evidence only. They cannot pass any native acceptance row.
 
 ## Baseline and preparatory test evidence
+
+The committed `docs/chromium/evidence/baseline.json` contains synthetic fixture
+traces, observed system-engine identity, baseline outcomes and raw log hashes.
+The original logs and disposable profiles remain in the external checkout.
 
 - `npm test`: passed, including the network-free generated contract check.
 - `npm run docs:build`: passed. `git diff --check`: passed.
