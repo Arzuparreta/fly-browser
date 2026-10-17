@@ -405,10 +405,11 @@ body.sidebar-auto-collapse #Sidebar:not(.pointer-inside, .expanded, :focus-withi
     transition: background-color var(--motion-fast) var(--motion-ease);
 }
 
-/* Persistent row states are drawn twice: as the full row (::before) and as a
-   28px tile around the favicon for the rail (::after); they crossfade. */
+/* Expanded states use the full row (::before). Every rail tab has a quiet
+   28 × 40px surface (::after), sharing the row's height and 4px rhythm. The
+   two surfaces crossfade without changing layout or moving the favicon. */
 #TabList li:is(.selected, .tab-pinned, .split-pane-1-tab, .split-pane-2-tab)::before,
-#TabList li:is(.selected, .tab-pinned, .split-pane-1-tab, .split-pane-2-tab)::after {
+#TabList li::after {
     content: "";
     position: absolute;
     z-index: -1;
@@ -423,11 +424,13 @@ body.sidebar-auto-collapse #Sidebar:not(.pointer-inside, .expanded, :focus-withi
 }
 
 #TabList li::after {
-    top: 6px;
+    top: 0;
     left: 0;
     width: 28px;
-    height: 28px;
-    border-radius: 6px;
+    height: 100%;
+    border-radius: 4px;
+    background-color: color-mix(in srgb, var(--text) 4%, var(--bg-sidebar));
+    border-color: color-mix(in srgb, var(--text) 9%, var(--bg-sidebar));
     opacity: 0;
 }
 
@@ -458,7 +461,8 @@ body.sidebar-auto-collapse #Sidebar:not(.pointer-inside, .expanded, :focus-withi
     display: none;
 }
 
-/* Mini indicators stand in for the row's badges in the rail. */
+/* Rail status marks have their own space: audio below the favicon and the
+   smaller pin at its upper corner. Neither covers the site icon or numbers. */
 .tab-audio-dot,
 .tab-pin-dot {
     position: absolute;
@@ -471,9 +475,23 @@ body.sidebar-auto-collapse #Sidebar:not(.pointer-inside, .expanded, :focus-withi
 
 
 .tab-audio-dot {
-    top: -3px;
-    right: -3px;
-    color: var(--text);
+    top: 18px;
+    left: 3px;
+    width: 12px;
+    height: 9px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 0;
+    border-radius: 0;
+    background: transparent;
+    font-size: 8px;
+    color: var(--accent);
+    pointer-events: none;
+}
+
+.tab-audio-dot.is-muted {
+    color: var(--dim, var(--text));
 }
 
 .tab-pin-dot {
@@ -484,7 +502,7 @@ body.sidebar-auto-collapse #Sidebar:not(.pointer-inside, .expanded, :focus-withi
 
 /* Rail and expanded decorations swap with the sidebar's motion. */
 body.sidebar-auto-collapse #TabList li:is(.selected, .tab-pinned, .split-pane-1-tab, .split-pane-2-tab)::before,
-body.sidebar-auto-collapse #TabList li:is(.selected, .tab-pinned, .split-pane-1-tab, .split-pane-2-tab)::after,
+body.sidebar-auto-collapse #TabList li::after,
 body.sidebar-auto-collapse :is(.tab-audio-dot, .tab-pin-dot) {
     transition: opacity var(--motion-normal) var(--motion-ease);
 }
@@ -493,7 +511,7 @@ body.sidebar-auto-collapse #Sidebar:not(.pointer-inside, .expanded, :focus-withi
     opacity: 0;
 }
 
-body.sidebar-auto-collapse #Sidebar:not(.pointer-inside, .expanded, :focus-within) #TabList li:is(.selected, .tab-pinned, .split-pane-1-tab, .split-pane-2-tab)::after,
+body.sidebar-auto-collapse #Sidebar:not(.pointer-inside, .expanded, :focus-within) #TabList li::after,
 body.sidebar-auto-collapse #Sidebar:not(.pointer-inside, .expanded, :focus-within) :is(.tab-audio-dot, .tab-pin-dot) {
     opacity: 1;
 }
