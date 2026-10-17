@@ -155,6 +155,11 @@ std::string NormalizeStroke(std::string_view input) {
 bool IsKnownAction(std::string_view id) {
   return Metadata().contains(id);
 }
+std::string ActionLabel(std::string_view id) {
+  const auto* row = Metadata().FindDict(id);
+  const auto* label = row ? row->FindString("label") : nullptr;
+  return label ? *label : std::string();
+}
 bool IsRepeatableAction(std::string_view id) {
   return id.starts_with("scroll-") || id.starts_with("half-page-") ||
          id.starts_with("zoom-") || id == "next-tab" || id == "previous-tab";

@@ -1,0 +1,276 @@
+// Copyright Fly Browser contributors. All rights reserved.
+// Use of this source code is governed by the GPL-3.0-or-later license in the
+// Fly repository.
+#include "fly/ui/native_commands.h"
+
+#include <algorithm>
+#include <utility>
+#include "base/strings/utf_string_conversions.h"
+
+#include "chrome/app/chrome_command_ids.h"
+#include "chrome/browser/ui/browser_commands.h"
+#include "chrome/browser/ui/browser_window/public/browser_window_interface.h"
+#include "chrome/browser/ui/tabs/split_tab_metrics.h"
+#include "chrome/browser/ui/tabs/tab_strip_model.h"
+#include "components/input/native_web_keyboard_event.h"
+#include "components/tabs/public/split_tab_data.h"
+#include "content/public/browser/navigation_handle.h"
+#include "content/public/browser/web_contents.h"
+#include "content/public/browser/web_contents_observer.h"
+#include "content/public/browser/web_contents_user_data.h"
+#include "fly/commands/keyboard_router.h"
+#include "fly/ui/fly_window_controller.h"
+#include "ui/base/clipboard/clipboard_buffer.h"
+#include "ui/base/clipboard/scoped_clipboard_writer.h"
+#include "ui/events/keycodes/dom/dom_code.h"
+#include "ui/events/keycodes/dom/dom_key.h"
+#include "ui/events/keycodes/dom/keycode_converter.h"
+
+namespace fly {
+namespace {
+class PageKeyboardState
+    : public content::WebContentsObserver,
+      public content::WebContentsUserData<PageKeyboardState> {
+ public:
+  ~PageKeyboardState() override = default;
+  KeyboardRouter& router() {
+    auto& service = FlyWindowController::Get().commands();
+    if (generation_ != service.generation()) {
+      router_.Configure(service.Read().value_or(DefaultKeyboardConfig()));
+      generation_ = service.generation();
+    }
+    return router_;
+  }
+  void OnVisibilityChanged(content::Visibility visibility) override {
+    router_.ClearPending();
+  }
+  void OnWebContentsLostFocus(content::RenderWidgetHost* host) override {
+    router_.ClearPending();
+  }
+  void DidFinishNavigation(content::NavigationHandle* navigation) override {
+    if (navigation->HasCommitted() && navigation->IsInPrimaryMainFrame() &&
+        !navigation->IsSameDocument()) {
+      router_.ClearPending();
+    }
+  }
+
+ private:
+  friend class content::WebContentsUserData<PageKeyboardState>;
+  explicit PageKeyboardState(content::WebContents* contents)
+      : content::WebContentsObserver(contents),
+        content::WebContentsUserData<PageKeyboardState>(*contents),
+        router_(DefaultKeyboardConfig()) {}
+  KeyboardRouter router_;
+  uint64_t generation_ = 0;
+  WEB_CONTENTS_USER_DATA_KEY_DECL();
+};
+WEB_CONTENTS_USER_DATA_KEY_IMPL(PageKeyboardState);
+
+std::string EventStroke(const input::NativeWebKeyboardEvent& event) {
+  using Event = blink::WebInputEvent;
+  const auto modifiers = event.GetModifiers();
+  const ui::DomKey dom_key(event.dom_key);
+  if (dom_key.IsDeadKey() || dom_key.IsComposeKey() ||
+      (modifiers & (Event::kIsComposing | Event::kAltGrKey))) {
+    return {};
+  }
+  auto key = ui::KeycodeConverter::DomKeyToKeyString(dom_key);
+  if (key == "Dead" || key == "Process" || key == "Unidentified") {
+    return {};
+  }
+  if (key == " ")
+    key = "Space";
+  if (key == "+")
+    key = "Plus";
+  // Match the existing recorder's modified digit grammar on all layouts.
+  const auto code = ui::KeycodeConverter::DomCodeToCodeString(
+      static_cast<ui::DomCode>(event.dom_code));
+  if ((modifiers & Event::kShiftKey) &&
+      (modifiers & (Event::kControlKey | Event::kAltKey | Event::kMetaKey)) &&
+      code.size() == 6 && code.starts_with("Digit")) {
+    key = code.substr(5);
+  }
+  std::string stroke;
+  if (modifiers & Event::kControlKey)
+    stroke += "Ctrl+";
+  if (modifiers & Event::kAltKey)
+    stroke += "Alt+";
+  if (modifiers & Event::kShiftKey)
+    stroke += "Shift+";
+  if (modifiers & Event::kMetaKey)
+    stroke += "Meta+";
+  return NormalizeStroke(stroke + key);
+}
+
+bool SplitCommand(BrowserWindowInterface* browser, std::string_view action) {
+  auto* model = browser->GetTabStripModel();
+  if (model->empty())
+    return false;
+  const auto existing = model->GetSplitForTab(model->active_index());
+  if (action == "close-split-view") {
+    if (existing)
+      model->RemoveSplit(*existing);
+    return true;
+  }
+  if (action == "switch-split-focus" || action == "swap-split-panes" ||
+      action == "cycle-split-orientation") {
+    if (!existing) {
+      return action == "cycle-split-orientation"
+                 ? SplitCommand(browser, "toggle-split")
+                 : true;
+    }
+    auto* data = model->GetSplitData(*existing);
+    if (action == "swap-split-panes") {
+      model->ReverseTabsInSplit(*existing);
+    } else if (action == "switch-split-focus") {
+      for (auto* tab : data->ListTabs()) {
+        if (tab != model->GetActiveTab()) {
+          model->ActivateTab(tab);
+          tab->GetContents()->Focus();
+          break;
+        }
+      }
+    } else {
+      using Layout = split_tabs::SplitTabLayout;
+      if (data->visual_data()->split_layout() == Layout::kSideBySide) {
+        model->UpdateSplitLayout(*existing, Layout::kStacked);
+      } else {
+        model->RemoveSplit(*existing);
+      }
+    }
+    return true;
+  }
+  if (action != "toggle-split" && action != "toggle-split-horizontal") {
+    return false;
+  }
+  if (existing) {
+    if (action == "toggle-split-horizontal" &&
+        model->GetSplitData(*existing)->visual_data()->split_layout() !=
+            split_tabs::SplitTabLayout::kStacked) {
+      model->UpdateSplitLayout(*existing, split_tabs::SplitTabLayout::kStacked);
+    } else {
+      model->RemoveSplit(*existing);
+    }
+    return true;
+  }
+  if (model->count() < 2) {
+    chrome::NewTab(browser, NewTabTypes::kNewTabCommand);
+    model->AddToNewSplit({0, 1},
+                         split_tabs::SplitTabVisualData(
+                             action == "toggle-split-horizontal"
+                                 ? split_tabs::SplitTabLayout::kStacked
+                                 : split_tabs::SplitTabLayout::kSideBySide),
+                         split_tabs::SplitTabCreatedSource::kKeyboardShortcut);
+    return true;
+  }
+  const auto first = model->active_index();
+  const auto second = first + 1 < model->count() ? first + 1 : first - 1;
+  model->AddToNewSplit({first, second},
+                       split_tabs::SplitTabVisualData(
+                           action == "toggle-split-horizontal"
+                               ? split_tabs::SplitTabLayout::kStacked
+                               : split_tabs::SplitTabLayout::kSideBySide),
+                       split_tabs::SplitTabCreatedSource::kKeyboardShortcut);
+  return true;
+}
+}  // namespace
+
+content::KeyboardEventProcessingResult RouteNativePageKey(
+    BrowserWindowInterface* browser,
+    const input::NativeWebKeyboardEvent& event,
+    bool browser_ui_editable) {
+  using Result = content::KeyboardEventProcessingResult;
+  if (event.GetType() != blink::WebInputEvent::Type::kRawKeyDown) {
+    return Result::NOT_HANDLED;
+  }
+  auto* contents = browser->GetTabStripModel()->GetActiveWebContents();
+  if (!contents)
+    return Result::NOT_HANDLED;
+  PageKeyboardState::CreateForWebContents(contents);
+  auto& router = PageKeyboardState::FromWebContents(contents)->router();
+  const auto key = router.Route(
+      {.stroke = EventStroke(event),
+       .time = base::TimeTicks::Now(),
+       .repeat =
+           bool(event.GetModifiers() & blink::WebInputEvent::kIsAutoRepeat),
+       .composing =
+           event.skip_if_unhandled ||
+           bool(event.GetModifiers() & (blink::WebInputEvent::kIsComposing |
+                                        blink::WebInputEvent::kAltGrKey)),
+       .editable =
+           browser_ui_editable || contents->IsFocusedElementEditable()});
+  if (key.kind == KeyResultKind::kPass)
+    return Result::NOT_HANDLED;
+  if (key.kind == KeyResultKind::kExitInsert) {
+    contents->ClearFocusedElement();
+    contents->Focus();
+  } else if (key.kind == KeyResultKind::kAction) {
+    // Native commands can close the BrowserView; never read it afterwards.
+    FlyWindowController::Get().RunCommand(browser, key.action);
+  }
+  return Result::HANDLED;
+}
+
+bool ExecuteNativeCommand(BrowserWindowInterface* browser,
+                          std::string_view action) {
+  constexpr std::pair<std::string_view, int> mappings[] = {
+      {"spawn-tab", IDC_NEW_TAB},
+      {"remove-tab", IDC_CLOSE_TAB},
+      {"next-tab", IDC_SELECT_NEXT_TAB},
+      {"previous-tab", IDC_SELECT_PREVIOUS_TAB},
+      {"duplicate-tab", IDC_DUPLICATE_TAB},
+      {"reopen-closed-tab", IDC_RESTORE_TAB},
+      {"move-tab-left", IDC_MOVE_TAB_PREVIOUS},
+      {"move-tab-right", IDC_MOVE_TAB_NEXT},
+      {"go-back", IDC_BACK},
+      {"go-forward", IDC_FORWARD},
+      {"reload-active-tab", IDC_RELOAD},
+      {"force-reload-tab", IDC_RELOAD_BYPASSING_CACHE},
+      {"stop-loading", IDC_STOP},
+      {"zoom-in", IDC_ZOOM_PLUS},
+      {"zoom-out", IDC_ZOOM_MINUS},
+      {"reset-zoom", IDC_ZOOM_NORMAL},
+      {"toggle-find", IDC_FIND},
+      {"toggle-fullscreen", IDC_FULLSCREEN},
+      {"print-page", IDC_PRINT},
+      {"toggle-pin-tab", IDC_WINDOW_PIN_TAB},
+      {"focus-webview", IDC_FOCUS_WEB_CONTENTS_PANE},
+      {"focus-nav-buttons", IDC_FOCUS_TOOLBAR},
+      {"toggle-address", IDC_FOCUS_LOCATION},
+      {"toggle-menu-bar", IDC_SHOW_APP_MENU}};
+  for (const auto& [name, command] : mappings) {
+    if (action == name) {
+      // A disabled native command is a handled key, just like upstream.
+      if (chrome::IsCommandEnabled(browser, command)) {
+        chrome::ExecuteCommand(browser, command);
+      }
+      return true;
+    }
+  }
+  if (action.size() == 5 && action.starts_with("tab-") &&
+      action.back() >= '1' && action.back() <= '9') {
+    const int command = action.back() == '9'
+                            ? IDC_SELECT_LAST_TAB
+                            : IDC_SELECT_TAB_0 + action.back() - '1';
+    if (chrome::IsCommandEnabled(browser, command))
+      chrome::ExecuteCommand(browser, command);
+    return true;
+  }
+  auto* contents = browser->GetTabStripModel()->GetActiveWebContents();
+  if (action == "toggle-tab-audio-mute") {
+    if (contents)
+      contents->SetAudioMuted(!contents->IsAudioMuted());
+    return true;
+  }
+  if (action == "yank-url") {
+    if (contents) {
+      ui::ScopedClipboardWriter writer(ui::ClipboardBuffer::kCopyPaste);
+      writer.WriteText(base::UTF8ToUTF16(contents->GetVisibleURL().spec()));
+    }
+    return true;
+  }
+  if (action == "enter-insert" || action == "toggle-passthrough")
+    return true;
+  return SplitCommand(browser, action);
+}
+}  // namespace fly

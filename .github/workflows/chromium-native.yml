@@ -67,6 +67,10 @@ jobs:
         if: inputs.platforms == 'all' || inputs.platforms == matrix.platform
         with:
           python-version: '3.11'
+      - name: Install the pinned Chromium Windows SDK prerequisite
+        if: matrix.platform == 'windows' && (inputs.platforms == 'all' || inputs.platforms == matrix.platform)
+        shell: pwsh
+        run: ./scripts/chromium/ci-windows-sdk.ps1
       - name: Inspect resources and configure the exact upstream control
         if: inputs.platforms == 'all' || inputs.platforms == matrix.platform
         env:

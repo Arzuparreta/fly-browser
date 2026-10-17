@@ -11,7 +11,9 @@
 #include "base/callback_list.h"
 #include "base/memory/raw_ptr.h"
 #include "base/memory/weak_ptr.h"
+#include "fly/commands/command_service.h"
 #include "fly/workspaces/workspace_service.h"
+#include "ui/events/event_handler.h"
 #include "ui/views/widget/widget.h"
 #include "ui/views/widget/widget_delegate.h"
 #include "ui/views/widget/widget_observer.h"
@@ -22,6 +24,7 @@ class ScopedKeepAlive;
 namespace views {
 class NativeViewHost;
 class View;
+class Label;
 }  // namespace views
 
 namespace fly {
@@ -29,7 +32,8 @@ namespace fly {
 // tab model, profile and extension window ID. Its NativeWidgetAura does not
 // create an OS window. NativeViewHost controls actual clipping and visibility.
 class FlyWindowController : public views::WidgetDelegate,
-                            public views::WidgetObserver {
+                            public views::WidgetObserver,
+                            public ui::EventHandler {
  public:
   static bool ShouldEmbed(BrowserWindowInterface* browser);
   static FlyWindowController& Get();
@@ -45,7 +49,11 @@ class FlyWindowController : public views::WidgetDelegate,
   void Select(BrowserWindowInterface* browser, bool focus);
   bool IsSelected(const BrowserWindowInterface* browser) const;
   views::Widget* desktop_widget() const { return desktop_.get(); }
+  CommandService& commands() { return commands_; }
   void CreateWorkspace();
+  bool RunCommand(BrowserWindowInterface* browser, std::string_view action);
+
+  void OnKeyEvent(ui::KeyEvent* event) override;
 
   // WidgetObserver:
   void OnWidgetDestroying(views::Widget* widget) override;
@@ -67,10 +75,12 @@ class FlyWindowController : public views::WidgetDelegate,
   void ArmCloseCallback();
 
   WorkspaceService workspaces_;
+  CommandService commands_;
   std::unique_ptr<ScopedKeepAlive> keep_alive_;
   std::unique_ptr<views::Widget> desktop_;
   raw_ptr<views::View> workspace_buttons_ = nullptr;
   raw_ptr<views::View> content_ = nullptr;
+  raw_ptr<views::Label> status_ = nullptr;
   std::map<BrowserWindowInterface*, Entry> entries_;
   raw_ptr<BrowserWindowInterface> selected_ = nullptr;
   bool closing_ = false;

@@ -2,6 +2,7 @@
 // Use of this source code is governed by the GPL-3.0-or-later license in the
 // Fly repository.
 #include "fly/ui/fly_window_controller.h"
+#include "fly/ui/native_commands.h"
 
 #include <algorithm>
 #include <utility>
@@ -21,12 +22,20 @@
 #include "chrome/browser/ui/browser_window/public/browser_window_interface.h"
 #include "chrome/browser/ui/browser_window/public/create_browser_window.h"
 #include "chrome/browser/ui/tabs/tab_strip_model.h"
+#include "components/input/native_web_keyboard_event.h"
 #include "components/keep_alive_registry/keep_alive_types.h"
 #include "components/keep_alive_registry/scoped_keep_alive.h"
+#include "content/public/browser/render_widget_host_view.h"
 #include "content/public/browser/web_contents.h"
+#include "ui/aura/window.h"
+#include "ui/base/ime/input_method.h"
+#include "ui/base/ime/text_input_client.h"
+#include "ui/base/ime/text_input_type.h"
+#include "ui/events/event.h"
 #include "ui/views/controls/button/md_text_button.h"
 #include "ui/views/controls/label.h"
 #include "ui/views/controls/native/native_view_host.h"
+#include "ui/views/focus/focus_manager.h"
 #include "ui/views/layout/box_layout.h"
 #include "ui/views/layout/fill_layout.h"
 #include "ui/views/view.h"
@@ -57,6 +66,7 @@ FlyWindowController* FlyWindowController::GetIfCreated() {
 
 FlyWindowController::FlyWindowController()
     : workspaces_(*g_browser_process->local_state()),
+      commands_(*g_browser_process->local_state()),
       keep_alive_(
           std::make_unique<ScopedKeepAlive>(KeepAliveOrigin::BROWSER,
                                             KeepAliveRestartOption::DISABLED)),
@@ -80,6 +90,7 @@ FlyWindowController::FlyWindowController()
   workspace_buttons_ = sidebar->AddChildView(std::make_unique<views::View>());
   workspace_buttons_->SetLayoutManager(std::make_unique<views::BoxLayout>(
       views::BoxLayout::Orientation::kVertical));
+  status_ = sidebar->AddChildView(std::make_unique<views::Label>(u"NORMAL"));
   root->AddChildView(std::move(sidebar));
   content_ = root->AddChildView(std::make_unique<views::View>());
   content_->SetLayoutManager(std::make_unique<views::FillLayout>());
@@ -92,6 +103,7 @@ FlyWindowController::FlyWindowController()
   params.bounds = gfx::Rect(80, 80, 1200, 800);
   desktop_->Init(std::move(params));
   desktop_->AddObserver(this);
+  desktop_->GetNativeWindow()->AddPreTargetHandler(this);
   ArmCloseCallback();
   close_subscription_ = chrome::AddClosingAllBrowsersCallback(
       base::BindRepeating(&FlyWindowController::OnClosingAllBrowsers,
@@ -101,6 +113,7 @@ FlyWindowController::FlyWindowController()
 
 FlyWindowController::~FlyWindowController() {
   CHECK(entries_.empty());
+  desktop_->GetNativeWindow()->RemovePreTargetHandler(this);
   desktop_->RemoveObserver(this);
   // Destruction is only posted after all profile-bound BrowserWidgets finish
   // their own beforeunload and destruction paths.
@@ -153,7 +166,7 @@ bool FlyWindowController::IsSelected(
 
 void FlyWindowController::Select(BrowserWindowInterface* browser, bool focus) {
   auto it = entries_.find(browser);
-  if (it == entries_.end() || !it->second.widget || closing_) {
+  if (it == entries_.end() || !it->second.widget) {
     return;
   }
   if (selected_ != browser) {
@@ -345,6 +358,65 @@ void FlyWindowController::OnWidgetActivationChanged(views::Widget* widget,
   if (widget == desktop_.get() && selected_) {
     auto* child = entries_.at(selected_).widget.get();
     child->OnNativeWidgetActivationChanged(active);
+  }
+}
+}  // namespace fly
+
+namespace fly {
+bool FlyWindowController::RunCommand(BrowserWindowInterface* browser,
+                                     std::string_view action) {
+  if (!entries_.contains(browser) || closing_)
+    return false;
+  if (action == "new-workspace") {
+    CreateWorkspace();
+    return true;
+  }
+  if (action == "focus-sidebar") {
+    workspace_buttons_->GetFocusManager()->AdvanceFocus(false);
+    return true;
+  }
+  if (action == "next-workspace" || action == "previous-workspace") {
+    const auto catalog = workspaces_.Read();
+    if (!catalog || catalog->items.empty())
+      return false;
+    auto current = std::ranges::find(
+        catalog->items, entries_.at(browser).workspace_id, &Workspace::id);
+    size_t index =
+        current == catalog->items.end() ? 0 : current - catalog->items.begin();
+    const size_t count = catalog->items.size();
+    index = action == "next-workspace" ? (index + 1) % count
+                                       : (index + count - 1) % count;
+    OpenWorkspace(catalog->items[index].id);
+    return true;
+  }
+  const bool handled = ExecuteNativeCommand(browser, action);
+  if (!handled) {
+    status_->SetText(base::UTF8ToUTF16(ActionLabel(action) + ": unavailable"));
+  }
+  return handled;
+}
+}  // namespace fly
+
+namespace fly {
+void FlyWindowController::OnKeyEvent(ui::KeyEvent* event) {
+  if (!selected_ || event->type() != ui::EventType::kKeyPressed ||
+      event->is_char())
+    return;
+  auto* contents = selected_->GetTabStripModel()->GetActiveWebContents();
+  // Page events use BrowserView::PreHandleKeyboardEvent after native IME
+  // processing. Do not dispatch them a second time at the desktop ancestor.
+  if (!contents || (contents->GetRenderWidgetHostView() &&
+                    contents->GetRenderWidgetHostView()->HasFocus()))
+    return;
+  auto* input = desktop_->GetInputMethod();
+  auto* client = input ? input->GetTextInputClient() : nullptr;
+  bool editable =
+      client && client->GetTextInputType() != ui::TEXT_INPUT_TYPE_NONE;
+  const input::NativeWebKeyboardEvent native(*event);
+  const auto handled = RouteNativePageKey(selected_, native, editable);
+  if (handled == content::KeyboardEventProcessingResult::HANDLED) {
+    event->SetHandled();
+    event->StopPropagation();
   }
 }
 }  // namespace fly

@@ -30,6 +30,7 @@ std::string NormalizeStroke(std::string_view input);
 KeyboardValidation ValidateKeyboardConfig(const base::DictValue& input);
 const KeyboardConfig& DefaultKeyboardConfig();
 bool IsKnownAction(std::string_view id);
+std::string ActionLabel(std::string_view id);
 bool IsRepeatableAction(std::string_view id);
 std::map<std::string, std::string> CompileBindings(const BindingTable& table,
                                                    std::string_view tabs = {});
