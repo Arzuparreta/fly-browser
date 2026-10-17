@@ -202,3 +202,51 @@ local compilation is simply unfinished. macOS/Windows hosts remain unestablished
 - `python3 scripts/chromium/pin-upstream.py --output /mnt/storage/fly-chromium/evidence/upstream-candidate.json`:
   passed; independent re-resolution verifies source `chrome/VERSION`. This is a
   pin-resolution check, not an engine-update rehearsal.
+
+
+## Active native implementation and CI
+
+The current continuation starts from merged `106a1c7` on
+`codex/chromium-native-window`. The owner's intervening image cleanup was pulled
+before this branch. The unmodified control build remains running under the
+external operation lease; the source has not been patched during that build.
+PR #108 merged as `670c6c8` with its latest remote checks successful.
+
+Native sources now live under `chromium/overlay/fly/`. They include a Local State
+workspace catalog and a Views desktop controller composing profile-bound
+BrowserWidgets through non-desktop NativeWidgetAura/NativeViewHost. Integration
+hooks are an ordered patch in `chromium/patches/series`. The native window is
+explicitly gated by `--fly-native` on Linux/Windows; macOS embedding and native
+production cutover are still outstanding. This code has **not** passed a linked
+native build or desktop acceptance yet. It is not a finished M1.
+
+The catalog uses UUIDs independent of display names, portable unique profile
+directory mappings, retired-directory tombstones, exact reorder validation and
+fail-closed schema validation. Unknown metadata survives edits. Its tests cover
+identity through rename/restart, case distinctions, delete/recreate, invalid
+paths/names, corrupt/future schemas and atomic reordering. They are native C++
+tests, not JavaScript stand-ins. Private entries stay in the window controller
+and never enter the catalog.
+
+The four new C++ translation units pass `clang++ -fsyntax-only` with the pinned
+source's actual UI compile flags, generated headers and toolchain. This is a
+syntax/header check only; the unit tests have not been linked/executed. Raw flags,
+checker and logs are under the external `evidence/` directory. The integration
+patch passes `git apply --check` against the pinned pristine source.
+
+`native.py` preflights the whole patch series in a temporary tree, fingerprints
+all source inputs, owns an explicit source manifest, refuses unrelated/edited
+changes, and can recover an interrupted apply/revert without `reset` or `clean`.
+Its first application requires a successful unmodified control build. The
+checkout/overlay tooling suite currently passes 22 tests on Linux, including
+simulated interruption and preservation of subsequent owner edits.
+
+The owner has only this Linux host and explicitly requested all possible CI
+validation. `.github/workflows/chromium-native.yml` is manual-only. It runs
+portable tooling contracts on Linux/macOS/Windows, and attempts pinned-source
+bootstrap, dependencies, hooks and GN configuration on the selected platforms.
+The explicit build depth additionally builds the control, native unit tests and
+native browser. Source/configuration attempts use a declared 40 GiB minimum;
+full builds keep the 100 GiB floor. Resource/toolchain failures are retained as
+failed attempts with artifacts, not counted as native validation. No publication
+or ordinary-PR checks are added. Actual CI results must be recorded after dispatch.

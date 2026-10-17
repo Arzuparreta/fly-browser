@@ -26,7 +26,8 @@ Official instructions:
 [Windows](https://chromium.googlesource.com/chromium/src/+/main/docs/windows_build_instructions.md).
 The scripts have only been exercised on Linux; other hosts remain unverified.
 On Windows use the supported Visual Studio toolchain and a depot_tools-capable
-shell; this initial Python runner has not yet verified Windows command wrappers.
+shell; the runner bootstraps pinned Windows tools directly, without updating depot_tools.
+Windows wrapper/toolchain validation is tracked by the manual CI workflow.
 
 ## Commands
 
@@ -141,3 +142,31 @@ platform coverage before adopting it on an engine-update branch. It does not
 rebase, update the current lock or change a checkout. The engine-update rehearsal
 is still outstanding. Fly's product version remains generated from
 `package.json` by the existing release tooling.
+
+
+## Native overlay development
+
+After the unmodified control build succeeds, use the same dedicated engine root:
+
+```sh
+python3 scripts/chromium/native.py apply --root /path/to/fly-chromium
+python3 scripts/chromium/native.py configure --root /path/to/fly-chromium
+python3 scripts/chromium/native.py test --root /path/to/fly-chromium
+python3 scripts/chromium/native.py build --root /path/to/fly-chromium
+```
+
+The native output is `src/out/FlyNative`. During development, its native desktop
+window requires `--fly-native`; Electron remains the production runtime. Native
+source changes and input fingerprints are recorded in `evidence/native-overlay.json`.
+`verify` rejects edits outside that manifest as well as changed managed files.
+To install a changed overlay, first `revert` the previous managed copy, then
+`apply` again. `recover` restores pristine upstream after an interrupted apply or
+revert, provided every affected file still matches one of the transaction's
+expected states. It refuses to overwrite subsequent edits. Never remove a live
+operation lease or run dependency sync over an installed native overlay.
+
+The manual `Native Chromium validation` workflow accepts `depth=configure` or
+`depth=build` and selected platforms. It retains stage logs and provenance even
+on failure. Tooling tests, source configuration, a linked browser and packaged
+desktop acceptance are separate results. Hosted-runner resource limits may
+prevent larger stages; those failures require evidence, not silent skips.

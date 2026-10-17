@@ -1,0 +1,25 @@
+# Fly Browser's native services. Upstream browser UI glue is compiled in the
+# existing chrome/browser/ui target to avoid introducing a circular dependency.
+import("//testing/test.gni")
+
+source_set("workspaces") {
+  sources = [
+    "workspaces/workspace_service.cc",
+    "workspaces/workspace_service.h",
+  ]
+  public_deps = [
+    "//base",
+    "//components/prefs",
+  ]
+}
+
+test("fly_unittests") {
+  sources = [ "workspaces/workspace_service_unittest.cc" ]
+  deps = [
+    ":workspaces",
+    "//base/test:run_all_unittests",
+    "//base/test:test_support",
+    "//components/prefs:test_support",
+    "//testing/gtest",
+  ]
+}

@@ -111,7 +111,8 @@ class EngineTests(unittest.TestCase):
             engine.require_stage(self.root, 'sync', lock)
         engine.atomic_json(file, {'lock_sha256': engine.digest(engine.LOCK)})
         engine.require_stage(self.root, 'sync', lock)
-        self.assertEqual(file.stat().st_mode & 0o777, 0o600)
+        if os.name != 'nt':
+            self.assertEqual(file.stat().st_mode & 0o777, 0o600)
 
     def test_modified_dependency_trees_are_rejected(self):
         directory, pin, git = self.repository()
@@ -139,6 +140,13 @@ class EngineTests(unittest.TestCase):
         self.assertEqual(env['DEPOT_TOOLS_WIN_TOOLCHAIN'], '0')
         self.assertEqual(env['DEPOT_TOOLS_METRICS'], '0')
         self.assertEqual(env['PATH'].split(os.pathsep)[0], str(self.root / 'depot_tools'))
+
+    def test_space_floor_is_explicit_and_checked(self):
+        with patch.object(engine.shutil, 'disk_usage') as usage:
+            usage.return_value.free = 50 * 1024**3
+            engine.doctor(self.root, minimum_free_gib=40)
+            with self.assertRaisesRegex(RuntimeError, 'Less than 100 GiB'):
+                engine.doctor(self.root)
 
     def test_command_arguments_are_never_shell_evaluated(self):
         with patch.object(engine.subprocess, 'run') as run:

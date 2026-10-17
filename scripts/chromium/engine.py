@@ -44,7 +44,12 @@ def read_lock():
 def run(args, cwd, env=None, capture=False):
     if not capture:
         print('+ ' + ' '.join(str(arg) for arg in args), flush=True)
-    result = subprocess.run([str(arg) for arg in args], cwd=cwd, env=env,
+    command = [str(arg) for arg in args]
+    if sys.platform == 'win32':
+        resolved = shutil.which(command[0], path=(env or os.environ).get('PATH'))
+        if resolved:
+            command[0] = resolved
+    result = subprocess.run(command, cwd=cwd, env=env,
                             check=True, text=True,
                             stdout=subprocess.PIPE if capture else None)
     return result.stdout.strip() if capture else None
@@ -107,10 +112,11 @@ def environment(root):
     env['DEPOT_TOOLS_UPDATE'] = '0'
     env['DEPOT_TOOLS_METRICS'] = '0'
     env['DEPOT_TOOLS_WIN_TOOLCHAIN'] = '0'
+    env['PYTHONUTF8'] = '1'
     return env
 
 
-def doctor(root):
+def doctor(root, minimum_free_gib=100):
     for tool in ('git', 'python3'):
         if not shutil.which(tool):
             fail(f'Missing required tool: {tool}')
@@ -124,8 +130,8 @@ def doctor(root):
     print(json.dumps(result, indent=2))
     if sys.version_info < (3, 9):
         fail('Chromium requires Python 3.9 or newer')
-    if free < 100 * 1024**3:
-        fail('Less than 100 GiB free: source sync/build requires another volume')
+    if free < minimum_free_gib * 1024**3:
+        fail(f'Less than {minimum_free_gib} GiB free: source sync/build requires another volume')
     if ram is not None and ram < 8 * 1024**3:
         fail('Less than 8 GiB RAM: below upstream Linux build minimum')
     return result
@@ -185,7 +191,7 @@ def gclient_config(root, lock):
         file.write_text(expected)
 
 
-def verify_dependencies(root):
+def verify_dependencies(root, source_verifier=None):
     file = root / 'evidence/dependency-revisions.json'
     record = root / 'evidence/sync.json'
     if not file.exists() or not record.exists():
@@ -198,6 +204,9 @@ def verify_dependencies(root):
         relative, pin = item
         if pin.get('rev') is None:
             return  # CIPD/GCS objects are content-pinned in DEPS, not Git trees.
+        if relative == 'src' and source_verifier is not None:
+            source_verifier()
+            return
         directory = (root / relative).resolve()
         if root not in directory.parents or ':' in relative or not re.fullmatch('[0-9a-f]{40}', pin['rev']):
             fail('Invalid dependency inventory path or revision')
@@ -235,14 +244,18 @@ def execute(args):
     root = engine_root(args.root)
     with exclusive(root):
         if args.command == 'doctor':
-            doctor(root)
+            doctor(root, args.minimum_free_gib)
             return
         if args.command == 'bootstrap':
-            doctor(root)
+            doctor(root, args.minimum_free_gib)
             checkout(root, 'depot_tools', lock['depot_tools'])
             if sys.platform == 'win32':
-                fail('Windows bootstrap wrappers are not yet validated; use the official Windows setup guide')
-            run([root / 'depot_tools/ensure_bootstrap'], root, environment(root))
+                # Bootstrap pinned tools directly; update_depot_tools.bat would
+                # move the checkout to a floating upstream revision.
+                run([root / 'depot_tools/bootstrap/win_tools.bat'], root, environment(root))
+                run([root / 'depot_tools/cipd_bin_setup.bat'], root, environment(root))
+            else:
+                run([root / 'depot_tools/ensure_bootstrap'], root, environment(root))
             verify_checkout(root / 'depot_tools', lock['depot_tools'])
             checkout(root, 'src', lock['chromium'])
             gclient_config(root, lock)
@@ -256,7 +269,7 @@ def execute(args):
             require_stage(root, 'sync', lock)
             verify_dependencies(root)
         if args.command == 'sync':
-            doctor(root)
+            doctor(root, args.minimum_free_gib)
             gclient_config(root, lock)
             run(['gclient', 'sync', '--nohooks', '--no-history',
                  '--revision', 'src@' + lock['chromium']['revision'],
@@ -283,7 +296,7 @@ def execute(args):
             run(['gn', 'gen', 'out/FlyControl'], root / 'src', env)
             evidence(root, 'configure', lock, {'args_sha256': digest(config)})
         elif args.command == 'build':
-            doctor(root)
+            doctor(root, args.minimum_free_gib)
             require_stage(root, 'configure', lock)
             if digest(root / 'src/out/FlyControl/args.gn') != digest(CONFIG):
                 fail('Control build arguments changed since configuration')
@@ -314,9 +327,13 @@ def main():
     parser.add_argument('--root', required=True, help='dedicated external Chromium checkout root')
     parser.add_argument('--jobs', type=int, default=min(8, os.cpu_count() or 1))
     parser.add_argument('--url', default='about:blank')
+    parser.add_argument('--minimum-free-gib', type=int, default=100,
+                        help='explicit space floor; configuration-only CI uses 40 GiB')
     args = parser.parse_args()
     if args.jobs < 1:
         parser.error('--jobs must be positive')
+    if args.minimum_free_gib < 40:
+        parser.error('--minimum-free-gib must be at least 40')
     try:
         execute(args)
     except (RuntimeError, OSError, subprocess.CalledProcessError, ValueError, KeyError) as error:
