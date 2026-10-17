@@ -323,23 +323,28 @@ def execute(args):
             engine.run(['gn', 'gen', OUTPUT], root / 'src', env)
             engine.evidence(root, 'native-configure', lock,
                             {'fingerprint': manifest['fingerprint'], 'args_sha256': engine.digest(config)})
-        elif args.command in ('build', 'test'):
+        elif args.command in ('build', 'test', 'test-browser'):
             engine.doctor(root)
             engine.require_stage(root, 'native-configure', lock)
             configured = json.loads((root / 'evidence/native-configure.json').read_text())['details']
             if configured['fingerprint'] != manifest['fingerprint'] or engine.digest(output / 'args.gn') != configured['args_sha256']:
                 engine.fail('Native inputs differ from configuration; configure again')
-            target = 'chrome' if args.command == 'build' else 'fly_unittests'
+            target = {'build': 'chrome', 'test': 'fly_unittests', 'test-browser': 'browser_tests'}[args.command]
             engine.run(['autoninja', '-C', OUTPUT, '-j', str(args.jobs), target], root / 'src', env)
             if args.command == 'test':
                 engine.run([output / ('fly_unittests.exe' if sys.platform == 'win32' else 'fly_unittests')], root / 'src', env)
+            if args.command == 'test-browser':
+                executable = output / ('browser_tests.exe' if sys.platform == 'win32' else 'browser_tests')
+                engine.run([executable, '--gtest_filter=FlyWorkspaceBrowserTest.*',
+                            '--test-launcher-jobs=1',
+                            '--test-launcher-summary-output=' + str(root / 'evidence/native-browser-tests.json')], root / 'src', env)
             verify_source(root, lock)
             engine.evidence(root, 'native-' + args.command, lock, {'fingerprint': manifest['fingerprint']})
 
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument('command', choices=['apply', 'verify', 'configure', 'build', 'test', 'test-core', 'revert', 'recover'])
+    parser.add_argument('command', choices=['apply', 'verify', 'configure', 'build', 'test', 'test-browser', 'test-core', 'revert', 'recover'])
     parser.add_argument('--root', required=True)
     parser.add_argument('--jobs', type=int, default=min(8, os.cpu_count() or 1))
     args = parser.parse_args()

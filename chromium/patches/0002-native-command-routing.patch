@@ -1,0 +1,115 @@
+--- a/chrome/browser/ui/views/frame/browser_view.cc
++++ b/chrome/browser/ui/views/frame/browser_view.cc
+@@ -3,6 +3,11 @@
+ // found in the LICENSE file.
+ 
+ #include "chrome/browser/ui/views/frame/browser_view.h"
++
++#if BUILDFLAG(IS_LINUX) || BUILDFLAG(IS_WIN)
++#include "fly/ui/fly_window_controller.h"
++#include "fly/ui/native_commands.h"
++#endif
+ 
+ #include <stdint.h>
+ 
+@@ -1798,6 +1803,12 @@
+ }
+ 
+ bool BrowserView::IsVisibleOnScreen() const {
++#if BUILDFLAG(IS_LINUX) || BUILDFLAG(IS_WIN)
++  if (fly::FlyWindowController::ShouldEmbed(browser_)) {
++    return fly::FlyWindowController::Get().IsSelected(browser_) &&
++           browser_widget_->IsVisibleOnScreen();
++  }
++#endif
+ #if BUILDFLAG(IS_MAC) || BUILDFLAG(IS_WIN)
+   // TODO(crbug.com/405283740): currently only works for mac and windows. See
+   // comments around Widget::IsVisibleOnScreen() for more details. Eventually
+@@ -3219,6 +3230,12 @@
+   if (focus_manager->shortcut_handling_suspended()) {
+     return content::KeyboardEventProcessingResult::NOT_HANDLED;
+   }
++
++#if BUILDFLAG(IS_LINUX) || BUILDFLAG(IS_WIN)
++  if (fly::FlyWindowController::ShouldEmbed(browser_)) {
++    return fly::RouteNativePageKey(browser_, event);
++  }
++#endif
+ 
+   ui::Accelerator accelerator =
+       ui::GetAcceleratorFromNativeWebKeyboardEvent(event);
+@@ -5626,6 +5643,13 @@
+ #endif
+   const std::vector<AcceleratorMapping> accelerator_list(GetAcceleratorList());
+   for (const auto& entry : accelerator_list) {
++#if BUILDFLAG(IS_LINUX) || BUILDFLAG(IS_WIN)
++    // Fly's validated catalogue owns its shortcuts. Unbound/disabled choices
++    // must not fall back to an unrelated stock Chromium accelerator.
++    if (fly::FlyWindowController::ShouldEmbed(browser_)) {
++      continue;
++    }
++#endif
+     // In app mode, only allow accelerators of allowlisted commands to pass
+     // through.
+     if (is_app_mode &&
+--- a/chrome/browser/ui/BUILD.gn
++++ b/chrome/browser/ui/BUILD.gn
+@@ -793,6 +793,8 @@
+       "//fly/ui/embedded_browser_frame.h",
+       "//fly/ui/fly_window_controller.cc",
+       "//fly/ui/fly_window_controller.h",
++      "//fly/ui/native_commands.cc",
++      "//fly/ui/native_commands.h",
+     ]
+   }
+ 
+@@ -1096,7 +1098,7 @@
+     "//ui/webui",
+   ]
+   if (is_linux || is_win) {
+-    deps += [ "//fly:workspaces" ]
++    deps += [ "//fly:workspaces", "//fly:commands" ]
+   }
+ 
+   allow_circular_includes_from = [
+--- a/chrome/browser/prefs/browser_prefs.cc
++++ b/chrome/browser/prefs/browser_prefs.cc
+@@ -5,6 +5,7 @@
+ #include "chrome/browser/prefs/browser_prefs.h"
+ 
+ #include "fly/workspaces/workspace_service.h"
++#include "fly/commands/command_service.h"
+ 
+ #include <array>
+ #include <optional>
+@@ -1416,6 +1417,7 @@
+ 
+ void RegisterLocalState(PrefRegistrySimple* registry) {
+   fly::WorkspaceService::RegisterLocalStatePrefs(registry);
++  fly::CommandService::RegisterLocalStatePrefs(registry);
+   // Call outs to individual subsystems that register Local State (browser-wide)
+   // prefs en masse. See RegisterProfilePrefs for per-profile prefs. Please
+   // keep this list alphabetized.
+--- a/chrome/browser/prefs/BUILD.gn
++++ b/chrome/browser/prefs/BUILD.gn
+@@ -59,6 +59,7 @@
+ 
+   deps = [
+     "//fly:workspaces",
++    "//fly:commands",
+     ":prefs",
+     ":util",
+     "//chrome/browser:browser_process",
+--- a/chrome/test/BUILD.gn
++++ b/chrome/test/BUILD.gn
+@@ -2830,6 +2830,10 @@
+       "data/webui/mojo/mojo_js_interface_broker_browsertest.cc",
+       "data/webui/mojo/mojo_web_ui_controller_browsertest.cc",
+     ]
++    if (is_linux || is_win) {
++      sources += [ "//fly/test/workspace_browser_test.cc" ]
++      deps += [ "//fly:commands", "//fly:workspaces" ]
++    }
+     fuzztests = [ "SafeXmlParserFixture.ParseXML" ]
+     fuzztest_additional_args = [
+       "--single-process-tests",

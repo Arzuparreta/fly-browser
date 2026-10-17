@@ -186,3 +186,23 @@ The manual workflow's `units` depth performs this native compilation and test
 execution on the selected platforms. `contracts` runs only the small Python
 transaction/checkout tests and JavaScript syntax checks. Neither depth passes
 desktop, migration or package acceptance by itself.
+
+
+### Browser topology acceptance
+
+After building the complete native browser, run:
+
+```sh
+python3 scripts/chromium/native.py test-browser --root /path/to/fly-chromium
+```
+
+This explicitly builds upstream `browser_tests` and runs only
+`FlyWorkspaceBrowserTest.*`, with disposable profiles owned by the upstream test
+harness. Its summary is `evidence/native-browser-tests.json`. These tests exercise
+real windows, profiles, content visibility and split models; service-unit results
+cannot substitute for them. The tests keep sandboxing enabled.
+
+Windows hosted-runner validation provisions the SDK required by the pinned
+Chromium source using the [official Microsoft installer](https://learn.microsoft.com/en-us/windows/apps/windows-sdk/downloads).
+The CI-only PowerShell script validates the Microsoft signature and retains the
+installer digest and installation logs. It never runs as part of local bootstrap.

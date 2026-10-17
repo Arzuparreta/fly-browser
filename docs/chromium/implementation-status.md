@@ -290,3 +290,57 @@ source bytes can match the upstream DEPS hash without changing global user Git
 configuration. Workspace directory validation also rejects reserved Windows
 device names. All desktop/private/isolation/extension/media/package acceptance
 rows remain pending until their own real browser evidence exists.
+
+
+## Native event integration and browser acceptance implementation
+
+PR #111 merged as `f316184`. Its manual unit run
+[39034216256](https://github.com/Arzuparreta/fly-browser/actions/runs/39034216256)
+compiled and ran all 18 native tests successfully with the official Chromium GN
+and test launcher on Linux and macOS. Tooling contracts passed on all three
+platforms. Windows native tests stopped during GN because the hosted runner lacks
+the SDK explicitly required by the pinned source. That failed attempt is retained
+in external `evidence/ci-windows-units-first.log`; it is not a Windows pass.
+Linux/macOS unit artifacts, including test summary JSON and provenance, are under
+external `evidence/ci-linux-units/` and `evidence/ci-macos-units/`.
+
+The active branch `codex/chromium-command-integration` adds a second ordered
+integration patch. Browser page events route through a per-WebContents keyboard
+state and native browser UI events through the desktop ancestor. Composition and
+native IME paths remain intact. Fly shortcuts replace stock BrowserView
+accelerators so disabled/custom assignments cannot silently revert to upstream
+keys. Navigation, tab operations, pinning, tab-only mute, clipboard URL copy and
+split actions use real upstream browser services. Unimplemented actions return
+unavailable rather than pretending success. Floating/product UI parity and the
+recorder still need their own implementation/desktop acceptance.
+
+CommandService stores only changes from generated defaults in Local State,
+retains explicit disables and numbered-tab choices, validates edits before
+persistence, preserves unknown metadata and refuses to overwrite future/corrupt
+stores. Chosen chords take precedence over newly introduced defaults. A preference
+generation updates each document router without destroying an in-progress sequence
+on every keypress. Twenty-six C++ service tests pass in the recorded local
+bootstrap runner, including eight new command-store tests. This updated target
+still needs the new standard cross-platform GN run.
+
+Four real InProcessBrowserTests are now wired into upstream `browser_tests`:
+one desktop host with distinct profiles/native window IDs, cookie/local-storage
+isolation, workspace visibility and active-window routing, and native split
+visibility/focus/orientation. They have **not run**. Use
+`native.py test-browser --root /path/to/engine` after the full native configure.
+The source/header checks for native UI/commands pass; full patched BrowserView
+syntax checking encountered a not-yet-generated upstream theme resource header.
+No browser-linked compilation or desktop acceptance is inferred from that check.
+
+The Windows CI prerequisite step installs the official Microsoft-signed SDK
+installer linked from Microsoft's downloads page, checks Authenticode and records
+its SHA-256/install logs. This is restricted to disposable hosted runners; local
+bootstrap never installs it. No upstream SDK requirement is relaxed.
+
+The original local control build stopped abruptly after 33,695 completed tasks,
+without a compiler diagnostic or a confirmed kernel OOM record. Its owner/build
+processes were verified absent before removing only the stale operation lease.
+Existing source and objects were preserved; resumed build output is
+`/mnt/storage/fly-chromium/build-resume.log`. The interruption record is external
+`evidence/interrupted-control-operation.json`. Inspect the current lease and live
+processes before continuing; do not assume the old PID is still valid.

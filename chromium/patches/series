@@ -1,2 +1,3 @@
 # Ordered integration patches, relative to this directory.
 0001-native-workspace-window.patch
+0002-native-command-routing.patch
