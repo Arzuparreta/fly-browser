@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
 <meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
-<meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' data: https: http:; connect-src 'none'">
+<meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' data:; connect-src 'none'">
 <title>New tab · Fly</title>
 <link rel="icon" href="identity/pixel-32.png"><link rel="stylesheet" href="fonts/fonts.css"><link rel="stylesheet" href="new-tab.css">
 <script src="new-tab.js" defer></script>
@@ -16,14 +16,15 @@
 <div class="eyebrow sites-label">FREQUENT SITES</div><nav id="sites" aria-label="Frequent sites"></nav>
 <p id="empty">Your frequent sites will appear here as you browse.</p>
 </section>
-<section id="saved-bookmarks" aria-label="Bookmarks" hidden>
-<nav id="bookmarks" aria-label="Saved bookmarks"></nav>
-<p id="bookmarks-empty">Save pages to bookmarks to see them here.</p>
-</section>
+
 </section>
 <figure class="specimen" aria-label="Fly specimen and browser statistics">
 <img id="memory-fly" src="identity/memory-chasis@2x.png" alt="Ink drawing of a fly, fading towards the tail">
 <figcaption class="annotation memory"><span id="memory">—</span><small>MEMORY / SNAPSHOT</small></figcaption>
 </figure>
+<section id="saved-bookmarks" aria-label="Bookmarks" hidden>
+<nav id="bookmarks" aria-label="Saved bookmarks"></nav>
+<p id="bookmarks-empty">Save pages to bookmarks to see them here.</p>
+</section>
 </main><footer><strong>Fly Browser</strong> <span>by <a href="https://arzuparreta.github.io/">Arzuparreta</a></span></footer>
 </body></html>
