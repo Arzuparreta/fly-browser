@@ -186,7 +186,7 @@ def apply(root, lock):
         print('Native overlay already matches the reviewed inputs.')
         return
     engine.verify_checkout(root / 'src', lock['chromium'])
-    engine.require_stage(root, 'build', lock)
+    engine.require_control(root, lock, CONFIG)
     patches, overlay = inputs()
     touched = set()
     for patch in patches:

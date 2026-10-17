@@ -214,3 +214,25 @@ Windows hosted-runner validation provisions the SDK required by the pinned
 Chromium source using the [official Microsoft installer](https://learn.microsoft.com/en-us/windows/apps/windows-sdk/downloads).
 The CI-only PowerShell script validates the Microsoft signature and retains the
 installer digest and installation logs. It never runs as part of local bootstrap.
+
+### Synthetic video checks
+
+The shared control/native GN preset enables upstream H264/AAC decoding through
+`proprietary_codecs` and the Chrome FFmpeg codec selection. This does not enable
+Google product branding. Control and Fly must use identical GN options before
+comparing media behaviour. Preserve an older output before reconfiguring; a
+successful build record with different arguments cannot authorise native apply.
+
+The media fixture is a generated local MP4 with a test pattern and quiet tone.
+After building the matching control, use:
+
+```sh
+node tests/chromium/control-smoke.js --executable /path/to/fly-chromium/src/out/FlyControl/chrome --work-dir /path/to/fly-chromium/fixture-evidence --backend x11 --video --extension
+```
+
+After building native Fly, select its executable and add `--native`. Omit
+`--video` to retain the PCM audio scenario; omit `--extension` for the baseline
+without the visibility-sensitive MV3 probe. Every run creates a new profile and
+records the executable/media hashes, codec capability, actual frame decode,
+visibility and pause/background checks. These fixtures do not establish live
+Twitch, real Pie, HLS, DRM or package acceptance.
