@@ -236,3 +236,13 @@ without the visibility-sensitive MV3 probe. Every run creates a new profile and
 records the executable/media hashes, codec capability, actual frame decode,
 visibility and pause/background checks. These fixtures do not establish live
 Twitch, real Pie, HLS, DRM or package acceptance.
+
+The manual workflow's `build` depth also runs the scoped browser suite on Linux
+and Windows after compilation. Linux installs Xvfb for an isolated test display.
+macOS currently validates compilation/services only, because its native desktop
+adapter is unfinished. CI uses explicit phase-specific free-space floors (80 GiB
+initially, 60 GiB before dependency sync, 40 GiB for compilation) and reclaims only
+control compilation objects before native compilation. Logs retain actual resource
+failures and test results; a successful run is not complete platform acceptance.
+Local native builds retain a 100-GiB default floor; `--minimum-free-gib` makes an
+explicit alternative of at least 40 GiB possible.

@@ -23,29 +23,57 @@ def main():
               'fly_commit': os.environ.get('GITHUB_SHA'),
               'started_at': datetime.datetime.now(datetime.timezone.utc).isoformat(),
               'disk': shutil.disk_usage(root)._asdict(), 'steps': [],
-              'acceptance': 'No desktop or packaged acceptance is implied by this run.'}
+              'native_desktop_supported': sys.platform in ('linux', 'win32'),
+              'acceptance': 'Individual tests are evidence; complete desktop/package acceptance is not implied.'}
     engine.atomic_json(evidence / 'ci.json', record)
     commands = []
-    # Source/configuration needs less space than a complete control+native build.
+    # Component/symbol-free local control output measures about 10 GiB. Keep
+    # explicit phase-specific floors: reserve source plus both outputs initially,
+    # then avoid demanding that entire initial budget again after sync/build.
     # Resource failures remain failures with actual free-space evidence.
     stages = ('doctor', 'bootstrap', 'sync', 'hooks')
     if depth != 'units':
         stages += ('configure',)
     for stage in stages:
+        minimum = ({'doctor': 80, 'bootstrap': 80, 'sync': 60}.get(stage, 40)
+                   if depth == 'build' else 40)
         commands.append([sys.executable, str(Path(__file__).with_name('engine.py')),
                          stage, '--root', str(root), '--minimum-free-gib',
-                         '100' if depth == 'build' else '40'])
+                         str(minimum)])
     if depth == 'units':
         commands.append([sys.executable, str(Path(__file__).with_name('native.py')),
                          'test-core', '--root', str(root)])
     if depth == 'build':
         commands.append([sys.executable, str(Path(__file__).with_name('engine.py')),
-                         'build', '--root', str(root)])
+                         'build', '--root', str(root), '--minimum-free-gib', '40'])
         for stage in ('apply', 'configure', 'test', 'build'):
             commands.append([sys.executable, str(Path(__file__).with_name('native.py')),
-                             stage, '--root', str(root)])
+                             stage, '--root', str(root), '--minimum-free-gib', '40'])
+        if sys.platform in ('linux', 'win32'):
+            commands.append([sys.executable, str(Path(__file__).with_name('native.py')),
+                             'test-browser', '--root', str(root), '--minimum-free-gib', '40'])
     for index, command in enumerate(commands):
         log = evidence / f'ci-{index:02d}-{command[2]}.log'
+        if command[2] == 'test' and Path(command[1]).name == 'native.py':
+            # Preserve the complete control runtime/binary/provenance for
+            # comparison, freeing only its no-longer-needed compilation objects.
+            objects = root / 'src/out/FlyControl/obj'
+            if objects.exists():
+                before = shutil.disk_usage(root).free
+                removed = 0
+                suffixes = {'.o', '.obj', '.a', '.lib', '.rlib', '.rmeta', '.pcm', '.pch'}
+                for file in objects.rglob('*'):
+                    if file.suffix in suffixes and file.is_file() and not file.is_symlink():
+                        file.unlink()
+                        removed += 1
+                record['removed_control_build_objects'] = {
+                    'path': str(objects), 'files': removed,
+                    'freed_bytes': shutil.disk_usage(root).free - before}
+                engine.atomic_json(evidence / 'ci.json', record)
+        if command[2] == 'test-browser':
+            if sys.platform == 'linux':
+                command = ['xvfb-run', '--auto-servernum',
+                           '--server-args=-screen 0 1280x1024x24', *command]
         print('+ ' + ' '.join(command), flush=True)
         with log.open('w', encoding='utf-8') as output:
             result = subprocess.run(command, stdout=output, stderr=subprocess.STDOUT)
