@@ -30,7 +30,7 @@ features:
   - title: Multi-Account Containers
     details: Every workspace runs inside an isolated persistent Chromium partition. Run multiple corporate and personal logins simultaneously with zero cookie cross-contamination.
   - title: Mouse-Free Navigation
-    details: Full Vim-inspired link hints (f), customisable quickmark actions, floating omnibar, and browser and page-key customisation in Preferences.
+    details: Full Vim-inspired link hints (f), floating omnibar, and browser and page-key customisation in Preferences.
   - title: uBlock Origin
     details: Included ad and tracker blocking for persistent workspaces, with filter lists and site exceptions managed in uBlock Origin.
   - title: Clipboard-Mediated Oversight
@@ -38,7 +38,7 @@ features:
   - title: User Scripts & Styles Engine
     details: Native injection of local .user.js and .user.css files without extension overhead. Automatic file watching and live hot-reloading keep workflows fluid.
   - title: History & Bookmarks
-    details: Actionable history overlay (Ctrl + Shift + H), structured bookmarks and single-key quickmarks built right into the interface.
+    details: Actionable history overlay (Ctrl + Shift + H), structured bookmarks built right into the interface.
   - title: Distro-Agnostic & Zero Telemetry
     details: An Arch package and a distro-agnostic AppImage for everything else. Zero telemetry, zero usage tracking, and anonymous GitHub release notifications for effortless updates.
 ---

@@ -97,15 +97,6 @@ const root = path.resolve(__dirname, '..');
         assert.equal(await page.evaluate(() => document.activeElement.id), 'WideAddressBar');
         await page.keyboard.press('Escape');
 
-        // A quickmark prompt ends with the page focused, so it closes the bar when it starts.
-        for (const [key, then] of [['Control+Shift+q', 'a'], ['Control+j', 'Escape']]) {
-            await open();
-            await page.keyboard.press(key);
-            await bar.waitFor({state: 'hidden'});
-            await page.keyboard.press(then);
-            await page.waitForFunction(() => document.activeElement.tagName === 'WEBVIEW');
-        }
-
         // A click on browser chrome outside the bar closes it and still runs that control; going back leaves the fixture page, so this runs last.
         await open();
         await page.mouse.move(10, 100);

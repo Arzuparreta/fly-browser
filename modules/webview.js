@@ -963,8 +963,7 @@ export function switchTabFocus(targetIdx) {
             const addressBar = document.getElementById('WideAddressBar');
             const addressBarIsActive = addressBar && (addressBar.style.display === 'block' || currentFocused === addressBar);
 
-            // A pending quickmark prompt reads its key in the host, so the page must not take it.
-            if (!sidebarHasFocus && !hasActiveOverlay() && !addressBarIsActive && !state.awaitingQuickmarkKey) {
+            if (!sidebarHasFocus && !hasActiveOverlay() && !addressBarIsActive) {
                 targetView.focus();
             }
         }, 50);

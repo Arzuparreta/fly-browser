@@ -24,7 +24,7 @@ Fly wraps the Chromium engine in a lean Electron shell. Every browser action can
 * **Clipboard-Mediated Terminal Oversight**: High-risk script execution and raw web commands trigger a clipboard-mediated security handshake, sanitising and staging vetted commands to your clipboard for deliberate user review and execution in an external terminal.
 * **uBlock Origin**: Included ad and tracker blocking, with filter lists and site exceptions managed in uBlock. Workspaces keep separate cookies and extension settings.
 * **Local User Scripts & Styles**: Direct native injection of `.user.js` and `.user.css` files directly from `~/.config/fly-browser/` with inotify watching and live CSS hot-reloading, avoiding the heavy memory overhead of full WebExtensions.
-* **Power Tools**: Integrated bookmarks, quickmarks, actionable history overlay, and a full-page Command Centre.
+* **Power Tools**: Integrated bookmarks, actionable history overlay, and a full-page Command Centre.
 
 ***
 

@@ -43,14 +43,12 @@ import {
 } from './modules/webview.js';
 
 import { 
-    loadBookmarksAndQuickmarks, 
-    promptQuickmark, 
+    loadBookmarks,
     addCurrentPageToBookmarks, 
     toggleBookmarksOverlay, 
     renderBookmarksList, 
     updateBookmarkVisualSelection, 
     deleteBookmark, 
-    deleteQuickmark, 
     setupBookmarkOverlayListeners 
 } from './modules/overlays/bookmarks.js';
 
@@ -193,7 +191,6 @@ window.applySplitLayout = applySplitLayout;
 window.openUrlInSplit = openUrlInSplit;
 window.reapplyActiveUserStyles = reapplyActiveUserStyles;
 window.toggleBookmarksOverlay = toggleBookmarksOverlay;
-window.promptQuickmark = promptQuickmark;
 window.addCurrentPageToBookmarks = addCurrentPageToBookmarks;
 window.focusSidebar = focusSidebar;
 
@@ -613,8 +610,6 @@ function setupEventListeners() {
             case 'toggle-zen-mode':
             case 'toggle-sidebar-pin': toggleSidebarPin(); break;
             case 'toggle-sidebar-collapse-mode': applySidebarMode(args[0]); break;
-            case 'set-quickmark': promptQuickmark('set'); break;
-            case 'jump-quickmark': promptQuickmark('jump'); break;
             case 'add-bookmark': addCurrentPageToBookmarks(); break;
             case 'toggle-global-media': toggleGlobalMediaPlayback(); break;
             case 'toggle-tab-audio-mute': toggleActiveTabAudioMute(); break;
@@ -626,9 +621,7 @@ function setupEventListeners() {
             case 'close-split': closeSplitView(); break;
             case 'delete-bookmark-entry': {
                 if (state.bookmarksActive) {
-                    if (state.bookmarkActiveColumn === 'quickmarks' && state.filteredQuickmarksCache[state.quickmarkSelectionIdx]) {
-                        deleteQuickmark(state.filteredQuickmarksCache[state.quickmarkSelectionIdx].key);
-                    } else if (state.filteredBookmarksCache[state.bookmarkSelectionIdx]) {
+                    if (state.filteredBookmarksCache[state.bookmarkSelectionIdx]) {
                         deleteBookmark(state.filteredBookmarksCache[state.bookmarkSelectionIdx].url);
                     }
                 }
@@ -837,7 +830,7 @@ function setupEventListeners() {
             for (const input of inputs) view.sendInputEvent(input).catch(() => {});
             return;
         }
-        if (document.querySelector('dialog[open]') || !event.isTrusted || event.isComposing || event.defaultPrevented || state.awaitingQuickmarkKey) return;
+        if (document.querySelector('dialog[open]') || !event.isTrusted || event.isComposing || event.defaultPrevented) return;
         if (event.key === 'Escape' && document.getElementById('ExtensionPopupOverlay')) {
             event.preventDefault(); event.stopImmediatePropagation(); closeExtensionPopup(); return;
         }
@@ -1090,7 +1083,7 @@ function setupEventListeners() {
         }
     });
 
-    loadBookmarksAndQuickmarks();
+    loadBookmarks();
 }
 
 function handlePrivateBrowsingStateShift(isPrivate) {

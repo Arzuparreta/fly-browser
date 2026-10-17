@@ -75,10 +75,8 @@ The shortcuts below are new-profile defaults. The palette shows your saved assig
 
 | Command Title | Shortcut | Action ID | Description |
 | :--- | :--- | :--- | :--- |
-| **Bookmarks & Quickmarks Manager** | `Ctrl+Shift+B` | `toggle-bookmarks` | Ledger manager for saved bookmarks and single-key quickmarks. |
+| **Bookmarks Manager** | `Ctrl+Shift+B` | `toggle-bookmarks` | Manager for saved bookmarks. |
 | **Bookmark Current Page** | `Ctrl+D` | `add-bookmark` | Saves current webpage title and URL into bookmarks collection. |
-| **Set Quickmark** | `Ctrl+Shift+Q` | `set-quickmark` | Binds active webpage to an instant single-key navigation shortcut. |
-| **Jump to Quickmark** | `Ctrl+J` | `jump-quickmark` | Prompts for assigned quickmark character to navigate immediately. |
 | **Toggle Downloads Shelf** | `Ctrl+Shift+D` | `toggle-downloads` | Bottom drawer showing transfer speed, progress bars, and file links. |
 | **Toggle Active Webview DevTools** | `Ctrl+Shift+I` / `F12` | `toggle-devtools` | Chromium developer tools for inspecting DOM, network, and console. |
 | **Toggle Global Media Playback** | `Ctrl+Shift+0` / `F10` | `toggle-global-media` | Global play and pause toggle across all active media streams. |
