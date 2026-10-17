@@ -387,7 +387,7 @@ UUID after the original is gone. Malformed IDs and live collisions get a fresh
 identity, and a live tab's identity cannot be reassigned. Private tabs never add
 this field to persistent restore data. Two additional browser tests cover native
 close/reopen, collision rejection, malformed input and private exclusion. All
-eight browser tests still await their real linked execution. Automatic reopening
+nine browser tests still await their real linked execution. Automatic reopening
 of all saved workspaces/session startup remains outstanding.
 
 The detached build received another interrupt signal after 5,901 additional
@@ -402,3 +402,10 @@ profile-bound browser closes. The model observer base removes its registration
 before the destruction callback; the sidebar clears its references there without
 removing twice. The desktop controller invalidates pending callbacks and clears
 its non-owning child-view references before destroying the widget tree.
+
+A ninth browser test loads the same real Manifest V3 extension into both native
+profiles through Chromium's extension loader. Its runtime installation event,
+profile-local `chrome.storage`, native tab/window IDs and active-tab query are
+asserted from a real content script/service worker. This is still unexecuted
+browser coverage; extension compatibility, blocking and media acceptance remain
+pending until real runs.
