@@ -41,7 +41,7 @@ def read_lock():
     return lock
 
 
-def run(args, cwd, env=None, capture=False):
+def run(args, cwd, env=None, capture=False, foreground=False):
     if not capture:
         print('+ ' + ' '.join(str(arg) for arg in args), flush=True)
     command = [str(arg) for arg in args]
@@ -49,7 +49,13 @@ def run(args, cwd, env=None, capture=False):
         resolved = shutil.which(command[0], path=(env or os.environ).get('PATH'))
         if resolved:
             command[0] = resolved
-    result = subprocess.run(command, cwd=cwd, env=env,
+    options = {}
+    if foreground and sys.platform == 'win32':
+        # Hosted services can inherit BELOW_NORMAL priority. Chromium's test
+        # launcher requires normal priority and verifies it in every child.
+        # Set only this child process, leaving the runner/build priority alone.
+        options['creationflags'] = subprocess.NORMAL_PRIORITY_CLASS
+    result = subprocess.run(command, cwd=cwd, env=env, **options,
                             check=True, text=True,
                             stdout=subprocess.PIPE if capture else None)
     return result.stdout.strip() if capture else None

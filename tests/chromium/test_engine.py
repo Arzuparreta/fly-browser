@@ -159,6 +159,22 @@ class EngineTests(unittest.TestCase):
             with self.assertRaisesRegex(RuntimeError, 'Less than 100 GiB'):
                 engine.doctor(self.root)
 
+    def test_windows_native_tests_start_at_normal_priority(self):
+        with patch.object(engine.sys, 'platform', 'win32'), \
+                patch.object(engine.shutil, 'which', return_value=None), \
+                patch.object(engine.subprocess, 'NORMAL_PRIORITY_CLASS', 32, create=True), \
+                patch.object(engine.subprocess, 'run') as run:
+            engine.run(['fly_unittests.exe'], self.root, foreground=True)
+            self.assertEqual(run.call_args.kwargs['creationflags'], 32)
+            engine.run(['autoninja.bat'], self.root)
+            self.assertNotIn('creationflags', run.call_args.kwargs)
+
+    def test_foreground_option_does_not_change_posix_process_launch(self):
+        with patch.object(engine.sys, 'platform', 'linux'), \
+                patch.object(engine.subprocess, 'run') as run:
+            engine.run(['fly_unittests'], self.root, foreground=True)
+        self.assertNotIn('creationflags', run.call_args.kwargs)
+
     def test_command_arguments_are_never_shell_evaluated(self):
         with patch.object(engine.subprocess, 'run') as run:
             engine.run(['program', '$(not-a-command)', 'value; still one argument'], self.root)
