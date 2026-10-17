@@ -67,6 +67,8 @@ export default defineConfig({
           { text: 'Command Palette', link: '/reference/command-palette' },
           { text: 'Configuration Files', link: '/reference/configuration' },
           { text: 'Versioning & Releases', link: '/releasing' },
+          { text: 'Chromium Rework Plan', link: '/chromium-rework' },
+          { text: 'Implementation Agent Handoff', link: '/chromium-rework-handoff' },
           { text: 'Fork Performance Audit', link: '/performance-audit' },
           { text: 'Fly vs Chromium Resource Use', link: '/performance-vs-chromium' },
           { text: 'Ad Blocking Follow-up', link: '/performance-shields-removal' },

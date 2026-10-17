@@ -138,6 +138,7 @@ This project is licensed under the terms of the GNU General Public Licence v3.0 
 
 ## Engineering records
 
+- [Native Chromium rework plan](docs/chromium-rework.md) and [implementation agent handoff](docs/chromium-rework-handoff.md) (planned; the current runtime remains Electron)
 - [Versioning and releases](docs/releasing.md)
 - [Contributing](CONTRIBUTING.md)
 - [Keyboard coverage review](docs/keyboard-review.md)
