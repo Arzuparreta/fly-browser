@@ -4,3 +4,4 @@
 0003-native-tab-sidebar.patch
 0004-native-tab-identity.patch
 0005-native-hints-and-window-lifetime.patch
+0006-native-focused-page-scroll.patch

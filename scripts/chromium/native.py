@@ -335,7 +335,7 @@ def execute(args):
                 engine.run([output / ('fly_unittests.exe' if sys.platform == 'win32' else 'fly_unittests')], root / 'src', env, foreground=True)
             if args.command == 'test-browser':
                 executable = output / ('browser_tests.exe' if sys.platform == 'win32' else 'browser_tests')
-                engine.run([executable, '--gtest_filter=FlyWorkspaceBrowserTest.*',
+                engine.run([executable, '--gtest_filter=FlyWorkspaceBrowserTest.*:FlyPageScrollBrowserTest.*',
                             '--test-launcher-jobs=1',
                             '--test-launcher-summary-output=' + str(root / 'evidence/native-browser-tests.json')], root / 'src', env, foreground=True)
             verify_source(root, lock)
