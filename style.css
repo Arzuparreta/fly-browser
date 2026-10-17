@@ -143,7 +143,6 @@ body.sidebar-pinned #right-content {
    sidebar, as keyboard routes into the navigation buttons expect. */
 body.sidebar-auto-collapse .sidebar-content::before,
 body.sidebar-auto-collapse .bottom-theme-layout::before,
-body.sidebar-auto-collapse #WorkspaceHeader::before,
 body.sidebar-auto-collapse :is(.window-controls, .nav-action-layout, .sidebar-clock-row, #WorkspaceLabel) {
     transition: opacity var(--motion-normal) var(--motion-ease);
 }
@@ -157,7 +156,6 @@ body.sidebar-auto-collapse :is(#reader-view-btn, #split-toggle-btn, #search-addr
 
 body.sidebar-auto-collapse #Sidebar:not(.pointer-inside, .expanded, :focus-within) .sidebar-content::before,
 body.sidebar-auto-collapse #Sidebar:not(.pointer-inside, .expanded, :focus-within) .bottom-theme-layout::before,
-body.sidebar-auto-collapse #Sidebar:not(.pointer-inside, .expanded, :focus-within) #WorkspaceHeader::before,
 body.sidebar-auto-collapse #Sidebar:not(.pointer-inside, .expanded, :focus-within) :is(.window-controls, .nav-action-layout, .sidebar-clock-row, #WorkspaceLabel, #reader-view-btn, #split-toggle-btn, #search-address-btn, #settings-btn) {
     opacity: 0;
     pointer-events: none;
@@ -227,8 +225,8 @@ body.sidebar-auto-collapse #Sidebar:not(.pointer-inside, .expanded, :focus-withi
     color: #ffffff;
 }
 
-/* The workspace control fills the space beside the compact navigation group.
-   Its badge stays centred on the rail when the sidebar collapses. */
+/* The workspace reads as a text heading on the sidebar. Its short and full
+   names share one slot and crossfade; neither changes the sidebar's layout. */
 .sidebar-top-row {
     display: flex;
     align-items: center;
@@ -247,8 +245,7 @@ body.sidebar-auto-collapse #Sidebar:not(.pointer-inside, .expanded, :focus-withi
     flex: 1;
     min-width: 0;
     min-height: 34px;
-    gap: 8px;
-    padding: 3px 4px 3px 0;
+    padding: 3px 0;
     cursor: pointer;
 }
 
@@ -257,47 +254,50 @@ body.sidebar-auto-collapse #Sidebar:not(.pointer-inside, .expanded, :focus-withi
     position: absolute;
     inset: 0;
     z-index: -1;
-    border: 1px solid var(--border);
-    border-radius: 2px;
-    background-color: var(--panel);
+    border-radius: 4px;
+    background-color: color-mix(in srgb, var(--text) 7%, transparent);
+    opacity: 0;
     pointer-events: none;
-    transition: background-color var(--motion-fast) var(--motion-ease);
+    transition: opacity var(--motion-fast) var(--motion-ease);
 }
 
-#WorkspaceHeader:hover::before {
-    background-color: var(--selected);
-}
-
-#WorkspaceHeader:hover #WorkspaceBadge {
-    background-color: var(--selected);
+#WorkspaceHeader:is(:hover, :focus-visible)::before {
+    opacity: 1;
 }
 
 #WorkspaceBadge {
     width: 28px;
     min-width: 28px;
     height: 28px;
-    border-radius: 6px;
-    background: var(--border);
-    color: var(--accent);
+    color: var(--text);
     display: flex;
     align-items: center;
     justify-content: center;
-    font-weight: 700;
-    font-size: 11px;
-    border: 1px solid var(--accent);
-    letter-spacing: 0.5px;
+    font: 500 12px/1 'IBM Plex Mono', monospace;
+    letter-spacing: 0.02em;
     text-transform: uppercase;
-    box-shadow: 0 1px 3px rgba(0,0,0,0.3);
-    transition: background-color var(--motion-fast) var(--motion-ease), border-color var(--motion-fast) var(--motion-ease);
+    opacity: 0;
+}
+
+body.sidebar-auto-collapse #WorkspaceBadge {
+    transition: opacity var(--motion-normal) var(--motion-ease);
+}
+
+body.sidebar-auto-collapse #Sidebar:not(.pointer-inside, .expanded, :focus-within) #WorkspaceBadge {
+    opacity: 1;
 }
 
 #WorkspaceLabel {
+    position: absolute;
+    inset: 0 5px;
+    align-content: center;
     color: var(--text);
-    font-weight: bold;
-    font-size: 13px;
+    font: 600 14px/20px 'IBM Plex Sans', sans-serif;
+    letter-spacing: 0.01em;
     white-space: nowrap;
     overflow: hidden;
     text-overflow: ellipsis;
+    pointer-events: none;
 }
 
 /* History shares one pill at the right edge, in line with the tab rows. */
@@ -4363,7 +4363,7 @@ body.light-mode .sidebar-content, body.light-mode #StatusBar {
 }
 body.light-mode .sidebar-content::before { background-image: url('assets/identity/engraving-papel@2x.png'); }
 #WindowControls { justify-content: flex-end; }
-#WorkspaceBadge, #StatusBarMode { font-family: 'Doto', monospace; font-weight: 900; background: var(--cell); color: var(--text); border-radius: 2px; }
+#StatusBarMode { font-family: 'Doto', monospace; font-weight: 900; background: var(--cell); color: var(--text); border-radius: 2px; }
 #StatusBar { background-color: var(--bg-sidebar); font-family: 'IBM Plex Mono', monospace; }
 #StatusBarMode { border-left: 2px solid var(--accent); }
 #StatusBarClockTime, #SidebarClockTime { font-family: 'Doto', monospace; font-weight: 800; }
