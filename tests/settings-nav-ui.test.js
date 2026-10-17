@@ -127,7 +127,7 @@ const root = path.resolve(__dirname, '..');
         await page.locator('#SettingsSearch').fill('clock');
         await page.locator('#SettingsTab-appearance').click();
         assert.deepEqual(await visiblePanes(), ['SettingsPane-appearance']);
-        assert.equal(await page.locator('#SettingsPane-appearance .setting-item:visible').count(), 13);
+        assert.equal(await page.locator('#SettingsPane-appearance .setting-item:visible').count(), await page.locator('#SettingsPane-appearance .setting-item').count());
         // Closing clears any search, so reopening starts from the remembered section.
         await page.locator('#SettingsSearch').fill('cookies');
         await page.locator('#CloseSettingsBtn').click();
@@ -222,7 +222,7 @@ const root = path.resolve(__dirname, '..');
         await page.evaluate(() => window.toggleSidebarPin());
         await page.locator('#CloseSettingsBtn').click();
         await page.locator('#PreferencesOverlay').waitFor({state: 'hidden'});
-        await page.locator('#noti-toggle-btn').focus();
+        await page.locator('#search-address-btn').focus();
         await page.keyboard.press('ArrowRight');
         assert.equal(await active(), 'extensions-btn');
         await page.keyboard.press('ArrowRight');

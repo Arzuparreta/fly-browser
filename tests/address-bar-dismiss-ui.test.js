@@ -12,7 +12,7 @@ const root = path.resolve(__dirname, '..');
     const server = http.createServer((request, response) => {
         if (request.url === '/frame') return response.end('<!doctype html><body style="margin:0;background:#ccc">Cross-origin frame</body>');
         // Plain text, a press whose default is cancelled and a cross-origin frame all move focus into the guest.
-        response.end(`<!doctype html><title>Dismiss fixture</title><body style="margin:0"><p style="height:100px;margin:0">Plain text</p><div style="height:100px" onmousedown="event.preventDefault()">Cancelled press</div><iframe src="http://localhost:${server.address().port}/frame" style="width:300px;height:100px;border:0;display:block"></iframe><input id="editable" style="margin:40px 0 0 300px"></body>`);
+        response.end(`<!doctype html><title>Dismiss fixture</title><body style="margin:0"><p style="height:100px;margin:0">Plain text</p><div style="height:100px" onmousedown="event.preventDefault()">Cancelled press</div><iframe src="http://localhost:${server.address().port}/frame" style="width:100%;height:100px;border:0;display:block"></iframe><input id="editable" style="margin:40px 0 0 300px"></body>`);
     });
     await new Promise(resolve => server.listen(0, '127.0.0.1', resolve));
     let application;
@@ -25,6 +25,8 @@ const root = path.resolve(__dirname, '..');
         await page.waitForFunction(() => {try {const view = [...document.querySelectorAll('webview')].find(view => view.getClientRects().length); return view?.getWebContentsId() > 0 && !!view.getURL() && !view.isLoading();} catch {return false;}});
         await page.evaluate(url => [...document.querySelectorAll('webview')].find(view => view.getClientRects().length).loadURL(url), `http://127.0.0.1:${server.address().port}`);
         const bar = page.locator('#WideAddressBar');
+        // Keep fixture clicks clear of both the floating bar and an expanded sidebar.
+        const safeX = (await page.locator('webview:visible').boundingBox()).width - 24;
         const open = async () => {
             await page.keyboard.press('Control+l');
             await page.waitForFunction(() => document.activeElement.id === 'WideAddressBar');
@@ -59,18 +61,18 @@ const root = path.resolve(__dirname, '..');
         await page.keyboard.press('Escape');
         for (const y of [50, 150, 250]) {
             await open();
-            await page.locator('webview:visible').click({position: {x: 100, y}});
+            await page.locator('webview:visible').click({position: {x: safeX, y}});
             await bar.waitFor({state: 'hidden'});
         }
         // Playwright's synthetic keys skip before-input-event, so inside a cross-origin frame they
         // never reach Fly's shortcuts (real keys do); return to the page document first.
-        await page.locator('webview:visible').click({position: {x: 100, y: 50}});
+        await page.locator('webview:visible').click({position: {x: safeX, y: 50}});
 
         // Clicks inside the bar keep it open; reopening after a page click starts from the page address.
         await open();
         await bar.click();
         assert(await bar.isVisible());
-        await page.locator('webview:visible').click({position: {x: 100, y: 50}});
+        await page.locator('webview:visible').click({position: {x: safeX, y: 50}});
         await bar.waitFor({state: 'hidden'});
         await page.keyboard.press('Control+l');
         await page.waitForFunction(() => document.activeElement.id === 'WideAddressBar');
@@ -83,7 +85,7 @@ const root = path.resolve(__dirname, '..');
         await page.mouse.click(list.x + list.width / 2, list.y + 2);
         assert(await bar.isVisible());
         assert.equal(await page.evaluate(() => document.activeElement.id), 'WideAddressBar');
-        await page.locator('webview:visible').click({position: {x: 100, y: 50}});
+        await page.locator('webview:visible').click({position: {x: safeX, y: 50}});
         await bar.waitFor({state: 'hidden'});
 
         // Opening from the command palette must not be closed by the palette handing focus back.
@@ -104,12 +106,14 @@ const root = path.resolve(__dirname, '..');
         await page.locator('#back-btn').click();
         await bar.waitFor({state: 'hidden'});
         await page.waitForFunction(before => [...document.querySelectorAll('webview')].find(view => view.getClientRects().length).getURL() !== before, before);
-        // The navigation button that opens the bar also closes it.
-        await page.mouse.move(10, 100);
-        await page.locator('#toggle-nav-btn').click();
-        await page.waitForFunction(() => document.activeElement.id === 'WideAddressBar');
-        await page.locator('#toggle-nav-btn').click();
-        await bar.waitFor({state: 'hidden'});
+        // Both mouse entry points toggle the bar without an outside-press reopen race.
+        for (const selector of ['#toggle-nav-btn', '#search-address-btn']) {
+            await page.mouse.move(10, 100);
+            await page.locator(selector).click();
+            await page.waitForFunction(() => document.activeElement.id === 'WideAddressBar');
+            await page.locator(selector).click();
+            await bar.waitFor({state: 'hidden'});
+        }
         assert.deepEqual(errors, []);
         console.log('Address bar dismiss UI checks passed');
     } finally {

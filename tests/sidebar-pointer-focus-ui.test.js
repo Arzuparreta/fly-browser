@@ -43,12 +43,12 @@ const root = path.resolve(__dirname, '..');
         await page.evaluate(url => window.executeBrowserAction('spawn-tab-with-url', url), `http://127.0.0.1:${server.address().port}/second`);
         await page.waitForFunction(() => document.querySelectorAll('#TabList li').length >= 2);
         // Exercise real actions, including clicks on nested clock text and icon targets.
-        for (const selector of ['#SidebarClockDate', '#SidebarClockTime', '#SidebarClock i', '#split-toggle-btn', '#TabList li.selected .split-tab-badge', '#split-toggle-btn', '#reader-view-btn', '#noti-toggle-btn', '#TabList li.selected .tab-title']) {
+        for (const selector of ['#SidebarClockDate', '#SidebarClockTime', '#SidebarClock i', '#split-toggle-btn', '#TabList li.selected .split-tab-badge', '#split-toggle-btn', '#reader-view-btn', '#TabList li.selected .tab-title']) {
             await click(selector);
             await contract();
             console.log('Pointer action contracts:', selector);
         }
-        for (const [selector, surface] of [['#WorkspaceBadge', 'DashboardOverlay'], ['#toggle-nav-btn', 'WideAddressBar'], ['#settings-btn', 'PreferencesOverlay']]) {
+        for (const [selector, surface] of [['#WorkspaceBadge', 'DashboardOverlay'], ['#toggle-nav-btn', 'WideAddressBar'], ['#search-address-btn', 'WideAddressBar'], ['#settings-btn', 'PreferencesOverlay']]) {
             console.log('Opening surface:', selector);
             await click(selector);
             await page.waitForFunction(id => document.getElementById(id).contains(document.activeElement), surface, {timeout: 5000}).catch(async error => {console.log(await page.evaluate(() => ({focus: document.activeElement.outerHTML.slice(0,200), surfaces: [...document.querySelectorAll('[id$=Overlay], #WideAddressBar')].filter(el => el.getClientRects().length).map(el => el.id)}))); throw error;});

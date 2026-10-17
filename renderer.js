@@ -512,6 +512,7 @@ function setupEventListeners() {
 
     document.getElementById('reader-view-btn')?.addEventListener('click', toggleReaderViewOnActiveTab);
     document.getElementById('toggle-nav-btn').addEventListener('click', displayAddressOverlay);
+    document.getElementById('search-address-btn').addEventListener('click', displayAddressOverlay);
     document.getElementById('split-toggle-btn')?.addEventListener('click', () => toggleSplitView());
     document.getElementById('split-toggle-btn')?.addEventListener('contextmenu', (e) => {
         e.preventDefault();
@@ -569,7 +570,7 @@ function setupEventListeners() {
     // becomes active only after the focusout; leaving the window keeps the active element.
     // The navigation button toggles the bar on click, so it closes the bar itself.
     document.addEventListener('mousedown', event => {
-        if (addressBar.style.display === 'block' && !event.target.closest('#AddressBarContainer, #toggle-nav-btn')) dismissAddressBar();
+        if (addressBar.style.display === 'block' && !event.target.closest('#AddressBarContainer, #toggle-nav-btn, #search-address-btn')) dismissAddressBar();
     }, true);
     document.addEventListener('focusout', () => setTimeout(() => {
         if (addressBar.style.display === 'block' && document.activeElement?.tagName === 'WEBVIEW') dismissAddressBar();
@@ -800,6 +801,7 @@ function setupEventListeners() {
         const controls = {'WorkspaceHeader': ['toggle-dashboard', 'Workspace dashboard'],
             'split-toggle-btn': ['toggle-split', 'Toggle split view'], 'pin-sidebar-btn': ['toggle-zen-mode', 'Toggle sidebar expansion'],
             'reader-view-btn': ['toggle-reader-view', 'Toggle reader view'],
+            'search-address-btn': ['toggle-address', 'Search or enter address'],
             'back-btn': ['go-back', 'Go back'], 'forward-btn': ['go-forward', 'Go forward'],
             'settings-btn': ['toggle-help', 'Settings'],
             'toggle-nav-btn': ['spawn-tab', 'New tab'], 'noti-toggle-btn': ['toggle-notifications', 'Toggle web notifications']};
@@ -906,8 +908,8 @@ function setupEventListeners() {
                 if (selectedTab) selectedTab.focus();
             } else if (e.key === 'ArrowUp') {
                 e.preventDefault();
-                const notiBtn = document.getElementById('noti-toggle-btn') || document.getElementById('pin-sidebar-btn');
-                if (notiBtn) notiBtn.focus();
+                const footerButton = document.getElementById('search-address-btn');
+                if (footerButton) footerButton.focus();
             } else if (e.key === 'Escape') {
                 e.preventDefault();
                 focusSidebar();
@@ -915,7 +917,7 @@ function setupEventListeners() {
         });
     });
 
-    const bottomButtons = ['pin-sidebar-btn', 'split-toggle-btn', 'reader-view-btn', 'noti-toggle-btn', 'extensions-btn', 'settings-btn'];
+    const bottomButtons = ['pin-sidebar-btn', 'split-toggle-btn', 'reader-view-btn', 'search-address-btn', 'extensions-btn', 'settings-btn'];
     bottomButtons.forEach((id, idx) => {
         const btn = document.getElementById(id);
         if (!btn) return;
@@ -1207,10 +1209,11 @@ document.getElementById('noti-toggle-btn').addEventListener('click', async () =>
         await window.flyAPI.toggleGlobalNotifications(targetState);
     }
 
+    btn.setAttribute('aria-pressed', String(targetState));
     if (targetState) {
-        btn.innerHTML = '<i class="fa-solid fa-bell"></i>';
+        btn.innerHTML = '<i class="fa-solid fa-bell" aria-hidden="true"></i>';
     } else {
-        btn.innerHTML = '<i class="fa-solid fa-bell-slash"></i>';
+        btn.innerHTML = '<i class="fa-solid fa-bell-slash" aria-hidden="true"></i>';
     }
 
     focusActiveWebview();
