@@ -329,23 +329,28 @@ def execute(args):
             configured = json.loads((root / 'evidence/native-configure.json').read_text())['details']
             if configured['fingerprint'] != manifest['fingerprint'] or engine.digest(output / 'args.gn') != configured['args_sha256']:
                 engine.fail('Native inputs differ from configuration; configure again')
-            target = {'build': 'chrome', 'test': 'fly_unittests', 'test-browser': 'browser_tests'}[args.command]
+            target = {'build': 'chrome', 'test': 'fly_unittests',
+                      'test-browser': args.browser_target}[args.command]
             engine.run(['autoninja', '-C', OUTPUT, '-j', str(args.jobs), target], root / 'src', env)
             if args.command == 'test':
                 engine.run([output / ('fly_unittests.exe' if sys.platform == 'win32' else 'fly_unittests')], root / 'src', env, foreground=True)
             if args.command == 'test-browser':
-                executable = output / ('browser_tests.exe' if sys.platform == 'win32' else 'browser_tests')
-                engine.run([executable, '--gtest_filter=FlyWorkspaceBrowserTest.*',
+                executable = output / (target + ('.exe' if sys.platform == 'win32' else ''))
+                engine.run([executable, '--gtest_filter=FlyWorkspaceBrowserTest.*:FlyPageScrollBrowserTest.*',
                             '--test-launcher-jobs=1',
                             '--test-launcher-summary-output=' + str(root / 'evidence/native-browser-tests.json')], root / 'src', env, foreground=True)
             verify_source(root, lock)
-            engine.evidence(root, 'native-' + args.command, lock, {'fingerprint': manifest['fingerprint']})
+            engine.evidence(root, 'native-' + args.command, lock,
+                            {'fingerprint': manifest['fingerprint'], 'target': target})
 
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('command', choices=['apply', 'verify', 'configure', 'build', 'test', 'test-browser', 'test-core', 'revert', 'recover'])
     parser.add_argument('--root', required=True)
+    parser.add_argument('--browser-target', choices=['fly_browser_tests', 'browser_tests'],
+                        default='fly_browser_tests',
+                        help='Scoped Fly acceptance runner or the complete upstream test binary')
     parser.add_argument('--jobs', type=int, default=min(8, os.cpu_count() or 1))
     args = parser.parse_args()
     if args.jobs < 1:

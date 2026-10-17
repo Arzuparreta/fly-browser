@@ -15,11 +15,13 @@
 #include "components/input/native_web_keyboard_event.h"
 #include "components/tabs/public/split_tab_data.h"
 #include "content/public/browser/navigation_handle.h"
+#include "content/public/browser/render_widget_host_view.h"
 #include "content/public/browser/web_contents.h"
 #include "content/public/browser/web_contents_observer.h"
 #include "content/public/browser/web_contents_user_data.h"
 #include "fly/commands/keyboard_router.h"
 #include "fly/ui/fly_window_controller.h"
+#include "fly/ui/hint_controller.h"
 #include "ui/base/clipboard/clipboard_buffer.h"
 #include "ui/base/clipboard/scoped_clipboard_writer.h"
 #include "ui/events/keycodes/dom/dom_code.h"
@@ -28,6 +30,31 @@
 
 namespace fly {
 namespace {
+constexpr std::pair<std::string_view, int> kNativeMappings[] = {
+    {"spawn-tab", IDC_NEW_TAB},
+    {"remove-tab", IDC_CLOSE_TAB},
+    {"next-tab", IDC_SELECT_NEXT_TAB},
+    {"previous-tab", IDC_SELECT_PREVIOUS_TAB},
+    {"duplicate-tab", IDC_DUPLICATE_TAB},
+    {"reopen-closed-tab", IDC_RESTORE_TAB},
+    {"move-tab-left", IDC_MOVE_TAB_PREVIOUS},
+    {"move-tab-right", IDC_MOVE_TAB_NEXT},
+    {"go-back", IDC_BACK},
+    {"go-forward", IDC_FORWARD},
+    {"reload-active-tab", IDC_RELOAD},
+    {"force-reload-tab", IDC_RELOAD_BYPASSING_CACHE},
+    {"stop-loading", IDC_STOP},
+    {"zoom-in", IDC_ZOOM_PLUS},
+    {"zoom-out", IDC_ZOOM_MINUS},
+    {"reset-zoom", IDC_ZOOM_NORMAL},
+    {"toggle-find", IDC_FIND},
+    {"toggle-fullscreen", IDC_FULLSCREEN},
+    {"print-page", IDC_PRINT},
+    {"toggle-pin-tab", IDC_WINDOW_PIN_TAB},
+    {"focus-webview", IDC_FOCUS_WEB_CONTENTS_PANE},
+    {"focus-nav-buttons", IDC_FOCUS_TOOLBAR},
+    {"toggle-address", IDC_FOCUS_LOCATION},
+    {"toggle-menu-bar", IDC_SHOW_APP_MENU}};
 class PageKeyboardState
     : public content::WebContentsObserver,
       public content::WebContentsUserData<PageKeyboardState> {
@@ -175,6 +202,10 @@ bool SplitCommand(BrowserWindowInterface* browser, std::string_view action) {
 }
 }  // namespace
 
+std::string NativeEventStroke(const input::NativeWebKeyboardEvent& event) {
+  return EventStroke(event);
+}
+
 content::KeyboardEventProcessingResult RouteNativePageKey(
     BrowserWindowInterface* browser,
     const input::NativeWebKeyboardEvent& event,
@@ -186,6 +217,9 @@ content::KeyboardEventProcessingResult RouteNativePageKey(
   auto* contents = browser->GetTabStripModel()->GetActiveWebContents();
   if (!contents)
     return Result::NOT_HANDLED;
+  auto& window = FlyWindowController::Get();
+  if (window.hints().HandleKey(contents, event))
+    return Result::HANDLED;
   PageKeyboardState::CreateForWebContents(contents);
   auto& router = PageKeyboardState::FromWebContents(contents)->router();
   const auto key = router.Route(
@@ -199,6 +233,7 @@ content::KeyboardEventProcessingResult RouteNativePageKey(
                                         blink::WebInputEvent::kAltGrKey)),
        .editable =
            browser_ui_editable || contents->IsFocusedElementEditable()});
+  window.UpdateModeLabel();
   if (key.kind == KeyResultKind::kPass)
     return Result::NOT_HANDLED;
   if (key.kind == KeyResultKind::kExitInsert) {
@@ -211,34 +246,68 @@ content::KeyboardEventProcessingResult RouteNativePageKey(
   return Result::HANDLED;
 }
 
+std::u16string NativePageModeLabel(BrowserWindowInterface* browser) {
+  if (browser && browser->IsDeleteScheduled())
+    return u"NORMAL";
+  auto* contents =
+      browser ? browser->GetTabStripModel()->GetActiveWebContents() : nullptr;
+  auto* state =
+      contents ? PageKeyboardState::FromWebContents(contents) : nullptr;
+  if (state && state->router().mode() == KeyboardMode::kPassthrough)
+    return u"PASSTHROUGH";
+  if ((state && state->router().mode() == KeyboardMode::kInsert) ||
+      (contents && contents->IsFocusedElementEditable() &&
+       contents->GetRenderWidgetHostView() &&
+       contents->GetRenderWidgetHostView()->HasFocus()))
+    return u"INSERT";
+  return u"NORMAL";
+}
+
+bool InvokeNativeCommand(BrowserWindowInterface* browser, std::string action) {
+  if (!browser || !IsKnownAction(action))
+    return false;
+  auto* contents = browser->GetTabStripModel()->GetActiveWebContents();
+  if (!contents)
+    return false;
+  PageKeyboardState::CreateForWebContents(contents);
+  PageKeyboardState::FromWebContents(contents)->router().Invoke(action);
+  auto& window = FlyWindowController::Get();
+  const bool handled = window.RunCommand(browser, action);
+  window.UpdateModeLabel();
+  return handled;
+}
+
+bool NativeCommandAvailable(BrowserWindowInterface* browser,
+                            std::string_view action) {
+  if (!browser)
+    return false;
+  for (const auto& [name, command] : kNativeMappings)
+    if (action == name)
+      return chrome::IsCommandEnabled(browser, command);
+  constexpr std::string_view actions[] = {"enter-insert",
+                                          "toggle-passthrough",
+                                          "toggle-tab-audio-mute",
+                                          "yank-url",
+                                          "scroll-down",
+                                          "scroll-up",
+                                          "scroll-left",
+                                          "scroll-right",
+                                          "half-page-down",
+                                          "half-page-up",
+                                          "page-top",
+                                          "page-bottom",
+                                          "toggle-split",
+                                          "toggle-split-horizontal",
+                                          "close-split-view",
+                                          "switch-split-focus",
+                                          "swap-split-panes",
+                                          "cycle-split-orientation"};
+  return std::ranges::find(actions, action) != std::end(actions);
+}
+
 bool ExecuteNativeCommand(BrowserWindowInterface* browser,
                           std::string_view action) {
-  constexpr std::pair<std::string_view, int> mappings[] = {
-      {"spawn-tab", IDC_NEW_TAB},
-      {"remove-tab", IDC_CLOSE_TAB},
-      {"next-tab", IDC_SELECT_NEXT_TAB},
-      {"previous-tab", IDC_SELECT_PREVIOUS_TAB},
-      {"duplicate-tab", IDC_DUPLICATE_TAB},
-      {"reopen-closed-tab", IDC_RESTORE_TAB},
-      {"move-tab-left", IDC_MOVE_TAB_PREVIOUS},
-      {"move-tab-right", IDC_MOVE_TAB_NEXT},
-      {"go-back", IDC_BACK},
-      {"go-forward", IDC_FORWARD},
-      {"reload-active-tab", IDC_RELOAD},
-      {"force-reload-tab", IDC_RELOAD_BYPASSING_CACHE},
-      {"stop-loading", IDC_STOP},
-      {"zoom-in", IDC_ZOOM_PLUS},
-      {"zoom-out", IDC_ZOOM_MINUS},
-      {"reset-zoom", IDC_ZOOM_NORMAL},
-      {"toggle-find", IDC_FIND},
-      {"toggle-fullscreen", IDC_FULLSCREEN},
-      {"print-page", IDC_PRINT},
-      {"toggle-pin-tab", IDC_WINDOW_PIN_TAB},
-      {"focus-webview", IDC_FOCUS_WEB_CONTENTS_PANE},
-      {"focus-nav-buttons", IDC_FOCUS_TOOLBAR},
-      {"toggle-address", IDC_FOCUS_LOCATION},
-      {"toggle-menu-bar", IDC_SHOW_APP_MENU}};
-  for (const auto& [name, command] : mappings) {
+  for (const auto& [name, command] : kNativeMappings) {
     if (action == name) {
       // A disabled native command is a handled key, just like upstream.
       if (chrome::IsCommandEnabled(browser, command)) {
@@ -257,6 +326,23 @@ bool ExecuteNativeCommand(BrowserWindowInterface* browser,
     return true;
   }
   auto* contents = browser->GetTabStripModel()->GetActiveWebContents();
+  using Scroll = content::WebContents::PageScrollCommand;
+  constexpr std::pair<std::string_view, Scroll> scrolling[] = {
+      {"scroll-down", Scroll::kStepDown},
+      {"scroll-up", Scroll::kStepUp},
+      {"scroll-left", Scroll::kStepLeft},
+      {"scroll-right", Scroll::kStepRight},
+      {"half-page-down", Scroll::kHalfPageDown},
+      {"half-page-up", Scroll::kHalfPageUp},
+      {"page-top", Scroll::kTop},
+      {"page-bottom", Scroll::kBottom}};
+  for (const auto& [name, command] : scrolling) {
+    if (action == name) {
+      if (contents)
+        contents->ScrollFocusedPage(command);
+      return true;
+    }
+  }
   if (action == "toggle-tab-audio-mute") {
     if (contents)
       contents->SetAudioMuted(!contents->IsAudioMuted());

@@ -1,0 +1,209 @@
+--- a/content/public/browser/web_contents.h
++++ b/content/public/browser/web_contents.h
+@@ -1196,6 +1196,21 @@
+   virtual void ScrollToTopOfDocument() = 0;
+   virtual void ScrollToBottomOfDocument() = 0;
+ 
++  // Browser-owned keyboard scrolling. Sent through the focused frame's ordered
++  // input channel; it does not dispatch synthetic DOM keys or evaluate injected
++  // script.
++  enum class PageScrollCommand {
++    kStepDown,
++    kStepUp,
++    kStepLeft,
++    kStepRight,
++    kHalfPageDown,
++    kHalfPageUp,
++    kTop,
++    kBottom,
++  };
++  virtual void ScrollFocusedPage(PageScrollCommand command) = 0;
++
+   // Adjust the selection starting and ending points in the focused frame by
+   // the given amounts. A negative amount moves the selection towards the
+   // beginning of the document, a positive amount moves the selection towards
+--- a/content/browser/web_contents/web_contents_impl.h
++++ b/content/browser/web_contents/web_contents_impl.h
+@@ -550,6 +550,7 @@
+   void CollapseSelection() override;
+   void ScrollToTopOfDocument() override;
+   void ScrollToBottomOfDocument() override;
++  void ScrollFocusedPage(PageScrollCommand command) override;
+   void Replace(const std::u16string& word) override;
+   void ReplaceMisspelling(const std::u16string& word) override;
+   void NotifyContextMenuClosed(const GURL& link_followed) override;
+--- a/content/browser/web_contents/web_contents_impl.cc
++++ b/content/browser/web_contents/web_contents_impl.cc
+@@ -7092,6 +7092,37 @@
+   ExecuteEditCommand("ScrollToEndOfDocument", std::nullopt);
+ }
+ 
++void WebContentsImpl::ScrollFocusedPage(PageScrollCommand command) {
++  // These private input commands terminate in WebFrameWidgetImpl, not the
++  // web-exposed document.execCommand dispatch table.
++  switch (command) {
++    case PageScrollCommand::kStepDown:
++      ExecuteEditCommand("FlyScrollStepDown", std::nullopt);
++      break;
++    case PageScrollCommand::kStepUp:
++      ExecuteEditCommand("FlyScrollStepUp", std::nullopt);
++      break;
++    case PageScrollCommand::kStepLeft:
++      ExecuteEditCommand("FlyScrollStepLeft", std::nullopt);
++      break;
++    case PageScrollCommand::kStepRight:
++      ExecuteEditCommand("FlyScrollStepRight", std::nullopt);
++      break;
++    case PageScrollCommand::kHalfPageDown:
++      ExecuteEditCommand("FlyScrollHalfPageDown", std::nullopt);
++      break;
++    case PageScrollCommand::kHalfPageUp:
++      ExecuteEditCommand("FlyScrollHalfPageUp", std::nullopt);
++      break;
++    case PageScrollCommand::kTop:
++      ExecuteEditCommand("FlyScrollTop", std::nullopt);
++      break;
++    case PageScrollCommand::kBottom:
++      ExecuteEditCommand("FlyScrollBottom", std::nullopt);
++      break;
++  }
++}
++
+ void WebContentsImpl::Replace(const std::u16string& word) {
+   OPTIONAL_TRACE_EVENT0("content", "WebContentsImpl::Replace");
+   auto* input_handler = GetFocusedFrameWidgetInputHandler();
+--- a/third_party/blink/renderer/core/frame/web_frame_widget_impl.h
++++ b/third_party/blink/renderer/core/frame/web_frame_widget_impl.h
+@@ -1018,6 +1018,7 @@
+                                          int32_t after) override;
+   void SetEditableSelectionOffsets(int32_t start, int32_t end) override;
+   void ExecuteEditCommand(const String& command, const String& value) override;
++  bool ExecuteFlyPageScroll(const String& command);
+   void Undo() override;
+   void Redo() override;
+   void Cut() override;
+--- a/third_party/blink/renderer/core/frame/web_frame_widget_impl.cc
++++ b/third_party/blink/renderer/core/frame/web_frame_widget_impl.cc
+@@ -31,6 +31,7 @@
+ #include "third_party/blink/renderer/core/frame/web_frame_widget_impl.h"
+ 
+ #include <algorithm>
++#include <cmath>
+ #include <memory>
+ #include <optional>
+ #include <utility>
+@@ -78,6 +79,7 @@
+ #include "third_party/blink/public/web/web_view_client.h"
+ #include "third_party/blink/renderer/bindings/core/v8/script_promise_resolver.h"
+ #include "third_party/blink/renderer/bindings/core/v8/v8_focus_options.h"
++#include "third_party/blink/renderer/bindings/core/v8/v8_scroll_to_options.h"
+ #include "third_party/blink/renderer/core/accessibility/histogram_macros.h"
+ #include "third_party/blink/renderer/core/clipboard/data_transfer_access_policy.h"
+ #include "third_party/blink/renderer/core/content_capture/content_capture_manager.h"
+@@ -88,6 +90,7 @@
+ #include "third_party/blink/renderer/core/dom/element.h"
+ #include "third_party/blink/renderer/core/dom/element_traversal.h"
+ #include "third_party/blink/renderer/core/dom/events/event_dispatch_result.h"
++#include "third_party/blink/renderer/core/dom/flat_tree_traversal.h"
+ #include "third_party/blink/renderer/core/dom/focus_params.h"
+ #include "third_party/blink/renderer/core/dom/layout_tree_builder_traversal.h"
+ #include "third_party/blink/renderer/core/dom/scroll_marker_group_pseudo_element.h"
+@@ -152,6 +155,7 @@
+ #include "third_party/blink/renderer/core/page/scrolling/fragment_anchor.h"
+ #include "third_party/blink/renderer/core/page/validation_message_client.h"
+ #include "third_party/blink/renderer/core/page/viewport_description.h"
++#include "third_party/blink/renderer/core/paint/paint_layer_scrollable_area.h"
+ #include "third_party/blink/renderer/core/paint/timing/first_meaningful_paint_detector.h"
+ #include "third_party/blink/renderer/core/paint/timing/paint_timing.h"
+ #include "third_party/blink/renderer/core/probe/core_probes.h"
+@@ -4889,6 +4893,80 @@
+   focused_frame->SetEditableSelectionOffsets(start, end);
+ }
+ 
++bool WebFrameWidgetImpl::ExecuteFlyPageScroll(const String& command) {
++  const bool down = command == "FlyScrollStepDown";
++  const bool up = command == "FlyScrollStepUp";
++  const bool left = command == "FlyScrollStepLeft";
++  const bool right = command == "FlyScrollStepRight";
++  const bool half_down = command == "FlyScrollHalfPageDown";
++  const bool half_up = command == "FlyScrollHalfPageUp";
++  const bool top = command == "FlyScrollTop";
++  const bool bottom = command == "FlyScrollBottom";
++  if (!(down || up || left || right || half_down || half_up || top || bottom))
++    return false;
++  LocalFrame* frame = FocusedLocalFrameInWidget();
++  if (!frame || !frame->GetDocument() || !frame->View())
++    return true;
++  Document* document = frame->GetDocument();
++  document->UpdateStyleAndLayout(DocumentUpdateReason::kScroll);
++  if (!frame->View() || frame->GetDocument() != document)
++    return true;
++
++  // Match Fly's focused scroll-container semantics, including shadow trees.
++  // Reading the native layout avoids serializing DOM state to the browser.
++  Element* target = nullptr;
++  for (Element* element = document->FocusedElement();
++       element && element != document->body() &&
++       element != document->documentElement();
++       element = FlatTreeTraversal::ParentElement(*element)) {
++    auto* box = element->GetLayoutBox();
++    auto* area = box ? box->GetScrollableArea() : nullptr;
++    if (area && area->MaximumScrollOffset() != area->MinimumScrollOffset() &&
++        (area->UserInputScrollable(kHorizontalScrollbar) ||
++         area->UserInputScrollable(kVerticalScrollbar))) {
++      target = element;
++      break;
++    }
++  }
++  if (!target)
++    target = document->ScrollingElementNoLayout();
++  auto* window = frame->DomWindow();
++  if (!target && !window)
++    return true;
++  auto* options = ScrollToOptions::Create();
++  options->setBehavior(V8ScrollBehavior::Enum::kSmooth);
++  double x = left ? -80 : right ? 80 : 0;
++  double y = down ? 80 : up ? -80 : 0;
++  if (half_down || half_up) {
++    const double height = target && target->clientHeight()
++                              ? target->clientHeight()
++                          : window ? window->innerHeight()
++                                   : 0;
++    y = std::floor(height / 2) * (half_down ? 1 : -1);
++  }
++  if (top || bottom) {
++    x = 0;
++    y = bottom && target ? target->scrollHeight() : 0;
++  }
++  options->setLeft(x);
++  options->setTop(y);
++  // Call Blink's implementations directly. Page overrides of scrollBy/scrollTo
++  // do not intercept browser controls; native zoom, snapping and smooth-scroll
++  // completion follow the same paths as the retained product's DOM commands.
++  if (target) {
++    if (top || bottom)
++      target->scrollTo(nullptr, options);
++    else
++      target->scrollBy(nullptr, options);
++  } else {
++    if (top || bottom)
++      window->scrollTo(nullptr, options);
++    else
++      window->scrollBy(nullptr, options);
++  }
++  return true;
++}
++
+ void WebFrameWidgetImpl::ExecuteEditCommand(const String& command,
+                                             const String& value) {
+   scoped_refptr<WebPagePopupImpl> page_popup = View()->GetPagePopup();
+@@ -4900,7 +4978,8 @@
+   WebLocalFrame* focused_frame = FocusedWebLocalFrameInWidget();
+   if (!focused_frame)
+     return;
+-  focused_frame->ExecuteCommand(command, value);
++  if (!ExecuteFlyPageScroll(command))
++    focused_frame->ExecuteCommand(command, value);
+ }
+ 
+ void WebFrameWidgetImpl::Undo() {

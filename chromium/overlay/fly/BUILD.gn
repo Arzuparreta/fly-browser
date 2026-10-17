@@ -18,10 +18,14 @@ source_set("commands") {
     "commands/command_service.cc",
     "commands/command_service.h",
     "commands/generated_contract.h",
+    "commands/hint_codes.cc",
+    "commands/hint_codes.h",
     "commands/keyboard_config.cc",
     "commands/keyboard_config.h",
     "commands/keyboard_router.cc",
     "commands/keyboard_router.h",
+    "commands/palette_catalog.cc",
+    "commands/palette_catalog.h",
   ]
   public_deps = [
     "//base",
@@ -44,7 +48,9 @@ source_set("session_metadata") {
 test("fly_unittests") {
   sources = [
     "commands/command_service_unittest.cc",
+    "commands/hint_codes_unittest.cc",
     "commands/keyboard_config_unittest.cc",
+    "commands/palette_catalog_unittest.cc",
     "workspaces/workspace_service_unittest.cc",
   ]
   deps = [
@@ -55,4 +61,56 @@ test("fly_unittests") {
     "//components/prefs:test_support",
     "//testing/gtest",
   ]
+}
+
+# Same upstream in-process browser and out-of-process test launcher, scoped to
+# Fly's acceptance cases. Keep the upstream browser_tests integration available
+# for broader regressions without compiling its entire catalogue for each run.
+if (is_linux || is_win) {
+  test("fly_browser_tests") {
+    use_xvfb = is_linux
+    defines = [ "HAS_OUT_OF_PROC_TEST_RUNNER" ]
+    sources = [ "test/workspace_browser_test.cc" ]
+    deps = [
+      ":commands",
+      ":session_metadata",
+      ":workspaces",
+      "//base",
+      "//base/test:test_support",
+      "//base/version_info",
+      "//chrome:packed_resources",
+      "//chrome:resources",
+      "//chrome:strings",
+      "//chrome/browser",
+      "//chrome/browser:browser_process",
+      "//chrome/browser/extensions",
+      "//chrome/browser/extensions:test_support",
+      "//chrome/browser/profiles:profile",
+      "//chrome/browser/profiles:profile_manager",
+      "//chrome/browser/profiles:profile_test_util",
+      "//chrome/browser/ui",
+      "//chrome/browser/ui/browser_window:create_browser_window",
+      "//chrome/browser/ui/tabs:tab_strip",
+      "//chrome/renderer",
+      "//chrome/test:test_support",
+      "//chrome/test/base:browser_tests_runner",
+      "//chrome/test/base:in_process_browser_test",
+      "//chrome/test/base:ui_test_utils",
+      "//content/public/browser",
+      "//content/test:test_support",
+      "//extensions:test_support",
+      "//net:test_support",
+      "//testing/gtest",
+      "//ui/aura",
+      "//ui/base",
+      "//ui/events:test_support",
+      "//ui/views",
+      "//ui/views:test_support",
+    ]
+    data_deps = [
+      "//chrome",
+      "//chrome:browser_tests_pak",
+    ]
+    data = [ "//chrome/test/data/title1.html" ]
+  }
 }

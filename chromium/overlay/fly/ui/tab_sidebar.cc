@@ -4,13 +4,14 @@
 #include "fly/ui/tab_sidebar.h"
 
 #include <set>
+#include <utility>
 
 #include "base/functional/bind.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/task/single_thread_task_runner.h"
-#include "chrome/browser/ui/browser_commands.h"
 #include "chrome/browser/ui/browser_window/public/browser_window_interface.h"
+#include "chrome/browser/ui/tabs/tab_enums.h"
 #include "chrome/browser/ui/tabs/tab_strip_model.h"
 #include "content/public/browser/web_contents.h"
 #include "ui/base/metadata/metadata_impl_macros.h"
@@ -20,17 +21,11 @@
 #include "ui/views/layout/box_layout.h"
 
 namespace fly {
-TabSidebar::TabSidebar() {
+TabSidebar::TabSidebar(base::RepeatingClosure new_tab) {
   auto* layout = SetLayoutManager(std::make_unique<views::BoxLayout>(
       views::BoxLayout::Orientation::kVertical));
-  auto* add = AddChildView(std::make_unique<views::MdTextButton>(
-      base::BindRepeating(
-          [](base::WeakPtr<TabSidebar> sidebar) {
-            if (sidebar && sidebar->browser_)
-              chrome::NewTab(sidebar->browser_, NewTabTypes::kNewTabCommand);
-          },
-          weak_factory_.GetWeakPtr()),
-      u"New tab"));
+  auto* add = AddChildView(
+      std::make_unique<views::MdTextButton>(std::move(new_tab), u"New tab"));
   add->GetViewAccessibility().SetName(u"New tab in selected workspace");
   auto* scroll = AddChildView(std::make_unique<views::ScrollView>());
   scroll->SetHorizontalScrollBarMode(

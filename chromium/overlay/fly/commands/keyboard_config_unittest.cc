@@ -124,5 +124,24 @@ TEST_F(KeyboardRouterTest,
   EXPECT_EQ("spawn-tab",
             router_.Route({.stroke = "Ctrl+T", .hints_active = true}).action);
 }
+TEST_F(KeyboardRouterTest, NativeActionsShareModesAndClearPendingSequences) {
+  KeyboardRouter router(DefaultKeyboardConfig());
+  const auto now = base::TimeTicks::Now();
+  EXPECT_EQ(KeyResultKind::kConsume,
+            router.Route({.stroke = "G", .time = now}).kind);
+  EXPECT_EQ(KeyResultKind::kAction, router.Invoke("enter-insert").kind);
+  EXPECT_EQ(KeyboardMode::kInsert, router.mode());
+  EXPECT_EQ(KeyResultKind::kPass,
+            router.Route({.stroke = "J", .time = now}).kind);
+  EXPECT_EQ(KeyResultKind::kExitInsert,
+            router.Route({.stroke = "Escape", .time = now}).kind);
+  router.Invoke("toggle-passthrough");
+  EXPECT_EQ(KeyboardMode::kPassthrough, router.mode());
+  router.Route({.stroke = "Shift+Escape", .time = now});
+  EXPECT_EQ(KeyboardMode::kNormal, router.mode());
+  EXPECT_EQ(KeyResultKind::kPass, router.Invoke("unknown-action").kind);
+  EXPECT_EQ(KeyResultKind::kConsume,
+            router.Route({.stroke = "G", .time = now}).kind);
+}
 }  // namespace
 }  // namespace fly

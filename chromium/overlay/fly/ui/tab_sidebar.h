@@ -6,6 +6,7 @@
 
 #include <map>
 
+#include "base/functional/callback_forward.h"
 #include "base/memory/raw_ptr.h"
 #include "base/memory/weak_ptr.h"
 #include "chrome/browser/ui/tabs/tab_strip_model_observer.h"
@@ -28,7 +29,7 @@ class TabSidebar : public views::View, public TabStripModelObserver {
   METADATA_HEADER(TabSidebar, views::View)
 
  public:
-  TabSidebar();
+  explicit TabSidebar(base::RepeatingClosure new_tab);
   ~TabSidebar() override;
   void SetBrowser(BrowserWindowInterface* browser);
   void FocusActiveTab();
