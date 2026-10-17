@@ -3,7 +3,7 @@
 // Fly repository.
 #include "fly/workspaces/workspace_service.h"
 
-#include "base/test/task_environment.h"
+#include "base/task/single_thread_task_executor.h"
 #include "components/prefs/testing_pref_service.h"
 #include "testing/gtest/include/gtest/gtest.h"
 
@@ -14,7 +14,7 @@ class WorkspaceServiceTest : public testing::Test {
   WorkspaceServiceTest() : service_(prefs_) {
     WorkspaceService::RegisterLocalStatePrefs(prefs_.registry());
   }
-  base::test::TaskEnvironment task_environment_;
+  base::SingleThreadTaskExecutor task_executor_;
   TestingPrefServiceSimple prefs_;
   WorkspaceService service_;
 };
@@ -80,7 +80,7 @@ TEST_F(WorkspaceServiceTest, RejectPathsAndInvalidNamesWithoutChangingData) {
   const auto before = prefs_.GetDict(kWorkspacesPref).Clone();
   for (const char* directory :
        {"", "../Profile 1", "/tmp/profile", "a/b", "a\\b", "C:profile", ".",
-        "..", " Profile", "Profile "}) {
+        "..", " Profile", "Profile ", "CON", "nul", "COM1", "lpt9"}) {
     EXPECT_FALSE(service_.Add("second", directory)) << directory;
   }
   EXPECT_FALSE(service_.Add("", "Profile 2"));

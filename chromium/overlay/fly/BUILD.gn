@@ -13,9 +13,25 @@ source_set("workspaces") {
   ]
 }
 
+source_set("commands") {
+  sources = [
+    "commands/generated_contract.h",
+    "commands/keyboard_config.cc",
+    "commands/keyboard_config.h",
+    "commands/keyboard_router.cc",
+    "commands/keyboard_router.h",
+  ]
+  public_deps = [ "//base" ]
+  deps = [ "//third_party/icu" ]
+}
+
 test("fly_unittests") {
-  sources = [ "workspaces/workspace_service_unittest.cc" ]
+  sources = [
+    "commands/keyboard_config_unittest.cc",
+    "workspaces/workspace_service_unittest.cc",
+  ]
   deps = [
+    ":commands",
     ":workspaces",
     "//base/test:run_all_unittests",
     "//base/test:test_support",

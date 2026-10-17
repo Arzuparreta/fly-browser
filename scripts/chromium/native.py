@@ -154,9 +154,35 @@ def verify_source(root, lock, require_current=True):
     return manifest
 
 
+def apply_core(root, lock):
+    """Install only new //fly sources for service tests, without browser hooks."""
+    if (root / MANIFEST).exists():
+        manifest = verify_source(root, lock)
+        if manifest.get('kind') != 'core':
+            engine.fail('Full overlay present; use the normal native test command')
+        return
+    engine.verify_checkout(root / 'src', lock['chromium'])
+    _, overlay = inputs()
+    manifest = {'schema': 1, 'phase': 'applying', 'kind': 'core',
+                'upstream': lock['chromium']['revision'],
+                'fingerprint': fingerprint(), 'files': {}}
+    for name, file in overlay.items():
+        if checked_path(root / 'src', name).exists():
+            engine.fail('Core overlay destination exists: ' + name)
+        manifest['files'][name] = {'before': None, 'after': engine.digest(file)}
+    engine.atomic_json(root / MANIFEST, manifest)
+    for name, file in overlay.items():
+        atomic_bytes(root / 'src' / name, file.read_bytes())
+    manifest['phase'] = 'applied'
+    engine.atomic_json(root / MANIFEST, manifest)
+    verify_source(root, lock)
+
+
 def apply(root, lock):
     if (root / MANIFEST).exists():
-        verify_source(root, lock)
+        existing = verify_source(root, lock)
+        if existing.get('kind') == 'core':
+            engine.fail('Core-only overlay present; revert before applying browser hooks')
         print('Native overlay already matches the reviewed inputs.')
         return
     engine.verify_checkout(root / 'src', lock['chromium'])
@@ -253,6 +279,9 @@ def execute(args):
     root = engine.engine_root(args.root)
     with engine.exclusive(root):
         engine.verify_checkout(root / 'depot_tools', lock['depot_tools'])
+        if args.command == 'test-core':
+            engine.require_stage(root, 'hooks', lock)
+            apply_core(root, lock)
         if args.command == 'apply':
             # The control build verifies all dependency revisions. This command
             # only touches source files after its successful completion.
@@ -265,7 +294,24 @@ def execute(args):
         engine.verify_dependencies(root, source_verifier=lambda: verify_source(root, lock))
         env = engine.environment(root)
         output = root / 'src' / OUTPUT
-        if args.command == 'verify':
+        if args.command == 'test-core':
+            # Service tests need no patched browser or claim of a complete
+            # control build. Root-target keeps the real Chromium dependency
+            # graph, toolchain, test launcher and platform implementations.
+            unit_output = root / 'src/out/FlyUnit'
+            unit_output.mkdir(parents=True, exist_ok=True)
+            config = unit_output / 'args.gn'
+            if config.exists() and config.read_bytes() != CONFIG.read_bytes():
+                engine.fail('Core test build arguments differ; preserve existing output')
+            config.write_bytes(CONFIG.read_bytes())
+            engine.run(['gn', 'gen', 'out/FlyUnit', '--root-target=//fly'], root / 'src', env)
+            engine.run(['autoninja', '-C', 'out/FlyUnit', '-j', str(args.jobs), 'fly_unittests'], root / 'src', env)
+            executable = unit_output / ('fly_unittests.exe' if sys.platform == 'win32' else 'fly_unittests')
+            engine.run([executable, '--test-launcher-jobs=2',
+                        '--test-launcher-summary-output=' + str(root / 'evidence/native-core-tests.json')], root / 'src', env)
+            verify_source(root, lock)
+            engine.evidence(root, 'native-test-core', lock, {'fingerprint': manifest['fingerprint']})
+        elif args.command == 'verify':
             print('Native source, overlay fingerprint and pinned dependencies match.')
         elif args.command == 'configure':
             engine.require_stage(root, 'hooks', lock)
@@ -293,7 +339,7 @@ def execute(args):
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument('command', choices=['apply', 'verify', 'configure', 'build', 'test', 'revert', 'recover'])
+    parser.add_argument('command', choices=['apply', 'verify', 'configure', 'build', 'test', 'test-core', 'revert', 'recover'])
     parser.add_argument('--root', required=True)
     parser.add_argument('--jobs', type=int, default=min(8, os.cpu_count() or 1))
     args = parser.parse_args()

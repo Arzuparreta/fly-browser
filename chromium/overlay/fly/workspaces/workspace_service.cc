@@ -23,6 +23,13 @@ bool ValidName(std::string_view name) {
 }
 
 bool ValidProfileDirectory(std::string_view directory) {
+  const auto upper = base::ToUpperASCII(directory);
+  if (upper == "CON" || upper == "PRN" || upper == "AUX" || upper == "NUL" ||
+      (upper.size() == 4 &&
+       (upper.starts_with("COM") || upper.starts_with("LPT")) &&
+       upper.back() >= '1' && upper.back() <= '9')) {
+    return false;
+  }
   // Chromium-generated Default/Profile N names fit this portable allowlist.
   // Do not accept paths, drive names, dot components or platform separators.
   return !directory.empty() && directory.size() <= 128 &&

@@ -170,3 +170,19 @@ The manual `Native Chromium validation` workflow accepts `depth=configure` or
 on failure. Tooling tests, source configuration, a linked browser and packaged
 desktop acceptance are separate results. Hosted-runner resource limits may
 prevent larger stages; those failures require evidence, not silent skips.
+
+
+### Native service tests without browser integration
+
+`native.py test-core --root /path/to/dedicated-engine` installs only the new
+`//fly` sources and builds the real Chromium `fly_unittests` target using
+`gn gen out/FlyUnit --root-target=//fly`. It does not patch the browser or require
+a completed control browser. This is useful for native service tests on CI while
+the full local control is still building. It still requires pinned source,
+dependencies and completed hooks. Use a separate checkout when another engine
+operation is active. Revert this core-only overlay before applying browser hooks.
+
+The manual workflow's `units` depth performs this native compilation and test
+execution on the selected platforms. `contracts` runs only the small Python
+transaction/checkout tests and JavaScript syntax checks. Neither depth passes
+desktop, migration or package acceptance by itself.

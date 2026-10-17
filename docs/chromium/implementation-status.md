@@ -250,3 +250,43 @@ native browser. Source/configuration attempts use a declared 40 GiB minimum;
 full builds keep the 100 GiB floor. Resource/toolchain failures are retained as
 failed attempts with artifacts, not counted as native validation. No publication
 or ordinary-PR checks are added. Actual CI results must be recorded after dispatch.
+
+
+## Native commands and cross-platform follow-up
+
+PR #109 merged as `7b7c60d`; PR #110 merged as `a108401`, after current-head PR
+checks passed. PR #110 canonicalized temporary test roots on macOS and Windows:
+the original fixtures bypassed the CLI's canonicalization and tripped containment
+checks on `/var` aliases and Windows short paths. Production guards were retained.
+Manual [contracts run 39033282537](https://github.com/Arzuparreta/fly-browser/actions/runs/39033282537)
+passed all 22 tooling tests on Linux/macOS/Windows at PR #110's actual remote head.
+The earlier [configuration run 39033161482](https://github.com/Arzuparreta/fly-browser/actions/runs/39033161482)
+has a successful Linux source/dependencies/hooks/GN job; its original macOS and
+Windows fixture failures are preserved, and its other engine jobs are separate.
+Downloaded Linux provenance is under external `evidence/ci-linux-configure/`.
+
+The current branch is `codex/chromium-commands`. Native keyboard metadata,
+defaults and cross-language validation fixtures are generated from the actual
+Fly keyboard catalogue by `scripts/chromium/generate-commands.js`. `npm test`
+checks this generated file. New C++ code validates conflict-free assignments,
+reserved keys, numbered-tab chords and the passthrough return shortcut, and
+routes per-document NORMAL/INSERT/passthrough modes, prefixes, repeat, editable,
+composition, hint and recorder contexts. This core is **not yet wired into the
+native desktop event pipeline**; product keyboard acceptance remains pending.
+
+Eighteen actual C++ tests (ten workspace tests and eight keyboard tests) have
+been linked and executed successfully against the already compiled pinned
+Chromium components. This bootstrap used the saved GN compile flags/toolchain
+and upstream GTest sources, with a small external test main; it did not build a
+browser or replace the standard GN test gate. Exact helper, runner, objects and
+output remain under external `evidence/build-keyboard-native.py`,
+`run-keyboard-native.cc` and `keyboard-native-tests.log`. The standard
+`//fly:fly_unittests` build/execution is being added as manual CI `depth=units`.
+It uses a core-only overlay and the real Chromium GN/test launcher, without
+patching browser integration or asserting an unbuilt control-browser pass.
+
+Git line-ending settings for dependency tools are process-local, so Windows
+source bytes can match the upstream DEPS hash without changing global user Git
+configuration. Workspace directory validation also rejects reserved Windows
+device names. All desktop/private/isolation/extension/media/package acceptance
+rows remain pending until their own real browser evidence exists.

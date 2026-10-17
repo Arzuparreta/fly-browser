@@ -141,6 +141,17 @@ class EngineTests(unittest.TestCase):
         self.assertEqual(env['DEPOT_TOOLS_METRICS'], '0')
         self.assertEqual(env['PATH'].split(os.pathsep)[0], str(self.root / 'depot_tools'))
 
+    def test_git_line_endings_are_pinned_without_overwriting_existing_environment_options(self):
+        with patch.dict(os.environ, {'GIT_CONFIG_COUNT': '1',
+                                     'GIT_CONFIG_KEY_0': 'fixture.setting',
+                                     'GIT_CONFIG_VALUE_0': 'keep'}):
+            env = engine.environment(self.root)
+        self.assertEqual(env['GIT_CONFIG_COUNT'], '2')
+        self.assertEqual(env['GIT_CONFIG_KEY_0'], 'fixture.setting')
+        self.assertEqual(env['GIT_CONFIG_VALUE_0'], 'keep')
+        self.assertEqual(env['GIT_CONFIG_KEY_1'], 'core.autocrlf')
+        self.assertEqual(env['GIT_CONFIG_VALUE_1'], 'false')
+
     def test_space_floor_is_explicit_and_checked(self):
         with patch.object(engine.shutil, 'disk_usage') as usage:
             usage.return_value.free = 50 * 1024**3

@@ -113,6 +113,12 @@ def environment(root):
     env['DEPOT_TOOLS_METRICS'] = '0'
     env['DEPOT_TOOLS_WIN_TOOLCHAIN'] = '0'
     env['PYTHONUTF8'] = '1'
+    # Preserve pinned source bytes on Windows without changing the owner's
+    # global Git configuration. Dependencies inherit this runtime-only setting.
+    count = int(env.get('GIT_CONFIG_COUNT', '0'))
+    env[f'GIT_CONFIG_KEY_{count}'] = 'core.autocrlf'
+    env[f'GIT_CONFIG_VALUE_{count}'] = 'false'
+    env['GIT_CONFIG_COUNT'] = str(count + 1)
     return env
 
 
@@ -168,7 +174,7 @@ def checkout(root, name, pin):
     if any(item.name != '.git' for item in directory.iterdir()):
         fail(f'Unborn checkout has unrelated files: {directory}')
     run(['git', 'fetch', '--depth=1', 'origin', pin['revision']], directory)
-    run(['git', 'checkout', '--detach', pin['revision']], directory)
+    run(['git', '-c', 'core.autocrlf=false', 'checkout', '--detach', pin['revision']], directory)
     verify_checkout(directory, pin)
 
 

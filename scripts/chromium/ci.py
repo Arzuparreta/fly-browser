@@ -15,7 +15,7 @@ import engine
 def main():
     root = engine.engine_root(os.environ['FLY_CI_ENGINE_ROOT'])
     depth = os.environ['FLY_CI_DEPTH']
-    if depth not in ('configure', 'build'):
+    if depth not in ('configure', 'units', 'build'):
         engine.fail('Unknown CI depth')
     evidence = root / 'evidence'
     evidence.mkdir(exist_ok=True)
@@ -28,10 +28,16 @@ def main():
     commands = []
     # Source/configuration needs less space than a complete control+native build.
     # Resource failures remain failures with actual free-space evidence.
-    for stage in ('doctor', 'bootstrap', 'sync', 'hooks', 'configure'):
+    stages = ('doctor', 'bootstrap', 'sync', 'hooks')
+    if depth != 'units':
+        stages += ('configure',)
+    for stage in stages:
         commands.append([sys.executable, str(Path(__file__).with_name('engine.py')),
                          stage, '--root', str(root), '--minimum-free-gib',
                          '100' if depth == 'build' else '40'])
+    if depth == 'units':
+        commands.append([sys.executable, str(Path(__file__).with_name('native.py')),
+                         'test-core', '--root', str(root)])
     if depth == 'build':
         commands.append([sys.executable, str(Path(__file__).with_name('engine.py')),
                          'build', '--root', str(root)])
