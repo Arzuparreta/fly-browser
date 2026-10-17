@@ -22,8 +22,10 @@ No native application, migration or package has passed acceptance yet.
   records (168 Git repositories plus content-pinned packages/objects) are in
   external `evidence/dependency-revisions.json`, hashed by `evidence/sync.json`.
 - M0 infrastructure merged as `d91ab27` through PR #107. Follow-up control-build
-  refinements are on `codex/chromium-control-build` (PR/commit recorded below
-  when created).
+  refinements: `codex/chromium-control-build`, initial commit `89e2b0b`,
+  [PR #108](https://github.com/Arzuparreta/fly-browser/pull/108). The PR links
+  expose their current remote heads and merge state; after merging, resume from
+  pulled `main` with the existing external engine checkout.
 - The initial whole-tree `gn gen --check` run was deliberately interrupted after
   it spent minutes reading upstream headers on the HDD. The control now uses
   upstream's normal `gn gen out/FlyControl`; compiler/header checks for Fly
