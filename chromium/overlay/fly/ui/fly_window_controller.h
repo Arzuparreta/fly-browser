@@ -39,7 +39,7 @@ class FlyWindowController : public views::WidgetDelegate,
                             public views::WidgetObserver,
                             public ui::EventHandler {
  public:
-  static bool ShouldEmbed(BrowserWindowInterface* browser);
+  static bool ShouldEmbed(const BrowserWindowInterface* browser);
   static FlyWindowController& Get();
   static FlyWindowController* GetIfCreated();
 

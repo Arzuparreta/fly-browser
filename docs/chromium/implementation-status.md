@@ -584,3 +584,37 @@ The isolated `gn check` passes for both `//fly:*` and
 target. External evidence: `native-shadow-gn-retry.log` and
 `native-shadow-ui-headers.log`. The initial restricted-dependency failure is
 preserved in `native-shadow-gn.log`.
+
+## Shared native window geometry
+
+PR [#114](https://github.com/Arzuparreta/fly-browser/pull/114) contains the
+consolidated keyboard/UI follow-up. Its latest head `4bd4588` passed ordinary PR
+checks; the explicit all-platform unit matrix is
+[39078704053](https://github.com/Arzuparreta/fly-browser/actions/runs/39078704053)
+and is still running. All eight modified upstream implementation files now pass
+pinned-target syntax checks, including BrowserView/BrowserWidget, preferences
+and native session hooks (`evidence/upstream-native-syntax.log`).
+
+The dependent `codex/chromium-native-window-geometry` branch addresses another
+M1 API seam: the embedded BrowserView's browser-window GetBounds/SetBounds must
+represent Fly's shared OS desktop, including its sidebar/frame, rather than the
+profile child viewport. The eighth patch adapts those two BrowserWindow methods;
+native child view/layout geometry and native window handles remain real. This
+also routes extension window bounds through Chromium's existing window controller
+instead of fabricating extension responses. Restored bounds already use the
+shared desktop through the embedded native widget.
+
+A new browser assertion resizes the shared desktop through a background profile,
+checks both native BrowserWindows before/after workspace switching, and verifies
+the page viewport remains smaller. The real MV3 profile probe now asserts
+chrome.windows.get bounds in both profiles. There are 16 browser tests in this
+branch; execution remains pending, and no browser acceptance status changes from
+these source assertions.
+
+The geometry patch and updated 16-case browser-test source pass syntax checks
+with the pinned flags (`evidence/window-geometry-syntax.log` and
+`window-geometry-browser-syntax.log`). The embedding predicate is now a const
+query so BrowserWindow's const bounds method can use it without a cast. All
+eight ordered patches preflight cleanly over the original pinned files. Local
+repository/tooling/docs checks pass; these are still source checks rather than
+a linked native run.

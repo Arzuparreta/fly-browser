@@ -28,6 +28,7 @@
 #include "chrome/test/base/in_process_browser_test.h"
 #include "chrome/test/base/ui_test_utils.h"
 #include "content/public/browser/render_frame_host.h"
+#include "content/public/browser/render_widget_host_view.h"
 #include "content/public/browser/web_contents.h"
 #include "content/public/test/browser_test.h"
 #include "content/public/test/browser_test_utils.h"
@@ -326,7 +327,8 @@ IN_PROC_BROWSER_TEST_F(FlyWorkspaceBrowserTest,
       if (message !== 'fly-native-probe' || !sender.tab) return;
       update(async state => {
         const active = await chrome.tabs.query({active: true, currentWindow: true});
-        reply({identity: state.identity, installed: state.installed,
+        const nativeWindow = await chrome.windows.get(sender.tab.windowId);
+        reply({nativeWindow, identity: state.identity, installed: state.installed,
                tabId: sender.tab.id, windowId: sender.tab.windowId,
                activeTabId: active[0]?.id, activated: state.activated});
       });
@@ -389,7 +391,43 @@ IN_PROC_BROWSER_TEST_F(FlyWorkspaceBrowserTest,
               data->FindInt("windowId"));
     EXPECT_EQ(data->FindInt("tabId"), data->FindInt("activeTabId"));
     EXPECT_EQ(data->FindInt("tabId"), data->FindInt("activated"));
+    const auto* native_window = data->FindDict("nativeWindow");
+    ASSERT_TRUE(native_window);
+    const auto bounds =
+        FlyWindowController::Get().desktop_widget()->GetWindowBoundsInScreen();
+    EXPECT_EQ(bounds.x(), native_window->FindInt("left"));
+    EXPECT_EQ(bounds.y(), native_window->FindInt("top"));
+    EXPECT_EQ(bounds.width(), native_window->FindInt("width"));
+    EXPECT_EQ(bounds.height(), native_window->FindInt("height"));
   }
+}
+
+IN_PROC_BROWSER_TEST_F(FlyWorkspaceBrowserTest,
+                       BrowserBoundsRepresentSharedDesktopNotPageViewport) {
+  auto* first = browser();
+  auto* second = SecondWorkspace();
+  ASSERT_TRUE(second);
+  auto& window = FlyWindowController::Get();
+  auto* desktop = window.desktop_widget();
+  auto expect_shared_bounds = [&] {
+    const auto bounds = desktop->GetWindowBoundsInScreen();
+    EXPECT_EQ(bounds, first->GetWindow()->GetBounds());
+    EXPECT_EQ(bounds, second->GetWindow()->GetBounds());
+    EXPECT_EQ(desktop->GetRestoredBounds(),
+              first->GetWindow()->GetRestoredBounds());
+  };
+  expect_shared_bounds();
+  // Updating a background profile's native browser changes the one OS window.
+  const gfx::Rect requested(64, 70, 1000, 700);
+  first->GetWindow()->SetBounds(requested);
+  ASSERT_TRUE(base::test::RunUntil(
+      [&] { return desktop->GetWindowBoundsInScreen() == requested; }));
+  expect_shared_bounds();
+  window.Select(first, true);
+  expect_shared_bounds();
+  auto* view = Active(first)->GetRenderWidgetHostView();
+  ASSERT_TRUE(view);
+  EXPECT_LT(view->GetViewBounds().width(), requested.width());
 }
 
 IN_PROC_BROWSER_TEST_F(FlyWorkspaceBrowserTest,
