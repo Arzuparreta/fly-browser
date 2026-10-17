@@ -129,6 +129,13 @@
 
 const { ipcRenderer, webFrame, contextBridge } = require('electron');
 
+// Only the bundled new-tab document can request a frequent-site removal.
+document.addEventListener('click', event => {
+    if (location.protocol !== 'file:' || !location.pathname.endsWith('/assets/new-tab.html')) return;
+    const button = event.target.closest?.('button[data-hide-site]');
+    if (button) ipcRenderer.sendToHost('hide-frequent-site', button.dataset.hideSite);
+});
+
 // Guest pointer events do not reach the host document.
 document.addEventListener('pointerdown', event => {
     if (event.isTrusted) ipcRenderer.sendToHost('guest-pointer-down');

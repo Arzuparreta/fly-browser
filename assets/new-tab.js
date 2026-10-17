@@ -9,10 +9,19 @@ window.updateFlyNewTab = data => {
     const sites = document.getElementById('sites');
     sites.replaceChildren();
     for (const site of data.sites) {
+        const row = document.createElement('div');
+        row.className = 'site-row';
         const link = document.createElement('a');
         link.href = site.url;
         link.textContent = site.title;
-        sites.append(link);
+        const remove = document.createElement('button');
+        remove.type = 'button';
+        remove.textContent = '×';
+        remove.dataset.hideSite = site.url;
+        remove.setAttribute('aria-label', `Remove ${site.title} from frequent sites`);
+        remove.title = 'Remove from frequent sites';
+        row.append(link, remove);
+        sites.append(row);
     }
     document.getElementById('empty').hidden = data.sites.length > 0;
 };
