@@ -1,7 +1,8 @@
 # Implementation agent handoff: native Chromium Fly
 
-Status: ready for implementation. No implementation agent has been launched by
-the planning task. The runtime is still Electron until this work is carried out.
+Status: implementation started at M0. See the
+[execution record](./chromium/implementation-status.md) for current source pins,
+commands, results and remaining work. The runtime is still Electron.
 
 ## Copyable agent brief
 

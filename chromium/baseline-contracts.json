@@ -1,0 +1,4421 @@
+{
+  "schema": 1,
+  "baseline": "a477efd0cd47c24d8053ce2be013446054268fe9",
+  "warning": "Repository contract inventory. Source/test anchors are discovery aids, not proof of behavioural coverage or native acceptance.",
+  "sourceDigests": {
+    "main.js": "7cb249013b14f9fc2a4d7b0e80da3e26cc294383de6d9c5e3349c92e263bd289",
+    "keybinds.js": "9d5a0fd847823b619d0659c0c647f58659a1d61321d24edb1b63e916a520bf32",
+    "keyboard.js": "4b6097a4989a44b3156b705e47c4db98175f1f143d4da7d85c12f1f177812469",
+    "renderer.js": "dd63654620e86316e61dd6e10d0d8636a8a039949e38634b0784a69df83e6f70",
+    "preload.js": "48881fd8b5211d54387241fe4d5e2da4817fe1e3fdcb086a5b2ab1105093280d",
+    "webview-preload.js": "1a636fd2c4ea6998f506cce34b3a43a030790cc6f35ca8b1d5ce72bf075ae7c7",
+    "workspacePartitions.js": "85ed5bb694022fe9714a4f19732972187875a0427a9a0c996d8a1db036394b0d",
+    "modules/state.js": "7537d035cde47c5d4eabbf825723cfef2a8c472cbdf6460a58e0b868cdc7e8aa",
+    "modules/webview.js": "323660d49ff5954e85c85d222c4f900c51781368622ca1b20fe33fdf5d9e9305",
+    "modules/splitView.js": "e8babb9f8f0c097880104a1765d9492dd849e07518946e6d72e77a8ec8f446e2",
+    "modules/tabRestoration.js": "3f4cc34c79fd80b0a2bc1b1f68de98f26b765850b1b8a3182514f6069b26a374",
+    "modules/tabTransfer.js": "714e8a09900c75981710e4c518bdbe5051564bcc71c220240309e0533c30c05e",
+    "modules/keyboardSettings.js": "67bce296f7226e2f581811377f0116ab3379a4d4e024deda1eba51fff77953f3",
+    "modules/overlays/commandPalette.js": "06cb040d7b71723ae3730d2c947847fbc723b3e82b805065a1df0b8a5731ca26",
+    "modules/overlays/dashboard.js": "c6586e11b1720f087718f4887b9a02961a361d33cc962272789875c14e553d7d",
+    "modules/overlays/bookmarks.js": "be91134c2ef32ec34c21fda3a4610f02d61246faeaf7de97bc23a3c2cf12780c",
+    "modules/theme.js": "d5f72a6f040c200884b56244944d2631ca87039027f9ab3090776b0188637044",
+    "modules/clock.js": "67bd6280aa8650df1037527190f7e2caa680817d81003c9523d238c254764c2f",
+    "bookmarkStore.js": "45d788338e1390e373298b88bdd4d28a09985ab29a4b5e5ecd0b0b8d2ef676f1",
+    "siteZoom.js": "28ca24f9f68e3bdcc78f9caaf80ec0b9d123bb54bc143fa7902b9129bbcc08a1",
+    "frequentSites.js": "a76f73b80dc848af50c29fc9b7e4edd67b4510ee64983342e375ece0a44bd139",
+    "userContent.js": "d76dbaabb6b5cdbf3be47bb56227fb93e394ae778a0859d8e20af7e24706b4cc",
+    "extensions.js": "432a088dbb3272e51654cb2cafb9372e95c5321603250d08daa54e45482a1a92",
+    "extensionStore.js": "58b63236cca0708c666f8cdeb67bae6f0e614b634a9074a82c35306b12795404",
+    "extensionPackages.js": "33c5ab4e9232dcb239d67612a96eaa3678cfad7c518ecda40faf116d93e42f78",
+    "profileMigration.js": "1096d61bd74c1f12c43cc50e24c7a72d4353e993bbab0f9c1e97ad6dcc3e5a74",
+    "diagnostics.js": "e239605e95a46cc9e3fa9994d76ef32bf8f16f945f5a8db78c0a492222dcf370",
+    "desktopIntegration.js": "db3073f9ffbfebaae8f47c023b58108cadf37847318c8709a5e8aa454fac5f05",
+    "appImageUpdate.js": "a7059011ee26ba10cef31134cc8de3c4370e539e0436cc774bf156020af52dbe",
+    "launch.sh": "669fb80b24f46b17c679ca6b86bfafb656a6721b903da8979a3d3cd8bf2e5269",
+    "scripts/fly-install": "533c4e789076cced74d2abe6ddcc0877e3bc81ea9af1804d600501e19e5b386d"
+  },
+  "actions": [
+    {
+      "id": "toggle-menu-bar",
+      "label": "Open native settings menu",
+      "category": "System",
+      "shortcuts": [
+        "F1"
+      ],
+      "normal": [],
+      "milestone": "M2",
+      "acceptance": [
+        "A02",
+        "A03",
+        "A04"
+      ],
+      "source": [
+        {
+          "file": "main.js",
+          "line": 1427
+        },
+        {
+          "file": "keybinds.js",
+          "line": 8
+        },
+        {
+          "file": "renderer.js",
+          "line": 782
+        },
+        {
+          "file": "preload.js",
+          "line": 50
+        },
+        {
+          "file": "modules/overlays/commandPalette.js",
+          "line": 530
+        }
+      ],
+      "baselineTestAnchors": [],
+      "nativeStatus": "pending",
+      "nativeEvidence": []
+    },
+    {
+      "id": "spawn-tab",
+      "label": "New Blank Tab",
+      "category": "Navigation & Workspaces",
+      "shortcuts": [
+        "Ctrl+T"
+      ],
+      "normal": [
+        "T"
+      ],
+      "milestone": "M2",
+      "acceptance": [
+        "A02",
+        "A03",
+        "A04"
+      ],
+      "source": [
+        {
+          "file": "main.js",
+          "line": 337
+        },
+        {
+          "file": "keybinds.js",
+          "line": 9
+        },
+        {
+          "file": "renderer.js",
+          "line": 596
+        },
+        {
+          "file": "modules/webview.js",
+          "line": 425
+        },
+        {
+          "file": "modules/overlays/commandPalette.js",
+          "line": 22
+        },
+        {
+          "file": "extensions.js",
+          "line": 425
+        }
+      ],
+      "baselineTestAnchors": [
+        "tests/interface-scale-ui.test.js",
+        "tests/keyboard-ui.test.js",
+        "tests/keyboard.test.js",
+        "tests/legacy-keybinds-ui.test.js",
+        "tests/self-closing-tab-ui.test.js",
+        "tests/settings-tabs-ui.test.js",
+        "tests/sidebar-cursor-ui.test.js",
+        "tests/sidebar-pointer-focus-ui.test.js",
+        "tests/site-zoom-ui.test.js",
+        "tests/tab-close-button-ui.test.js",
+        "tests/tab-close-typing-ui.test.js",
+        "tests/tab-context-menu-ui.test.js",
+        "tests/tab-numbers-ui.test.js",
+        "tests/tab-suspension-ui.test.js",
+        "tests/website-theme-ui.test.js"
+      ],
+      "nativeStatus": "pending",
+      "nativeEvidence": []
+    },
+    {
+      "id": "toggle-address",
+      "label": "Toggle Floating Address Bar",
+      "category": "Navigation & Workspaces",
+      "shortcuts": [
+        "Ctrl+L"
+      ],
+      "normal": [
+        "O"
+      ],
+      "milestone": "M2",
+      "acceptance": [
+        "A02",
+        "A03",
+        "A04"
+      ],
+      "source": [
+        {
+          "file": "keybinds.js",
+          "line": 10
+        },
+        {
+          "file": "renderer.js",
+          "line": 600
+        },
+        {
+          "file": "modules/webview.js",
+          "line": 431
+        },
+        {
+          "file": "modules/overlays/commandPalette.js",
+          "line": 34
+        }
+      ],
+      "baselineTestAnchors": [
+        "tests/overlay-state.test.js",
+        "tests/workspace-partitions-ui.test.js"
+      ],
+      "nativeStatus": "pending",
+      "nativeEvidence": []
+    },
+    {
+      "id": "toggle-dashboard",
+      "label": "Toggle Workspace Dashboard",
+      "category": "Navigation & Workspaces",
+      "shortcuts": [
+        "Ctrl+Shift+W"
+      ],
+      "normal": [
+        "W"
+      ],
+      "milestone": "M2",
+      "acceptance": [
+        "A02",
+        "A03",
+        "A04"
+      ],
+      "source": [
+        {
+          "file": "keybinds.js",
+          "line": 11
+        },
+        {
+          "file": "renderer.js",
+          "line": 601
+        },
+        {
+          "file": "modules/webview.js",
+          "line": 462
+        },
+        {
+          "file": "modules/overlays/commandPalette.js",
+          "line": 46
+        }
+      ],
+      "baselineTestAnchors": [
+        "tests/workspace-partitions-ui.test.js"
+      ],
+      "nativeStatus": "pending",
+      "nativeEvidence": []
+    },
+    {
+      "id": "reload-active-tab",
+      "label": "Reload Active Tab",
+      "category": "Navigation & Workspaces",
+      "shortcuts": [
+        "Ctrl+R",
+        "F5"
+      ],
+      "normal": [
+        "R"
+      ],
+      "milestone": "M2",
+      "acceptance": [
+        "A02",
+        "A03",
+        "A04"
+      ],
+      "source": [
+        {
+          "file": "main.js",
+          "line": 1759
+        },
+        {
+          "file": "keybinds.js",
+          "line": 12
+        },
+        {
+          "file": "renderer.js",
+          "line": 602
+        },
+        {
+          "file": "modules/overlays/commandPalette.js",
+          "line": 139
+        }
+      ],
+      "baselineTestAnchors": [
+        "tests/keyboard.test.js"
+      ],
+      "nativeStatus": "pending",
+      "nativeEvidence": []
+    },
+    {
+      "id": "remove-tab",
+      "label": "Close Current Tab",
+      "category": "Navigation & Workspaces",
+      "shortcuts": [
+        "Ctrl+W"
+      ],
+      "normal": [
+        "X"
+      ],
+      "milestone": "M2",
+      "acceptance": [
+        "A02",
+        "A03",
+        "A04"
+      ],
+      "source": [
+        {
+          "file": "main.js",
+          "line": 1954
+        },
+        {
+          "file": "keybinds.js",
+          "line": 13
+        },
+        {
+          "file": "renderer.js",
+          "line": 612
+        },
+        {
+          "file": "modules/webview.js",
+          "line": 428
+        },
+        {
+          "file": "modules/overlays/commandPalette.js",
+          "line": 154
+        }
+      ],
+      "baselineTestAnchors": [
+        "tests/empty-search-ui.test.js",
+        "tests/frequent-sites-ui.test.js",
+        "tests/keyboard.test.js",
+        "tests/legacy-keybinds-ui.test.js",
+        "tests/oauth-popup-ui.test.js",
+        "tests/self-closing-tab-ui.test.js",
+        "tests/settings-tabs-ui.test.js",
+        "tests/sidebar-pointer-focus-ui.test.js",
+        "tests/tab-close-button-ui.test.js",
+        "tests/whats-new-ui.test.js"
+      ],
+      "nativeStatus": "pending",
+      "nativeEvidence": []
+    },
+    {
+      "id": "focus-sidebar",
+      "label": "Toggle Sidebar Focus",
+      "category": "Navigation & Workspaces",
+      "shortcuts": [
+        "Alt+S"
+      ],
+      "normal": [
+        "S"
+      ],
+      "milestone": "M2",
+      "acceptance": [
+        "A02",
+        "A03",
+        "A04"
+      ],
+      "source": [
+        {
+          "file": "keybinds.js",
+          "line": 14
+        },
+        {
+          "file": "renderer.js",
+          "line": 633
+        },
+        {
+          "file": "modules/webview.js",
+          "line": 467
+        },
+        {
+          "file": "modules/overlays/commandPalette.js",
+          "line": 196
+        }
+      ],
+      "baselineTestAnchors": [
+        "tests/keyboard.test.js",
+        "tests/overlay-state.test.js",
+        "tests/tab-numbers-ui.test.js"
+      ],
+      "nativeStatus": "pending",
+      "nativeEvidence": []
+    },
+    {
+      "id": "focus-nav-buttons",
+      "label": "Focus Navigation Buttons",
+      "category": "Navigation & Workspaces",
+      "shortcuts": [
+        "Alt+N"
+      ],
+      "normal": [],
+      "milestone": "M2",
+      "acceptance": [
+        "A02",
+        "A03",
+        "A04"
+      ],
+      "source": [
+        {
+          "file": "keybinds.js",
+          "line": 15
+        },
+        {
+          "file": "renderer.js",
+          "line": 637
+        },
+        {
+          "file": "modules/overlays/commandPalette.js",
+          "line": 208
+        }
+      ],
+      "baselineTestAnchors": [
+        "tests/keyboard.test.js"
+      ],
+      "nativeStatus": "pending",
+      "nativeEvidence": []
+    },
+    {
+      "id": "focus-webview",
+      "label": "Focus Active Webview",
+      "category": "Navigation & Workspaces",
+      "shortcuts": [
+        "Alt+W"
+      ],
+      "normal": [],
+      "milestone": "M2",
+      "acceptance": [
+        "A02",
+        "A03",
+        "A04"
+      ],
+      "source": [
+        {
+          "file": "keybinds.js",
+          "line": 16
+        },
+        {
+          "file": "renderer.js",
+          "line": 642
+        },
+        {
+          "file": "modules/overlays/commandPalette.js",
+          "line": 223
+        }
+      ],
+      "baselineTestAnchors": [
+        "tests/keyboard.test.js",
+        "tests/sidebar-cursor-ui.test.js",
+        "tests/tab-numbers-ui.test.js"
+      ],
+      "nativeStatus": "pending",
+      "nativeEvidence": []
+    },
+    {
+      "id": "trigger-hints",
+      "label": "Toggle Link Hints Overlay",
+      "category": "Web Interaction",
+      "shortcuts": [
+        "Alt+F"
+      ],
+      "normal": [
+        "F"
+      ],
+      "milestone": "M2",
+      "acceptance": [
+        "A02",
+        "A03",
+        "A04"
+      ],
+      "source": [
+        {
+          "file": "keybinds.js",
+          "line": 17
+        },
+        {
+          "file": "renderer.js",
+          "line": 643
+        },
+        {
+          "file": "modules/webview.js",
+          "line": 457
+        },
+        {
+          "file": "modules/overlays/commandPalette.js",
+          "line": 115
+        }
+      ],
+      "baselineTestAnchors": [
+        "tests/keyboard.test.js"
+      ],
+      "nativeStatus": "pending",
+      "nativeEvidence": []
+    },
+    {
+      "id": "toggle-help",
+      "label": "Toggle Preferences / Help",
+      "category": "System",
+      "shortcuts": [
+        "Ctrl+H"
+      ],
+      "normal": [],
+      "milestone": "M2",
+      "acceptance": [
+        "A02",
+        "A03",
+        "A04"
+      ],
+      "source": [
+        {
+          "file": "main.js",
+          "line": 1723
+        },
+        {
+          "file": "keybinds.js",
+          "line": 18
+        },
+        {
+          "file": "renderer.js",
+          "line": 645
+        }
+      ],
+      "baselineTestAnchors": [
+        "tests/interface-scale-ui.test.js",
+        "tests/keyboard.test.js",
+        "tests/settings-nav-ui.test.js",
+        "tests/settings-tabs-ui.test.js",
+        "tests/site-zoom-ui.test.js",
+        "tests/website-theme-ui.test.js"
+      ],
+      "nativeStatus": "pending",
+      "nativeEvidence": []
+    },
+    {
+      "id": "toggle-private-mode",
+      "label": "Toggle Private Browsing Mode",
+      "category": "System",
+      "shortcuts": [
+        "Ctrl+Shift+P"
+      ],
+      "normal": [],
+      "milestone": "M3",
+      "acceptance": [
+        "A17"
+      ],
+      "source": [
+        {
+          "file": "main.js",
+          "line": 1768
+        },
+        {
+          "file": "keybinds.js",
+          "line": 19
+        },
+        {
+          "file": "renderer.js",
+          "line": 664
+        },
+        {
+          "file": "modules/overlays/commandPalette.js",
+          "line": 475
+        }
+      ],
+      "baselineTestAnchors": [
+        "tests/keyboard.test.js"
+      ],
+      "nativeStatus": "pending",
+      "nativeEvidence": []
+    },
+    {
+      "id": "toggle-palette",
+      "label": "Toggle Command Palette",
+      "category": "Navigation & Workspaces",
+      "shortcuts": [
+        "Ctrl+P"
+      ],
+      "normal": [],
+      "milestone": "M2",
+      "acceptance": [
+        "A02",
+        "A03",
+        "A04"
+      ],
+      "source": [
+        {
+          "file": "keybinds.js",
+          "line": 20
+        },
+        {
+          "file": "renderer.js",
+          "line": 644
+        }
+      ],
+      "baselineTestAnchors": [
+        "tests/keyboard-ui.test.js",
+        "tests/settings-nav-ui.test.js",
+        "tests/whats-new-ui.test.js"
+      ],
+      "nativeStatus": "pending",
+      "nativeEvidence": []
+    },
+    {
+      "id": "toggle-find",
+      "label": "Find In Page",
+      "category": "Web Interaction",
+      "shortcuts": [
+        "Ctrl+F",
+        "F3"
+      ],
+      "normal": [
+        "/"
+      ],
+      "milestone": "M2",
+      "acceptance": [
+        "A02",
+        "A03",
+        "A04"
+      ],
+      "source": [
+        {
+          "file": "keybinds.js",
+          "line": 21
+        },
+        {
+          "file": "renderer.js",
+          "line": 611
+        },
+        {
+          "file": "modules/webview.js",
+          "line": 452
+        },
+        {
+          "file": "modules/overlays/commandPalette.js",
+          "line": 127
+        }
+      ],
+      "baselineTestAnchors": [
+        "tests/keyboard.test.js"
+      ],
+      "nativeStatus": "pending",
+      "nativeEvidence": []
+    },
+    {
+      "id": "toggle-devtools",
+      "label": "Toggle Active Webview DevTools",
+      "category": "Web Interaction",
+      "shortcuts": [
+        "Ctrl+Shift+I",
+        "F12"
+      ],
+      "normal": [],
+      "milestone": "M2",
+      "acceptance": [
+        "A02",
+        "A03",
+        "A04"
+      ],
+      "source": [
+        {
+          "file": "main.js",
+          "line": 1142
+        },
+        {
+          "file": "keybinds.js",
+          "line": 22
+        },
+        {
+          "file": "renderer.js",
+          "line": 607
+        },
+        {
+          "file": "modules/overlays/commandPalette.js",
+          "line": 379
+        }
+      ],
+      "baselineTestAnchors": [],
+      "nativeStatus": "pending",
+      "nativeEvidence": []
+    },
+    {
+      "id": "toggle-zen-mode",
+      "label": "Toggle Sidebar Expansion (Pin / Unpin)",
+      "category": "Navigation & Workspaces",
+      "shortcuts": [
+        "Ctrl+Shift+Z"
+      ],
+      "normal": [],
+      "milestone": "M2",
+      "acceptance": [
+        "A02",
+        "A03",
+        "A04"
+      ],
+      "source": [
+        {
+          "file": "keybinds.js",
+          "line": 23
+        },
+        {
+          "file": "renderer.js",
+          "line": 613
+        },
+        {
+          "file": "modules/overlays/commandPalette.js",
+          "line": 236
+        }
+      ],
+      "baselineTestAnchors": [
+        "tests/keyboard.test.js"
+      ],
+      "nativeStatus": "pending",
+      "nativeEvidence": []
+    },
+    {
+      "id": "add-bookmark",
+      "label": "Add Current Page to Bookmarks",
+      "category": "Web Interaction",
+      "shortcuts": [
+        "Ctrl+D"
+      ],
+      "normal": [],
+      "milestone": "M2",
+      "acceptance": [
+        "A14"
+      ],
+      "source": [
+        {
+          "file": "keybinds.js",
+          "line": 24
+        },
+        {
+          "file": "renderer.js",
+          "line": 616
+        },
+        {
+          "file": "modules/overlays/commandPalette.js",
+          "line": 355
+        }
+      ],
+      "baselineTestAnchors": [],
+      "nativeStatus": "pending",
+      "nativeEvidence": []
+    },
+    {
+      "id": "toggle-bookmarks",
+      "label": "Open Bookmarks",
+      "category": "Navigation & Workspaces",
+      "shortcuts": [
+        "Ctrl+Shift+B"
+      ],
+      "normal": [],
+      "milestone": "M2",
+      "acceptance": [
+        "A14"
+      ],
+      "source": [
+        {
+          "file": "keybinds.js",
+          "line": 25
+        },
+        {
+          "file": "renderer.js",
+          "line": 608
+        },
+        {
+          "file": "modules/overlays/commandPalette.js",
+          "line": 343
+        }
+      ],
+      "baselineTestAnchors": [
+        "tests/keyboard.test.js"
+      ],
+      "nativeStatus": "pending",
+      "nativeEvidence": []
+    },
+    {
+      "id": "toggle-global-media",
+      "label": "Play/Pause Media Playback Globally",
+      "category": "Web Interaction",
+      "shortcuts": [
+        "Ctrl+Shift+0",
+        "F10"
+      ],
+      "normal": [],
+      "milestone": "M3",
+      "acceptance": [
+        "A09"
+      ],
+      "source": [
+        {
+          "file": "keybinds.js",
+          "line": 26
+        },
+        {
+          "file": "renderer.js",
+          "line": 617
+        },
+        {
+          "file": "modules/overlays/commandPalette.js",
+          "line": 391
+        }
+      ],
+      "baselineTestAnchors": [],
+      "nativeStatus": "pending",
+      "nativeEvidence": []
+    },
+    {
+      "id": "toggle-tab-audio-mute",
+      "label": "Toggle Audio Mute on Active Tab",
+      "category": "Web Interaction",
+      "shortcuts": [
+        "Ctrl+Shift+M",
+        "F8"
+      ],
+      "normal": [
+        "M"
+      ],
+      "milestone": "M3",
+      "acceptance": [
+        "A09"
+      ],
+      "source": [
+        {
+          "file": "keybinds.js",
+          "line": 27
+        },
+        {
+          "file": "renderer.js",
+          "line": 618
+        },
+        {
+          "file": "modules/webview.js",
+          "line": 483
+        },
+        {
+          "file": "modules/overlays/commandPalette.js",
+          "line": 403
+        }
+      ],
+      "baselineTestAnchors": [
+        "tests/audio-controls.test.js",
+        "tests/collapsed-sidebar-ui.test.js",
+        "tests/sidebar-pointer-focus-ui.test.js"
+      ],
+      "nativeStatus": "pending",
+      "nativeEvidence": []
+    },
+    {
+      "id": "toggle-global-audio-mute",
+      "label": "Toggle Audio Mute Globally (All Tabs)",
+      "category": "Web Interaction",
+      "shortcuts": [],
+      "normal": [
+        "Shift+M"
+      ],
+      "milestone": "M3",
+      "acceptance": [
+        "A09"
+      ],
+      "source": [
+        {
+          "file": "keybinds.js",
+          "line": 59
+        },
+        {
+          "file": "renderer.js",
+          "line": 619
+        },
+        {
+          "file": "modules/webview.js",
+          "line": 486
+        },
+        {
+          "file": "modules/overlays/commandPalette.js",
+          "line": 415
+        }
+      ],
+      "baselineTestAnchors": [
+        "tests/audio-controls.test.js"
+      ],
+      "nativeStatus": "pending",
+      "nativeEvidence": []
+    },
+    {
+      "id": "toggle-history",
+      "label": "Toggle Actionable History",
+      "category": "Navigation & Workspaces",
+      "shortcuts": [
+        "Ctrl+Shift+H"
+      ],
+      "normal": [],
+      "milestone": "M2",
+      "acceptance": [
+        "A14"
+      ],
+      "source": [
+        {
+          "file": "keybinds.js",
+          "line": 28
+        },
+        {
+          "file": "renderer.js",
+          "line": 651
+        },
+        {
+          "file": "modules/overlays/commandPalette.js",
+          "line": 58
+        }
+      ],
+      "baselineTestAnchors": [],
+      "nativeStatus": "pending",
+      "nativeEvidence": []
+    },
+    {
+      "id": "toggle-downloads",
+      "label": "Toggle Downloads Shelf",
+      "category": "Navigation & Workspaces",
+      "shortcuts": [
+        "Ctrl+Shift+D"
+      ],
+      "normal": [],
+      "milestone": "M3",
+      "acceptance": [
+        "A16"
+      ],
+      "source": [
+        {
+          "file": "keybinds.js",
+          "line": 29
+        },
+        {
+          "file": "renderer.js",
+          "line": 609
+        },
+        {
+          "file": "modules/overlays/commandPalette.js",
+          "line": 367
+        }
+      ],
+      "baselineTestAnchors": [],
+      "nativeStatus": "pending",
+      "nativeEvidence": []
+    },
+    {
+      "id": "toggle-status-bar",
+      "label": "Toggle Status & Mode Bar",
+      "category": "Navigation & Workspaces",
+      "shortcuts": [
+        "Ctrl+/"
+      ],
+      "normal": [],
+      "milestone": "M2",
+      "acceptance": [
+        "A02",
+        "A03",
+        "A04"
+      ],
+      "source": [
+        {
+          "file": "keybinds.js",
+          "line": 30
+        },
+        {
+          "file": "renderer.js",
+          "line": 652
+        },
+        {
+          "file": "modules/overlays/commandPalette.js",
+          "line": 70
+        }
+      ],
+      "baselineTestAnchors": [],
+      "nativeStatus": "pending",
+      "nativeEvidence": []
+    },
+    {
+      "id": "toggle-clock",
+      "label": "Toggle Live Clock & Date Display",
+      "category": "Navigation & Workspaces",
+      "shortcuts": [],
+      "normal": [],
+      "milestone": "M2",
+      "acceptance": [
+        "A15"
+      ],
+      "source": [
+        {
+          "file": "keybinds.js",
+          "line": 63
+        },
+        {
+          "file": "renderer.js",
+          "line": 653
+        },
+        {
+          "file": "modules/overlays/commandPalette.js",
+          "line": 82
+        }
+      ],
+      "baselineTestAnchors": [],
+      "nativeStatus": "pending",
+      "nativeEvidence": []
+    },
+    {
+      "id": "cycle-clock-format",
+      "label": "Cycle Clock Format (Date & Time / Time / Seconds)",
+      "category": "Navigation & Workspaces",
+      "shortcuts": [],
+      "normal": [],
+      "milestone": "M2",
+      "acceptance": [
+        "A15"
+      ],
+      "source": [
+        {
+          "file": "keybinds.js",
+          "line": 64
+        },
+        {
+          "file": "renderer.js",
+          "line": 654
+        },
+        {
+          "file": "modules/overlays/commandPalette.js",
+          "line": 93
+        }
+      ],
+      "baselineTestAnchors": [],
+      "nativeStatus": "pending",
+      "nativeEvidence": []
+    },
+    {
+      "id": "toggle-split",
+      "label": "Toggle Dual-Split View (Side-by-Side)",
+      "category": "Navigation & Workspaces",
+      "shortcuts": [
+        "Ctrl+Shift+S"
+      ],
+      "normal": [],
+      "milestone": "M2",
+      "acceptance": [
+        "A07"
+      ],
+      "source": [
+        {
+          "file": "keybinds.js",
+          "line": 31
+        },
+        {
+          "file": "renderer.js",
+          "line": 621
+        },
+        {
+          "file": "modules/splitView.js",
+          "line": 45
+        },
+        {
+          "file": "modules/overlays/commandPalette.js",
+          "line": 248
+        }
+      ],
+      "baselineTestAnchors": [
+        "tests/settings-tabs-ui.test.js",
+        "tests/split-view-ui.test.js",
+        "tests/tab-suspension-ui.test.js"
+      ],
+      "nativeStatus": "pending",
+      "nativeEvidence": []
+    },
+    {
+      "id": "switch-split-focus",
+      "label": "Switch Split Pane Focus (Pane 1 / Pane 2)",
+      "category": "Navigation & Workspaces",
+      "shortcuts": [
+        "Ctrl+O"
+      ],
+      "normal": [],
+      "milestone": "M2",
+      "acceptance": [
+        "A07"
+      ],
+      "source": [
+        {
+          "file": "keybinds.js",
+          "line": 32
+        },
+        {
+          "file": "renderer.js",
+          "line": 622
+        },
+        {
+          "file": "modules/overlays/commandPalette.js",
+          "line": 282
+        }
+      ],
+      "baselineTestAnchors": [],
+      "nativeStatus": "pending",
+      "nativeEvidence": []
+    },
+    {
+      "id": "swap-split-panes",
+      "label": "Swap Split Panes (Left / Right)",
+      "category": "Navigation & Workspaces",
+      "shortcuts": [
+        "Ctrl+\\"
+      ],
+      "normal": [],
+      "milestone": "M2",
+      "acceptance": [
+        "A07"
+      ],
+      "source": [
+        {
+          "file": "keybinds.js",
+          "line": 33
+        },
+        {
+          "file": "renderer.js",
+          "line": 623
+        },
+        {
+          "file": "modules/overlays/commandPalette.js",
+          "line": 294
+        }
+      ],
+      "baselineTestAnchors": [],
+      "nativeStatus": "pending",
+      "nativeEvidence": []
+    },
+    {
+      "id": "toggle-reader-view",
+      "label": "Toggle Reader View on Active Tab",
+      "category": "Web Interaction",
+      "shortcuts": [
+        "F9"
+      ],
+      "normal": [
+        "E"
+      ],
+      "milestone": "M3",
+      "acceptance": [
+        "A16"
+      ],
+      "source": [
+        {
+          "file": "keybinds.js",
+          "line": 34
+        },
+        {
+          "file": "renderer.js",
+          "line": 659
+        },
+        {
+          "file": "webview-preload.js",
+          "line": 147
+        },
+        {
+          "file": "modules/webview.js",
+          "line": 480
+        },
+        {
+          "file": "modules/overlays/commandPalette.js",
+          "line": 507
+        }
+      ],
+      "baselineTestAnchors": [
+        "tests/keyboard.test.js"
+      ],
+      "nativeStatus": "pending",
+      "nativeEvidence": []
+    },
+    {
+      "id": "toggle-pin-tab",
+      "label": "Pin / Unpin Active Tab",
+      "category": "Navigation & Workspaces",
+      "shortcuts": [
+        "Ctrl+Shift+X",
+        "F4"
+      ],
+      "normal": [
+        "P"
+      ],
+      "milestone": "M2",
+      "acceptance": [
+        "A02",
+        "A03",
+        "A04"
+      ],
+      "source": [
+        {
+          "file": "keybinds.js",
+          "line": 35
+        },
+        {
+          "file": "renderer.js",
+          "line": 620
+        },
+        {
+          "file": "modules/webview.js",
+          "line": 489
+        },
+        {
+          "file": "modules/overlays/commandPalette.js",
+          "line": 166
+        }
+      ],
+      "baselineTestAnchors": [
+        "tests/pinned-tabs.test.js",
+        "tests/sidebar-pointer-focus-ui.test.js",
+        "tests/tab-suspension-ui.test.js"
+      ],
+      "nativeStatus": "pending",
+      "nativeEvidence": []
+    },
+    {
+      "id": "open-extension-actions",
+      "label": "Open Extension Actions (Popups, Commands, Options)",
+      "category": "Web Interaction",
+      "shortcuts": [],
+      "normal": [],
+      "milestone": "M3",
+      "acceptance": [
+        "A11",
+        "A12"
+      ],
+      "source": [
+        {
+          "file": "keybinds.js",
+          "line": 71
+        },
+        {
+          "file": "renderer.js",
+          "line": 749
+        }
+      ],
+      "baselineTestAnchors": [
+        "tests/extensions.test.js",
+        "tests/keyboard-ui.test.js",
+        "tests/keyboard.test.js"
+      ],
+      "nativeStatus": "pending",
+      "nativeEvidence": []
+    },
+    {
+      "id": "toggle-window-controls",
+      "label": "Toggle Window Controls (Minimise, Maximise, Close)",
+      "category": "Preferences & System",
+      "shortcuts": [],
+      "normal": [],
+      "milestone": "M2",
+      "acceptance": [
+        "A02",
+        "A03",
+        "A04"
+      ],
+      "source": [
+        {
+          "file": "main.js",
+          "line": 1697
+        },
+        {
+          "file": "keybinds.js",
+          "line": 75
+        },
+        {
+          "file": "renderer.js",
+          "line": 655
+        },
+        {
+          "file": "modules/overlays/commandPalette.js",
+          "line": 104
+        }
+      ],
+      "baselineTestAnchors": [
+        "tests/identity-ui.test.js"
+      ],
+      "nativeStatus": "pending",
+      "nativeEvidence": []
+    },
+    {
+      "id": "reset-zoom",
+      "label": "Reset Tab Zoom Level",
+      "category": "Tabs & Navigation",
+      "shortcuts": [
+        "Ctrl+0"
+      ],
+      "normal": [],
+      "milestone": "M2",
+      "acceptance": [
+        "A15"
+      ],
+      "source": [
+        {
+          "file": "keybinds.js",
+          "line": 83
+        },
+        {
+          "file": "modules/overlays/commandPalette.js",
+          "line": 178
+        },
+        {
+          "file": "siteZoom.js",
+          "line": 26
+        }
+      ],
+      "baselineTestAnchors": [
+        "tests/site-zoom-ui.test.js",
+        "tests/site-zoom.test.js"
+      ],
+      "nativeStatus": "pending",
+      "nativeEvidence": []
+    },
+    {
+      "id": "toggle-sidebar-pin",
+      "label": "Toggle Auto-Collapse Sidebar (Pin / Unpin)",
+      "category": "Tabs & Navigation",
+      "shortcuts": [],
+      "normal": [],
+      "milestone": "M2",
+      "acceptance": [
+        "A02",
+        "A03",
+        "A04"
+      ],
+      "source": [
+        {
+          "file": "keybinds.js",
+          "line": 87
+        },
+        {
+          "file": "renderer.js",
+          "line": 614
+        },
+        {
+          "file": "modules/overlays/commandPalette.js",
+          "line": 235
+        }
+      ],
+      "baselineTestAnchors": [
+        "tests/keyboard.test.js",
+        "tests/overlay-state-ui.test.js"
+      ],
+      "nativeStatus": "pending",
+      "nativeEvidence": []
+    },
+    {
+      "id": "toggle-split-horizontal",
+      "label": "Toggle Dual-Split View (Stacked)",
+      "category": "Split View",
+      "shortcuts": [],
+      "normal": [],
+      "milestone": "M2",
+      "acceptance": [
+        "A07"
+      ],
+      "source": [
+        {
+          "file": "keybinds.js",
+          "line": 91
+        },
+        {
+          "file": "modules/overlays/commandPalette.js",
+          "line": 260
+        }
+      ],
+      "baselineTestAnchors": [],
+      "nativeStatus": "pending",
+      "nativeEvidence": []
+    },
+    {
+      "id": "cycle-split-orientation",
+      "label": "Cycle Split View Orientation",
+      "category": "Split View",
+      "shortcuts": [],
+      "normal": [],
+      "milestone": "M2",
+      "acceptance": [
+        "A07"
+      ],
+      "source": [
+        {
+          "file": "keybinds.js",
+          "line": 95
+        },
+        {
+          "file": "modules/overlays/commandPalette.js",
+          "line": 271
+        }
+      ],
+      "baselineTestAnchors": [],
+      "nativeStatus": "pending",
+      "nativeEvidence": []
+    },
+    {
+      "id": "close-split-view",
+      "label": "Close Split View",
+      "category": "Split View",
+      "shortcuts": [],
+      "normal": [],
+      "milestone": "M2",
+      "acceptance": [
+        "A07"
+      ],
+      "source": [
+        {
+          "file": "keybinds.js",
+          "line": 99
+        },
+        {
+          "file": "modules/overlays/commandPalette.js",
+          "line": 306
+        }
+      ],
+      "baselineTestAnchors": [
+        "tests/tab-suspension-ui.test.js"
+      ],
+      "nativeStatus": "pending",
+      "nativeEvidence": []
+    },
+    {
+      "id": "hibernate-tabs",
+      "label": "Suspend Inactive Tabs",
+      "category": "Performance & Memory",
+      "shortcuts": [],
+      "normal": [],
+      "milestone": "M3",
+      "acceptance": [
+        "A10"
+      ],
+      "source": [
+        {
+          "file": "keybinds.js",
+          "line": 104
+        },
+        {
+          "file": "modules/overlays/commandPalette.js",
+          "line": 319
+        }
+      ],
+      "baselineTestAnchors": [],
+      "nativeStatus": "pending",
+      "nativeEvidence": []
+    },
+    {
+      "id": "wake-all-tabs",
+      "label": "Resume Tabs in Workspace",
+      "category": "Performance & Memory",
+      "shortcuts": [],
+      "normal": [],
+      "milestone": "M3",
+      "acceptance": [
+        "A10"
+      ],
+      "source": [
+        {
+          "file": "keybinds.js",
+          "line": 108
+        },
+        {
+          "file": "modules/overlays/commandPalette.js",
+          "line": 330
+        }
+      ],
+      "baselineTestAnchors": [],
+      "nativeStatus": "pending",
+      "nativeEvidence": []
+    },
+    {
+      "id": "open-scripts-dir",
+      "label": "Open User Scripts Directory",
+      "category": "User Scripts & Styles",
+      "shortcuts": [],
+      "normal": [],
+      "milestone": "M3",
+      "acceptance": [
+        "A13"
+      ],
+      "source": [
+        {
+          "file": "keybinds.js",
+          "line": 112
+        },
+        {
+          "file": "modules/overlays/commandPalette.js",
+          "line": 429
+        }
+      ],
+      "baselineTestAnchors": [],
+      "nativeStatus": "pending",
+      "nativeEvidence": []
+    },
+    {
+      "id": "open-styles-dir",
+      "label": "Open User Styles Directory",
+      "category": "User Scripts & Styles",
+      "shortcuts": [],
+      "normal": [],
+      "milestone": "M3",
+      "acceptance": [
+        "A13"
+      ],
+      "source": [
+        {
+          "file": "keybinds.js",
+          "line": 116
+        },
+        {
+          "file": "modules/overlays/commandPalette.js",
+          "line": 440
+        }
+      ],
+      "baselineTestAnchors": [],
+      "nativeStatus": "pending",
+      "nativeEvidence": []
+    },
+    {
+      "id": "open-script-storage-dir",
+      "label": "Open User Script Storage Directory",
+      "category": "User Scripts & Styles",
+      "shortcuts": [],
+      "normal": [],
+      "milestone": "M3",
+      "acceptance": [
+        "A13"
+      ],
+      "source": [
+        {
+          "file": "keybinds.js",
+          "line": 120
+        },
+        {
+          "file": "modules/overlays/commandPalette.js",
+          "line": 451
+        }
+      ],
+      "baselineTestAnchors": [],
+      "nativeStatus": "pending",
+      "nativeEvidence": []
+    },
+    {
+      "id": "reload-user-content",
+      "label": "Reload User Scripts and Styles",
+      "category": "User Scripts & Styles",
+      "shortcuts": [],
+      "normal": [],
+      "milestone": "M3",
+      "acceptance": [
+        "A13"
+      ],
+      "source": [
+        {
+          "file": "keybinds.js",
+          "line": 124
+        },
+        {
+          "file": "preload.js",
+          "line": 88
+        },
+        {
+          "file": "modules/overlays/commandPalette.js",
+          "line": 462
+        },
+        {
+          "file": "userContent.js",
+          "line": 938
+        }
+      ],
+      "baselineTestAnchors": [],
+      "nativeStatus": "pending",
+      "nativeEvidence": []
+    },
+    {
+      "id": "test-google-signin",
+      "label": "Test Clean Google Sign-In Flow",
+      "category": "Preferences & System",
+      "shortcuts": [],
+      "normal": [],
+      "milestone": "M3",
+      "acceptance": [
+        "A16"
+      ],
+      "source": [
+        {
+          "file": "keybinds.js",
+          "line": 128
+        },
+        {
+          "file": "modules/overlays/commandPalette.js",
+          "line": 491
+        }
+      ],
+      "baselineTestAnchors": [],
+      "nativeStatus": "pending",
+      "nativeEvidence": []
+    },
+    {
+      "id": "toggle-theme",
+      "label": "Toggle Colour Theme (Dark / Light)",
+      "category": "Preferences & System",
+      "shortcuts": [],
+      "normal": [],
+      "milestone": "M2",
+      "acceptance": [
+        "A15"
+      ],
+      "source": [
+        {
+          "file": "keybinds.js",
+          "line": 132
+        },
+        {
+          "file": "modules/overlays/commandPalette.js",
+          "line": 519
+        }
+      ],
+      "baselineTestAnchors": [
+        "tests/collapsed-sidebar-ui.test.js"
+      ],
+      "nativeStatus": "pending",
+      "nativeEvidence": []
+    },
+    {
+      "id": "check-for-updates",
+      "label": "Check for Updates",
+      "category": "Preferences & System",
+      "shortcuts": [],
+      "normal": [],
+      "milestone": "M2",
+      "acceptance": [
+        "A02",
+        "A03",
+        "A04"
+      ],
+      "source": [
+        {
+          "file": "main.js",
+          "line": 958
+        },
+        {
+          "file": "keybinds.js",
+          "line": 136
+        },
+        {
+          "file": "preload.js",
+          "line": 94
+        },
+        {
+          "file": "modules/overlays/commandPalette.js",
+          "line": 542
+        }
+      ],
+      "baselineTestAnchors": [],
+      "nativeStatus": "pending",
+      "nativeEvidence": []
+    },
+    {
+      "id": "open-diagnostics",
+      "label": "Open Diagnostics & Health Hub",
+      "category": "Preferences & System",
+      "shortcuts": [],
+      "normal": [],
+      "milestone": "M2",
+      "acceptance": [
+        "A02",
+        "A03",
+        "A04"
+      ],
+      "source": [
+        {
+          "file": "keybinds.js",
+          "line": 140
+        },
+        {
+          "file": "renderer.js",
+          "line": 656
+        },
+        {
+          "file": "modules/overlays/commandPalette.js",
+          "line": 571
+        }
+      ],
+      "baselineTestAnchors": [
+        "tests/overlay-state-ui.test.js"
+      ],
+      "nativeStatus": "pending",
+      "nativeEvidence": []
+    },
+    {
+      "id": "toggle-diagnostics-recording",
+      "label": "Toggle Diagnostics Recording (In-Memory)",
+      "category": "Preferences & System",
+      "shortcuts": [],
+      "normal": [],
+      "milestone": "M2",
+      "acceptance": [
+        "A02",
+        "A03",
+        "A04"
+      ],
+      "source": [
+        {
+          "file": "keybinds.js",
+          "line": 144
+        },
+        {
+          "file": "renderer.js",
+          "line": 658
+        },
+        {
+          "file": "modules/overlays/commandPalette.js",
+          "line": 583
+        }
+      ],
+      "baselineTestAnchors": [],
+      "nativeStatus": "pending",
+      "nativeEvidence": []
+    },
+    {
+      "id": "go-back",
+      "label": "Go back",
+      "category": "Navigation & Workspaces",
+      "shortcuts": [
+        "Alt+ArrowLeft"
+      ],
+      "normal": [
+        "Shift+H"
+      ],
+      "milestone": "M2",
+      "acceptance": [
+        "A02",
+        "A03",
+        "A04"
+      ],
+      "source": [
+        {
+          "file": "main.js",
+          "line": 2096
+        },
+        {
+          "file": "keybinds.js",
+          "line": 148
+        },
+        {
+          "file": "renderer.js",
+          "line": 660
+        }
+      ],
+      "baselineTestAnchors": [],
+      "nativeStatus": "pending",
+      "nativeEvidence": []
+    },
+    {
+      "id": "go-forward",
+      "label": "Go forward",
+      "category": "Navigation & Workspaces",
+      "shortcuts": [
+        "Alt+ArrowRight"
+      ],
+      "normal": [
+        "Shift+L"
+      ],
+      "milestone": "M2",
+      "acceptance": [
+        "A02",
+        "A03",
+        "A04"
+      ],
+      "source": [
+        {
+          "file": "main.js",
+          "line": 2097
+        },
+        {
+          "file": "keybinds.js",
+          "line": 152
+        },
+        {
+          "file": "renderer.js",
+          "line": 662
+        }
+      ],
+      "baselineTestAnchors": [],
+      "nativeStatus": "pending",
+      "nativeEvidence": []
+    },
+    {
+      "id": "next-tab",
+      "label": "Next tab",
+      "category": "Tabs",
+      "shortcuts": [
+        "Ctrl+Tab",
+        "Ctrl+PageDown"
+      ],
+      "normal": [],
+      "milestone": "M2",
+      "acceptance": [
+        "A02",
+        "A03",
+        "A04"
+      ],
+      "source": [
+        {
+          "file": "keybinds.js",
+          "line": 156
+        },
+        {
+          "file": "keyboard.js",
+          "line": 69
+        },
+        {
+          "file": "renderer.js",
+          "line": 706
+        },
+        {
+          "file": "webview-preload.js",
+          "line": 70
+        }
+      ],
+      "baselineTestAnchors": [
+        "tests/keyboard.test.js",
+        "tests/legacy-keybinds-ui.test.js",
+        "tests/tab-suspension-ui.test.js"
+      ],
+      "nativeStatus": "pending",
+      "nativeEvidence": []
+    },
+    {
+      "id": "previous-tab",
+      "label": "Previous tab",
+      "category": "Tabs",
+      "shortcuts": [
+        "Ctrl+Shift+Tab",
+        "Ctrl+PageUp"
+      ],
+      "normal": [],
+      "milestone": "M2",
+      "acceptance": [
+        "A02",
+        "A03",
+        "A04"
+      ],
+      "source": [
+        {
+          "file": "keybinds.js",
+          "line": 160
+        },
+        {
+          "file": "keyboard.js",
+          "line": 69
+        },
+        {
+          "file": "renderer.js",
+          "line": 707
+        },
+        {
+          "file": "webview-preload.js",
+          "line": 70
+        }
+      ],
+      "baselineTestAnchors": [
+        "tests/tab-suspension-ui.test.js"
+      ],
+      "nativeStatus": "pending",
+      "nativeEvidence": []
+    },
+    {
+      "id": "duplicate-tab",
+      "label": "Duplicate active tab",
+      "category": "Tabs",
+      "shortcuts": [
+        "Ctrl+Shift+K"
+      ],
+      "normal": [],
+      "milestone": "M2",
+      "acceptance": [
+        "A02",
+        "A03",
+        "A04"
+      ],
+      "source": [
+        {
+          "file": "keybinds.js",
+          "line": 164
+        },
+        {
+          "file": "renderer.js",
+          "line": 715
+        }
+      ],
+      "baselineTestAnchors": [],
+      "nativeStatus": "pending",
+      "nativeEvidence": []
+    },
+    {
+      "id": "next-workspace",
+      "label": "Next workspace",
+      "category": "Navigation & Workspaces",
+      "shortcuts": [
+        "Alt+PageDown"
+      ],
+      "normal": [],
+      "milestone": "M2",
+      "acceptance": [
+        "A02",
+        "A05",
+        "A06"
+      ],
+      "source": [
+        {
+          "file": "keybinds.js",
+          "line": 168
+        },
+        {
+          "file": "renderer.js",
+          "line": 720
+        }
+      ],
+      "baselineTestAnchors": [
+        "tests/workspace-partitions-ui.test.js"
+      ],
+      "nativeStatus": "pending",
+      "nativeEvidence": []
+    },
+    {
+      "id": "previous-workspace",
+      "label": "Previous workspace",
+      "category": "Navigation & Workspaces",
+      "shortcuts": [
+        "Alt+PageUp"
+      ],
+      "normal": [],
+      "milestone": "M2",
+      "acceptance": [
+        "A02",
+        "A05",
+        "A06"
+      ],
+      "source": [
+        {
+          "file": "keybinds.js",
+          "line": 172
+        },
+        {
+          "file": "renderer.js",
+          "line": 721
+        }
+      ],
+      "baselineTestAnchors": [
+        "tests/keyboard-ui.test.js",
+        "tests/workspace-partitions-ui.test.js"
+      ],
+      "nativeStatus": "pending",
+      "nativeEvidence": []
+    },
+    {
+      "id": "new-workspace",
+      "label": "Create workspace",
+      "category": "Navigation & Workspaces",
+      "shortcuts": [],
+      "normal": [],
+      "milestone": "M2",
+      "acceptance": [
+        "A02",
+        "A05",
+        "A06"
+      ],
+      "source": [
+        {
+          "file": "keybinds.js",
+          "line": 176
+        },
+        {
+          "file": "renderer.js",
+          "line": 731
+        }
+      ],
+      "baselineTestAnchors": [
+        "tests/keyboard-ui.test.js",
+        "tests/overlay-state-ui.test.js",
+        "tests/workspace-partitions-ui.test.js"
+      ],
+      "nativeStatus": "pending",
+      "nativeEvidence": []
+    },
+    {
+      "id": "force-reload-tab",
+      "label": "Reload without cache",
+      "category": "Web Interaction",
+      "shortcuts": [
+        "Ctrl+Shift+R"
+      ],
+      "normal": [
+        "Shift+R"
+      ],
+      "milestone": "M2",
+      "acceptance": [
+        "A02",
+        "A03",
+        "A04"
+      ],
+      "source": [
+        {
+          "file": "keybinds.js",
+          "line": 180
+        },
+        {
+          "file": "renderer.js",
+          "line": 686
+        },
+        {
+          "file": "modules/webview.js",
+          "line": 441
+        }
+      ],
+      "baselineTestAnchors": [],
+      "nativeStatus": "pending",
+      "nativeEvidence": []
+    },
+    {
+      "id": "stop-loading",
+      "label": "Stop loading",
+      "category": "Web Interaction",
+      "shortcuts": [],
+      "normal": [],
+      "milestone": "M2",
+      "acceptance": [
+        "A02",
+        "A03",
+        "A04"
+      ],
+      "source": [
+        {
+          "file": "keybinds.js",
+          "line": 184
+        },
+        {
+          "file": "renderer.js",
+          "line": 687
+        },
+        {
+          "file": "modules/webview.js",
+          "line": 320
+        }
+      ],
+      "baselineTestAnchors": [],
+      "nativeStatus": "pending",
+      "nativeEvidence": []
+    },
+    {
+      "id": "zoom-in",
+      "label": "Zoom in",
+      "category": "Web Interaction",
+      "shortcuts": [
+        "Ctrl+Plus",
+        "Ctrl+="
+      ],
+      "normal": [],
+      "milestone": "M2",
+      "acceptance": [
+        "A15"
+      ],
+      "source": [
+        {
+          "file": "keybinds.js",
+          "line": 188
+        },
+        {
+          "file": "renderer.js",
+          "line": 688
+        },
+        {
+          "file": "siteZoom.js",
+          "line": 26
+        }
+      ],
+      "baselineTestAnchors": [
+        "tests/site-zoom-ui.test.js",
+        "tests/site-zoom.test.js"
+      ],
+      "nativeStatus": "pending",
+      "nativeEvidence": []
+    },
+    {
+      "id": "zoom-out",
+      "label": "Zoom out",
+      "category": "Web Interaction",
+      "shortcuts": [
+        "Ctrl+-"
+      ],
+      "normal": [],
+      "milestone": "M2",
+      "acceptance": [
+        "A15"
+      ],
+      "source": [
+        {
+          "file": "keybinds.js",
+          "line": 192
+        },
+        {
+          "file": "renderer.js",
+          "line": 689
+        },
+        {
+          "file": "siteZoom.js",
+          "line": 26
+        }
+      ],
+      "baselineTestAnchors": [
+        "tests/site-zoom-ui.test.js",
+        "tests/site-zoom.test.js"
+      ],
+      "nativeStatus": "pending",
+      "nativeEvidence": []
+    },
+    {
+      "id": "yank-url",
+      "label": "Copy page URL",
+      "category": "Web Interaction",
+      "shortcuts": [],
+      "normal": [
+        "Y"
+      ],
+      "milestone": "M2",
+      "acceptance": [
+        "A02",
+        "A03",
+        "A04"
+      ],
+      "source": [
+        {
+          "file": "keybinds.js",
+          "line": 196
+        },
+        {
+          "file": "renderer.js",
+          "line": 694
+        },
+        {
+          "file": "modules/webview.js",
+          "line": 470
+        }
+      ],
+      "baselineTestAnchors": [],
+      "nativeStatus": "pending",
+      "nativeEvidence": []
+    },
+    {
+      "id": "toggle-passthrough",
+      "label": "Toggle passthrough mode",
+      "category": "Modes",
+      "shortcuts": [
+        "Shift+Escape"
+      ],
+      "normal": [],
+      "milestone": "M2",
+      "acceptance": [
+        "A02",
+        "A03",
+        "A04"
+      ],
+      "source": [
+        {
+          "file": "main.js",
+          "line": 2201
+        },
+        {
+          "file": "keybinds.js",
+          "line": 200
+        },
+        {
+          "file": "keyboard.js",
+          "line": 107
+        },
+        {
+          "file": "renderer.js",
+          "line": 734
+        },
+        {
+          "file": "webview-preload.js",
+          "line": 108
+        }
+      ],
+      "baselineTestAnchors": [],
+      "nativeStatus": "pending",
+      "nativeEvidence": []
+    },
+    {
+      "id": "enter-insert",
+      "label": "Enter insert mode",
+      "category": "Modes",
+      "shortcuts": [],
+      "normal": [
+        "I"
+      ],
+      "milestone": "M2",
+      "acceptance": [
+        "A02",
+        "A03",
+        "A04"
+      ],
+      "source": [
+        {
+          "file": "keybinds.js",
+          "line": 204
+        },
+        {
+          "file": "renderer.js",
+          "line": 736
+        },
+        {
+          "file": "webview-preload.js",
+          "line": 394
+        }
+      ],
+      "baselineTestAnchors": [],
+      "nativeStatus": "pending",
+      "nativeEvidence": []
+    },
+    {
+      "id": "scroll-down",
+      "label": "Scroll down",
+      "category": "Page scrolling",
+      "shortcuts": [],
+      "normal": [
+        "J"
+      ],
+      "milestone": "M2",
+      "acceptance": [
+        "A02",
+        "A03",
+        "A04"
+      ],
+      "source": [
+        {
+          "file": "keybinds.js",
+          "line": 208
+        },
+        {
+          "file": "renderer.js",
+          "line": 735
+        },
+        {
+          "file": "webview-preload.js",
+          "line": 388
+        }
+      ],
+      "baselineTestAnchors": [
+        "tests/keyboard-ui.test.js",
+        "tests/keyboard.test.js"
+      ],
+      "nativeStatus": "pending",
+      "nativeEvidence": []
+    },
+    {
+      "id": "scroll-up",
+      "label": "Scroll up",
+      "category": "Page scrolling",
+      "shortcuts": [],
+      "normal": [
+        "K"
+      ],
+      "milestone": "M2",
+      "acceptance": [
+        "A02",
+        "A03",
+        "A04"
+      ],
+      "source": [
+        {
+          "file": "keybinds.js",
+          "line": 212
+        },
+        {
+          "file": "renderer.js",
+          "line": 735
+        },
+        {
+          "file": "webview-preload.js",
+          "line": 388
+        }
+      ],
+      "baselineTestAnchors": [
+        "tests/keyboard.test.js"
+      ],
+      "nativeStatus": "pending",
+      "nativeEvidence": []
+    },
+    {
+      "id": "scroll-left",
+      "label": "Scroll left",
+      "category": "Page scrolling",
+      "shortcuts": [],
+      "normal": [
+        "H"
+      ],
+      "milestone": "M2",
+      "acceptance": [
+        "A02",
+        "A03",
+        "A04"
+      ],
+      "source": [
+        {
+          "file": "keybinds.js",
+          "line": 216
+        },
+        {
+          "file": "renderer.js",
+          "line": 735
+        },
+        {
+          "file": "webview-preload.js",
+          "line": 389
+        }
+      ],
+      "baselineTestAnchors": [],
+      "nativeStatus": "pending",
+      "nativeEvidence": []
+    },
+    {
+      "id": "scroll-right",
+      "label": "Scroll right",
+      "category": "Page scrolling",
+      "shortcuts": [],
+      "normal": [
+        "L"
+      ],
+      "milestone": "M2",
+      "acceptance": [
+        "A02",
+        "A03",
+        "A04"
+      ],
+      "source": [
+        {
+          "file": "keybinds.js",
+          "line": 220
+        },
+        {
+          "file": "renderer.js",
+          "line": 735
+        },
+        {
+          "file": "webview-preload.js",
+          "line": 389
+        }
+      ],
+      "baselineTestAnchors": [],
+      "nativeStatus": "pending",
+      "nativeEvidence": []
+    },
+    {
+      "id": "half-page-down",
+      "label": "Scroll half a page down",
+      "category": "Page scrolling",
+      "shortcuts": [],
+      "normal": [
+        "D"
+      ],
+      "milestone": "M2",
+      "acceptance": [
+        "A02",
+        "A03",
+        "A04"
+      ],
+      "source": [
+        {
+          "file": "keybinds.js",
+          "line": 224
+        },
+        {
+          "file": "renderer.js",
+          "line": 736
+        },
+        {
+          "file": "webview-preload.js",
+          "line": 390
+        }
+      ],
+      "baselineTestAnchors": [],
+      "nativeStatus": "pending",
+      "nativeEvidence": []
+    },
+    {
+      "id": "half-page-up",
+      "label": "Scroll half a page up",
+      "category": "Page scrolling",
+      "shortcuts": [],
+      "normal": [
+        "U"
+      ],
+      "milestone": "M2",
+      "acceptance": [
+        "A02",
+        "A03",
+        "A04"
+      ],
+      "source": [
+        {
+          "file": "keybinds.js",
+          "line": 228
+        },
+        {
+          "file": "renderer.js",
+          "line": 736
+        },
+        {
+          "file": "webview-preload.js",
+          "line": 391
+        }
+      ],
+      "baselineTestAnchors": [],
+      "nativeStatus": "pending",
+      "nativeEvidence": []
+    },
+    {
+      "id": "page-top",
+      "label": "Go to page top",
+      "category": "Page scrolling",
+      "shortcuts": [],
+      "normal": [
+        "G G"
+      ],
+      "milestone": "M2",
+      "acceptance": [
+        "A02",
+        "A03",
+        "A04"
+      ],
+      "source": [
+        {
+          "file": "keybinds.js",
+          "line": 232
+        },
+        {
+          "file": "renderer.js",
+          "line": 736
+        },
+        {
+          "file": "webview-preload.js",
+          "line": 392
+        }
+      ],
+      "baselineTestAnchors": [
+        "tests/keyboard-ui.test.js",
+        "tests/keyboard.test.js"
+      ],
+      "nativeStatus": "pending",
+      "nativeEvidence": []
+    },
+    {
+      "id": "page-bottom",
+      "label": "Go to page bottom",
+      "category": "Page scrolling",
+      "shortcuts": [],
+      "normal": [
+        "Shift+G"
+      ],
+      "milestone": "M2",
+      "acceptance": [
+        "A02",
+        "A03",
+        "A04"
+      ],
+      "source": [
+        {
+          "file": "keybinds.js",
+          "line": 236
+        },
+        {
+          "file": "renderer.js",
+          "line": 736
+        },
+        {
+          "file": "webview-preload.js",
+          "line": 393
+        }
+      ],
+      "baselineTestAnchors": [],
+      "nativeStatus": "pending",
+      "nativeEvidence": []
+    },
+    {
+      "id": "show-whats-new",
+      "label": "Show What's New",
+      "category": "System",
+      "shortcuts": [],
+      "normal": [],
+      "milestone": "M2",
+      "acceptance": [
+        "A02",
+        "A03",
+        "A04"
+      ],
+      "source": [
+        {
+          "file": "keybinds.js",
+          "line": 243
+        },
+        {
+          "file": "modules/overlays/commandPalette.js",
+          "line": 553
+        }
+      ],
+      "baselineTestAnchors": [],
+      "nativeStatus": "pending",
+      "nativeEvidence": []
+    },
+    {
+      "id": "toggle-native-menu-visibility",
+      "label": "Toggle native menu bar visibility",
+      "category": "System",
+      "shortcuts": [],
+      "normal": [],
+      "milestone": "M2",
+      "acceptance": [
+        "A02",
+        "A03",
+        "A04"
+      ],
+      "source": [
+        {
+          "file": "main.js",
+          "line": 1749
+        },
+        {
+          "file": "keybinds.js",
+          "line": 244
+        },
+        {
+          "file": "renderer.js",
+          "line": 782
+        }
+      ],
+      "baselineTestAnchors": [],
+      "nativeStatus": "pending",
+      "nativeEvidence": []
+    },
+    {
+      "id": "move-tab-to-workspace",
+      "label": "Move active tab to another workspace",
+      "category": "Tabs",
+      "shortcuts": [],
+      "normal": [],
+      "milestone": "M2",
+      "acceptance": [
+        "A02",
+        "A05",
+        "A06"
+      ],
+      "source": [
+        {
+          "file": "keybinds.js",
+          "line": 245
+        },
+        {
+          "file": "renderer.js",
+          "line": 670
+        }
+      ],
+      "baselineTestAnchors": [
+        "tests/keyboard-ui.test.js"
+      ],
+      "nativeStatus": "pending",
+      "nativeEvidence": []
+    },
+    {
+      "id": "open-keyboard-settings",
+      "label": "Customise keyboard controls",
+      "category": "System",
+      "shortcuts": [
+        "Ctrl+,"
+      ],
+      "normal": [],
+      "milestone": "M2",
+      "acceptance": [
+        "A02",
+        "A03",
+        "A04"
+      ],
+      "source": [
+        {
+          "file": "keybinds.js",
+          "line": 246
+        },
+        {
+          "file": "renderer.js",
+          "line": 646
+        }
+      ],
+      "baselineTestAnchors": [
+        "tests/legacy-keybinds-ui.test.js",
+        "tests/tab-numbers-ui.test.js"
+      ],
+      "nativeStatus": "pending",
+      "nativeEvidence": []
+    },
+    {
+      "id": "reopen-closed-tab",
+      "label": "Reopen last closed tab",
+      "category": "Tabs",
+      "shortcuts": [
+        "Ctrl+Shift+T"
+      ],
+      "normal": [],
+      "milestone": "M2",
+      "acceptance": [
+        "A02",
+        "A03",
+        "A04"
+      ],
+      "source": [
+        {
+          "file": "keybinds.js",
+          "line": 247
+        },
+        {
+          "file": "renderer.js",
+          "line": 671
+        }
+      ],
+      "baselineTestAnchors": [],
+      "nativeStatus": "pending",
+      "nativeEvidence": []
+    },
+    {
+      "id": "move-tab-left",
+      "label": "Move tab left",
+      "category": "Tabs",
+      "shortcuts": [
+        "Ctrl+Shift+PageUp"
+      ],
+      "normal": [],
+      "milestone": "M2",
+      "acceptance": [
+        "A02",
+        "A03",
+        "A04"
+      ],
+      "source": [
+        {
+          "file": "keybinds.js",
+          "line": 248
+        },
+        {
+          "file": "renderer.js",
+          "line": 672
+        }
+      ],
+      "baselineTestAnchors": [],
+      "nativeStatus": "pending",
+      "nativeEvidence": []
+    },
+    {
+      "id": "move-tab-right",
+      "label": "Move tab right",
+      "category": "Tabs",
+      "shortcuts": [
+        "Ctrl+Shift+PageDown"
+      ],
+      "normal": [],
+      "milestone": "M2",
+      "acceptance": [
+        "A02",
+        "A03",
+        "A04"
+      ],
+      "source": [
+        {
+          "file": "keybinds.js",
+          "line": 249
+        },
+        {
+          "file": "renderer.js",
+          "line": 672
+        }
+      ],
+      "baselineTestAnchors": [],
+      "nativeStatus": "pending",
+      "nativeEvidence": []
+    },
+    {
+      "id": "toggle-fullscreen",
+      "label": "Toggle full screen",
+      "category": "System",
+      "shortcuts": [
+        "F11"
+      ],
+      "normal": [],
+      "milestone": "M2",
+      "acceptance": [
+        "A02",
+        "A03",
+        "A04"
+      ],
+      "source": [
+        {
+          "file": "main.js",
+          "line": 1744
+        },
+        {
+          "file": "keybinds.js",
+          "line": 250
+        },
+        {
+          "file": "renderer.js",
+          "line": 782
+        }
+      ],
+      "baselineTestAnchors": [
+        "tests/keyboard.test.js"
+      ],
+      "nativeStatus": "pending",
+      "nativeEvidence": []
+    },
+    {
+      "id": "print-page",
+      "label": "Print active page",
+      "category": "Web Interaction",
+      "shortcuts": [],
+      "normal": [],
+      "milestone": "M2",
+      "acceptance": [
+        "A02",
+        "A03",
+        "A04"
+      ],
+      "source": [
+        {
+          "file": "keybinds.js",
+          "line": 251
+        },
+        {
+          "file": "renderer.js",
+          "line": 684
+        }
+      ],
+      "baselineTestAnchors": [],
+      "nativeStatus": "pending",
+      "nativeEvidence": []
+    },
+    {
+      "id": "toggle-notifications",
+      "label": "Toggle web notifications",
+      "category": "System",
+      "shortcuts": [],
+      "normal": [],
+      "milestone": "M2",
+      "acceptance": [
+        "A02",
+        "A03",
+        "A04"
+      ],
+      "source": [
+        {
+          "file": "keybinds.js",
+          "line": 252
+        },
+        {
+          "file": "renderer.js",
+          "line": 685
+        }
+      ],
+      "baselineTestAnchors": [],
+      "nativeStatus": "pending",
+      "nativeEvidence": []
+    }
+  ],
+  "paletteEntries": [
+    {
+      "id": "spawn-tab",
+      "actionId": "spawn-tab",
+      "title": "New Blank Tab"
+    },
+    {
+      "id": "toggle-address",
+      "actionId": "toggle-address",
+      "title": "Toggle Floating Address Bar"
+    },
+    {
+      "id": "toggle-dashboard",
+      "actionId": "toggle-dashboard",
+      "title": "Toggle Workspace Dashboard"
+    },
+    {
+      "id": "toggle-history",
+      "actionId": "toggle-history",
+      "title": "Toggle Actionable History"
+    },
+    {
+      "id": "toggle-status-bar",
+      "actionId": "toggle-status-bar",
+      "title": "Toggle Status & Mode Bar"
+    },
+    {
+      "id": "toggle-clock",
+      "actionId": "toggle-clock",
+      "title": "Toggle Clock & Date Display"
+    },
+    {
+      "id": "cycle-clock-format",
+      "actionId": "cycle-clock-format",
+      "title": "Cycle Clock Format (Date & Time / Time / Seconds)"
+    },
+    {
+      "id": "toggle-window-controls",
+      "actionId": "toggle-window-controls",
+      "title": "Toggle Window Controls (Minimise, Maximise, Close)"
+    },
+    {
+      "id": "trigger-hints",
+      "actionId": "trigger-hints",
+      "title": "Toggle Link Hints Overlay"
+    },
+    {
+      "id": "toggle-find",
+      "actionId": "toggle-find",
+      "title": "Find In Page"
+    },
+    {
+      "id": "reload-active-tab",
+      "actionId": "reload-active-tab",
+      "title": "Reload Active Tab"
+    },
+    {
+      "id": "remove-tab",
+      "actionId": "remove-tab",
+      "title": "Close Current Tab"
+    },
+    {
+      "id": "toggle-pin-tab",
+      "actionId": "toggle-pin-tab",
+      "title": "Pin / Unpin Active Tab"
+    },
+    {
+      "id": "reset-zoom",
+      "actionId": "reset-zoom",
+      "title": "Reset Site Zoom Level"
+    },
+    {
+      "id": "focus-sidebar",
+      "actionId": "focus-sidebar",
+      "title": "Toggle Sidebar Focus"
+    },
+    {
+      "id": "focus-nav-buttons",
+      "actionId": "focus-nav-buttons",
+      "title": "Focus Navigation Buttons"
+    },
+    {
+      "id": "focus-webview",
+      "actionId": "focus-webview",
+      "title": "Focus Active Webview"
+    },
+    {
+      "id": "toggle-sidebar-pin",
+      "actionId": "toggle-zen-mode",
+      "title": "Toggle Sidebar Expansion (Pin / Unpin)"
+    },
+    {
+      "id": "toggle-split-vertical",
+      "actionId": "toggle-split",
+      "title": "Toggle Dual-Split View (Side-by-Side)"
+    },
+    {
+      "id": "toggle-split-horizontal",
+      "actionId": "toggle-split-horizontal",
+      "title": "Toggle Dual-Split View (Stacked)"
+    },
+    {
+      "id": "cycle-split-orientation",
+      "actionId": "cycle-split-orientation",
+      "title": "Cycle Split View Orientation"
+    },
+    {
+      "id": "switch-split-focus",
+      "actionId": "switch-split-focus",
+      "title": "Switch Split Pane Focus"
+    },
+    {
+      "id": "swap-split-panes",
+      "actionId": "swap-split-panes",
+      "title": "Swap Split Panes"
+    },
+    {
+      "id": "close-split-view",
+      "actionId": "close-split-view",
+      "title": "Close Split View"
+    },
+    {
+      "id": "hibernate-tabs",
+      "actionId": "hibernate-tabs",
+      "title": "Suspend Inactive Tabs"
+    },
+    {
+      "id": "wake-all-tabs",
+      "actionId": "wake-all-tabs",
+      "title": "Resume Tabs in Workspace"
+    },
+    {
+      "id": "toggle-bookmarks",
+      "actionId": "toggle-bookmarks",
+      "title": "Bookmarks Manager"
+    },
+    {
+      "id": "add-bookmark",
+      "actionId": "add-bookmark",
+      "title": "Bookmark Current Page"
+    },
+    {
+      "id": "toggle-downloads",
+      "actionId": "toggle-downloads",
+      "title": "Toggle Downloads Shelf"
+    },
+    {
+      "id": "toggle-devtools",
+      "actionId": "toggle-devtools",
+      "title": "Toggle Active Webview DevTools"
+    },
+    {
+      "id": "toggle-global-media",
+      "actionId": "toggle-global-media",
+      "title": "Toggle Global Media Playback"
+    },
+    {
+      "id": "toggle-tab-audio-mute",
+      "actionId": "toggle-tab-audio-mute",
+      "title": "Toggle Tab Audio Mute"
+    },
+    {
+      "id": "toggle-global-audio-mute",
+      "actionId": "toggle-global-audio-mute",
+      "title": "Toggle Global Audio Mute"
+    },
+    {
+      "id": "open-scripts-dir",
+      "actionId": "open-scripts-dir",
+      "title": "Open User Scripts Directory"
+    },
+    {
+      "id": "open-styles-dir",
+      "actionId": "open-styles-dir",
+      "title": "Open User Styles Directory"
+    },
+    {
+      "id": "open-script-storage-dir",
+      "actionId": "open-script-storage-dir",
+      "title": "Open User Script Storage Directory"
+    },
+    {
+      "id": "reload-user-content",
+      "actionId": "reload-user-content",
+      "title": "Reload User Scripts and Styles"
+    },
+    {
+      "id": "toggle-private-mode",
+      "actionId": "toggle-private-mode",
+      "title": "Toggle Private Browsing Mode"
+    },
+    {
+      "id": "test-google-signin",
+      "actionId": "test-google-signin",
+      "title": "Test Clean Google Sign-In Flow"
+    },
+    {
+      "id": "toggle-reader-view",
+      "actionId": "toggle-reader-view",
+      "title": "Toggle Reader View on Active Tab"
+    },
+    {
+      "id": "toggle-theme",
+      "actionId": "toggle-theme",
+      "title": "Toggle Colour Theme (Dark / Light)"
+    },
+    {
+      "id": "toggle-menu-bar",
+      "actionId": "toggle-menu-bar",
+      "title": "Open Native Settings Menu"
+    },
+    {
+      "id": "check-for-updates",
+      "actionId": "check-for-updates",
+      "title": "Check for Updates"
+    },
+    {
+      "id": "show-whats-new",
+      "actionId": "show-whats-new",
+      "title": "Show What's New"
+    },
+    {
+      "id": "open-diagnostics",
+      "actionId": "open-diagnostics",
+      "title": "Open Diagnostics & Health Hub"
+    },
+    {
+      "id": "toggle-diagnostics-recording",
+      "actionId": "toggle-diagnostics-recording",
+      "title": "Toggle Diagnostics Recording (In-Memory)"
+    }
+  ],
+  "tabSelectionModifier": "Alt",
+  "features": [
+    {
+      "id": "Native launch, URL routing, single instance",
+      "milestone": "M1/M5",
+      "acceptance": [
+        "A01",
+        "A21"
+      ],
+      "source": [
+        "main.js",
+        "launch.sh",
+        "desktopIntegration.js"
+      ],
+      "baselineTestAnchors": [
+        "tests/launcher.test.js",
+        "tests/desktop-integration.test.js"
+      ],
+      "nativeStatus": "pending",
+      "nativeEvidence": []
+    },
+    {
+      "id": "Tab creation, ordering, pins, close/reopen, numbering and context menus",
+      "milestone": "M2",
+      "acceptance": [
+        "A02"
+      ],
+      "source": [
+        "modules/webview.js",
+        "modules/tabActions.js",
+        "tabNumbers.js",
+        "tabContextMenu.js"
+      ],
+      "baselineTestAnchors": [
+        "tests/pinned-tabs.test.js",
+        "tests/tab-context-menu.test.js",
+        "tests/tab-numbers.test.js",
+        "tests/tab-restoration-ui.test.js"
+      ],
+      "nativeStatus": "pending",
+      "nativeEvidence": []
+    },
+    {
+      "id": "Workspace create, rename, delete and stable identity",
+      "milestone": "M1/M2",
+      "acceptance": [
+        "A05"
+      ],
+      "source": [
+        "workspacePartitions.js",
+        "modules/overlays/dashboard.js"
+      ],
+      "baselineTestAnchors": [
+        "tests/workspace-partitions.test.js",
+        "tests/workspace-partitions-ui.test.js"
+      ],
+      "nativeStatus": "pending",
+      "nativeEvidence": []
+    },
+    {
+      "id": "Cross-workspace tab moves and in-flight cancellation",
+      "milestone": "M1/M2",
+      "acceptance": [
+        "A06"
+      ],
+      "source": [
+        "modules/tabTransfer.js",
+        "modules/tabActions.js"
+      ],
+      "baselineTestAnchors": [
+        "tests/workspace-partitions-ui.test.js"
+      ],
+      "nativeStatus": "pending",
+      "nativeEvidence": []
+    },
+    {
+      "id": "Split orientations, pane focus, swap and close",
+      "milestone": "M1/M2",
+      "acceptance": [
+        "A07"
+      ],
+      "source": [
+        "modules/splitView.js"
+      ],
+      "baselineTestAnchors": [
+        "tests/split-view-ui.test.js"
+      ],
+      "nativeStatus": "pending",
+      "nativeEvidence": []
+    },
+    {
+      "id": "NORMAL/INSERT/PASSTHROUGH, hints, IME/AltGr and recorder",
+      "milestone": "M2",
+      "acceptance": [
+        "A03"
+      ],
+      "source": [
+        "keybinds.js",
+        "keyboard.js",
+        "hinter.js",
+        "modules/keyboardSettings.js"
+      ],
+      "baselineTestAnchors": [
+        "tests/keyboard.test.js",
+        "tests/keyboard-ui.test.js",
+        "tests/legacy-keybinds-ui.test.js"
+      ],
+      "nativeStatus": "pending",
+      "nativeEvidence": []
+    },
+    {
+      "id": "Sidebar expansion, pointer/focus, resize, high DPI and window controls",
+      "milestone": "M2",
+      "acceptance": [
+        "A04"
+      ],
+      "source": [
+        "renderer.js",
+        "modules/sidebarPointer.js",
+        "modules/windowControls.js",
+        "modules/focus.js"
+      ],
+      "baselineTestAnchors": [
+        "tests/sidebar-pointer.test.js",
+        "tests/collapsed-sidebar-ui.test.js",
+        "tests/interface-scale-ui.test.js"
+      ],
+      "nativeStatus": "pending",
+      "nativeEvidence": []
+    },
+    {
+      "id": "Address bar, aliases, suggestions and calculator",
+      "milestone": "M2",
+      "acceptance": [
+        "A14"
+      ],
+      "source": [
+        "modules/navigation.js",
+        "modules/overlays/searchEngine.js",
+        "modules/calculator.js"
+      ],
+      "baselineTestAnchors": [
+        "tests/search-aliases.test.js",
+        "tests/address-bar-dismiss-ui.test.js",
+        "tests/empty-search-ui.test.js"
+      ],
+      "nativeStatus": "pending",
+      "nativeEvidence": []
+    },
+    {
+      "id": "Palette, dashboard, overlay cancellation, focus and accessibility",
+      "milestone": "M2",
+      "acceptance": [
+        "A03",
+        "A04"
+      ],
+      "source": [
+        "modules/overlays/commandPalette.js",
+        "modules/overlays/dashboard.js",
+        "modules/focus.js"
+      ],
+      "baselineTestAnchors": [
+        "tests/overlay-state.test.js",
+        "tests/overlay-state-ui.test.js",
+        "tests/navigation-focus-ui.test.js"
+      ],
+      "nativeStatus": "pending",
+      "nativeEvidence": []
+    },
+    {
+      "id": "New tab, bookmarks/folders, quickmarks, history, hiding frequent sites",
+      "milestone": "M2",
+      "acceptance": [
+        "A14"
+      ],
+      "source": [
+        "assets/new-tab.js",
+        "bookmarkStore.js",
+        "frequentSites.js",
+        "modules/overlays/bookmarks.js",
+        "modules/overlays/history.js"
+      ],
+      "baselineTestAnchors": [
+        "tests/bookmark-store.test.js",
+        "tests/bookmarks-ui.test.js",
+        "tests/frequent-sites.test.js",
+        "tests/new-tab-bookmarks-ui.test.js"
+      ],
+      "nativeStatus": "pending",
+      "nativeEvidence": []
+    },
+    {
+      "id": "Settings navigation, search, live preferences and atomic writes",
+      "milestone": "M2",
+      "acceptance": [
+        "A15",
+        "A19"
+      ],
+      "source": [
+        "main.js",
+        "modules/settingsNav.js",
+        "modules/settingsTab.js"
+      ],
+      "baselineTestAnchors": [
+        "tests/config-writes.test.js",
+        "tests/settings-nav-ui.test.js",
+        "tests/settings-tabs-ui.test.js"
+      ],
+      "nativeStatus": "pending",
+      "nativeEvidence": []
+    },
+    {
+      "id": "Website theme, custom palette, UI scale, hostname zoom and clock",
+      "milestone": "M2",
+      "acceptance": [
+        "A15"
+      ],
+      "source": [
+        "modules/theme.js",
+        "siteZoom.js",
+        "modules/clock.js"
+      ],
+      "baselineTestAnchors": [
+        "tests/site-zoom.test.js",
+        "tests/clock.test.js",
+        "tests/website-theme-ui.test.js",
+        "tests/interface-scale-ui.test.js"
+      ],
+      "nativeStatus": "pending",
+      "nativeEvidence": []
+    },
+    {
+      "id": "Native visibility and media, paused/playing, mute and Pie reproduction",
+      "milestone": "M1/M3",
+      "acceptance": [
+        "A08",
+        "A09"
+      ],
+      "source": [
+        "modules/webview.js",
+        "main.js"
+      ],
+      "baselineTestAnchors": [
+        "tests/audio-controls.test.js"
+      ],
+      "nativeStatus": "pending",
+      "nativeEvidence": []
+    },
+    {
+      "id": "Freeze/resume eligibility, memory discard distinction and protection",
+      "milestone": "M3",
+      "acceptance": [
+        "A10"
+      ],
+      "source": [
+        "tabSuspension.js",
+        "modules/tabSuspension.js"
+      ],
+      "baselineTestAnchors": [
+        "tests/tab-suspension.test.js",
+        "tests/tab-suspension-ui.test.js"
+      ],
+      "nativeStatus": "pending",
+      "nativeEvidence": []
+    },
+    {
+      "id": "Extensions, store/ZIP/CRX/unpacked, update, options/popups and native IDs",
+      "milestone": "M1/M3",
+      "acceptance": [
+        "A11"
+      ],
+      "source": [
+        "extensions.js",
+        "extensionStore.js",
+        "extensionPackages.js",
+        "modules/extensions.js"
+      ],
+      "baselineTestAnchors": [
+        "tests/extensions.test.js",
+        "tests/extension-store.test.js",
+        "tests/extension-packages.test.js",
+        "tests/extension-install-ui.test.js"
+      ],
+      "nativeStatus": "pending",
+      "nativeEvidence": []
+    },
+    {
+      "id": "Maintained native-rule blocker, restore ordering, exceptions and choices",
+      "milestone": "M3/M4",
+      "acceptance": [
+        "A12",
+        "A19"
+      ],
+      "source": [
+        "extensions.js",
+        "assets/extensions/ublock-origin/manifest.json"
+      ],
+      "baselineTestAnchors": [
+        "tests/blocking-startup-ui.test.js",
+        "tests/extensions-ui.test.js"
+      ],
+      "nativeStatus": "pending",
+      "nativeEvidence": []
+    },
+    {
+      "id": "Local scripts/styles, matching, grants, per-script storage and hot reload",
+      "milestone": "M3",
+      "acceptance": [
+        "A13"
+      ],
+      "source": [
+        "userContent.js",
+        "modules/userScriptShim.js"
+      ],
+      "baselineTestAnchors": [],
+      "nativeStatus": "pending",
+      "nativeEvidence": []
+    },
+    {
+      "id": "PDF URL/MIME handling, reader, print and downloads",
+      "milestone": "M3",
+      "acceptance": [
+        "A16"
+      ],
+      "source": [
+        "main.js",
+        "modules/utils.js",
+        "modules/readerDistiller.js"
+      ],
+      "baselineTestAnchors": [],
+      "nativeStatus": "pending",
+      "nativeEvidence": []
+    },
+    {
+      "id": "OAuth, popups and origin/profile routing",
+      "milestone": "M3",
+      "acceptance": [
+        "A16",
+        "A17"
+      ],
+      "source": [
+        "main.js",
+        "security.js"
+      ],
+      "baselineTestAnchors": [
+        "tests/auth-security.test.js",
+        "tests/oauth-popup-ui.test.js"
+      ],
+      "nativeStatus": "pending",
+      "nativeEvidence": []
+    },
+    {
+      "id": "Permissions, private mode, internal page capability boundaries and vault exclusion",
+      "milestone": "M3/M4",
+      "acceptance": [
+        "A17",
+        "A19"
+      ],
+      "source": [
+        "main.js",
+        "preload.js",
+        "security.js"
+      ],
+      "baselineTestAnchors": [
+        "tests/auth-security.test.js"
+      ],
+      "nativeStatus": "pending",
+      "nativeEvidence": []
+    },
+    {
+      "id": "Clipboard-mediated terminal, external schemes and hostile paths",
+      "milestone": "M3",
+      "acceptance": [
+        "A18"
+      ],
+      "source": [
+        "modules/overlays/commandPalette.js",
+        "main.js",
+        "closedOutput.js"
+      ],
+      "baselineTestAnchors": [
+        "tests/closed-output.test.js",
+        "tests/auth-security.test.js"
+      ],
+      "nativeStatus": "pending",
+      "nativeEvidence": []
+    },
+    {
+      "id": "Migration, unknown fields, interruption/retry, rollback and recovery",
+      "milestone": "M4",
+      "acceptance": [
+        "A19",
+        "A20"
+      ],
+      "source": [
+        "profileMigration.js",
+        "main.js",
+        "modules/tabRestoration.js"
+      ],
+      "baselineTestAnchors": [
+        "tests/profile-migration.test.js",
+        "tests/config-writes.test.js",
+        "tests/tab-restoration-ui.test.js"
+      ],
+      "nativeStatus": "pending",
+      "nativeEvidence": []
+    },
+    {
+      "id": "Diagnostics and distinct product/engine/build identity",
+      "milestone": "M2/M5",
+      "acceptance": [
+        "A15",
+        "A21"
+      ],
+      "source": [
+        "diagnostics.js",
+        "modules/overlays/diagnostics.js"
+      ],
+      "baselineTestAnchors": [
+        "tests/identity-ui.test.js"
+      ],
+      "nativeStatus": "pending",
+      "nativeEvidence": []
+    },
+    {
+      "id": "Packages, launcher/installer/AUR, verified updates and failure recovery",
+      "milestone": "M5",
+      "acceptance": [
+        "A21"
+      ],
+      "source": [
+        "scripts/fly-install",
+        "scripts/aur.js",
+        "appImageUpdate.js",
+        "desktopIntegration.js"
+      ],
+      "baselineTestAnchors": [
+        "tests/fly-install.test.js",
+        "tests/aur-package.test.js",
+        "tests/appimage-update.test.js",
+        "tests/desktop-integration.test.js"
+      ],
+      "nativeStatus": "pending",
+      "nativeEvidence": []
+    },
+    {
+      "id": "Clean rebuild, patch provenance, licences and engine update rehearsal",
+      "milestone": "M0/M5",
+      "acceptance": [
+        "A22"
+      ],
+      "source": [
+        "scripts/chromium/engine.py",
+        "scripts/release.js"
+      ],
+      "baselineTestAnchors": [
+        "tests/release-tooling.test.js"
+      ],
+      "nativeStatus": "pending",
+      "nativeEvidence": []
+    }
+  ],
+  "preferences": [
+    {
+      "id": "disable_gpu",
+      "default": false,
+      "source": [
+        {
+          "file": "main.js",
+          "line": 148
+        },
+        {
+          "file": "modules/overlays/commandPalette.js",
+          "line": 696
+        }
+      ],
+      "baselineTestAnchors": [],
+      "milestone": "M2",
+      "acceptance": [
+        "A15",
+        "A19"
+      ],
+      "nativeStatus": "pending",
+      "nativeEvidence": []
+    },
+    {
+      "id": "background_throttling",
+      "default": true,
+      "source": [
+        {
+          "file": "main.js",
+          "line": 149
+        },
+        {
+          "file": "modules/overlays/commandPalette.js",
+          "line": 697
+        }
+      ],
+      "baselineTestAnchors": [],
+      "milestone": "M2",
+      "acceptance": [
+        "A15",
+        "A19"
+      ],
+      "nativeStatus": "pending",
+      "nativeEvidence": []
+    },
+    {
+      "id": "process_limit",
+      "default": 4,
+      "source": [
+        {
+          "file": "main.js",
+          "line": 150
+        },
+        {
+          "file": "modules/overlays/commandPalette.js",
+          "line": 698
+        }
+      ],
+      "baselineTestAnchors": [],
+      "milestone": "M2",
+      "acceptance": [
+        "A15",
+        "A19"
+      ],
+      "nativeStatus": "pending",
+      "nativeEvidence": []
+    },
+    {
+      "id": "email_handler",
+      "default": "system",
+      "source": [
+        {
+          "file": "main.js",
+          "line": 151
+        },
+        {
+          "file": "modules/overlays/commandPalette.js",
+          "line": 699
+        }
+      ],
+      "baselineTestAnchors": [],
+      "milestone": "M2",
+      "acceptance": [
+        "A15",
+        "A19"
+      ],
+      "nativeStatus": "pending",
+      "nativeEvidence": []
+    },
+    {
+      "id": "search_engine",
+      "default": "https://duckduckgo.com/?q=%s",
+      "source": [
+        {
+          "file": "main.js",
+          "line": 152
+        }
+      ],
+      "baselineTestAnchors": [
+        "tests/empty-search-ui.test.js",
+        "tests/identity-ui.test.js",
+        "tests/navigation-focus-ui.test.js",
+        "tests/navigation-focus.test.js"
+      ],
+      "milestone": "M2",
+      "acceptance": [
+        "A15",
+        "A19"
+      ],
+      "nativeStatus": "pending",
+      "nativeEvidence": []
+    },
+    {
+      "id": "spellchecker_language",
+      "default": "en-GB",
+      "source": [
+        {
+          "file": "main.js",
+          "line": 153
+        },
+        {
+          "file": "modules/overlays/commandPalette.js",
+          "line": 702
+        }
+      ],
+      "baselineTestAnchors": [],
+      "milestone": "M2",
+      "acceptance": [
+        "A15",
+        "A19"
+      ],
+      "nativeStatus": "pending",
+      "nativeEvidence": []
+    },
+    {
+      "id": "theme",
+      "default": "dark",
+      "source": [
+        {
+          "file": "main.js",
+          "line": 154
+        },
+        {
+          "file": "keybinds.js",
+          "line": 132
+        },
+        {
+          "file": "renderer.js",
+          "line": 22
+        },
+        {
+          "file": "preload.js",
+          "line": 38
+        },
+        {
+          "file": "modules/webview.js",
+          "line": 22
+        },
+        {
+          "file": "modules/overlays/commandPalette.js",
+          "line": 10
+        },
+        {
+          "file": "modules/theme.js",
+          "line": 2
+        },
+        {
+          "file": "extensionPackages.js",
+          "line": 106
+        },
+        {
+          "file": "scripts/fly-install",
+          "line": 257
+        }
+      ],
+      "baselineTestAnchors": [
+        "tests/collapsed-sidebar-ui.test.js",
+        "tests/identity-ui.test.js",
+        "tests/settings-nav-ui.test.js",
+        "tests/sidebar-footer-ui.test.js",
+        "tests/website-theme-ui.test.js"
+      ],
+      "milestone": "M2",
+      "acceptance": [
+        "A15",
+        "A19"
+      ],
+      "nativeStatus": "pending",
+      "nativeEvidence": []
+    },
+    {
+      "id": "interface_scale",
+      "default": "normal",
+      "source": [
+        {
+          "file": "main.js",
+          "line": 155
+        },
+        {
+          "file": "renderer.js",
+          "line": 368
+        }
+      ],
+      "baselineTestAnchors": [
+        "tests/extensions-ui.test.js",
+        "tests/interface-scale-ui.test.js"
+      ],
+      "milestone": "M2",
+      "acceptance": [
+        "A15",
+        "A19"
+      ],
+      "nativeStatus": "pending",
+      "nativeEvidence": []
+    },
+    {
+      "id": "sync_website_theme",
+      "default": true,
+      "source": [
+        {
+          "file": "main.js",
+          "line": 156
+        },
+        {
+          "file": "renderer.js",
+          "line": 403
+        },
+        {
+          "file": "modules/overlays/commandPalette.js",
+          "line": 737
+        }
+      ],
+      "baselineTestAnchors": [
+        "tests/website-theme-ui.test.js"
+      ],
+      "milestone": "M2",
+      "acceptance": [
+        "A15",
+        "A19"
+      ],
+      "nativeStatus": "pending",
+      "nativeEvidence": []
+    },
+    {
+      "id": "trusted_domains",
+      "default": [
+        "accounts.google.com"
+      ],
+      "source": [
+        {
+          "file": "main.js",
+          "line": 157
+        },
+        {
+          "file": "modules/overlays/commandPalette.js",
+          "line": 721
+        },
+        {
+          "file": "diagnostics.js",
+          "line": 67
+        }
+      ],
+      "baselineTestAnchors": [],
+      "milestone": "M2",
+      "acceptance": [
+        "A17"
+      ],
+      "nativeStatus": "pending",
+      "nativeEvidence": []
+    },
+    {
+      "id": "tab_suspend_timeout_minutes",
+      "default": 15,
+      "source": [
+        {
+          "file": "main.js",
+          "line": 9
+        },
+        {
+          "file": "modules/overlays/commandPalette.js",
+          "line": 700
+        }
+      ],
+      "baselineTestAnchors": [
+        "tests/tab-restoration-ui.test.js",
+        "tests/tab-suspension.test.js"
+      ],
+      "milestone": "M2",
+      "acceptance": [
+        "A10"
+      ],
+      "nativeStatus": "pending",
+      "nativeEvidence": []
+    },
+    {
+      "id": "sidebar_auto_collapse",
+      "default": true,
+      "source": [
+        {
+          "file": "main.js",
+          "line": 159
+        },
+        {
+          "file": "renderer.js",
+          "line": 360
+        },
+        {
+          "file": "modules/overlays/commandPalette.js",
+          "line": 701
+        }
+      ],
+      "baselineTestAnchors": [
+        "tests/overlay-state-ui.test.js",
+        "tests/settings-tabs-ui.test.js"
+      ],
+      "milestone": "M2",
+      "acceptance": [
+        "A15",
+        "A19"
+      ],
+      "nativeStatus": "pending",
+      "nativeEvidence": []
+    },
+    {
+      "id": "show_status_bar",
+      "default": true,
+      "source": [
+        {
+          "file": "main.js",
+          "line": 160
+        },
+        {
+          "file": "renderer.js",
+          "line": 426
+        },
+        {
+          "file": "modules/overlays/commandPalette.js",
+          "line": 705
+        }
+      ],
+      "baselineTestAnchors": [],
+      "milestone": "M2",
+      "acceptance": [
+        "A15",
+        "A19"
+      ],
+      "nativeStatus": "pending",
+      "nativeEvidence": []
+    },
+    {
+      "id": "show_clock",
+      "default": true,
+      "source": [
+        {
+          "file": "main.js",
+          "line": 161
+        },
+        {
+          "file": "modules/overlays/commandPalette.js",
+          "line": 711
+        },
+        {
+          "file": "modules/clock.js",
+          "line": 117
+        }
+      ],
+      "baselineTestAnchors": [],
+      "milestone": "M2",
+      "acceptance": [
+        "A15",
+        "A19"
+      ],
+      "nativeStatus": "pending",
+      "nativeEvidence": []
+    },
+    {
+      "id": "show_frequent_sites",
+      "default": true,
+      "source": [
+        {
+          "file": "main.js",
+          "line": 162
+        },
+        {
+          "file": "modules/overlays/commandPalette.js",
+          "line": 708
+        }
+      ],
+      "baselineTestAnchors": [
+        "tests/frequent-sites-ui.test.js",
+        "tests/new-tab-bookmarks-ui.test.js"
+      ],
+      "milestone": "M2",
+      "acceptance": [
+        "A15",
+        "A19"
+      ],
+      "nativeStatus": "pending",
+      "nativeEvidence": []
+    },
+    {
+      "id": "clock_format",
+      "default": "datetime",
+      "source": [
+        {
+          "file": "main.js",
+          "line": 163
+        },
+        {
+          "file": "modules/clock.js",
+          "line": 90
+        }
+      ],
+      "baselineTestAnchors": [],
+      "milestone": "M2",
+      "acceptance": [
+        "A15",
+        "A19"
+      ],
+      "nativeStatus": "pending",
+      "nativeEvidence": []
+    },
+    {
+      "id": "theme_colors",
+      "default": {
+        "dark": {
+          "accent": "#e0261c",
+          "bg_main": "#121211",
+          "bg_sidebar": "#0b0b0a",
+          "text": "#e7e1d3",
+          "sidebar_opacity": 100,
+          "overlay_opacity": 100
+        },
+        "light": {
+          "accent": "#e0261c",
+          "bg_main": "#ece6d8",
+          "bg_sidebar": "#e3dccb",
+          "text": "#1a1814",
+          "sidebar_opacity": 100,
+          "overlay_opacity": 100
+        }
+      },
+      "source": [
+        {
+          "file": "main.js",
+          "line": 164
+        },
+        {
+          "file": "modules/theme.js",
+          "line": 41
+        }
+      ],
+      "baselineTestAnchors": [
+        "tests/identity-ui.test.js"
+      ],
+      "milestone": "M2",
+      "acceptance": [
+        "A15",
+        "A19"
+      ],
+      "nativeStatus": "pending",
+      "nativeEvidence": []
+    },
+    {
+      "id": "enable_diagnostics",
+      "default": false,
+      "source": [
+        {
+          "file": "main.js",
+          "line": 165
+        },
+        {
+          "file": "modules/overlays/commandPalette.js",
+          "line": 717
+        },
+        {
+          "file": "diagnostics.js",
+          "line": 85
+        }
+      ],
+      "baselineTestAnchors": [],
+      "milestone": "M2",
+      "acceptance": [
+        "A15",
+        "A19"
+      ],
+      "nativeStatus": "pending",
+      "nativeEvidence": []
+    },
+    {
+      "id": "show_window_controls",
+      "default": false,
+      "source": [
+        {
+          "file": "main.js",
+          "line": 166
+        },
+        {
+          "file": "modules/overlays/commandPalette.js",
+          "line": 714
+        }
+      ],
+      "baselineTestAnchors": [],
+      "milestone": "M2",
+      "acceptance": [
+        "A15",
+        "A19"
+      ],
+      "nativeStatus": "pending",
+      "nativeEvidence": []
+    },
+    {
+      "id": "custom_search_aliases",
+      "default": {},
+      "source": [
+        {
+          "file": "main.js",
+          "line": 167
+        },
+        {
+          "file": "modules/overlays/commandPalette.js",
+          "line": 724
+        }
+      ],
+      "baselineTestAnchors": [
+        "tests/settings-nav-ui.test.js"
+      ],
+      "milestone": "M2",
+      "acceptance": [
+        "A15",
+        "A19"
+      ],
+      "nativeStatus": "pending",
+      "nativeEvidence": []
+    },
+    {
+      "id": "last_seen_version",
+      "default": null,
+      "source": [
+        {
+          "file": "main.js",
+          "line": 168
+        },
+        {
+          "file": "renderer.js",
+          "line": 452
+        }
+      ],
+      "baselineTestAnchors": [
+        "tests/blocking-startup-ui.test.js",
+        "tests/packaged-ui.test.js",
+        "tests/tab-restoration-ui.test.js",
+        "tests/whats-new-ui.test.js"
+      ],
+      "milestone": "M2",
+      "acceptance": [
+        "A15",
+        "A19"
+      ],
+      "nativeStatus": "pending",
+      "nativeEvidence": []
+    },
+    {
+      "id": "desktop_integration_offered",
+      "default": false,
+      "source": [
+        {
+          "file": "main.js",
+          "line": 170
+        }
+      ],
+      "baselineTestAnchors": [
+        "tests/desktop-integration-ui.test.js"
+      ],
+      "milestone": "M2",
+      "acceptance": [
+        "A21"
+      ],
+      "nativeStatus": "pending",
+      "nativeEvidence": []
+    },
+    {
+      "id": "extensions_enabled",
+      "default": true,
+      "source": [
+        {
+          "file": "main.js",
+          "line": 172
+        },
+        {
+          "file": "extensions.js",
+          "line": 191
+        },
+        {
+          "file": "extensionStore.js",
+          "line": 91
+        }
+      ],
+      "baselineTestAnchors": [
+        "tests/blocking-startup-ui.test.js",
+        "tests/extension-install-ui.test.js",
+        "tests/extension-store.test.js",
+        "tests/extensions-ui.test.js",
+        "tests/extensions.test.js",
+        "tests/packaged-ui.test.js",
+        "tests/settings-tabs-ui.test.js",
+        "tests/tab-restoration-ui.test.js",
+        "tests/workspace-partitions-ui.test.js"
+      ],
+      "milestone": "M3",
+      "acceptance": [
+        "A11",
+        "A12",
+        "A19"
+      ],
+      "nativeStatus": "pending",
+      "nativeEvidence": []
+    },
+    {
+      "id": "extensions_by_workspace",
+      "default": {},
+      "source": [
+        {
+          "file": "main.js",
+          "line": 173
+        },
+        {
+          "file": "extensions.js",
+          "line": 195
+        },
+        {
+          "file": "extensionStore.js",
+          "line": 99
+        }
+      ],
+      "baselineTestAnchors": [
+        "tests/extension-install-ui.test.js",
+        "tests/extension-store.test.js",
+        "tests/extensions.test.js",
+        "tests/settings-tabs-ui.test.js",
+        "tests/workspace-partitions-ui.test.js"
+      ],
+      "milestone": "M3",
+      "acceptance": [
+        "A11",
+        "A12",
+        "A19"
+      ],
+      "nativeStatus": "pending",
+      "nativeEvidence": []
+    },
+    {
+      "id": "extensions_bundled",
+      "default": {},
+      "source": [
+        {
+          "file": "main.js",
+          "line": 174
+        },
+        {
+          "file": "extensions.js",
+          "line": 196
+        },
+        {
+          "file": "extensionStore.js",
+          "line": 101
+        }
+      ],
+      "baselineTestAnchors": [
+        "tests/extension-install-ui.test.js",
+        "tests/extensions.test.js"
+      ],
+      "milestone": "M3",
+      "acceptance": [
+        "A11",
+        "A12",
+        "A19"
+      ],
+      "nativeStatus": "pending",
+      "nativeEvidence": []
+    },
+    {
+      "id": "extensions_disabled",
+      "default": [],
+      "source": [
+        {
+          "file": "main.js",
+          "line": 175
+        },
+        {
+          "file": "extensions.js",
+          "line": 199
+        },
+        {
+          "file": "extensionStore.js",
+          "line": 107
+        }
+      ],
+      "baselineTestAnchors": [
+        "tests/extension-store.test.js",
+        "tests/extensions.test.js"
+      ],
+      "milestone": "M3",
+      "acceptance": [
+        "A11",
+        "A12",
+        "A19"
+      ],
+      "nativeStatus": "pending",
+      "nativeEvidence": []
+    },
+    {
+      "id": "extensions_unload_grace_seconds",
+      "default": 60,
+      "source": [
+        {
+          "file": "main.js",
+          "line": 176
+        },
+        {
+          "file": "extensions.js",
+          "line": 204
+        }
+      ],
+      "baselineTestAnchors": [
+        "tests/extensions.test.js"
+      ],
+      "milestone": "M3",
+      "acceptance": [
+        "A11",
+        "A12",
+        "A19"
+      ],
+      "nativeStatus": "pending",
+      "nativeEvidence": []
+    },
+    {
+      "id": "extensions_sources",
+      "default": {},
+      "source": [
+        {
+          "file": "extensions.js",
+          "line": 284
+        },
+        {
+          "file": "extensionStore.js",
+          "line": 98
+        }
+      ],
+      "baselineTestAnchors": [
+        "tests/extension-install-ui.test.js",
+        "tests/extension-store.test.js"
+      ],
+      "milestone": "M3",
+      "acceptance": [
+        "A11",
+        "A19"
+      ],
+      "nativeStatus": "pending",
+      "nativeEvidence": [],
+      "note": "Written by the extension installer, absent from DEFAULT_CONFIG"
+    }
+  ],
+  "persistence": [
+    {
+      "id": "config.json",
+      "root": "legacy-config",
+      "contract": "Defaults, explicit choices, unknown fields; tab_sleep_timeout_minutes is a legacy alias",
+      "fields": [
+        "disable_gpu",
+        "background_throttling",
+        "process_limit",
+        "email_handler",
+        "search_engine",
+        "spellchecker_language",
+        "theme",
+        "interface_scale",
+        "sync_website_theme",
+        "trusted_domains",
+        "tab_suspend_timeout_minutes",
+        "sidebar_auto_collapse",
+        "show_status_bar",
+        "show_clock",
+        "show_frequent_sites",
+        "clock_format",
+        "theme_colors",
+        "enable_diagnostics",
+        "show_window_controls",
+        "custom_search_aliases",
+        "last_seen_version",
+        "desktop_integration_offered",
+        "extensions_enabled",
+        "extensions_by_workspace",
+        "extensions_bundled",
+        "extensions_disabled",
+        "extensions_unload_grace_seconds",
+        "extensions_sources"
+      ],
+      "milestone": "M4",
+      "acceptance": [
+        "A19",
+        "A20"
+      ],
+      "nativeStatus": "pending",
+      "nativeEvidence": []
+    },
+    {
+      "id": "session.json",
+      "root": "legacy-config",
+      "contract": "Workspace URL arrays, stable partition identity and parallel tab metadata",
+      "fields": [
+        "current_workspace",
+        "tab_favicons",
+        "tab_pinned",
+        "tab_restore_states",
+        "tab_titles",
+        "workspace_partitions",
+        "workspaces"
+      ],
+      "milestone": "M4",
+      "acceptance": [
+        "A19",
+        "A20"
+      ],
+      "nativeStatus": "pending",
+      "nativeEvidence": []
+    },
+    {
+      "id": "session.json.bak",
+      "root": "legacy-config",
+      "contract": "Rolling session recovery journal",
+      "milestone": "M4",
+      "acceptance": [
+        "A19",
+        "A20"
+      ],
+      "nativeStatus": "pending",
+      "nativeEvidence": []
+    },
+    {
+      "id": "session_sentinel.json",
+      "root": "legacy-config",
+      "contract": "clean_exit and crash recovery; never treat as a clean session snapshot",
+      "milestone": "M4",
+      "acceptance": [
+        "A19",
+        "A20"
+      ],
+      "nativeStatus": "pending",
+      "nativeEvidence": []
+    },
+    {
+      "id": "bookmarks.json",
+      "root": "legacy-config",
+      "contract": "App-wide bookmarks, folders, order, quickmarks and unknown item fields",
+      "milestone": "M4",
+      "acceptance": [
+        "A19",
+        "A20"
+      ],
+      "nativeStatus": "pending",
+      "nativeEvidence": []
+    },
+    {
+      "id": "history.json",
+      "root": "legacy-config",
+      "contract": "App-wide visits, titles, timestamps; private visits excluded",
+      "milestone": "M4",
+      "acceptance": [
+        "A19",
+        "A20"
+      ],
+      "nativeStatus": "pending",
+      "nativeEvidence": []
+    },
+    {
+      "id": "keybinds.json",
+      "root": "legacy-config",
+      "contract": "keybinds.resolveKeybinds: legacy and versioned changesOnly inputs; explicit empty bindings retained",
+      "milestone": "M4",
+      "acceptance": [
+        "A19",
+        "A20"
+      ],
+      "nativeStatus": "pending",
+      "nativeEvidence": []
+    },
+    {
+      "id": "site-zoom.json",
+      "root": "legacy-config",
+      "contract": "Hostname levels; private zoom memory-only",
+      "milestone": "M4",
+      "acceptance": [
+        "A19",
+        "A20"
+      ],
+      "nativeStatus": "pending",
+      "nativeEvidence": []
+    },
+    {
+      "id": "hidden-sites.json",
+      "root": "legacy-config",
+      "contract": "Hidden frequent-site origins, distinct from history/bookmarks",
+      "milestone": "M4",
+      "acceptance": [
+        "A19",
+        "A20"
+      ],
+      "nativeStatus": "pending",
+      "nativeEvidence": []
+    },
+    {
+      "id": "scripts/",
+      "root": "legacy-config",
+      "contract": "Local user-script source, grants, matching and run timing",
+      "milestone": "M4",
+      "acceptance": [
+        "A19",
+        "A20"
+      ],
+      "nativeStatus": "pending",
+      "nativeEvidence": []
+    },
+    {
+      "id": "styles/",
+      "root": "legacy-config",
+      "contract": "Local CSS source and matching",
+      "milestone": "M4",
+      "acceptance": [
+        "A19",
+        "A20"
+      ],
+      "nativeStatus": "pending",
+      "nativeEvidence": []
+    },
+    {
+      "id": "script-storage/",
+      "root": "legacy-config",
+      "contract": "Per-script JSON; validate filename boundaries",
+      "milestone": "M4",
+      "acceptance": [
+        "A19",
+        "A20"
+      ],
+      "nativeStatus": "pending",
+      "nativeEvidence": []
+    },
+    {
+      "id": "extensions/",
+      "root": "legacy-config",
+      "contract": "Packages and manifests; source/identity selections live in config.extensions_sources and config.extensions_bundled",
+      "milestone": "M4",
+      "acceptance": [
+        "A19",
+        "A20"
+      ],
+      "nativeStatus": "pending",
+      "nativeEvidence": []
+    },
+    {
+      "id": "Partitions/",
+      "root": "electron-user-data",
+      "contract": "Cookies, local/session storage, IndexedDB, workers, extension data; format-aware import only",
+      "milestone": "M4",
+      "acceptance": [
+        "A19",
+        "A20"
+      ],
+      "nativeStatus": "pending",
+      "nativeEvidence": []
+    },
+    {
+      "id": "Local Storage/",
+      "root": "electron-user-data",
+      "contract": "Host UI mise_recent_commands; reader __mise_reader_prefs__ is website-origin storage within its partition; no raw LevelDB copy",
+      "milestone": "M4",
+      "acceptance": [
+        "A19",
+        "A20"
+      ],
+      "nativeStatus": "pending",
+      "nativeEvidence": []
+    }
+  ]
+}
