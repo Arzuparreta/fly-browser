@@ -7,7 +7,7 @@
   "license": "GPL-3.0-or-later",
   "scripts": {
     "start": "install-electron && electron . --log-level=3",
-    "test": "node tests/frequent-sites.test.js && node tests/tab-suspension.test.js && node tests/site-zoom.test.js && node tests/auth-security.test.js && node tests/closed-output.test.js && node tests/clock.test.js && node tests/audio-controls.test.js && node tests/pinned-tabs.test.js && node tests/tab-context-menu.test.js && node tests/search-aliases.test.js && node tests/config-writes.test.js && node tests/profile-migration.test.js && node tests/workspace-partitions.test.js && node tests/keyboard.test.js && node scripts/sync-keyboard.js --check && node scripts/generate-keybind-docs.js --check && node tests/navigation-focus.test.js && node tests/overlay-state.test.js && node tests/extensions.test.js && node tests/extension-packages.test.js && node tests/extension-store.test.js && node tests/tab-numbers.test.js && node tests/focus-recovery.test.js && node tests/sidebar-pointer.test.js && node scripts/generate-extension-preload.js --check && node tests/launcher.test.js && node tests/release-tooling.test.js && node tests/aur-package.test.js && node tests/desktop-integration.test.js && node tests/appimage-update.test.js && node tests/fly-install.test.js && node scripts/version-sync.js --check",
+    "test": "node tests/bookmark-store.test.js && node tests/frequent-sites.test.js && node tests/tab-suspension.test.js && node tests/site-zoom.test.js && node tests/auth-security.test.js && node tests/closed-output.test.js && node tests/clock.test.js && node tests/audio-controls.test.js && node tests/pinned-tabs.test.js && node tests/tab-context-menu.test.js && node tests/search-aliases.test.js && node tests/config-writes.test.js && node tests/profile-migration.test.js && node tests/workspace-partitions.test.js && node tests/keyboard.test.js && node scripts/sync-keyboard.js --check && node scripts/generate-keybind-docs.js --check && node tests/navigation-focus.test.js && node tests/overlay-state.test.js && node tests/extensions.test.js && node tests/extension-packages.test.js && node tests/extension-store.test.js && node tests/tab-numbers.test.js && node tests/focus-recovery.test.js && node tests/sidebar-pointer.test.js && node scripts/generate-extension-preload.js --check && node tests/launcher.test.js && node tests/release-tooling.test.js && node tests/aur-package.test.js && node tests/desktop-integration.test.js && node tests/appimage-update.test.js && node tests/fly-install.test.js && node scripts/version-sync.js --check",
     "docs:dev": "vitepress dev docs",
     "docs:build": "vitepress build docs",
     "docs:preview": "vitepress preview docs",
@@ -37,6 +37,7 @@
       "main.js",
       "siteZoom.js",
       "frequentSites.js",
+      "bookmarkStore.js",
       "tabSuspension.js",
       "preload.js",
       "webview-preload.js",

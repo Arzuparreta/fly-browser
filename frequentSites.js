@@ -1,11 +1,13 @@
 const fs = require('node:fs');
 
 // Derived from the bounded history cache; no extra visit log or background timer.
-exports.createFrequentSites = function (hiddenPath, getHistory, now = Date.now) {
+const NO_BOOKMARKS = new Set();
+exports.createFrequentSites = function (hiddenPath, getHistory, now = Date.now, getBookmarkOrigins = () => NO_BOOKMARKS) {
     let hidden;
     let cached;
     let cachedHistory;
     let cachedDay;
+    let cachedBookmarkOrigins;
     function loadHidden() {
         if (hidden) return hidden;
         try {
@@ -18,13 +20,14 @@ exports.createFrequentSites = function (hiddenPath, getHistory, now = Date.now) 
         invalidate() { cached = null; },
         get() {
             const history = getHistory();
+            const bookmarked = getBookmarkOrigins();
             const day = Math.floor(now() / 86400000);
-            if (cached && cachedHistory === history && cachedDay === day) return cached;
+            if (cached && cachedHistory === history && cachedDay === day && cachedBookmarkOrigins === bookmarked) return cached;
             const sites = new Map();
             for (const entry of history) {
                 try {
                     const url = new URL(entry.url);
-                    if (!['https:', 'http:'].includes(url.protocol) || loadHidden().has(url.origin)) continue;
+                    if (!['https:', 'http:'].includes(url.protocol) || loadHidden().has(url.origin) || bookmarked.has(url.origin)) continue;
                     const timestamp = Number.isFinite(entry.timestamp) ? entry.timestamp : 0;
                     const site = sites.get(url.origin) || { url: url.origin, title: url.host, score: 0, lastVisit: 0 };
                     // Frequency with a seven-day half-life; future timestamps cannot inflate rank.
@@ -35,6 +38,7 @@ exports.createFrequentSites = function (hiddenPath, getHistory, now = Date.now) 
             }
             cachedHistory = history;
             cachedDay = day;
+            cachedBookmarkOrigins = bookmarked;
             cached = [...sites.values()].sort((a, b) => b.score - a.score || b.lastVisit - a.lastVisit || a.url.localeCompare(b.url))
                 .slice(0, 5).map(({url, title}) => ({url, title}));
             return cached;

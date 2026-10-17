@@ -1,3 +1,4 @@
+import { updateNewTabLists } from './modules/newTab.js';
 import { initializeTabSuspension } from './modules/tabSuspension.js';
 import { migrateTabRestoration } from './modules/tabRestoration.js';
 import { recordSidebarPointerEntry } from './modules/sidebarPointer.js';
@@ -499,6 +500,7 @@ async function initializeBrowser() {
 }
 
 function setupEventListeners() {
+    window.flyAPI.onBookmarksChanged(updateNewTabLists);
     const sidebar = document.getElementById('Sidebar');
     initialiseSidebarPointerFocus(sidebar, focusActiveWebview);
     // Retain hover on window exit; host or guest entry clears it over content.

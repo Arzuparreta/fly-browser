@@ -5,6 +5,10 @@ window.updateFlyNewTab = data => {
     document.getElementById('memory-fly').src = `identity/memory-${data.light ? 'papel' : 'chasis'}@2x.png`;
     document.getElementById('memory').textContent = `${data.memory} MB`;
     document.getElementById('saved-bookmarks').hidden = !data.showBookmarks;
+    document.getElementById('frequent-sites').hidden = !data.showSites;
+    window.updateFlyNewTabLists(data);
+};
+window.updateFlyNewTabLists = data => {
     const bookmarkData = JSON.stringify(data.bookmarks || []);
     if (bookmarkSnapshot !== bookmarkData) {
         bookmarkSnapshot = bookmarkData;
@@ -22,7 +26,6 @@ window.updateFlyNewTab = data => {
         }
     }
     document.getElementById('bookmarks-empty').hidden = (data.bookmarks || []).length > 0;
-    document.getElementById('frequent-sites').hidden = !data.showSites;
     const sites = document.getElementById('sites');
     sites.replaceChildren();
     for (const site of data.sites) {

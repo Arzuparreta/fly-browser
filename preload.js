@@ -36,6 +36,11 @@ contextBridge.exposeInMainWorld('flyAPI', {
     searchHistory: (query) => ipcRenderer.invoke('search-history', query),
     purgeHistory: () => ipcRenderer.invoke('purge-history'),
     setNativeTheme: (mode) => ipcRenderer.send('set-native-theme', mode),
+    onBookmarksChanged: callback => {
+        const handler = (_event, data) => callback(data);
+        ipcRenderer.on('bookmarks-changed', handler);
+        return () => ipcRenderer.removeListener('bookmarks-changed', handler);
+    },
     readBookmarks: () => ipcRenderer.invoke('read-bookmarks'),
     saveBookmarks: (data) => ipcRenderer.invoke('save-bookmarks', data),
     onMasterShortcut: (callback) => {

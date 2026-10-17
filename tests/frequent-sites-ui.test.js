@@ -31,6 +31,13 @@ const createFixture = require('./electron-fixture');
         let page = await launch();
         const guest = expression => page.evaluate(expression => document.querySelector('webview').executeJavaScript(expression), expression);
         assert.equal(await guest('document.querySelectorAll(".site-row").length'), 2);
+        // A bookmark save pushes both lists into the visible new tab without a manual refresh.
+        await page.evaluate(() => window.flyAPI.saveBookmarks([{url:'https://example.com/saved-page', title:'Saved Example'}]));
+        await page.waitForFunction(async () => document.querySelector('webview').executeJavaScript('document.querySelectorAll(".site-row").length === 1 && document.querySelector("#bookmarks a .bookmark-title")?.textContent === "Saved Example"'));
+        assert.equal(await guest('document.querySelector("#sites a").hostname'), 'example.org');
+        await page.evaluate(() => window.flyAPI.saveBookmarks([]));
+        await page.waitForFunction(async () => document.querySelector('webview').executeJavaScript('document.querySelectorAll(".site-row").length === 2 && document.querySelectorAll("#bookmarks a").length === 0'));
+
         await page.evaluate(() => window.openPreferencesPane('appearance'));
         const toggle = () => page.locator('#setting-frequent-sites-toggle');
         assert(await toggle().isChecked());
