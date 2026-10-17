@@ -29,3 +29,12 @@ footer a { color:inherit; text-decoration:underline; text-underline-offset:2px; 
 #sites .site-row a { flex:1; min-width:0; border-bottom:0; }
 .site-row button { color:var(--dim); font-size:18px; padding:8px 12px; }
 .site-row button:hover, .site-row button:focus-visible { color:var(--accent); }
+
+#saved-bookmarks { margin-top:24px; }
+#bookmarks { display:flex; justify-content:safe center; gap:6px; overflow-x:auto; padding:5px; scrollbar-width:thin; }
+#bookmarks a { display:inline-flex; align-items:center; gap:7px; flex:0 0 auto; max-width:170px; padding:8px 10px; border:1px solid transparent; border-radius:4px; color:var(--text); text-decoration:none; font:12px 'IBM Plex Sans',sans-serif; }
+#bookmarks a:hover { background:var(--panel); border-color:var(--border); }
+.bookmark-icon { display:inline-flex; align-items:center; justify-content:center; flex:0 0 16px; width:16px; height:16px; color:var(--dim); }
+.bookmark-icon img { width:16px; height:16px; object-fit:contain; }
+.bookmark-title { min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+#bookmarks-empty { text-align:center; color:var(--dim); font-size:12px; }
