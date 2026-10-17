@@ -744,11 +744,6 @@ export function renderWorkspaceUI(targetTabToFocus = null) {
         const favFallback = document.createElement('i');
         favFallback.className = isSettingsTab(url) ? 'fa-solid fa-gear tab-fallback-icon' : 'fa-solid fa-globe tab-fallback-icon';
 
-        const audioDot = document.createElement('span');
-        audioDot.className = 'tab-audio-dot';
-        audioDot.title = 'Playing audio';
-        audioDot.innerHTML = '<i class="fa-solid fa-volume-high"></i>';
-
         const pinDot = document.createElement('span');
         pinDot.className = 'tab-pin-dot';
         pinDot.title = 'Pinned tab';
@@ -756,7 +751,6 @@ export function renderWorkspaceUI(targetTabToFocus = null) {
 
         favWrapper.appendChild(favImg);
         favWrapper.appendChild(favFallback);
-        if (state.tabMediaAudible[currentWS]?.[idx]) favWrapper.appendChild(audioDot);
         if (isPinned) favWrapper.appendChild(pinDot);
 
         const initialFav = isSettingsTab(url) ? null : cachedFavicon || getFaviconUrl(url);
@@ -801,12 +795,14 @@ export function renderWorkspaceUI(targetTabToFocus = null) {
 
         const isAudible = !!state.tabMediaAudible[currentWS]?.[idx];
         const isMuted = !!state.tabAudioMuted[currentWS]?.[idx];
+        updateRailMediaIndicator(favWrapper, isAudible, isMuted);
 
         if (isAudible || isMuted) {
             const mediaBadge = document.createElement('span');
             mediaBadge.className = 'tab-media-badge' + (isMuted ? ' is-muted' : '');
             mediaBadge.title = isMuted ? 'Tab audio muted (click to unmute)' : 'Tab playing audio (click to mute)';
             mediaBadge.innerHTML = isMuted ? '<i class="fa-solid fa-volume-xmark"></i>' : '<i class="fa-solid fa-volume-high"></i>';
+            mediaBadge.__muteListenerAttached = true;
             mediaBadge.addEventListener('click', (e) => {
                 e.stopPropagation();
                 toggleTabAudioMute(currentWS, idx);
@@ -1504,6 +1500,21 @@ export function togglePinActiveTab() {
     }
 }
 
+function updateRailMediaIndicator(wrapper, isAudible, isMuted) {
+    let indicator = wrapper.querySelector('.tab-audio-dot');
+    if (!isAudible && !isMuted) {
+        indicator?.remove();
+        return;
+    }
+    if (!indicator) {
+        indicator = document.createElement('span');
+        indicator.setAttribute('aria-hidden', 'true');
+        wrapper.appendChild(indicator);
+    }
+    indicator.className = 'tab-audio-dot' + (isMuted ? ' is-muted' : '');
+    indicator.innerHTML = isMuted ? '<i class="fa-solid fa-volume-xmark"></i>' : '<i class="fa-solid fa-volume-high"></i>';
+}
+
 export function updateTabMediaIndicator(workspaceId, tabIdx, isAudible, isMutedOverride) {
     if (state.sessionState.current_workspace !== workspaceId) return;
 
@@ -1513,6 +1524,7 @@ export function updateTabMediaIndicator(workspaceId, tabIdx, isAudible, isMutedO
 
     let mediaBadge = targetLi.querySelector('.tab-media-badge');
     const isMuted = isMutedOverride !== undefined ? isMutedOverride : !!state.tabAudioMuted[workspaceId]?.[tabIdx];
+    updateRailMediaIndicator(targetLi.querySelector('.tab-favicon-wrapper'), isAudible, isMuted);
 
     if (isAudible || isMuted) {
         if (!mediaBadge) {
