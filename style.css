@@ -2270,6 +2270,10 @@ webview {
     width: 500px;
 }
 
+#CloseBookmarksBtn {
+    flex: 0 0 32px;
+}
+
 /* Custom dark search input styling */
 #BookmarkSearchInput {
     flex-grow: 1;
