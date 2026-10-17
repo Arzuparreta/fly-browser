@@ -52,7 +52,7 @@ std::unique_ptr<FlyWindowController>& Instance() {
 }
 }  // namespace
 
-bool FlyWindowController::ShouldEmbed(BrowserWindowInterface* browser) {
+bool FlyWindowController::ShouldEmbed(const BrowserWindowInterface* browser) {
   // Explicit development gate until migration and the acceptance suite pass.
   return base::CommandLine::ForCurrentProcess()->HasSwitch("fly-native") &&
          browser->GetType() == BrowserWindowInterface::Type::TYPE_NORMAL;
