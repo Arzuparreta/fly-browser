@@ -354,7 +354,10 @@ extractUrlsFromArgs(process.argv).forEach(url => pendingUrls.push(url));
 
 let inMemoryHistory = null;
 let historyFlushTimer = null;
-const frequentSites = require('./frequentSites').createFrequentSites(path.join(CONFIG_DIR, 'hidden-sites.json'), getHistoryCache);
+const bookmarkStore = require('./bookmarkStore').createBookmarkStore(BOOKMARKS_PATH, bookmarks => {
+    if (mainWindow && !mainWindow.isDestroyed()) mainWindow.webContents.send('bookmarks-changed', {bookmarks, sites:frequentSites.get()});
+});
+const frequentSites = require('./frequentSites').createFrequentSites(path.join(CONFIG_DIR, 'hidden-sites.json'), getHistoryCache, Date.now, () => bookmarkStore.origins());
 
 function getHistoryCache() {
     if (inMemoryHistory === null) {
@@ -1505,19 +1508,8 @@ ipcMain.on('keyboard-action', (event, action) => {
     handleAppAction(action, event.sender);
 });
 
-ipcMain.handle('read-bookmarks', async () => {
-    try {
-        if (!fs.existsSync(BOOKMARKS_PATH)) fs.writeFileSync(BOOKMARKS_PATH, JSON.stringify([]), 'utf-8');
-        return JSON.parse(fs.readFileSync(BOOKMARKS_PATH, 'utf-8'));
-    } catch (err) { return []; }
-});
-
-ipcMain.handle('save-bookmarks', async (event, data) => {
-    try {
-        fs.writeFileSync(BOOKMARKS_PATH, JSON.stringify(data, null, 4), 'utf-8');
-        return true;
-    } catch (err) { return false; }
-});
+ipcMain.handle('read-bookmarks', () => bookmarkStore.read());
+ipcMain.handle('save-bookmarks', (_event, data) => bookmarkStore.save(data));
 
 ipcMain.on('execute-terminal-command', (event, commandStr) => {
     if (!commandStr || !commandStr.trim()) return;
