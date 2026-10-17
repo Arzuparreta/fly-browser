@@ -16,7 +16,7 @@ class NativeOverlayTests(unittest.TestCase):
     def setUp(self):
         self.tmp = tempfile.TemporaryDirectory(prefix='fly-native-guard-')
         self.addCleanup(self.tmp.cleanup)
-        self.root = Path(self.tmp.name)
+        self.root = Path(self.tmp.name).resolve()
         self.source = self.root / 'src'
         self.source.mkdir()
         self.git('init', '--quiet')
