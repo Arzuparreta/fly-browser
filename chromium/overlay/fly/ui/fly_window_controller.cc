@@ -116,10 +116,15 @@ FlyWindowController::FlyWindowController()
 
 FlyWindowController::~FlyWindowController() {
   CHECK(entries_.empty());
+  weak_factory_.InvalidateWeakPtrs();
   desktop_->GetNativeWindow()->RemovePreTargetHandler(this);
   desktop_->RemoveObserver(this);
   // Destruction is only posted after all profile-bound BrowserWidgets finish
   // their own beforeunload and destruction paths.
+  workspace_buttons_ = nullptr;
+  content_ = nullptr;
+  status_ = nullptr;
+  tab_sidebar_ = nullptr;
   desktop_.reset();
 }
 

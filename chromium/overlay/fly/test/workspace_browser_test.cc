@@ -259,5 +259,22 @@ IN_PROC_BROWSER_TEST_F(FlyWorkspaceBrowserTest,
   EXPECT_FALSE(TabIdentity::CanPersist(private_tab.get()));
 }
 
+IN_PROC_BROWSER_TEST_F(FlyWorkspaceBrowserTest,
+                       ClosingSelectedWorkspaceReleasesSidebarObservation) {
+  auto* first = browser();
+  auto* second = SecondWorkspace();
+  ASSERT_TRUE(second);
+  auto& window = FlyWindowController::Get();
+  ASSERT_TRUE(window.IsSelected(second));
+  second->GetWindow()->Close();
+  ASSERT_TRUE(base::test::RunUntil([&] {
+    return window.IsSelected(first) &&
+           window.tab_sidebar_for_testing()->row_for_testing(Active(first));
+  }));
+  EXPECT_EQ(first->GetTabStripModel()->count(),
+            static_cast<int>(
+                window.tab_sidebar_for_testing()->row_count_for_testing()));
+}
+
 }  // namespace
 }  // namespace fly

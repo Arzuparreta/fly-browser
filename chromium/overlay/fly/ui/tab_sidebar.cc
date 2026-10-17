@@ -180,8 +180,8 @@ void TabSidebar::OnTabChangedAt(tabs::TabInterface*, TabChangeType) {
 void TabSidebar::OnTabPinnedStateChanged(tabs::TabInterface*, int) {
   ScheduleRefresh();
 }
-void TabSidebar::OnTabStripModelDestroyed(TabStripModel* model) {
-  model->RemoveObserver(this);
+void TabSidebar::OnTabStripModelDestroyed(TabStripModel*) {
+  // The observer base removes its registration before this notification.
   model_ = nullptr;
   browser_ = nullptr;
   ScheduleRefresh();

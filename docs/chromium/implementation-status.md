@@ -399,7 +399,7 @@ UUID after the original is gone. Malformed IDs and live collisions get a fresh
 identity, and a live tab's identity cannot be reassigned. Private tabs never add
 this field to persistent restore data. Two additional browser tests cover native
 close/reopen, collision rejection, malformed input and private exclusion. All
-seven browser tests still await their real linked execution. Automatic reopening
+eight browser tests still await their real linked execution. Automatic reopening
 of all saved workspaces/session startup remains outstanding.
 
 The detached build received another interrupt signal after 5,901 additional
@@ -408,3 +408,9 @@ verified stale lease was cleared. The build now runs independently of the chat
 under `systemd-run --user`, unit `fly-chromium-control-build.service`, with output
 in `build-systemd.log`. The interruption record is external
 `evidence/interrupted-control-operation-second.json`.
+
+The sidebar's close/teardown test also covers switching back after its selected
+profile-bound browser closes. The model observer base removes its registration
+before the destruction callback; the sidebar clears its references there without
+removing twice. The desktop controller invalidates pending callbacks and clears
+its non-owning child-view references before destroying the widget tree.
