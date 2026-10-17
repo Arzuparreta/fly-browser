@@ -28,6 +28,7 @@ class Label;
 }  // namespace views
 
 namespace fly {
+class TabSidebar;
 // One OS window. Each entry keeps an upstream BrowserView/BrowserWidget, native
 // tab model, profile and extension window ID. Its NativeWidgetAura does not
 // create an OS window. NativeViewHost controls actual clipping and visibility.
@@ -50,6 +51,7 @@ class FlyWindowController : public views::WidgetDelegate,
   bool IsSelected(const BrowserWindowInterface* browser) const;
   views::Widget* desktop_widget() const { return desktop_.get(); }
   CommandService& commands() { return commands_; }
+  TabSidebar* tab_sidebar_for_testing() { return tab_sidebar_; }
   void CreateWorkspace();
   bool RunCommand(BrowserWindowInterface* browser, std::string_view action);
 
@@ -81,6 +83,7 @@ class FlyWindowController : public views::WidgetDelegate,
   raw_ptr<views::View> workspace_buttons_ = nullptr;
   raw_ptr<views::View> content_ = nullptr;
   raw_ptr<views::Label> status_ = nullptr;
+  raw_ptr<TabSidebar> tab_sidebar_ = nullptr;
   std::map<BrowserWindowInterface*, Entry> entries_;
   raw_ptr<BrowserWindowInterface> selected_ = nullptr;
   bool closing_ = false;

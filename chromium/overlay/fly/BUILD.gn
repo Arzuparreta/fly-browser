@@ -30,6 +30,17 @@ source_set("commands") {
   deps = [ "//third_party/icu" ]
 }
 
+source_set("session_metadata") {
+  sources = [
+    "sessions/tab_identity.cc",
+    "sessions/tab_identity.h",
+  ]
+  public_deps = [
+    "//base",
+    "//content/public/browser",
+  ]
+}
+
 test("fly_unittests") {
   sources = [
     "commands/command_service_unittest.cc",

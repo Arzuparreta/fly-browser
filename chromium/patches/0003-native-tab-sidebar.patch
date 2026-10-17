@@ -1,0 +1,25 @@
+--- a/chrome/browser/ui/views/frame/browser_view.cc
++++ b/chrome/browser/ui/views/frame/browser_view.cc
+@@ -1419,6 +1419,12 @@
+ }
+ 
+ bool BrowserView::ShouldDrawTabStrip() const {
++#if BUILDFLAG(IS_LINUX) || BUILDFLAG(IS_WIN)
++  if (fly::FlyWindowController::ShouldEmbed(browser_)) {
++    // Fly's native sidebar projects this same profile-bound tab model.
++    return false;
++  }
++#endif
+   // Return false if this window does not normally display a tabstrip or if the
+   // tabstrip is currently hidden, e.g. because we're in fullscreen.
+   if (!WindowFeatureController::From(browser_)->SupportsWindowFeature(
+--- a/chrome/browser/ui/BUILD.gn
++++ b/chrome/browser/ui/BUILD.gn
+@@ -795,5 +795,7 @@
+       "//fly/ui/fly_window_controller.h",
+       "//fly/ui/native_commands.cc",
+       "//fly/ui/native_commands.h",
++      "//fly/ui/tab_sidebar.cc",
++      "//fly/ui/tab_sidebar.h",
+     ]
+   }

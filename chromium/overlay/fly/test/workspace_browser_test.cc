@@ -1,12 +1,15 @@
 // Copyright Fly Browser contributors. All rights reserved.
 // Use of this source code is governed by the GPL-3.0-or-later license in the
 // Fly repository.
+#include "fly/sessions/tab_identity.h"
 #include "fly/ui/fly_window_controller.h"
 #include "fly/ui/native_commands.h"
+#include "fly/ui/tab_sidebar.h"
 
 #include "base/command_line.h"
 #include "base/test/run_until.h"
 #include "base/test/test_future.h"
+#include "base/uuid.h"
 #include "chrome/browser/browser_process.h"
 #include "chrome/browser/extensions/extension_tab_util.h"
 #include "chrome/browser/profiles/profile.h"
@@ -25,6 +28,8 @@
 #include "ui/aura/window.h"
 #include "ui/aura/window_tree_host.h"
 #include "ui/base/base_window.h"
+#include "ui/views/controls/button/button.h"
+#include "ui/views/test/button_test_api.h"
 
 namespace fly {
 namespace {
@@ -167,5 +172,92 @@ IN_PROC_BROWSER_TEST_F(FlyWorkspaceBrowserTest,
   EXPECT_FALSE(model->GetSplitForTab(model->active_index()));
   ExpectVisible(Active(browser()), true);
 }
+IN_PROC_BROWSER_TEST_F(FlyWorkspaceBrowserTest,
+                       SidebarUsesTabIdentityAfterMoveAndSwitch) {
+  auto* model = browser()->GetTabStripModel();
+  auto* first = Active(browser());
+  chrome::NewTab(browser(), NewTabTypes::kNewTabCommand);
+  auto* sidebar = FlyWindowController::Get().tab_sidebar_for_testing();
+  ASSERT_TRUE(base::test::RunUntil(
+      [&] { return sidebar->row_count_for_testing() == 2; }));
+  auto* original_row = sidebar->row_for_testing(first);
+  ASSERT_TRUE(original_row);
+  auto* select = static_cast<views::Button*>(original_row->children()[0]);
+  auto* pin = static_cast<views::Button*>(original_row->children()[1]);
+  model->MoveWebContentsAt(model->GetIndexOfWebContents(first), 1, false);
+  // Click before the deferred projection update. A cached index would choose
+  // the other tab; the row must resolve its WebContents in the current model.
+  views::test::ButtonTestApi(select).NotifyDefaultMouseClick();
+  EXPECT_EQ(first, Active(browser()));
+  views::test::ButtonTestApi(pin).NotifyDefaultMouseClick();
+  EXPECT_TRUE(model->IsTabPinned(model->GetIndexOfWebContents(first)));
+  ASSERT_TRUE(base::test::RunUntil([&] {
+    return sidebar->row_for_testing(first) == original_row &&
+           sidebar->row_count_for_testing() == 2;
+  }));
+  auto* second = SecondWorkspace();
+  ASSERT_TRUE(second);
+  ASSERT_TRUE(base::test::RunUntil([&] {
+    return sidebar->row_count_for_testing() == 1 &&
+           sidebar->row_for_testing(Active(second)) != nullptr;
+  }));
+  EXPECT_EQ(nullptr, sidebar->row_for_testing(first));
+  FlyWindowController::Get().Select(browser(), true);
+  ASSERT_TRUE(base::test::RunUntil([&] {
+    return sidebar->row_count_for_testing() == 2 &&
+           sidebar->row_for_testing(first) != nullptr;
+  }));
+}
+
+IN_PROC_BROWSER_TEST_F(FlyWorkspaceBrowserTest,
+                       NativeCloseAndReopenPreserveFlyIdentity) {
+  ASSERT_TRUE(ui_test_utils::NavigateToURL(
+      browser(), embedded_test_server()->GetURL("/title1.html")));
+  auto* first = Active(browser());
+  const std::string id = TabIdentity::Get(first);
+  auto original = first->GetWeakPtr();
+  EXPECT_TRUE(base::Uuid::ParseLowercase(id).is_valid());
+  chrome::NewTab(browser(), NewTabTypes::kNewTabCommand);
+  EXPECT_NE(id, TabIdentity::Get(Active(browser())));
+  auto* model = browser()->GetTabStripModel();
+  model->CloseWebContentsAt(model->GetIndexOfWebContents(first),
+                            TabCloseTypes::CLOSE_USER_GESTURE |
+                                TabCloseTypes::CLOSE_CREATE_HISTORICAL_TAB);
+  ASSERT_TRUE(base::test::RunUntil([&] { return !original; }));
+  ASSERT_TRUE(ExecuteNativeCommand(browser(), "reopen-closed-tab"));
+  ASSERT_TRUE(base::test::RunUntil([&] { return model->count() == 2; }));
+  EXPECT_EQ(id, TabIdentity::Get(Active(browser())));
+}
+
+IN_PROC_BROWSER_TEST_F(FlyWorkspaceBrowserTest,
+                       TabIdentityRejectsLiveCollisionsAndPrivatePersistence) {
+  const std::string id = TabIdentity::Get(Active(browser()));
+  std::map<std::string, std::string> extra{{TabIdentity::kExtraDataKey, id}};
+  auto restored = content::WebContents::Create(
+      content::WebContents::CreateParams(browser()->GetProfile()));
+  TabIdentity::Restore(restored.get(), extra);
+  EXPECT_NE(id, TabIdentity::Get(restored.get()));
+  const std::string replacement = TabIdentity::Get(restored.get());
+  extra[TabIdentity::kExtraDataKey] =
+      base::Uuid::GenerateRandomV4().AsLowercaseString();
+  TabIdentity::Restore(restored.get(), extra);
+  EXPECT_EQ(replacement, TabIdentity::Get(restored.get()));
+  auto invalid = content::WebContents::Create(
+      content::WebContents::CreateParams(browser()->GetProfile()));
+  extra[TabIdentity::kExtraDataKey] = "../invalid-session-id";
+  TabIdentity::Restore(invalid.get(), extra);
+  EXPECT_TRUE(
+      base::Uuid::ParseLowercase(TabIdentity::Get(invalid.get())).is_valid());
+  auto private_tab =
+      content::WebContents::Create(content::WebContents::CreateParams(
+          browser()->GetProfile()->GetPrimaryOTRProfile(
+              /*create_if_needed=*/true)));
+  std::map<std::string, std::string> private_data;
+  TabIdentity::Populate(private_tab.get(), &private_data);
+  EXPECT_TRUE(private_data.empty());
+  TabIdentity::Restore(private_tab.get(), extra);
+  EXPECT_FALSE(TabIdentity::CanPersist(private_tab.get()));
+}
+
 }  // namespace
 }  // namespace fly
