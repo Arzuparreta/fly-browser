@@ -58,10 +58,17 @@ class EmbeddedBrowserNativeWidget final : public views::NativeWidgetAura,
   }
   void Show(ui::mojom::WindowShowState state,
             const gfx::Rect& restore_bounds) override {
+    auto& window = FlyWindowController::Get();
+    // A background native window is still a separate browser/tab model. It
+    // must not replace the currently visible workspace merely because Chrome
+    // requests ShowInactive (for example chrome.windows.create focused:false).
+    if (state == ui::mojom::WindowShowState::kInactive &&
+        window.has_selected_browser() && !window.IsSelected(browser_)) {
+      views::NativeWidgetAura::Hide();
+      return;
+    }
     views::NativeWidgetAura::Show(state, restore_bounds);
-    // Startup, session restore and extension-created windows use the normal
-    // upstream Show path. All of them select within the same desktop window.
-    FlyWindowController::Get().Select(browser_, false);
+    window.Select(browser_, false);
   }
   void Activate() override {
     FlyWindowController::Get().Select(browser_, true);
