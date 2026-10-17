@@ -459,3 +459,30 @@ activate a hint without hiding/blurring the document, and close/reopen the last
 browser using keyboard and pointer flows. They are unexecuted until the full
 native browser/test link completes. Do not mark M1/M2 or A02/A03/A04/A08 passed
 from source checks or partial service tests.
+
+
+## Native focused-page scrolling
+
+The dependent `codex/chromium-native-page-scroll` branch extends the browser's
+existing ordered edit/input channel with a bounded C++ scroll-command enum.
+Chromium's public WebContents interface exposes document jumps but does not
+expose Fly's 80-CSS-pixel steps and half-viewport commands. The sixth integration
+patch maps these controls to private renderer input commands, which execute in
+the currently focused local frame and find its native scroll container through
+layout/shadow ancestry. Blink's own scrollBy/scrollTo implementations handle
+smooth scrolling, snapping and zoom; no injected script or page API replacement
+implements this path. The private names do not enter document.execCommand's
+web-exposed dispatch table. Ordinary edit commands retain their original path.
+
+The browser, Blink renderer and Fly dispatcher pass syntax checking with their
+actual respective pinned GN compile flags; raw output is external
+`evidence/scroll-syntax.log` and the three `scroll-*-syntax.log` files. The engine
+source remains unmodified while the control builds. Two more browser tests
+(13 total) cover focused-container steps, half-page/jump/horizontal movement at
+native zoom, editable typing, hostile page method overrides and a focused
+cross-origin/OOPIF scroll target. Native browser execution remains pending.
+
+Workspace switching also stores/restores native WebContents focus instead of
+unconditionally resetting it. The OOPIF case switches to a second profile and
+back before issuing its native scroll key, to check that the focused frame is
+retained. This remains an unexecuted browser assertion.

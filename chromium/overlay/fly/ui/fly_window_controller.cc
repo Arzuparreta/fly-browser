@@ -197,6 +197,9 @@ void FlyWindowController::Select(BrowserWindowInterface* browser, bool focus) {
   if (selected_ != browser) {
     if (selected_) {
       auto& previous = entries_.at(selected_);
+      if (auto* contents =
+              selected_->GetTabStripModel()->GetActiveWebContents())
+        contents->StoreFocus();
       previous.widget->OnNativeWidgetActivationChanged(false);
       previous.host->SetVisible(false);
       previous.widget->Hide();
@@ -217,7 +220,9 @@ void FlyWindowController::Select(BrowserWindowInterface* browser, bool focus) {
   if (focus) {
     desktop_->Activate();
     if (auto* contents = browser->GetTabStripModel()->GetActiveWebContents()) {
-      contents->Focus();
+      auto* view = contents->GetRenderWidgetHostView();
+      if (!view || !view->HasFocus())
+        contents->RestoreFocus();
     }
   }
 }

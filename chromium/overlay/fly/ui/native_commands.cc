@@ -284,6 +284,23 @@ bool ExecuteNativeCommand(BrowserWindowInterface* browser,
     return true;
   }
   auto* contents = browser->GetTabStripModel()->GetActiveWebContents();
+  using Scroll = content::WebContents::PageScrollCommand;
+  constexpr std::pair<std::string_view, Scroll> scrolling[] = {
+      {"scroll-down", Scroll::kStepDown},
+      {"scroll-up", Scroll::kStepUp},
+      {"scroll-left", Scroll::kStepLeft},
+      {"scroll-right", Scroll::kStepRight},
+      {"half-page-down", Scroll::kHalfPageDown},
+      {"half-page-up", Scroll::kHalfPageUp},
+      {"page-top", Scroll::kTop},
+      {"page-bottom", Scroll::kBottom}};
+  for (const auto& [name, command] : scrolling) {
+    if (action == name) {
+      if (contents)
+        contents->ScrollFocusedPage(command);
+      return true;
+    }
+  }
   if (action == "toggle-tab-audio-mute") {
     if (contents)
       contents->SetAudioMuted(!contents->IsAudioMuted());
