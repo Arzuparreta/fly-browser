@@ -1,0 +1,407 @@
+{
+  "schema": 1,
+  "captured_at": "2026-10-17T11:53:10.669653+00:00",
+  "baseline_commit": "98fc5f9",
+  "native_fly_acceptance": "pending for all A01-A22",
+  "baseline_logs": [
+    {
+      "log": "baseline-keyboard-x11.log",
+      "sha256": "7d9520e6baecf3720a613446ebd76148be1a1a000c5ee0bb827e877b9ab4c6fd",
+      "result": "pass",
+      "output": "Live Electron keyboard editor and guest input passed. { errors: [], scroll: 80 }"
+    },
+    {
+      "log": "baseline-workspaces-x11.log",
+      "sha256": "ff0626926331d1b80af4e12d64b8f90172ff6ba7ea973f35ff3cdc50174f321b",
+      "result": "pass",
+      "output": "Workspace partitions stay separate across migration, creation, renames, deletion and restarts."
+    },
+    {
+      "log": "baseline-split-x11.log",
+      "sha256": "9c0e2fb8fe00d6b31933c961c72520e75a2fbf7ee0cbde83952faf277c7f91a5",
+      "result": "pass",
+      "output": "Split view opens from a single tab and leaves showing only the selected tab."
+    },
+    {
+      "log": "baseline-keyboard.log",
+      "sha256": "b68b0c362203f3a9e26d34be37ac5d427123e98a97ffed6e277170e064655668",
+      "result": "fail",
+      "output": "locator.waitFor: Timeout 10000ms exceeded."
+    },
+    {
+      "log": "baseline-workspaces.log",
+      "sha256": "a7aae8fc55fcbd535af6d67f6805fd94f27cad3eaefb96d2504ecee53aa2a861",
+      "result": "fail",
+      "output": "locator.getAttribute: Timeout 15000ms exceeded."
+    },
+    {
+      "log": "baseline-split.log",
+      "sha256": "60d2d5a09a7c1a67f550446a4f7f1de3e5cfe39359a2d0d6c2101fb0c1bd2fa2",
+      "result": "fail",
+      "output": "page.waitForFunction: Timeout 10000ms exceeded."
+    },
+    {
+      "log": "baseline-keyboard-capture.log",
+      "sha256": "43b6d1316a9b963cd15ca316aa67deffa9a14ca0b24341f383f8bcfad7fc0436",
+      "result": "fail",
+      "output": "electron.launch: Timeout 30000ms exceeded."
+    }
+  ],
+  "system_chromium_fixture_runs": [
+    {
+      "role": "control fixture validation; no native Fly acceptance",
+      "browserVersion": "154.0.8037.97",
+      "backend": "x11",
+      "sandboxDisabled": false,
+      "focusEmulationDisabled": true,
+      "extensionManifestSha256": null,
+      "checks": {
+        "editableFocusDoesNotHide": "pass",
+        "sameNativeWindow": "pass",
+        "pausedAcrossTabSwitch": "pass",
+        "backgroundAudioContinues": "pass"
+      },
+      "result": "pass",
+      "limitations": [
+        "No native Fly shell/workspace integration",
+        "Audio fixture only; video, Twitch and real Pie untested",
+        "No minimise/restore, packaged application or platform-wide acceptance"
+      ],
+      "events": [
+        {
+          "type": "loadeddata",
+          "hidden": false,
+          "visibility": "visible",
+          "focused": false,
+          "paused": true,
+          "muted": false,
+          "time": 0,
+          "readyState": 4
+        },
+        {
+          "type": "pageshow",
+          "hidden": false,
+          "visibility": "visible",
+          "focused": false,
+          "paused": true,
+          "muted": false,
+          "time": 0,
+          "readyState": 4
+        },
+        {
+          "type": "focus",
+          "hidden": false,
+          "visibility": "visible",
+          "focused": true,
+          "paused": true,
+          "muted": false,
+          "time": 0,
+          "readyState": 4
+        },
+        {
+          "type": "focus",
+          "hidden": false,
+          "visibility": "visible",
+          "focused": true,
+          "paused": true,
+          "muted": false,
+          "time": 0,
+          "readyState": 4
+        },
+        {
+          "type": "play",
+          "hidden": false,
+          "visibility": "visible",
+          "focused": true,
+          "paused": false,
+          "muted": false,
+          "time": 0,
+          "readyState": 4
+        },
+        {
+          "type": "pause",
+          "hidden": false,
+          "visibility": "visible",
+          "focused": true,
+          "paused": true,
+          "muted": false,
+          "time": 0,
+          "readyState": 4
+        },
+        {
+          "type": "blur",
+          "hidden": false,
+          "visibility": "visible",
+          "focused": false,
+          "paused": true,
+          "muted": false,
+          "time": 0,
+          "readyState": 4
+        },
+        {
+          "type": "visibilitychange",
+          "hidden": true,
+          "visibility": "hidden",
+          "focused": false,
+          "paused": true,
+          "muted": false,
+          "time": 0,
+          "readyState": 4
+        },
+        {
+          "type": "visibilitychange",
+          "hidden": false,
+          "visibility": "visible",
+          "focused": false,
+          "paused": true,
+          "muted": false,
+          "time": 0,
+          "readyState": 4
+        },
+        {
+          "type": "focus",
+          "hidden": false,
+          "visibility": "visible",
+          "focused": true,
+          "paused": true,
+          "muted": false,
+          "time": 0,
+          "readyState": 4
+        },
+        {
+          "type": "blur",
+          "hidden": false,
+          "visibility": "visible",
+          "focused": false,
+          "paused": false,
+          "muted": false,
+          "time": 0,
+          "readyState": 4
+        },
+        {
+          "type": "visibilitychange",
+          "hidden": true,
+          "visibility": "hidden",
+          "focused": false,
+          "paused": false,
+          "muted": false,
+          "time": 0,
+          "readyState": 4
+        },
+        {
+          "type": "play",
+          "hidden": true,
+          "visibility": "hidden",
+          "focused": false,
+          "paused": false,
+          "muted": false,
+          "time": 0.033172,
+          "readyState": 4
+        },
+        {
+          "type": "visibilitychange",
+          "hidden": false,
+          "visibility": "visible",
+          "focused": false,
+          "paused": false,
+          "muted": false,
+          "time": 0.053324,
+          "readyState": 4
+        },
+        {
+          "type": "focus",
+          "hidden": false,
+          "visibility": "visible",
+          "focused": true,
+          "paused": false,
+          "muted": false,
+          "time": 0.053606,
+          "readyState": 4
+        }
+      ]
+    },
+    {
+      "role": "control fixture validation; no native Fly acceptance",
+      "browserVersion": "154.0.8037.97",
+      "backend": "x11",
+      "sandboxDisabled": false,
+      "focusEmulationDisabled": true,
+      "extensionManifestSha256": "17f815501c0905d881e1f6a0524121413486879bf340de6450379674c97486c4",
+      "checks": {
+        "editableFocusDoesNotHide": "pass",
+        "sameNativeWindow": "pass",
+        "pausedAcrossTabSwitch": "pass",
+        "backgroundAudioContinues": "pass",
+        "extensionProbeLoaded": "pass"
+      },
+      "result": "pass",
+      "limitations": [
+        "No native Fly shell/workspace integration",
+        "Audio fixture only; video, Twitch and real Pie untested",
+        "No minimise/restore, packaged application or platform-wide acceptance"
+      ],
+      "events": [
+        {
+          "type": "loadeddata",
+          "hidden": false,
+          "visibility": "visible",
+          "focused": false,
+          "paused": true,
+          "muted": false,
+          "time": 0,
+          "readyState": 4
+        },
+        {
+          "type": "pageshow",
+          "hidden": false,
+          "visibility": "visible",
+          "focused": false,
+          "paused": true,
+          "muted": false,
+          "time": 0,
+          "readyState": 4
+        },
+        {
+          "type": "focus",
+          "hidden": false,
+          "visibility": "visible",
+          "focused": true,
+          "paused": true,
+          "muted": false,
+          "time": 0,
+          "readyState": 4
+        },
+        {
+          "type": "focus",
+          "hidden": false,
+          "visibility": "visible",
+          "focused": true,
+          "paused": true,
+          "muted": false,
+          "time": 0,
+          "readyState": 4
+        },
+        {
+          "type": "play",
+          "hidden": false,
+          "visibility": "visible",
+          "focused": true,
+          "paused": false,
+          "muted": false,
+          "time": 0,
+          "readyState": 4
+        },
+        {
+          "type": "pause",
+          "hidden": false,
+          "visibility": "visible",
+          "focused": true,
+          "paused": true,
+          "muted": false,
+          "time": 0,
+          "readyState": 4
+        },
+        {
+          "type": "blur",
+          "hidden": false,
+          "visibility": "visible",
+          "focused": false,
+          "paused": true,
+          "muted": false,
+          "time": 0,
+          "readyState": 4
+        },
+        {
+          "type": "visibilitychange",
+          "hidden": true,
+          "visibility": "hidden",
+          "focused": false,
+          "paused": true,
+          "muted": false,
+          "time": 0,
+          "readyState": 4
+        },
+        {
+          "type": "focus",
+          "hidden": true,
+          "visibility": "hidden",
+          "focused": true,
+          "paused": true,
+          "muted": false,
+          "time": 0,
+          "readyState": 4
+        },
+        {
+          "type": "visibilitychange",
+          "hidden": false,
+          "visibility": "visible",
+          "focused": true,
+          "paused": true,
+          "muted": false,
+          "time": 0,
+          "readyState": 4
+        },
+        {
+          "type": "blur",
+          "hidden": false,
+          "visibility": "visible",
+          "focused": false,
+          "paused": false,
+          "muted": false,
+          "time": 0,
+          "readyState": 4
+        },
+        {
+          "type": "visibilitychange",
+          "hidden": true,
+          "visibility": "hidden",
+          "focused": false,
+          "paused": false,
+          "muted": false,
+          "time": 0,
+          "readyState": 4
+        },
+        {
+          "type": "play",
+          "hidden": true,
+          "visibility": "hidden",
+          "focused": false,
+          "paused": false,
+          "muted": false,
+          "time": 0.037445,
+          "readyState": 4
+        },
+        {
+          "type": "visibilitychange",
+          "hidden": false,
+          "visibility": "visible",
+          "focused": false,
+          "paused": false,
+          "muted": false,
+          "time": 0.058991,
+          "readyState": 4
+        },
+        {
+          "type": "focus",
+          "hidden": false,
+          "visibility": "visible",
+          "focused": true,
+          "paused": false,
+          "muted": false,
+          "time": 0.059366,
+          "readyState": 4
+        },
+        {
+          "type": "pause",
+          "hidden": false,
+          "visibility": "visible",
+          "focused": true,
+          "paused": true,
+          "muted": false,
+          "time": 0.059366,
+          "readyState": 4
+        }
+      ]
+    }
+  ]
+}

@@ -27,3 +27,7 @@ docs/.vitepress/cache/
 
 # Build and distribution outputs
 dist/
+
+# Python tooling caches (Chromium checkouts/builds live outside this repository)
+__pycache__/
+*.pyc

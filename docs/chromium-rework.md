@@ -1,7 +1,8 @@
 # Fly on Chromium: implementation plan
 
-Status: approved direction, implementation not started. This document plans a
-full Chromium browser rework; it does not announce that Fly has migrated.
+Status: implementation started at M0; native runtime and cutover remain
+outstanding. The [execution record](./chromium/implementation-status.md) tracks
+actual evidence. This plan does not announce that Fly has migrated.
 
 Planning baseline: `a477efd0cd47c24d8053ce2be013446054268fe9` in
 `Arzuparreta/fly-browser`. Re-audit changes made after that commit before starting.
