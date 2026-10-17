@@ -1,6 +1,6 @@
 {
   "schema": 1,
-  "captured_at": "2026-10-17T11:53:10.669653+00:00",
+  "captured_at": "2026-10-17T11:59:32.535014+00:00",
   "baseline_commit": "98fc5f9",
   "native_fly_acceptance": "pending for all A01-A22",
   "baseline_logs": [
@@ -45,6 +45,18 @@
       "sha256": "43b6d1316a9b963cd15ca316aa67deffa9a14ca0b24341f383f8bcfad7fc0436",
       "result": "fail",
       "output": "electron.launch: Timeout 30000ms exceeded."
+    },
+    {
+      "log": "baseline-keyboard-capture-retry.log",
+      "sha256": "7d9520e6baecf3720a613446ebd76148be1a1a000c5ee0bb827e877b9ab4c6fd",
+      "result": "pass",
+      "output": "Live Electron keyboard editor and guest input passed. { errors: [], scroll: 80 }"
+    },
+    {
+      "log": "baseline-bookmarks-x11.log",
+      "sha256": "e9711fda8249597458a1c58360ed762cf99928043d7ffb815b2420ada44dfde3",
+      "result": "pass",
+      "output": "Bookmarks Electron: single list, keyboard navigation, filtering, open/delete, retired shortcuts and editable-page typing pass."
     }
   ],
   "system_chromium_fixture_runs": [
@@ -403,5 +415,12 @@
         }
       ]
     }
-  ]
+  ],
+  "electron_baseline_screenshot": {
+    "sha256": "783b770653e322e4eae59144e94f9f3574a56dbbaa2a14aeb0017ea2b297c104",
+    "width": 956,
+    "height": 1052,
+    "location": "external evidence/electron-keyboard.png",
+    "result": "visually inspected; narrow viewport includes horizontal scrollbar"
+  }
 }

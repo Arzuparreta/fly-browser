@@ -42,7 +42,8 @@ def read_lock():
 
 
 def run(args, cwd, env=None, capture=False):
-    print('+ ' + ' '.join(str(arg) for arg in args), flush=True)
+    if not capture:
+        print('+ ' + ' '.join(str(arg) for arg in args), flush=True)
     result = subprocess.run([str(arg) for arg in args], cwd=cwd, env=env,
                             check=True, text=True,
                             stdout=subprocess.PIPE if capture else None)
@@ -279,9 +280,10 @@ def execute(args):
             if config.exists() and config.read_bytes() != CONFIG.read_bytes():
                 fail('Existing control args differ; preserve output before reconfiguration')
             config.write_bytes(CONFIG.read_bytes())
-            run(['gn', 'gen', 'out/FlyControl', '--check'], root / 'src', env)
+            run(['gn', 'gen', 'out/FlyControl'], root / 'src', env)
             evidence(root, 'configure', lock, {'args_sha256': digest(config)})
         elif args.command == 'build':
+            doctor(root)
             require_stage(root, 'configure', lock)
             if digest(root / 'src/out/FlyControl/args.gn') != digest(CONFIG):
                 fail('Control build arguments changed since configuration')

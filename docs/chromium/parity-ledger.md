@@ -23,7 +23,7 @@ for every row. The matrix in the approved plan defines the required outcomes.
 | Sidebar expansion, pointer/focus, resize, high DPI and window controls | M2 / A04 | `renderer.js`, `modules/sidebarPointer.js`, `modules/windowControls.js`, `modules/focus.js` | pending |
 | Address bar, aliases, suggestions and calculator | M2 / A14 | `modules/navigation.js`, `modules/overlays/searchEngine.js`, `modules/calculator.js` | pending |
 | Palette, dashboard, overlay cancellation, focus and accessibility | M2 / A03, A04 | `modules/overlays/commandPalette.js`, `modules/overlays/dashboard.js`, `modules/focus.js` | pending |
-| New tab, bookmarks/folders, quickmarks, history, hiding frequent sites | M2 / A14 | `assets/new-tab.js`, `bookmarkStore.js`, `frequentSites.js`, `modules/overlays/bookmarks.js`, `modules/overlays/history.js` | pending |
+| New tab, flat bookmarks, history, hiding frequent sites; preserve retired quickmark data | M2/M4 / A14, A19 | `assets/new-tab.js`, `bookmarkStore.js`, `frequentSites.js`, `modules/overlays/bookmarks.js`, `modules/overlays/history.js` | pending |
 | Settings navigation, search, live preferences and atomic writes | M2 / A15, A19 | `main.js`, `modules/settingsNav.js`, `modules/settingsTab.js` | pending |
 | Website theme, custom palette, UI scale, hostname zoom and clock | M2 / A15 | `modules/theme.js`, `siteZoom.js`, `modules/clock.js` | pending |
 | Native visibility and media, paused/playing, mute and Pie reproduction | M1/M3 / A08, A09 | `modules/webview.js`, `main.js` | pending |
@@ -233,14 +233,15 @@ by Electron per platform. Never assume they coincide. Neither root has been read
 | Input | Root | Contract | Native import |
 | --- | --- | --- | --- |
 | `config.json` | legacy-config | Defaults, explicit choices, unknown fields; tab_sleep_timeout_minutes is a legacy alias | pending |
-| `session.json` | legacy-config | Workspace URL arrays, stable partition identity and parallel tab metadata | pending |
+| `session.json` | legacy-config | Workspace URL arrays, stable partition identity and parallel tab metadata; legacy tab_sleep_states aliases restoration records | pending |
 | `session.json.bak` | legacy-config | Rolling session recovery journal | pending |
-| `session_sentinel.json` | legacy-config | clean_exit and crash recovery; never treat as a clean session snapshot | pending |
-| `bookmarks.json` | legacy-config | App-wide bookmarks, folders, order, quickmarks and unknown item fields | pending |
-| `history.json` | legacy-config | App-wide visits, titles, timestamps; private visits excluded | pending |
+| `session_sentinel.json` | legacy-config | Object: clean_exit, timestamp, pid; never treat as a clean session snapshot | pending |
+| `bookmarks.json` | legacy-config | Ordered flat array of title, url, timestamp objects; preserve unknown item fields; no active folders/quickmarks | pending |
+| `quickmarks.json` | legacy-config | Retired legacy input: current Fly does not load or alter it. Preserve original data; do not resurrect retired bindings | pending |
+| `history.json` | legacy-config | Bounded ordered array of title, url, timestamp objects; private visits excluded | pending |
 | `keybinds.json` | legacy-config | keybinds.resolveKeybinds: legacy and versioned changesOnly inputs; explicit empty bindings retained | pending |
-| `site-zoom.json` | legacy-config | Hostname levels; private zoom memory-only | pending |
-| `hidden-sites.json` | legacy-config | Hidden frequent-site origins, distinct from history/bookmarks | pending |
+| `site-zoom.json` | legacy-config | Hostname-to-number object; finite levels between -5 and 5, zero omitted; private zoom memory-only | pending |
+| `hidden-sites.json` | legacy-config | Array of hidden HTTP(S) origins, distinct from history/bookmarks | pending |
 | `scripts/` | legacy-config | Local user-script source, grants, matching and run timing | pending |
 | `styles/` | legacy-config | Local CSS source and matching | pending |
 | `script-storage/` | legacy-config | Per-script JSON; validate filename boundaries | pending |
