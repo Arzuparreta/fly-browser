@@ -155,6 +155,7 @@ if (is_linux || is_win) {
       "//ui/events:test_support",
       "//ui/views",
       "//ui/views:test_support",
+      "//ui/wm/core",
     ]
     data_deps = [
       "//chrome",

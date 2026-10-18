@@ -76,6 +76,7 @@
 #include "components/prefs/pref_service.h"
 #include "ui/aura/window.h"
 #include "ui/aura/window_tree_host.h"
+#include "ui/wm/core/coordinate_conversion.h"
 #include "ui/base/base_window.h"
 #include "ui/events/test/event_generator.h"
 #include "ui/views/controls/button/button.h"
@@ -1221,7 +1222,8 @@ IN_PROC_BROWSER_TEST_F(FlyWorkspaceBrowserTest,
       browser(), embedded_test_server()->GetURL("/title1.html")));
   auto* contents = Active(browser());
   ASSERT_TRUE(content::ExecJs(contents, R"js(
-    document.body.innerHTML = '<button id="only">Hint fixture</button>';
+    document.body.innerHTML = '<button id="only">Hint fixture</button>' +
+        '<iframe id="unrelated" src="about:blank"></iframe>';
     document.querySelector('#only').onclick = () => document.title = 'hint activated';
     window.visibilityEvents = 0;
     document.addEventListener('visibilitychange', () => visibilityEvents++);
@@ -1256,6 +1258,14 @@ IN_PROC_BROWSER_TEST_F(FlyWorkspaceBrowserTest,
   EXPECT_EQ("visible", content::EvalJs(contents, "document.visibilityState"));
   EXPECT_EQ(true, content::EvalJs(contents, "document.hasFocus()"));
   EXPECT_EQ(0, content::EvalJs(contents, "visibilityEvents"));
+  auto* unrelated = content::ChildFrameAt(contents->GetPrimaryMainFrame(), 0);
+  ASSERT_TRUE(unrelated);
+  content::RenderFrameDeletedObserver deleted(unrelated);
+  ASSERT_TRUE(content::ExecJs(contents,
+                            "document.querySelector('#unrelated').remove()"));
+  deleted.WaitUntilDeleted();
+  EXPECT_TRUE(window.hints().active());
+  EXPECT_EQ(1u, window.hints().target_count_for_testing());
   content::TitleWatcher title(contents, u"hint activated");
   keys.PressKey(ui::VKEY_Q, ui::EF_NONE);
   EXPECT_EQ(u"hint activated", title.WaitAndGetTitle());
@@ -1967,13 +1977,28 @@ class FlyTabMenuBrowserTest : public FlyWorkspaceBrowserTest {
         FlyWindowController::Get().desktop_widget()->GetNativeWindow()->GetRootWindow());
     auto point = control->GetVisibleBounds().CenterPoint();
     views::View::ConvertPointToScreen(control, &point);
+    auto* root_window = FlyWindowController::Get()
+                            .desktop_widget()->GetNativeWindow()->GetRootWindow();
+    auto native_point = point;
+    wm::ConvertPointFromScreen(root_window, &native_point);
+    auto* native_target = root_window->GetEventHandlerForPoint(native_point);
+    const std::string native_target_name =
+        native_target ? native_target->GetName() : "<none>";
+    auto* root_view = sidebar->GetWidget()->GetRootView();
+    auto view_point = point;
+    views::View::ConvertPointFromScreen(root_view, &view_point);
+    auto* view_target = root_view->GetEventHandlerForPoint(view_point);
+    const std::string view_target_name(
+        view_target ? view_target->GetClassName() : "<none>");
     mouse.MoveMouseTo(point);
     mouse.ClickRightButton();
     ASSERT_TRUE(base::test::RunUntil([&] { return inspected; }))
         << "click=" << point.ToString()
         << " control=" << control->GetBoundsInScreen().ToString()
         << " visible=" << control->GetVisibleBounds().ToString()
-        << " sidebar=" << sidebar->GetBoundsInScreen().ToString();
+        << " sidebar=" << sidebar->GetBoundsInScreen().ToString()
+        << " native_target=" << native_target_name
+        << " view_target=" << view_target_name;
   }
   static size_t Item(ui::SimpleMenuModel* menu, std::u16string_view label) {
     for (size_t i = 0; i < menu->GetItemCount(); ++i)

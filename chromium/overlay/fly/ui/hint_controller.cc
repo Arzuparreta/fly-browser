@@ -318,8 +318,14 @@ void HintController::AccessibilityLocationChangesReceived(
 void HintController::PrimaryPageChanged(content::Page&) {
   CancelWithReason("navigation");
 }
-void HintController::RenderFrameDeleted(content::RenderFrameHost*) {
-  CancelWithReason("frame-deleted");
+void HintController::RenderFrameDeleted(content::RenderFrameHost* frame) {
+  // A previous navigation's RFH can finish deletion after hint startup. Only
+  // invalidate the current page or a frame that actually owns a hint target.
+  if ((web_contents() && frame == web_contents()->GetPrimaryMainFrame()) ||
+      std::ranges::any_of(targets_, [&](const Target& target) {
+        return target.tree == frame->GetAXTreeID();
+      }))
+    CancelWithReason("target-frame-deleted");
 }
 void HintController::OnVisibilityChanged(content::Visibility visibility) {
   if (visibility != content::Visibility::VISIBLE)

@@ -26,6 +26,7 @@
 #include "base/task/single_thread_task_runner.h"
 #include "chrome/app/chrome_command_ids.h"
 #include "chrome/browser/browser_process.h"
+#include "chrome/browser/lifetime/application_lifetime.h"
 #include "chrome/browser/lifetime/application_lifetime_desktop.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/profiles/profile_manager.h"
@@ -221,7 +222,10 @@ FlyWindowController::~FlyWindowController() {
   bookmark_picker_.reset();
   palette_.reset();
   hints_.reset();
-  desktop_->GetNativeWindow()->RemovePreTargetHandler(this);
+  // During application quit the native desktop can be destroyed before the
+  // posted controller cleanup, while this client-owned Widget is still alive.
+  if (auto* native_window = desktop_->GetNativeWindow())
+    native_window->RemovePreTargetHandler(this);
   desktop_->RemoveObserver(this);
   // Destruction is only posted after all profile-bound BrowserWidgets finish
   // their own beforeunload and destruction paths.
@@ -737,7 +741,7 @@ void FlyWindowController::RequestClose(views::Widget::ClosedReason reason) {
     // This desktop represents the whole Fly application. Announce quit before
     // closing profile windows so Chromium preserves its last-opened profiles
     // and session services. The coordinator still honours unload cancellation.
-    chrome::CloseAllBrowsersAndQuit();
+    chrome::AttemptExit();
   }
 }
 void FlyWindowController::OnClosingAllBrowsers(bool closing) {
@@ -763,6 +767,8 @@ void FlyWindowController::FinishClose() {
 
 void FlyWindowController::OnWidgetDestroying(views::Widget* widget) {
   if (widget == desktop_.get()) {
+    clock_timer_.Stop();
+    preferences_registrar_.RemoveAll();
     return;
   }
   auto it = std::ranges::find_if(

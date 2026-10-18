@@ -47,15 +47,28 @@ also preserves toolbar focus. Hints and both session cases fail; three pointer-m
 cases time out. Both sandboxed media fixtures pass with full runtime provenance.
 The failed summaries are retained; no acceptance gate has been waived.
 
-The next correction announces application quit through Chromium before closing
-profile windows, preserving last-opened profiles. A new real beforeunload case
-requires cancellation to retain both workspace browsers and leave commands usable.
-Pointer tests wait for visible layout and click within the clipped visible control.
-Hint diagnostics retain cancellation reason and observed native accessibility mode;
-the fixture explicitly focuses the page before testing that hints preserve focus.
-These changes bring the current browser source to 47 declarations, including two
-PRE cases. The changed UI and browser source pass pinned Linux Clang syntax checks.
-Runtime confirmation of this follow-up remains pending.
+The follow-up source has 47 browser declarations, including two PRE cases.
+The `68c8856` run exposed a cleanup crash after requesting quit: the client-owned
+Widget outlives its native window. Cleanup must tolerate the native window already
+being gone. The complete application-exit path must also notify Chromium's
+closing-all-browsers observers, not only set its quit flag. The prepared repair
+uses `chrome::AttemptExit()`, guards native handler removal and stops UI timers
+when the desktop is destroyed. A beforeunload regression requires cancellation to
+retain both workspace browsers and leave commands usable.
+
+Hint diagnostics identify a late `RenderFrameDeleted` notification from a prior
+navigation as the cancellation reason, with native accessibility mode enabled.
+Only deletion of the current main frame or a frame owning hint targets should
+cancel hints. The regression also removes an unrelated empty iframe while hints
+are active and requires the remaining real target to work without focus or
+visibility emulation.
+
+Physical pointer diagnostics found tab rows at zero bounds, even after layout
+waiting. The sidebar ScrollView must use its plain content View's preferred size.
+The repair enables this and keeps real clicks within the visible clipped control;
+failures report both Views and Aura hit-test targets. Runtime confirmation of
+these follow-ups remains pending. The failed intermediate run is retained and
+must not count as successful shutdown or native acceptance.
 
 Current source is developed in the hints worktree, then frozen in the sidebar
 worktree before each managed build. Inspect user units

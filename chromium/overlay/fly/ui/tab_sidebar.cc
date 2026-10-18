@@ -213,6 +213,9 @@ TabSidebar::TabSidebar(base::RepeatingClosure new_tab) {
       std::make_unique<views::MdTextButton>(std::move(new_tab), u"New tab"));
   add->GetViewAccessibility().SetName(u"New tab in selected workspace");
   auto* scroll = AddChildView(std::make_unique<views::ScrollView>());
+  // A plain contents View does not size itself to its BoxLayout. Let the
+  // viewport use its preferred size, otherwise rows remain at zero bounds.
+  scroll->SetUseContentsPreferredSize(true);
   scroll->SetHorizontalScrollBarMode(
       views::ScrollView::ScrollBarMode::kDisabled);
   rows_ = scroll->SetContents(std::make_unique<views::View>());
