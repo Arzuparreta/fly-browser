@@ -755,3 +755,19 @@ and the 29 tooling transaction tests pass.
 The complete isolated GN graph also generates and passes header ownership
 checks (`session-startup-gn.log`, 35,576 targets). This validation uses private
 patched copies and leaves the in-progress control source untouched.
+
+## Native media provenance
+
+The dependent `codex/chromium-native-provenance` branch makes native build evidence
+identify the executable path/hash, argument hash and whether a desktop adapter is
+implemented on that platform. The media harness requires this completed build
+record with `--native-record` when using `--native`, and checks its engine lock,
+overlay fingerprint format, desktop support and executable identity before
+creating a work directory, starting a server or loading Playwright. A browser
+ignoring the development switch can no longer be labelled native by that switch
+alone. macOS compilation cannot produce native desktop acceptance until its
+adapter exists. The record digest and build provenance accompany fixture results.
+Six boundary tests use inert file bytes and no browser launch; missing, control,
+unsupported-platform, different-lock, malformed-overlay and replaced-binary
+records fail before side effects. The tooling suite now has 35 passing tests.
+These tests validate evidence integrity; no native runtime result is claimed.
