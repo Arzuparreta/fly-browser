@@ -13,6 +13,7 @@ from pathlib import Path, PurePosixPath
 import subprocess
 import sys
 import tempfile
+import time
 
 import engine
 
@@ -338,6 +339,28 @@ def compile_objects(root, lock, manifest, env, jobs):
     engine.evidence(root, 'native-test-objects', lock, details)
 
 
+def verify_browser_results(summary, source):
+    # PRE success is folded into its matching main result by Chromium's test
+    # launcher. A failed PRE propagates to that main result. See upstream
+    # base/test/launcher/test_results_tracker.cc::AddTestResult.
+    expected = {fixture + '.' + name for fixture, name in re.findall(
+        r'IN_PROC_BROWSER_TEST_F\(\s*(Fly\w*BrowserTest),\s*(\w+)\s*\)',
+        source.read_text()) if not name.startswith('PRE_')}
+    if not expected:
+        engine.fail('No native browser cases declared in the reviewed source')
+    report = json.loads(summary.read_text())
+    iterations = report.get('per_iteration_data', [])
+    if not iterations:
+        engine.fail('Native browser summary contains no test iterations')
+    for iteration in iterations:
+        for name in sorted(expected):
+            attempts = iteration.get(name, [])
+            if not attempts or attempts[-1].get('status') != 'SUCCESS':
+                engine.fail('Native browser case was missing or unsuccessful: ' + name)
+    return {'main_cases_per_iteration': len(expected),
+            'iterations': len(iterations), 'summary_sha256': engine.digest(summary)}
+
+
 def execute(args):
     lock = engine.read_lock()
     root = engine.engine_root(args.root)
@@ -409,11 +432,19 @@ def execute(args):
                 engine.run([output / ('fly_unittests.exe' if sys.platform == 'win32' else 'fly_unittests')], root / 'src', env, foreground=True)
             if args.command == 'test-browser':
                 executable = output / (target + ('.exe' if sys.platform == 'win32' else ''))
-                engine.run([executable, '--gtest_filter=FlyWorkspaceBrowserTest.*:FlyPageScrollBrowserTest.*',
+                summary = root / 'evidence/native-browser-tests.json'
+                if summary.exists():
+                    summary.rename(summary.with_name(
+                        'native-browser-tests.previous-' + str(time.time_ns()) + '.json'))
+                engine.run([executable, '--gtest_filter=Fly*BrowserTest.*',
                             '--test-launcher-jobs=1',
-                            '--test-launcher-summary-output=' + str(root / 'evidence/native-browser-tests.json')], root / 'src', env, foreground=True)
+                            '--test-launcher-summary-output=' + str(summary)], root / 'src', env, foreground=True)
+                browser_results = verify_browser_results(
+                    summary, OVERLAY / 'fly/test/workspace_browser_test.cc')
             verify_source(root, lock)
             details = {'fingerprint': manifest['fingerprint'], 'target': target}
+            if args.command == 'test-browser':
+                details.update(browser_results)
             if args.command == 'build':
                 executable = (output / 'Chromium.app/Contents/MacOS/Chromium'
                               if sys.platform == 'darwin' else

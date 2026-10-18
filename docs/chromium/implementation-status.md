@@ -5,29 +5,41 @@ No native application, migration or package has passed acceptance yet.
 
 ## Current checkpoint
 
-PR [#113](https://github.com/Arzuparreta/fly-browser/pull/113) merged as
-`3a34888` after latest-head ordinary checks and the explicit native matrix passed.
-[Run 39075312206](https://github.com/Arzuparreta/fly-browser/actions/runs/39075312206)
-built and executed all 26 native service tests on **Linux, macOS and Windows**;
-all 27 Python tooling contracts also passed on all three. Downloaded
-`native-core-tests.json` files each contain 26 SUCCESS results, under external
-`evidence/ci-sidebar-final/`. These are service tests, not browser acceptance.
+PR [114](https://github.com/Arzuparreta/fly-browser/pull/114) is merged as
+`485d4bc`. Its latest-head ordinary checks and manual matrix 39078704053 passed;
+all three official native service summaries contain 31 SUCCESS results.
 
-The follow-up work is consolidated on `codex/chromium-browser-test-runner`,
-rebased onto that merged main: native hints, empty-window handling, focused page
-scrolling, command palette and a scoped browser-test executable. This replaces
-the earlier dependent-branch delivery sequence; the old pushed branches preserve
-intermediate checkpoints. The combined branch has 15 browser tests awaiting
-execution, 31 service tests passing in the pinned local partial runner, and
-successful full native GN generation/header checks in an isolated source shadow.
-The updated official 31-test matrix is in progress in run 39078704053.
-No source overlay has been applied to the engine checkout. The initial complete
-control built successfully, matches its recorded executable hash, and passed
-its input/native visibility/pause/background-audio fixtures with and without the
-MV3 probe. H264/AAC video was correctly rejected by that initial configuration;
-the dependent media branch enables real decoding in the common control/native
-GN preset and adds a synthetic MP4 fixture. A matching control rebuild and
-native build/browser tests are the next runtime gates.
+PR [115](https://github.com/Arzuparreta/fly-browser/pull/115) at `39d68ec` adds
+shared-window geometry, workspace window selection/background focus, matching
+H264/AAC, native session startup, private workspaces and bounded manual CI.
+Its ordinary checks pass; latest-head manual runs 39120988598 (object compilation)
+and 39120990306 (service execution) are in progress on all three platforms.
+No open PR is a completed delivery or native runtime acceptance.
+
+The codec-matched unmodified control has completed and passes actual video/MV3
+and PCM audio fixtures (`control-smoke-a47ZFT` and `control-smoke-X0emxw`). Both
+control outputs remain independent. The full CI attempt at an earlier head timed
+out on Linux/macOS and lost the Windows runner; those are unverified builds.
+
+The external engine source now has the nine-patch native overlay from clean
+commit `b98cae4`, fingerprint
+`75a051104f8d5ef10732edca9b7144b01a7e18a9b65294694661af17390f07a0`.
+User unit `fly-chromium-native-build.service` is compiling the complete browser.
+`fly-chromium-native-acceptance.service` waits for successful compilation, then
+runs native services, the 23-case scoped browser suite and native video/audio
+fixtures. It records each actual exit status and keeps independent failures.
+Logs and transaction state live under `/mnt/storage/fly-chromium/evidence/` and
+`native-build-systemd.log` / `native-acceptance-systemd.log`. This pipeline is
+running, not a completed native test result.
+
+The sidebar worktree on `codex/chromium-native-runtime` must remain frozen through
+both services. Follow-up source work uses the hints worktree; the current
+`codex/chromium-native-privacy-defaults` branch adds a tenth patch and a 24th
+browser case, outside the running build. Before editing/reapplying its source,
+inspect both units and stop their owned processes if changes are necessary.
+The immediate runtime gate is the first complete native build and those actual
+browser/media results; fix failures before claiming M1. The rest of M2-M6 remains
+open, including macOS embedding, complete product UI/services, import and packages.
 
 ## Source and working state
 
@@ -847,3 +859,44 @@ remaining M0-M6 acceptance still require execution.
 The object resolver finds 31 compiler edges with no exclusions in the actual
 Linux native GN graph (`evidence/ci-objects-actual-plan.json`). This checks target
 selection only; hosted object compilation has not yet run on this branch.
+
+## Native blank tabs and restart test coverage
+
+`about:blank` is an ordinary native tab. Each workspace owns a Chromium Profile;
+its window models own their native TabStripModels and WebContents. The sidebar
+projects every tab from the selected model, including blank pages, new-tab pages
+and extension pages. URLs and titles are presentation data, never tab identity
+or a reason to discard a tab. Zero native tabs produces the empty desktop UI.
+There is no replacement blank WebContents, URL-only recreation or second tab
+registry. Chromium retains opener, origin inheritance, extension IDs and security
+semantics; Fly adds its independent UUID to the same native tab.
+
+The browser suite now contains 27 declarations, including two PRE restart phases
+and 25 main cases. New cases exercise a real page's `window.open('about:blank')`
+with inherited origin/opener, navigation without replacing the tab/sidebar row,
+and MV3 `chrome.tabs.create` with an explicit blank URL, native IDs, profile
+ownership, openerTabId, sidebar inclusion and native close/reopen identity.
+These source cases are not yet executed: the first full native link is pending.
+
+Restart coverage distinguishes an ordinary launch without URLs from a launch
+with an explicit command-line `about:blank`. Both must restore all saved native
+tabs, including a bare blank tab; the latter must also retain the newly requested
+blank as a separate native tab with its own identity. The general Chromium test
+fixture injects a command-line blank by default, so the ordinary-launch fixture
+explicitly disables that test-only argument. No product URL filtering is added.
+
+The browser runner selects all Fly browser fixtures and checks a newly generated
+upstream result summary against every main case declared in the source. Missing,
+failed, skipped and zero-test runs fail evidence recording; successful PRE phases
+are correctly folded into their main case by Chromium's launcher. An old summary
+is archived before execution and cannot satisfy a new run. All 43 Python tooling
+contracts pass locally; browser runtime acceptance remains pending.
+
+Windows object run 39120988598 exposed CRLF conversion of the product patch
+checkout before native application. A local reproduction confirms that an LF
+patch applies to exact upstream LF bytes while its CRLF-converted counterpart
+fails identically. Repository attributes now preserve all `chromium/` inputs
+byte for byte; a real temporary Git checkout with `core.autocrlf=true` verifies
+both patch/overlay bytes and successful patch preflight. No host-global Git
+setting is needed for these product files. The earlier failed run remains failed;
+the updated remote head must pass fresh CI.
