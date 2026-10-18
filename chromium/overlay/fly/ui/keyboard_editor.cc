@@ -194,6 +194,12 @@ void KeyboardEditor::Toggle(content::WebContents* contents) {
   Refresh();
   overlay_->ShowInactive();
   desktop_->GetNativeWindow()->StackChildAtTop(overlay_->GetNativeWindow());
+  ShowKeyboard();
+}
+void KeyboardEditor::ShowKeyboard() {
+  if (!active())
+    return;
+  StopRecording();
   sections_->SelectTabAt(1, false);
   search_->RequestFocus();
 }

@@ -1405,3 +1405,15 @@ unchanged timestamps, add/remove, upstream/owner-edit rejection, interruption
 before/after a write and preservation of edits after interruption. All 65 tooling
 cases pass locally. This is tested tooling behavior; the running frozen repair
 uses its original tools and does not exercise the new command yet.
+
+## Canonical preference action entry points
+
+The native keyboard settings action now opens/focuses its existing Keyboard tab
+without closing the editor or discarding a draft when invoked again. Switching
+from Appearance uses the same native surface and stops any ongoing recording.
+`cycle-clock-format` also uses the shared validated preference service and native
+policy availability, matching the sidebar's cycle behavior. Browser coverage
+checks the repeated entry/draft/focus transition and canonical clock action;
+those cases remain pending execution in the current full browser. Pinned Clang
+accepts the changed UI and test source. The retained Electron recorder/editable
+baseline is validated separately with a disposable Xvfb profile.

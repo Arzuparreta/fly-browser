@@ -298,11 +298,11 @@ bool NativeCommandAvailable(BrowserWindowInterface* browser,
     auto* window = FlyWindowController::GetIfCreated();
     return window && window->preferences().CanEditStatusBar();
   }
-  if (action == "toggle-clock") {
+  if (action == "toggle-clock" || action == "cycle-clock-format") {
     auto* window = FlyWindowController::GetIfCreated();
     return window && window->preferences().CanEditClock();
   }
-  if (action == "toggle-help")
+  if (action == "toggle-help" || action == "open-keyboard-settings")
     return FlyWindowController::GetIfCreated() != nullptr;
   if (action == "toggle-private-mode") {
     const auto* window = FlyWindowController::GetIfCreated();

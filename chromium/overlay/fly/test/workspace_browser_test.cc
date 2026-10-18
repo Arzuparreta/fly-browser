@@ -1227,6 +1227,9 @@ IN_PROC_BROWSER_TEST_F(FlyWorkspaceBrowserTest,
   views::test::ButtonTestApi(clock).NotifyDefaultMouseClick();
   ASSERT_TRUE(window.preferences().ReadClock());
   EXPECT_EQ("time", window.preferences().ReadClock()->format);
+  ASSERT_TRUE(NativeCommandAvailable(browser(), "cycle-clock-format"));
+  ASSERT_TRUE(InvokeNativeCommand(browser(), "cycle-clock-format"));
+  EXPECT_EQ("seconds", window.preferences().ReadClock()->format);
   ASSERT_TRUE(NativeCommandAvailable(browser(), "toggle-clock"));
   ASSERT_TRUE(window.RunCommand(browser(), "toggle-clock"));
   EXPECT_FALSE(clock->GetVisible());
@@ -1289,6 +1292,15 @@ IN_PROC_BROWSER_TEST_F(FlyWorkspaceBrowserTest,
   EXPECT_EQ(u"Ctrl+Y", binding->GetText());
   ASSERT_TRUE(window.preferences().ToggleTheme());
   EXPECT_TRUE(editor.appearance_for_testing("theme")->GetChecked());
+  EXPECT_EQ(u"Ctrl+Y", binding->GetText());
+  ASSERT_TRUE(NativeCommandAvailable(browser(), "open-keyboard-settings"));
+  ASSERT_TRUE(InvokeNativeCommand(browser(), "open-keyboard-settings"));
+  EXPECT_TRUE(editor.active());
+  EXPECT_TRUE(editor.search_for_testing()->IsDrawn());
+  EXPECT_TRUE(editor.search_for_testing()->HasFocus());
+  EXPECT_EQ(u"Ctrl+Y", binding->GetText());
+  ASSERT_TRUE(InvokeNativeCommand(browser(), "open-keyboard-settings"));
+  EXPECT_TRUE(editor.active());
   EXPECT_EQ(u"Ctrl+Y", binding->GetText());
   const auto appearance = state->GetDict(kPreferencesPref).Clone();
   keys.PressKey(ui::VKEY_ESCAPE, ui::EF_NONE);

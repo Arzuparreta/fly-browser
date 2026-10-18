@@ -46,6 +46,7 @@ class KeyboardEditor : public views::TextfieldController,
   void Toggle(content::WebContents* contents);
   void Cancel(bool restore_focus = false);
   void ShowAppearance();
+  void ShowKeyboard();
   bool HandleOverlayKey(const ui::KeyEvent& event);
   bool active() const { return overlay_ && !closing_; }
   bool recording() const { return recording_.has_value(); }

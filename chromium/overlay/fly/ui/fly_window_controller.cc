@@ -845,16 +845,20 @@ bool FlyWindowController::RunCommand(BrowserWindowInterface* browser,
     const auto visible = preferences_.ReadStatusBarVisible();
     return visible && preferences_.SetStatusBarVisible(!*visible);
   }
+  if (action == "cycle-clock-format")
+    return preferences_.CycleClockFormat();
   if (action == "toggle-clock") {
     const auto clock = preferences_.ReadClock();
     return clock && preferences_.SetClockVisible(!clock->visible);
   }
-  if (action == "toggle-help") {
+  if (action == "toggle-help" || action == "open-keyboard-settings") {
     hints_->Cancel();
     palette_->Cancel();
     bookmark_picker_->Cancel();
-    keyboard_editor_->Toggle(
-        browser->GetTabStripModel()->GetActiveWebContents());
+    if (action == "toggle-help" || !keyboard_editor_->active())
+      keyboard_editor_->Toggle(browser->GetTabStripModel()->GetActiveWebContents());
+    if (action == "open-keyboard-settings")
+      keyboard_editor_->ShowKeyboard();
     return true;
   }
   if (action == "new-workspace") {
