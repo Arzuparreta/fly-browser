@@ -358,6 +358,44 @@ IN_PROC_BROWSER_TEST_F(FlyWorkspaceBrowserTest,
 }
 
 IN_PROC_BROWSER_TEST_F(FlyWorkspaceBrowserTest,
+                       DesktopQuitHonoursBeforeUnloadCancellation) {
+  auto first = browser()->GetWeakPtr();
+  auto* second = SecondWorkspace();
+  ASSERT_TRUE(second);
+  auto second_alive = second->GetWeakPtr();
+  ASSERT_TRUE(ui_test_utils::NavigateToURL(
+      second, embedded_test_server()->GetURL("/title1.html")));
+  auto* contents = Active(second);
+  ASSERT_TRUE(content::ExecJs(contents,
+                             "window.onbeforeunload = () => 'unsaved'"));
+  content::PrepContentsForBeforeUnloadTest(contents);
+  class CancellationObserver : public content::WebContentsObserver {
+   public:
+    explicit CancellationObserver(content::WebContents* contents)
+        : content::WebContentsObserver(contents) {}
+    void BeforeUnloadDialogCancelled() override { cancelled = true; }
+    bool cancelled = false;
+  } cancellation(contents);
+  auto& window = FlyWindowController::Get();
+  window.desktop_widget()->Close();
+  auto* dialog = ui_test_utils::WaitForAppModalDialog();
+  ASSERT_TRUE(dialog);
+  ASSERT_TRUE(dialog->is_before_unload_dialog());
+  dialog->view()->CancelAppModalDialog();
+  ASSERT_TRUE(base::test::RunUntil([&] { return cancellation.cancelled; }));
+  ASSERT_TRUE(first);
+  ASSERT_TRUE(second_alive);
+  EXPECT_EQ(&window, FlyWindowController::GetIfCreated());
+  EXPECT_EQ(second, window.selected_browser_for_testing());
+  ExpectVisible(contents, true);
+  ASSERT_TRUE(content::ExecJs(contents, "window.onbeforeunload = null"));
+  const int count = second->GetTabStripModel()->count();
+  ASSERT_TRUE(window.RunCommand(second, "spawn-tab"));
+  ASSERT_TRUE(base::test::RunUntil(
+      [&] { return second->GetTabStripModel()->count() == count + 1; }));
+}
+
+IN_PROC_BROWSER_TEST_F(FlyWorkspaceBrowserTest,
                        SwitchingWorkspacesUsesNativeVisibility) {
   auto* first = browser();
   ASSERT_TRUE(ui_test_utils::NavigateToURL(
@@ -1190,14 +1228,21 @@ IN_PROC_BROWSER_TEST_F(FlyWorkspaceBrowserTest,
   )js"));
   auto& window = FlyWindowController::Get();
   window.Select(browser(), true);
+  contents->Focus();
+  ASSERT_TRUE(base::test::RunUntil([&] {
+    return contents->GetRenderWidgetHostView()->HasFocus() &&
+           content::EvalJs(contents, "document.hasFocus()") == true;
+  }));
   ui::test::EventGenerator keys(
       window.desktop_widget()->GetNativeWindow()->GetRootWindow());
   keys.PressKey(ui::VKEY_F, ui::EF_ALT_DOWN);
   bool was_active = false;
   bool had_ax_root = false;
   size_t max_targets = 0;
+  uint32_t observed_ax_flags = 0;
   ASSERT_TRUE(base::test::RunUntil([&] {
     was_active |= window.hints().active();
+    observed_ax_flags |= contents->GetAccessibilityMode().flags();
     had_ax_root |= contents->GetAccessibilityRootNode() != nullptr;
     max_targets = std::max(max_targets, window.hints().target_count_for_testing());
     return window.hints().active() &&
@@ -1205,6 +1250,8 @@ IN_PROC_BROWSER_TEST_F(FlyWorkspaceBrowserTest,
   })) << "active=" << window.hints().active()
       << " was_active=" << was_active << " had_ax_root=" << had_ax_root
       << " max_targets=" << max_targets
+      << " ax_flags=" << observed_ax_flags
+      << " cancellation=" << window.hints().cancellation_for_testing()
       << " native_focus=" << contents->GetRenderWidgetHostView()->HasFocus();
   EXPECT_EQ("visible", content::EvalJs(contents, "document.visibilityState"));
   EXPECT_EQ(true, content::EvalJs(contents, "document.hasFocus()"));
@@ -1897,6 +1944,11 @@ class FlyTabMenuBrowserTest : public FlyWorkspaceBrowserTest {
       return sidebar->row_for_testing(contents) != nullptr;
     }));
     auto* control = sidebar->row_for_testing(contents)->children().front().get();
+    ASSERT_TRUE(base::test::RunUntil([&] {
+      return control->IsDrawn() && !control->GetVisibleBounds().IsEmpty();
+    })) << "row=" << sidebar->row_for_testing(contents)->bounds().ToString()
+        << " control=" << control->bounds().ToString();
+
     bool inspected = false;
     // MenuRunner can post its opening work. Inspect only after the real pointer
     // event has opened a menu, rather than assuming the next queued task does.
@@ -1913,9 +1965,15 @@ class FlyTabMenuBrowserTest : public FlyWorkspaceBrowserTest {
         }));
     ui::test::EventGenerator mouse(
         FlyWindowController::Get().desktop_widget()->GetNativeWindow()->GetRootWindow());
-    mouse.MoveMouseTo(control->GetBoundsInScreen().CenterPoint());
+    auto point = control->GetVisibleBounds().CenterPoint();
+    views::View::ConvertPointToScreen(control, &point);
+    mouse.MoveMouseTo(point);
     mouse.ClickRightButton();
-    ASSERT_TRUE(base::test::RunUntil([&] { return inspected; }));
+    ASSERT_TRUE(base::test::RunUntil([&] { return inspected; }))
+        << "click=" << point.ToString()
+        << " control=" << control->GetBoundsInScreen().ToString()
+        << " visible=" << control->GetVisibleBounds().ToString()
+        << " sidebar=" << sidebar->GetBoundsInScreen().ToString();
   }
   static size_t Item(ui::SimpleMenuModel* menu, std::u16string_view label) {
     for (size_t i = 0; i < menu->GetItemCount(); ++i)

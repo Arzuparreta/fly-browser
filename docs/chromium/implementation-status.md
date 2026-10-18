@@ -39,19 +39,29 @@ in the original pipeline (`control-smoke-UL55nX`). Sandbox and site isolation st
 enabled. These synthetic single-profile fixtures do not establish real Twitch/Pie,
 packaged application or complete workspace acceptance.
 
-The next focus repair records actual native page focus before an overlay opens;
-embedded profile Views focus can otherwise still point at an earlier toolbar
-control. The browser regression also requires preserving toolbar focus when the
-palette starts there. Pointer-menu inspection waits for a real pointer-opened menu.
-Session/hint assertions retain their conditions and now report intermediate state.
-The helper and browser test pass pinned Linux Clang syntax checks; the helper's
-GN header check passes. Runtime confirmation of these changes remains pending.
+The focus repair at `98ecc7c` has completed its full Linux build and runtime
+pipeline: all 53 service cases pass; both PRE cases and 38 of 44 main browser
+cases pass. The five repaired cases cover palette dismissal, keyboard recorder,
+preferences, bookmark editing and focused cross-origin scrolling. The palette
+also preserves toolbar focus. Hints and both session cases fail; three pointer-menu
+cases time out. Both sandboxed media fixtures pass with full runtime provenance.
+The failed summaries are retained; no acceptance gate has been waived.
+
+The next correction announces application quit through Chromium before closing
+profile windows, preserving last-opened profiles. A new real beforeunload case
+requires cancellation to retain both workspace browsers and leave commands usable.
+Pointer tests wait for visible layout and click within the clipped visible control.
+Hint diagnostics retain cancellation reason and observed native accessibility mode;
+the fixture explicitly focuses the page before testing that hints preserve focus.
+These changes bring the current browser source to 47 declarations, including two
+PRE cases. The changed UI and browser source pass pinned Linux Clang syntax checks.
+Runtime confirmation of this follow-up remains pending.
 
 Current source is developed in the hints worktree, then frozen in the sidebar
 worktree before each managed build. Inspect user units
 `fly-chromium-native-build.service`, `fly-chromium-native-acceptance.service` and
 `fly-chromium-native-summary-audit.service` before editing the frozen checkout or
-engine source. The previous pipeline and audit are complete and failed. Logs and
+engine source. The `98ecc7c` pipeline and audit are complete and failed. Logs and
 JSON summaries remain under `/mnt/storage/fly-chromium/evidence`; service output
 is in `current-build-systemd.log`, `current-acceptance-systemd.log` and
 `current-summary-audit.log` under the engine root. No owner profile was accessed.
@@ -60,6 +70,8 @@ Hosted object validation now queries GN source owners and retains compiler rules
 flags, response files, outputs and generated-header/module dependencies in a
 separate Ninja manifest. The Linux plan has 42 changed objects, 24,707 prerequisite
 files and 13,246 commands; this graph inspection is not a hosted compilation pass.
+Official service run 39164821004 passed exactly 53 cases on each of Linux, macOS
+and Windows; all downloaded test identities were independently verified.
 All 78 Python tooling contracts pass locally, including real Ninja scheduling,
 escaped spaces, Windows command resolution, generated headers and byte preservation.
 

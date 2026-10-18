@@ -734,7 +734,10 @@ void FlyWindowController::RequestClose(views::Widget::ClosedReason reason) {
         FROM_HERE, base::BindOnce(&FlyWindowController::FinishClose,
                                   weak_factory_.GetWeakPtr()));
   } else {
-    chrome::CloseAllBrowsers();
+    // This desktop represents the whole Fly application. Announce quit before
+    // closing profile windows so Chromium preserves its last-opened profiles
+    // and session services. The coordinator still honours unload cancellation.
+    chrome::CloseAllBrowsersAndQuit();
   }
 }
 void FlyWindowController::OnClosingAllBrowsers(bool closing) {
