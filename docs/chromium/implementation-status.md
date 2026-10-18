@@ -1022,3 +1022,37 @@ The earlier native service matrix 39120990306 at `39d68ec` has completed
 successfully on Linux, macOS and Windows. It precedes the Windows line-ending
 and browser-fixture repair, so it cannot substitute for the latest-head matrix
 39123604736 at `5d76c7e` required before merging PR 115.
+
+## Native sidebar favicons, audio and mute metadata
+
+The dependent `codex/chromium-native-tab-indicators` branch projects the native
+navigation entry's actual favicon into each existing sidebar row, with a native
+vector fallback for blank/unknown icons. It caches bitmap identity and uses
+16-DIP images. Pin/close controls are compact native icon buttons with tooltips
+and accessible names; all hover/pressed/disabled icon states follow changes.
+Rows and their weak WebContents identity survive favicon/title/pin updates.
+
+The audio control uses native mute state and RecentlyAudibleHelper, including its
+native two-second quiet-period notification. Clicking it resolves that row's
+current contents after moves and can mute background tabs without selecting
+them. Both this control and the shared mute command now call Chromium's
+`SetTabAudioMuted` with its user-audio-indicator reason. The earlier direct
+WebContents setter changed audio but omitted native extension mute metadata;
+standard `chrome.tabs` queries now receive the user reason and clear any previous
+extension ownership through the upstream utility. No media play/pause or web API
+is replaced, and this remains tab-specific rather than changing site permissions.
+
+Two source browser cases fetch/decode the real upstream favicon fixture, retain
+the same row/UUID through navigation to bare `about:blank`, and query mute state
+through a loaded MV3 extension after user/extension changes and a background-row
+move/click. The scoped runner declares its actual favicon HTML/PNG dependencies.
+There are now 36 browser declarations, two PRE phases and 34 main cases.
+These GUI/API cases remain unexecuted pending a current linked test binary.
+
+Pinned Clang accepts the sidebar, native commands, controller and all browser
+cases. All thirteen patches preflight over 22 upstream files; native GN
+generation and Fly/UI/profile header checks pass. The initial GN attempt exposed
+an incorrect vector icon generator target; the corrected stack uses the existing
+Views target and the explicit component icon dependency. All 47 Python tooling
+contracts, `npm test`, docs build and whitespace pass locally. This does not
+substitute for native GUI, audible playback or packaged acceptance.

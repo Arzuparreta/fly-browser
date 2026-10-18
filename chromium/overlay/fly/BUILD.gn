@@ -129,6 +129,10 @@ if (is_linux || is_win) {
       "//chrome",
       "//chrome:browser_tests_pak",
     ]
-    data = [ "//chrome/test/data/title1.html" ]
+    data = [
+      "//chrome/test/data/title1.html",
+      "//chrome/test/data/favicon/page_with_favicon.html",
+      "//chrome/test/data/favicon/icon.png",
+    ]
   }
 }

@@ -46,6 +46,11 @@
 #include "content/public/browser/render_frame_host.h"
 #include "content/public/browser/render_widget_host_view.h"
 #include "content/public/browser/web_contents.h"
+#include "content/public/browser/navigation_controller.h"
+#include "content/public/browser/navigation_entry.h"
+#include "content/public/browser/favicon_status.h"
+#include "chrome/browser/ui/tabs/tab_muted_utils.h"
+#include "ui/views/controls/button/image_button.h"
 #include "content/public/test/browser_test.h"
 #include "content/public/test/browser_test_utils.h"
 #include "extensions/test/test_extension_dir.h"
@@ -523,6 +528,104 @@ IN_PROC_BROWSER_TEST_F(FlyWorkspaceBrowserTest,
   EXPECT_EQ(GURL("about:blank"), Active(browser())->GetVisibleURL());
   EXPECT_EQ(id, TabIdentity::Get(Active(browser())));
   EXPECT_EQ(second_count, second->GetTabStripModel()->count());
+}
+
+IN_PROC_BROWSER_TEST_F(FlyWorkspaceBrowserTest,
+                       SidebarUsesNativeFaviconAndKeepsBlankTabRow) {
+  ASSERT_TRUE(ui_test_utils::NavigateToURL(browser(),
+      embedded_test_server()->GetURL("/favicon/page_with_favicon.html")));
+  auto* contents = Active(browser());
+  auto* sidebar = FlyWindowController::Get().tab_sidebar_for_testing();
+  ASSERT_TRUE(base::test::RunUntil([&] {
+    auto* entry = contents->GetController().GetVisibleEntry();
+    auto* row = sidebar->row_for_testing(contents);
+    if (!entry || !entry->GetFavicon().valid ||
+        entry->GetFavicon().image.IsEmpty() || !row)
+      return false;
+    const auto& image = static_cast<views::MdTextButton*>(row->children()[0])
+                            ->GetImageModel(views::Button::STATE_NORMAL);
+    return image && image->IsImage();
+  }));
+  auto* row = sidebar->row_for_testing(contents);
+  auto* select = static_cast<views::MdTextButton*>(row->children()[0]);
+  EXPECT_EQ(gfx::Size(16, 16), select->GetImage(views::Button::STATE_NORMAL).size());
+  const std::string id = TabIdentity::Get(contents);
+  ASSERT_TRUE(ui_test_utils::NavigateToURL(browser(), GURL("about:blank")));
+  ASSERT_TRUE(base::test::RunUntil([&] {
+    const auto& image = select->GetImageModel(views::Button::STATE_NORMAL);
+    return image && image->IsVectorIcon();
+  }));
+  EXPECT_EQ(row, sidebar->row_for_testing(contents));
+  EXPECT_EQ(id, TabIdentity::Get(contents));
+  EXPECT_EQ(GURL("about:blank"), contents->GetLastCommittedURL());
+}
+
+IN_PROC_BROWSER_TEST_F(FlyWorkspaceBrowserTest,
+                       SidebarAndCommandsExposeNativeMuteReasonsToExtensions) {
+  extensions::TestExtensionDir directory;
+  directory.WriteManifest(
+      base::DictValue().Set("manifest_version", 3)
+          .Set("name", "Fly native mute probe")
+          .Set("version", std::string(version_info::GetVersionNumber()))
+          .Set("permissions", base::ListValue().Append("tabs")));
+  directory.WriteFile(FILE_PATH_LITERAL("probe.html"),
+                      "<!doctype html><title>Mute probe</title>");
+  extensions::ChromeTestExtensionLoader loader(browser()->GetProfile());
+  auto extension = loader.LoadExtension(directory.UnpackedPath());
+  ASSERT_TRUE(extension);
+  ASSERT_TRUE(ui_test_utils::NavigateToURL(
+      browser(), extension->GetResourceURL("probe.html")));
+  auto* contents = Active(browser());
+  const int native_id = extensions::ExtensionTabUtil::GetTabId(contents);
+  auto* sidebar = FlyWindowController::Get().tab_sidebar_for_testing();
+  auto read_info = [&] {
+    return base::JSONReader::ReadDict(content::EvalJs(contents, content::JsReplace(
+        "(async () => JSON.stringify((await chrome.tabs.get($1)).mutedInfo))()",
+        native_id)).ExtractString(), base::JSON_PARSE_RFC);
+  };
+  ASSERT_TRUE(ExecuteNativeCommand(browser(), "toggle-tab-audio-mute"));
+  auto info = read_info();
+  ASSERT_TRUE(info);
+  EXPECT_EQ(true, info->FindBool("muted"));
+  ASSERT_TRUE(info->FindString("reason"));
+  EXPECT_EQ("user", *info->FindString("reason"));
+  EXPECT_FALSE(info->contains("extensionId"));
+  ASSERT_TRUE(base::test::RunUntil([&] {
+    auto* audio = sidebar->audio_for_testing(contents);
+    return audio && audio->GetVisible();
+  }));
+  ASSERT_TRUE(content::ExecJs(contents, content::JsReplace(
+      "chrome.tabs.update($1, {muted: false})", native_id)));
+  info = read_info();
+  ASSERT_TRUE(info);
+  ASSERT_TRUE(info->FindString("reason"));
+  ASSERT_TRUE(info->FindString("extensionId"));
+  EXPECT_EQ("extension", *info->FindString("reason"));
+  EXPECT_EQ(extension->id(), *info->FindString("extensionId"));
+  ASSERT_TRUE(ExecuteNativeCommand(browser(), "toggle-tab-audio-mute"));
+  info = read_info();
+  ASSERT_TRUE(info);
+  EXPECT_EQ("user", *info->FindString("reason"));
+  EXPECT_FALSE(info->contains("extensionId"));
+  auto* audio = sidebar->audio_for_testing(contents);
+  ASSERT_TRUE(audio);
+  chrome::NewTab(browser(), NewTabTypes::kNewTabCommand);
+  auto* other = Active(browser());
+  auto* strip = browser()->GetTabStripModel();
+  strip->MoveWebContentsAt(strip->GetIndexOfWebContents(contents), 1, false);
+  // A background row must still target its own contents before refresh.
+  views::test::ButtonTestApi(audio).NotifyDefaultMouseClick();
+  EXPECT_FALSE(contents->IsAudioMuted());
+  EXPECT_FALSE(other->IsAudioMuted());
+  EXPECT_EQ(other, Active(browser()));
+  EXPECT_EQ(TabMutedReason::kAudioIndicator, GetTabAudioMutedReason(contents));
+  EXPECT_EQ(native_id, extensions::ExtensionTabUtil::GetTabId(contents));
+  info = read_info();
+  ASSERT_TRUE(info);
+  ASSERT_TRUE(info->FindString("reason"));
+  EXPECT_EQ(false, info->FindBool("muted"));
+  EXPECT_EQ("user", *info->FindString("reason"));
+  EXPECT_FALSE(info->contains("extensionId"));
 }
 
 IN_PROC_BROWSER_TEST_F(FlyWorkspaceBrowserTest,

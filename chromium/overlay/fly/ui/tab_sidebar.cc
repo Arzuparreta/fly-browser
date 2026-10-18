@@ -11,16 +11,41 @@
 #include "base/strings/utf_string_conversions.h"
 #include "base/task/single_thread_task_runner.h"
 #include "chrome/browser/ui/browser_window/public/browser_window_interface.h"
+#include "chrome/browser/ui/recently_audible_helper.h"
 #include "chrome/browser/ui/tabs/tab_enums.h"
+#include "chrome/browser/ui/tabs/tab_muted_utils.h"
 #include "chrome/browser/ui/tabs/tab_strip_model.h"
+#include "components/vector_icons/vector_icons.h"
+#include "content/public/browser/favicon_status.h"
+#include "content/public/browser/navigation_controller.h"
+#include "content/public/browser/navigation_entry.h"
 #include "content/public/browser/web_contents.h"
+#include "skia/ext/image_operations.h"
 #include "ui/base/metadata/metadata_impl_macros.h"
+#include "ui/base/models/image_model.h"
+#include "ui/color/color_id.h"
+#include "ui/gfx/image/image_skia_operations.h"
 #include "ui/views/accessibility/view_accessibility.h"
+#include "ui/views/controls/button/image_button.h"
 #include "ui/views/controls/button/md_text_button.h"
 #include "ui/views/controls/scroll_view.h"
 #include "ui/views/layout/box_layout.h"
+#include "ui/views/vector_icons.h"
 
 namespace fly {
+namespace {
+void SetActionIcon(views::ImageButton* button, const gfx::VectorIcon& icon) {
+  for (auto state :
+       {views::Button::STATE_NORMAL, views::Button::STATE_HOVERED,
+        views::Button::STATE_PRESSED, views::Button::STATE_DISABLED})
+    button->SetImageModel(state, ui::ImageModel::FromVectorIcon(
+                                     icon,
+                                     state == views::Button::STATE_DISABLED
+                                         ? ui::kColorIconDisabled
+                                         : ui::kColorIcon,
+                                     16));
+}
+}  // namespace
 TabSidebar::TabSidebar(base::RepeatingClosure new_tab) {
   auto* layout = SetLayoutManager(std::make_unique<views::BoxLayout>(
       views::BoxLayout::Orientation::kVertical));
@@ -95,15 +120,36 @@ void TabSidebar::Refresh() {
           callback(RowAction::kSelect), u""));
       select->SetHorizontalAlignment(gfx::ALIGN_LEFT);
       layout->SetFlexForView(select, 1);
-      auto* pin = row->AddChildView(std::make_unique<views::MdTextButton>(
-          callback(RowAction::kPin), u""));
-      pin->SetStyle(ui::ButtonStyle::kText);
-      auto* close = row->AddChildView(std::make_unique<views::MdTextButton>(
-          callback(RowAction::kClose), u"×"));
-      close->SetStyle(ui::ButtonStyle::kText);
+      auto icon_button = [&](RowAction action, const gfx::VectorIcon& icon,
+                             const std::u16string& name) {
+        auto* button = row->AddChildView(views::ImageButton::CreateIconButton(
+            callback(action), icon, name,
+            views::ImageButton::MaterialIconStyle::kSmall, gfx::Insets(4)));
+        button->SetPreferredSize(gfx::Size(24, 24));
+        return button;
+      };
+      auto* pin = icon_button(RowAction::kPin, views::kKeepIcon, u"Pin tab");
+      auto* close = icon_button(RowAction::kClose, vector_icons::kCloseIcon,
+                                u"Close tab");
+      auto* audio = icon_button(RowAction::kMute, vector_icons::kVolumeUpIcon,
+                                u"Mute tab");
       auto* view = rows_->AddChildView(std::move(row));
-      tab_rows_.emplace(contents,
-                        Row{contents->GetWeakPtr(), view, select, pin, close});
+      auto& data = tab_rows_.try_emplace(contents).first->second;
+      data.contents = contents->GetWeakPtr();
+      data.view = view;
+      data.select = select;
+      data.pin = pin;
+      data.close = close;
+      data.audio = audio;
+      if (auto* audible = RecentlyAudibleHelper::FromWebContents(contents)) {
+        data.audible_subscription =
+            audible->RegisterRecentlyAudibleChangedCallback(base::BindRepeating(
+                [](base::WeakPtr<TabSidebar> sidebar, bool) {
+                  if (sidebar)
+                    sidebar->ScheduleRefresh();
+                },
+                weak_factory_.GetWeakPtr()));
+      }
     }
     auto& row = tab_rows_.at(contents);
     rows_->ReorderChildView(row.view, i);
@@ -121,10 +167,47 @@ void TabSidebar::Refresh() {
         position + u". " + title +
         (i == model_->active_index() ? u", selected" : u"") +
         (model_->IsTabPinned(i) ? u", pinned" : u""));
-    row.pin->SetText(model_->IsTabPinned(i) ? u"Unpin" : u"Pin");
-    row.pin->GetViewAccessibility().SetName(
-        (model_->IsTabPinned(i) ? u"Unpin " : u"Pin ") + title);
+    auto* navigation = contents->GetController().GetVisibleEntry();
+    const gfx::ImageSkia icon =
+        navigation && navigation->GetFavicon().valid &&
+                !navigation->GetFavicon().image.IsEmpty()
+            ? navigation->GetFavicon().image.AsImageSkia()
+            : gfx::ImageSkia();
+    if (!row.favicon_initialized || !icon.BackedBySameObjectAs(row.favicon)) {
+      row.favicon = icon;
+      row.favicon_initialized = true;
+      row.select->SetImageModel(
+          views::Button::STATE_NORMAL,
+          icon.isNull() ? ui::ImageModel::FromVectorIcon(
+                              vector_icons::kGlobeIcon, ui::kColorIcon, 16)
+                        : ui::ImageModel::FromImageSkia(
+                              gfx::ImageSkiaOperations::CreateResizedImage(
+                                  icon, skia::ImageOperations::RESIZE_BEST,
+                                  gfx::Size(16, 16))));
+    }
+    if (row.pinned != model_->IsTabPinned(i)) {
+      row.pinned = model_->IsTabPinned(i);
+      SetActionIcon(row.pin,
+                    row.pinned ? views::kKeepFilledIcon : views::kKeepIcon);
+    }
+    const auto pin_label =
+        (model_->IsTabPinned(i) ? u"Unpin " : u"Pin ") + title;
+    row.pin->GetViewAccessibility().SetName(pin_label);
+    row.pin->SetTooltipText(pin_label);
     row.close->GetViewAccessibility().SetName(u"Close " + title);
+    row.close->SetTooltipText(u"Close " + title);
+    const auto* audible = RecentlyAudibleHelper::FromWebContents(contents);
+    const bool muted = contents->IsAudioMuted();
+    row.audio->SetVisible(muted || (audible ? audible->WasRecentlyAudible()
+                                            : contents->IsCurrentlyAudible()));
+    if (row.muted != muted) {
+      row.muted = muted;
+      SetActionIcon(row.audio, muted ? vector_icons::kVolumeOffIcon
+                                     : vector_icons::kVolumeUpIcon);
+    }
+    const auto audio_label = (muted ? u"Unmute " : u"Mute ") + title;
+    row.audio->SetTooltipText(audio_label);
+    row.audio->GetViewAccessibility().SetName(audio_label);
   }
 }
 void TabSidebar::Invoke(base::WeakPtr<content::WebContents> contents,
@@ -138,6 +221,10 @@ void TabSidebar::Invoke(base::WeakPtr<content::WebContents> contents,
     case RowAction::kSelect:
       model_->ActivateTabAt(index);
       contents->Focus();
+      break;
+    case RowAction::kMute:
+      SetTabAudioMuted(contents.get(), !contents->IsAudioMuted(),
+                       TabMutedReason::kAudioIndicator, std::string());
       break;
     case RowAction::kClose:
       model_->CloseWebContentsAt(
@@ -163,6 +250,11 @@ size_t TabSidebar::row_count_for_testing() const {
 views::View* TabSidebar::row_for_testing(content::WebContents* contents) const {
   auto it = tab_rows_.find(contents);
   return it == tab_rows_.end() ? nullptr : it->second.view.get();
+}
+views::ImageButton* TabSidebar::audio_for_testing(
+    content::WebContents* contents) const {
+  auto it = tab_rows_.find(contents);
+  return it == tab_rows_.end() ? nullptr : it->second.audio.get();
 }
 void TabSidebar::OnTabStripModelChanged(TabStripModel*,
                                         const TabStripModelChange&,

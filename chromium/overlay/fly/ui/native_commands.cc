@@ -12,6 +12,7 @@
 #include "chrome/browser/ui/browser_window/public/browser_window_interface.h"
 #include "chrome/browser/ui/tabs/split_tab_metrics.h"
 #include "chrome/browser/ui/tabs/tab_strip_model.h"
+#include "chrome/browser/ui/tabs/tab_muted_utils.h"
 #include "components/input/native_web_keyboard_event.h"
 #include "components/tabs/public/split_tab_data.h"
 #include "content/public/browser/navigation_handle.h"
@@ -355,7 +356,8 @@ bool ExecuteNativeCommand(BrowserWindowInterface* browser,
   }
   if (action == "toggle-tab-audio-mute") {
     if (contents)
-      contents->SetAudioMuted(!contents->IsAudioMuted());
+      SetTabAudioMuted(contents, !contents->IsAudioMuted(),
+                       TabMutedReason::kAudioIndicator, std::string());
     return true;
   }
   if (action == "yank-url") {

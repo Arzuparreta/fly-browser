@@ -6,10 +6,12 @@
 
 #include <map>
 
+#include "base/callback_list.h"
 #include "base/functional/callback_forward.h"
 #include "base/memory/raw_ptr.h"
 #include "base/memory/weak_ptr.h"
 #include "chrome/browser/ui/tabs/tab_strip_model_observer.h"
+#include "ui/gfx/image/image_skia.h"
 #include "ui/views/view.h"
 
 class BrowserWindowInterface;
@@ -18,7 +20,8 @@ class WebContents;
 }
 namespace views {
 class MdTextButton;
-}
+class ImageButton;
+}  // namespace views
 
 namespace fly {
 // A projection of the selected profile's upstream tab model. Rows hold weak
@@ -36,6 +39,7 @@ class TabSidebar : public views::View, public TabStripModelObserver {
   void FocusActiveTab();
   size_t row_count_for_testing() const;
   views::View* row_for_testing(content::WebContents* contents) const;
+  views::ImageButton* audio_for_testing(content::WebContents* contents) const;
 
   void OnTabStripModelChanged(
       TabStripModel* model,
@@ -46,7 +50,7 @@ class TabSidebar : public views::View, public TabStripModelObserver {
   void OnTabStripModelDestroyed(TabStripModel* model) override;
 
  private:
-  enum class RowAction { kSelect, kClose, kPin };
+  enum class RowAction { kSelect, kClose, kPin, kMute };
   void ScheduleRefresh();
   void Refresh();
   void Invoke(base::WeakPtr<content::WebContents> contents, RowAction action);
@@ -55,8 +59,14 @@ class TabSidebar : public views::View, public TabStripModelObserver {
     base::WeakPtr<content::WebContents> contents;
     raw_ptr<views::View> view;
     raw_ptr<views::MdTextButton> select;
-    raw_ptr<views::MdTextButton> pin;
-    raw_ptr<views::MdTextButton> close;
+    raw_ptr<views::ImageButton> pin;
+    raw_ptr<views::ImageButton> close;
+    raw_ptr<views::ImageButton> audio;
+    gfx::ImageSkia favicon;
+    bool favicon_initialized = false;
+    bool pinned = false;
+    bool muted = false;
+    base::CallbackListSubscription audible_subscription;
   };
   std::map<content::WebContents*, Row> tab_rows_;
   raw_ptr<BrowserWindowInterface> browser_ = nullptr;
