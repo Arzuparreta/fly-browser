@@ -1,0 +1,35 @@
+--- a/chrome/browser/ui/views/tab_contents/chrome_web_contents_view_focus_helper.cc
++++ b/chrome/browser/ui/views/tab_contents/chrome_web_contents_view_focus_helper.cc
+@@ -5,6 +5,12 @@
+ #include "chrome/browser/ui/views/tab_contents/chrome_web_contents_view_focus_helper.h"
+ 
+ #include "base/memory/ptr_util.h"
++#include "build/build_config.h"
++#if BUILDFLAG(IS_LINUX) || BUILDFLAG(IS_WIN)
++#include "chrome/browser/ui/browser_window.h"
++#include "chrome/browser/ui/browser_window/public/browser_window_interface.h"
++#include "fly/ui/fly_window_controller.h"
++#endif
+ #include "chrome/browser/ui/browser_element_identifiers.h"
+ #include "chrome/browser/ui/location_bar/location_bar.h"
+ #include "chrome/browser/ui/location_bar/location_bar_override_data.h"
+@@ -155,6 +161,19 @@
+ }
+ 
+ views::Widget* ChromeWebContentsViewFocusHelper::GetTopLevelWidget() {
++#if BUILDFLAG(IS_LINUX) || BUILDFLAG(IS_WIN)
++  // Native Fly browsers share an outer OS window but keep independent Views
++  // FocusManagers. Walking to the outermost native widget saves the desktop's
++  // focus instead of this profile's WebView/omnibox and loses it on restore.
++  if (auto* tab = tabs::TabInterface::MaybeGetFromContents(&GetWebContents())) {
++    auto* browser = tab->GetBrowserWindowInterface();
++    if (browser && fly::FlyWindowController::ShouldEmbed(browser) &&
++        browser->GetWindow()) {
++      return views::Widget::GetWidgetForNativeView(
++          browser->GetWindow()->GetNativeWindow());
++    }
++  }
++#endif
+   return views::Widget::GetTopLevelWidgetForNativeView(GetActiveNativeView());
+ }
+ 
