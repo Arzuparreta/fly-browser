@@ -101,7 +101,7 @@ async function main() {
         browser = await chromium.connectOverCDP('http://127.0.0.1:' + port, {noDefaults: true});
         evidence.browserVersion = browser.version();
         context = browser.contexts()[0];
-        const page = context.pages()[0];
+        const page = await until(() => context.pages().find(page => !page.isClosed()), child);
         const firstSession = await context.newCDPSession(page);
         // Keep native focus/visibility; also guard against older attach paths.
         await firstSession.send('Emulation.setFocusEmulationEnabled', {enabled: false});

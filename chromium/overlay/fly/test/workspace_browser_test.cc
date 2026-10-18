@@ -26,6 +26,9 @@
 #include "base/command_line.h"
 #include "base/functional/bind.h"
 #include "base/run_loop.h"
+#include "base/timer/timer.h"
+#include "ui/views/focus/focus_manager.h"
+#include "ui/views/widget/widget.h"
 #include "base/threading/thread_restrictions.h"
 #include "base/task/single_thread_task_runner.h"
 #include "ui/menus/simple_menu_model.h"
@@ -1063,9 +1066,12 @@ class FlySessionRestoreBrowserTest : public FlyWorkspaceBrowserTest {
     ASSERT_TRUE(saved);
     ASSERT_TRUE(saved->FindString("active_id"));
     ASSERT_TRUE(saved->FindDict("cookies"));
+    size_t windows = 0;
+    bool restoring = false;
+    std::string active_id;
     ASSERT_TRUE(base::test::RunUntil([&] {
-      size_t windows = 0;
-      bool restoring = false;
+      windows = 0;
+      restoring = false;
       GlobalBrowserCollection::GetInstance()->ForEach(
           [&](BrowserWindowInterface* model) {
             if (FlyWindowController::ShouldEmbed(model) &&
@@ -1077,9 +1083,12 @@ class FlySessionRestoreBrowserTest : public FlyWorkspaceBrowserTest {
           });
       WorkspaceService service(*g_browser_process->local_state());
       const auto catalog = service.Read();
+      active_id = catalog ? catalog->active_id : "<unreadable>";
       return windows == 3 && !restoring && catalog &&
              catalog->active_id == *saved->FindString("active_id");
-    }));
+    })) << "windows=" << windows << " restoring=" << restoring
+        << " active_id=" << active_id
+        << " expected_active_id=" << *saved->FindString("active_id");
     const auto restored = SessionSnapshot();
     ASSERT_TRUE(saved->FindList("workspaces"));
     ASSERT_TRUE(restored.FindList("workspaces"));
@@ -1184,11 +1193,18 @@ IN_PROC_BROWSER_TEST_F(FlyWorkspaceBrowserTest,
   ui::test::EventGenerator keys(
       window.desktop_widget()->GetNativeWindow()->GetRootWindow());
   keys.PressKey(ui::VKEY_F, ui::EF_ALT_DOWN);
+  bool was_active = false;
+  bool had_ax_root = false;
+  size_t max_targets = 0;
   ASSERT_TRUE(base::test::RunUntil([&] {
+    was_active |= window.hints().active();
+    had_ax_root |= contents->GetAccessibilityRootNode() != nullptr;
+    max_targets = std::max(max_targets, window.hints().target_count_for_testing());
     return window.hints().active() &&
            window.hints().target_count_for_testing() == 1;
   })) << "active=" << window.hints().active()
-      << " accessibility_root=" << (contents->GetAccessibilityRootNode() != nullptr)
+      << " was_active=" << was_active << " had_ax_root=" << had_ax_root
+      << " max_targets=" << max_targets
       << " native_focus=" << contents->GetRenderWidgetHostView()->HasFocus();
   EXPECT_EQ("visible", content::EvalJs(contents, "document.visibilityState"));
   EXPECT_EQ(true, content::EvalJs(contents, "document.hasFocus()"));
@@ -1594,6 +1610,20 @@ IN_PROC_BROWSER_TEST_F(FlyWorkspaceBrowserTest,
                            "document.querySelector('#editable').value")
                .ExtractString() == "j";
   }));
+  ASSERT_TRUE(window.RunCommand(browser(), "toggle-address"));
+  auto* widget = views::Widget::GetWidgetForNativeView(
+      browser()->GetWindow()->GetNativeWindow());
+  ASSERT_TRUE(widget);
+  auto* toolbar_focus = widget->GetFocusManager()->GetFocusedView();
+  ASSERT_TRUE(toolbar_focus);
+  ASSERT_FALSE(contents->GetRenderWidgetHostView()->HasFocus());
+  keys.PressKey(ui::VKEY_P, ui::EF_ALT_DOWN);
+  ASSERT_TRUE(base::test::RunUntil([&] { return window.palette().active(); }));
+  keys.PressKey(ui::VKEY_P, ui::EF_ALT_DOWN);
+  ASSERT_TRUE(base::test::RunUntil(
+      [&] { return window.palette().search_for_testing() == nullptr; }));
+  EXPECT_EQ(toolbar_focus, widget->GetFocusManager()->GetFocusedView());
+  EXPECT_FALSE(contents->GetRenderWidgetHostView()->HasFocus());
   keys.PressKey(ui::VKEY_P, ui::EF_ALT_DOWN);
   ASSERT_TRUE(base::test::RunUntil([&] { return window.palette().active(); }));
   ASSERT_TRUE(SecondWorkspace());
@@ -1868,17 +1898,19 @@ class FlyTabMenuBrowserTest : public FlyWorkspaceBrowserTest {
     }));
     auto* control = sidebar->row_for_testing(contents)->children().front().get();
     bool inspected = false;
-    base::SingleThreadTaskRunner::GetCurrentDefault()->PostTask(
-        FROM_HERE, base::BindOnce(
-            [](TabSidebar* sidebar, bool* inspected,
-               base::OnceCallback<void(ui::SimpleMenuModel*)> inspect) {
-              auto* menu = sidebar->context_menu_for_testing();
-              EXPECT_TRUE(menu);
-              if (menu)
-                std::move(inspect).Run(menu);
-              sidebar->CloseContextMenu();
-              *inspected = true;
-            }, sidebar, &inspected, std::move(inspect)));
+    // MenuRunner can post its opening work. Inspect only after the real pointer
+    // event has opened a menu, rather than assuming the next queued task does.
+    base::RepeatingTimer inspect_menu;
+    inspect_menu.Start(FROM_HERE, base::Milliseconds(1),
+        base::BindLambdaForTesting([&] {
+          auto* menu = sidebar->context_menu_for_testing();
+          if (!menu)
+            return;
+          inspect_menu.Stop();
+          std::move(inspect).Run(menu);
+          sidebar->CloseContextMenu();
+          inspected = true;
+        }));
     ui::test::EventGenerator mouse(
         FlyWindowController::Get().desktop_widget()->GetNativeWindow()->GetRootWindow());
     mouse.MoveMouseTo(control->GetBoundsInScreen().CenterPoint());

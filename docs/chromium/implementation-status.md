@@ -11,86 +11,62 @@ three official native service summaries contain 31 SUCCESS results. Follow-up wo
 PR [115](https://github.com/Arzuparreta/fly-browser/pull/115); the stacked feature
 PRs preserve their original review history. Its latest remote checks and explicit
 CI must finish successfully before merging.
-At remote checkpoint `1bf79fc`, ordinary checks and all three tooling-contract
-jobs pass. Its manual runs are 39164821004 (services) and 39164822924 (objects).
-Further source/tooling fixes below require another latest-head CI run before merging. The previous head's service run 39144885256 passed exactly 46
-cases per platform, verified in downloaded summaries. Superseded object run
-39144886975 completed macOS compilation; its unfinished Linux/Windows jobs were
-cancelled after the new runs were dispatched. Cancellation is not a pass. Local
-follow-ups `79acb5e` and `ca6ce4c` repair initial native visibility and focus.
+The latest remote checkpoint `f7ef421` passes ordinary checks and tooling contracts
+on all three systems. Manual runs are 39166795264 (services) and 39166793504
+(objects). macOS objects failed the focus helper's header dependency check;
+Windows objects failed because a raw subprocess did not resolve `gn.bat`.
+The prepared repairs use the public `ui::BaseWindow` interface with the existing
+GN dependency and the engine's platform-aware command wrapper. Linux objects
+are still running. These failed jobs do not satisfy the merge gate.
 
-Official service CI at `e4150ad` passed all 37 cases on Linux, macOS and Windows,
-with downloaded per-test summaries verified. The current development source in the
-hints worktree has eighteen patches, 53 Linux partial service cases and 46 browser
-declarations; the browser cases remain unexecuted. These counts describe different
-source snapshots and validation scopes, not a completed native port.
+The full eighteen-patch native source at frozen `02d63e4` built successfully.
+Its binary SHA-256 is
+`298389240de7aa1cd05ca8126ef1bf9d5a7807eeb01227eac988041b7f920d28`;
+its source fingerprint is
+`9043a3f95dbd922235f2238dade254624168cab1f63153a29e381a003e19fa92`.
+The complete GN runtime closure contains 5,301 files and is checked before smoke
+fixtures. All 53 native service cases passed. The browser suite executed 46
+declarations: both PRE cases passed; 33 of 44 main cases passed, 11 failed and
+none crashed. Failures cover session restoration, hints, pointer menus, focus
+after overlays and focused-frame scrolling. Background extension-window visibility
+now passes. This is failed acceptance, not a completed milestone.
 
-The codec-matched unmodified control has built and passed actual video/MV3 and
-PCM audio fixtures (`control-smoke-a47ZFT` and `control-smoke-X0emxw`). Both control
-outputs remain independent. The full CI attempt at an earlier head timed out on
-Linux/macOS and lost the Windows runner; those are unverified builds.
+The pipeline's video fixture attached before Chromium published its initial page.
+Waiting for that actual page fixes the harness race. A real rerun against the same
+frozen binary passed video decoding, MV3 loading, native focus/visibility, paused
+media preservation and background audio (`control-smoke-OSHkYu`). PCM audio passed
+in the original pipeline (`control-smoke-UL55nX`). Sandbox and site isolation stay
+enabled. These synthetic single-profile fixtures do not establish real Twitch/Pie,
+packaged application or complete workspace acceptance.
 
-The first complete native build at frozen `b98cae4` succeeded (binary SHA-256
-`de7ebfdb766f3e32b9cf6a110f518fbefd050941f1b035abe2dc0cca52be5cd4`).
-Its real browser runner exposed a dangling browser pointer during posted Aura
-widget teardown. The repair at frozen `5fd0d8a` uses the browser's WeakPtr and
-passed full recompilation, all 31 official service cases, video/MV3 and PCM audio.
-The browser suite executed all 23 declarations: 14 succeeded, one failed and eight
-crashed. This is a failed acceptance result, not a completed milestone. Most
-crashes now came from test infrastructure: an EventGenerator given a non-root
-Aura window, fixture file access on the restricted UI thread, and a creation
-waiter retaining a closed browser. The background extension-window visibility
-failure still needs diagnosis.
+The next focus repair records actual native page focus before an overlay opens;
+embedded profile Views focus can otherwise still point at an earlier toolbar
+control. The browser regression also requires preserving toolbar focus when the
+palette starts there. Pointer-menu inspection waits for a real pointer-opened menu.
+Session/hint assertions retain their conditions and now report intermediate state.
+The helper and browser test pass pinned Linux Clang syntax checks; the helper's
+GN header check passes. Runtime confirmation of these changes remains pending.
 
-Frozen `31279e3` repaired the test lifetimes and Aura roots without removing
-assertions. Its complete run has 18 successes, five failures and no crashes:
-background extension-window visibility, session restart, native hints, focus after
-palette dismissal and focused cross-origin scrolling. Video/MV3, PCM and all 31
-service cases pass. Complete failing summaries remain in
-`evidence/current-before-*`. Those results validate only the old nine-patch source.
+Current source is developed in the hints worktree, then frozen in the sidebar
+worktree before each managed build. Inspect user units
+`fly-chromium-native-build.service`, `fly-chromium-native-acceptance.service` and
+`fly-chromium-native-summary-audit.service` before editing the frozen checkout or
+engine source. The previous pipeline and audit are complete and failed. Logs and
+JSON summaries remain under `/mnt/storage/fly-chromium/evidence`; service output
+is in `current-build-systemd.log`, `current-acceptance-systemd.log` and
+`current-summary-audit.log` under the engine root. No owner profile was accessed.
 
-The full current source is now frozen at `02d63e4` on
-`codex/chromium-native-current` in the sidebar worktree. It has eighteen patches,
-53 service cases and 46 browser declarations, including two PRE cases. Patch 17
-starts tabs in unselected embedded browsers hidden; subsequent visibility uses
-native Aura occlusion. Patch 18 saves/restores focus through the embedded
-profile browser's FocusManager instead of the outer Fly desktop's manager.
-Both changed upstream translation units pass pinned Linux Clang syntax checks.
-The focus helper now uses public native-window interfaces and an explicit
-header-only GN dependency; its owning target's header check passes without a
-cycle back into the outer UI controller. Their runtime results remain pending. The initial seventeen-patch build was
-explicitly stopped before adding the focus repair. The reviewed additional patch
-was applied transactionally without rewriting existing engine files; its helper
-SHA and final input fingerprint are in `evidence/native-preparation.json`.
+Hosted object validation now queries GN source owners and retains compiler rules,
+flags, response files, outputs and generated-header/module dependencies in a
+separate Ninja manifest. The Linux plan has 42 changed objects, 24,707 prerequisite
+files and 13,246 commands; this graph inspection is not a hosted compilation pass.
+All 78 Python tooling contracts pass locally, including real Ninja scheduling,
+escaped spaces, Windows command resolution, generated headers and byte preservation.
 
-User units `fly-chromium-native-build.service`,
-`fly-chromium-native-acceptance.service` and
-`fly-chromium-native-summary-audit.service` own the current build and independent
-acceptance audit. Inspect their live state before editing the frozen checkout or
-engine source. Current logs are `current-build-systemd.log`,
-`current-acceptance-systemd.log` and `current-summary-audit.log` under
-`/mnt/storage/fly-chromium/`. Current runtime provenance verifies the complete
-GN-declared runtime file closure before browser smoke automation. The separate
-hints worktree is for subsequent source changes. Full native acceptance is pending.
-
-The old hosted object mode followed runtime-data generators into over 50,000
-build steps; the cancelled Linux run was still compiling V8 after four hours.
-The replacement uses GN source-owner queries to read only relevant compiler
-recipes, preserves their rules/flags/response files/output paths, and derives a
-separate Ninja manifest retaining header/module generation and its real tools.
-It verifies nonempty compiled objects and hashes each result. The actual Linux
-GN plan contains 42 changed source objects and 24,707 prerequisite files; Ninja
-lists 13,246 commands, including 4,332 compiler commands for tools/prerequisites,
-with no generated V8 CSA compilation. Every selected source/output command was
-checked. This is graph validation, not a successful hosted object build. External
-evidence is `object-final-plan.json`/`object-final-commands.txt`. All 76 Python
-contracts pass locally, including real Ninja scheduling, response files, header
-invalidation, transitive header aliases, byte preservation and Windows newlines.
-
-Next: finish and inspect the frozen build/pipeline, repair actual runtime failures,
-then rebuild and run the complete current source. Finish the remaining M2–M6 work
-and all platform/package/migration acceptance before default cutover. The sections
-below preserve earlier build attempts and decisions.
+Next: rebuild the focus repair and inspect every browser result, repair remaining
+runtime failures and finish latest-head CI before merging PR 115. Continue M2–M6,
+platform packages, migration and acceptance before default cutover. Electron
+remains production; no native package has passed acceptance.
 
 ## Source and working state
 

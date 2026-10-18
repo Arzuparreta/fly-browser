@@ -7,7 +7,6 @@ Ninja still builds each selected prerequisite through its original GN graph.
 """
 from pathlib import Path
 import re
-import subprocess
 
 import engine
 
@@ -21,12 +20,12 @@ def recipe_files(root, relative, manifest, env):
                      if name.endswith(('.cc', '.mm', '.c', '.m')))
     response = output / 'fly-object-sources.rsp'
     response.write_text(''.join('//' + name + '\n' for name in sources), encoding='utf-8')
-    result = subprocess.run(
+    result = engine.run(
         ['gn', 'refs', relative, '@' + str(response.resolve()), '--default-toolchain',
          '--relation=source', '--as=label', '-q',
          '--type=source_set,static_library,shared_library,loadable_module,executable'],
-        cwd=root / 'src', env=env, check=True, capture_output=True, text=True)
-    labels = sorted(set(result.stdout.splitlines()))
+        root / 'src', env, capture=True)
+    labels = sorted(set(result.splitlines()))
     files = []
     for label in labels:
         # GN qualifies non-default toolchains. The browser and its scoped test
@@ -79,9 +78,9 @@ def compiler_plan(output, targets):
                 outputs, body = line[6:].strip().split(b': ', 1)
             except ValueError:
                 engine.fail('Unsupported GN build edge in ' + str(file))
-            parts = body.split()
+            parts = re.findall(rb'(?:\$[ $:]|[^ \t])+', body)
             rule, deps = parts[0], [x for x in parts[1:] if x not in (b'|', b'||')]
-            for token in outputs.split():
+            for token in re.findall(rb'(?:\$[ $:]|[^ \t])+', outputs):
                 edges[token] = (rule, deps)
                 if token not in wanted:
                     continue

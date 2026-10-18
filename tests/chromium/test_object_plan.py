@@ -77,6 +77,19 @@ elif mode == 'compile':
         self.assertEqual(generated, self.output / 'obj/native.o')
         self.assertTrue((self.output / 'obj/generator-tool').exists())
 
+    def test_escaped_spaces_in_compiler_inputs_keep_valid_ninja_paths(self):
+        ninja = os.environ.get('FLY_TEST_NINJA') or shutil.which('ninja')
+        if not ninja:
+            self.skipTest('Ninja is unavailable on this host')
+        (self.output / 'normal input.txt').write_text('SDK prerequisite')
+        file = self.output / 'obj/native.ninja'
+        file.write_text(file.read_text().replace(
+            '| phony/native.inputdeps', '| phony/native.inputdeps normal$ input.txt'))
+        plan = object_plan.compiler_plan(self.output, self.targets)
+        subprocess.run([ninja, '-C', str(self.output), '-f', plan['manifest'],
+                        plan['target']], check=True, capture_output=True)
+        self.assertTrue((self.output / 'obj/native.o').exists())
+
     def test_gn_rules_derive_the_same_declared_output_from_target_variables(self):
         ninja = os.environ.get('FLY_TEST_NINJA') or shutil.which('ninja')
         if not ninja:
@@ -177,9 +190,8 @@ class GNSourceOwnerTests(unittest.TestCase):
         self.manifest = {'files': dict.fromkeys(['fly/config.cc', 'fly/config.h'])}
 
     def test_gn_source_owners_bound_recipe_reads_and_use_a_response_file(self):
-        result = subprocess.CompletedProcess([], 0, stdout=(
-            '//fly:commands\n//fly:commands(//build/toolchain:host)\n'))
-        with mock.patch.object(object_plan.subprocess, 'run', return_value=result) as run:
+        result = '//fly:commands\n//fly:commands(//build/toolchain:host)\n'
+        with mock.patch.object(object_plan.engine, 'run', return_value=result) as run:
             files, labels = object_plan.recipe_files(self.root, 'out/Objects',
                                                      self.manifest, {})
         self.assertEqual(files, [self.file])
@@ -190,12 +202,23 @@ class GNSourceOwnerTests(unittest.TestCase):
         response = Path(next(arg[1:] for arg in args if arg.startswith('@')))
         self.assertEqual(response.read_text(), '//fly/config.cc\n')
 
+    def test_windows_queries_resolve_the_depot_tools_batch_launcher(self):
+        result = subprocess.CompletedProcess([], 0, stdout='//fly:commands\n')
+        with mock.patch.object(object_plan.engine.sys, 'platform', 'win32'), \
+             mock.patch.object(object_plan.engine.shutil, 'which', return_value='D:/tools/gn.bat'), \
+             mock.patch.object(object_plan.engine.subprocess, 'run', return_value=result) as run:
+            files, _ = object_plan.recipe_files(self.root, 'out/Objects',
+                                                 self.manifest, {'PATH': 'D:/tools'})
+        self.assertEqual(files, [self.file])
+        self.assertEqual(run.call_args.args[0][0], 'D:/tools/gn.bat')
+        self.assertEqual(run.call_args.kwargs['cwd'], self.root / 'src')
+        self.assertEqual(run.call_args.kwargs['stdout'], subprocess.PIPE)
+
     def test_missing_or_invalid_owners_fail_instead_of_scanning_another_toolchain(self):
         for stdout in ('//fly:missing\n', '//../outside:target\n', '',
                        '//fly:commands(//build/toolchain:host)\n'):
             with self.subTest(stdout=stdout):
-                result = subprocess.CompletedProcess([], 0, stdout=stdout)
-                with mock.patch.object(object_plan.subprocess, 'run', return_value=result):
+                with mock.patch.object(object_plan.engine, 'run', return_value=stdout):
                     with self.assertRaises(RuntimeError):
                         object_plan.recipe_files(self.root, 'out/Objects', self.manifest, {})
 
