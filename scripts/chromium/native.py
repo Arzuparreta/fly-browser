@@ -340,8 +340,16 @@ def execute(args):
                             '--test-launcher-jobs=1',
                             '--test-launcher-summary-output=' + str(root / 'evidence/native-browser-tests.json')], root / 'src', env, foreground=True)
             verify_source(root, lock)
-            engine.evidence(root, 'native-' + args.command, lock,
-                            {'fingerprint': manifest['fingerprint'], 'target': target})
+            details = {'fingerprint': manifest['fingerprint'], 'target': target}
+            if args.command == 'build':
+                executable = (output / 'Chromium.app/Contents/MacOS/Chromium'
+                              if sys.platform == 'darwin' else
+                              output / ('chrome.exe' if sys.platform == 'win32' else 'chrome'))
+                details.update({'binary': str(executable.resolve()),
+                                'sha256': engine.digest(executable),
+                                'args_sha256': configured['args_sha256'],
+                                'native_desktop_supported': sys.platform in ('linux', 'win32')})
+            engine.evidence(root, 'native-' + args.command, lock, details)
 
 
 def main():

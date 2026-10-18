@@ -230,7 +230,13 @@ After building the matching control, use:
 node tests/chromium/control-smoke.js --executable /path/to/fly-chromium/src/out/FlyControl/chrome --work-dir /path/to/fly-chromium/fixture-evidence --backend x11 --video --extension
 ```
 
-After building native Fly, select its executable and add `--native`. Omit
+After building native Fly, select its executable and add
+`--native --native-record /path/to/fly-chromium/evidence/native-build.json`.
+The native build records the executable path/hash, overlay fingerprint and desktop
+support. The fixture checks those fields and the pinned engine lock before
+creating a profile or launching anything. A control/test record, changed binary
+or platform without the desktop adapter cannot authorise native media evidence.
+Omit
 `--video` to retain the PCM audio scenario; omit `--extension` for the baseline
 without the visibility-sensitive MV3 probe. Every run creates a new profile and
 records the executable/media hashes, codec capability, actual frame decode,

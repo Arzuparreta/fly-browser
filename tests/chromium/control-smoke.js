@@ -7,8 +7,25 @@ const path = require('node:path');
 const crypto = require('node:crypto');
 const {spawn} = require('node:child_process');
 const {parseArgs} = require('node:util');
-const {chromium} = require(process.env.FLY_PLAYWRIGHT_MODULE || 'playwright');
 const fixtures = require('./fixtures');
+
+const sha256 = file => crypto.createHash('sha256').update(fs.readFileSync(file)).digest('hex');
+
+function validateNativeBuild(executable, recordFile) {
+    assert(recordFile, 'Native fixtures require --native-record from native.py build');
+    const record = JSON.parse(fs.readFileSync(recordFile, 'utf8'));
+    assert.equal(record.stage, 'native-build', 'Require a completed native build record');
+    assert.equal(record.details?.native_desktop_supported, true, 'Native desktop adapter is unsupported in this build');
+    assert.equal(record.details.target, 'chrome', 'Require the native browser build');
+    assert.match(record.details.fingerprint || '', /^[0-9a-f]{64}$/, 'Require overlay fingerprint');
+    assert.equal(record.lock_sha256, sha256(path.resolve(__dirname, '../../chromium/upstream.lock.json')),
+        'Native engine lock differs from the fixture checkout');
+    assert.equal(fs.realpathSync(record.details.binary), fs.realpathSync(executable), 'Native executable path differs');
+    assert.equal(record.details.sha256, sha256(executable), 'Native executable hash differs');
+    return {file: path.resolve(recordFile), sha256: sha256(recordFile),
+        overlayFingerprint: record.details.fingerprint, flyCommit: record.fly_commit,
+        flyDirty: record.fly_dirty, lockSha256: record.lock_sha256};
+}
 
 const pause = ms => new Promise(resolve => setTimeout(resolve, ms));
 async function until(fn, process, timeout = 30000) {
@@ -28,11 +45,17 @@ async function main() {
         extension: {type: 'boolean', default: false},
         video: {type: 'boolean', default: false},
         native: {type: 'boolean', default: false},
+        'native-record': {type: 'string'},
         backend: {type: 'string', default: 'x11'},
     }});
     assert(values.executable && values['work-dir'], 'Provide --executable and a dedicated --work-dir');
     assert(['x11', 'wayland'].includes(values.backend), 'This desktop smoke requires X11 or Wayland');
     const executable = path.resolve(values.executable);
+    assert(values.native || !values['native-record'], '--native-record requires --native');
+    // Validate before creating any evidence/profile or starting a fixture server.
+    // Unknown switches alone cannot prove this executable embeds Fly's desktop.
+    const nativeBuild = values.native ? validateNativeBuild(executable, values['native-record']) : null;
+    const {chromium} = require(process.env.FLY_PLAYWRIGHT_MODULE || 'playwright');
     const directory = path.resolve(values['work-dir']);
     fs.mkdirSync(directory, {recursive: true, mode: 0o700});
     const work = fs.mkdtempSync(path.join(directory, 'control-smoke-'));
@@ -54,7 +77,7 @@ async function main() {
     const evidence = {role: values.native ? 'native Fly single-profile media fixture' : 'control fixture validation; no native Fly acceptance',
         native: values.native, media: values.video ? 'H264/AAC MP4' : 'PCM WAV',
         mediaFixtureSha256: fixture.mediaSha256,
-        executable, launcherSha256: crypto.createHash('sha256').update(fs.readFileSync(executable)).digest('hex'),
+        executable, launcherSha256: sha256(executable), nativeBuild,
         args, sandboxDisabled: false, profile, backend: values.backend,
         extensionManifestSha256: extension?.manifestSha256 || null,
         checks: {}, limitations: [values.native ? 'Single profile fixture only; full workspace/split/desktop acceptance untested' : 'No native Fly shell/workspace integration',
@@ -165,4 +188,5 @@ async function main() {
     }
 }
 
-main().catch(error => {console.error(error); process.exitCode = 1;});
+if (require.main === module) main().catch(error => {console.error(error); process.exitCode = 1;});
+module.exports = {validateNativeBuild};
