@@ -114,6 +114,15 @@ FlyWindowController::FlyWindowController()
                           weak_factory_.GetWeakPtr()),
       u""));
   clock_->SetStyle(ui::ButtonStyle::kText);
+  preferences_button_ = sidebar->AddChildView(std::make_unique<views::MdTextButton>(
+      base::BindRepeating(
+          [](base::WeakPtr<FlyWindowController> window) {
+            if (window && window->selected_) {
+              InvokeNativeCommand(window->selected_, "toggle-help");
+              window->keyboard_editor_->ShowAppearance();
+            }
+          }, weak_factory_.GetWeakPtr()), u"Preferences"));
+  preferences_button_->SetEnabled(false);
   root->AddChildView(std::move(sidebar));
   auto* column = root->AddChildView(std::make_unique<views::View>());
   auto* column_layout =
@@ -162,7 +171,8 @@ FlyWindowController::FlyWindowController()
           },
           weak_factory_.GetWeakPtr()));
   keyboard_editor_ =
-      std::make_unique<KeyboardEditor>(desktop_.get(), commands_);
+      std::make_unique<KeyboardEditor>(desktop_.get(), commands_,
+                                       *g_browser_process->local_state());
   desktop_->AddObserver(this);
   preferences_registrar_.Init(g_browser_process->local_state());
   preferences_registrar_.Add(
@@ -195,6 +205,7 @@ FlyWindowController::~FlyWindowController() {
   status_ = nullptr;
   status_bar_ = nullptr;
   clock_ = nullptr;
+  preferences_button_ = nullptr;
   tab_sidebar_ = nullptr;
   desktop_.reset();
 }
@@ -315,6 +326,7 @@ void FlyWindowController::Select(BrowserWindowInterface* browser, bool focus) {
     palette_->Cancel();
     keyboard_editor_->Cancel();
     selected_ = browser;
+    preferences_button_->SetEnabled(true);
     tab_sidebar_->SetBrowser(browser);
     auto& next = it->second;
     std::u16string workspace_name;
@@ -558,6 +570,7 @@ void FlyWindowController::OnBrowserDidClose(BrowserWindowInterface* browser) {
     tab_sidebar_->SetBrowser(nullptr);
     status_bar_->SetBrowser(nullptr, u"");
     selected_ = nullptr;
+    preferences_button_->SetEnabled(false);
     if (it->second.widget) {
       it->second.host->SetVisible(false);
       it->second.widget->Hide();

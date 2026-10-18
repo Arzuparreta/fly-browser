@@ -13,6 +13,7 @@
 #include "fly/ui/status_bar.h"
 #include "chrome/browser/ssl/chrome_security_state_util.h"
 #include "ui/views/controls/label.h"
+#include "ui/views/controls/button/checkbox.h"
 #include "ui/views/controls/textfield/textfield.h"
 
 #include <algorithm>
@@ -1236,6 +1237,107 @@ IN_PROC_BROWSER_TEST_F(FlyWorkspaceBrowserTest,
   EXPECT_FALSE(NativeCommandAvailable(browser(), "toggle-clock"));
   EXPECT_FALSE(window.RunCommand(browser(), "toggle-clock"));
   EXPECT_EQ(future, state->GetDict(kPreferencesPref));
+}
+
+IN_PROC_BROWSER_TEST_F(FlyWorkspaceBrowserTest,
+                       PreferencesPointerControlsKeepKeyboardDraftAndPageFocus) {
+  ASSERT_TRUE(ui_test_utils::NavigateToURL(
+      browser(), embedded_test_server()->GetURL("/title1.html")));
+  auto* contents = Active(browser());
+  ASSERT_TRUE(content::ExecJs(contents,
+      "document.body.innerHTML='<input id=entry>';"
+      "document.querySelector('#entry').focus();"
+      "window.visibilityEvents=0;"
+      "document.addEventListener('visibilitychange',()=>visibilityEvents++)"));
+  auto& window = FlyWindowController::Get();
+  window.Select(browser(), true);
+  const auto keyboard = window.commands().Read();
+  ASSERT_TRUE(keyboard);
+  auto* pointer = window.preferences_button_for_testing();
+  ASSERT_TRUE(pointer && pointer->GetEnabled());
+  ui::test::EventGenerator keys(window.desktop_widget()->GetNativeWindow());
+  keys.MoveMouseTo(pointer->GetBoundsInScreen().CenterPoint());
+  keys.ClickLeftButton();
+  auto& editor = window.keyboard_editor();
+  ASSERT_TRUE(base::test::RunUntil([&] { return editor.active(); }));
+  EXPECT_TRUE(editor.appearance_for_testing("theme")->IsDrawn());
+  EXPECT_FALSE(editor.search_for_testing()->IsDrawn());
+  auto* state = g_browser_process->local_state();
+  EXPECT_EQ(nullptr, state->GetUserPrefValue(kPreferencesPref));
+  auto* binding = editor.field_for_testing("spawn-tab", false);
+  ASSERT_TRUE(binding);
+  binding->SetText(u"Ctrl+Y");
+  editor.ContentsChanged(binding, u"Ctrl+Y");
+  for (const auto key : {"theme", "sync_website_theme", "show_clock",
+                         "show_status_bar"}) {
+    auto* checkbox = editor.appearance_for_testing(key);
+    ASSERT_TRUE(checkbox && checkbox->GetEnabled());
+    EXPECT_TRUE(checkbox->GetChecked());
+    views::test::ButtonTestApi(checkbox).NotifyDefaultMouseClick();
+    EXPECT_FALSE(checkbox->GetChecked());
+  }
+  EXPECT_EQ("light", window.preferences().ReadTheme()->mode);
+  EXPECT_FALSE(window.preferences().ReadTheme()->sync_websites);
+  EXPECT_FALSE(window.clock_for_testing()->GetVisible());
+  EXPECT_FALSE(window.status_bar_for_testing()->GetVisible());
+  views::test::ButtonTestApi(editor.clock_format_for_testing())
+      .NotifyDefaultMouseClick();
+  EXPECT_EQ("time", window.preferences().ReadClock()->format);
+  EXPECT_EQ(u"Ctrl+Y", binding->GetText());
+  ASSERT_TRUE(window.preferences().ToggleTheme());
+  EXPECT_TRUE(editor.appearance_for_testing("theme")->GetChecked());
+  EXPECT_EQ(u"Ctrl+Y", binding->GetText());
+  const auto appearance = state->GetDict(kPreferencesPref).Clone();
+  keys.PressKey(ui::VKEY_ESCAPE, ui::EF_NONE);
+  ASSERT_TRUE(base::test::RunUntil([&] { return !editor.search_for_testing(); }));
+  EXPECT_EQ(appearance, state->GetDict(kPreferencesPref));
+  ASSERT_TRUE(window.commands().Read());
+  EXPECT_EQ(keyboard->shortcuts, window.commands().Read()->shortcuts);
+  ASSERT_TRUE(base::test::RunUntil([&] {
+    return content::EvalJs(contents, "document.hasFocus()").ExtractBool();
+  }));
+  keys.PressKey(ui::VKEY_J, ui::EF_NONE);
+  ASSERT_TRUE(base::test::RunUntil([&] {
+    return content::EvalJs(contents, "document.querySelector('#entry').value")
+               .ExtractString() == "j";
+  }));
+  EXPECT_EQ(0, content::EvalJs(contents, "visibilityEvents"));
+}
+
+IN_PROC_BROWSER_TEST_F(FlyWorkspaceBrowserTest,
+                       PreferencesRefuseFutureDataAndIgnoreCancelledCallbacks) {
+  auto& window = FlyWindowController::Get();
+  auto* state = g_browser_process->local_state();
+  const auto future = base::DictValue().Set("schema", 2)
+      .Set("values", base::DictValue().Set("show_clock", true));
+  state->SetDict(kPreferencesPref, future.Clone());
+  ASSERT_TRUE(window.RunCommand(browser(), "toggle-help"));
+  auto& editor = window.keyboard_editor();
+  ASSERT_TRUE(editor.active());
+  for (const auto key : {"theme", "sync_website_theme", "show_clock",
+                         "show_status_bar"})
+    EXPECT_FALSE(editor.appearance_for_testing(key)->GetEnabled());
+  EXPECT_FALSE(editor.clock_format_for_testing()->GetEnabled());
+  EXPECT_EQ(future, state->GetDict(kPreferencesPref));
+  state->ClearPref(kPreferencesPref);
+  for (const auto key : {"theme", "sync_website_theme", "show_clock",
+                         "show_status_bar"}) {
+    EXPECT_TRUE(editor.appearance_for_testing(key)->GetEnabled());
+    EXPECT_TRUE(editor.appearance_for_testing(key)->GetChecked());
+  }
+  EXPECT_TRUE(editor.clock_format_for_testing()->GetEnabled());
+  EXPECT_EQ(nullptr, state->GetUserPrefValue(kPreferencesPref));
+  views::test::ButtonTestApi(editor.record_for_testing("spawn-tab", false))
+      .NotifyDefaultMouseClick();
+  ASSERT_TRUE(editor.recording());
+  editor.ShowAppearance();
+  EXPECT_FALSE(editor.recording());
+  auto* checkbox = editor.appearance_for_testing("show_clock");
+  editor.Cancel();
+  views::test::ButtonTestApi(checkbox).NotifyDefaultMouseClick();
+  EXPECT_EQ(nullptr, state->GetUserPrefValue(kPreferencesPref));
+  ASSERT_TRUE(base::test::RunUntil([&] { return !editor.search_for_testing(); }));
+  EXPECT_EQ(nullptr, editor.appearance_for_testing("show_clock"));
 }
 
 IN_PROC_BROWSER_TEST_F(FlyWorkspaceBrowserTest,

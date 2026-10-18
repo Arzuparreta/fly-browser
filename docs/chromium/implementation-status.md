@@ -12,7 +12,7 @@ PR stack starts at PR [115](https://github.com/Arzuparreta/fly-browser/pull/115)
 Its latest remote checks and explicit CI must finish successfully before merging.
 Official service CI at `e4150ad` passed all 37 cases on Linux, macOS and Windows,
 with downloaded per-test summaries verified. The current development source in the
-hints worktree has fifteen patches, 42 Linux partial service cases and 42 browser
+hints worktree has fifteen patches, 42 Linux partial service cases and 44 browser
 declarations; the browser cases remain unexecuted. These counts describe different
 source snapshots and validation scopes, not a completed native port.
 
@@ -1174,3 +1174,33 @@ It remains unexecuted until a current native test executable links. The complete
 running build still uses its frozen nine-patch inputs. Custom theme palettes,
 the general preferences UI and the remaining product settings are still pending;
 this does not pass A04/A15 or complete M2 from source checks alone.
+
+## Native presentation controls
+
+The native preferences surface now exposes the five implemented presentation
+settings: dark/light interface, website color synchronization, clock visibility,
+clock format and status-bar visibility. Native Views checkboxes and a format
+button occupy an independently scrollable Appearance tab. Keyboard keeps its
+own tab and native scroll viewport. They call the same app-wide PreferencesService
+used by commands; changes apply
+immediately. The sidebar has a Preferences button, disabled when no browser
+context exists. Keyboard edits remain drafts until Apply in the Keyboard tab, and Close or
+Escape discards only that keyboard draft. The panel states this distinction.
+
+A pref observer refreshes presentation controls after outside changes without
+rebuilding keyboard rows, dropping a draft or cancelling recording. Future,
+malformed or managed appearance data leaves controls disabled; preserved data is
+never replaced with defaults. Callbacks after cancellation cannot save a change.
+Observer subscriptions and control pointers are cleared before widget teardown.
+The native child surface shares the existing window and focus/IME lifecycle.
+
+Two additional browser cases cover pointer entry, all five settings, keyboard
+draft preservation, outside updates, close and restored page typing without
+visibility events; and unsupported data, live recovery and cancelled callbacks.
+These bring the current suite to 44 declarations including two PRE cases. They
+remain unexecuted pending the complete current native browser. This implements
+presentation controls, not the remaining preference groups or complete M2.
+
+Downloaded official summaries from run 39130191670 at `6ff2d1e` contain exactly
+39 SUCCESS results on each of Linux, macOS and Windows. Object compilation for
+that snapshot and later theme-source CI are separate, still pending operations.

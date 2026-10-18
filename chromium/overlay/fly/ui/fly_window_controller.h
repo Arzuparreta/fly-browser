@@ -69,6 +69,7 @@ class FlyWindowController : public views::WidgetDelegate,
   CommandService& commands() { return commands_; }
   PreferencesService& preferences() { return preferences_; }
   views::MdTextButton* clock_for_testing() { return clock_; }
+  views::MdTextButton* preferences_button_for_testing() { return preferences_button_; }
   BrowserWindowInterface* selected_browser_for_testing() { return selected_; }
   CommandPalette& palette() { return *palette_; }
   KeyboardEditor& keyboard_editor() { return *keyboard_editor_; }
@@ -135,6 +136,7 @@ class FlyWindowController : public views::WidgetDelegate,
   raw_ptr<views::Label> status_ = nullptr;
   raw_ptr<StatusBar> status_bar_ = nullptr;
   raw_ptr<views::MdTextButton> clock_ = nullptr;
+  raw_ptr<views::MdTextButton> preferences_button_ = nullptr;
   raw_ptr<TabSidebar> tab_sidebar_ = nullptr;
   std::map<BrowserWindowInterface*, Entry> entries_;
   raw_ptr<BrowserWindowInterface> selected_ = nullptr;

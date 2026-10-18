@@ -19,9 +19,11 @@
 #include "ui/views/accessibility/view_accessibility.h"
 #include "ui/views/background.h"
 #include "ui/views/controls/button/md_text_button.h"
+#include "ui/views/controls/button/checkbox.h"
 #include "ui/views/controls/label.h"
 #include "ui/views/controls/scroll_view.h"
 #include "ui/views/controls/textarea/textarea.h"
+#include "ui/views/controls/tabbed_pane/tabbed_pane.h"
 #include "ui/views/controls/textfield/textfield.h"
 #include "ui/views/layout/box_layout.h"
 #include "ui/views/widget/native_widget_aura.h"
@@ -29,12 +31,18 @@
 #include "ui/wm/core/coordinate_conversion.h"
 
 namespace fly {
-KeyboardEditor::KeyboardEditor(views::Widget* desktop, CommandService& commands)
-    : desktop_(desktop), commands_(commands) {
+KeyboardEditor::KeyboardEditor(views::Widget* desktop, CommandService& commands,
+                               PrefService& local_state)
+    : desktop_(desktop), commands_(commands), preferences_(local_state) {
   desktop_->AddObserver(this);
+  preferences_registrar_.Init(&local_state);
+  preferences_registrar_.Add(
+      kPreferencesPref, base::BindRepeating(&KeyboardEditor::RefreshAppearance,
+                                           weak_factory_.GetWeakPtr()));
 }
 KeyboardEditor::~KeyboardEditor() {
   weak_factory_.InvalidateWeakPtrs();
+  preferences_registrar_.RemoveAll();
   recording_timer_.Stop();
   Observe(nullptr);
   fields_.clear();
@@ -43,6 +51,7 @@ KeyboardEditor::~KeyboardEditor() {
   rows_ = nullptr;
   status_ = nullptr;
   save_ = nullptr;
+  ClearAppearance();
   overlay_.reset();
   if (desktop_)
     desktop_->RemoveObserver(this);
@@ -100,15 +109,44 @@ void KeyboardEditor::Toggle(content::WebContents* contents) {
   panel->SetBackground(
       views::CreateSolidBackground(ui::kColorDialogBackground));
   panel->AddChildView(
-      std::make_unique<views::Label>(u"Preferences · Keyboard"));
-  panel->AddChildView(std::make_unique<views::Label>(
+      std::make_unique<views::Label>(u"Preferences"));
+  sections_ = panel->AddChildView(std::make_unique<views::TabbedPane>());
+  sections_->SetListener(this);
+  layout->SetFlexForView(sections_, 1);
+  auto* appearance_scroll = sections_->AddTab(
+      u"Appearance", std::make_unique<views::ScrollView>());
+  appearance_scroll->SetHorizontalScrollBarMode(
+      views::ScrollView::ScrollBarMode::kDisabled);
+  auto* appearance = appearance_scroll->SetContents(std::make_unique<views::View>());
+  appearance->SetLayoutManager(std::make_unique<views::BoxLayout>(
+      views::BoxLayout::Orientation::kVertical));
+  for (const auto& [key, label] :
+       {std::pair{"theme", u"Dark interface"},
+        std::pair{"sync_website_theme", u"Match website color scheme to Fly"},
+        std::pair{"show_clock", u"Show clock"},
+        std::pair{"show_status_bar", u"Show status bar"}}) {
+    appearance_[key] = appearance->AddChildView(std::make_unique<views::Checkbox>(
+        label, base::BindRepeating(&KeyboardEditor::ChangeAppearance,
+                                   weak_factory_.GetWeakPtr(), std::string(key))));
+    appearance_[key]->SetMultiLine(true);
+  }
+  clock_format_ = appearance->AddChildView(std::make_unique<views::MdTextButton>(
+      base::BindRepeating(&KeyboardEditor::CycleClockFormat,
+                          weak_factory_.GetWeakPtr()), u"Clock format"));
+  clock_format_->SetTooltipText(u"Click to change the clock format");
+  appearance_status_ = appearance->AddChildView(std::make_unique<views::Label>());
+  appearance_status_->SetMultiLine(true);
+  auto* keyboard = sections_->AddTab(u"Keyboard", std::make_unique<views::View>());
+  auto* keyboard_layout = keyboard->SetLayoutManager(std::make_unique<views::BoxLayout>(
+      views::BoxLayout::Orientation::kVertical, gfx::Insets(8), 8));
+  keyboard->AddChildView(std::make_unique<views::Label>(
       u"One binding per line. Add key records a shortcut or a two-key "
       u"NORMAL sequence."));
-  search_ = panel->AddChildView(std::make_unique<views::Textfield>());
+  search_ = keyboard->AddChildView(std::make_unique<views::Textfield>());
   search_->SetPlaceholderText(u"Search actions");
   search_->GetViewAccessibility().SetName(u"Search keyboard actions");
   search_->set_controller(this);
-  auto* modifiers = panel->AddChildView(std::make_unique<views::View>());
+  auto* modifiers = keyboard->AddChildView(std::make_unique<views::View>());
   auto* modifier_layout =
       modifiers->SetLayoutManager(std::make_unique<views::BoxLayout>(
           views::BoxLayout::Orientation::kHorizontal));
@@ -119,28 +157,24 @@ void KeyboardEditor::Toggle(content::WebContents* contents) {
   tabs_->GetViewAccessibility().SetName(u"Numbered tab modifier");
   tabs_->set_controller(this);
   modifier_layout->SetFlexForView(tabs_, 1);
-  auto* scroll = panel->AddChildView(std::make_unique<views::ScrollView>());
+  auto* scroll = keyboard->AddChildView(std::make_unique<views::ScrollView>());
   scroll->SetHorizontalScrollBarMode(
       views::ScrollView::ScrollBarMode::kDisabled);
   rows_ = scroll->SetContents(std::make_unique<views::View>());
   rows_->SetLayoutManager(std::make_unique<views::BoxLayout>(
       views::BoxLayout::Orientation::kVertical, gfx::Insets(), 10));
-  layout->SetFlexForView(scroll, 1);
-  status_ = panel->AddChildView(std::make_unique<views::Label>(u""));
+  keyboard_layout->SetFlexForView(scroll, 1);
+  status_ = keyboard->AddChildView(std::make_unique<views::Label>(u""));
   status_->SetMultiLine(true);
   status_->GetViewAccessibility().SetLiveRegionContainer(
       views::ViewAccessibility::LiveRegionStatus::kPolite);
-  auto* buttons = panel->AddChildView(std::make_unique<views::View>());
+  auto* buttons = keyboard->AddChildView(std::make_unique<views::View>());
   buttons->SetLayoutManager(std::make_unique<views::BoxLayout>(
       views::BoxLayout::Orientation::kHorizontal, gfx::Insets(), 8));
   buttons->AddChildView(std::make_unique<views::MdTextButton>(
       base::BindRepeating(&KeyboardEditor::ResetAll,
                           weak_factory_.GetWeakPtr()),
       u"Restore defaults"));
-  buttons->AddChildView(std::make_unique<views::MdTextButton>(
-      base::BindRepeating(&KeyboardEditor::Cancel, weak_factory_.GetWeakPtr(),
-                          true),
-      u"Cancel"));
   save_ = buttons->AddChildView(std::make_unique<views::MdTextButton>(
       base::BindRepeating(&KeyboardEditor::Save, weak_factory_.GetWeakPtr()),
       u"Apply"));
@@ -149,12 +183,89 @@ void KeyboardEditor::Toggle(content::WebContents* contents) {
   if (!current)
     status_->SetText(
         u"Existing keyboard settings need recovery. They have been preserved.");
+  panel->AddChildView(std::make_unique<views::MdTextButton>(
+      base::BindRepeating(&KeyboardEditor::Cancel, weak_factory_.GetWeakPtr(), true),
+      u"Close"));
   root->AddChildView(std::move(panel));
   overlay_->SetContentsView(std::move(root));
+  RefreshAppearance();
   Refresh();
   overlay_->ShowInactive();
   desktop_->GetNativeWindow()->StackChildAtTop(overlay_->GetNativeWindow());
+  sections_->SelectTabAt(1, false);
   search_->RequestFocus();
+}
+void KeyboardEditor::ShowAppearance() {
+  if (!active())
+    return;
+  sections_->SelectTabAt(0, false);
+  appearance_.at("theme")->RequestFocus();
+}
+void KeyboardEditor::TabSelectedAt(int index) {
+  if (index == 0)
+    StopRecording();
+}
+void KeyboardEditor::ClearAppearance() {
+  if (sections_)
+    sections_->SetListener(nullptr);
+  appearance_.clear();
+  clock_format_ = nullptr;
+  appearance_status_ = nullptr;
+  sections_ = nullptr;
+}
+views::Checkbox* KeyboardEditor::appearance_for_testing(std::string_view key) {
+  auto it = appearance_.find(std::string(key));
+  return it == appearance_.end() ? nullptr : it->second.get();
+}
+void KeyboardEditor::RefreshAppearance() {
+  if (appearance_.empty())
+    return;
+  const auto theme = preferences_.ReadTheme();
+  const auto clock = preferences_.ReadClock();
+  const auto footer = preferences_.ReadStatusBarVisible();
+  const auto set = [&](const char* key, bool checked, bool enabled) {
+    auto* checkbox = appearance_.at(key).get();
+    checkbox->SetChecked(checked);
+    checkbox->SetEnabled(enabled);
+  };
+  set("theme", theme && theme->mode == "dark", preferences_.CanEditTheme());
+  set("sync_website_theme", theme && theme->sync_websites,
+      preferences_.CanEditTheme());
+  set("show_clock", clock && clock->visible, preferences_.CanEditClock());
+  set("show_status_bar", footer.value_or(false), preferences_.CanEditStatusBar());
+  clock_format_->SetEnabled(preferences_.CanEditClock());
+  clock_format_->SetText(!clock ? u"Clock format unavailable"
+      : clock->format == "datetime" ? u"Clock: date and time"
+      : clock->format == "time" ? u"Clock: time"
+                                 : u"Clock: date, time and seconds");
+  appearance_status_->SetText(!theme || !clock || !footer
+      ? u"Appearance settings need recovery. Saved data has been preserved."
+      : !preferences_.CanEditTheme() ? u"Appearance settings are managed."
+                                    : u"Appearance changes are saved immediately.");
+}
+void KeyboardEditor::ChangeAppearance(std::string key) {
+  if (!active())
+    return;
+  auto found = appearance_.find(key);
+  if (found == appearance_.end())
+    return;
+  const bool checked = found->second->GetChecked();
+  if (key == "theme") {
+    const auto theme = preferences_.ReadTheme();
+    if (theme && checked != (theme->mode == "dark"))
+      preferences_.ToggleTheme();
+  } else if (key == "sync_website_theme") {
+    preferences_.SetWebsiteThemeSync(checked);
+  } else if (key == "show_clock") {
+    preferences_.SetClockVisible(checked);
+  } else if (key == "show_status_bar") {
+    preferences_.SetStatusBarVisible(checked);
+  }
+  RefreshAppearance();
+}
+void KeyboardEditor::CycleClockFormat() {
+  if (active())
+    preferences_.CycleClockFormat();
 }
 void KeyboardEditor::Refresh() {
   StopRecording();
@@ -370,6 +481,7 @@ void KeyboardEditor::FinishClose(bool restore_focus) {
   rows_ = nullptr;
   status_ = nullptr;
   save_ = nullptr;
+  ClearAppearance();
   overlay_.reset();
   draft_.clear();
   catalog_.clear();
