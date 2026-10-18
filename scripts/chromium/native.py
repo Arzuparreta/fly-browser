@@ -8,6 +8,7 @@ import argparse
 import hashlib
 import json
 import os
+import re
 from pathlib import Path, PurePosixPath
 import subprocess
 import sys
@@ -178,15 +179,20 @@ def apply_core(root, lock):
     verify_source(root, lock)
 
 
-def apply(root, lock):
+def apply(root, lock, objects_only=False):
     if (root / MANIFEST).exists():
         existing = verify_source(root, lock)
         if existing.get('kind') == 'core':
             engine.fail('Core-only overlay present; revert before applying browser hooks')
+        if existing.get('kind') == 'objects' and not objects_only:
+            engine.fail('Compile-only overlay present; revert and apply after the control build')
         print('Native overlay already matches the reviewed inputs.')
         return
     engine.verify_checkout(root / 'src', lock['chromium'])
-    engine.require_control(root, lock, CONFIG)
+    if objects_only:
+        engine.require_stage(root, 'hooks', lock)
+    else:
+        engine.require_control(root, lock, CONFIG)
     patches, overlay = inputs()
     touched = set()
     for patch in patches:
@@ -207,6 +213,8 @@ def apply(root, lock):
     manifest = {'schema': 1, 'phase': 'applying',
                 'upstream': lock['chromium']['revision'],
                 'fingerprint': fingerprint(), 'files': {}}
+    if objects_only:
+        manifest['kind'] = 'objects'
     # Exercise the entire ordered stack before touching the real source. This
     # catches a late failed hunk without leaving an earlier patch installed.
     with tempfile.TemporaryDirectory(prefix='fly-overlay-', dir=root) as tmp:
@@ -274,6 +282,62 @@ def revert(root, lock, recover=False):
     (root / MANIFEST).unlink()
 
 
+def object_targets(output, manifest, platform):
+    """Resolve actual GN compiler edges, retaining GN-generated prerequisites."""
+    wanted = {name for name in manifest['files']
+              if name.endswith(('.cc', '.mm', '.c', '.m'))}
+    found = {name: [] for name in wanted}
+    source_names = {name.encode('utf-8'): name for name in wanted}
+    for file in output.rglob('*.ninja'):
+        # GN variables may carry non-UTF8 bytes from third-party metadata.
+        # Decode only matching path tokens, not unrelated command variables.
+        for line in file.read_bytes().splitlines():
+            edge = re.match(rb'^build ([^ ]+): (?:cxx|cc|objcxx|objc) ../../([^ ]+)(?: |$)', line)
+            if edge and edge[2] in source_names:
+                target = edge[1].decode('utf-8')
+                relative_path(target)
+                found[source_names[edge[2]]].append(target)
+    missing = sorted(name for name, targets in found.items() if not targets)
+    skipped = [name for name in missing if platform == 'darwin' and
+               name.startswith(('fly/ui/', 'fly/test/'))]
+    unexpected = set(missing) - set(skipped)
+    if unexpected:
+        engine.fail('No GN compiler edge for native sources: ' + repr(sorted(unexpected)))
+    targets = {}
+    for name, candidates in found.items():
+        if candidates:
+            # The scoped runner and upstream browser_tests share the test TU.
+            # Prefer the scoped runner; never build the upstream test catalogue.
+            targets[name] = min(candidates, key=lambda target:
+                                (not target.startswith('obj/fly/'), len(target), target))
+    if not targets:
+        engine.fail('No native compiler targets selected')
+    return targets, skipped
+
+
+def compile_objects(root, lock, manifest, env, jobs):
+    relative = 'out/FlyObjects'
+    output = root / 'src' / relative
+    output.mkdir(parents=True, exist_ok=True)
+    config = output / 'args.gn'
+    if config.exists() and config.read_bytes() != CONFIG.read_bytes():
+        engine.fail('Object build arguments differ; preserve existing output')
+    config.write_bytes(CONFIG.read_bytes())
+    engine.run(['gn', 'gen', relative], root / 'src', env)
+    engine.run(['gn', 'check', relative, '//fly:*'], root / 'src', env)
+    engine.run(['gn', 'check', relative, '//chrome/browser/ui:ui'], root / 'src', env)
+    targets, skipped = object_targets(output, manifest, sys.platform)
+    details = {'fingerprint': manifest['fingerprint'], 'objects': targets,
+               'platform_excluded_sources': skipped,
+               'native_desktop_supported': sys.platform in ('linux', 'win32'),
+               'acceptance': 'Object compilation only; no linked browser or runtime acceptance'}
+    engine.atomic_json(root / 'evidence/native-object-plan.json', details)
+    engine.run(['autoninja', '-C', relative, '-j', str(jobs), *sorted(targets.values())],
+               root / 'src', env)
+    verify_source(root, lock)
+    engine.evidence(root, 'native-test-objects', lock, details)
+
+
 def execute(args):
     lock = engine.read_lock()
     root = engine.engine_root(args.root)
@@ -282,6 +346,9 @@ def execute(args):
         if args.command == 'test-core':
             engine.require_stage(root, 'hooks', lock)
             apply_core(root, lock)
+        if args.command == 'test-objects':
+            engine.doctor(root, args.minimum_free_gib)
+            apply(root, lock, objects_only=True)
         if args.command == 'apply':
             # The control build verifies all dependency revisions. This command
             # only touches source files after its successful completion.
@@ -294,7 +361,13 @@ def execute(args):
         engine.verify_dependencies(root, source_verifier=lambda: verify_source(root, lock))
         env = engine.environment(root)
         output = root / 'src' / OUTPUT
-        if args.command == 'test-core':
+        if args.command in ('configure', 'build', 'test', 'test-browser'):
+            if manifest.get('kind') in ('core', 'objects'):
+                engine.fail('A full overlay after a matching control build is required')
+            engine.require_control(root, lock, CONFIG)
+        if args.command == 'test-objects':
+            compile_objects(root, lock, manifest, env, args.jobs)
+        elif args.command == 'test-core':
             # Service tests need no patched browser or claim of a complete
             # control build. Root-target keeps the real Chromium dependency
             # graph, toolchain, test launcher and platform implementations.
@@ -354,7 +427,7 @@ def execute(args):
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument('command', choices=['apply', 'verify', 'configure', 'build', 'test', 'test-browser', 'test-core', 'revert', 'recover'])
+    parser.add_argument('command', choices=['apply', 'verify', 'configure', 'build', 'test', 'test-browser', 'test-core', 'test-objects', 'revert', 'recover'])
     parser.add_argument('--root', required=True)
     parser.add_argument('--browser-target', choices=['fly_browser_tests', 'browser_tests'],
                         default='fly_browser_tests',

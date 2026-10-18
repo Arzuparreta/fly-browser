@@ -116,6 +116,16 @@ class NativeOverlayTests(unittest.TestCase):
         self.assertEqual((self.source / 'fly/native.cc').read_text(), 'keep owner work\n')
         self.assertFalse((self.root / native.MANIFEST).exists())
 
+    def test_compile_only_overlay_cannot_authorise_full_browser_build(self):
+        with patch.object(native.engine, 'require_control', side_effect=AssertionError('No control available')):
+            native.apply(self.root, self.lock, objects_only=True)
+        manifest = native.verify_source(self.root, self.lock)
+        self.assertEqual(manifest['kind'], 'objects')
+        with self.assertRaisesRegex(RuntimeError, 'Compile-only overlay'):
+            native.apply(self.root, self.lock)
+        native.revert(self.root, self.lock)
+        self.assertEqual(self.git('status', '--porcelain'), '')
+
     def test_late_failed_patch_does_not_install_earlier_patch(self):
         self.series.write_text('first.patch\nsecond.patch\n')
         (self.patches / 'second.patch').write_text(
@@ -200,6 +210,51 @@ class NativeOverlayTests(unittest.TestCase):
         with self.assertRaisesRegex(RuntimeError, 'build has not succeeded'):
             native.apply(self.root, self.lock)
         self.assertEqual(self.git('status', '--porcelain'), '')
+
+
+
+class NativeObjectPlanTests(unittest.TestCase):
+    def setUp(self):
+        self.tmp = tempfile.TemporaryDirectory(prefix='fly-object-plan-')
+        self.addCleanup(self.tmp.cleanup)
+        self.output = Path(self.tmp.name)
+        self.ninja = self.output / 'build.ninja'
+
+    def test_uses_real_compiler_edges_and_prefers_scoped_browser_runner(self):
+        self.ninja.write_text(
+            'build obj/chrome/test/browser_tests/test.o: cxx ../../fly/test/workspace_browser_test.cc | prerequisites\n'
+            'build obj/fly/fly_browser_tests/test.o: cxx ../../fly/test/workspace_browser_test.cc | prerequisites\n'
+            'build obj/ui/native.obj: cxx ../../fly/ui/native.cc | generated.h\n'
+            'build obj/chrome/start.o: cxx ../../chrome/browser/start.cc\n'
+            'build ignored: copy ../../fly/ui/header.h\n')
+        with self.ninja.open('ab') as stream:
+            stream.write(b'cflags = -Dthird_party_metadata=\xff\n')
+        manifest = {'files': dict.fromkeys(['fly/test/workspace_browser_test.cc',
+                                          'fly/ui/native.cc', 'chrome/browser/start.cc',
+                                          'fly/ui/header.h'])}
+        targets, skipped = native.object_targets(self.output, manifest, 'win32')
+        self.assertEqual(len(targets), 3)
+        self.assertEqual(targets['fly/test/workspace_browser_test.cc'], 'obj/fly/fly_browser_tests/test.o')
+        self.assertEqual(targets['fly/ui/native.cc'], 'obj/ui/native.obj')
+        self.assertEqual(skipped, [])
+
+    def test_missing_compiler_edges_fail_instead_of_claiming_source_validation(self):
+        self.ninja.write_text('')
+        manifest = {'files': {'chrome/browser/start.cc': {}}}
+        for platform in ('linux', 'win32', 'darwin'):
+            with self.subTest(platform=platform):
+                with self.assertRaisesRegex(RuntimeError, 'No GN compiler edge'):
+                    native.object_targets(self.output, manifest, platform)
+
+    def test_mac_desktop_exclusion_is_explicit_and_does_not_hide_shared_sources(self):
+        self.ninja.write_text('build obj/fly/commands/config.o: cxx ../../fly/commands/config.cc\n')
+        manifest = {'files': dict.fromkeys(['fly/ui/native.cc', 'fly/test/test.cc',
+                                          'fly/commands/config.cc'])}
+        targets, skipped = native.object_targets(self.output, manifest, 'darwin')
+        self.assertEqual(list(targets), ['fly/commands/config.cc'])
+        self.assertEqual(skipped, ['fly/test/test.cc', 'fly/ui/native.cc'])
+        with self.assertRaisesRegex(RuntimeError, 'No GN compiler edge'):
+            native.object_targets(self.output, manifest, 'linux')
 
 
 if __name__ == '__main__':

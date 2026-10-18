@@ -805,3 +805,45 @@ succeeded at its latest head. The downloaded Linux/macOS/Windows test summaries
 each contain 31 SUCCESS results (`evidence/ci-palette-final/`). The root checkout
 is pulled main. Later source changes in the dependent branches still need their
 own final delivery and runtime validation.
+
+## Matching codec control and bounded hosted compilation
+
+The codec-enabled source-unmodified control completed at
+`2026-10-18T00:43:15Z`, clean Fly source `2c3aead`, executable SHA-256
+`f66bf58d2cd2ea47159f4e68e0c8203a2dceb4d4366eb85007fb5b7f7b795d72` and
+argument digest `09a546dca3089bf4d9cc93de2555ebe54ff6528a214d099c6e2a9ccbbd6cd71d`.
+Its real H264/AAC video/MV3 fixture passes in
+`fixture-evidence/control-smoke-a47ZFT/result.json`; PCM audio passes in
+`control-smoke-X0emxw/result.json`. They verify decode, pause, native visibility
+and continuing background audio with sandboxing enabled. This is pinned control
+evidence, not Fly runtime acceptance. The original control remains independent.
+
+Full manual matrix 39080367029 did not complete: Linux and macOS hit the hosted
+5h50 limit during their initial control compilation (about 30,907/66,953 and
+27,862/70,761 actions respectively). Windows lost communication with its runner;
+its cause and compiler result are unknown. Downloaded Linux/macOS evidence is
+retained in `evidence/ci-full-first/`. Neither cancelled job is a source failure
+or a successful build, and Windows has no retained build log.
+
+The dependent `codex/chromium-native-ci-objects` branch adds explicit manual
+`objects` depth to validate actual compiler outputs and GN ownership within
+hosted resources. It retains generated prerequisites, resolves source-to-object
+edges from GN's Ninja files, prefers the scoped browser runner, fails on missing
+shared/compiler edges and records macOS-only desktop exclusions. A distinct
+compile-only transaction cannot authorise browser configuration/build; the
+completed matching-control requirement still guards full native builds. Hosted
+compilations use two workers, and active-stage metadata survives job timeout in
+retained evidence. Four new boundary tests bring tooling coverage to 39 tests.
+
+PR 114 is merged main `485d4bc`. Its eight dependent source commits were rebased
+onto that main in `codex/chromium-native-runtime` at `b98cae4`; the overlay is
+unchanged by the rebase. The clean sidebar worktree is frozen for user service
+`fly-chromium-native-build.service`. It independently seeds `out/FlyNative` from
+the matching control, then applies/configures/builds all nine patches and the
+23-case browser source. Log: `native-build-systemd.log`; preparation identity:
+`evidence/native-preparation.json`. Do not edit/switch that worktree during the
+build. Subsequent tooling work uses the hints worktree. Native runtime and
+remaining M0-M6 acceptance still require execution.
+The object resolver finds 31 compiler edges with no exclusions in the actual
+Linux native GN graph (`evidence/ci-objects-actual-plan.json`). This checks target
+selection only; hosted object compilation has not yet run on this branch.

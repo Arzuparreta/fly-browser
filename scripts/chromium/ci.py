@@ -15,7 +15,7 @@ import engine
 def main():
     root = engine.engine_root(os.environ['FLY_CI_ENGINE_ROOT'])
     depth = os.environ['FLY_CI_DEPTH']
-    if depth not in ('configure', 'units', 'build'):
+    if depth not in ('configure', 'units', 'objects', 'build'):
         engine.fail('Unknown CI depth')
     evidence = root / 'evidence'
     evidence.mkdir(exist_ok=True)
@@ -32,7 +32,7 @@ def main():
     # then avoid demanding that entire initial budget again after sync/build.
     # Resource failures remain failures with actual free-space evidence.
     stages = ('doctor', 'bootstrap', 'sync', 'hooks')
-    if depth != 'units':
+    if depth not in ('units', 'objects'):
         stages += ('configure',)
     for stage in stages:
         minimum = ({'doctor': 80, 'bootstrap': 80, 'sync': 60}.get(stage, 40)
@@ -42,16 +42,23 @@ def main():
                          str(minimum)])
     if depth == 'units':
         commands.append([sys.executable, str(Path(__file__).with_name('native.py')),
-                         'test-core', '--root', str(root)])
+                         'test-core', '--root', str(root), '--jobs', '2'])
+    if depth == 'objects':
+        commands.append([sys.executable, str(Path(__file__).with_name('native.py')),
+                         'test-objects', '--root', str(root), '--jobs', '2',
+                         '--minimum-free-gib', '40'])
     if depth == 'build':
         commands.append([sys.executable, str(Path(__file__).with_name('engine.py')),
-                         'build', '--root', str(root), '--minimum-free-gib', '40'])
+                         'build', '--root', str(root), '--minimum-free-gib', '40',
+                         '--jobs', '2'])
         for stage in ('apply', 'configure', 'test', 'build'):
             commands.append([sys.executable, str(Path(__file__).with_name('native.py')),
-                             stage, '--root', str(root), '--minimum-free-gib', '40'])
+                             stage, '--root', str(root), '--minimum-free-gib', '40',
+                             '--jobs', '2'])
         if sys.platform in ('linux', 'win32'):
             commands.append([sys.executable, str(Path(__file__).with_name('native.py')),
-                             'test-browser', '--root', str(root), '--minimum-free-gib', '40'])
+                             'test-browser', '--root', str(root), '--minimum-free-gib', '40',
+                             '--jobs', '2'])
     for index, command in enumerate(commands):
         log = evidence / f'ci-{index:02d}-{command[2]}.log'
         if command[2] == 'test' and Path(command[1]).name == 'native.py':
@@ -75,10 +82,13 @@ def main():
                 command = ['xvfb-run', '--auto-servernum',
                            '--server-args=-screen 0 1280x1024x24', *command]
         print('+ ' + ' '.join(command), flush=True)
+        record['active_step'] = {'command': command, 'log': log.name}
+        engine.atomic_json(evidence / 'ci.json', record)
         with log.open('w', encoding='utf-8') as output:
             result = subprocess.run(command, stdout=output, stderr=subprocess.STDOUT)
         record['steps'].append({'command': command, 'exit_code': result.returncode,
                                 'log': log.name, 'log_sha256': engine.digest(log)})
+        record.pop('active_step', None)
         engine.atomic_json(evidence / 'ci.json', record)
         if result.returncode:
             # Keep the log in the artifact; bounded output avoids giant sync logs.

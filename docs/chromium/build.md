@@ -252,3 +252,24 @@ control compilation objects before native compilation. Logs retain actual resour
 failures and test results; a successful run is not complete platform acceptance.
 Local native builds retain a 100-GiB default floor; `--minimum-free-gib` makes an
 explicit alternative of at least 40 GiB possible.
+
+### Hosted source compilation
+
+The manual workflow also accepts depth `objects`. It bootstraps the exact source
+and toolchain, applies a distinct compile-only overlay transaction and builds
+the actual GN compiler edges for every modified upstream and Fly translation
+unit, including the scoped browser test source. GN supplies their generated
+headers and tool prerequisites. Two compiler workers bound hosted memory use.
+This is object compilation, without a linked browser or runtime acceptance.
+On macOS the unfinished desktop/browser-test sources are explicitly excluded;
+missing edges for shared/upstream sources fail validation.
+
+Local equivalent (use a dedicated engine checkout):
+
+```sh
+python3 scripts/chromium/native.py test-objects --root /path/to/fly-chromium --jobs 2 --minimum-free-gib 40
+```
+
+The transaction is tagged `objects` and cannot authorise native configure/build
+or media acceptance. Revert it before building the unmodified control and applying
+the full native overlay. Full build depth still requires the matching control.
