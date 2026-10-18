@@ -30,6 +30,8 @@
 #include "chrome/browser/sessions/session_restore.h"
 #include "chrome/browser/ui/browser.h"
 #include "chrome/browser/ui/browser_commands.h"
+#include "components/javascript_dialogs/app_modal_dialog_controller.h"
+#include "components/javascript_dialogs/app_modal_dialog_view.h"
 #include "chrome/browser/ui/browser_window/public/create_browser_window.h"
 #include "chrome/browser/ui/browser_window/public/global_browser_collection.h"
 #include "chrome/browser/ui/tabs/tab_strip_model.h"
@@ -44,6 +46,7 @@
 #include "extensions/test/test_extension_dir.h"
 #include "net/dns/mock_host_resolver.h"
 #include "net/test/embedded_test_server/embedded_test_server.h"
+#include "components/prefs/pref_service.h"
 #include "ui/aura/window.h"
 #include "ui/aura/window_tree_host.h"
 #include "ui/base/base_window.h"
@@ -190,6 +193,118 @@ IN_PROC_BROWSER_TEST_F(FlyWorkspaceBrowserTest,
                                      "localStorage.getItem('workspace')"));
   EXPECT_EQ("workspace=second",
             content::EvalJs(Active(second), "document.cookie"));
+}
+
+IN_PROC_BROWSER_TEST_F(FlyWorkspaceBrowserTest,
+                       PrivateWorkspacesUseIsolatedEphemeralNativeProfiles) {
+  auto* first = browser();
+  auto* second = SecondWorkspace();
+  ASSERT_TRUE(second);
+  auto& window = FlyWindowController::Get();
+  const auto url = embedded_test_server()->GetURL("/title1.html");
+  window.Select(first, true);
+  ASSERT_TRUE(ui_test_utils::NavigateToURL(first, url));
+  ASSERT_TRUE(content::ExecJs(Active(first),
+                              "document.cookie='normal=first;path=/'"));
+  const auto catalog =
+      g_browser_process->local_state()->GetDict(kWorkspacesPref).Clone();
+  ASSERT_TRUE(NativeCommandAvailable(first, "toggle-private-mode"));
+  ASSERT_TRUE(window.RunCommand(first, "toggle-private-mode"));
+  ASSERT_TRUE(base::test::RunUntil([&] {
+    return window.selected_browser_for_testing() != first;
+  }));
+  auto* private_first = window.selected_browser_for_testing();
+  ASSERT_TRUE(private_first);
+  ASSERT_TRUE(private_first->GetProfile()->IsOffTheRecord());
+  EXPECT_EQ(first->GetProfile(),
+            private_first->GetProfile()->GetOriginalProfile());
+  EXPECT_EQ(window.desktop_widget()->GetNativeWindow()->GetHost(),
+            private_first->GetWindow()->GetNativeWindow()->GetHost());
+  EXPECT_EQ(catalog, g_browser_process->local_state()->GetDict(kWorkspacesPref));
+  ASSERT_TRUE(ui_test_utils::NavigateToURL(private_first, url));
+  EXPECT_EQ("", content::EvalJs(Active(private_first), "document.cookie"));
+  ASSERT_TRUE(content::ExecJs(
+      Active(private_first),
+      "document.cookie='private=first;path=/';localStorage.setItem('private','first')"));
+  std::map<std::string, std::string> extra;
+  TabIdentity::Populate(Active(private_first), &extra);
+  EXPECT_TRUE(extra.empty());
+  ExpectVisible(Active(first), false);
+  window.Select(second, true);
+  ASSERT_TRUE(window.RunCommand(second, "toggle-private-mode"));
+  ASSERT_TRUE(base::test::RunUntil([&] {
+    return window.selected_browser_for_testing() != second;
+  }));
+  auto* private_second = window.selected_browser_for_testing();
+  ASSERT_TRUE(private_second);
+  ASSERT_TRUE(private_second->GetProfile()->IsOffTheRecord());
+  EXPECT_NE(private_first->GetProfile(), private_second->GetProfile());
+  ASSERT_TRUE(ui_test_utils::NavigateToURL(private_second, url));
+  EXPECT_EQ("", content::EvalJs(Active(private_second), "document.cookie"));
+  EXPECT_EQ(true, content::EvalJs(Active(private_second),
+                                 "localStorage.getItem('private') === null"));
+  ASSERT_TRUE(window.RunCommand(private_second, "toggle-private-mode"));
+  ASSERT_TRUE(base::test::RunUntil([&] {
+    return !second->GetProfile()->HasPrimaryOTRProfile();
+  }));
+  EXPECT_EQ(second, window.selected_browser_for_testing());
+  window.Select(private_first, true);
+  ASSERT_TRUE(window.RunCommand(private_first, "toggle-private-mode"));
+  ASSERT_TRUE(base::test::RunUntil([&] {
+    return !first->GetProfile()->HasPrimaryOTRProfile();
+  }));
+  EXPECT_EQ(first, window.selected_browser_for_testing());
+  EXPECT_EQ("normal=first", content::EvalJs(Active(first), "document.cookie"));
+  ASSERT_TRUE(window.RunCommand(first, "toggle-private-mode"));
+  ASSERT_TRUE(base::test::RunUntil([&] {
+    return window.selected_browser_for_testing() != first;
+  }));
+  auto* fresh = window.selected_browser_for_testing();
+  ASSERT_TRUE(fresh);
+  ASSERT_TRUE(ui_test_utils::NavigateToURL(fresh, url));
+  EXPECT_EQ("", content::EvalJs(Active(fresh), "document.cookie"));
+  EXPECT_EQ(true, content::EvalJs(Active(fresh),
+                                 "localStorage.getItem('private') === null"));
+}
+
+IN_PROC_BROWSER_TEST_F(FlyWorkspaceBrowserTest,
+                       PrivateExitHonoursBeforeUnloadCancellation) {
+  auto* normal = browser();
+  auto& window = FlyWindowController::Get();
+  ASSERT_TRUE(window.RunCommand(normal, "toggle-private-mode"));
+  ASSERT_TRUE(base::test::RunUntil([&] {
+    return window.selected_browser_for_testing() != normal;
+  }));
+  auto* private_model = window.selected_browser_for_testing();
+  ASSERT_TRUE(private_model);
+  ASSERT_TRUE(ui_test_utils::NavigateToURL(
+      private_model, embedded_test_server()->GetURL("/title1.html")));
+  auto* contents = Active(private_model);
+  ASSERT_TRUE(content::ExecJs(contents,
+                              "window.onbeforeunload = () => 'unsaved'"));
+  content::PrepContentsForBeforeUnloadTest(contents);
+  class CancellationObserver : public content::WebContentsObserver {
+   public:
+    explicit CancellationObserver(content::WebContents* contents)
+        : content::WebContentsObserver(contents) {}
+    void BeforeUnloadDialogCancelled() override { cancelled = true; }
+    bool cancelled = false;
+  } cancellation(contents);
+  ASSERT_TRUE(window.RunCommand(private_model, "toggle-private-mode"));
+  auto* dialog = ui_test_utils::WaitForAppModalDialog();
+  ASSERT_TRUE(dialog);
+  ASSERT_TRUE(dialog->is_before_unload_dialog());
+  dialog->view()->CancelAppModalDialog();
+  ASSERT_TRUE(base::test::RunUntil([&] { return cancellation.cancelled; }));
+  EXPECT_EQ(private_model, window.selected_browser_for_testing());
+  EXPECT_TRUE(normal->GetProfile()->HasPrimaryOTRProfile());
+  ExpectVisible(contents, true);
+  ASSERT_TRUE(content::ExecJs(contents, "window.onbeforeunload = null"));
+  ASSERT_TRUE(window.RunCommand(private_model, "toggle-private-mode"));
+  ASSERT_TRUE(base::test::RunUntil([&] {
+    return !normal->GetProfile()->HasPrimaryOTRProfile();
+  }));
+  EXPECT_EQ(normal, window.selected_browser_for_testing());
 }
 
 IN_PROC_BROWSER_TEST_F(FlyWorkspaceBrowserTest,

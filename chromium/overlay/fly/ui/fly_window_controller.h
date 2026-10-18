@@ -63,6 +63,7 @@ class FlyWindowController : public views::WidgetDelegate,
   TabSidebar* tab_sidebar_for_testing() { return tab_sidebar_; }
   void CreateTab();
   void CreateWorkspace();
+  bool CanTogglePrivate(BrowserWindowInterface* browser) const;
   views::View* workspace_buttons_for_testing() { return workspace_buttons_; }
   bool RunCommand(BrowserWindowInterface* browser, std::string_view action);
 
@@ -88,6 +89,7 @@ class FlyWindowController : public views::WidgetDelegate,
   void OpenWorkspace(std::string id);
   void OnProfileReady(std::string id, Profile* profile);
   void OnBrowserDidClose(BrowserWindowInterface* browser);
+  void TogglePrivate(BrowserWindowInterface* browser);
   void RequestClose(views::Widget::ClosedReason reason);
   void OnClosingAllBrowsers(bool closing);
   void FinishClose();
@@ -108,6 +110,8 @@ class FlyWindowController : public views::WidgetDelegate,
   std::map<BrowserWindowInterface*, Entry> entries_;
   raw_ptr<BrowserWindowInterface> selected_ = nullptr;
   std::map<std::string, base::WeakPtr<BrowserWindowInterface>> last_windows_;
+  // Memory only. OTR Profiles are never entered in the persistent catalog.
+  std::map<Profile*, base::WeakPtr<BrowserWindowInterface>> private_returns_;
   uint64_t next_window_order_ = 0;
   bool workspace_refresh_pending_ = false;
   bool closing_ = false;

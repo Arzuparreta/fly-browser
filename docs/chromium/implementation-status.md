@@ -771,3 +771,37 @@ Six boundary tests use inert file bytes and no browser launch; missing, control,
 unsupported-platform, different-lock, malformed-overlay and replaced-binary
 records fail before side effects. The tooling suite now has 35 passing tests.
 These tests validate evidence integrity; no native runtime result is claimed.
+
+## Private native workspace source
+
+The dependent `codex/chromium-native-private-workspaces` branch connects the
+private-mode command and palette entry to Chromium off-the-record profiles.
+Each persistent workspace has its own native OTR context; entering starts an
+empty private window in the shared desktop, preserving normal tabs in their
+original profile. Native incognito policy controls availability. Private choices
+and the return-window weak pointers live only in memory and do not enter the
+workspace catalog or persistent Fly tab metadata. The sidebar identifies the
+private workspace and the mode indicator includes PRIVATE.
+
+Exiting closes that OTR profile's native windows using Chromium's beforeunload
+coordinator, returning to its normal workspace after successful close. Cancelling
+a dialog retains the private window. Closing one of several private windows
+first selects another window of the same OTR profile. Native Chromium owns OTR
+service/storage destruction; Fly does not copy cookies or original navigations.
+This replaces Electron's shared private partition with workspace-isolated native
+private profiles. Extensions retain Chromium's user-controlled incognito access.
+
+There are now 23 browser cases. Two new cases cover per-workspace private
+isolation, normal-cookie preservation, native host identity, unchanged catalog,
+private metadata exclusion, closing/re-entering with empty cookies/local storage,
+and beforeunload cancellation. Their linked execution remains pending. Controller,
+native commands and browser-test translation units pass pinned source checks;
+repository and 35 tooling tests pass. No A17 completion is claimed yet.
+
+PR [114](https://github.com/Arzuparreta/fly-browser/pull/114) was squash-merged as
+`485d4bc` after ordinary checks and all six jobs in manual run
+[39078704053](https://github.com/Arzuparreta/fly-browser/actions/runs/39078704053)
+succeeded at its latest head. The downloaded Linux/macOS/Windows test summaries
+each contain 31 SUCCESS results (`evidence/ci-palette-final/`). The root checkout
+is pulled main. Later source changes in the dependent branches still need their
+own final delivery and runtime validation.
