@@ -23,7 +23,8 @@ class MdTextButton;
 namespace fly {
 // A projection of the selected profile's upstream tab model. Rows hold weak
 // WebContents identities, never a cached tab index or an extension's session
-// ID.
+// ID. Every native tab is projected, including about:blank; URL and title are
+// presentation only. An empty model has no synthetic placeholder tab.
 class TabSidebar : public views::View, public TabStripModelObserver {
  public:
   METADATA_HEADER(TabSidebar, views::View)

@@ -880,3 +880,43 @@ Telemetry and the rest of the product privacy/service acceptance remain separate
 unverified gates. The running local acceptance pipeline waits for the complete
 build and will record native unit/browser/media exit statuses automatically; it
 does not turn an attempted stage into a pass.
+## Native blank tabs and restart test coverage
+
+`about:blank` is an ordinary native tab. Each workspace owns a Chromium Profile;
+its window models own their native TabStripModels and WebContents. The sidebar
+projects every tab from the selected model, including blank pages, new-tab pages
+and extension pages. URLs and titles are presentation data, never tab identity
+or a reason to discard a tab. Zero native tabs produces the empty desktop UI.
+There is no replacement blank WebContents, URL-only recreation or second tab
+registry. Chromium retains opener, origin inheritance, extension IDs and security
+semantics; Fly adds its independent UUID to the same native tab.
+
+The browser suite now contains 27 declarations, including two PRE restart phases
+and 25 main cases. New cases exercise a real page's `window.open('about:blank')`
+with inherited origin/opener, navigation without replacing the tab/sidebar row,
+and MV3 `chrome.tabs.create` with an explicit blank URL, native IDs, profile
+ownership, openerTabId, sidebar inclusion and native close/reopen identity.
+These source cases are not yet executed: the first full native link is pending.
+
+Restart coverage distinguishes an ordinary launch without URLs from a launch
+with an explicit command-line `about:blank`. Both must restore all saved native
+tabs, including a bare blank tab; the latter must also retain the newly requested
+blank as a separate native tab with its own identity. The general Chromium test
+fixture injects a command-line blank by default, so the ordinary-launch fixture
+explicitly disables that test-only argument. No product URL filtering is added.
+
+The browser runner selects all Fly browser fixtures and checks a newly generated
+upstream result summary against every main case declared in the source. Missing,
+failed, skipped and zero-test runs fail evidence recording; successful PRE phases
+are correctly folded into their main case by Chromium's launcher. An old summary
+is archived before execution and cannot satisfy a new run. All 43 Python tooling
+contracts pass locally; browser runtime acceptance remains pending.
+
+Windows object run 39120988598 exposed CRLF conversion of the product patch
+checkout before native application. A local reproduction confirms that an LF
+patch applies to exact upstream LF bytes while its CRLF-converted counterpart
+fails identically. Repository attributes now preserve all `chromium/` inputs
+byte for byte; a real temporary Git checkout with `core.autocrlf=true` verifies
+both patch/overlay bytes and successful patch preflight. No host-global Git
+setting is needed for these product files. The earlier failed run remains failed;
+the updated remote head must pass fresh CI.

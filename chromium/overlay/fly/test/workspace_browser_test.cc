@@ -10,6 +10,7 @@
 #include "ui/views/controls/textfield/textfield.h"
 
 #include <algorithm>
+#include <map>
 #include <set>
 
 #include "base/command_line.h"
@@ -35,6 +36,7 @@
 #include "chrome/browser/ui/browser_window/public/create_browser_window.h"
 #include "chrome/browser/ui/browser_window/public/global_browser_collection.h"
 #include "chrome/browser/ui/tabs/tab_strip_model.h"
+#include "components/tabs/public/tab_interface.h"
 #include "chrome/test/base/browser_created_waiter.h"
 #include "chrome/test/base/in_process_browser_test.h"
 #include "chrome/test/base/ui_test_utils.h"
@@ -413,6 +415,116 @@ IN_PROC_BROWSER_TEST_F(FlyWorkspaceBrowserTest,
 }
 
 IN_PROC_BROWSER_TEST_F(FlyWorkspaceBrowserTest,
+                       BlankPopupRetainsOpenerOriginAndSidebarIdentity) {
+  ASSERT_TRUE(ui_test_utils::NavigateToURL(
+      browser(), embedded_test_server()->GetURL("/title1.html")));
+  auto* opener = Active(browser());
+  const std::string opener_id = TabIdentity::Get(opener);
+  auto* strip = browser()->GetTabStripModel();
+  const int count = strip->count();
+  content::WebContentsAddedObserver added;
+  ASSERT_TRUE(content::ExecJs(opener, "window.open('about:blank', '_blank')"));
+  auto* blank = added.GetWebContents();
+  ASSERT_TRUE(blank);
+  ASSERT_TRUE(base::test::RunUntil([&] {
+    return strip->count() == count + 1 &&
+           strip->GetIndexOfWebContents(blank) != TabStripModel::kNoTab;
+  }));
+  ASSERT_TRUE(content::WaitForLoadStop(blank));
+  EXPECT_EQ(GURL("about:blank"), blank->GetLastCommittedURL());
+  EXPECT_EQ(opener->GetBrowserContext(), blank->GetBrowserContext());
+  EXPECT_EQ(opener->GetPrimaryMainFrame(), blank->GetOpener());
+  EXPECT_EQ(opener->GetPrimaryMainFrame()->GetLastCommittedOrigin(),
+            blank->GetPrimaryMainFrame()->GetLastCommittedOrigin());
+  EXPECT_EQ(opener->GetLastCommittedURL().spec(),
+            content::EvalJs(blank, "window.opener.location.href"));
+  const std::string blank_id = TabIdentity::Get(blank);
+  const int native_id = extensions::ExtensionTabUtil::GetTabId(blank);
+  EXPECT_NE(opener_id, blank_id);
+  auto* sidebar = FlyWindowController::Get().tab_sidebar_for_testing();
+  ASSERT_TRUE(base::test::RunUntil([&] {
+    return sidebar->row_for_testing(blank) &&
+           sidebar->row_count_for_testing() == static_cast<size_t>(count + 1);
+  }));
+  auto* row = sidebar->row_for_testing(blank);
+  // Navigating the existing WebContents must not reconstruct a tab or row.
+  ASSERT_TRUE(content::NavigateToURL(
+      blank, embedded_test_server()->GetURL("/title2.html")));
+  EXPECT_EQ(blank_id, TabIdentity::Get(blank));
+  EXPECT_EQ(native_id, extensions::ExtensionTabUtil::GetTabId(blank));
+  EXPECT_EQ(row, sidebar->row_for_testing(blank));
+}
+
+IN_PROC_BROWSER_TEST_F(FlyWorkspaceBrowserTest,
+                       ExtensionBlankIsNativeProfileScopedAndReopenable) {
+  auto* second = SecondWorkspace();
+  ASSERT_TRUE(second);
+  const int second_count = second->GetTabStripModel()->count();
+  FlyWindowController::Get().Select(browser(), true);
+  extensions::TestExtensionDir directory;
+  directory.WriteManifest(
+      base::DictValue()
+          .Set("manifest_version", 3)
+          .Set("name", "Fly blank tab probe")
+          .Set("version", std::string(version_info::GetVersionNumber()))
+          .Set("permissions", base::ListValue().Append("tabs")));
+  directory.WriteFile(FILE_PATH_LITERAL("probe.html"),
+                      "<!doctype html><title>Blank tab probe</title>");
+  extensions::ChromeTestExtensionLoader loader(browser()->GetProfile());
+  const auto extension = loader.LoadExtension(directory.UnpackedPath());
+  ASSERT_TRUE(extension);
+  ASSERT_TRUE(ui_test_utils::NavigateToURL(
+      browser(), extension->GetResourceURL("probe.html")));
+  auto* opener = Active(browser());
+  auto* strip = browser()->GetTabStripModel();
+  const int count = strip->count();
+  auto result =
+      base::JSONReader::ReadDict(content::EvalJs(opener, R"js((async () => {
+        const current = await chrome.tabs.getCurrent();
+        const tab = await chrome.tabs.create({url: 'about:blank', active: true,
+          windowId: current.windowId, openerTabId: current.id});
+        return JSON.stringify(tab);
+      })())js")
+                                     .ExtractString(),
+                                 base::JSON_PARSE_RFC);
+  ASSERT_TRUE(result);
+  ASSERT_TRUE(
+      base::test::RunUntil([&] { return strip->count() == count + 1; }));
+  auto* blank = Active(browser());
+  ASSERT_NE(opener, blank);
+  ASSERT_TRUE(content::WaitForLoadStop(blank));
+  EXPECT_EQ(GURL("about:blank"), blank->GetLastCommittedURL());
+  EXPECT_EQ(browser()->GetProfile(), blank->GetBrowserContext());
+  EXPECT_EQ(extensions::ExtensionTabUtil::GetTabId(blank),
+            result->FindInt("id"));
+  EXPECT_EQ(extensions::ExtensionTabUtil::GetWindowId(browser()),
+            result->FindInt("windowId"));
+  EXPECT_EQ(extensions::ExtensionTabUtil::GetTabId(opener),
+            result->FindInt("openerTabId"));
+  EXPECT_EQ(strip->GetTabAtIndex(strip->GetIndexOfWebContents(opener)),
+            strip->GetOpenerOfTabAt(strip->GetIndexOfWebContents(blank)));
+  EXPECT_EQ(second_count, second->GetTabStripModel()->count());
+  const std::string id = TabIdentity::Get(blank);
+  EXPECT_NE(TabIdentity::Get(opener), id);
+  auto* sidebar = FlyWindowController::Get().tab_sidebar_for_testing();
+  ASSERT_TRUE(base::test::RunUntil([&] {
+    return sidebar->row_for_testing(blank) &&
+           sidebar->row_count_for_testing() == static_cast<size_t>(count + 1);
+  }));
+  auto original = blank->GetWeakPtr();
+  strip->CloseWebContentsAt(strip->GetIndexOfWebContents(blank),
+                            TabCloseTypes::CLOSE_USER_GESTURE |
+                                TabCloseTypes::CLOSE_CREATE_HISTORICAL_TAB);
+  ASSERT_TRUE(base::test::RunUntil([&] { return !original; }));
+  ASSERT_TRUE(ExecuteNativeCommand(browser(), "reopen-closed-tab"));
+  ASSERT_TRUE(
+      base::test::RunUntil([&] { return strip->count() == count + 1; }));
+  EXPECT_EQ(GURL("about:blank"), Active(browser())->GetVisibleURL());
+  EXPECT_EQ(id, TabIdentity::Get(Active(browser())));
+  EXPECT_EQ(second_count, second->GetTabStripModel()->count());
+}
+
+IN_PROC_BROWSER_TEST_F(FlyWorkspaceBrowserTest,
                        NativeCloseAndReopenPreserveFlyIdentity) {
   ASSERT_TRUE(ui_test_utils::NavigateToURL(
       browser(), embedded_test_server()->GetURL("/title1.html")));
@@ -767,116 +879,165 @@ IN_PROC_BROWSER_TEST_F(
   ExpectVisible(Active(second), true);
 }
 
-IN_PROC_BROWSER_TEST_F(
-    FlyWorkspaceBrowserTest,
-    PRE_NativeSessionRestoresProfilesWindowsIdsPinsAndCookies) {
-  auto* first = browser();
-  ASSERT_TRUE(ui_test_utils::NavigateToURL(
-      first, embedded_test_server()->GetURL("/title1.html")));
-  ASSERT_TRUE(content::ExecJs(
-      Active(first), "document.cookie = 'fly_restart_profile=first; path=/'"));
-  ASSERT_TRUE(
-      ui_test_utils::NavigateToURL(first, GURL("about:blank#fly-first")));
-  first->GetTabStripModel()->SetTabPinned(0, true);
-  auto* second = SecondWorkspace();
-  ASSERT_TRUE(second);
-  ASSERT_TRUE(ui_test_utils::NavigateToURL(
-      second, embedded_test_server()->GetURL("/title1.html")));
-  ASSERT_TRUE(content::ExecJs(
-      Active(second),
-      "document.cookie = 'fly_restart_profile=second; path=/'"));
-  ASSERT_TRUE(
-      ui_test_utils::NavigateToURL(second, GURL("about:blank#fly-second")));
-  base::test::TestFuture<BrowserWindowInterface*> future;
-  BrowserWindowCreateParams params(*first->GetProfile(), true);
-  params.should_trigger_session_restore = false;
-  CreateBrowserWindow(std::move(params), future.GetCallback());
-  auto* third = future.Get();
-  ASSERT_TRUE(third);
-  chrome::NewTab(third, NewTabTypes::kNewTabCommand);
-  ASSERT_TRUE(
-      ui_test_utils::NavigateToURL(third, GURL("about:blank#fly-third")));
-  FlyWindowController::Get().Select(second, true);
-  auto state = SessionSnapshot();
-  state.Set("cookies",
-            base::DictValue()
-                .Set(first->GetProfile()->GetPath().BaseName().AsUTF8Unsafe(),
-                     "first")
-                .Set(second->GetProfile()->GetPath().BaseName().AsUTF8Unsafe(),
-                     "second"));
-  auto json = base::WriteJson(state);
-  ASSERT_TRUE(json);
-  ASSERT_TRUE(base::WriteFile(RestoreFixturePath(), *json));
-}
+class FlySessionRestoreBrowserTest : public FlyWorkspaceBrowserTest {
+ public:
+  FlySessionRestoreBrowserTest() {
+    // Ordinary launch has no requested URL. A separate fixture below retains
+    // the framework's explicit command-line about:blank and asserts that tab.
+    set_open_about_blank_on_browser_launch(false);
+  }
 
-IN_PROC_BROWSER_TEST_F(FlyWorkspaceBrowserTest,
-                       NativeSessionRestoresProfilesWindowsIdsPinsAndCookies) {
-  std::string data;
-  ASSERT_TRUE(base::ReadFileToString(RestoreFixturePath(), &data));
-  const auto saved = base::JSONReader::ReadDict(data, base::JSON_PARSE_RFC);
-  ASSERT_TRUE(saved);
-  ASSERT_TRUE(saved->FindString("active_id"));
-  ASSERT_TRUE(saved->FindDict("cookies"));
-  ASSERT_TRUE(base::test::RunUntil([&] {
-    size_t windows = 0;
-    bool restoring = false;
+ protected:
+  void SaveSessionFixture() {
+    auto* first = browser();
+    ASSERT_TRUE(ui_test_utils::NavigateToURL(
+        first, embedded_test_server()->GetURL("/title1.html")));
+    ASSERT_TRUE(content::ExecJs(
+        Active(first),
+        "document.cookie = 'fly_restart_profile=first; path=/'"));
+    ASSERT_TRUE(
+        ui_test_utils::NavigateToURL(first, GURL("about:blank#fly-first")));
+    first->GetTabStripModel()->SetTabPinned(0, true);
+    auto* second = SecondWorkspace();
+    ASSERT_TRUE(second);
+    ASSERT_TRUE(ui_test_utils::NavigateToURL(
+        second, embedded_test_server()->GetURL("/title1.html")));
+    ASSERT_TRUE(content::ExecJs(
+        Active(second),
+        "document.cookie = 'fly_restart_profile=second; path=/'"));
+    ASSERT_TRUE(ui_test_utils::NavigateToURL(second, GURL("about:blank")));
+    base::test::TestFuture<BrowserWindowInterface*> future;
+    BrowserWindowCreateParams params(*first->GetProfile(), true);
+    params.should_trigger_session_restore = false;
+    CreateBrowserWindow(std::move(params), future.GetCallback());
+    auto* third = future.Get();
+    ASSERT_TRUE(third);
+    chrome::NewTab(third, NewTabTypes::kNewTabCommand);
+    ASSERT_TRUE(
+        ui_test_utils::NavigateToURL(third, GURL("about:blank#fly-third")));
+    FlyWindowController::Get().Select(second, true);
+    auto state = SessionSnapshot();
+    state.Set(
+        "cookies",
+        base::DictValue()
+            .Set(first->GetProfile()->GetPath().BaseName().AsUTF8Unsafe(),
+                 "first")
+            .Set(second->GetProfile()->GetPath().BaseName().AsUTF8Unsafe(),
+                 "second"));
+    auto json = base::WriteJson(state);
+    ASSERT_TRUE(json);
+    ASSERT_TRUE(base::WriteFile(RestoreFixturePath(), *json));
+  }
+  void ExpectSessionFixture(bool explicit_blank) {
+    std::string data;
+    ASSERT_TRUE(base::ReadFileToString(RestoreFixturePath(), &data));
+    const auto saved = base::JSONReader::ReadDict(data, base::JSON_PARSE_RFC);
+    ASSERT_TRUE(saved);
+    ASSERT_TRUE(saved->FindString("active_id"));
+    ASSERT_TRUE(saved->FindDict("cookies"));
+    ASSERT_TRUE(base::test::RunUntil([&] {
+      size_t windows = 0;
+      bool restoring = false;
+      GlobalBrowserCollection::GetInstance()->ForEach(
+          [&](BrowserWindowInterface* model) {
+            if (FlyWindowController::ShouldEmbed(model) &&
+                !model->GetProfile()->IsOffTheRecord()) {
+              ++windows;
+              restoring |= SessionRestore::IsRestoring(model->GetProfile());
+            }
+            return true;
+          });
+      WorkspaceService service(*g_browser_process->local_state());
+      const auto catalog = service.Read();
+      return windows == 3 && !restoring && catalog &&
+             catalog->active_id == *saved->FindString("active_id");
+    }));
+    const auto restored = SessionSnapshot();
+    ASSERT_TRUE(saved->FindList("workspaces"));
+    ASSERT_TRUE(restored.FindList("workspaces"));
+    EXPECT_EQ(*saved->FindList("workspaces"), *restored.FindList("workspaces"));
+    auto index = [](const base::DictValue& state) {
+      std::map<std::string, base::DictValue> result;
+      for (const auto& value : *state.FindList("windows")) {
+        const auto& model = value.GetDict();
+        for (const auto& tab : *model.FindList("tabs"))
+          result.emplace(*model.FindString("directory") + ":" +
+                             *tab.GetDict().FindString("id"),
+                         tab.GetDict().Clone());
+      }
+      return result;
+    };
+    const auto expected_tabs = index(*saved);
+    ASSERT_EQ(3u, expected_tabs.size());
+    auto actual_tabs = index(restored);
+    size_t requested_tabs = 0;
+    for (auto it = actual_tabs.begin(); it != actual_tabs.end();) {
+      if (expected_tabs.contains(it->first)) {
+        ++it;
+        continue;
+      }
+      // An explicit command-line URL is an additional native tab, even when
+      // another restored tab already has the very same about:blank URL.
+      EXPECT_EQ("about:blank", *it->second.FindString("url"));
+      EXPECT_FALSE(*it->second.FindBool("pinned"));
+      EXPECT_TRUE(
+          base::Uuid::ParseLowercase(*it->second.FindString("id")).is_valid());
+      ++requested_tabs;
+      it = actual_tabs.erase(it);
+    }
+    EXPECT_EQ(explicit_blank ? 1u : 0u, requested_tabs);
+    EXPECT_EQ(expected_tabs, actual_tabs);
+    std::set<std::string> profiles;
+    auto* desktop = FlyWindowController::Get().desktop_widget();
     GlobalBrowserCollection::GetInstance()->ForEach(
         [&](BrowserWindowInterface* model) {
-          if (FlyWindowController::ShouldEmbed(model) &&
-              !model->GetProfile()->IsOffTheRecord()) {
-            ++windows;
-            restoring |= SessionRestore::IsRestoring(model->GetProfile());
+          if (!FlyWindowController::ShouldEmbed(model) ||
+              model->GetProfile()->IsOffTheRecord())
+            return true;
+          EXPECT_EQ(desktop->GetNativeWindow()->GetHost(),
+                    model->GetWindow()->GetNativeWindow()->GetHost());
+          const auto directory =
+              model->GetProfile()->GetPath().BaseName().AsUTF8Unsafe();
+          if (profiles.insert(directory).second) {
+            FlyWindowController::Get().Select(model, true);
+            EXPECT_TRUE(ui_test_utils::NavigateToURL(
+                model, embedded_test_server()->GetURL("/title1.html")));
+            const auto* cookie =
+                saved->FindDict("cookies")->FindString(directory);
+            EXPECT_TRUE(cookie);
+            if (cookie)
+              EXPECT_EQ("fly_restart_profile=" + *cookie,
+                        content::EvalJs(Active(model), "document.cookie"));
           }
           return true;
         });
-    WorkspaceService service(*g_browser_process->local_state());
-    const auto catalog = service.Read();
-    return windows == 3 && !restoring && catalog &&
-           catalog->active_id == *saved->FindString("active_id");
-  }));
-  const auto restored = SessionSnapshot();
-  ASSERT_TRUE(saved->FindList("workspaces"));
-  ASSERT_TRUE(restored.FindList("workspaces"));
-  EXPECT_EQ(*saved->FindList("workspaces"), *restored.FindList("workspaces"));
-  auto index = [](const base::DictValue& state) {
-    std::map<std::string, base::DictValue> result;
-    for (const auto& value : *state.FindList("windows")) {
-      const auto& model = value.GetDict();
-      for (const auto& tab : *model.FindList("tabs"))
-        result.emplace(*model.FindString("directory") + ":" +
-                           *tab.GetDict().FindString("id"),
-                       tab.GetDict().Clone());
-    }
-    return result;
-  };
-  const auto expected_tabs = index(*saved);
-  ASSERT_EQ(3u, expected_tabs.size());
-  EXPECT_EQ(expected_tabs, index(restored));
-  std::set<std::string> profiles;
-  auto* desktop = FlyWindowController::Get().desktop_widget();
-  GlobalBrowserCollection::GetInstance()->ForEach(
-      [&](BrowserWindowInterface* model) {
-        if (!FlyWindowController::ShouldEmbed(model) ||
-            model->GetProfile()->IsOffTheRecord())
-          return true;
-        EXPECT_EQ(desktop->GetNativeWindow()->GetHost(),
-                  model->GetWindow()->GetNativeWindow()->GetHost());
-        const auto directory =
-            model->GetProfile()->GetPath().BaseName().AsUTF8Unsafe();
-        if (profiles.insert(directory).second) {
-          FlyWindowController::Get().Select(model, true);
-          EXPECT_TRUE(ui_test_utils::NavigateToURL(
-              model, embedded_test_server()->GetURL("/title1.html")));
-          const auto* cookie =
-              saved->FindDict("cookies")->FindString(directory);
-          EXPECT_TRUE(cookie);
-          if (cookie)
-            EXPECT_EQ("fly_restart_profile=" + *cookie,
-                      content::EvalJs(Active(model), "document.cookie"));
-        }
-        return true;
-      });
-  EXPECT_EQ(2u, profiles.size());
+    EXPECT_EQ(2u, profiles.size());
+  }
+};
+
+class FlyExplicitBlankRestoreBrowserTest : public FlySessionRestoreBrowserTest {
+ public:
+  FlyExplicitBlankRestoreBrowserTest() {
+    set_open_about_blank_on_browser_launch(true);
+  }
+};
+
+IN_PROC_BROWSER_TEST_F(
+    FlySessionRestoreBrowserTest,
+    PRE_NativeSessionRestoresProfilesWindowsIdsPinsAndCookies) {
+  SaveSessionFixture();
+}
+IN_PROC_BROWSER_TEST_F(FlySessionRestoreBrowserTest,
+                       NativeSessionRestoresProfilesWindowsIdsPinsAndCookies) {
+  ExpectSessionFixture(false);
+}
+IN_PROC_BROWSER_TEST_F(FlyExplicitBlankRestoreBrowserTest,
+                       PRE_ExplicitBlankAddsToRestoredNativeTabs) {
+  SaveSessionFixture();
+}
+IN_PROC_BROWSER_TEST_F(FlyExplicitBlankRestoreBrowserTest,
+                       ExplicitBlankAddsToRestoredNativeTabs) {
+  ExpectSessionFixture(true);
 }
 
 IN_PROC_BROWSER_TEST_F(FlyWorkspaceBrowserTest,

@@ -257,5 +257,73 @@ class NativeObjectPlanTests(unittest.TestCase):
             native.object_targets(self.output, manifest, 'linux')
 
 
+class NativeProductCheckoutBytesTests(unittest.TestCase):
+    def test_native_inputs_keep_exact_bytes_with_windows_autocrlf(self):
+        with tempfile.TemporaryDirectory(prefix='fly-native-checkout-') as tmp:
+            root = Path(tmp)
+            def git(*args):
+                return subprocess.run(['git', *args], cwd=root, check=True,
+                                      capture_output=True)
+            git('init', '--quiet')
+            git('config', 'user.name', 'Fixture')
+            git('config', 'user.email', 'fixture@invalid.example')
+            git('config', 'core.autocrlf', 'true')
+            (root / '.gitattributes').write_bytes((ROOT / '.gitattributes').read_bytes())
+            patch_file = root / 'chromium/patches/native.patch'
+            overlay = root / 'chromium/overlay/fly/native.cc'
+            patch_file.parent.mkdir(parents=True)
+            overlay.parent.mkdir(parents=True)
+            patch_bytes = (b'--- a/upstream.cc\n+++ b/upstream.cc\n'
+                           b'@@ -1 +1 @@\n-original\n+native\n')
+            patch_file.write_bytes(patch_bytes)
+            overlay.write_bytes(b'// Native source\n')
+            git('add', '.gitattributes', 'chromium')
+            git('commit', '--quiet', '-m', 'native inputs')
+            patch_file.unlink()
+            overlay.unlink()
+            git('checkout', '--', 'chromium')
+            self.assertEqual(patch_file.read_bytes(), patch_bytes)
+            self.assertEqual(overlay.read_bytes(), b'// Native source\n')
+            (root / 'upstream.cc').write_bytes(b'original\n')
+            git('apply', '--check', '--whitespace=error-all', str(patch_file))
+
+
+class BrowserResultCoverageTests(unittest.TestCase):
+    def setUp(self):
+        self.tmp = tempfile.TemporaryDirectory(prefix='fly-browser-coverage-')
+        self.addCleanup(self.tmp.cleanup)
+        self.root = Path(self.tmp.name)
+        self.source = self.root / 'browser.cc'
+        self.summary = self.root / 'results.json'
+        self.source.write_text(
+            'IN_PROC_BROWSER_TEST_F(FlyWorkspaceBrowserTest, NativeIds) {}\n'
+            'IN_PROC_BROWSER_TEST_F(FlySessionRestoreBrowserTest, PRE_Restart) {}\n'
+            'IN_PROC_BROWSER_TEST_F(FlySessionRestoreBrowserTest, Restart) {}\n')
+        self.passed = {'FlyWorkspaceBrowserTest.NativeIds': [{'status': 'SUCCESS'}],
+                       'FlySessionRestoreBrowserTest.Restart': [{'status': 'SUCCESS'}]}
+
+    def test_launcher_zero_cases_or_a_missing_fixture_cannot_pass(self):
+        for iterations in ([], [{}], [dict(list(self.passed.items())[:1])]):
+            with self.subTest(iterations=iterations):
+                self.summary.write_text(json.dumps({'per_iteration_data': iterations}))
+                with self.assertRaisesRegex(RuntimeError, 'no test iterations|missing or unsuccessful'):
+                    native.verify_browser_results(self.summary, self.source)
+
+    def test_failed_or_not_run_main_result_cannot_pass(self):
+        for status in ('FAILURE', 'CRASH', 'NOTRUN', 'SKIPPED'):
+            with self.subTest(status=status):
+                data = dict(self.passed)
+                data['FlySessionRestoreBrowserTest.Restart'] = [{'status': status}]
+                self.summary.write_text(json.dumps({'per_iteration_data': [data]}))
+                with self.assertRaisesRegex(RuntimeError, 'missing or unsuccessful'):
+                    native.verify_browser_results(self.summary, self.source)
+
+    def test_pre_success_is_folded_into_the_native_main_result(self):
+        self.summary.write_text(json.dumps({'per_iteration_data': [self.passed]}))
+        result = native.verify_browser_results(self.summary, self.source)
+        self.assertEqual(result['main_cases_per_iteration'], 2)
+        self.assertEqual(result['iterations'], 1)
+
+
 if __name__ == '__main__':
     unittest.main()
