@@ -351,13 +351,14 @@ def revert(root, lock, recover=False):
     (root / MANIFEST).unlink()
 
 
-def object_targets(output, manifest, platform):
+def object_targets(output, manifest, platform, recipe_files=None):
     """Resolve actual GN compiler edges, retaining GN-generated prerequisites."""
     wanted = {name for name in manifest['files']
               if name.endswith(('.cc', '.mm', '.c', '.m'))}
     found = {name: [] for name in wanted}
     source_names = {name.encode('utf-8'): name for name in wanted}
-    for file in output.rglob('*.ninja'):
+    files = recipe_files if recipe_files is not None else output.rglob('*.ninja')
+    for file in files:
         # GN variables may carry non-UTF8 bytes from third-party metadata.
         # Decode only matching path tokens, not unrelated command variables.
         for line in file.read_bytes().splitlines():
@@ -395,14 +396,30 @@ def compile_objects(root, lock, manifest, env, jobs):
     engine.run(['gn', 'gen', relative], root / 'src', env)
     engine.run(['gn', 'check', relative, '//fly:*'], root / 'src', env)
     engine.run(['gn', 'check', relative, '//chrome/browser/ui:ui'], root / 'src', env)
-    targets, skipped = object_targets(output, manifest, sys.platform)
+    engine.run(['gn', 'check', relative, '//chrome/browser/ui/navigator:impl'], root / 'src', env)
+    engine.run(['gn', 'check', relative, '//chrome/browser/ui/views/tab_contents:tab_contents'], root / 'src', env)
+    engine.run(['gn', 'check', relative, '//chrome/browser:core'], root / 'src', env)
+    engine.run(['gn', 'check', relative, '//chrome/browser/prefs:impl'], root / 'src', env)
+    from object_plan import compiler_plan, recipe_files
+    files, owners = recipe_files(root, relative, manifest, env)
+    targets, skipped = object_targets(output, manifest, sys.platform, files)
+    plan = compiler_plan(output, targets)
     details = {'fingerprint': manifest['fingerprint'], 'objects': targets,
+               'compiler_plan': plan, 'gn_source_owners': owners,
                'platform_excluded_sources': skipped,
                'native_desktop_supported': sys.platform in ('linux', 'win32'),
                'acceptance': 'Object compilation only; no linked browser or runtime acceptance'}
     engine.atomic_json(root / 'evidence/native-object-plan.json', details)
-    engine.run(['autoninja', '-C', relative, '-j', str(jobs), *sorted(targets.values())],
-               root / 'src', env)
+    engine.run(['autoninja', '-C', relative, '-j', str(jobs),
+                '-f', plan['manifest'], plan['target']], root / 'src', env)
+    compiled = {}
+    for source, target in targets.items():
+        file = output / target
+        if not file.is_file() or file.stat().st_size == 0:
+            engine.fail('Compiler did not produce its declared object: ' + target)
+        compiled[source] = {'path': target, 'sha256': engine.digest(file),
+                            'size': file.stat().st_size}
+    details['compiler_outputs'] = compiled
     verify_source(root, lock)
     engine.evidence(root, 'native-test-objects', lock, details)
 

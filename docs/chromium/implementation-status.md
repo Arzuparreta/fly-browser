@@ -11,10 +11,9 @@ three official native service summaries contain 31 SUCCESS results. Follow-up wo
 PR [115](https://github.com/Arzuparreta/fly-browser/pull/115); the stacked feature
 PRs preserve their original review history. Its latest remote checks and explicit
 CI must finish successfully before merging.
-The consolidated remote head is `94bd8fd`: its ordinary checks pass. Latest-head
-manual runs 39164066947 (services) and 39164069120 (compiler objects) are running
-on Linux, macOS and Windows. Their tooling-contract jobs already pass on all
-three systems. The previous head's service run 39144885256 passed exactly 46
+At remote checkpoint `1bf79fc`, ordinary checks and all three tooling-contract
+jobs pass. Its manual runs are 39164821004 (services) and 39164822924 (objects).
+Further source/tooling fixes below require another latest-head CI run before merging. The previous head's service run 39144885256 passed exactly 46
 cases per platform, verified in downloaded summaries. Superseded object run
 39144886975 completed macOS compilation; its unfinished Linux/Windows jobs were
 cancelled after the new runs were dispatched. Cancellation is not a pass. Local
@@ -50,14 +49,16 @@ palette dismissal and focused cross-origin scrolling. Video/MV3, PCM and all 31
 service cases pass. Complete failing summaries remain in
 `evidence/current-before-*`. Those results validate only the old nine-patch source.
 
-The full current source is now frozen at `ca6ce4c` on
+The full current source is now frozen at `02d63e4` on
 `codex/chromium-native-current` in the sidebar worktree. It has eighteen patches,
 53 service cases and 46 browser declarations, including two PRE cases. Patch 17
 starts tabs in unselected embedded browsers hidden; subsequent visibility uses
 native Aura occlusion. Patch 18 saves/restores focus through the embedded
 profile browser's FocusManager instead of the outer Fly desktop's manager.
-Both changed upstream translation units pass pinned Linux Clang syntax checks;
-their runtime results remain pending. The initial seventeen-patch build was
+Both changed upstream translation units pass pinned Linux Clang syntax checks.
+The focus helper now uses public native-window interfaces and an explicit
+header-only GN dependency; its owning target's header check passes without a
+cycle back into the outer UI controller. Their runtime results remain pending. The initial seventeen-patch build was
 explicitly stopped before adding the focus repair. The reviewed additional patch
 was applied transactionally without rewriting existing engine files; its helper
 SHA and final input fingerprint are in `evidence/native-preparation.json`.
@@ -71,6 +72,20 @@ engine source. Current logs are `current-build-systemd.log`,
 `/mnt/storage/fly-chromium/`. Current runtime provenance verifies the complete
 GN-declared runtime file closure before browser smoke automation. The separate
 hints worktree is for subsequent source changes. Full native acceptance is pending.
+
+The old hosted object mode followed runtime-data generators into over 50,000
+build steps; the cancelled Linux run was still compiling V8 after four hours.
+The replacement uses GN source-owner queries to read only relevant compiler
+recipes, preserves their rules/flags/response files/output paths, and derives a
+separate Ninja manifest retaining header/module generation and its real tools.
+It verifies nonempty compiled objects and hashes each result. The actual Linux
+GN plan contains 42 changed source objects and 24,707 prerequisite files; Ninja
+lists 13,246 commands, including 4,332 compiler commands for tools/prerequisites,
+with no generated V8 CSA compilation. Every selected source/output command was
+checked. This is graph validation, not a successful hosted object build. External
+evidence is `object-final-plan.json`/`object-final-commands.txt`. All 76 Python
+contracts pass locally, including real Ninja scheduling, response files, header
+invalidation, transitive header aliases, byte preservation and Windows newlines.
 
 Next: finish and inspect the frozen build/pipeline, repair actual runtime failures,
 then rebuild and run the complete current source. Finish the remaining M2–M6 work

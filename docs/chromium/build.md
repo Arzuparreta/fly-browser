@@ -257,10 +257,15 @@ explicit alternative of at least 40 GiB possible.
 
 The manual workflow also accepts depth `objects`. It bootstraps the exact source
 and toolchain, applies a distinct compile-only overlay transaction and builds
-the actual GN compiler edges for every modified upstream and Fly translation
-unit, including the scoped browser test source. GN supplies their generated
-headers and tool prerequisites. Two compiler workers bound hosted memory use.
-This is object compilation, without a linked browser or runtime acceptance.
+every modified upstream and Fly translation unit, including the scoped browser
+test source, with GN's original compiler rules, flags, response files and per-edge
+variables. A separate Ninja manifest retains generated header/module prerequisites
+and their original generators/tools. It excludes runtime-only data generation,
+such as snapshots whose generators would otherwise link most of Chromium.
+Original GN files and the derived recipes are hashed in the evidence. Two
+compiler workers bound hosted memory use. This validates compiler outputs and
+header dependencies; linking, runtime resources and browser acceptance belong
+to the separate full build.
 On macOS the unfinished desktop/browser-test sources are explicitly excluded;
 missing edges for shared/upstream sources fail validation.
 
