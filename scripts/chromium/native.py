@@ -180,21 +180,7 @@ def apply_core(root, lock):
     verify_source(root, lock)
 
 
-def apply(root, lock, objects_only=False):
-    if (root / MANIFEST).exists():
-        existing = verify_source(root, lock)
-        if existing.get('kind') == 'core':
-            engine.fail('Core-only overlay present; revert before applying browser hooks')
-        if existing.get('kind') == 'objects' and not objects_only:
-            engine.fail('Compile-only overlay present; revert and apply after the control build')
-        print('Native overlay already matches the reviewed inputs.')
-        return
-    engine.verify_checkout(root / 'src', lock['chromium'])
-    if objects_only:
-        engine.require_stage(root, 'hooks', lock)
-    else:
-        engine.require_control(root, lock, CONFIG)
-    patches, overlay = inputs()
+def patch_paths(patches):
     touched = set()
     for patch in patches:
         old = []
@@ -211,6 +197,25 @@ def apply(root, lock, objects_only=False):
             if name.startswith('fly/'):
                 engine.fail('//fly sources belong to the overlay, not upstream patches')
             touched.add(name)
+    return touched
+
+
+def apply(root, lock, objects_only=False):
+    if (root / MANIFEST).exists():
+        existing = verify_source(root, lock)
+        if existing.get('kind') == 'core':
+            engine.fail('Core-only overlay present; revert before applying browser hooks')
+        if existing.get('kind') == 'objects' and not objects_only:
+            engine.fail('Compile-only overlay present; revert and apply after the control build')
+        print('Native overlay already matches the reviewed inputs.')
+        return
+    engine.verify_checkout(root / 'src', lock['chromium'])
+    if objects_only:
+        engine.require_stage(root, 'hooks', lock)
+    else:
+        engine.require_control(root, lock, CONFIG)
+    patches, overlay = inputs()
+    touched = patch_paths(patches)
     manifest = {'schema': 1, 'phase': 'applying',
                 'upstream': lock['chromium']['revision'],
                 'fingerprint': fingerprint(), 'files': {}}
@@ -244,6 +249,66 @@ def apply(root, lock, objects_only=False):
     verify_source(root, lock)
 
 
+def refresh_overlay(root, lock):
+    """Refresh only Fly-owned files; upstream patch output must stay identical."""
+    old = verify_source(root, lock, require_current=False)
+    if old.get('kind') in ('core', 'objects'):
+        engine.fail('Only a full native overlay may be refreshed')
+    expected_fingerprint = fingerprint()
+    patches, overlay = inputs()
+    touched = patch_paths(patches)
+    upstream = {name for name, record in old['files'].items() if record['before'] is not None}
+    if touched != upstream:
+        engine.fail('Upstream patch targets changed; revert and reapply')
+    with tempfile.TemporaryDirectory(prefix='fly-refresh-', dir=root) as tmp:
+        stage = Path(tmp)
+        engine.run(['git', 'init', '--quiet'], stage)
+        for name in sorted(touched):
+            atomic_bytes(stage / name, upstream_file(root / 'src', old['upstream'], name))
+        for patch in patches:
+            engine.run(['git', 'apply', '--check', '--whitespace=error-all', patch], stage)
+            engine.run(['git', 'apply', '--whitespace=error-all', patch], stage)
+        for name in touched:
+            if engine.digest(stage / name) != old['files'][name]['after']:
+                engine.fail('Upstream patch output changed; revert and reapply')
+    contents = {name: file.read_bytes() for name, file in overlay.items()}
+    desired = {name: {'before': None, 'after': bytes_digest(data)}
+               for name, data in contents.items()}
+    old_overlay = {name for name, record in old['files'].items() if record['before'] is None}
+    changed = {name for name in old_overlay | set(contents)
+               if old['files'].get(name, {}).get('after') != desired.get(name, {}).get('after')}
+    for name in contents.keys() - old_overlay:
+        if checked_path(root / 'src', name).exists():
+            engine.fail('New overlay destination already exists: ' + name)
+    if fingerprint() != expected_fingerprint:
+        engine.fail('Overlay inputs changed during refresh preflight')
+    records = {name: record for name, record in old['files'].items() if name in upstream}
+    records.update(desired)
+    final = dict(old, phase='applied', fingerprint=expected_fingerprint, files=records)
+    pending = dict(final, phase='applying', files=dict(records))
+    for name in changed:
+        transition = dict(pending['files'].get(name, {'before': None, 'after': None}))
+        if name in old_overlay:
+            transition['previous_after'] = old['files'][name]['after']
+        pending['files'][name] = transition
+    # Recovery may restore clean upstream from either reviewed overlay version.
+    # Unchanged files retain their bytes and timestamps, including public IPC
+    # headers that would otherwise invalidate large parts of Chromium.
+    engine.atomic_json(root / MANIFEST, pending)
+    for name in sorted(changed):
+        file = checked_path(root / 'src', name)
+        actual = engine.digest(file) if file.is_file() else None
+        if actual != old['files'].get(name, {}).get('after'):
+            engine.fail('Native source changed during refresh; preserve edits: ' + name)
+        if name in contents:
+            atomic_bytes(file, contents[name])
+        else:
+            file.unlink()
+    engine.atomic_json(root / MANIFEST, final)
+    verify_source(root, lock)
+    print('Refreshed', len(changed), 'Fly-owned files; upstream patch output unchanged.')
+
+
 def revert(root, lock, recover=False):
     if recover:
         manifest = read_manifest(root, lock, allow_pending=True)
@@ -256,7 +321,10 @@ def revert(root, lock, recover=False):
         for name, record in manifest['files'].items():
             file = checked_path(source, name)
             current = engine.digest(file) if file.is_file() else None
-            if current not in (record['before'], record['after']):
+            accepted = (record['before'], record['after'])
+            if 'previous_after' in record:
+                accepted += (record['previous_after'],)
+            if current not in accepted:
                 engine.fail('Edited transaction file must be preserved: ' + name)
     else:
         manifest = verify_source(root, lock, require_current=False)
@@ -372,6 +440,9 @@ def execute(args):
         if args.command == 'test-objects':
             engine.doctor(root, args.minimum_free_gib)
             apply(root, lock, objects_only=True)
+        if args.command == 'refresh-overlay':
+            refresh_overlay(root, lock)
+            return
         if args.command == 'apply':
             # The control build verifies all dependency revisions. This command
             # only touches source files after its successful completion.
@@ -459,7 +530,7 @@ def execute(args):
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument('command', choices=['apply', 'verify', 'configure', 'build', 'test', 'test-browser', 'test-core', 'test-objects', 'revert', 'recover'])
+    parser.add_argument('command', choices=['apply', 'refresh-overlay', 'verify', 'configure', 'build', 'test', 'test-browser', 'test-core', 'test-objects', 'revert', 'recover'])
     parser.add_argument('--root', required=True)
     parser.add_argument('--browser-target', choices=['fly_browser_tests', 'browser_tests'],
                         default='fly_browser_tests',

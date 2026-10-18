@@ -12,8 +12,8 @@ PR [115](https://github.com/Arzuparreta/fly-browser/pull/115); the stacked featu
 PRs preserve their original review history. Its latest remote checks and explicit
 CI must finish successfully before merging.
 The consolidated head is `9aaf531`: its ordinary checks pass. Manual service run
-39144885256 has passed Linux and macOS with 46 SUCCESS results each; Windows is
-pending. Manual object run 39144886975 is separate and still pending. The local
+39144885256 has passed Linux, macOS and Windows with exactly 46 SUCCESS results
+each, verified in downloaded summaries. Manual object run 39144886975 is separate and still pending. The local
 bookmark commit `0294989` follows that fixed integration head and is not part of
 its CI evidence.
 Official service CI at `e4150ad` passed all 37 cases on Linux, macOS and Windows,
@@ -1362,3 +1362,46 @@ sandbox enabled. This is the older frozen snapshot: the blank-tab row fix,
 accountless defaults, clock/footer, preferences and bookmarks in later commits
 are not validated by that image. The screenshot is a launch observation, not a
 completed product UX or M1 acceptance result.
+
+## Native teardown failure and current repair
+
+The first browser suite executed actual cases and repeatedly crashed during
+teardown. Chromium's dangling-pointer detector identifies
+`EmbeddedBrowserNativeWidget::~EmbeddedBrowserNativeWidget` releasing its raw
+BrowserWindowInterface pointer after BrowserManagerService deleted that model.
+The first six test bodies reached teardown without an assertion failure, but
+those crashes are failed tests, not passing cases.
+
+The owned acceptance pipeline was stopped, its lease owner verified dead, and
+its original logs/records archived as `evidence/lifetime-before-*`. The audit
+records all_passed=false. No dangling-pointer diagnostics were suppressed.
+Minimal repair `5fd0d8a` on `codex/chromium-native-lifetime` in the sidebar worktree
+uses the model's native WeakPtr and refuses stale activation/show requests. It
+passes pinned Linux Clang and npm test. Its new source fingerprint is
+`bd7881e588206f4ff1fafb7e89eb8b234c3087ecd50c9d1030fa657cd9b2cfc0`.
+
+That checkout and the reapplied nine-patch engine source are frozen again during
+`fly-chromium-native-build.service`, the restarted acceptance service and summary
+audit. New logs use `lifetime-build-systemd.log`,
+`lifetime-acceptance-systemd.log` and `lifetime-summary-audit.log`. The rebuild is
+still running. The repair is also cherry-picked onto the current development
+branch; it has not yet been added to PR 115, whose old head cannot be treated as
+runtime-safe. Finish the actual repaired browser/media tests before claiming M1.
+
+## Safe incremental Fly-source refresh
+
+`native.py refresh-overlay --root /mnt/storage/fly-chromium` updates only managed
+Fly-owned source files after verifying the current engine state and replaying the
+entire patch stack in a private staging directory. Upstream target paths and
+resulting patched bytes must be identical. Patch changes require the existing
+revert/apply path. Unchanged upstream/Fly files retain their timestamps, avoiding
+unnecessary invalidation of large public-header dependency trees.
+
+The operation journals both reviewed versions of changed owned files. An
+interrupted refresh can use `recover` to restore clean pinned upstream; unknown
+source edits still cause recovery to refuse writes. Core/compile-only overlays
+cannot be promoted through refresh. Five new disposable-tree regressions cover
+unchanged timestamps, add/remove, upstream/owner-edit rejection, interruption
+before/after a write and preservation of edits after interruption. All 65 tooling
+cases pass locally. This is tested tooling behavior; the running frozen repair
+uses its original tools and does not exercise the new command yet.

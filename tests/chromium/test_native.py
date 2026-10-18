@@ -96,6 +96,83 @@ class NativeOverlayTests(unittest.TestCase):
         self.assertEqual((self.source / 'upstream.cc').read_text(), 'original\n')
         self.assertFalse((self.root / native.MANIFEST).exists())
 
+    def test_refresh_preserves_upstream_and_unchanged_owned_file_timestamps(self):
+        (self.overlay / 'fly/unchanged.h').write_text('unchanged\n')
+        native.apply(self.root, self.lock)
+        watched = [self.source / 'upstream.cc', self.source / 'fly/unchanged.h']
+        before = {file: file.stat().st_mtime_ns for file in watched}
+        (self.overlay / 'fly/native.cc').write_text('updated native\n')
+        native.refresh_overlay(self.root, self.lock)
+        self.assertEqual((self.source / 'fly/native.cc').read_text(), 'updated native\n')
+        self.assertEqual(before, {file: file.stat().st_mtime_ns for file in watched})
+        native.verify_source(self.root, self.lock)
+        native.revert(self.root, self.lock)
+        self.assertEqual(self.git('status', '--porcelain'), '')
+
+    def test_refresh_cannot_change_upstream_patch_output_or_overwrite_owner_edits(self):
+        native.apply(self.root, self.lock)
+        patch_file = self.patches / 'first.patch'
+        original = patch_file.read_text()
+        patch_file.write_text(original.replace('+adapted', '+changed'))
+        with self.assertRaisesRegex(RuntimeError, 'Upstream patch output changed'):
+            native.refresh_overlay(self.root, self.lock)
+        self.assertEqual((self.source / 'upstream.cc').read_text(), 'adapted\n')
+        patch_file.write_text(original)
+        owned = self.source / 'fly/native.cc'
+        owned.write_text('owner edits\n')
+        with self.assertRaisesRegex(RuntimeError, 'Managed native source was edited'):
+            native.refresh_overlay(self.root, self.lock)
+        self.assertEqual(owned.read_text(), 'owner edits\n')
+
+    def test_refresh_can_add_and_remove_only_managed_fly_files(self):
+        native.apply(self.root, self.lock)
+        (self.overlay / 'fly/native.cc').unlink()
+        (self.overlay / 'fly/replacement.cc').write_text('replacement\n')
+        native.refresh_overlay(self.root, self.lock)
+        self.assertFalse((self.source / 'fly/native.cc').exists())
+        self.assertEqual((self.source / 'fly/replacement.cc').read_text(), 'replacement\n')
+        native.verify_source(self.root, self.lock)
+        native.revert(self.root, self.lock)
+        self.assertEqual(self.git('status', '--porcelain'), '')
+
+    def test_interrupted_refresh_recovers_from_either_reviewed_overlay_version(self):
+        for write_first in (False, True):
+            with self.subTest(write_first=write_first):
+                (self.overlay / 'fly/native.cc').write_text('native\n')
+                native.apply(self.root, self.lock)
+                (self.overlay / 'fly/native.cc').write_text('updated\n')
+                destination = self.source / 'fly/native.cc'
+                real_write = native.atomic_bytes
+                def interrupted(file, data):
+                    if file == destination:
+                        if write_first:
+                            real_write(file, data)
+                        raise OSError('fixture interruption')
+                    return real_write(file, data)
+                with patch.object(native, 'atomic_bytes', side_effect=interrupted):
+                    with self.assertRaisesRegex(OSError, 'fixture interruption'):
+                        native.refresh_overlay(self.root, self.lock)
+                self.assertEqual(json.loads((self.root / native.MANIFEST).read_text())['phase'], 'applying')
+                native.revert(self.root, self.lock, recover=True)
+                self.assertEqual(self.git('status', '--porcelain'), '')
+
+    def test_refresh_recovery_preserves_unreviewed_edits(self):
+        native.apply(self.root, self.lock)
+        (self.overlay / 'fly/native.cc').write_text('updated\n')
+        destination = self.source / 'fly/native.cc'
+        real_write = native.atomic_bytes
+        def interrupted(file, data):
+            if file == destination:
+                raise OSError('fixture interruption')
+            return real_write(file, data)
+        with patch.object(native, 'atomic_bytes', side_effect=interrupted):
+            with self.assertRaises(OSError):
+                native.refresh_overlay(self.root, self.lock)
+        destination.write_text('owner edits after interruption\n')
+        with self.assertRaisesRegex(RuntimeError, 'Edited transaction file must be preserved'):
+            native.revert(self.root, self.lock, recover=True)
+        self.assertEqual(destination.read_text(), 'owner edits after interruption\n')
+
     def test_core_unit_overlay_does_not_patch_the_browser_or_require_control_binary(self):
         native.apply_core(self.root, self.lock)
         manifest = native.verify_source(self.root, self.lock)
