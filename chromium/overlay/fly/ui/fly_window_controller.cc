@@ -7,6 +7,7 @@
 #include "fly/ui/hint_controller.h"
 #include "fly/ui/keyboard_editor.h"
 #include "fly/ui/native_commands.h"
+#include "fly/ui/status_bar.h"
 #include "fly/ui/tab_sidebar.h"
 
 #include <algorithm>
@@ -104,15 +105,22 @@ FlyWindowController::FlyWindowController()
       sidebar->AddChildView(std::make_unique<TabSidebar>(base::BindRepeating(
           &FlyWindowController::CreateTab, weak_factory_.GetWeakPtr())));
   sidebar_layout->SetFlexForView(tab_sidebar_, 1);
-  status_ = sidebar->AddChildView(std::make_unique<views::Label>(u"NORMAL"));
   clock_ = sidebar->AddChildView(std::make_unique<views::MdTextButton>(
       base::BindRepeating(&FlyWindowController::CycleClockFormat,
-                          weak_factory_.GetWeakPtr()), u""));
+                          weak_factory_.GetWeakPtr()),
+      u""));
   clock_->SetStyle(ui::ButtonStyle::kText);
   root->AddChildView(std::move(sidebar));
-  content_ = root->AddChildView(std::make_unique<views::View>());
+  auto* column = root->AddChildView(std::make_unique<views::View>());
+  auto* column_layout =
+      column->SetLayoutManager(std::make_unique<views::BoxLayout>(
+          views::BoxLayout::Orientation::kVertical));
+  content_ = column->AddChildView(std::make_unique<views::View>());
   content_->SetLayoutManager(std::make_unique<views::FillLayout>());
-  layout->SetFlexForView(content_, 1);
+  column_layout->SetFlexForView(content_, 1);
+  status_bar_ = column->AddChildView(std::make_unique<StatusBar>());
+  status_ = status_bar_->mode_label();
+  layout->SetFlexForView(column, 1);
   SetContentsView(std::move(root));
   views::Widget::InitParams params(
       views::Widget::InitParams::CLIENT_OWNS_WIDGET);
@@ -149,12 +157,13 @@ FlyWindowController::FlyWindowController()
               InvokeNativeCommand(window->selected_, std::move(action));
           },
           weak_factory_.GetWeakPtr()));
-  keyboard_editor_ = std::make_unique<KeyboardEditor>(desktop_.get(), commands_);
+  keyboard_editor_ =
+      std::make_unique<KeyboardEditor>(desktop_.get(), commands_);
   desktop_->AddObserver(this);
   preferences_registrar_.Init(g_browser_process->local_state());
-  preferences_registrar_.Add(kPreferencesPref,
-      base::BindRepeating(&FlyWindowController::UpdateClock,
-                          weak_factory_.GetWeakPtr()));
+  preferences_registrar_.Add(
+      kPreferencesPref, base::BindRepeating(&FlyWindowController::UpdateClock,
+                                            weak_factory_.GetWeakPtr()));
   UpdateClock();
   desktop_->GetNativeWindow()->AddPreTargetHandler(this);
   ArmCloseCallback();
@@ -179,12 +188,16 @@ FlyWindowController::~FlyWindowController() {
   workspace_buttons_ = nullptr;
   content_ = nullptr;
   status_ = nullptr;
+  status_bar_ = nullptr;
   clock_ = nullptr;
   tab_sidebar_ = nullptr;
   desktop_.reset();
 }
 
 void FlyWindowController::UpdateClock() {
+  if (status_bar_)
+    status_bar_->SetVisible(
+        preferences_.ReadStatusBarVisible().value_or(false));
   const auto settings = preferences_.ReadClock();
   const bool visible = settings && settings->visible;
   if (!visible && clock_->HasFocus() && selected_) {
@@ -204,8 +217,8 @@ void FlyWindowController::UpdateClock() {
     clock_->SetTooltipText(text.tooltip);
   if (!clock_timer_.IsRunning())
     clock_timer_.Start(FROM_HERE, base::Seconds(1),
-        base::BindRepeating(&FlyWindowController::UpdateClock,
-                            weak_factory_.GetWeakPtr()));
+                       base::BindRepeating(&FlyWindowController::UpdateClock,
+                                           weak_factory_.GetWeakPtr()));
 }
 void FlyWindowController::CycleClockFormat() {
   preferences_.CycleClockFormat();
@@ -285,6 +298,14 @@ void FlyWindowController::Select(BrowserWindowInterface* browser, bool focus) {
     selected_ = browser;
     tab_sidebar_->SetBrowser(browser);
     auto& next = it->second;
+    std::u16string workspace_name;
+    if (const auto catalog = workspaces_.Read()) {
+      auto item =
+          std::ranges::find(catalog->items, next.workspace_id, &Workspace::id);
+      if (item != catalog->items.end())
+        workspace_name = base::UTF8ToUTF16(item->name);
+    }
+    status_bar_->SetBrowser(browser, std::move(workspace_name));
     next.host->SetVisible(true);
     next.widget->ShowInactive();
     if (!next.workspace_id.empty()) {
@@ -380,7 +401,7 @@ void FlyWindowController::RebuildWorkspaceButtons() {
                                    .BaseName()
                                    .AsUTF8Unsafe();
         const auto item = std::ranges::find(catalog->items, directory,
-                                             &Workspace::profile_directory);
+                                            &Workspace::profile_directory);
         if (item != catalog->items.end())
           label = u"Private · " + base::UTF8ToUTF16(item->name);
       }
@@ -516,6 +537,7 @@ void FlyWindowController::OnBrowserDidClose(BrowserWindowInterface* browser) {
     palette_->Cancel();
     keyboard_editor_->Cancel();
     tab_sidebar_->SetBrowser(nullptr);
+    status_bar_->SetBrowser(nullptr, u"");
     selected_ = nullptr;
     if (it->second.widget) {
       it->second.host->SetVisible(false);
@@ -557,9 +579,9 @@ void FlyWindowController::OnBrowserDidClose(BrowserWindowInterface* browser) {
 
 bool FlyWindowController::CanTogglePrivate(
     BrowserWindowInterface* browser) const {
-  return browser && (browser->GetProfile()->IsOffTheRecord() ||
-                     chrome::IsCommandEnabled(browser,
-                                              IDC_NEW_INCOGNITO_WINDOW));
+  return browser &&
+         (browser->GetProfile()->IsOffTheRecord() ||
+          chrome::IsCommandEnabled(browser, IDC_NEW_INCOGNITO_WINDOW));
 }
 
 void FlyWindowController::TogglePrivate(BrowserWindowInterface* browser) {
@@ -570,7 +592,7 @@ void FlyWindowController::TogglePrivate(BrowserWindowInterface* browser) {
     // The native close coordinator resolves all beforeunload decisions before
     // closing this OTR profile's windows. Cancellation leaves them intact.
     chrome::CloseAllBrowsersWithIncognitoProfile(profile,
-                                                /*skip_beforeunload=*/false);
+                                                 /*skip_beforeunload=*/false);
     return;
   }
   auto* private_profile = profile->GetPrimaryOTRProfile(true);
@@ -585,7 +607,7 @@ void FlyWindowController::TogglePrivate(BrowserWindowInterface* browser) {
   // Standard Chromium creation owns OTR lifetime, extension incognito access,
   // permissions, downloads and shutdown. No normal navigation/state is copied.
   chrome::NewEmptyWindow(private_profile,
-                          /*should_trigger_session_restore=*/false);
+                         /*should_trigger_session_restore=*/false);
 }
 
 void FlyWindowController::ArmCloseCallback() {
@@ -642,6 +664,7 @@ void FlyWindowController::OnWidgetDestroying(views::Widget* widget) {
   const bool was_selected = selected_ == it->first;
   if (was_selected) {
     tab_sidebar_->SetBrowser(nullptr);
+    status_bar_->SetBrowser(nullptr, u"");
   }
   it->second.host->Detach();
   auto removed_host = content_->RemoveChildViewT(it->second.host.get());
@@ -689,6 +712,10 @@ bool FlyWindowController::RunCommand(BrowserWindowInterface* browser,
     hints_->Toggle(browser->GetTabStripModel()->GetActiveWebContents());
     return true;
   }
+  if (action == "toggle-status-bar") {
+    const auto visible = preferences_.ReadStatusBarVisible();
+    return visible && preferences_.SetStatusBarVisible(!*visible);
+  }
   if (action == "toggle-clock") {
     const auto clock = preferences_.ReadClock();
     return clock && preferences_.SetClockVisible(!clock->visible);
@@ -696,7 +723,8 @@ bool FlyWindowController::RunCommand(BrowserWindowInterface* browser,
   if (action == "toggle-help") {
     hints_->Cancel();
     palette_->Cancel();
-    keyboard_editor_->Toggle(browser->GetTabStripModel()->GetActiveWebContents());
+    keyboard_editor_->Toggle(
+        browser->GetTabStripModel()->GetActiveWebContents());
     return true;
   }
   if (action == "new-workspace") {
@@ -822,6 +850,12 @@ void FlyWindowController::OnKeyEvent(ui::KeyEvent* event) {
 }  // namespace fly
 
 namespace fly {
+void FlyWindowController::UpdateTargetURL(BrowserWindowInterface* browser,
+                                          content::WebContents* source,
+                                          const GURL& url) {
+  if (status_bar_ && selected_ == browser)
+    status_bar_->SetTargetURL(source, url);
+}
 void FlyWindowController::UpdateModeLabel() {
   if (!status_)
     return;
@@ -832,7 +866,8 @@ void FlyWindowController::UpdateModeLabel() {
                                                             : u"NORMAL");
     return;
   }
-  const std::u16string mode = hints_ && hints_->active()
+  const std::u16string mode =
+      hints_ && hints_->active()
           ? (hints_->truncated() ? u"HINTS (target limit)" : u"HINTS")
           : NativePageModeLabel(selected_);
   status_->SetText(selected_ && selected_->GetProfile()->IsOffTheRecord()

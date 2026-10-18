@@ -109,5 +109,65 @@ TEST_F(PreferencesServiceTest,
   EXPECT_TRUE(FormatClock(time, "unknown").label.empty());
   EXPECT_TRUE(FormatClock(base::Time(), "time").label.empty());
 }
+TEST_F(PreferencesServiceTest, StatusChoicePreservesClockAndOtherMetadata) {
+  ASSERT_EQ(true, service_.ReadStatusBarVisible());
+  EXPECT_EQ(nullptr, prefs_.GetUserPref(kPreferencesPref));
+  ASSERT_TRUE(service_.CycleClockFormat());
+  auto stored = prefs_.GetDict(kPreferencesPref).Clone();
+  stored.Set("future_metadata", "preserve");
+  stored.EnsureDict("values")->Set("unknown", "preserve");
+  prefs_.SetDict(kPreferencesPref, std::move(stored));
+  ASSERT_TRUE(service_.SetStatusBarVisible(false));
+  PreferencesService restarted(prefs_);
+  ASSERT_EQ(false, restarted.ReadStatusBarVisible());
+  ASSERT_EQ("time", restarted.ReadClock()->format);
+  ASSERT_TRUE(restarted.CycleClockFormat());
+  EXPECT_EQ(false, restarted.ReadStatusBarVisible());
+  EXPECT_EQ("preserve",
+            *prefs_.GetDict(kPreferencesPref).FindString("future_metadata"));
+  EXPECT_EQ("preserve", *prefs_.GetDict(kPreferencesPref)
+                             .FindDict("values")
+                             ->FindString("unknown"));
+}
+TEST_F(PreferencesServiceTest,
+       StatusEditsRespectPolicyAndRejectMalformedGroups) {
+  prefs_.SetUserPref(kPreferencesPref, base::Value("preserve wrong root type"));
+  EXPECT_FALSE(service_.ReadClock());
+  EXPECT_FALSE(service_.ReadStatusBarVisible());
+  EXPECT_FALSE(service_.SetStatusBarVisible(true));
+  EXPECT_FALSE(service_.SetClockVisible(true));
+  ASSERT_TRUE(prefs_.GetUserPref(kPreferencesPref));
+  EXPECT_EQ("preserve wrong root type",
+            prefs_.GetUserPref(kPreferencesPref)->GetString());
+  const auto recommendation =
+      base::DictValue().Set("schema", 1).Set("values", base::DictValue());
+  prefs_.SetRecommendedPref(kPreferencesPref,
+                            base::Value(recommendation.Clone()));
+  EXPECT_FALSE(service_.ReadStatusBarVisible());
+  EXPECT_FALSE(service_.SetStatusBarVisible(true));
+  EXPECT_EQ("preserve wrong root type",
+            prefs_.GetUserPref(kPreferencesPref)->GetString());
+  prefs_.RemoveRecommendedPref(kPreferencesPref);
+  const auto invalid =
+      base::DictValue()
+          .Set("schema", 1)
+          .Set("values",
+               base::DictValue().Set("show_status_bar", "not a boolean"));
+  prefs_.SetDict(kPreferencesPref, invalid.Clone());
+  EXPECT_FALSE(service_.ReadStatusBarVisible());
+  EXPECT_FALSE(service_.ReadClock());
+  EXPECT_FALSE(service_.SetStatusBarVisible(true));
+  EXPECT_FALSE(service_.SetClockVisible(true));
+  EXPECT_EQ(invalid, prefs_.GetDict(kPreferencesPref));
+  const auto policy =
+      base::DictValue()
+          .Set("schema", 1)
+          .Set("values", base::DictValue().Set("show_status_bar", false));
+  prefs_.SetManagedPref(kPreferencesPref, base::Value(policy.Clone()));
+  EXPECT_EQ(false, service_.ReadStatusBarVisible());
+  EXPECT_FALSE(service_.CanEditStatusBar());
+  EXPECT_FALSE(service_.SetStatusBarVisible(true));
+  EXPECT_EQ(policy, prefs_.GetDict(kPreferencesPref));
+}
 }  // namespace
 }  // namespace fly

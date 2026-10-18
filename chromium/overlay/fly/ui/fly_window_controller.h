@@ -12,10 +12,10 @@
 #include "base/callback_list.h"
 #include "base/memory/raw_ptr.h"
 #include "base/memory/weak_ptr.h"
-#include "fly/commands/command_service.h"
-#include "fly/preferences/preferences_service.h"
 #include "base/timer/timer.h"
 #include "components/prefs/pref_change_registrar.h"
+#include "fly/commands/command_service.h"
+#include "fly/preferences/preferences_service.h"
 #include "fly/workspaces/workspace_service.h"
 #include "ui/events/event_handler.h"
 #include "ui/views/widget/widget.h"
@@ -25,6 +25,10 @@
 class BrowserWindowInterface;
 class Profile;
 class ScopedKeepAlive;
+class GURL;
+namespace content {
+class WebContents;
+}
 namespace views {
 class NativeViewHost;
 class MdTextButton;
@@ -34,6 +38,7 @@ class Label;
 
 namespace fly {
 class CommandPalette;
+class StatusBar;
 class KeyboardEditor;
 class TabSidebar;
 class HintController;
@@ -68,6 +73,10 @@ class FlyWindowController : public views::WidgetDelegate,
   KeyboardEditor& keyboard_editor() { return *keyboard_editor_; }
   HintController& hints() { return *hints_; }
   void UpdateModeLabel();
+  void UpdateTargetURL(BrowserWindowInterface* browser,
+                       content::WebContents* source,
+                       const GURL& url);
+  StatusBar* status_bar_for_testing() { return status_bar_; }
   TabSidebar* tab_sidebar_for_testing() { return tab_sidebar_; }
   void CreateTab();
   void CreateWorkspace();
@@ -121,6 +130,7 @@ class FlyWindowController : public views::WidgetDelegate,
   raw_ptr<views::View> workspace_buttons_ = nullptr;
   raw_ptr<views::View> content_ = nullptr;
   raw_ptr<views::Label> status_ = nullptr;
+  raw_ptr<StatusBar> status_bar_ = nullptr;
   raw_ptr<views::MdTextButton> clock_ = nullptr;
   raw_ptr<TabSidebar> tab_sidebar_ = nullptr;
   std::map<BrowserWindowInterface*, Entry> entries_;

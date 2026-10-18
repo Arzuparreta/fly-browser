@@ -28,9 +28,10 @@ struct ClockText {
 ClockText FormatClock(base::Time time, std::string_view format);
 
 // App-wide product preferences, separate from each Profile's native site state.
-// Clock is the first implemented group. Other settings remain pending; unknown
-// fields in this store are preserved for later groups and importer versions.
-// A malformed/future store requires recovery, never an implicit default write.
+// Clock and status-bar presentation are implemented groups. Other settings
+// remain pending; unknown fields in this store are preserved for later groups
+// and importer versions. A malformed/future store requires recovery, never an
+// implicit default write.
 class PreferencesService {
  public:
   static void RegisterLocalStatePrefs(PrefRegistrySimple* registry);
@@ -42,8 +43,12 @@ class PreferencesService {
   bool CanEditClock() const;
   bool SetClockVisible(bool visible);
   bool CycleClockFormat();
+  std::optional<bool> ReadStatusBarVisible() const;
+  bool CanEditStatusBar() const;
+  bool SetStatusBarVisible(bool visible);
 
  private:
+  bool ValidStore() const;
   bool SaveClock(const ClockPreferences& clock);
   const raw_ref<PrefService> local_state_;
   SEQUENCE_CHECKER(sequence_checker_);

@@ -1091,3 +1091,46 @@ with disposable profiles (`tab-menu-retained-context.log` and
 The keyboard run retains all assertions and uses the existing external wrapper
 that only raises its app-launch timeout on the compiling host. These passes are
 retained-runtime regression evidence, not execution of the new native cases.
+
+## Native footer status and security presentation
+
+The dependent `codex/chromium-native-status-bar` branch places the keyboard-mode
+label in a native footer alongside current URL/link target, native page security
+and workspace/private context. The read-only view observes the actual selected
+tab model and WebContents. Chromium's browser delegate forwards native pointer
+link targets; hidden tabs and other profile/window models cannot replace them.
+A separate target observer clears links when their pane hides, navigates or dies,
+including a visible unfocused split pane. URL formatting and the page's security
+level come from Chromium's existing formatter and Chrome security-state utility,
+not a scheme heuristic or renderer binding. Clearing the page also clears the
+accessible names and tooltips that could otherwise retain old private metadata.
+
+`show_status_bar` is now a third native presentation preference in the existing
+schema-1 app store. The shared command/palette action toggles it immediately.
+Reads do not save defaults; edits preserve clock and unknown data, respect native
+policy precedence, and reject malformed/future implemented groups. Two new
+service cases bring the pinned Linux partial runner to **39 passing C++ tests**
+(`status-bar-native-tests-final.log`). This remains separate from the official native
+GN launcher and cannot pass GUI acceptance.
+
+The fourteenth patch integrates the new view and browser-target forwarding seam.
+All fourteen patches preflight over 23 upstream files; independent full GN
+generation and Fly/UI/browser-delegate header ownership checks pass. Pinned Clang
+accepts the view, controller, command adapter, modified upstream delegate and all
+41 browser declarations (two PRE phases, 39 main cases). Evidence:
+`status-bar-gn-final.log`, `status-bar-syntax-final.log`,
+`status-delegate-syntax.log` and `status-bar-browser-syntax-final.log`.
+Two new native browser cases cover real pointer hover/exit, visibility preference,
+hidden/other-profile rejection, HTTPS engine state, a native test malware verdict,
+and private/blank state. They remain unexecuted pending a current linked test
+binary; the full active build keeps its earlier frozen inputs unchanged.
+
+The preference guard also detects a typed default/recommended fallback while an
+explicit user value is present. A corrupt non-dictionary preference remains
+untouched rather than being mistaken for a new store. The first synthetic case
+exposed the typed user getter's fatal mismatch diagnostic; the corrected guard
+uses read-only native provenance/effective-value APIs. The final native tests
+exercise both fallback and preservation boundaries.
+`npm test`, 47 Python tooling tests, documentation and whitespace pass locally.
+The retained menu/keyboard disposable-profile regressions passed immediately
+before this footer-only follow-up; native footer GUI acceptance remains pending.

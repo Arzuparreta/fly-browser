@@ -1,0 +1,60 @@
+--- a/chrome/browser/ui/BUILD.gn
++++ b/chrome/browser/ui/BUILD.gn
+@@ -804,6 +804,8 @@
+       "//fly/ui/command_palette.h",
+       "//fly/ui/keyboard_editor.cc",
+       "//fly/ui/keyboard_editor.h",
++      "//fly/ui/status_bar.cc",
++      "//fly/ui/status_bar.h",
+     ]
+   }
+ 
+@@ -1107,7 +1109,7 @@
+     "//ui/webui",
+   ]
+   if (is_linux || is_win) {
+-    deps += [ "//fly:workspaces", "//fly:commands", "//fly:preferences", "//components/vector_icons", "//ui/accessibility", "//ui/wm" ]
++    deps += [ "//fly:workspaces", "//fly:commands", "//fly:preferences", "//chrome/browser/ssl", "//components/url_formatter", "//components/vector_icons", "//ui/accessibility", "//ui/wm" ]
+   }
+   deps += [ "//fly:session_metadata" ]
+ 
+--- a/chrome/browser/ui/browser_web_contents_delegate/browser_web_contents_delegate.cc
++++ b/chrome/browser/ui/browser_web_contents_delegate/browser_web_contents_delegate.cc
+@@ -5,6 +5,10 @@
+ #include "chrome/browser/ui/browser_web_contents_delegate/browser_web_contents_delegate.h"
+ 
+ #include "base/check_deref.h"
++#include "build/build_config.h"
++#if BUILDFLAG(IS_LINUX) || BUILDFLAG(IS_WIN)
++#include "fly/ui/fly_window_controller.h"
++#endif
+ #include "base/metrics/histogram_macros.h"
+ #include "base/notimplemented.h"
+ #include "base/trace_event/trace_event.h"
+@@ -798,6 +802,13 @@
+ 
+ void BrowserWebContentsDelegate::UpdateTargetURL(content::WebContents* source,
+                                                  const GURL& url) {
++#if BUILDFLAG(IS_LINUX) || BUILDFLAG(IS_WIN)
++  if (fly::FlyWindowController::ShouldEmbed(&browser_.get())) {
++    if (auto* window = fly::FlyWindowController::GetIfCreated())
++      window->UpdateTargetURL(&browser_.get(), source, url);
++    return;
++  }
++#endif
+   std::vector<StatusBubble*> status_bubbles =
+       browser_ui_controller_->GetStatusBubbles();
+   for (StatusBubble* status_bubble : status_bubbles) {
+@@ -817,6 +828,12 @@
+     const ui::Event& event) {
+   const ui::EventType type = event.type();
+   const bool exited = type == ui::EventType::kMouseExited;
++#if BUILDFLAG(IS_LINUX) || BUILDFLAG(IS_WIN)
++  if (exited && fly::FlyWindowController::ShouldEmbed(&browser_.get())) {
++    if (auto* window = fly::FlyWindowController::GetIfCreated())
++      window->UpdateTargetURL(&browser_.get(), source, GURL());
++  }
++#endif
+   // Disregard synthesized events, and mouse enter and exit, which may occur
+   // without explicit user input events during window state changes.
+   if (type != ui::EventType::kMouseEntered && !exited &&

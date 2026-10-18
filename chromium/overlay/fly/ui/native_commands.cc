@@ -282,6 +282,10 @@ bool NativeCommandAvailable(BrowserWindowInterface* browser,
                             std::string_view action) {
   if (!browser)
     return false;
+  if (action == "toggle-status-bar") {
+    auto* window = FlyWindowController::GetIfCreated();
+    return window && window->preferences().CanEditStatusBar();
+  }
   if (action == "toggle-clock") {
     auto* window = FlyWindowController::GetIfCreated();
     return window && window->preferences().CanEditClock();

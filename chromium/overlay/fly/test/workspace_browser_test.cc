@@ -10,6 +10,9 @@
 #include "fly/ui/hint_controller.h"
 #include "fly/ui/native_commands.h"
 #include "fly/ui/tab_sidebar.h"
+#include "fly/ui/status_bar.h"
+#include "chrome/browser/ssl/chrome_security_state_util.h"
+#include "ui/views/controls/label.h"
 #include "ui/views/controls/textfield/textfield.h"
 
 #include <algorithm>
@@ -1452,6 +1455,78 @@ IN_PROC_BROWSER_TEST_F(FlyWorkspaceBrowserTest,
   ASSERT_TRUE(SecondWorkspace());
   ASSERT_TRUE(base::test::RunUntil([&] { return !window.palette().active(); }));
   EXPECT_NE(browser(), window.selected_browser_for_testing());
+}
+
+IN_PROC_BROWSER_TEST_F(FlyWorkspaceBrowserTest,
+                       NativeStatusTracksRealHoverAndPersistentVisibility) {
+  ASSERT_TRUE(ui_test_utils::NavigateToURL(
+      browser(), embedded_test_server()->GetURL("/title1.html")));
+  auto* contents = Active(browser());
+  auto& window = FlyWindowController::Get();
+  window.Select(browser(), true);
+  auto* status = window.status_bar_for_testing();
+  ASSERT_TRUE(status->GetVisible());
+  EXPECT_EQ(nullptr, g_browser_process->local_state()->GetUserPrefValue(kPreferencesPref));
+  ASSERT_TRUE(content::ExecJs(contents, R"js(
+    document.body.innerHTML = '<a href="https://example.invalid/fixture" '
+      + 'style="position:fixed;left:20px;top:20px;width:180px;height:40px;display:block">Link</a>';
+  )js"));
+  ui::test::EventGenerator pointer(window.desktop_widget()->GetNativeWindow());
+  const auto bounds = contents->GetRenderWidgetHostView()->GetViewBounds();
+  pointer.MoveMouseTo(bounds.origin() + gfx::Vector2d(40, 35));
+  ASSERT_TRUE(base::test::RunUntil([&] {
+    const auto& text = status->location_for_testing()->GetText();
+    return text.starts_with(u"Link: ") && text.find(u"example.invalid/fixture") != std::u16string::npos;
+  }));
+  pointer.MoveMouseTo(window.workspace_buttons_for_testing()->GetBoundsInScreen().CenterPoint());
+  ASSERT_TRUE(base::test::RunUntil([&] {
+    return !status->location_for_testing()->GetText().starts_with(u"Link: ");
+  }));
+  ASSERT_TRUE(InvokeNativeCommand(browser(), "toggle-status-bar"));
+  EXPECT_FALSE(status->GetVisible());
+  EXPECT_EQ(false, window.preferences().ReadStatusBarVisible());
+  ASSERT_TRUE(InvokeNativeCommand(browser(), "toggle-status-bar"));
+  EXPECT_TRUE(status->GetVisible());
+  ASSERT_TRUE(ExecuteNativeCommand(browser(), "spawn-tab"));
+  window.UpdateTargetURL(browser(), contents, GURL("https://hidden.invalid/"));
+  EXPECT_EQ(std::u16string::npos, status->location_for_testing()->GetText().find(u"hidden.invalid"));
+  auto* second = SecondWorkspace();
+  ASSERT_TRUE(second);
+  const std::u16string before(status->location_for_testing()->GetText());
+  window.UpdateTargetURL(browser(), Active(browser()), GURL("https://other-profile.invalid/"));
+  EXPECT_EQ(before, status->location_for_testing()->GetText());
+}
+
+IN_PROC_BROWSER_TEST_F(FlyWorkspaceBrowserTest,
+                       NativeStatusUsesEngineSecurityAndPrivateWorkspaceState) {
+  net::EmbeddedTestServer https(net::EmbeddedTestServer::TYPE_HTTPS);
+  https.ServeFilesFromSourceDirectory("chrome/test/data");
+  ASSERT_TRUE(https.Start());
+  ASSERT_TRUE(ui_test_utils::NavigateToURL(browser(), https.GetURL("/title1.html")));
+  auto* contents = Active(browser());
+  auto& window = FlyWindowController::Get();
+  auto* status = window.status_bar_for_testing();
+  ASSERT_EQ(security_state::SECURE, chrome_security_state::GetSecurityLevel(contents));
+  ASSERT_TRUE(base::test::RunUntil([&] {
+    return status->security_for_testing()->GetText() == u"Page secure";
+  }));
+  {
+    chrome_security_state::ScopedMaliciousContentStatusForTesting verdict(
+        security_state::MALICIOUS_CONTENT_STATUS_MALWARE);
+    status->DidChangeVisibleSecurityState();
+    EXPECT_EQ(u"Page security warning", status->security_for_testing()->GetText());
+  }
+  status->DidChangeVisibleSecurityState();
+  EXPECT_EQ(u"Page secure", status->security_for_testing()->GetText());
+  ASSERT_TRUE(ui_test_utils::NavigateToURL(browser(), GURL("about:blank")));
+  EXPECT_TRUE(status->security_for_testing()->GetText().empty());
+  ASSERT_TRUE(window.RunCommand(browser(), "toggle-private-mode"));
+  ASSERT_TRUE(base::test::RunUntil([&] {
+    auto* selected = window.selected_browser_for_testing();
+    return selected && selected->GetProfile()->IsOffTheRecord();
+  }));
+  EXPECT_EQ(u"Private", status->workspace_for_testing()->GetText());
+  EXPECT_TRUE(status->security_for_testing()->GetText().empty());
 }
 
 class FlyTabMenuBrowserTest : public FlyWorkspaceBrowserTest {
