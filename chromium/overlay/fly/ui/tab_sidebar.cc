@@ -10,6 +10,8 @@
 #include "base/strings/string_number_conversions.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/task/single_thread_task_runner.h"
+#include "chrome/app/chrome_command_ids.h"
+#include "chrome/browser/ui/browser_commands.h"
 #include "chrome/browser/ui/browser_window/public/browser_window_interface.h"
 #include "chrome/browser/ui/recently_audible_helper.h"
 #include "chrome/browser/ui/tabs/tab_enums.h"
@@ -25,9 +27,11 @@
 #include "ui/base/models/image_model.h"
 #include "ui/color/color_id.h"
 #include "ui/gfx/image/image_skia_operations.h"
+#include "ui/menus/simple_menu_model.h"
 #include "ui/views/accessibility/view_accessibility.h"
 #include "ui/views/controls/button/image_button.h"
 #include "ui/views/controls/button/md_text_button.h"
+#include "ui/views/controls/menu/menu_runner.h"
 #include "ui/views/controls/scroll_view.h"
 #include "ui/views/layout/box_layout.h"
 #include "ui/views/vector_icons.h"
@@ -46,6 +50,162 @@ void SetActionIcon(views::ImageButton* button, const gfx::VectorIcon& icon) {
                                      16));
 }
 }  // namespace
+// Product tab actions use native models and unload/restore services. This menu
+// deliberately distinguishes tab muting from Chromium's site-wide mute command.
+class SidebarTabMenu : public ui::SimpleMenuModel::Delegate {
+ public:
+  enum Action : int {
+    kNew = 1,
+    kReload,
+    kDuplicate,
+    kPin,
+    kMute,
+    kClose,
+    kCloseOthers,
+    kCloseRight,
+    kReopen,
+  };
+  SidebarTabMenu(BrowserWindowInterface* browser,
+                 base::WeakPtr<content::WebContents> contents,
+                 base::RepeatingCallback<void(int)> execute)
+      : browser_(browser->GetWeakPtr()),
+        contents_(std::move(contents)),
+        execute_(std::move(execute)),
+        model_(this) {
+    model_.AddItem(kNew, u"New tab to the right");
+    model_.AddSeparator(ui::NORMAL_SEPARATOR);
+    model_.AddItem(kReload, u"Reload");
+    model_.AddItem(kDuplicate, u"Duplicate");
+    const auto* tabs = browser->GetTabStripModel();
+    const int index = tabs->GetIndexOfWebContents(contents_.get());
+    model_.AddItem(kPin, tabs->IsTabPinned(index) ? u"Unpin" : u"Pin");
+    model_.AddItem(kMute,
+                   contents_->IsAudioMuted() ? u"Unmute tab" : u"Mute tab");
+    model_.AddSeparator(ui::NORMAL_SEPARATOR);
+    model_.AddItem(kClose, u"Close");
+    model_.AddItem(kCloseOthers, u"Close other tabs");
+    model_.AddItem(kCloseRight, u"Close tabs to the right");
+    model_.AddSeparator(ui::NORMAL_SEPARATOR);
+    model_.AddItem(kReopen, u"Reopen closed tab");
+    runner_ = std::make_unique<views::MenuRunner>(
+        &model_,
+        views::MenuRunner::CONTEXT_MENU | views::MenuRunner::HAS_MNEMONICS);
+  }
+  ~SidebarTabMenu() override = default;
+  void Run(const gfx::Point& point,
+           ui::mojom::MenuSourceType source,
+           views::Widget* widget) {
+    runner_->RunMenuAt(widget, nullptr, gfx::Rect(point, gfx::Size()),
+                       views::MenuAnchorPosition::kTopLeft, source);
+  }
+  void Cancel() { runner_->Cancel(); }
+  ui::SimpleMenuModel* model() { return &model_; }
+  bool IsCommandIdEnabled(int action) const override {
+    return Enabled(browser_.get(), contents_.get(), action);
+  }
+  void ExecuteCommand(int action, int) override {
+    if (!IsCommandIdEnabled(action))
+      return;
+    // Closing a tab can destroy the invoking row, model or entire browser. Run
+    // only after native menu dispatch/nested loops unwind, using live
+    // identities.
+    auto execute = execute_;
+    runner_->Cancel();
+    base::SingleThreadTaskRunner::GetCurrentDefault()->PostNonNestableTask(
+        FROM_HERE, base::BindOnce(std::move(execute), action));
+  }
+  static bool Enabled(BrowserWindowInterface* browser,
+                      content::WebContents* contents,
+                      int action) {
+    if (!browser || !contents)
+      return false;
+    const auto* tabs = browser->GetTabStripModel();
+    const int index = tabs->GetIndexOfWebContents(contents);
+    if (index == TabStripModel::kNoTab)
+      return false;
+    switch (action) {
+      case kNew:
+        return tabs->IsContextMenuCommandEnabled(
+            index, TabStripModel::CommandNewTabToRight);
+      case kReload:
+        return tabs->IsContextMenuCommandEnabled(index,
+                                                 TabStripModel::CommandReload);
+      case kDuplicate:
+        return tabs->IsContextMenuCommandEnabled(
+            index, TabStripModel::CommandDuplicate);
+      case kPin:
+        return tabs->IsContextMenuCommandEnabled(
+            index, TabStripModel::CommandTogglePinned);
+      case kMute:
+        return true;
+      case kClose:
+        return !tabs->IsTabPinned(index) &&
+               tabs->IsContextMenuCommandEnabled(
+                   index, TabStripModel::CommandCloseTab);
+      case kCloseOthers:
+        return tabs->IsContextMenuCommandEnabled(
+            index, TabStripModel::CommandCloseOtherTabs);
+      case kCloseRight:
+        return tabs->IsContextMenuCommandEnabled(
+            index, TabStripModel::CommandCloseTabsToRight);
+      case kReopen:
+        return chrome::IsCommandEnabled(browser, IDC_RESTORE_TAB);
+      default:
+        return false;
+    }
+  }
+  static void Execute(BrowserWindowInterface* browser,
+                      content::WebContents* contents,
+                      int action) {
+    if (!Enabled(browser, contents, action))
+      return;
+    auto* tabs = browser->GetTabStripModel();
+    const int index = tabs->GetIndexOfWebContents(contents);
+    switch (action) {
+      case kNew:
+        tabs->ExecuteContextMenuCommand(index,
+                                        TabStripModel::CommandNewTabToRight);
+        return;
+      case kReload:
+        tabs->ExecuteContextMenuCommand(index, TabStripModel::CommandReload);
+        return;
+      case kDuplicate:
+        tabs->ExecuteContextMenuCommand(index, TabStripModel::CommandDuplicate);
+        return;
+      case kPin:
+        tabs->SetTabPinned(index, !tabs->IsTabPinned(index));
+        return;
+      case kMute:
+        SetTabAudioMuted(contents, !contents->IsAudioMuted(),
+                         TabMutedReason::kAudioIndicator, std::string());
+        return;
+      case kClose:
+        tabs->CloseWebContentsAt(
+            index, TabCloseTypes::CLOSE_USER_GESTURE |
+                       TabCloseTypes::CLOSE_CREATE_HISTORICAL_TAB);
+        return;
+      case kCloseOthers:
+        tabs->ExecuteContextMenuCommand(index,
+                                        TabStripModel::CommandCloseOtherTabs);
+        return;
+      case kCloseRight:
+        tabs->ExecuteContextMenuCommand(index,
+                                        TabStripModel::CommandCloseTabsToRight);
+        return;
+      case kReopen:
+        chrome::ExecuteCommand(browser, IDC_RESTORE_TAB);
+        return;
+    }
+  }
+
+ private:
+  base::WeakPtr<BrowserWindowInterface> browser_;
+  base::WeakPtr<content::WebContents> contents_;
+  base::RepeatingCallback<void(int)> execute_;
+  ui::SimpleMenuModel model_;
+  std::unique_ptr<views::MenuRunner> runner_;
+};
+
 TabSidebar::TabSidebar(base::RepeatingClosure new_tab) {
   auto* layout = SetLayoutManager(std::make_unique<views::BoxLayout>(
       views::BoxLayout::Orientation::kVertical));
@@ -61,12 +221,15 @@ TabSidebar::TabSidebar(base::RepeatingClosure new_tab) {
   layout->SetFlexForView(scroll, 1);
 }
 TabSidebar::~TabSidebar() {
+  context_menu_.reset();
   if (model_)
     model_->RemoveObserver(this);
 }
 void TabSidebar::SetBrowser(BrowserWindowInterface* browser) {
   if (browser_ == browser)
     return;
+  ++context_generation_;
+  context_menu_.reset();
   if (model_)
     model_->RemoveObserver(this);
   browser_ = browser;
@@ -141,6 +304,11 @@ void TabSidebar::Refresh() {
       data.pin = pin;
       data.close = close;
       data.audio = audio;
+      for (auto* control :
+           {view, static_cast<views::View*>(select),
+            static_cast<views::View*>(pin), static_cast<views::View*>(close),
+            static_cast<views::View*>(audio)})
+        control->set_context_menu_controller(this);
       if (auto* audible = RecentlyAudibleHelper::FromWebContents(contents)) {
         data.audible_subscription =
             audible->RegisterRecentlyAudibleChangedCallback(base::BindRepeating(
@@ -196,6 +364,7 @@ void TabSidebar::Refresh() {
     row.pin->SetTooltipText(pin_label);
     row.close->GetViewAccessibility().SetName(u"Close " + title);
     row.close->SetTooltipText(u"Close " + title);
+    row.close->SetEnabled(!model_->IsTabPinned(i));
     const auto* audible = RecentlyAudibleHelper::FromWebContents(contents);
     const bool muted = contents->IsAudioMuted();
     row.audio->SetVisible(muted || (audible ? audible->WasRecentlyAudible()
@@ -227,6 +396,8 @@ void TabSidebar::Invoke(base::WeakPtr<content::WebContents> contents,
                        TabMutedReason::kAudioIndicator, std::string());
       break;
     case RowAction::kClose:
+      if (model_->IsTabPinned(index))
+        return;
       model_->CloseWebContentsAt(
           index, TabCloseTypes::CLOSE_USER_GESTURE |
                      TabCloseTypes::CLOSE_CREATE_HISTORICAL_TAB);
@@ -235,6 +406,40 @@ void TabSidebar::Invoke(base::WeakPtr<content::WebContents> contents,
       model_->SetTabPinned(index, !model_->IsTabPinned(index));
       break;
   }
+}
+void TabSidebar::ShowContextMenuForViewImpl(
+    views::View* source,
+    const gfx::Point& point,
+    ui::mojom::MenuSourceType source_type) {
+  if (!model_ || !browser_)
+    return;
+  for (const auto& [contents, row] : tab_rows_) {
+    if (!row.view->Contains(source) || !row.contents ||
+        model_->GetIndexOfWebContents(row.contents.get()) ==
+            TabStripModel::kNoTab)
+      continue;
+    context_menu_ = std::make_unique<SidebarTabMenu>(
+        browser_, row.contents,
+        base::BindRepeating(&TabSidebar::ExecuteMenuAction,
+                            weak_factory_.GetWeakPtr(), context_generation_,
+                            row.contents));
+    context_menu_->Run(point, source_type, GetWidget());
+    return;
+  }
+}
+void TabSidebar::ExecuteMenuAction(uint64_t generation,
+                                   base::WeakPtr<content::WebContents> contents,
+                                   int action) {
+  if (generation != context_generation_ || !browser_ || !contents)
+    return;
+  SidebarTabMenu::Execute(browser_, contents.get(), action);
+}
+ui::SimpleMenuModel* TabSidebar::context_menu_for_testing() const {
+  return context_menu_ ? context_menu_->model() : nullptr;
+}
+void TabSidebar::CloseContextMenu() {
+  if (context_menu_)
+    context_menu_->Cancel();
 }
 void TabSidebar::FocusActiveTab() {
   if (refresh_pending_)
@@ -268,6 +473,8 @@ void TabSidebar::OnTabPinnedStateChanged(tabs::TabInterface*, int) {
   ScheduleRefresh();
 }
 void TabSidebar::OnTabStripModelDestroyed(TabStripModel*) {
+  ++context_generation_;
+  context_menu_.reset();
   // The observer base removes its registration before this notification.
   model_ = nullptr;
   browser_ = nullptr;

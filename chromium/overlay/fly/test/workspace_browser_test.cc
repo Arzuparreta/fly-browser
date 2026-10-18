@@ -17,11 +17,17 @@
 #include <set>
 
 #include "base/command_line.h"
+#include "base/functional/bind.h"
+#include "base/run_loop.h"
+#include "base/task/single_thread_task_runner.h"
+#include "ui/menus/simple_menu_model.h"
+#include "ui/base/mojom/menu_source_type.mojom.h"
 #include "base/files/file_util.h"
 #include "base/json/json_reader.h"
 #include "base/json/json_writer.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/test/run_until.h"
+#include "base/test/bind.h"
 #include "base/test/test_future.h"
 #include "base/uuid.h"
 #include "base/version_info/version_info.h"
@@ -1446,6 +1452,135 @@ IN_PROC_BROWSER_TEST_F(FlyWorkspaceBrowserTest,
   ASSERT_TRUE(SecondWorkspace());
   ASSERT_TRUE(base::test::RunUntil([&] { return !window.palette().active(); }));
   EXPECT_NE(browser(), window.selected_browser_for_testing());
+}
+
+class FlyTabMenuBrowserTest : public FlyWorkspaceBrowserTest {
+ protected:
+  void Menu(content::WebContents* contents,
+            base::OnceCallback<void(ui::SimpleMenuModel*)> inspect) {
+    auto* sidebar = FlyWindowController::Get().tab_sidebar_for_testing();
+    ASSERT_TRUE(base::test::RunUntil([&] {
+      return sidebar->row_for_testing(contents) != nullptr;
+    }));
+    auto* control = sidebar->row_for_testing(contents)->children().front().get();
+    bool inspected = false;
+    base::SingleThreadTaskRunner::GetCurrentDefault()->PostTask(
+        FROM_HERE, base::BindOnce(
+            [](TabSidebar* sidebar, bool* inspected,
+               base::OnceCallback<void(ui::SimpleMenuModel*)> inspect) {
+              auto* menu = sidebar->context_menu_for_testing();
+              EXPECT_TRUE(menu);
+              if (menu)
+                std::move(inspect).Run(menu);
+              sidebar->CloseContextMenu();
+              *inspected = true;
+            }, sidebar, &inspected, std::move(inspect)));
+    ui::test::EventGenerator mouse(
+        FlyWindowController::Get().desktop_widget()->GetNativeWindow());
+    mouse.MoveMouseTo(control->GetBoundsInScreen().CenterPoint());
+    mouse.ClickRightButton();
+    ASSERT_TRUE(base::test::RunUntil([&] { return inspected; }));
+  }
+  static size_t Item(ui::SimpleMenuModel* menu, std::u16string_view label) {
+    for (size_t i = 0; i < menu->GetItemCount(); ++i)
+      if (menu->GetTypeAt(i) != ui::MenuModel::TYPE_SEPARATOR &&
+          menu->GetLabelAt(i) == label)
+        return i;
+    ADD_FAILURE() << "Missing native product menu item";
+    return menu->GetItemCount();
+  }
+  void Choose(content::WebContents* contents, std::u16string label) {
+    Menu(contents, base::BindOnce(
+        [](std::u16string label, ui::SimpleMenuModel* menu) {
+          const auto item = Item(menu, label);
+          if (item < menu->GetItemCount()) {
+            EXPECT_TRUE(menu->IsEnabledAt(item));
+            menu->ActivatedAt(item);
+          }
+        }, std::move(label)));
+  }
+};
+
+IN_PROC_BROWSER_TEST_F(FlyTabMenuBrowserTest,
+                       BackgroundPinMuteAndPinnedCloseProtection) {
+  auto* target = Active(browser());
+  auto* model = browser()->GetTabStripModel();
+  ASSERT_TRUE(ExecuteNativeCommand(browser(), "spawn-tab"));
+  auto* selected = Active(browser());
+  ASSERT_NE(target, selected);
+  Menu(target, base::BindOnce([](ui::SimpleMenuModel* menu) {
+    EXPECT_EQ(12u, menu->GetItemCount());
+    EXPECT_FALSE(menu->IsEnabledAt(Item(menu, u"Reopen closed tab")));
+  }));
+  EXPECT_EQ(selected, Active(browser()));
+  Choose(target, u"Pin");
+  ASSERT_TRUE(base::test::RunUntil([&] { return model->IsTabPinned(0); }));
+  EXPECT_EQ(selected, Active(browser()));
+  Choose(target, u"Mute tab");
+  ASSERT_TRUE(base::test::RunUntil([&] { return target->IsAudioMuted(); }));
+  EXPECT_EQ(TabMutedReason::kAudioIndicator, GetTabAudioMutedReason(target));
+  EXPECT_EQ(selected, Active(browser()));
+  Menu(target, base::BindOnce([](ui::SimpleMenuModel* menu) {
+    EXPECT_FALSE(menu->IsEnabledAt(Item(menu, u"Close")));
+    EXPECT_LT(Item(menu, u"Unpin"), menu->GetItemCount());
+    EXPECT_LT(Item(menu, u"Unmute tab"), menu->GetItemCount());
+  }));
+  model->ActivateTabAt(0);
+  EXPECT_FALSE(NativeCommandAvailable(browser(), "remove-tab"));
+  ASSERT_TRUE(ExecuteNativeCommand(browser(), "remove-tab"));
+  EXPECT_EQ(2, model->count());
+  auto* row = FlyWindowController::Get().tab_sidebar_for_testing()->row_for_testing(target);
+  ASSERT_TRUE(base::test::RunUntil([&] { return !row->children()[2]->GetEnabled(); }));
+}
+
+IN_PROC_BROWSER_TEST_F(FlyTabMenuBrowserTest,
+                       MenuTracksReordersAndRejectsClosedOrOtherProfileTargets) {
+  auto* model = browser()->GetTabStripModel();
+  auto* target = Active(browser());
+  ASSERT_TRUE(ExecuteNativeCommand(browser(), "spawn-tab"));
+  ASSERT_TRUE(ExecuteNativeCommand(browser(), "spawn-tab"));
+  auto* selected = Active(browser());
+  Menu(target, base::BindLambdaForTesting([&](ui::SimpleMenuModel* menu) {
+    model->MoveWebContentsAt(0, 1, false);
+    menu->ActivatedAt(Item(menu, u"Mute tab"));
+  }));
+  ASSERT_TRUE(base::test::RunUntil([&] { return target->IsAudioMuted(); }));
+  EXPECT_FALSE(selected->IsAudioMuted());
+  EXPECT_EQ(selected, Active(browser()));
+  Menu(target, base::BindLambdaForTesting([&](ui::SimpleMenuModel* menu) {
+    const int index = model->GetIndexOfWebContents(target);
+    model->CloseWebContentsAt(index, TabCloseTypes::CLOSE_USER_GESTURE |
+                                      TabCloseTypes::CLOSE_CREATE_HISTORICAL_TAB);
+    EXPECT_FALSE(menu->IsEnabledAt(Item(menu, u"Duplicate")));
+    menu->ActivatedAt(Item(menu, u"Duplicate"));
+  }));
+  ASSERT_TRUE(base::test::RunUntil([&] { return model->count() == 2; }));
+  target = model->GetWebContentsAt(0);
+  auto lifetime = target->GetWeakPtr();
+  Menu(target, base::BindLambdaForTesting([&](ui::SimpleMenuModel* menu) {
+    menu->ActivatedAt(Item(menu, u"Close"));
+    ASSERT_TRUE(SecondWorkspace());
+  }));
+  // The queued command must not cross a workspace generation boundary.
+  base::RunLoop().RunUntilIdle();
+  EXPECT_TRUE(lifetime);
+  EXPECT_EQ(2, model->count());
+}
+
+IN_PROC_BROWSER_TEST_F(FlyTabMenuBrowserTest,
+                       NativeCloseReopenRetainsStableIdentityAndAdjacentNewTab) {
+  auto* target = Active(browser());
+  auto* model = browser()->GetTabStripModel();
+  const auto id = TabIdentity::Get(target);
+  ASSERT_TRUE(ExecuteNativeCommand(browser(), "spawn-tab"));
+  Choose(target, u"New tab to the right");
+  ASSERT_TRUE(base::test::RunUntil([&] { return model->count() == 3; }));
+  EXPECT_EQ(target, model->GetWebContentsAt(0));
+  Choose(target, u"Close");
+  ASSERT_TRUE(base::test::RunUntil([&] { return model->count() == 2; }));
+  Choose(Active(browser()), u"Reopen closed tab");
+  ASSERT_TRUE(base::test::RunUntil([&] { return model->count() == 3; }));
+  EXPECT_EQ(id, TabIdentity::Get(Active(browser())));
 }
 
 class FlyPageScrollBrowserTest : public FlyWorkspaceBrowserTest {

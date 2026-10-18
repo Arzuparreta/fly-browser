@@ -11,8 +11,8 @@
 #include "chrome/browser/ui/browser_commands.h"
 #include "chrome/browser/ui/browser_window/public/browser_window_interface.h"
 #include "chrome/browser/ui/tabs/split_tab_metrics.h"
-#include "chrome/browser/ui/tabs/tab_strip_model.h"
 #include "chrome/browser/ui/tabs/tab_muted_utils.h"
+#include "chrome/browser/ui/tabs/tab_strip_model.h"
 #include "components/input/native_web_keyboard_event.h"
 #include "components/tabs/public/split_tab_data.h"
 #include "content/public/browser/navigation_handle.h"
@@ -292,9 +292,16 @@ bool NativeCommandAvailable(BrowserWindowInterface* browser,
     const auto* window = FlyWindowController::GetIfCreated();
     return window && window->CanTogglePrivate(browser);
   }
-  for (const auto& [name, command] : kNativeMappings)
-    if (action == name)
+  for (const auto& [name, command] : kNativeMappings) {
+    if (action == name) {
+      auto* tabs = browser->GetTabStripModel();
+      if (action == "remove-tab" &&
+          tabs->active_index() != TabStripModel::kNoTab &&
+          tabs->IsTabPinned(tabs->active_index()))
+        return false;
       return chrome::IsCommandEnabled(browser, command);
+    }
+  }
   constexpr std::string_view actions[] = {"enter-insert",
                                           "toggle-passthrough",
                                           "toggle-tab-audio-mute",
@@ -320,6 +327,12 @@ bool ExecuteNativeCommand(BrowserWindowInterface* browser,
                           std::string_view action) {
   for (const auto& [name, command] : kNativeMappings) {
     if (action == name) {
+      if (action == "remove-tab") {
+        auto* tabs = browser->GetTabStripModel();
+        if (tabs->active_index() != TabStripModel::kNoTab &&
+            tabs->IsTabPinned(tabs->active_index()))
+          return true;
+      }
       // A disabled native command is a handled key, just like upstream.
       if (chrome::IsCommandEnabled(browser, command)) {
         chrome::ExecuteCommand(browser, command);

@@ -1056,3 +1056,38 @@ an incorrect vector icon generator target; the corrected stack uses the existing
 Views target and the explicit component icon dependency. All 47 Python tooling
 contracts, `npm test`, docs build and whitespace pass locally. This does not
 substitute for native GUI, audible playback or packaged acceptance.
+
+## Native product tab menu and pinned-tab protection
+
+The dependent `codex/chromium-native-tab-menu` branch adds the product's native
+sidebar context menu: adjacent blank tab, reload, duplicate, pin/unpin, tab-specific
+mute/unmute, close, close others/right and profile-native closed-tab recovery.
+Opening it preserves the selected tab. It resolves the target's weak native
+identity and current index again after menu dispatch; reorders do not retarget a
+command, and closed targets or a changed workspace generation cancel it. Native
+model/unload/session services perform the operations. Muting retains Chromium's
+user-indicator metadata and does not change site sound permissions.
+
+Pinned product tabs now reject the shared close action and disable the sidebar
+close button/context item until unpinned, matching the retained Fly guard.
+Extension APIs and whole-window shutdown keep their native close semantics.
+Native close-other/right commands already exclude pinned tabs in the pinned
+upstream implementation.
+
+Three additional browser cases use native pointer menu opening and cover
+background targeting, pinned protection, reorders, closed targets, workspace
+switch cancellation, adjacent creation and stable identity through close/reopen.
+There are 39 browser declarations (two PRE phases, 37 main cases). Source checks
+pass with the pinned compiler, and the complete thirteen-patch graph plus Fly/UI
+header ownership checks pass in an independent shadow. These new GUI cases
+remain unexecuted until a current browser-test executable links; the running
+complete native build stays frozen at its reviewed nine-patch snapshot.
+
+Local repository checks pass: `npm test`, 47 Python tooling contracts,
+documentation generation and whitespace. Retained Electron context-menu and
+recorder/editable-page regressions both pass under private authenticated Xvfb
+with disposable profiles (`tab-menu-retained-context.log` and
+`tab-menu-retained-keyboard.log`; keyboard errors empty, guest scroll 80).
+The keyboard run retains all assertions and uses the existing external wrapper
+that only raises its app-launch timeout on the compiling host. These passes are
+retained-runtime regression evidence, not execution of the new native cases.
