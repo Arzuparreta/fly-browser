@@ -23,6 +23,7 @@ class CommandService {
   CommandService(const CommandService&) = delete;
   CommandService& operator=(const CommandService&) = delete;
   std::optional<KeyboardConfig> Read() const;
+  bool CanEdit() const;
   // Trusted callers must send a complete editor projection. Validate the whole
   // transaction before PrefService persistence; only differences are stored.
   KeyboardValidation Save(const base::DictValue& config);

@@ -2,6 +2,7 @@
 // Use of this source code is governed by the GPL-3.0-or-later license in the
 // Fly repository.
 #include "fly/commands/command_service.h"
+#include "fly/prefs/dictionary_store.h"
 
 #include <algorithm>
 #include <set>
@@ -36,7 +37,10 @@ void CommandService::OnChanged() {
 }
 std::optional<KeyboardConfig> CommandService::Read() const {
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
-  const auto& stored = local_state_->GetDict(kKeyboardPref);
+  const auto* readable = ReadDictionaryStore(*local_state_, kKeyboardPref);
+  if (!readable)
+    return std::nullopt;
+  const auto& stored = *readable;
   if (stored.empty())
     return DefaultKeyboardConfig();
   if (stored.FindInt("schema") != 1 || !stored.FindDict("shortcuts") ||
@@ -112,6 +116,10 @@ std::optional<KeyboardConfig> CommandService::Read() const {
   auto result = ValidateKeyboardConfig(candidate);
   return std::move(result.config);
 }
+bool CommandService::CanEdit() const {
+  return Read().has_value() &&
+         local_state_->FindPreference(kKeyboardPref)->IsUserModifiable();
+}
 KeyboardValidation CommandService::Save(const base::DictValue& config) {
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
   auto result = ValidateKeyboardConfig(config);
@@ -126,6 +134,8 @@ KeyboardValidation CommandService::Save(const base::DictValue& config) {
   // Recovery/reset is a separate user-visible operation.
   if (!Read())
     return {std::nullopt, "Existing keyboard data needs recovery."};
+  if (!local_state_->FindPreference(kKeyboardPref)->IsUserModifiable())
+    return {std::nullopt, "Keyboard settings are managed."};
   auto stored = local_state_->GetDict(kKeyboardPref).Clone();
   stored.Set("schema", 1);
   const auto& defaults = DefaultKeyboardConfig();

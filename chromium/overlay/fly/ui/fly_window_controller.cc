@@ -500,7 +500,7 @@ void FlyWindowController::CreateTab() {
 }
 
 void FlyWindowController::CreateWorkspace() {
-  if (closing_ || creating_profile_) {
+  if (closing_ || creating_profile_ || !workspaces_.CanEdit()) {
     return;
   }
   const auto catalog = workspaces_.Read();

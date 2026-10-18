@@ -2,6 +2,14 @@
 # existing chrome/browser/ui target to avoid introducing a circular dependency.
 import("//testing/test.gni")
 
+source_set("pref_storage") {
+  sources = [ "prefs/dictionary_store.h" ]
+  public_deps = [
+    "//base",
+    "//components/prefs",
+  ]
+}
+
 source_set("workspaces") {
   sources = [
     "workspaces/workspace_service.cc",
@@ -11,6 +19,7 @@ source_set("workspaces") {
     "//base",
     "//components/prefs",
   ]
+  deps = [ ":pref_storage" ]
 }
 
 source_set("commands") {
@@ -31,7 +40,10 @@ source_set("commands") {
     "//base",
     "//components/prefs",
   ]
-  deps = [ "//third_party/icu" ]
+  deps = [
+    ":pref_storage",
+    "//third_party/icu",
+  ]
 }
 
 source_set("preferences") {
@@ -43,6 +55,7 @@ source_set("preferences") {
     "//base",
     "//components/prefs",
   ]
+  deps = [ ":pref_storage" ]
 }
 
 source_set("session_metadata") {

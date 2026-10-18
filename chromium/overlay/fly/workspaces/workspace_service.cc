@@ -2,6 +2,7 @@
 // Use of this source code is governed by the GPL-3.0-or-later license in the
 // Fly repository.
 #include "fly/workspaces/workspace_service.h"
+#include "fly/prefs/dictionary_store.h"
 
 #include <algorithm>
 #include <set>
@@ -70,9 +71,13 @@ WorkspaceService::WorkspaceService(PrefService& local_state)
     : local_state_(local_state) {}
 WorkspaceService::~WorkspaceService() = default;
 
-std::optional<base::DictValue> WorkspaceService::ReadValidated() const {
+std::optional<base::DictValue> WorkspaceService::ReadValidated(bool for_write) const {
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
-  auto catalog = local_state_->GetDict(kWorkspacesPref).Clone();
+  const auto* readable = ReadDictionaryStore(*local_state_, kWorkspacesPref);
+  if (!readable || (for_write &&
+      !local_state_->FindPreference(kWorkspacesPref)->IsUserModifiable()))
+    return std::nullopt;
+  auto catalog = readable->Clone();
   if (catalog.empty()) {
     catalog.Set("schema", kSchema);
     catalog.Set("items", base::ListValue());
@@ -133,6 +138,9 @@ std::optional<WorkspaceCatalog> WorkspaceService::Read() const {
   return result;
 }
 
+bool WorkspaceService::CanEdit() const {
+  return ReadValidated(true).has_value();
+}
 void WorkspaceService::Commit(base::DictValue catalog) {
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
   local_state_->SetDict(kWorkspacesPref, std::move(catalog));
@@ -141,7 +149,7 @@ void WorkspaceService::Commit(base::DictValue catalog) {
 std::optional<Workspace> WorkspaceService::Add(
     std::string_view name,
     std::string_view profile_directory) {
-  auto catalog = ReadValidated();
+  auto catalog = ReadValidated(true);
   if (!catalog || !ValidName(name) ||
       !ValidProfileDirectory(profile_directory) || NameUsed(*catalog, name)) {
     return std::nullopt;
@@ -171,7 +179,7 @@ std::optional<Workspace> WorkspaceService::Add(
 }
 
 bool WorkspaceService::Rename(std::string_view id, std::string_view name) {
-  auto catalog = ReadValidated();
+  auto catalog = ReadValidated(true);
   if (!catalog || !ValidName(name) || NameUsed(*catalog, name, id)) {
     return false;
   }
@@ -185,7 +193,7 @@ bool WorkspaceService::Rename(std::string_view id, std::string_view name) {
 }
 
 bool WorkspaceService::Activate(std::string_view id) {
-  auto catalog = ReadValidated();
+  auto catalog = ReadValidated(true);
   if (!catalog || !FindRow(*catalog, id)) {
     return false;
   }
@@ -195,7 +203,7 @@ bool WorkspaceService::Activate(std::string_view id) {
 }
 
 bool WorkspaceService::Remove(std::string_view id) {
-  auto catalog = ReadValidated();
+  auto catalog = ReadValidated(true);
   if (!catalog) {
     return false;
   }
@@ -219,7 +227,7 @@ bool WorkspaceService::Remove(std::string_view id) {
 }
 
 bool WorkspaceService::Reorder(const std::vector<std::string>& ids) {
-  auto catalog = ReadValidated();
+  auto catalog = ReadValidated(true);
   if (!catalog || ids.size() != catalog->FindList("items")->size()) {
     return false;
   }

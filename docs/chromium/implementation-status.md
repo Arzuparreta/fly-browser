@@ -7,12 +7,13 @@ No native application, migration or package has passed acceptance yet.
 
 Merged main includes PR [114](https://github.com/Arzuparreta/fly-browser/pull/114)
 as `485d4bc`. Its ordinary checks and manual matrix 39078704053 passed; all
-three official native service summaries contain 31 SUCCESS results. The subsequent
-PR stack starts at PR [115](https://github.com/Arzuparreta/fly-browser/pull/115).
-Its latest remote checks and explicit CI must finish successfully before merging.
+three official native service summaries contain 31 SUCCESS results. Follow-up work is consolidated into
+PR [115](https://github.com/Arzuparreta/fly-browser/pull/115); the stacked feature
+PRs preserve their original review history. Its latest remote checks and explicit
+CI must finish successfully before merging.
 Official service CI at `e4150ad` passed all 37 cases on Linux, macOS and Windows,
 with downloaded per-test summaries verified. The current development source in the
-hints worktree has fifteen patches, 42 Linux partial service cases and 44 browser
+hints worktree has fifteen patches, 46 Linux partial service cases and 44 browser
 declarations; the browser cases remain unexecuted. These counts describe different
 source snapshots and validation scopes, not a completed native port.
 
@@ -1204,3 +1205,34 @@ presentation controls, not the remaining preference groups or complete M2.
 Downloaded official summaries from run 39130191670 at `6ff2d1e` contain exactly
 39 SUCCESS results on each of Linux, macOS and Windows. Object compilation for
 that snapshot and later theme-source CI are separate, still pending operations.
+
+## Strict native dictionary storage
+
+The app-wide workspace and keyboard services now share the preference service's
+native dictionary provenance check. A wrong-typed user value can resolve through
+Chromium's typed getter to an empty default or recommended dictionary; treating
+that result as a new store would overwrite the original data. The common
+`fly/prefs/dictionary_store.h` guard uses read-only native preference provenance,
+preserves valid explicit empty dictionaries and avoids the typed user getter's
+fatal type-mismatch diagnostic. No private PrefService API is exposed or patched.
+
+Managed dictionaries remain readable with native precedence. Every workspace
+mutation and keyboard save also checks native user modifiability, preventing a
+hidden user write behind managed settings. The keyboard Apply button reflects
+that restriction, and workspace creation checks editability before allocating a
+profile directory. Malformed and future schemas remain fail-closed.
+
+Four regression cases failed against the earlier implementation while all 42
+existing cases passed. After the fix, all 46 cases pass in the partial local
+pinned Linux runner (`store-regression-before-final.log` and
+`store-native-tests-final.log`). The cases cover wrong string/bool/list roots,
+recommended fallback, managed read-only values, preserved raw data and valid empty
+user dictionaries. Official GN and three-platform execution remain a separate CI
+gate for the consolidated head.
+
+The integration branch retains the feature commits from PRs 116–123. Those PRs
+are superseded by PR 115 so that ordinary checks and explicit service/object CI
+can validate one complete source head. In-progress manual runs for their earlier
+snapshots are cancelled when superseded; completed results remain historical
+snapshot evidence, never results for the final combined source. This does not
+change ordinary PR workflows or native cutover requirements.

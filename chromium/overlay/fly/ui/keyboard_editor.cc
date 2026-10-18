@@ -179,10 +179,12 @@ void KeyboardEditor::Toggle(content::WebContents* contents) {
       base::BindRepeating(&KeyboardEditor::Save, weak_factory_.GetWeakPtr()),
       u"Apply"));
   save_->SetStyle(ui::ButtonStyle::kProminent);
-  save_->SetEnabled(current.has_value());
+  save_->SetEnabled(commands_->CanEdit());
   if (!current)
     status_->SetText(
         u"Existing keyboard settings need recovery. They have been preserved.");
+  else if (!commands_->CanEdit())
+    status_->SetText(u"Keyboard settings are managed.");
   panel->AddChildView(std::make_unique<views::MdTextButton>(
       base::BindRepeating(&KeyboardEditor::Cancel, weak_factory_.GetWeakPtr(), true),
       u"Close"));

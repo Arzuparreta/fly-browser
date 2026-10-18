@@ -2,6 +2,7 @@
 // Use of this source code is governed by the GPL-3.0-or-later license in the
 // Fly repository.
 #include "fly/preferences/preferences_service.h"
+#include "fly/prefs/dictionary_store.h"
 
 #include <array>
 
@@ -51,18 +52,10 @@ PreferencesService::PreferencesService(PrefService& local_state)
 PreferencesService::~PreferencesService() = default;
 bool PreferencesService::ValidStore() const {
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
-  // Store provenance is presence-based, while typed reads can fall back. An
-  // explicit user value resolving to the default/recommended store has a wrong
-  // type. Detect that through read-only native APIs, without the typed user
-  // getter's fatal mismatch diagnostic or a mutable preference update.
-  const auto* pref = local_state_->FindPreference(kPreferencesPref);
-  if (pref->HasUserSetting() && pref->IsUserControlled()) {
-    const auto* effective = pref->GetValue();
-    if (effective == local_state_->GetDefaultPrefValue(kPreferencesPref) ||
-        effective == pref->GetRecommendedValue())
-      return false;
-  }
-  const auto& stored = local_state_->GetDict(kPreferencesPref);
+  const auto* readable = ReadDictionaryStore(*local_state_, kPreferencesPref);
+  if (!readable)
+    return false;
+  const auto& stored = *readable;
   if (stored.empty())
     return true;
   const auto* values = stored.FindDict("values");
