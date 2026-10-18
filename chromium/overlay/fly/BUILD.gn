@@ -89,6 +89,7 @@ if (is_linux || is_win) {
       "//chrome/browser/profiles:profile_manager",
       "//chrome/browser/profiles:profile_test_util",
       "//chrome/browser/ui",
+      "//chrome/browser/ui/browser_window",
       "//chrome/browser/ui/browser_window:create_browser_window",
       "//chrome/browser/ui/tabs:tab_strip",
       "//chrome/renderer",
