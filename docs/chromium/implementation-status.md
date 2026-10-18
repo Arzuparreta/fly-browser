@@ -730,3 +730,28 @@ pending. The local codec-enabled control rebuild is managed by user unit
 control output is `src/out/FlyControlInitial`; the copy/configuration preparation
 is recorded in `evidence/control-codec-preparation.json`. The source remains
 unmodified until the matching control and fixtures pass.
+
+## Native session startup source
+
+The dependent `codex/chromium-native-session-startup` branch routes normal Fly
+startup through Chromium's existing per-profile SessionRestore and last-opened
+profile list. The development switch selects restore-last-session without
+overwriting the user's stored startup preference or mandatory policy. Existing
+guest/private guards still apply. The same upstream startup decision controls
+session cookie and storage retention. Explicit empty-workspace/new-window
+requests continue to suppress restoration within the running process.
+
+Patch nine changes the startup preference seam and honours the existing native
+BrowserInitState restore flag for Fly. There is no second URL/session store.
+The scoped browser suite now contains 21 cases, including a PRE/restart pair
+that records two profiles/three native windows, stable workspace/tab identities,
+pinned state and isolated session cookies, then verifies them after process
+restart in one OS host. These runtime assertions are pending execution.
+The startup and session-service translation units and browser test source pass
+pinned-header syntax checks (`session-startup-syntax.log` and
+`session-startup-browser-syntax.log`). All nine patches preflight over 20 original
+upstream files without modifying the active control checkout. Repository tests
+and the 29 tooling transaction tests pass.
+The complete isolated GN graph also generates and passes header ownership
+checks (`session-startup-gn.log`, 35,576 targets). This validation uses private
+patched copies and leaves the in-progress control source untouched.
