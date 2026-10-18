@@ -997,3 +997,28 @@ write, click format changes, command visibility changes and preserving future
 schema data. Pinned source checks pass; that GUI case remains unexecuted until
 a current native browser/test binary links. No clock acceptance or broader M2
 completion is claimed from the standalone service results.
+
+## CI progress retention
+
+The dependent `codex/chromium-ci-progress` branch addresses the missing Windows
+full-build diagnosis when its runner connection was lost before artifact upload.
+CI now preserves exact merged child stdout/stderr bytes and emits bounded live
+progress every fifteen seconds, plus failures immediately. Actual child exit
+codes and full log hashes still determine each recorded result; no time/resource
+failure becomes a pass. Source lines are prefixed in the console, including the
+bounded failure tail, so progress containing carriage returns or workflow-like
+text remains ordinary log output. A lost runner can still lose its artifact, but
+the server-side job log retains the latest emitted build progress.
+
+Four real subprocess logging cases pass locally, including failure exit status,
+non-UTF8 bytes, bounded noisy progress, carriage returns and a quiet successful
+child. The complete Python tooling suite passes **47 tests**. This changes no
+ordinary PR workflow or required check; existing manual engine jobs call the
+updated logger. The new native clock branch is PR
+[117](https://github.com/Arzuparreta/fly-browser/pull/117) at `e4150ad`; its manual
+service and object runs are 39124850207 and 39124851963.
+
+The earlier native service matrix 39120990306 at `39d68ec` has completed
+successfully on Linux, macOS and Windows. It precedes the Windows line-ending
+and browser-fixture repair, so it cannot substitute for the latest-head matrix
+39123604736 at `5d76c7e` required before merging PR 115.

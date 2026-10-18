@@ -8,8 +8,30 @@ import platform
 import shutil
 import subprocess
 import sys
+import time
 
 import engine
+
+
+def run_logged(command, log, label):
+    """Keep exact child bytes and bounded live progress if artifact upload is lost."""
+    last_progress = None
+    with log.open('wb') as output:
+        with subprocess.Popen(command, stdout=subprocess.PIPE,
+                              stderr=subprocess.STDOUT) as process:
+            for raw in process.stdout:
+                output.write(raw)
+                lines = raw.decode('utf-8', errors='replace').splitlines()
+                line = lines[-1] if lines else ''
+                now = time.monotonic()
+                if (last_progress is None or now - last_progress >= 15 or
+                        'error:' in line.lower() or 'FAILED' in line):
+                    # Prefix every emitted line so source output is never a
+                    # leading GitHub workflow command. Full logs remain exact.
+                    print('[' + label + '] ' + line[-2000:], flush=True)
+                    output.flush()
+                    last_progress = now
+            return process.wait()
 
 
 def main():
@@ -84,16 +106,16 @@ def main():
         print('+ ' + ' '.join(command), flush=True)
         record['active_step'] = {'command': command, 'log': log.name}
         engine.atomic_json(evidence / 'ci.json', record)
-        with log.open('w', encoding='utf-8') as output:
-            result = subprocess.run(command, stdout=output, stderr=subprocess.STDOUT)
-        record['steps'].append({'command': command, 'exit_code': result.returncode,
+        exit_code = run_logged(command, log, log.stem)
+        record['steps'].append({'command': command, 'exit_code': exit_code,
                                 'log': log.name, 'log_sha256': engine.digest(log)})
         record.pop('active_step', None)
         engine.atomic_json(evidence / 'ci.json', record)
-        if result.returncode:
+        if exit_code:
             # Keep the log in the artifact; bounded output avoids giant sync logs.
-            print(log.read_text(encoding='utf-8', errors='replace')[-16000:], flush=True)
-            return result.returncode
+            for line in log.read_text(encoding='utf-8', errors='replace')[-16000:].splitlines():
+                print('[' + log.stem + '] ' + line, flush=True)
+            return exit_code
     record['completed_at'] = datetime.datetime.now(datetime.timezone.utc).isoformat()
     engine.atomic_json(evidence / 'ci.json', record)
     return 0
