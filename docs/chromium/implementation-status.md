@@ -11,14 +11,18 @@ three official native service summaries contain 31 SUCCESS results. Follow-up wo
 PR [115](https://github.com/Arzuparreta/fly-browser/pull/115); the stacked feature
 PRs preserve their original review history. Its latest remote checks and explicit
 CI must finish successfully before merging.
-The consolidated head is `9aaf531`: its ordinary checks pass. Manual service run
-39144885256 has passed Linux, macOS and Windows with exactly 46 SUCCESS results
-each, verified in downloaded summaries. Manual object run 39144886975 is separate and still pending. The local
-bookmark commit `0294989` follows that fixed integration head and is not part of
-its CI evidence.
+The consolidated remote head is `94bd8fd`: its ordinary checks pass. Latest-head
+manual runs 39164066947 (services) and 39164069120 (compiler objects) are running
+on Linux, macOS and Windows. Their tooling-contract jobs already pass on all
+three systems. The previous head's service run 39144885256 passed exactly 46
+cases per platform, verified in downloaded summaries. Superseded object run
+39144886975 completed macOS compilation; its unfinished Linux/Windows jobs were
+cancelled after the new runs were dispatched. Cancellation is not a pass. Local
+follow-ups `79acb5e` and `ca6ce4c` repair initial native visibility and focus.
+
 Official service CI at `e4150ad` passed all 37 cases on Linux, macOS and Windows,
 with downloaded per-test summaries verified. The current development source in the
-hints worktree has sixteen patches, 53 Linux partial service cases and 46 browser
+hints worktree has eighteen patches, 53 Linux partial service cases and 46 browser
 declarations; the browser cases remain unexecuted. These counts describe different
 source snapshots and validation scopes, not a completed native port.
 
@@ -39,24 +43,34 @@ Aura window, fixture file access on the restricted UI thread, and a creation
 waiter retaining a closed browser. The background extension-window visibility
 failure still needs diagnosis.
 
-Frozen `31279e3` on `codex/chromium-native-lifetime` in the sidebar worktree
-repairs those test lifetimes and input roots, retaining all assertions and adding
-visibility traces. The independent audit rejects missing or unsuccessful browser
-cases. The managed incremental refresh changed only that Fly test file and kept
-upstream bytes and timestamps unchanged. User units
-`fly-chromium-native-build.service`, `fly-chromium-native-acceptance.service` and
-`fly-chromium-native-summary-audit.service` now repeat the build and acceptance.
-Inspect their live state before editing that checkout or engine source. Inputs
-are in external `evidence/native-preparation.json`; current logs are
-`harness-build-systemd.log`, `harness-acceptance-systemd.log` and
-`harness-summary-audit.log` under `/mnt/storage/fly-chromium/`. Previous failing
-summaries and logs remain archived in `evidence/harness-before-*`.
+Frozen `31279e3` repaired the test lifetimes and Aura roots without removing
+assertions. Its complete run has 18 successes, five failures and no crashes:
+background extension-window visibility, session restart, native hints, focus after
+palette dismissal and focused cross-origin scrolling. Video/MV3, PCM and all 31
+service cases pass. Complete failing summaries remain in
+`evidence/current-before-*`. Those results validate only the old nine-patch source.
 
-The separate hints worktree includes shared bookmarks, complete runtime-file
-provenance, safe incremental overlay refresh, canonical preference commands and
-these harness repairs. Its 46 browser declarations still require the complete
-current build. Neither earlier 31-case runtime nor 46-case service CI validates
-that newer source. Full native acceptance remains pending.
+The full current source is now frozen at `ca6ce4c` on
+`codex/chromium-native-current` in the sidebar worktree. It has eighteen patches,
+53 service cases and 46 browser declarations, including two PRE cases. Patch 17
+starts tabs in unselected embedded browsers hidden; subsequent visibility uses
+native Aura occlusion. Patch 18 saves/restores focus through the embedded
+profile browser's FocusManager instead of the outer Fly desktop's manager.
+Both changed upstream translation units pass pinned Linux Clang syntax checks;
+their runtime results remain pending. The initial seventeen-patch build was
+explicitly stopped before adding the focus repair. The reviewed additional patch
+was applied transactionally without rewriting existing engine files; its helper
+SHA and final input fingerprint are in `evidence/native-preparation.json`.
+
+User units `fly-chromium-native-build.service`,
+`fly-chromium-native-acceptance.service` and
+`fly-chromium-native-summary-audit.service` own the current build and independent
+acceptance audit. Inspect their live state before editing the frozen checkout or
+engine source. Current logs are `current-build-systemd.log`,
+`current-acceptance-systemd.log` and `current-summary-audit.log` under
+`/mnt/storage/fly-chromium/`. Current runtime provenance verifies the complete
+GN-declared runtime file closure before browser smoke automation. The separate
+hints worktree is for subsequent source changes. Full native acceptance is pending.
 
 Next: finish and inspect the frozen build/pipeline, repair actual runtime failures,
 then rebuild and run the complete current source. Finish the remaining M2–M6 work
