@@ -58,6 +58,19 @@ source_set("preferences") {
   deps = [ ":pref_storage" ]
 }
 
+source_set("bookmarks") {
+  sources = [
+    "bookmarks/bookmark_service.cc",
+    "bookmarks/bookmark_service.h",
+  ]
+  public_deps = [ "//base" ]
+  deps = [
+    ":pref_storage",
+    "//components/prefs",
+    "//url",
+  ]
+}
+
 source_set("session_metadata") {
   sources = [
     "sessions/tab_identity.cc",
@@ -71,6 +84,7 @@ source_set("session_metadata") {
 
 test("fly_unittests") {
   sources = [
+    "bookmarks/bookmark_service_unittest.cc",
     "commands/command_service_unittest.cc",
     "commands/hint_codes_unittest.cc",
     "commands/keyboard_config_unittest.cc",
@@ -79,6 +93,7 @@ test("fly_unittests") {
     "workspaces/workspace_service_unittest.cc",
   ]
   deps = [
+    ":bookmarks",
     ":commands",
     ":preferences",
     ":workspaces",
@@ -98,6 +113,7 @@ if (is_linux || is_win) {
     defines = [ "HAS_OUT_OF_PROC_TEST_RUNNER" ]
     sources = [ "test/workspace_browser_test.cc" ]
     deps = [
+      ":bookmarks",
       ":commands",
       ":preferences",
       ":session_metadata",
@@ -110,6 +126,7 @@ if (is_linux || is_win) {
       "//chrome:strings",
       "//chrome/browser",
       "//chrome/browser:browser_process",
+      "//chrome/browser/bookmarks",
       "//chrome/browser/extensions",
       "//chrome/browser/extensions:test_support",
       "//chrome/browser/profiles:profile",

@@ -13,7 +13,7 @@ PRs preserve their original review history. Its latest remote checks and explici
 CI must finish successfully before merging.
 Official service CI at `e4150ad` passed all 37 cases on Linux, macOS and Windows,
 with downloaded per-test summaries verified. The current development source in the
-hints worktree has fifteen patches, 46 Linux partial service cases and 44 browser
+hints worktree has sixteen patches, 53 Linux partial service cases and 46 browser
 declarations; the browser cases remain unexecuted. These counts describe different
 source snapshots and validation scopes, not a completed native port.
 
@@ -1236,3 +1236,53 @@ can validate one complete source head. In-progress manual runs for their earlier
 snapshots are cancelled when superseded; completed results remain historical
 snapshot evidence, never results for the final combined source. This does not
 change ordinary PR workflows or native cutover requirements.
+
+## App-wide native Fly bookmarks
+
+The native BookmarkService owns Fly's shared flat collection in schema-1 Local
+State `fly.bookmarks`, independent of profile cookie/storage state. Explicit adds
+prepend a URL/title/timestamp row; exact duplicate URLs preserve the original
+entry and position. Exact removals preserve other row ordering, unknown row data
+and import metadata. Reads do not create a store. Typed-root fallback, future or
+malformed records and managed writes are rejected using the common provenance
+guard. Native PrefService owns asynchronous atomic disk persistence; storage-fault
+and interruption acceptance remain pending and are not established by these
+in-memory service tests.
+
+The collection has one authority. Chromium's profile BookmarkModel remains the
+separate native scope used by extensions and internal Chromium bookmark pages;
+there is no synchronization or API replacement between it and the explicitly
+labelled Fly collection. Final adaptation of remaining stock browser menu/toolbar
+bookmark surfaces is still an M2 task, so their profile scope must not be presented
+as the shared Fly list during default cutover.
+
+The shared list is available from the sidebar's Fly bookmarks button and the
+existing bookmark action/palette bindings. A native child picker searches titles
+and URLs, opens a new foreground tab through Chromium's real navigator in the
+selected browser's Profile, and supports pointer removal, arrow/page navigation,
+Enter, Escape and Delete. Delete retains normal text editing while a selection or
+text ahead of the cursor exists. Existing keyboard binding choices apply. The
+command palette and picker share native surface machinery with separate callback
+instances; URL strings never become command names or page-accessible APIs.
+
+Removal runs after the input callback returns and rechecks picker lifetime and
+membership. Store changes refresh the open list and native enabled state without
+clearing its query. Closing, navigation, profile switching and destroyed source
+contents cancel pending actions. Cached URL membership keeps row availability
+checks from repeatedly traversing the complete store. Pages retain real native
+visibility and restore their saved input focus on dismissal.
+
+Only explicit bookmark actions write this list. Merely visiting a page privately
+adds no entry; an explicit save from private mode follows the browser's usual
+user-requested persistent bookmark behavior. Unsafe executable/data URLs and blank
+tabs cannot be added. HTTP(S) origin exclusions retain scheme, host and port for
+later frequent-site integration; no new quickmark store is introduced.
+
+Seven new service cases bring the partial pinned Linux suite to 53 passing cases.
+Two browser cases bring the current declaration count to 46, including two PRE
+cases: shared-list navigation verifies distinct destination cookies and separate
+native profile bookmark models; deletion verifies native text editing, deferred
+cancelled clicks and restored page typing/visibility. The browser cases remain
+unexecuted pending the complete current native build. Patch 16 registers the store
+and GN dependencies. The unmodified control and frozen nine-patch runtime build
+are separate snapshots; neither proves this bookmark implementation accepted.

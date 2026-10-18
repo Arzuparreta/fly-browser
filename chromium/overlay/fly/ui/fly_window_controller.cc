@@ -6,7 +6,10 @@
 #include "fly/ui/command_palette.h"
 #include "fly/ui/hint_controller.h"
 #include "fly/ui/keyboard_editor.h"
+#include "chrome/browser/ui/navigator/browser_navigator.h"
+#include "chrome/browser/ui/navigator/browser_navigator_params.h"
 #include "fly/ui/native_commands.h"
+#include "fly/bookmarks/bookmark_service.h"
 #include "fly/ui/status_bar.h"
 #include "fly/ui/tab_sidebar.h"
 
@@ -80,6 +83,7 @@ FlyWindowController::FlyWindowController()
     : workspaces_(*g_browser_process->local_state()),
       commands_(*g_browser_process->local_state()),
       preferences_(*g_browser_process->local_state()),
+      bookmarks_(std::make_unique<BookmarkService>(*g_browser_process->local_state())),
       keep_alive_(
           std::make_unique<ScopedKeepAlive>(KeepAliveOrigin::FLY_WINDOW,
                                             KeepAliveRestartOption::DISABLED)),
@@ -123,6 +127,12 @@ FlyWindowController::FlyWindowController()
             }
           }, weak_factory_.GetWeakPtr()), u"Preferences"));
   preferences_button_->SetEnabled(false);
+  bookmarks_button_ = sidebar->AddChildView(std::make_unique<views::MdTextButton>(
+      base::BindRepeating([](base::WeakPtr<FlyWindowController> window) {
+        if (window && window->selected_)
+          InvokeNativeCommand(window->selected_, "toggle-bookmarks");
+      }, weak_factory_.GetWeakPtr()), u"Fly bookmarks"));
+  bookmarks_button_->SetEnabled(false);
   root->AddChildView(std::move(sidebar));
   auto* column = root->AddChildView(std::make_unique<views::View>());
   auto* column_layout =
@@ -170,6 +180,17 @@ FlyWindowController::FlyWindowController()
               InvokeNativeCommand(window->selected_, std::move(action));
           },
           weak_factory_.GetWeakPtr()));
+  bookmark_picker_ = std::make_unique<CommandPalette>(
+      desktop_.get(),
+      base::BindRepeating([](base::WeakPtr<FlyWindowController> window,
+                            std::string_view url) {
+        return window && !window->closing_ &&
+               window->bookmark_urls_.contains(std::string(url));
+      }, weak_factory_.GetWeakPtr()),
+      base::BindRepeating(&FlyWindowController::OpenBookmark,
+                          weak_factory_.GetWeakPtr()),
+      base::BindRepeating(&FlyWindowController::RemoveBookmark,
+                          weak_factory_.GetWeakPtr()));
   keyboard_editor_ =
       std::make_unique<KeyboardEditor>(desktop_.get(), commands_,
                                        *g_browser_process->local_state());
@@ -178,6 +199,9 @@ FlyWindowController::FlyWindowController()
   preferences_registrar_.Add(
       kPreferencesPref,
       base::BindRepeating(&FlyWindowController::OnPreferencesChanged,
+                          weak_factory_.GetWeakPtr()));
+  preferences_registrar_.Add(kBookmarksPref,
+      base::BindRepeating(&FlyWindowController::OnBookmarksChanged,
                           weak_factory_.GetWeakPtr()));
   OnPreferencesChanged();
   desktop_->GetNativeWindow()->AddPreTargetHandler(this);
@@ -194,6 +218,7 @@ FlyWindowController::~FlyWindowController() {
   clock_timer_.Stop();
   preferences_registrar_.RemoveAll();
   keyboard_editor_.reset();
+  bookmark_picker_.reset();
   palette_.reset();
   hints_.reset();
   desktop_->GetNativeWindow()->RemovePreTargetHandler(this);
@@ -206,8 +231,44 @@ FlyWindowController::~FlyWindowController() {
   status_bar_ = nullptr;
   clock_ = nullptr;
   preferences_button_ = nullptr;
+  bookmarks_button_ = nullptr;
   tab_sidebar_ = nullptr;
   desktop_.reset();
+}
+
+std::vector<PaletteEntry> FlyWindowController::BookmarkEntries() {
+  bookmark_urls_.clear();
+  std::vector<PaletteEntry> entries;
+  if (const auto bookmarks = bookmarks_->Read()) {
+    for (const auto& bookmark : *bookmarks) {
+      bookmark_urls_.insert(bookmark.url);
+      entries.push_back({bookmark.url, bookmark.url, bookmark.title,
+                         bookmark.url, {}, {}});
+    }
+  }
+  return entries;
+}
+void FlyWindowController::OnBookmarksChanged() {
+  bookmarks_button_->SetEnabled(selected_ && !closing_ && bookmarks_->Read().has_value());
+  if (bookmark_picker_->active())
+    bookmark_picker_->UpdateItems(BookmarkEntries(), bookmarks_->CanEdit());
+}
+void FlyWindowController::OpenBookmark(content::WebContents* source,
+                                      std::string url) {
+  if (closing_ || !selected_ ||
+      selected_->GetTabStripModel()->GetActiveWebContents() != source ||
+      !bookmarks_->Contains(url))
+    return;
+  NavigateParams params(selected_, GURL(url), ui::PAGE_TRANSITION_AUTO_BOOKMARK);
+  params.disposition = WindowOpenDisposition::NEW_FOREGROUND_TAB;
+  params.window_action = NavigateParams::WindowAction::kShowWindow;
+  Navigate(&params);
+}
+void FlyWindowController::RemoveBookmark(content::WebContents* source,
+                                        std::string url) {
+  if (!closing_ && selected_ &&
+      selected_->GetTabStripModel()->GetActiveWebContents() == source)
+    bookmarks_->Remove(url);
 }
 
 void FlyWindowController::OnPreferencesChanged() {
@@ -324,9 +385,11 @@ void FlyWindowController::Select(BrowserWindowInterface* browser, bool focus) {
     }
     hints_->Cancel();
     palette_->Cancel();
+    bookmark_picker_->Cancel();
     keyboard_editor_->Cancel();
     selected_ = browser;
     preferences_button_->SetEnabled(true);
+    OnBookmarksChanged();
     tab_sidebar_->SetBrowser(browser);
     auto& next = it->second;
     std::u16string workspace_name;
@@ -566,11 +629,13 @@ void FlyWindowController::OnBrowserDidClose(BrowserWindowInterface* browser) {
   if (selected_ == browser) {
     hints_->Cancel();
     palette_->Cancel();
+    bookmark_picker_->Cancel();
     keyboard_editor_->Cancel();
     tab_sidebar_->SetBrowser(nullptr);
     status_bar_->SetBrowser(nullptr, u"");
     selected_ = nullptr;
     preferences_button_->SetEnabled(false);
+    bookmarks_button_->SetEnabled(false);
     if (it->second.widget) {
       it->second.host->SetVisible(false);
       it->second.widget->Hide();
@@ -653,6 +718,7 @@ void FlyWindowController::RequestClose(views::Widget::ClosedReason reason) {
   }
   hints_->Cancel();
   palette_->Cancel();
+  bookmark_picker_->Cancel();
   keyboard_editor_->Cancel();
   closing_ = true;
   if (entries_.empty()) {
@@ -667,6 +733,7 @@ void FlyWindowController::OnClosingAllBrowsers(bool closing) {
   if (closing) {
     hints_->Cancel();
     palette_->Cancel();
+    bookmark_picker_->Cancel();
     keyboard_editor_->Cancel();
   }
   closing_ = closing;
@@ -728,7 +795,26 @@ bool FlyWindowController::RunCommand(BrowserWindowInterface* browser,
                                      std::string_view action) {
   if (!entries_.contains(browser) || closing_)
     return false;
+  if (action == "add-bookmark") {
+    auto* contents = browser->GetTabStripModel()->GetActiveWebContents();
+    return contents && bookmarks_->Add(contents->GetLastCommittedURL().spec(),
+                                      base::UTF16ToUTF8(contents->GetTitle()));
+  }
+  if (action == "toggle-bookmarks") {
+    if (!bookmarks_->Read())
+      return false;
+    hints_->Cancel();
+    palette_->Cancel();
+    keyboard_editor_->Cancel();
+    const auto config = commands_.Read().value_or(DefaultKeyboardConfig());
+    bookmark_picker_->ToggleItems(
+        browser->GetTabStripModel()->GetActiveWebContents(), BookmarkEntries(),
+        config.shortcuts.at("toggle-bookmarks"), u"Search Fly bookmarks",
+        bookmarks_->CanEdit());
+    return true;
+  }
   if (action == "toggle-palette") {
+    bookmark_picker_->Cancel();
     hints_->Cancel();
     keyboard_editor_->Cancel();
     palette_->Toggle(browser->GetTabStripModel()->GetActiveWebContents(),
@@ -740,6 +826,7 @@ bool FlyWindowController::RunCommand(BrowserWindowInterface* browser,
     return true;
   }
   if (action == "trigger-hints") {
+    bookmark_picker_->Cancel();
     keyboard_editor_->Cancel();
     hints_->Toggle(browser->GetTabStripModel()->GetActiveWebContents());
     return true;
@@ -757,6 +844,7 @@ bool FlyWindowController::RunCommand(BrowserWindowInterface* browser,
   if (action == "toggle-help") {
     hints_->Cancel();
     palette_->Cancel();
+    bookmark_picker_->Cancel();
     keyboard_editor_->Toggle(
         browser->GetTabStripModel()->GetActiveWebContents());
     return true;
@@ -793,6 +881,13 @@ bool FlyWindowController::RunCommand(BrowserWindowInterface* browser,
 
 namespace fly {
 void FlyWindowController::OnKeyEvent(ui::KeyEvent* event) {
+  if (bookmark_picker_->active()) {
+    if (bookmark_picker_->HandleOverlayKey(*event)) {
+      event->SetHandled();
+      event->StopPropagation();
+    }
+    return;
+  }
   if (keyboard_editor_->active()) {
     if (keyboard_editor_->HandleOverlayKey(*event)) {
       event->SetHandled();

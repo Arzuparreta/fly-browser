@@ -9,6 +9,8 @@
 #include "base/strings/utf_string_conversions.h"
 #include "base/task/single_thread_task_runner.h"
 #include "components/input/native_web_keyboard_event.h"
+#include "ui/base/metadata/metadata_header_macros.h"
+#include "ui/base/metadata/metadata_impl_macros.h"
 #include "content/public/browser/web_contents.h"
 #include "fly/ui/native_commands.h"
 #include "ui/aura/window.h"
@@ -28,6 +30,16 @@
 
 namespace fly {
 namespace {
+class PickerButton : public views::MdTextButton {
+  METADATA_HEADER(PickerButton, views::MdTextButton)
+ public:
+  PickerButton(PressedCallback callback, std::u16string_view text)
+      : views::MdTextButton(std::move(callback), text) {
+    label()->SetMultiLine(true);
+  }
+};
+BEGIN_METADATA(PickerButton)
+END_METADATA
 class DismissSurface : public views::View {
  public:
   explicit DismissSurface(base::RepeatingClosure dismiss)
@@ -47,16 +59,18 @@ class DismissSurface : public views::View {
 CommandPalette::CommandPalette(
     views::Widget* desktop,
     base::RepeatingCallback<bool(std::string_view)> available,
-    base::RepeatingCallback<void(content::WebContents*, std::string)> execute)
+    base::RepeatingCallback<void(content::WebContents*, std::string)> execute,
+    base::RepeatingCallback<void(content::WebContents*, std::string)> remove)
     : desktop_(desktop),
       available_(std::move(available)),
-      execute_(std::move(execute)) {
+      execute_(std::move(execute)), remove_(std::move(remove)) {
   desktop_->AddObserver(this);
 }
 CommandPalette::~CommandPalette() {
   weak_factory_.InvalidateWeakPtrs();
   Observe(nullptr);
   buttons_.clear();
+  remove_buttons_.clear();
   search_ = nullptr;
   results_ = nullptr;
   overlay_.reset();
@@ -65,6 +79,13 @@ CommandPalette::~CommandPalette() {
 }
 void CommandPalette::Toggle(content::WebContents* contents,
                             const KeyboardConfig& config) {
+  ToggleItems(contents, PaletteCatalog(config),
+              config.shortcuts.at("toggle-palette"), u"Search commands", false);
+}
+void CommandPalette::ToggleItems(content::WebContents* contents,
+                                 std::vector<PaletteEntry> items,
+                                 std::vector<std::string> close_bindings,
+                                 std::u16string placeholder, bool removable) {
   if (overlay_) {
     Cancel(true);
     return;
@@ -73,8 +94,9 @@ void CommandPalette::Toggle(content::WebContents* contents,
     return;
   Observe(contents);
   contents->StoreFocus();
-  catalog_ = PaletteCatalog(config);
-  palette_bindings_ = config.shortcuts.at("toggle-palette");
+  catalog_ = std::move(items);
+  palette_bindings_ = std::move(close_bindings);
+  removable_ = removable;
   closing_ = false;
   cancelled_ = false;
   overlay_ = std::make_unique<views::Widget>();
@@ -107,8 +129,8 @@ void CommandPalette::Toggle(content::WebContents* contents,
   panel->SetBackground(
       views::CreateSolidBackground(ui::kColorDialogBackground));
   search_ = panel->AddChildView(std::make_unique<views::Textfield>());
-  search_->SetPlaceholderText(u"Search commands");
-  search_->GetViewAccessibility().SetName(u"Search commands");
+  search_->SetPlaceholderText(placeholder);
+  search_->GetViewAccessibility().SetName(placeholder);
   search_->set_controller(this);
   auto* scroll = panel->AddChildView(std::make_unique<views::ScrollView>());
   scroll->ClipHeightTo(0, 440);
@@ -123,30 +145,65 @@ void CommandPalette::Toggle(content::WebContents* contents,
   desktop_->GetNativeWindow()->StackChildAtTop(overlay_->GetNativeWindow());
   search_->RequestFocus();
 }
+void CommandPalette::UpdateItems(std::vector<PaletteEntry> items, bool removable) {
+  if (!active())
+    return;
+  std::string selected;
+  if (selected_ >= 0)
+    selected = filtered_[selected_].action;
+  catalog_ = std::move(items);
+  removable_ = removable;
+  Refresh();
+  for (size_t i = 0; i < filtered_.size(); ++i) {
+    if (filtered_[i].action == selected && buttons_[i]->GetEnabled()) {
+      if (selected_ >= 0)
+        buttons_[selected_]->SetIsDefault(false);
+      selected_ = static_cast<int>(i);
+      buttons_[i]->SetIsDefault(true);
+      break;
+    }
+  }
+}
 void CommandPalette::Refresh() {
   if (!active())
     return;
   filtered_ = FilterPalette(catalog_, search_->GetText());
   buttons_.clear();
+  remove_buttons_.clear();
   results_->RemoveAllChildViews();
   selected_ = -1;
   for (const auto& entry : filtered_) {
     auto text = entry.title;
+    if (remove_ && !entry.category.empty())
+      text += "\n" + entry.category;
     if (!entry.shortcuts.empty())
       text += "    " + base::JoinString(entry.shortcuts, " / ");
     if (!entry.normal.empty())
       text += "    " + base::JoinString(entry.normal, " / ") + " (NORMAL)";
-    auto* button = results_->AddChildView(std::make_unique<views::MdTextButton>(
+    auto* row = results_->AddChildView(std::make_unique<views::View>());
+    auto* row_layout = row->SetLayoutManager(std::make_unique<views::BoxLayout>(
+        views::BoxLayout::Orientation::kHorizontal, gfx::Insets(), 4));
+    auto* button = row->AddChildView(std::make_unique<PickerButton>(
         base::BindRepeating(&CommandPalette::Activate,
                             weak_factory_.GetWeakPtr(), entry.action),
         base::UTF8ToUTF16(text)));
     button->SetEnabled(available_.Run(entry.action));
+    row_layout->SetFlexForView(button, 1);
     button->GetViewAccessibility().SetName(base::UTF8ToUTF16(text));
     buttons_.push_back(button);
+    if (remove_) {
+      auto* remove = row->AddChildView(std::make_unique<views::MdTextButton>(
+          base::BindRepeating(&CommandPalette::Remove, weak_factory_.GetWeakPtr(),
+                              entry.action), u"Remove"));
+      remove->SetEnabled(removable_ && available_.Run(entry.action));
+      remove->GetViewAccessibility().SetName(u"Remove " + base::UTF8ToUTF16(text));
+      remove_buttons_.push_back(remove);
+    }
   }
   if (buttons_.empty())
     results_->AddChildView(
-        std::make_unique<views::Label>(u"No matching commands"));
+        std::make_unique<views::Label>(remove_ ? u"No matching bookmarks"
+                                              : u"No matching commands"));
   Select(1);
 }
 void CommandPalette::Select(int direction) {
@@ -183,13 +240,31 @@ bool CommandPalette::HandleOverlayKey(const ui::KeyEvent& event) {
     Cancel(true);
     return true;
   }
-  if (!search_->HasFocus())
-    return false;
   if (event.flags() &
       (ui::EF_CONTROL_DOWN | ui::EF_ALT_DOWN | ui::EF_COMMAND_DOWN))
     return false;
+  if (remove_ && removable_ && selected_ >= 0 &&
+      event.key_code() == ui::VKEY_DELETE &&
+      (!search_->HasFocus() || (search_->GetSelectedRange().is_empty() &&
+        search_->GetCursorPosition() == search_->GetText().size()))) {
+    Remove(filtered_[selected_].action);
+    return true;
+  }
+  if (!search_->HasFocus())
+    return false;
   if (event.key_code() == ui::VKEY_DOWN || event.key_code() == ui::VKEY_UP) {
     Select(event.key_code() == ui::VKEY_DOWN ? 1 : -1);
+    return true;
+  }
+  if (remove_ && (event.key_code() == ui::VKEY_NEXT ||
+                  event.key_code() == ui::VKEY_PRIOR)) {
+    if (selected_ >= 0) {
+      buttons_[selected_]->SetIsDefault(false);
+      selected_ = std::clamp(selected_ + (event.key_code() == ui::VKEY_NEXT ? 5 : -5),
+                             0, static_cast<int>(buttons_.size()) - 1);
+      buttons_[selected_]->SetIsDefault(true);
+      buttons_[selected_]->ScrollViewToVisible();
+    }
     return true;
   }
   if (event.key_code() == ui::VKEY_RETURN) {
@@ -198,6 +273,20 @@ bool CommandPalette::HandleOverlayKey(const ui::KeyEvent& event) {
     return true;
   }
   return false;
+}
+void CommandPalette::Remove(std::string action) {
+  if (!active() || !remove_ || !removable_ || !available_.Run(action))
+    return;
+  // An update may replace the row. Run only after the native input callback has
+  // returned, then recheck surface lifetime and the current collection.
+  base::SingleThreadTaskRunner::GetCurrentDefault()->PostTask(
+      FROM_HERE, base::BindOnce(&CommandPalette::RemoveAfterEvent,
+                               weak_factory_.GetWeakPtr(), std::move(action)));
+}
+void CommandPalette::RemoveAfterEvent(std::string action) {
+  if (active() && !cancelled_ && removable_ && web_contents() &&
+      available_.Run(action))
+    remove_.Run(web_contents(), std::move(action));
 }
 void CommandPalette::Activate(std::string action) {
   if (!active() || !available_.Run(action))
@@ -226,6 +315,7 @@ void CommandPalette::FinishClose(bool restore_focus, std::string action) {
   auto contents = web_contents() ? web_contents()->GetWeakPtr() : nullptr;
   Observe(nullptr);
   buttons_.clear();
+  remove_buttons_.clear();
   search_ = nullptr;
   results_ = nullptr;
   overlay_.reset();

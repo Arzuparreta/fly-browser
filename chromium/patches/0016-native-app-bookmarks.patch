@@ -1,0 +1,50 @@
+--- a/chrome/browser/ui/BUILD.gn
++++ b/chrome/browser/ui/BUILD.gn
+@@ -1109,7 +1109,7 @@
+     "//ui/webui",
+   ]
+   if (is_linux || is_win) {
+-    deps += [ "//fly:workspaces", "//fly:commands", "//fly:preferences", "//chrome/browser/ssl", "//components/url_formatter", "//components/vector_icons", "//ui/accessibility", "//ui/wm" ]
++    deps += [ "//fly:workspaces", "//fly:commands", "//fly:preferences", "//fly:bookmarks", "//chrome/browser/ui/navigator", "//chrome/browser/ssl", "//components/url_formatter", "//components/vector_icons", "//ui/accessibility", "//ui/wm" ]
+   }
+   deps += [ "//fly:session_metadata" ]
+ 
+--- a/chrome/browser/prefs/BUILD.gn
++++ b/chrome/browser/prefs/BUILD.gn
+@@ -61,6 +61,7 @@
+     "//fly:workspaces",
+     "//fly:commands",
+     "//fly:preferences",
++    "//fly:bookmarks",
+     ":prefs",
+     ":util",
+     "//chrome/browser:browser_process",
+--- a/chrome/browser/prefs/browser_prefs.cc
++++ b/chrome/browser/prefs/browser_prefs.cc
+@@ -7,6 +7,7 @@
+ #include "fly/workspaces/workspace_service.h"
+ #include "fly/commands/command_service.h"
+ #include "fly/preferences/preferences_service.h"
++#include "fly/bookmarks/bookmark_service.h"
+ 
+ #include <array>
+ #include <optional>
+@@ -1420,6 +1421,7 @@
+   fly::WorkspaceService::RegisterLocalStatePrefs(registry);
+   fly::CommandService::RegisterLocalStatePrefs(registry);
+   fly::PreferencesService::RegisterLocalStatePrefs(registry);
++  fly::BookmarkService::RegisterLocalStatePrefs(registry);
+   // Call outs to individual subsystems that register Local State (browser-wide)
+   // prefs en masse. See RegisterProfilePrefs for per-profile prefs. Please
+   // keep this list alphabetized.
+--- a/chrome/test/BUILD.gn
++++ b/chrome/test/BUILD.gn
+@@ -2832,7 +2832,7 @@
+     ]
+     if (is_linux || is_win) {
+       sources += [ "//fly/test/workspace_browser_test.cc" ]
+-      deps += [ "//fly:commands", "//fly:workspaces", "//fly:session_metadata", "//fly:preferences" ]
++      deps += [ "//fly:commands", "//fly:workspaces", "//fly:session_metadata", "//fly:preferences", "//fly:bookmarks" ]
+     }
+     fuzztests = [ "SafeXmlParserFixture.ParseXML" ]
+     fuzztest_additional_args = [

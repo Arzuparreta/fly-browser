@@ -9,6 +9,7 @@
 #include <memory>
 #include <optional>
 #include <string>
+#include <set>
 
 #include "base/callback_list.h"
 #include "base/memory/raw_ptr.h"
@@ -16,6 +17,7 @@
 #include "base/timer/timer.h"
 #include "components/prefs/pref_change_registrar.h"
 #include "fly/commands/command_service.h"
+#include "fly/commands/palette_catalog.h"
 #include "fly/preferences/preferences_service.h"
 #include "fly/workspaces/workspace_service.h"
 #include "ui/events/event_handler.h"
@@ -39,6 +41,7 @@ class Label;
 
 namespace fly {
 class CommandPalette;
+class BookmarkService;
 class StatusBar;
 class KeyboardEditor;
 class TabSidebar;
@@ -67,9 +70,12 @@ class FlyWindowController : public views::WidgetDelegate,
   bool has_selected_browser() const { return selected_ != nullptr; }
   views::Widget* desktop_widget() const { return desktop_.get(); }
   CommandService& commands() { return commands_; }
+  BookmarkService& bookmarks() { return *bookmarks_; }
+  CommandPalette& bookmark_picker() { return *bookmark_picker_; }
   PreferencesService& preferences() { return preferences_; }
   views::MdTextButton* clock_for_testing() { return clock_; }
   views::MdTextButton* preferences_button_for_testing() { return preferences_button_; }
+  views::MdTextButton* bookmarks_button_for_testing() { return bookmarks_button_; }
   BrowserWindowInterface* selected_browser_for_testing() { return selected_; }
   CommandPalette& palette() { return *palette_; }
   KeyboardEditor& keyboard_editor() { return *keyboard_editor_; }
@@ -103,6 +109,10 @@ class FlyWindowController : public views::WidgetDelegate,
     base::CallbackListSubscription closed_subscription;
   };
   void OnPreferencesChanged();
+  std::vector<PaletteEntry> BookmarkEntries();
+  void OnBookmarksChanged();
+  void OpenBookmark(content::WebContents* source, std::string url);
+  void RemoveBookmark(content::WebContents* source, std::string url);
   void UpdateClock();
   void CycleClockFormat();
   void OnWidgetVisibilityChanged(views::Widget*, bool visible) override;
@@ -121,11 +131,14 @@ class FlyWindowController : public views::WidgetDelegate,
   WorkspaceService workspaces_;
   CommandService commands_;
   PreferencesService preferences_;
+  std::unique_ptr<BookmarkService> bookmarks_;
+  std::set<std::string> bookmark_urls_;
   std::optional<ThemePreferences> applied_theme_;
   PrefChangeRegistrar preferences_registrar_;
   base::RepeatingTimer clock_timer_;
   std::unique_ptr<HintController> hints_;
   std::unique_ptr<CommandPalette> palette_;
+  std::unique_ptr<CommandPalette> bookmark_picker_;
   std::unique_ptr<KeyboardEditor> keyboard_editor_;
   std::unique_ptr<KeyboardRouter> empty_router_;
   uint64_t empty_generation_ = 0;
@@ -137,6 +150,7 @@ class FlyWindowController : public views::WidgetDelegate,
   raw_ptr<StatusBar> status_bar_ = nullptr;
   raw_ptr<views::MdTextButton> clock_ = nullptr;
   raw_ptr<views::MdTextButton> preferences_button_ = nullptr;
+  raw_ptr<views::MdTextButton> bookmarks_button_ = nullptr;
   raw_ptr<TabSidebar> tab_sidebar_ = nullptr;
   std::map<BrowserWindowInterface*, Entry> entries_;
   raw_ptr<BrowserWindowInterface> selected_ = nullptr;

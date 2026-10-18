@@ -2,6 +2,7 @@
 // Use of this source code is governed by the GPL-3.0-or-later license in the
 // Fly repository.
 #include "fly/ui/native_commands.h"
+#include "fly/bookmarks/bookmark_service.h"
 
 #include <algorithm>
 #include <utility>
@@ -282,6 +283,13 @@ bool NativeCommandAvailable(BrowserWindowInterface* browser,
                             std::string_view action) {
   if (!browser)
     return false;
+  if (action == "toggle-bookmarks" || action == "add-bookmark") {
+    auto* window = FlyWindowController::GetIfCreated();
+    auto* contents = browser->GetTabStripModel()->GetActiveWebContents();
+    return window && (action == "toggle-bookmarks"
+        ? window->bookmarks().Read().has_value()
+        : contents && window->bookmarks().CanAdd(contents->GetLastCommittedURL().spec()));
+  }
   if (action == "toggle-theme") {
     auto* window = FlyWindowController::GetIfCreated();
     return window && window->preferences().CanEditTheme();

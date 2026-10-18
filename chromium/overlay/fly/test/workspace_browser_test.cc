@@ -2,6 +2,9 @@
 // Use of this source code is governed by the GPL-3.0-or-later license in the
 // Fly repository.
 #include "fly/ui/keyboard_editor.h"
+#include "fly/bookmarks/bookmark_service.h"
+#include "chrome/browser/bookmarks/bookmark_model_factory.h"
+#include "components/bookmarks/browser/bookmark_model.h"
 #include "components/password_manager/core/common/password_manager_pref_names.h"
 #include "components/signin/public/base/signin_pref_names.h"
 #include "fly/sessions/tab_identity.h"
@@ -1694,6 +1697,114 @@ IN_PROC_BROWSER_TEST_F(FlyWorkspaceBrowserTest,
   const auto before = g_browser_process->local_state()->GetDict(kPreferencesPref).Clone();
   base::RunLoop().RunUntilIdle();
   EXPECT_EQ(before, g_browser_process->local_state()->GetDict(kPreferencesPref));
+}
+
+IN_PROC_BROWSER_TEST_F(FlyWorkspaceBrowserTest,
+                       SharedFlyBookmarksNavigateWithDestinationProfileIdentity) {
+  const auto url = embedded_test_server()->GetURL("/title1.html");
+  ASSERT_TRUE(ui_test_utils::NavigateToURL(browser(), url));
+  auto* original = Active(browser());
+  ASSERT_TRUE(content::ExecJs(original, "document.cookie='identity=first'"));
+  auto& window = FlyWindowController::Get();
+  ASSERT_TRUE(InvokeNativeCommand(browser(), "add-bookmark"));
+  ASSERT_EQ(1u, window.bookmarks().Read()->size());
+  const auto stored = g_browser_process->local_state()->GetDict(kBookmarksPref).Clone();
+  ASSERT_TRUE(InvokeNativeCommand(browser(), "add-bookmark"));
+  EXPECT_EQ(stored, g_browser_process->local_state()->GetDict(kBookmarksPref));
+  auto* first_model = BookmarkModelFactory::GetForBrowserContext(browser()->GetProfile());
+  ASSERT_TRUE(first_model);
+  ASSERT_TRUE(base::test::RunUntil([&] { return first_model->loaded(); }));
+  EXPECT_FALSE(first_model->IsBookmarked(url));
+  const auto profile_only = embedded_test_server()->GetURL("/profile-only");
+  ASSERT_TRUE(first_model->AddURL(first_model->other_node(), 0, u"Profile only", profile_only));
+  EXPECT_FALSE(window.bookmarks().Contains(profile_only.spec()));
+  auto* second = SecondWorkspace();
+  ASSERT_TRUE(second);
+  ASSERT_TRUE(ui_test_utils::NavigateToURL(second, url));
+  auto* destination = Active(second);
+  ASSERT_TRUE(content::ExecJs(destination, "document.cookie='identity=second'"));
+  auto* second_model = BookmarkModelFactory::GetForBrowserContext(second->GetProfile());
+  ASSERT_TRUE(second_model);
+  ASSERT_TRUE(base::test::RunUntil([&] { return second_model->loaded(); }));
+  EXPECT_FALSE(second_model->IsBookmarked(profile_only));
+  ASSERT_EQ(1u, window.bookmarks().Read()->size());
+  const int count = second->GetTabStripModel()->count();
+  auto* pointer = window.bookmarks_button_for_testing();
+  ASSERT_TRUE(pointer && pointer->GetEnabled());
+  ui::test::EventGenerator keys(window.desktop_widget()->GetNativeWindow());
+  keys.MoveMouseTo(pointer->GetBoundsInScreen().CenterPoint());
+  keys.ClickLeftButton();
+  auto& picker = window.bookmark_picker();
+  ASSERT_TRUE(base::test::RunUntil([&] { return picker.active(); }));
+  ASSERT_EQ(1u, picker.result_count_for_testing());
+  keys.PressKey(ui::VKEY_RETURN, ui::EF_NONE);
+  ASSERT_TRUE(base::test::RunUntil([&] {
+    return !picker.search_for_testing() && second->GetTabStripModel()->count() == count + 1;
+  }));
+  auto* opened = Active(second);
+  ASSERT_TRUE(content::WaitForLoadStop(opened));
+  EXPECT_EQ(url, opened->GetLastCommittedURL());
+  EXPECT_EQ(second->GetProfile(), opened->GetBrowserContext());
+  EXPECT_EQ("identity=second", content::EvalJs(opened, "document.cookie"));
+  EXPECT_EQ("identity=first", content::EvalJs(original, "document.cookie"));
+  EXPECT_EQ(1u, window.bookmarks().Read()->size());
+  const auto before_private = g_browser_process->local_state()->GetDict(kBookmarksPref).Clone();
+  ASSERT_TRUE(window.RunCommand(second, "toggle-private-mode"));
+  ASSERT_TRUE(base::test::RunUntil([&] {
+    auto* selected = window.selected_browser_for_testing();
+    return selected && selected->GetProfile()->IsOffTheRecord();
+  }));
+  ASSERT_TRUE(ui_test_utils::NavigateToURL(window.selected_browser_for_testing(), url));
+  EXPECT_EQ(before_private, g_browser_process->local_state()->GetDict(kBookmarksPref));
+}
+
+IN_PROC_BROWSER_TEST_F(FlyWorkspaceBrowserTest,
+                       BookmarkDeletionKeepsNativeTextEditingAndCancelsLateClicks) {
+  ASSERT_TRUE(ui_test_utils::NavigateToURL(
+      browser(), embedded_test_server()->GetURL("/title1.html")));
+  auto* contents = Active(browser());
+  ASSERT_TRUE(content::ExecJs(contents,
+      "document.body.innerHTML='<input id=entry>';"
+      "document.querySelector('#entry').focus();"
+      "window.visibilityEvents=0;"
+      "document.addEventListener('visibilitychange',()=>visibilityEvents++)"));
+  auto& window = FlyWindowController::Get();
+  ASSERT_TRUE(window.bookmarks().Add("https://one.test/", "alpha one"));
+  ASSERT_TRUE(window.bookmarks().Add("https://two.test/", "alpha two"));
+  ASSERT_TRUE(InvokeNativeCommand(browser(), "toggle-bookmarks"));
+  auto& picker = window.bookmark_picker();
+  ASSERT_TRUE(picker.active());
+  auto* search = picker.search_for_testing();
+  search->SetText(u"alphaX");
+  picker.ContentsChanged(search, std::u16string(search->GetText()));
+  search->SetSelectedRange(gfx::Range(0));
+  ui::test::EventGenerator keys(window.desktop_widget()->GetNativeWindow());
+  keys.PressKey(ui::VKEY_DELETE, ui::EF_NONE);
+  ASSERT_TRUE(base::test::RunUntil([&] { return search->GetText() == u"lphaX"; }));
+  EXPECT_EQ(2u, window.bookmarks().Read()->size());
+  search->SetText(u"alpha");
+  picker.ContentsChanged(search, std::u16string(search->GetText()));
+  search->SetSelectedRange(gfx::Range(5));
+  ASSERT_EQ(2u, picker.result_count_for_testing());
+  keys.PressKey(ui::VKEY_DELETE, ui::EF_NONE);
+  ASSERT_TRUE(base::test::RunUntil([&] {
+    return window.bookmarks().Read()->size() == 1 && picker.result_count_for_testing() == 1;
+  }));
+  EXPECT_EQ(u"alpha", search->GetText());
+  auto* remove = picker.remove_for_testing(0);
+  ASSERT_TRUE(remove && remove->GetEnabled());
+  views::test::ButtonTestApi(remove).NotifyDefaultMouseClick();
+  picker.Cancel(true);
+  ASSERT_TRUE(base::test::RunUntil([&] { return !picker.search_for_testing(); }));
+  EXPECT_EQ(1u, window.bookmarks().Read()->size());
+  ASSERT_TRUE(base::test::RunUntil([&] {
+    return content::EvalJs(contents, "document.hasFocus()").ExtractBool();
+  }));
+  keys.PressKey(ui::VKEY_J, ui::EF_NONE);
+  ASSERT_TRUE(base::test::RunUntil([&] {
+    return content::EvalJs(contents, "document.querySelector('#entry').value").ExtractString() == "j";
+  }));
+  EXPECT_EQ(0, content::EvalJs(contents, "visibilityEvents"));
 }
 
 class FlyTabMenuBrowserTest : public FlyWorkspaceBrowserTest {
