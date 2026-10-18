@@ -26,6 +26,7 @@
 #include "base/command_line.h"
 #include "base/functional/bind.h"
 #include "base/run_loop.h"
+#include "base/threading/thread_restrictions.h"
 #include "base/task/single_thread_task_runner.h"
 #include "ui/menus/simple_menu_model.h"
 #include "ui/base/mojom/menu_source_type.mojom.h"
@@ -160,6 +161,8 @@ class FlyWorkspaceBrowserTest : public InProcessBrowserTest {
     return result;
   }
   void ExpectVisible(content::WebContents* contents, bool visible) {
+    SCOPED_TRACE(contents->GetVisibleURL().spec());
+    SCOPED_TRACE(visible ? "expected visible" : "expected hidden");
     ASSERT_TRUE(base::test::RunUntil([&] {
       return (contents->GetVisibility() == content::Visibility::VISIBLE) ==
              visible;
@@ -930,10 +933,11 @@ IN_PROC_BROWSER_TEST_F(
           "chrome.runtime.onInstalled.addListener(() => "
           "chrome.windows.create({url:$1}));",
           embedded_test_server()->GetURL("/title1.html").spec()));
-  BrowserCreatedWaiter created;
+  auto created = std::make_unique<BrowserCreatedWaiter>();
   extensions::ChromeTestExtensionLoader loader(first->GetProfile());
   ASSERT_TRUE(loader.LoadExtension(directory.UnpackedPath()));
-  auto* second = created.Wait();
+  auto* second = created->Wait();
+  created.reset();
   ASSERT_TRUE(second);
   auto& window = FlyWindowController::Get();
   ASSERT_TRUE(base::test::RunUntil([&] { return window.IsSelected(second); }));
@@ -975,10 +979,11 @@ IN_PROC_BROWSER_TEST_F(
           "chrome.runtime.onInstalled.addListener(() => "
           "chrome.windows.create({url:$1,focused:false}));",
           embedded_test_server()->GetURL("/title1.html").spec()));
-  BrowserCreatedWaiter created;
+  auto created = std::make_unique<BrowserCreatedWaiter>();
   extensions::ChromeTestExtensionLoader loader(first->GetProfile());
   ASSERT_TRUE(loader.LoadExtension(directory.UnpackedPath()));
-  auto* second = created.Wait();
+  auto* second = created->Wait();
+  created.reset();
   ASSERT_TRUE(second);
   ASSERT_TRUE(base::test::RunUntil([&] {
     return window.workspace_buttons_for_testing()->children().size() == 3 &&
@@ -1043,11 +1048,17 @@ class FlySessionRestoreBrowserTest : public FlyWorkspaceBrowserTest {
                  "second"));
     auto json = base::WriteJson(state);
     ASSERT_TRUE(json);
+    {
+    base::ScopedAllowBlockingForTesting allow_fixture_io;
     ASSERT_TRUE(base::WriteFile(RestoreFixturePath(), *json));
+  }
   }
   void ExpectSessionFixture(bool explicit_blank) {
     std::string data;
+    {
+    base::ScopedAllowBlockingForTesting allow_fixture_io;
     ASSERT_TRUE(base::ReadFileToString(RestoreFixturePath(), &data));
+  }
     const auto saved = base::JSONReader::ReadDict(data, base::JSON_PARSE_RFC);
     ASSERT_TRUE(saved);
     ASSERT_TRUE(saved->FindString("active_id"));
@@ -1170,7 +1181,8 @@ IN_PROC_BROWSER_TEST_F(FlyWorkspaceBrowserTest,
   )js"));
   auto& window = FlyWindowController::Get();
   window.Select(browser(), true);
-  ui::test::EventGenerator keys(window.desktop_widget()->GetNativeWindow());
+  ui::test::EventGenerator keys(
+      window.desktop_widget()->GetNativeWindow()->GetRootWindow());
   keys.PressKey(ui::VKEY_F, ui::EF_ALT_DOWN);
   ASSERT_TRUE(base::test::RunUntil([&] {
     return window.hints().active() &&
@@ -1195,7 +1207,8 @@ IN_PROC_BROWSER_TEST_F(FlyWorkspaceBrowserTest,
   ASSERT_EQ(&window, FlyWindowController::GetIfCreated());
   EXPECT_EQ(nullptr, window.selected_browser_for_testing());
   EXPECT_TRUE(window.desktop_widget()->IsVisible());
-  ui::test::EventGenerator keys(window.desktop_widget()->GetNativeWindow());
+  ui::test::EventGenerator keys(
+      window.desktop_widget()->GetNativeWindow()->GetRootWindow());
   keys.PressKey(ui::VKEY_T, ui::EF_CONTROL_DOWN);
   ASSERT_TRUE(base::test::RunUntil(
       [&] { return window.selected_browser_for_testing() != nullptr; }));
@@ -1261,7 +1274,8 @@ IN_PROC_BROWSER_TEST_F(FlyWorkspaceBrowserTest,
   ASSERT_TRUE(keyboard);
   auto* pointer = window.preferences_button_for_testing();
   ASSERT_TRUE(pointer && pointer->GetEnabled());
-  ui::test::EventGenerator keys(window.desktop_widget()->GetNativeWindow());
+  ui::test::EventGenerator keys(
+      window.desktop_widget()->GetNativeWindow()->GetRootWindow());
   keys.MoveMouseTo(pointer->GetBoundsInScreen().CenterPoint());
   keys.ClickLeftButton();
   auto& editor = window.keyboard_editor();
@@ -1367,7 +1381,8 @@ IN_PROC_BROWSER_TEST_F(FlyWorkspaceBrowserTest,
   ASSERT_TRUE(window.RunCommand(browser(), "toggle-help"));
   auto& editor = window.keyboard_editor();
   ASSERT_TRUE(editor.active());
-  ui::test::EventGenerator keys(window.desktop_widget()->GetNativeWindow());
+  ui::test::EventGenerator keys(
+      window.desktop_widget()->GetNativeWindow()->GetRootWindow());
   for (auto key : {ui::VKEY_S, ui::VKEY_P, ui::VKEY_A, ui::VKEY_W, ui::VKEY_N})
     keys.PressKey(key, ui::EF_NONE);
   ASSERT_TRUE(base::test::RunUntil([&] {
@@ -1423,7 +1438,8 @@ IN_PROC_BROWSER_TEST_F(FlyWorkspaceBrowserTest,
   auto* record = editor.record_for_testing("scroll-down", true);
   ASSERT_TRUE(record);
   views::test::ButtonTestApi(record).NotifyDefaultMouseClick();
-  ui::test::EventGenerator keys(window.desktop_widget()->GetNativeWindow());
+  ui::test::EventGenerator keys(
+      window.desktop_widget()->GetNativeWindow()->GetRootWindow());
   keys.PressKey(ui::VKEY_Q, ui::EF_NONE);
   EXPECT_TRUE(editor.recording());
   keys.PressKey(ui::VKEY_Q, ui::EF_NONE);
@@ -1447,7 +1463,8 @@ IN_PROC_BROWSER_TEST_F(FlyWorkspaceBrowserTest,
   auto* record = editor.record_for_testing("scroll-down", true);
   ASSERT_TRUE(record);
   views::test::ButtonTestApi(record).NotifyDefaultMouseClick();
-  ui::test::EventGenerator keys(window.desktop_widget()->GetNativeWindow());
+  ui::test::EventGenerator keys(
+      window.desktop_widget()->GetNativeWindow()->GetRootWindow());
   keys.PressKey(ui::VKEY_OEM_1, ui::EF_NONE);
   ASSERT_TRUE(base::test::RunUntil([&] { return !editor.recording(); }));
   EXPECT_EQ(u"J\n;", editor.field_for_testing("scroll-down", true)->GetText());
@@ -1468,7 +1485,8 @@ IN_PROC_BROWSER_TEST_F(FlyWorkspaceBrowserTest,
   auto* record = editor.record_for_testing("go-back", false);
   ASSERT_TRUE(record);
   views::test::ButtonTestApi(record).NotifyDefaultMouseClick();
-  ui::test::EventGenerator keys(window.desktop_widget()->GetNativeWindow());
+  ui::test::EventGenerator keys(
+      window.desktop_widget()->GetNativeWindow()->GetRootWindow());
   keys.PressKey(ui::VKEY_T, ui::EF_CONTROL_DOWN);
   views::test::ButtonTestApi(editor.save_for_testing()).NotifyDefaultMouseClick();
   EXPECT_TRUE(editor.active());
@@ -1495,7 +1513,8 @@ IN_PROC_BROWSER_TEST_F(FlyWorkspaceBrowserTest,
   auto* record = editor.record_for_testing("scroll-down", true);
   ASSERT_TRUE(record);
   views::test::ButtonTestApi(record).NotifyDefaultMouseClick();
-  ui::test::EventGenerator keys(window.desktop_widget()->GetNativeWindow());
+  ui::test::EventGenerator keys(
+      window.desktop_widget()->GetNativeWindow()->GetRootWindow());
   keys.PressKey(ui::VKEY_Q, ui::EF_NONE);
   keys.PressKey(ui::VKEY_ESCAPE, ui::EF_NONE);
   EXPECT_FALSE(editor.recording());
@@ -1521,7 +1540,8 @@ IN_PROC_BROWSER_TEST_F(FlyWorkspaceBrowserTest,
                               "document.querySelector('#editable').focus()"));
   auto& window = FlyWindowController::Get();
   window.Select(browser(), true);
-  ui::test::EventGenerator keys(window.desktop_widget()->GetNativeWindow());
+  ui::test::EventGenerator keys(
+      window.desktop_widget()->GetNativeWindow()->GetRootWindow());
   keys.PressKey(ui::VKEY_P, ui::EF_CONTROL_DOWN);
   ASSERT_TRUE(base::test::RunUntil([&] { return window.palette().active(); }));
   for (auto key : {ui::VKEY_D, ui::VKEY_U, ui::VKEY_P, ui::VKEY_L, ui::VKEY_I,
@@ -1555,7 +1575,8 @@ IN_PROC_BROWSER_TEST_F(FlyWorkspaceBrowserTest,
   config.FindDict("shortcuts")
       ->Set("toggle-palette", base::ListValue().Append("Alt+P"));
   ASSERT_TRUE(window.commands().Save(config).config);
-  ui::test::EventGenerator keys(window.desktop_widget()->GetNativeWindow());
+  ui::test::EventGenerator keys(
+      window.desktop_widget()->GetNativeWindow()->GetRootWindow());
   keys.PressKey(ui::VKEY_P, ui::EF_ALT_DOWN);
   ASSERT_TRUE(base::test::RunUntil([&] { return window.palette().active(); }));
   keys.PressKey(ui::VKEY_P, ui::EF_ALT_DOWN);
@@ -1588,7 +1609,8 @@ IN_PROC_BROWSER_TEST_F(FlyWorkspaceBrowserTest,
     document.body.innerHTML = '<a href="https://example.invalid/fixture" '
       + 'style="position:fixed;left:20px;top:20px;width:180px;height:40px;display:block">Link</a>';
   )js"));
-  ui::test::EventGenerator pointer(window.desktop_widget()->GetNativeWindow());
+  ui::test::EventGenerator pointer(
+      window.desktop_widget()->GetNativeWindow()->GetRootWindow());
   const auto bounds = contents->GetRenderWidgetHostView()->GetViewBounds();
   pointer.MoveMouseTo(bounds.origin() + gfx::Vector2d(40, 35));
   ASSERT_TRUE(base::test::RunUntil([&] {
@@ -1675,7 +1697,8 @@ IN_PROC_BROWSER_TEST_F(FlyWorkspaceBrowserTest,
   EXPECT_EQ(ui::ColorProviderKey::ColorMode::kLight, mode());
   EXPECT_EQ("entry", content::EvalJs(first, "document.activeElement.id"));
   EXPECT_EQ(true, content::EvalJs(first, "document.hasFocus()"));
-  ui::test::EventGenerator keys(window.desktop_widget()->GetNativeWindow());
+  ui::test::EventGenerator keys(
+      window.desktop_widget()->GetNativeWindow()->GetRootWindow());
   keys.PressKey(ui::VKEY_J, ui::EF_NONE);
   ASSERT_TRUE(base::test::RunUntil([&] {
     return content::EvalJs(first, "document.querySelector('#entry').value")
@@ -1743,7 +1766,8 @@ IN_PROC_BROWSER_TEST_F(FlyWorkspaceBrowserTest,
   const int count = second->GetTabStripModel()->count();
   auto* pointer = window.bookmarks_button_for_testing();
   ASSERT_TRUE(pointer && pointer->GetEnabled());
-  ui::test::EventGenerator keys(window.desktop_widget()->GetNativeWindow());
+  ui::test::EventGenerator keys(
+      window.desktop_widget()->GetNativeWindow()->GetRootWindow());
   keys.MoveMouseTo(pointer->GetBoundsInScreen().CenterPoint());
   keys.ClickLeftButton();
   auto& picker = window.bookmark_picker();
@@ -1790,7 +1814,8 @@ IN_PROC_BROWSER_TEST_F(FlyWorkspaceBrowserTest,
   search->SetText(u"alphaX");
   picker.ContentsChanged(search, std::u16string(search->GetText()));
   search->SetSelectedRange(gfx::Range(0));
-  ui::test::EventGenerator keys(window.desktop_widget()->GetNativeWindow());
+  ui::test::EventGenerator keys(
+      window.desktop_widget()->GetNativeWindow()->GetRootWindow());
   keys.PressKey(ui::VKEY_DELETE, ui::EF_NONE);
   ASSERT_TRUE(base::test::RunUntil([&] { return search->GetText() == u"lphaX"; }));
   EXPECT_EQ(2u, window.bookmarks().Read()->size());
@@ -1849,7 +1874,7 @@ class FlyTabMenuBrowserTest : public FlyWorkspaceBrowserTest {
               *inspected = true;
             }, sidebar, &inspected, std::move(inspect)));
     ui::test::EventGenerator mouse(
-        FlyWindowController::Get().desktop_widget()->GetNativeWindow());
+        FlyWindowController::Get().desktop_widget()->GetNativeWindow()->GetRootWindow());
     mouse.MoveMouseTo(control->GetBoundsInScreen().CenterPoint());
     mouse.ClickRightButton();
     ASSERT_TRUE(base::test::RunUntil([&] { return inspected; }));
@@ -1990,7 +2015,8 @@ IN_PROC_BROWSER_TEST_F(FlyPageScrollBrowserTest,
   )js"));
   auto& window = FlyWindowController::Get();
   window.Select(browser(), true);
-  ui::test::EventGenerator keys(window.desktop_widget()->GetNativeWindow());
+  ui::test::EventGenerator keys(
+      window.desktop_widget()->GetNativeWindow()->GetRootWindow());
   auto wait_offset = [&](const char* axis, int offset) {
     return base::test::RunUntil([&] {
       return content::EvalJs(
@@ -2067,7 +2093,8 @@ IN_PROC_BROWSER_TEST_F(FlyPageScrollBrowserTest,
   window.Select(browser(), true);
   ASSERT_TRUE(base::test::RunUntil(
       [&] { return contents->GetFocusedFrame() == child; }));
-  ui::test::EventGenerator keys(window.desktop_widget()->GetNativeWindow());
+  ui::test::EventGenerator keys(
+      window.desktop_widget()->GetNativeWindow()->GetRootWindow());
   keys.PressKey(ui::VKEY_J, ui::EF_NONE);
   ASSERT_TRUE(base::test::RunUntil([&] {
     return content::EvalJs(child, "Math.round(scrollY)").ExtractInt() == 80;
