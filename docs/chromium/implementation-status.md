@@ -5,29 +5,41 @@ No native application, migration or package has passed acceptance yet.
 
 ## Current checkpoint
 
-PR [#113](https://github.com/Arzuparreta/fly-browser/pull/113) merged as
-`3a34888` after latest-head ordinary checks and the explicit native matrix passed.
-[Run 39075312206](https://github.com/Arzuparreta/fly-browser/actions/runs/39075312206)
-built and executed all 26 native service tests on **Linux, macOS and Windows**;
-all 27 Python tooling contracts also passed on all three. Downloaded
-`native-core-tests.json` files each contain 26 SUCCESS results, under external
-`evidence/ci-sidebar-final/`. These are service tests, not browser acceptance.
+PR [114](https://github.com/Arzuparreta/fly-browser/pull/114) is merged as
+`485d4bc`. Its latest-head ordinary checks and manual matrix 39078704053 passed;
+all three official native service summaries contain 31 SUCCESS results.
 
-The follow-up work is consolidated on `codex/chromium-browser-test-runner`,
-rebased onto that merged main: native hints, empty-window handling, focused page
-scrolling, command palette and a scoped browser-test executable. This replaces
-the earlier dependent-branch delivery sequence; the old pushed branches preserve
-intermediate checkpoints. The combined branch has 15 browser tests awaiting
-execution, 31 service tests passing in the pinned local partial runner, and
-successful full native GN generation/header checks in an isolated source shadow.
-The updated official 31-test matrix is in progress in run 39078704053.
-No source overlay has been applied to the engine checkout. The initial complete
-control built successfully, matches its recorded executable hash, and passed
-its input/native visibility/pause/background-audio fixtures with and without the
-MV3 probe. H264/AAC video was correctly rejected by that initial configuration;
-the dependent media branch enables real decoding in the common control/native
-GN preset and adds a synthetic MP4 fixture. A matching control rebuild and
-native build/browser tests are the next runtime gates.
+PR [115](https://github.com/Arzuparreta/fly-browser/pull/115) at `39d68ec` adds
+shared-window geometry, workspace window selection/background focus, matching
+H264/AAC, native session startup, private workspaces and bounded manual CI.
+Its ordinary checks pass; latest-head manual runs 39120988598 (object compilation)
+and 39120990306 (service execution) are in progress on all three platforms.
+No open PR is a completed delivery or native runtime acceptance.
+
+The codec-matched unmodified control has completed and passes actual video/MV3
+and PCM audio fixtures (`control-smoke-a47ZFT` and `control-smoke-X0emxw`). Both
+control outputs remain independent. The full CI attempt at an earlier head timed
+out on Linux/macOS and lost the Windows runner; those are unverified builds.
+
+The external engine source now has the nine-patch native overlay from clean
+commit `b98cae4`, fingerprint
+`75a051104f8d5ef10732edca9b7144b01a7e18a9b65294694661af17390f07a0`.
+User unit `fly-chromium-native-build.service` is compiling the complete browser.
+`fly-chromium-native-acceptance.service` waits for successful compilation, then
+runs native services, the 23-case scoped browser suite and native video/audio
+fixtures. It records each actual exit status and keeps independent failures.
+Logs and transaction state live under `/mnt/storage/fly-chromium/evidence/` and
+`native-build-systemd.log` / `native-acceptance-systemd.log`. This pipeline is
+running, not a completed native test result.
+
+The sidebar worktree on `codex/chromium-native-runtime` must remain frozen through
+both services. Follow-up source work uses the hints worktree; the current
+`codex/chromium-native-privacy-defaults` branch adds a tenth patch and a 24th
+browser case, outside the running build. Before editing/reapplying its source,
+inspect both units and stop their owned processes if changes are necessary.
+The immediate runtime gate is the first complete native build and those actual
+browser/media results; fix failures before claiming M1. The rest of M2-M6 remains
+open, including macOS embedding, complete product UI/services, import and packages.
 
 ## Source and working state
 
@@ -56,10 +68,10 @@ native build/browser tests are the next runtime gates.
   it spent minutes reading upstream headers on the HDD. The control now uses
   upstream's normal `gn gen out/FlyControl`; compiler/header checks for Fly
   integration belong to its changed targets. Normal generation passed: 35,976
-  targets from 5,063 files in 57.174 seconds. The full `chrome` build is running;
-  no completed browser executable exists yet.
-  The external `.fly-engine-operation/owner.json` identifies the current process;
-  `configure-native.log` and `build.log` hold generation/build output.
+  targets from 5,063 files in 57.174 seconds. Both source-unmodified controls
+  have since completed. Full native compilation is now active as described above.
+  The external `.fly-engine-operation/owner.json` identifies the current engine
+  operation. Earlier configure/build logs remain historical evidence.
 
 ## Decisions and topology
 
@@ -100,8 +112,8 @@ live source or destination data has been modified.
 
 | Milestone | Status | Evidence / remaining gate |
 | --- | --- | --- |
-| M0 | pending | Source/tools/dependencies/hooks, generation and contract capture pass; control build/launch and audio/MV3 fixtures pass; codec-matched rebuild and clean second checkout outstanding |
-| M1 | pending | Native topology, shell, split and extension probe outstanding |
+| M0 | pending | Source/tools/dependencies/hooks, generation and contract capture pass; control builds/launch and codec-matched audio/video/MV3 fixtures pass; clean second checkout outstanding |
+| M1 | pending | Native source implemented, full compilation and 23-case runtime suite in progress; macOS adapter outstanding |
 | M2 | pending | Commands, preferences and product UI outstanding |
 | M3 | pending | Native services, blocker and user content outstanding |
 | M4 | pending | Import, recovery and rollback outstanding |
@@ -847,3 +859,24 @@ remaining M0-M6 acceptance still require execution.
 The object resolver finds 31 compiler edges with no exclusions in the actual
 Linux native GN graph (`evidence/ci-objects-actual-plan.json`). This checks target
 selection only; hosted object compilation has not yet run on this branch.
+
+## Account and vault defaults source
+
+The dependent `codex/chromium-native-privacy-defaults` branch adds patch ten at
+the native profile preference registration seam, after keyed services register
+their preferences. For the development-native gate it disables browser sign-in
+(including the next-startup setting), password saving/autosign-in, browser passkey
+storage and automatic passkey upgrades by default. It changes native default
+values; user and enterprise preference precedence remains native. It does not
+copy an account/password database or disable website WebAuthn authenticators.
+
+A 24th browser case checks both newly created normal profiles and their OTR
+profile. The profile utility and 24-case browser-test source pass pinned compiler syntax
+checks. The full private GN graph generates and both Fly/profile utility header
+ownership checks pass (`privacy-defaults-gn.log`). All ten patches preflight over
+22 upstream files without modifying the active build source. Linked execution is
+pending. This branch is outside the frozen running 23-case build.
+Telemetry and the rest of the product privacy/service acceptance remain separate
+unverified gates. The running local acceptance pipeline waits for the complete
+build and will record native unit/browser/media exit statuses automatically; it
+does not turn an attempted stage into a pass.

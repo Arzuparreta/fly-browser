@@ -47,6 +47,8 @@
 #include "net/dns/mock_host_resolver.h"
 #include "net/test/embedded_test_server/embedded_test_server.h"
 #include "components/prefs/pref_service.h"
+#include "components/password_manager/core/common/password_manager_pref_names.h"
+#include "components/signin/public/base/signin_pref_names.h"
 #include "ui/aura/window.h"
 #include "ui/aura/window_tree_host.h"
 #include "ui/base/base_window.h"
@@ -193,6 +195,27 @@ IN_PROC_BROWSER_TEST_F(FlyWorkspaceBrowserTest,
                                      "localStorage.getItem('workspace')"));
   EXPECT_EQ("workspace=second",
             content::EvalJs(Active(second), "document.cookie"));
+}
+
+IN_PROC_BROWSER_TEST_F(FlyWorkspaceBrowserTest,
+                       NewNativeProfilesDoNotEnableBrowserAccountsOrVault) {
+  auto check_defaults = [](Profile* profile) {
+    auto* prefs = profile->GetPrefs();
+    EXPECT_FALSE(prefs->GetBoolean(prefs::kSigninAllowed));
+    EXPECT_FALSE(prefs->GetBoolean(prefs::kSigninAllowedOnNextStartup));
+    for (const char* name : {
+             password_manager::prefs::kCredentialsEnableService,
+             password_manager::prefs::kCredentialsEnableAutosignin,
+             password_manager::prefs::kCredentialsEnablePasskeys,
+             password_manager::prefs::kAutomaticPasskeyUpgrades}) {
+      EXPECT_FALSE(prefs->GetBoolean(name)) << name;
+    }
+  };
+  check_defaults(browser()->GetProfile());
+  auto* second = SecondWorkspace();
+  ASSERT_TRUE(second);
+  check_defaults(second->GetProfile());
+  check_defaults(second->GetProfile()->GetPrimaryOTRProfile(true));
 }
 
 IN_PROC_BROWSER_TEST_F(FlyWorkspaceBrowserTest,

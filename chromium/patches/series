@@ -8,3 +8,4 @@
 0007-native-command-palette.patch
 0008-native-window-geometry.patch
 0009-native-session-startup.patch
+0010-native-private-product-defaults.patch
