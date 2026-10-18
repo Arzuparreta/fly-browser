@@ -13,6 +13,9 @@
 #include "base/memory/raw_ptr.h"
 #include "base/memory/weak_ptr.h"
 #include "fly/commands/command_service.h"
+#include "fly/preferences/preferences_service.h"
+#include "base/timer/timer.h"
+#include "components/prefs/pref_change_registrar.h"
 #include "fly/workspaces/workspace_service.h"
 #include "ui/events/event_handler.h"
 #include "ui/views/widget/widget.h"
@@ -24,6 +27,7 @@ class Profile;
 class ScopedKeepAlive;
 namespace views {
 class NativeViewHost;
+class MdTextButton;
 class View;
 class Label;
 }  // namespace views
@@ -57,6 +61,8 @@ class FlyWindowController : public views::WidgetDelegate,
   bool has_selected_browser() const { return selected_ != nullptr; }
   views::Widget* desktop_widget() const { return desktop_.get(); }
   CommandService& commands() { return commands_; }
+  PreferencesService& preferences() { return preferences_; }
+  views::MdTextButton* clock_for_testing() { return clock_; }
   BrowserWindowInterface* selected_browser_for_testing() { return selected_; }
   CommandPalette& palette() { return *palette_; }
   KeyboardEditor& keyboard_editor() { return *keyboard_editor_; }
@@ -85,6 +91,9 @@ class FlyWindowController : public views::WidgetDelegate,
     uint64_t order = 0;
     base::CallbackListSubscription closed_subscription;
   };
+  void UpdateClock();
+  void CycleClockFormat();
+  void OnWidgetVisibilityChanged(views::Widget*, bool visible) override;
   void ScheduleWorkspaceRefresh();
   void RebuildWorkspaceButtons();
   void SelectWindow(base::WeakPtr<BrowserWindowInterface> browser);
@@ -99,6 +108,9 @@ class FlyWindowController : public views::WidgetDelegate,
 
   WorkspaceService workspaces_;
   CommandService commands_;
+  PreferencesService preferences_;
+  PrefChangeRegistrar preferences_registrar_;
+  base::RepeatingTimer clock_timer_;
   std::unique_ptr<HintController> hints_;
   std::unique_ptr<CommandPalette> palette_;
   std::unique_ptr<KeyboardEditor> keyboard_editor_;
@@ -109,6 +121,7 @@ class FlyWindowController : public views::WidgetDelegate,
   raw_ptr<views::View> workspace_buttons_ = nullptr;
   raw_ptr<views::View> content_ = nullptr;
   raw_ptr<views::Label> status_ = nullptr;
+  raw_ptr<views::MdTextButton> clock_ = nullptr;
   raw_ptr<TabSidebar> tab_sidebar_ = nullptr;
   std::map<BrowserWindowInterface*, Entry> entries_;
   raw_ptr<BrowserWindowInterface> selected_ = nullptr;

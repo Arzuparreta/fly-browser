@@ -75,6 +75,7 @@ FlyWindowController* FlyWindowController::GetIfCreated() {
 FlyWindowController::FlyWindowController()
     : workspaces_(*g_browser_process->local_state()),
       commands_(*g_browser_process->local_state()),
+      preferences_(*g_browser_process->local_state()),
       keep_alive_(
           std::make_unique<ScopedKeepAlive>(KeepAliveOrigin::FLY_WINDOW,
                                             KeepAliveRestartOption::DISABLED)),
@@ -104,6 +105,10 @@ FlyWindowController::FlyWindowController()
           &FlyWindowController::CreateTab, weak_factory_.GetWeakPtr())));
   sidebar_layout->SetFlexForView(tab_sidebar_, 1);
   status_ = sidebar->AddChildView(std::make_unique<views::Label>(u"NORMAL"));
+  clock_ = sidebar->AddChildView(std::make_unique<views::MdTextButton>(
+      base::BindRepeating(&FlyWindowController::CycleClockFormat,
+                          weak_factory_.GetWeakPtr()), u""));
+  clock_->SetStyle(ui::ButtonStyle::kText);
   root->AddChildView(std::move(sidebar));
   content_ = root->AddChildView(std::make_unique<views::View>());
   content_->SetLayoutManager(std::make_unique<views::FillLayout>());
@@ -146,6 +151,11 @@ FlyWindowController::FlyWindowController()
           weak_factory_.GetWeakPtr()));
   keyboard_editor_ = std::make_unique<KeyboardEditor>(desktop_.get(), commands_);
   desktop_->AddObserver(this);
+  preferences_registrar_.Init(g_browser_process->local_state());
+  preferences_registrar_.Add(kPreferencesPref,
+      base::BindRepeating(&FlyWindowController::UpdateClock,
+                          weak_factory_.GetWeakPtr()));
+  UpdateClock();
   desktop_->GetNativeWindow()->AddPreTargetHandler(this);
   ArmCloseCallback();
   close_subscription_ = chrome::AddClosingAllBrowsersCallback(
@@ -157,6 +167,8 @@ FlyWindowController::FlyWindowController()
 FlyWindowController::~FlyWindowController() {
   CHECK(entries_.empty());
   weak_factory_.InvalidateWeakPtrs();
+  clock_timer_.Stop();
+  preferences_registrar_.RemoveAll();
   keyboard_editor_.reset();
   palette_.reset();
   hints_.reset();
@@ -167,8 +179,39 @@ FlyWindowController::~FlyWindowController() {
   workspace_buttons_ = nullptr;
   content_ = nullptr;
   status_ = nullptr;
+  clock_ = nullptr;
   tab_sidebar_ = nullptr;
   desktop_.reset();
+}
+
+void FlyWindowController::UpdateClock() {
+  const auto settings = preferences_.ReadClock();
+  const bool visible = settings && settings->visible;
+  if (!visible && clock_->HasFocus() && selected_) {
+    if (auto* contents = selected_->GetTabStripModel()->GetActiveWebContents())
+      contents->Focus();
+  }
+  clock_->SetVisible(visible);
+  clock_->SetEnabled(preferences_.CanEditClock());
+  if (!visible || !desktop_->IsVisible()) {
+    clock_timer_.Stop();
+    return;
+  }
+  const auto text = FormatClock(base::Time::Now(), settings->format);
+  if (clock_->GetText() != text.label)
+    clock_->SetText(text.label);
+  if (clock_->GetTooltipText() != text.tooltip)
+    clock_->SetTooltipText(text.tooltip);
+  if (!clock_timer_.IsRunning())
+    clock_timer_.Start(FROM_HERE, base::Seconds(1),
+        base::BindRepeating(&FlyWindowController::UpdateClock,
+                            weak_factory_.GetWeakPtr()));
+}
+void FlyWindowController::CycleClockFormat() {
+  preferences_.CycleClockFormat();
+}
+void FlyWindowController::OnWidgetVisibilityChanged(views::Widget*, bool) {
+  UpdateClock();
 }
 
 void FlyWindowController::Prepare(BrowserWindowInterface* browser) {
@@ -645,6 +688,10 @@ bool FlyWindowController::RunCommand(BrowserWindowInterface* browser,
     keyboard_editor_->Cancel();
     hints_->Toggle(browser->GetTabStripModel()->GetActiveWebContents());
     return true;
+  }
+  if (action == "toggle-clock") {
+    const auto clock = preferences_.ReadClock();
+    return clock && preferences_.SetClockVisible(!clock->visible);
   }
   if (action == "toggle-help") {
     hints_->Cancel();

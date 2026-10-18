@@ -1,0 +1,50 @@
+--- a/chrome/browser/ui/BUILD.gn
++++ b/chrome/browser/ui/BUILD.gn
+@@ -1107,7 +1107,7 @@
+     "//ui/webui",
+   ]
+   if (is_linux || is_win) {
+-    deps += [ "//fly:workspaces", "//fly:commands", "//ui/accessibility", "//ui/wm" ]
++    deps += [ "//fly:workspaces", "//fly:commands", "//fly:preferences", "//ui/accessibility", "//ui/wm" ]
+   }
+   deps += [ "//fly:session_metadata" ]
+ 
+--- a/chrome/browser/prefs/BUILD.gn
++++ b/chrome/browser/prefs/BUILD.gn
+@@ -60,6 +60,7 @@
+   deps = [
+     "//fly:workspaces",
+     "//fly:commands",
++    "//fly:preferences",
+     ":prefs",
+     ":util",
+     "//chrome/browser:browser_process",
+--- a/chrome/browser/prefs/browser_prefs.cc
++++ b/chrome/browser/prefs/browser_prefs.cc
+@@ -6,6 +6,7 @@
+ 
+ #include "fly/workspaces/workspace_service.h"
+ #include "fly/commands/command_service.h"
++#include "fly/preferences/preferences_service.h"
+ 
+ #include <array>
+ #include <optional>
+@@ -1418,6 +1419,7 @@
+ void RegisterLocalState(PrefRegistrySimple* registry) {
+   fly::WorkspaceService::RegisterLocalStatePrefs(registry);
+   fly::CommandService::RegisterLocalStatePrefs(registry);
++  fly::PreferencesService::RegisterLocalStatePrefs(registry);
+   // Call outs to individual subsystems that register Local State (browser-wide)
+   // prefs en masse. See RegisterProfilePrefs for per-profile prefs. Please
+   // keep this list alphabetized.
+--- a/chrome/test/BUILD.gn
++++ b/chrome/test/BUILD.gn
+@@ -2832,7 +2832,7 @@
+     ]
+     if (is_linux || is_win) {
+       sources += [ "//fly/test/workspace_browser_test.cc" ]
+-      deps += [ "//fly:commands", "//fly:workspaces", "//fly:session_metadata" ]
++      deps += [ "//fly:commands", "//fly:workspaces", "//fly:session_metadata", "//fly:preferences" ]
+     }
+     fuzztests = [ "SafeXmlParserFixture.ParseXML" ]
+     fuzztest_additional_args = [

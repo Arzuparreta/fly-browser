@@ -281,6 +281,10 @@ bool NativeCommandAvailable(BrowserWindowInterface* browser,
                             std::string_view action) {
   if (!browser)
     return false;
+  if (action == "toggle-clock") {
+    auto* window = FlyWindowController::GetIfCreated();
+    return window && window->preferences().CanEditClock();
+  }
   if (action == "toggle-help")
     return FlyWindowController::GetIfCreated() != nullptr;
   if (action == "toggle-private-mode") {

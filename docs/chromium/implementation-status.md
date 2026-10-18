@@ -963,3 +963,37 @@ on the compiling host. Earlier attempts remain recorded: X11 launch timed out at
 30 seconds; headless launched but could not open Preferences through the focused
 shortcut. Neither attempted run is counted as a pass. The new native editor
 still requires actual linked runtime execution and platform acceptance.
+
+## Native clock and first app preferences group
+
+PR [116](https://github.com/Arzuparreta/fly-browser/pull/116) contains native
+keyboard preferences and account/vault defaults, based on PR 115's branch until
+that predecessor passes and merges. Its `b2a30b4` object matrix is run 39124090577.
+The next dependent branch is `codex/chromium-native-clock` in the hints worktree;
+none of these source changes enter the frozen nine-patch local build implicitly.
+
+The native sidebar now has a browser-owned live clock with the existing three
+formats (`datetime`, `time`, `seconds`), local 24-hour time, click-to-cycle,
+keyboard/palette `toggle-clock`, and immediate preference updates. The timer
+stops when the clock or desktop is hidden and never saves on ticks. Visibility
+and format live in `fly.preferences` in native Local State, schema 1 with a
+`values` dictionary. Reads do not write defaults before migration; mutations
+preserve other groups and unknown metadata. Malformed/future data is preserved
+and disables editing. Managed native preference precedence also disables edits.
+This is app presentation state shared across profiles, with no site/private tab
+metadata. The other 26 baseline preferences still need native implementation.
+
+Patch twelve registers the service and its actual GN dependencies, including
+both scoped and upstream browser-test targets. All twelve patches preflight over
+22 upstream files; complete GN generation (35,577 targets) and Fly/UI/profile
+header checks pass in the independent shadow. Six new preferences tests execute
+in the pinned Linux partial service runner: all **37 C++ service tests pass**.
+The raw log is `evidence/clock-native-tests.log`. This runner links actual pinned
+Chromium libraries and gtest; it is not full-browser or GUI acceptance.
+
+The source now has 34 browser declarations (two PRE phases, 32 main cases).
+The added native clock case checks sidebar rendering, no initial tick/default
+write, click format changes, command visibility changes and preserving future
+schema data. Pinned source checks pass; that GUI case remains unexecuted until
+a current native browser/test binary links. No clock acceptance or broader M2
+completion is claimed from the standalone service results.

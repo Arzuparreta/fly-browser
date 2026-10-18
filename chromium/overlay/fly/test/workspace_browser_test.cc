@@ -1099,6 +1099,34 @@ IN_PROC_BROWSER_TEST_F(FlyWorkspaceBrowserTest,
 }
 
 IN_PROC_BROWSER_TEST_F(FlyWorkspaceBrowserTest,
+                       NativeClockUsesLiveAppPreferencesWithoutTickWrites) {
+  auto& window = FlyWindowController::Get();
+  auto* clock = window.clock_for_testing();
+  ASSERT_TRUE(clock);
+  ASSERT_TRUE(base::test::RunUntil([&] {
+    return clock->GetVisible() && !clock->GetText().empty();
+  }));
+  auto* state = g_browser_process->local_state();
+  EXPECT_EQ(nullptr, state->GetUserPrefValue(kPreferencesPref));
+  views::test::ButtonTestApi(clock).NotifyDefaultMouseClick();
+  ASSERT_TRUE(window.preferences().ReadClock());
+  EXPECT_EQ("time", window.preferences().ReadClock()->format);
+  ASSERT_TRUE(NativeCommandAvailable(browser(), "toggle-clock"));
+  ASSERT_TRUE(window.RunCommand(browser(), "toggle-clock"));
+  EXPECT_FALSE(clock->GetVisible());
+  EXPECT_FALSE(window.preferences().ReadClock()->visible);
+  ASSERT_TRUE(window.RunCommand(browser(), "toggle-clock"));
+  EXPECT_TRUE(clock->GetVisible());
+  const auto future = base::DictValue().Set("schema", 2)
+      .Set("values", base::DictValue().Set("show_clock", true));
+  state->SetDict(kPreferencesPref, future.Clone());
+  EXPECT_FALSE(clock->GetVisible());
+  EXPECT_FALSE(NativeCommandAvailable(browser(), "toggle-clock"));
+  EXPECT_FALSE(window.RunCommand(browser(), "toggle-clock"));
+  EXPECT_EQ(future, state->GetDict(kPreferencesPref));
+}
+
+IN_PROC_BROWSER_TEST_F(FlyWorkspaceBrowserTest,
                        NativeKeyboardRecorderSavesWithoutExecutingItsShortcut) {
   auto* contents = Active(browser());
   ASSERT_TRUE(ui_test_utils::NavigateToURL(

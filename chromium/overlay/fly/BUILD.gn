@@ -34,6 +34,17 @@ source_set("commands") {
   deps = [ "//third_party/icu" ]
 }
 
+source_set("preferences") {
+  sources = [
+    "preferences/preferences_service.cc",
+    "preferences/preferences_service.h",
+  ]
+  public_deps = [
+    "//base",
+    "//components/prefs",
+  ]
+}
+
 source_set("session_metadata") {
   sources = [
     "sessions/tab_identity.cc",
@@ -51,10 +62,12 @@ test("fly_unittests") {
     "commands/hint_codes_unittest.cc",
     "commands/keyboard_config_unittest.cc",
     "commands/palette_catalog_unittest.cc",
+    "preferences/preferences_service_unittest.cc",
     "workspaces/workspace_service_unittest.cc",
   ]
   deps = [
     ":commands",
+    ":preferences",
     ":workspaces",
     "//base/test:run_all_unittests",
     "//base/test:test_support",
@@ -73,6 +86,7 @@ if (is_linux || is_win) {
     sources = [ "test/workspace_browser_test.cc" ]
     deps = [
       ":commands",
+    ":preferences",
       ":session_metadata",
       ":workspaces",
       "//base",
