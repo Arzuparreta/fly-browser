@@ -30,6 +30,7 @@
 #include "chrome/browser/lifetime/application_lifetime_desktop.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/profiles/profile_manager.h"
+#include "chrome/browser/profiles/profiles_state.h"
 #include "chrome/browser/ui/browser_commands.h"
 #include "chrome/browser/ui/browser_window/public/browser_window_interface.h"
 #include "chrome/browser/ui/browser_window/public/create_browser_window.h"
@@ -424,6 +425,10 @@ void FlyWindowController::Select(BrowserWindowInterface* browser, bool focus) {
   UpdateModeLabel();
   desktop_->Show();
   if (focus) {
+    // Profile BrowserWidgets share one OS activation. Tell the native startup
+    // coordinator which persistent workspace the user actually selected.
+    if (!closing_ && !browser->GetProfile()->IsOffTheRecord())
+      profiles::SetLastUsedProfile(browser->GetProfile()->GetPath().BaseName());
     desktop_->Activate();
     if (auto* contents = browser->GetTabStripModel()->GetActiveWebContents()) {
       auto* view = contents->GetRenderWidgetHostView();

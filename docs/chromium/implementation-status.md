@@ -47,34 +47,41 @@ also preserves toolbar focus. Hints and both session cases fail; three pointer-m
 cases time out. Both sandboxed media fixtures pass with full runtime provenance.
 The failed summaries are retained; no acceptance gate has been waived.
 
-The follow-up source has 47 browser declarations, including two PRE cases.
-The `68c8856` run exposed a cleanup crash after requesting quit: the client-owned
-Widget outlives its native window. Cleanup must tolerate the native window already
-being gone. The complete application-exit path must also notify Chromium's
-closing-all-browsers observers, not only set its quit flag. The prepared repair
-uses `chrome::AttemptExit()`, guards native handler removal and stops UI timers
-when the desktop is destroyed. A beforeunload regression requires cancellation to
-retain both workspace browsers and leave commands usable.
+The eighteen-patch `0198700` follow-up built and ran 47 browser declarations:
+both PRE cases and 40 of 45 main cases pass. Native page/toolbar focus, hints,
+unrelated-frame deletion, focused cross-origin scrolling and cancellation of
+application quit pass. Three pointer cases and explicit-blank restore time out;
+ordinary restore fails. No browser case crashes. The failed intermediate
+`68c8856` run exposed native-window teardown ordering, repaired by guarding native
+handler removal and stopping UI timers before posted controller cleanup.
 
-Hint diagnostics identify a late `RenderFrameDeleted` notification from a prior
-navigation as the cancellation reason, with native accessibility mode enabled.
-Only deletion of the current main frame or a frame owning hint targets should
-cancel hints. The regression also removes an unrelated empty iframe while hints
-are active and requires the remaining real target to work without focus or
-visibility emulation.
+The next source has nineteen patches. A preserved disposable PRE run confirms
+native Session files contain two windows for Default and one for Profile 1, with
+all expected tab mappings and no close commands. Startup instead opens Chromium's
+multi-profile picker; the Fly workspace selector must be the default startup UX.
+Patch 19 changes only the profile-picker preference default under `--fly-native`,
+retaining explicit user values and forced-picker policy. Explicit persistent
+workspace selection updates Chromium's last-used profile through its public API.
+Both ordinary restart and an explicit command-line blank remain asserted.
 
-Physical pointer diagnostics found tab rows at zero bounds, even after layout
-waiting. The sidebar ScrollView must use its plain content View's preferred size.
-The repair enables this and keeps real clicks within the visible clipped control;
-failures report both Views and Aura hit-test targets. Runtime confirmation of
-these follow-ups remains pending. The failed intermediate run is retained and
-must not count as successful shutdown or native acceptance.
+Pointer diagnostics find rows at zero bounds. Preferred-size scrolling alone
+did not fix the non-layer backend. The next repair bounds the ScrollView height
+so both backends size plain BoxLayout contents; physical clicks must still open
+real menus. The test getter now reports only a running MenuRunner, so a stale
+model from a dismissed menu cannot satisfy a subsequent click. The unrelated
+iframe fixture is positioned outside document flow to isolate frame deletion
+from genuine target movement. Pinned Linux Clang accepts the changed upstream
+profile registration, window controller, sidebar and browser test. Runtime
+confirmation of the nineteen-patch source remains pending. A private full-stack
+preflight and GN checks for Fly, browser UI, profile misc and the focus helper all
+pass against the complete nineteen-patch source.
 
 Current source is developed in the hints worktree, then frozen in the sidebar
 worktree before each managed build. Inspect user units
 `fly-chromium-native-build.service`, `fly-chromium-native-acceptance.service` and
 `fly-chromium-native-summary-audit.service` before editing the frozen checkout or
-engine source. The `98ecc7c` pipeline and audit are complete and failed. Logs and
+engine source. The `0198700` browser suite is complete and failed; its media pipeline must finish
+before changing the frozen source. Logs and
 JSON summaries remain under `/mnt/storage/fly-chromium/evidence`; service output
 is in `current-build-systemd.log`, `current-acceptance-systemd.log` and
 `current-summary-audit.log` under the engine root. No owner profile was accessed.

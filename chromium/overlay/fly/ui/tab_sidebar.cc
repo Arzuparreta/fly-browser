@@ -3,6 +3,7 @@
 // Fly repository.
 #include "fly/ui/tab_sidebar.h"
 
+#include <limits>
 #include <set>
 #include <utility>
 
@@ -99,7 +100,9 @@ class SidebarTabMenu : public ui::SimpleMenuModel::Delegate {
                        views::MenuAnchorPosition::kTopLeft, source);
   }
   void Cancel() { runner_->Cancel(); }
-  ui::SimpleMenuModel* model() { return &model_; }
+  ui::SimpleMenuModel* model() {
+    return runner_->IsRunning() ? &model_ : nullptr;
+  }
   bool IsCommandIdEnabled(int action) const override {
     return Enabled(browser_.get(), contents_.get(), action);
   }
@@ -213,9 +216,9 @@ TabSidebar::TabSidebar(base::RepeatingClosure new_tab) {
       std::make_unique<views::MdTextButton>(std::move(new_tab), u"New tab"));
   add->GetViewAccessibility().SetName(u"New tab in selected workspace");
   auto* scroll = AddChildView(std::make_unique<views::ScrollView>());
-  // A plain contents View does not size itself to its BoxLayout. Let the
-  // viewport use its preferred size, otherwise rows remain at zero bounds.
-  scroll->SetUseContentsPreferredSize(true);
+  // A bounded viewport sizes plain BoxLayout contents on both compositor
+  // scrolling backends. Unbounded contents otherwise retain zero bounds.
+  scroll->ClipHeightTo(0, std::numeric_limits<int>::max());
   scroll->SetHorizontalScrollBarMode(
       views::ScrollView::ScrollBarMode::kDisabled);
   rows_ = scroll->SetContents(std::make_unique<views::View>());

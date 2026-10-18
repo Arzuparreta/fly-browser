@@ -1223,7 +1223,8 @@ IN_PROC_BROWSER_TEST_F(FlyWorkspaceBrowserTest,
   auto* contents = Active(browser());
   ASSERT_TRUE(content::ExecJs(contents, R"js(
     document.body.innerHTML = '<button id="only">Hint fixture</button>' +
-        '<iframe id="unrelated" src="about:blank"></iframe>';
+        '<iframe id="unrelated" src="about:blank" '
+        + 'style="position:absolute;left:400px;top:0"></iframe>';
     document.querySelector('#only').onclick = () => document.title = 'hint activated';
     window.visibilityEvents = 0;
     document.addEventListener('visibilitychange', () => visibilityEvents++);
