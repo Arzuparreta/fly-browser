@@ -3,7 +3,9 @@
 // Fly repository.
 #include "fly/preferences/preferences_service.h"
 
+#include "base/json/json_reader.h"
 #include "components/prefs/testing_pref_service.h"
+#include "fly/commands/generated_contract.h"
 #include "testing/gtest/include/gtest/gtest.h"
 
 namespace fly {
@@ -167,6 +169,73 @@ TEST_F(PreferencesServiceTest,
   EXPECT_EQ(false, service_.ReadStatusBarVisible());
   EXPECT_FALSE(service_.CanEditStatusBar());
   EXPECT_FALSE(service_.SetStatusBarVisible(true));
+  EXPECT_EQ(policy, prefs_.GetDict(kPreferencesPref));
+}
+TEST_F(PreferencesServiceTest, NativeWebsiteThemeMatchesRetainedRuntime) {
+  ASSERT_EQ(ThemePreferences(), service_.ReadTheme());
+  EXPECT_EQ(nullptr, prefs_.GetUserPref(kPreferencesPref));
+  const auto cases =
+      base::JSONReader::ReadList(kWebsiteThemeCasesJSON, base::JSON_PARSE_RFC);
+  ASSERT_TRUE(cases);
+  for (const auto& value : *cases) {
+    const auto& item = value.GetDict();
+    const auto& input = *item.FindDict("input");
+    const ThemePreferences theme{*input.FindString("theme"),
+                                 *input.FindBool("sync_website_theme")};
+    EXPECT_EQ(*item.FindString("expected"),
+              WebsiteUsesDarkTheme(theme) ? "dark" : "light");
+  }
+}
+TEST_F(PreferencesServiceTest,
+       ThemeChoicesPreserveOtherGroupsAndSurviveRestart) {
+  ASSERT_TRUE(service_.CycleClockFormat());
+  ASSERT_TRUE(service_.SetStatusBarVisible(false));
+  auto stored = prefs_.GetDict(kPreferencesPref).Clone();
+  stored.EnsureDict("values")->Set("theme_colors",
+                                   base::DictValue().Set("future", "preserve"));
+  prefs_.SetDict(kPreferencesPref, std::move(stored));
+  ASSERT_TRUE(service_.ToggleTheme());
+  ASSERT_TRUE(service_.SetWebsiteThemeSync(false));
+  PreferencesService restarted(prefs_);
+  ASSERT_TRUE(restarted.ReadTheme());
+  EXPECT_EQ("light", restarted.ReadTheme()->mode);
+  EXPECT_FALSE(restarted.ReadTheme()->sync_websites);
+  ASSERT_TRUE(restarted.ToggleTheme());
+  EXPECT_EQ("dark", restarted.ReadTheme()->mode);
+  EXPECT_FALSE(WebsiteUsesDarkTheme(*restarted.ReadTheme()));
+  EXPECT_EQ("time", restarted.ReadClock()->format);
+  EXPECT_EQ(false, restarted.ReadStatusBarVisible());
+  EXPECT_EQ("preserve", *prefs_.GetDict(kPreferencesPref)
+                             .FindDict("values")
+                             ->FindDict("theme_colors")
+                             ->FindString("future"));
+}
+TEST_F(PreferencesServiceTest, MalformedFutureAndPolicyThemeDataIsPreserved) {
+  for (const auto& invalid :
+       {base::DictValue()
+            .Set("schema", 1)
+            .Set("values", base::DictValue().Set("theme", "unknown")),
+        base::DictValue()
+            .Set("schema", 1)
+            .Set("values",
+                 base::DictValue().Set("sync_website_theme", "false")),
+        base::DictValue().Set("schema", 2).Set("values", base::DictValue())}) {
+    prefs_.SetDict(kPreferencesPref, invalid.Clone());
+    EXPECT_FALSE(service_.ReadTheme());
+    EXPECT_FALSE(service_.ToggleTheme());
+    EXPECT_FALSE(service_.SetWebsiteThemeSync(true));
+    EXPECT_EQ(invalid, prefs_.GetDict(kPreferencesPref));
+  }
+  const auto policy =
+      base::DictValue()
+          .Set("schema", 1)
+          .Set("values", base::DictValue().Set("theme", "light"));
+  prefs_.SetManagedPref(kPreferencesPref, base::Value(policy.Clone()));
+  ASSERT_TRUE(service_.ReadTheme());
+  EXPECT_EQ("light", service_.ReadTheme()->mode);
+  EXPECT_FALSE(service_.CanEditTheme());
+  EXPECT_FALSE(service_.ToggleTheme());
+  EXPECT_FALSE(service_.SetWebsiteThemeSync(false));
   EXPECT_EQ(policy, prefs_.GetDict(kPreferencesPref));
 }
 }  // namespace

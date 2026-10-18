@@ -1529,6 +1529,71 @@ IN_PROC_BROWSER_TEST_F(FlyWorkspaceBrowserTest,
   EXPECT_TRUE(status->security_for_testing()->GetText().empty());
 }
 
+IN_PROC_BROWSER_TEST_F(FlyWorkspaceBrowserTest,
+                       NativeThemeUpdatesExistingHiddenAndPrivatePages) {
+  ASSERT_TRUE(ui_test_utils::NavigateToURL(
+      browser(), embedded_test_server()->GetURL("/title1.html")));
+  auto* first = Active(browser());
+  ASSERT_TRUE(content::ExecJs(first, R"js(
+    document.body.innerHTML = '<input id=entry>';
+    document.querySelector('#entry').focus();
+    window.visibilityEvents = 0;
+    document.addEventListener('visibilitychange', () => visibilityEvents++);
+  )js"));
+  auto& window = FlyWindowController::Get();
+  const auto mode = [&] {
+    return window.desktop_widget()->GetColorProviderKeyForTesting().color_mode;
+  };
+  const auto dark = [](content::WebContents* contents) {
+    return content::EvalJs(contents, "matchMedia('(prefers-color-scheme: dark)').matches").ExtractBool();
+  };
+  window.Select(browser(), true);
+  ASSERT_TRUE(base::test::RunUntil([&] {
+    return content::EvalJs(first, "document.hasFocus()").ExtractBool();
+  }));
+  EXPECT_EQ(ui::ColorProviderKey::ColorMode::kDark, mode());
+  ASSERT_TRUE(base::test::RunUntil([&] { return dark(first); }));
+  ASSERT_TRUE(InvokeNativeCommand(browser(), "toggle-theme"));
+  ASSERT_TRUE(base::test::RunUntil([&] { return !dark(first); }));
+  EXPECT_EQ(ui::ColorProviderKey::ColorMode::kLight, mode());
+  EXPECT_EQ("entry", content::EvalJs(first, "document.activeElement.id"));
+  EXPECT_EQ(true, content::EvalJs(first, "document.hasFocus()"));
+  ui::test::EventGenerator keys(window.desktop_widget()->GetNativeWindow());
+  keys.PressKey(ui::VKEY_J, ui::EF_NONE);
+  ASSERT_TRUE(base::test::RunUntil([&] {
+    return content::EvalJs(first, "document.querySelector('#entry').value")
+               .ExtractString() == "j";
+  }));
+  EXPECT_EQ(0, content::EvalJs(first, "visibilityEvents"));
+  auto* second = SecondWorkspace();
+  ASSERT_TRUE(second);
+  ASSERT_TRUE(ui_test_utils::NavigateToURL(second,
+      embedded_test_server()->GetURL("/title1.html")));
+  auto* second_contents = Active(second);
+  ASSERT_TRUE(window.preferences().SetWebsiteThemeSync(false));
+  ASSERT_TRUE(InvokeNativeCommand(second, "toggle-theme"));
+  EXPECT_EQ(ui::ColorProviderKey::ColorMode::kDark, mode());
+  ASSERT_TRUE(base::test::RunUntil([&] { return !dark(first) && !dark(second_contents); }));
+  ASSERT_TRUE(window.preferences().SetWebsiteThemeSync(true));
+  ASSERT_TRUE(base::test::RunUntil([&] { return dark(first) && dark(second_contents); }));
+  ASSERT_TRUE(window.RunCommand(second, "toggle-private-mode"));
+  ASSERT_TRUE(base::test::RunUntil([&] {
+    auto* selected = window.selected_browser_for_testing();
+    return selected && selected->GetProfile()->IsOffTheRecord();
+  }));
+  auto* private_browser = window.selected_browser_for_testing();
+  ASSERT_TRUE(ui_test_utils::NavigateToURL(private_browser,
+      embedded_test_server()->GetURL("/title1.html")));
+  auto* private_contents = Active(private_browser);
+  ASSERT_TRUE(base::test::RunUntil([&] { return dark(private_contents); }));
+  ASSERT_TRUE(window.preferences().SetWebsiteThemeSync(false));
+  ASSERT_TRUE(base::test::RunUntil([&] { return !dark(private_contents); }));
+  EXPECT_EQ(ui::ColorProviderKey::ColorMode::kDark, mode());
+  const auto before = g_browser_process->local_state()->GetDict(kPreferencesPref).Clone();
+  base::RunLoop().RunUntilIdle();
+  EXPECT_EQ(before, g_browser_process->local_state()->GetDict(kPreferencesPref));
+}
+
 class FlyTabMenuBrowserTest : public FlyWorkspaceBrowserTest {
  protected:
   void Menu(content::WebContents* contents,

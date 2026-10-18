@@ -26,10 +26,16 @@ struct ClockText {
   std::u16string tooltip;
 };
 ClockText FormatClock(base::Time time, std::string_view format);
+struct ThemePreferences {
+  std::string mode = "dark";
+  bool sync_websites = true;
+  bool operator==(const ThemePreferences&) const = default;
+};
+bool WebsiteUsesDarkTheme(const ThemePreferences& theme);
 
 // App-wide product preferences, separate from each Profile's native site state.
-// Clock and status-bar presentation are implemented groups. Other settings
-// remain pending; unknown fields in this store are preserved for later groups
+// Clock, footer visibility and light/dark theme are implemented groups. Other
+// settings remain pending; unknown fields are preserved for later groups
 // and importer versions. A malformed/future store requires recovery, never an
 // implicit default write.
 class PreferencesService {
@@ -46,10 +52,15 @@ class PreferencesService {
   std::optional<bool> ReadStatusBarVisible() const;
   bool CanEditStatusBar() const;
   bool SetStatusBarVisible(bool visible);
+  std::optional<ThemePreferences> ReadTheme() const;
+  bool CanEditTheme() const;
+  bool ToggleTheme();
+  bool SetWebsiteThemeSync(bool sync);
 
  private:
   bool ValidStore() const;
   bool SaveClock(const ClockPreferences& clock);
+  bool SaveTheme(const ThemePreferences& theme);
   const raw_ref<PrefService> local_state_;
   SEQUENCE_CHECKER(sequence_checker_);
 };

@@ -16,6 +16,9 @@ bool ValidFormat(std::string_view format) {
   return format == "datetime" || format == "time" || format == "seconds";
 }
 }  // namespace
+bool WebsiteUsesDarkTheme(const ThemePreferences& theme) {
+  return theme.sync_websites && theme.mode == "dark";
+}
 ClockText FormatClock(base::Time time, std::string_view format) {
   if (!ValidFormat(format) || time.is_null())
     return {};
@@ -65,13 +68,59 @@ bool PreferencesService::ValidStore() const {
   const auto* values = stored.FindDict("values");
   if (stored.FindInt("schema") != 1 || !values)
     return false;
-  for (auto key : {"show_clock", "show_status_bar"})
+  for (auto key : {"show_clock", "show_status_bar", "sync_website_theme"})
     if (const auto* value = values->Find(key); value && !value->is_bool())
       return false;
   if (const auto* format = values->Find("clock_format");
       format && (!format->is_string() || !ValidFormat(format->GetString())))
     return false;
+  if (const auto* theme = values->Find("theme");
+      theme && (!theme->is_string() || (theme->GetString() != "dark" &&
+                                        theme->GetString() != "light")))
+    return false;
   return true;
+}
+std::optional<ThemePreferences> PreferencesService::ReadTheme() const {
+  if (!ValidStore())
+    return std::nullopt;
+  ThemePreferences theme;
+  const auto* values =
+      local_state_->GetDict(kPreferencesPref).FindDict("values");
+  if (values) {
+    if (const auto* mode = values->FindString("theme"))
+      theme.mode = *mode;
+    theme.sync_websites = values->FindBool("sync_website_theme").value_or(true);
+  }
+  return theme;
+}
+bool PreferencesService::CanEditTheme() const {
+  return ReadTheme().has_value() &&
+         local_state_->FindPreference(kPreferencesPref)->IsUserModifiable();
+}
+bool PreferencesService::SaveTheme(const ThemePreferences& theme) {
+  if (!CanEditTheme() || (theme.mode != "dark" && theme.mode != "light"))
+    return false;
+  auto stored = local_state_->GetDict(kPreferencesPref).Clone();
+  stored.Set("schema", 1);
+  auto* values = stored.EnsureDict("values");
+  values->Set("theme", theme.mode);
+  values->Set("sync_website_theme", theme.sync_websites);
+  local_state_->SetDict(kPreferencesPref, std::move(stored));
+  return true;
+}
+bool PreferencesService::ToggleTheme() {
+  auto theme = ReadTheme();
+  if (!theme)
+    return false;
+  theme->mode = theme->mode == "dark" ? "light" : "dark";
+  return SaveTheme(*theme);
+}
+bool PreferencesService::SetWebsiteThemeSync(bool sync) {
+  auto theme = ReadTheme();
+  if (!theme)
+    return false;
+  theme->sync_websites = sync;
+  return SaveTheme(*theme);
 }
 std::optional<bool> PreferencesService::ReadStatusBarVisible() const {
   if (!ValidStore())

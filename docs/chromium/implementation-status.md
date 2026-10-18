@@ -5,42 +5,45 @@ No native application, migration or package has passed acceptance yet.
 
 ## Current checkpoint
 
-PR [114](https://github.com/Arzuparreta/fly-browser/pull/114) is merged as
-`485d4bc`. Its latest-head ordinary checks and manual matrix 39078704053 passed;
-all three official native service summaries contain 31 SUCCESS results.
+Merged main includes PR [114](https://github.com/Arzuparreta/fly-browser/pull/114)
+as `485d4bc`. Its ordinary checks and manual matrix 39078704053 passed; all
+three official native service summaries contain 31 SUCCESS results. The subsequent
+PR stack starts at PR [115](https://github.com/Arzuparreta/fly-browser/pull/115).
+Its latest remote checks and explicit CI must finish successfully before merging.
+Official service CI at `e4150ad` passed all 37 cases on Linux, macOS and Windows,
+with downloaded per-test summaries verified. The current development source in the
+hints worktree has fifteen patches, 42 Linux partial service cases and 42 browser
+declarations; the browser cases remain unexecuted. These counts describe different
+source snapshots and validation scopes, not a completed native port.
 
-PR [115](https://github.com/Arzuparreta/fly-browser/pull/115) at `5d76c7e` adds
-shared-window geometry, workspace window selection/background focus, matching
-H264/AAC, native session startup, private workspaces and bounded manual CI.
-Its ordinary checks pass. After fixing Windows product-checkout line endings,
-latest-head manual runs 39123603078 (object compilation) and 39123604736 (service
-execution) are pending or in progress; inspect live results before merging.
-No open PR is a completed delivery or native runtime acceptance.
+The codec-matched unmodified control has built and passed actual video/MV3 and
+PCM audio fixtures (`control-smoke-a47ZFT` and `control-smoke-X0emxw`). Both control
+outputs remain independent. The full CI attempt at an earlier head timed out on
+Linux/macOS and lost the Windows runner; those are unverified builds.
 
-The codec-matched unmodified control has completed and passes actual video/MV3
-and PCM audio fixtures (`control-smoke-a47ZFT` and `control-smoke-X0emxw`). Both
-control outputs remain independent. The full CI attempt at an earlier head timed
-out on Linux/macOS and lost the Windows runner; those are unverified builds.
-
-The external engine source now has the nine-patch native overlay from clean
-commit `b98cae4`, fingerprint
+The full native build and following unit/browser/media pipeline use the clean
+frozen `b98cae4` checkout on `codex/chromium-native-runtime` in the sidebar
+worktree. The external engine source has its nine-patch overlay, fingerprint
 `75a051104f8d5ef10732edca9b7144b01a7e18a9b65294694661af17390f07a0`.
-User unit `fly-chromium-native-build.service` is compiling the complete browser.
-`fly-chromium-native-acceptance.service` waits for successful compilation, then
-runs native services, the 23-case scoped browser suite and native video/audio
-fixtures. It records each actual exit status and keeps independent failures.
-Logs and transaction state live under `/mnt/storage/fly-chromium/evidence/` and
-`native-build-systemd.log` / `native-acceptance-systemd.log`. This pipeline is
-running, not a completed native test result.
+The build was interrupted by a signal after roughly 46,722 compilation steps and
+resumed with the existing output. User units `fly-chromium-native-build.service`
+and `fly-chromium-native-acceptance.service` own these operations; inspect their
+live state before editing that checkout or the managed engine source. Follow-up
+source work uses the hints worktree. The matching inputs are recorded in external
+`evidence/native-preparation.json`; logs are `native-build-systemd.log` and
+`native-acceptance-systemd.log` under `/mnt/storage/fly-chromium/`.
 
-The sidebar worktree on `codex/chromium-native-runtime` must remain frozen through
-both services. Follow-up source work uses the hints worktree; the current
-`codex/chromium-native-privacy-defaults` branch adds a tenth patch and a 24th
-browser case, outside the running build. Before editing/reapplying its source,
-inspect both units and stop their owned processes if changes are necessary.
-The immediate runtime gate is the first complete native build and those actual
-browser/media results; fix failures before claiming M1. The rest of M2-M6 remains
-open, including macOS embedding, complete product UI/services, import and packages.
+The pipeline waits for successful compilation, then runs native services, the
+frozen browser suite and video/audio fixtures, recording every actual exit status.
+That frozen runner predates strict browser-summary verification: independently
+inspect its test summary against its 23 declarations, including PRE cases, before
+accepting a successful process exit. This is a running operation, not a completed
+native test result. Do not edit its inputs during either service.
+
+Next: finish and inspect the frozen build/pipeline, repair actual runtime failures,
+then rebuild and run the complete current source. Finish the remaining M2–M6 work
+and all platform/package/migration acceptance before default cutover. The sections
+below preserve earlier build attempts and decisions.
 
 ## Source and working state
 
@@ -1134,3 +1137,40 @@ exercise both fallback and preservation boundaries.
 `npm test`, 47 Python tooling tests, documentation and whitespace pass locally.
 The retained menu/keyboard disposable-profile regressions passed immediately
 before this footer-only follow-up; native footer GUI acceptance remains pending.
+
+## Native interface and website color scheme
+
+The dependent `codex/chromium-native-theme` branch implements the native
+light/dark action and the `theme`/`sync_website_theme` preference group. The shared
+desktop uses Views color-provider overrides, inherited by its native child
+surfaces. An explicit native background keeps unpainted sidebar/content areas
+consistent with those colors. There is no CSS injection or web API replacement.
+
+The existing Chrome browser-client preference seam maps the selected website
+scheme to actual Blink preferences and native scrollbar appearance. Turning
+website synchronization off selects light, matching the retained product's
+`websiteTheme` function. The generator executes that exact repository function
+to capture all four supported mode/sync combinations for the C++ contract test.
+WebUI, native managed browser-color policy, enterprise isolation, forced colors
+and Chromium's guest-owner preference routing retain their original paths.
+Changes notify native web-theme observers, including hidden/private/extension
+contents, without changing the process-wide OS color preference. Clock ticks do
+not issue theme notifications or write preferences.
+
+Three new native service cases cover the retained contract, restart, independent
+UI/website choices, other-group metadata, malformed/future data and policy.
+All **42 C++ service tests pass** in the pinned Linux partial runner
+(`theme-native-tests.log`). Complete fifteen-patch preflight and independent GN
+checks pass for Fly, UI, browser delegate and browser core (`theme-gn.log`).
+Pinned Clang accepts the controller/dispatcher, modified browser-client
+implementation and all 42 browser declarations (two PRE phases, 40 main cases):
+`theme-ui-syntax-final.log`, `theme-client-syntax.log` and
+`theme-browser-syntax.log`.
+
+The new native browser case checks actual matchMedia output, live changes in
+already loaded/hidden profiles, private contents, native UI color keys, preserved
+editable focus and absence of preference writes from notification processing.
+It remains unexecuted until a current native test executable links. The complete
+running build still uses its frozen nine-patch inputs. Custom theme palettes,
+the general preferences UI and the remaining product settings are still pending;
+this does not pass A04/A15 or complete M2 from source checks alone.

@@ -40,6 +40,9 @@
 #include "ui/base/ime/text_input_client.h"
 #include "ui/base/ime/text_input_type.h"
 #include "ui/events/event.h"
+#include "ui/color/color_id.h"
+#include "ui/native_theme/native_theme.h"
+#include "ui/views/background.h"
 #include "ui/views/accessibility/view_accessibility.h"
 #include "ui/views/controls/button/md_text_button.h"
 #include "ui/views/controls/label.h"
@@ -86,6 +89,7 @@ FlyWindowController::FlyWindowController()
   SetCanMinimize(true);
   SetCanMaximize(true);
   auto root = std::make_unique<views::View>();
+  root->SetBackground(views::CreateSolidBackground(ui::kColorDialogBackground));
   auto* layout = root->SetLayoutManager(std::make_unique<views::BoxLayout>(
       views::BoxLayout::Orientation::kHorizontal));
   auto sidebar = std::make_unique<views::View>();
@@ -162,9 +166,10 @@ FlyWindowController::FlyWindowController()
   desktop_->AddObserver(this);
   preferences_registrar_.Init(g_browser_process->local_state());
   preferences_registrar_.Add(
-      kPreferencesPref, base::BindRepeating(&FlyWindowController::UpdateClock,
-                                            weak_factory_.GetWeakPtr()));
-  UpdateClock();
+      kPreferencesPref,
+      base::BindRepeating(&FlyWindowController::OnPreferencesChanged,
+                          weak_factory_.GetWeakPtr()));
+  OnPreferencesChanged();
   desktop_->GetNativeWindow()->AddPreTargetHandler(this);
   ArmCloseCallback();
   close_subscription_ = chrome::AddClosingAllBrowsersCallback(
@@ -192,6 +197,20 @@ FlyWindowController::~FlyWindowController() {
   clock_ = nullptr;
   tab_sidebar_ = nullptr;
   desktop_.reset();
+}
+
+void FlyWindowController::OnPreferencesChanged() {
+  const auto theme = preferences_.ReadTheme();
+  if (theme && theme != applied_theme_) {
+    applied_theme_ = theme;
+    desktop_->SetColorModeOverride(
+        theme->mode == "dark" ? ui::ColorProviderKey::ColorMode::kDark
+                              : ui::ColorProviderKey::ColorMode::kLight);
+    // Native WebContents observers recompute actual renderer preferences,
+    // including hidden/split/private/extension pages. No web API is replaced.
+    ui::NativeTheme::GetInstanceForWeb()->NotifyOnNativeThemeUpdated();
+  }
+  UpdateClock();
 }
 
 void FlyWindowController::UpdateClock() {
@@ -712,6 +731,8 @@ bool FlyWindowController::RunCommand(BrowserWindowInterface* browser,
     hints_->Toggle(browser->GetTabStripModel()->GetActiveWebContents());
     return true;
   }
+  if (action == "toggle-theme")
+    return preferences_.ToggleTheme();
   if (action == "toggle-status-bar") {
     const auto visible = preferences_.ReadStatusBarVisible();
     return visible && preferences_.SetStatusBarVisible(!*visible);

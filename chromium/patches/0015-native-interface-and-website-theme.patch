@@ -1,0 +1,51 @@
+--- a/chrome/browser/BUILD.gn
++++ b/chrome/browser/BUILD.gn
+@@ -879,6 +879,7 @@
+   }
+ 
+   deps = [
++    "//fly:preferences",
+     ":active_use_util",
+     ":after_startup_task_utils",
+     ":bad_message",
+--- a/chrome/browser/chrome_content_browser_client.cc
++++ b/chrome/browser/chrome_content_browser_client.cc
+@@ -54,6 +54,9 @@
+ #include "build/android_buildflags.h"
+ #include "build/branding_buildflags.h"
+ #include "build/build_config.h"
++#if BUILDFLAG(IS_LINUX) || BUILDFLAG(IS_WIN)
++#include "fly/preferences/preferences_service.h"
++#endif
+ #include "build/config/chromebox_for_meetings/buildflags.h"  // PLATFORM_CFM
+ #include "chrome/browser/accessibility/caption_settings_dialog.h"
+ #include "chrome/browser/actor/actor_commit_deferring_condition.h"
+@@ -4037,6 +4040,28 @@
+           : blink::mojom::PreferredColorScheme::kLight;
+ #endif
+ 
++#if BUILDFLAG(IS_LINUX) || BUILDFLAG(IS_WIN)
++  // Fly's explicit application preference controls actual native web preferences.
++  // Keep internal WebUI, native enterprise policy and forced-colors semantics.
++  if (base::CommandLine::ForCurrentProcess()->HasSwitch("fly-native") &&
++      !security_principal.IsWebUI() &&
++      !profile->IsEnterpriseIsolatedModeProfile() &&
++      !profile->GetPrefs()->IsManagedPreference(prefs::kBrowserColorScheme) &&
++      ui::NativeTheme::GetInstanceForWeb()->forced_colors() ==
++          ui::ColorProviderKey::ForcedColors::kNone && g_browser_process) {
++    auto* state = g_browser_process->local_state();
++    if (state && state->FindPreference(fly::kPreferencesPref)) {
++      fly::PreferencesService preferences(*state);
++      if (const auto theme = preferences.ReadTheme()) {
++        preferred_color_scheme = fly::WebsiteUsesDarkTheme(*theme)
++            ? blink::mojom::PreferredColorScheme::kDark
++            : blink::mojom::PreferredColorScheme::kLight;
++        preferred_root_scrollbar_color_scheme = preferred_color_scheme;
++      }
++    }
++  }
++#endif
++
+ #if BUILDFLAG(ENABLE_GUEST_VIEW)
+   // Guest contents uses the same color scheme as the owner contents.
+   content::WebContents* owner_contents =

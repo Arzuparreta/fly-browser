@@ -7,6 +7,7 @@
 #include <cstdint>
 #include <map>
 #include <memory>
+#include <optional>
 #include <string>
 
 #include "base/callback_list.h"
@@ -100,6 +101,7 @@ class FlyWindowController : public views::WidgetDelegate,
     uint64_t order = 0;
     base::CallbackListSubscription closed_subscription;
   };
+  void OnPreferencesChanged();
   void UpdateClock();
   void CycleClockFormat();
   void OnWidgetVisibilityChanged(views::Widget*, bool visible) override;
@@ -118,6 +120,7 @@ class FlyWindowController : public views::WidgetDelegate,
   WorkspaceService workspaces_;
   CommandService commands_;
   PreferencesService preferences_;
+  std::optional<ThemePreferences> applied_theme_;
   PrefChangeRegistrar preferences_registrar_;
   base::RepeatingTimer clock_timer_;
   std::unique_ptr<HintController> hints_;
