@@ -5,6 +5,7 @@
 #include "fly/commands/keyboard_router.h"
 #include "fly/ui/command_palette.h"
 #include "fly/ui/hint_controller.h"
+#include "fly/ui/keyboard_editor.h"
 #include "fly/ui/native_commands.h"
 #include "fly/ui/tab_sidebar.h"
 
@@ -143,6 +144,7 @@ FlyWindowController::FlyWindowController()
               InvokeNativeCommand(window->selected_, std::move(action));
           },
           weak_factory_.GetWeakPtr()));
+  keyboard_editor_ = std::make_unique<KeyboardEditor>(desktop_.get(), commands_);
   desktop_->AddObserver(this);
   desktop_->GetNativeWindow()->AddPreTargetHandler(this);
   ArmCloseCallback();
@@ -155,6 +157,7 @@ FlyWindowController::FlyWindowController()
 FlyWindowController::~FlyWindowController() {
   CHECK(entries_.empty());
   weak_factory_.InvalidateWeakPtrs();
+  keyboard_editor_.reset();
   palette_.reset();
   hints_.reset();
   desktop_->GetNativeWindow()->RemovePreTargetHandler(this);
@@ -235,6 +238,7 @@ void FlyWindowController::Select(BrowserWindowInterface* browser, bool focus) {
     }
     hints_->Cancel();
     palette_->Cancel();
+    keyboard_editor_->Cancel();
     selected_ = browser;
     tab_sidebar_->SetBrowser(browser);
     auto& next = it->second;
@@ -467,6 +471,7 @@ void FlyWindowController::OnBrowserDidClose(BrowserWindowInterface* browser) {
   if (selected_ == browser) {
     hints_->Cancel();
     palette_->Cancel();
+    keyboard_editor_->Cancel();
     tab_sidebar_->SetBrowser(nullptr);
     selected_ = nullptr;
     if (it->second.widget) {
@@ -551,6 +556,7 @@ void FlyWindowController::RequestClose(views::Widget::ClosedReason reason) {
   }
   hints_->Cancel();
   palette_->Cancel();
+  keyboard_editor_->Cancel();
   closing_ = true;
   if (entries_.empty()) {
     base::SingleThreadTaskRunner::GetCurrentDefault()->PostTask(
@@ -564,6 +570,7 @@ void FlyWindowController::OnClosingAllBrowsers(bool closing) {
   if (closing) {
     hints_->Cancel();
     palette_->Cancel();
+    keyboard_editor_->Cancel();
   }
   closing_ = closing;
   if (closing && entries_.empty()) {
@@ -625,6 +632,7 @@ bool FlyWindowController::RunCommand(BrowserWindowInterface* browser,
     return false;
   if (action == "toggle-palette") {
     hints_->Cancel();
+    keyboard_editor_->Cancel();
     palette_->Toggle(browser->GetTabStripModel()->GetActiveWebContents(),
                      commands_.Read().value_or(DefaultKeyboardConfig()));
     return true;
@@ -634,7 +642,14 @@ bool FlyWindowController::RunCommand(BrowserWindowInterface* browser,
     return true;
   }
   if (action == "trigger-hints") {
+    keyboard_editor_->Cancel();
     hints_->Toggle(browser->GetTabStripModel()->GetActiveWebContents());
+    return true;
+  }
+  if (action == "toggle-help") {
+    hints_->Cancel();
+    palette_->Cancel();
+    keyboard_editor_->Toggle(browser->GetTabStripModel()->GetActiveWebContents());
     return true;
   }
   if (action == "new-workspace") {
@@ -669,6 +684,13 @@ bool FlyWindowController::RunCommand(BrowserWindowInterface* browser,
 
 namespace fly {
 void FlyWindowController::OnKeyEvent(ui::KeyEvent* event) {
+  if (keyboard_editor_->active()) {
+    if (keyboard_editor_->HandleOverlayKey(*event)) {
+      event->SetHandled();
+      event->StopPropagation();
+    }
+    return;
+  }
   if (event->type() != ui::EventType::kKeyPressed || event->is_char())
     return;
   if (palette_->active()) {

@@ -30,6 +30,7 @@ class Label;
 
 namespace fly {
 class CommandPalette;
+class KeyboardEditor;
 class TabSidebar;
 class HintController;
 class KeyboardRouter;
@@ -58,6 +59,7 @@ class FlyWindowController : public views::WidgetDelegate,
   CommandService& commands() { return commands_; }
   BrowserWindowInterface* selected_browser_for_testing() { return selected_; }
   CommandPalette& palette() { return *palette_; }
+  KeyboardEditor& keyboard_editor() { return *keyboard_editor_; }
   HintController& hints() { return *hints_; }
   void UpdateModeLabel();
   TabSidebar* tab_sidebar_for_testing() { return tab_sidebar_; }
@@ -99,6 +101,7 @@ class FlyWindowController : public views::WidgetDelegate,
   CommandService commands_;
   std::unique_ptr<HintController> hints_;
   std::unique_ptr<CommandPalette> palette_;
+  std::unique_ptr<KeyboardEditor> keyboard_editor_;
   std::unique_ptr<KeyboardRouter> empty_router_;
   uint64_t empty_generation_ = 0;
   std::unique_ptr<ScopedKeepAlive> keep_alive_;

@@ -9,11 +9,12 @@ PR [114](https://github.com/Arzuparreta/fly-browser/pull/114) is merged as
 `485d4bc`. Its latest-head ordinary checks and manual matrix 39078704053 passed;
 all three official native service summaries contain 31 SUCCESS results.
 
-PR [115](https://github.com/Arzuparreta/fly-browser/pull/115) at `39d68ec` adds
+PR [115](https://github.com/Arzuparreta/fly-browser/pull/115) at `5d76c7e` adds
 shared-window geometry, workspace window selection/background focus, matching
 H264/AAC, native session startup, private workspaces and bounded manual CI.
-Its ordinary checks pass; latest-head manual runs 39120988598 (object compilation)
-and 39120990306 (service execution) are in progress on all three platforms.
+Its ordinary checks pass. After fixing Windows product-checkout line endings,
+latest-head manual runs 39123603078 (object compilation) and 39123604736 (service
+execution) are pending or in progress; inspect live results before merging.
 No open PR is a completed delivery or native runtime acceptance.
 
 The codec-matched unmodified control has completed and passes actual video/MV3
@@ -920,3 +921,45 @@ byte for byte; a real temporary Git checkout with `core.autocrlf=true` verifies
 both patch/overlay bytes and successful patch preflight. No host-global Git
 setting is needed for these product files. The earlier failed run remains failed;
 the updated remote head must pass fresh CI.
+
+## Native keyboard preferences editor
+
+The dependent `codex/chromium-native-keyboard-editor` branch adds an actual
+browser-owned Views editor, reached through the existing keyboard-help action
+and palette. It exposes every action's global and NORMAL bindings, search,
+numbered-tab modifiers, shortcut recording, per-action clear/default and restore
+all defaults. Each binding occupies one editable line; punctuation such as `;`
+remains an actual key. Recording intercepts native keys before commands, ignores
+repeats and composition/AltGr, and shares the router's two-stroke timeout.
+Escape cancels recording first and closes the editor on a subsequent press.
+
+Edits stay in memory until the shared CommandService validates and saves the
+complete transaction. Invalid/conflicting bindings remain editable without
+partially saving; explicit disabled actions survive future default updates.
+A generation guard rejects overwriting settings changed elsewhere. Unrecognised
+or corrupt existing storage is preserved and cannot be overwritten by Apply.
+Navigation, profile changes, page destruction, desktop blur/close and resize
+cancel recording/drafts. Posted widget cleanup precedes restoring native focus.
+
+The complete source now has 33 browser declarations, including two PRE phases
+and 31 main cases. Five editor cases exercise real native key events, editable
+page focus, disabled/default shortcuts, two-stroke page scrolling, semicolon
+recording, conflicts, concurrent changes and cancellation on workspace switch.
+These native GUI cases await a linked browser/test executable. Source compilation
+checks and the independent GN/header checks cover the eleven-patch stack over
+22 upstream files, without changing the frozen engine source currently building.
+The retained Electron recorder/editable-page regression is run separately with
+a disposable profile and authenticated private Xvfb display; it cannot validate
+the new native UI. Native preferences beyond keyboard remain pending.
+
+Keyboard editor validation: pinned Clang accepts the editor, controller, command
+adapter and all 33 browser declarations; eleven-patch preflight and full GN graph
+plus Fly/UI/profile header ownership checks pass. All 43 Python tooling contracts,
+`npm test`, documentation build and whitespace check pass. The retained Electron
+keyboard test passes with `errors: []` and native guest scroll of 80 pixels under
+private Xvfb (`keyboard-editor-retained-electron-slow-start.log`). This run retained
+all assertions and raised only the Electron launch timeout from 30 to 120 seconds
+on the compiling host. Earlier attempts remain recorded: X11 launch timed out at
+30 seconds; headless launched but could not open Preferences through the focused
+shortcut. Neither attempted run is counted as a pass. The new native editor
+still requires actual linked runtime execution and platform acceptance.

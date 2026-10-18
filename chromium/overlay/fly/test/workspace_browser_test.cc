@@ -1,6 +1,9 @@
 // Copyright Fly Browser contributors. All rights reserved.
 // Use of this source code is governed by the GPL-3.0-or-later license in the
 // Fly repository.
+#include "fly/ui/keyboard_editor.h"
+#include "components/password_manager/core/common/password_manager_pref_names.h"
+#include "components/signin/public/base/signin_pref_names.h"
 #include "fly/sessions/tab_identity.h"
 #include "fly/ui/command_palette.h"
 #include "fly/ui/fly_window_controller.h"
@@ -49,8 +52,6 @@
 #include "net/dns/mock_host_resolver.h"
 #include "net/test/embedded_test_server/embedded_test_server.h"
 #include "components/prefs/pref_service.h"
-#include "components/password_manager/core/common/password_manager_pref_names.h"
-#include "components/signin/public/base/signin_pref_names.h"
 #include "ui/aura/window.h"
 #include "ui/aura/window_tree_host.h"
 #include "ui/base/base_window.h"
@@ -1095,6 +1096,162 @@ IN_PROC_BROWSER_TEST_F(FlyWorkspaceBrowserTest,
       [&] { return window.selected_browser_for_testing() != nullptr; }));
   EXPECT_EQ(1,
             window.selected_browser_for_testing()->GetTabStripModel()->count());
+}
+
+IN_PROC_BROWSER_TEST_F(FlyWorkspaceBrowserTest,
+                       NativeKeyboardRecorderSavesWithoutExecutingItsShortcut) {
+  auto* contents = Active(browser());
+  ASSERT_TRUE(ui_test_utils::NavigateToURL(
+      browser(), embedded_test_server()->GetURL("/title1.html")));
+  ASSERT_TRUE(content::ExecJs(contents,
+                              "document.body.innerHTML='<input id=editable>';"
+                              "document.querySelector('#editable').focus()"));
+  auto& window = FlyWindowController::Get();
+  ASSERT_TRUE(window.RunCommand(browser(), "toggle-help"));
+  auto& editor = window.keyboard_editor();
+  ASSERT_TRUE(editor.active());
+  ui::test::EventGenerator keys(window.desktop_widget()->GetNativeWindow());
+  for (auto key : {ui::VKEY_S, ui::VKEY_P, ui::VKEY_A, ui::VKEY_W, ui::VKEY_N})
+    keys.PressKey(key, ui::EF_NONE);
+  ASSERT_TRUE(base::test::RunUntil([&] {
+    return editor.search_for_testing()->GetText() == u"spawn";
+  }));
+  auto* field = editor.field_for_testing("spawn-tab", false);
+  ASSERT_TRUE(field);
+  field->RequestFocus();
+  keys.PressKey(ui::VKEY_A, ui::EF_CONTROL_DOWN);
+  keys.PressKey(ui::VKEY_BACK, ui::EF_NONE);
+  ASSERT_TRUE(base::test::RunUntil([&] { return field->GetText().empty(); }));
+  auto* record = editor.record_for_testing("spawn-tab", false);
+  ASSERT_TRUE(record);
+  views::test::ButtonTestApi(record).NotifyDefaultMouseClick();
+  ASSERT_TRUE(editor.recording());
+  const int tabs = browser()->GetTabStripModel()->count();
+  keys.PressKey(ui::VKEY_Y, ui::EF_CONTROL_DOWN);
+  EXPECT_FALSE(editor.recording());
+  EXPECT_EQ(u"Ctrl+Y", field->GetText());
+  EXPECT_EQ(tabs, browser()->GetTabStripModel()->count());
+  views::test::ButtonTestApi(editor.save_for_testing()).NotifyDefaultMouseClick();
+  ASSERT_TRUE(base::test::RunUntil([&] { return !editor.search_for_testing(); }));
+  ASSERT_TRUE(window.commands().Read());
+  EXPECT_EQ(std::vector<std::string>({"Ctrl+Y"}),
+            window.commands().Read()->shortcuts.at("spawn-tab"));
+  keys.PressKey(ui::VKEY_J, ui::EF_NONE);
+  ASSERT_TRUE(base::test::RunUntil([&] {
+    return content::EvalJs(contents,
+                           "document.querySelector('#editable').value")
+               .ExtractString() == "j";
+  }));
+  keys.PressKey(ui::VKEY_T, ui::EF_CONTROL_DOWN);
+  EXPECT_EQ("j", content::EvalJs(contents,
+                                "document.querySelector('#editable').value"));
+  EXPECT_EQ(tabs, browser()->GetTabStripModel()->count());
+  keys.PressKey(ui::VKEY_Y, ui::EF_CONTROL_DOWN);
+  ASSERT_TRUE(base::test::RunUntil(
+      [&] { return browser()->GetTabStripModel()->count() == tabs + 1; }));
+}
+
+IN_PROC_BROWSER_TEST_F(FlyWorkspaceBrowserTest,
+                       NativeKeyboardRecorderProducesTwoStrokePageBindings) {
+  ASSERT_TRUE(ui_test_utils::NavigateToURL(
+      browser(), embedded_test_server()->GetURL("/title1.html")));
+  auto* contents = Active(browser());
+  ASSERT_TRUE(content::ExecJs(contents,
+                              "document.body.innerHTML='<button id=focus>Page</button>';"
+                              "document.body.style.height='5000px';"
+                              "document.querySelector('#focus').focus()"));
+  auto& window = FlyWindowController::Get();
+  ASSERT_TRUE(window.RunCommand(browser(), "toggle-help"));
+  auto& editor = window.keyboard_editor();
+  auto* record = editor.record_for_testing("scroll-down", true);
+  ASSERT_TRUE(record);
+  views::test::ButtonTestApi(record).NotifyDefaultMouseClick();
+  ui::test::EventGenerator keys(window.desktop_widget()->GetNativeWindow());
+  keys.PressKey(ui::VKEY_Q, ui::EF_NONE);
+  EXPECT_TRUE(editor.recording());
+  keys.PressKey(ui::VKEY_Q, ui::EF_NONE);
+  EXPECT_FALSE(editor.recording());
+  EXPECT_EQ(u"J\nQ Q", editor.field_for_testing("scroll-down", true)->GetText());
+  EXPECT_EQ(0, content::EvalJs(contents, "scrollY"));
+  views::test::ButtonTestApi(editor.save_for_testing()).NotifyDefaultMouseClick();
+  ASSERT_TRUE(base::test::RunUntil([&] { return !editor.search_for_testing(); }));
+  keys.PressKey(ui::VKEY_Q, ui::EF_NONE);
+  keys.PressKey(ui::VKEY_Q, ui::EF_NONE);
+  ASSERT_TRUE(base::test::RunUntil([&] {
+    return content::EvalJs(contents, "Math.round(scrollY)").ExtractInt() == 80;
+  }));
+}
+
+IN_PROC_BROWSER_TEST_F(FlyWorkspaceBrowserTest,
+                       NativeKeyboardRecorderRetainsSemicolonBindings) {
+  auto& window = FlyWindowController::Get();
+  ASSERT_TRUE(window.RunCommand(browser(), "toggle-help"));
+  auto& editor = window.keyboard_editor();
+  auto* record = editor.record_for_testing("scroll-down", true);
+  ASSERT_TRUE(record);
+  views::test::ButtonTestApi(record).NotifyDefaultMouseClick();
+  ui::test::EventGenerator keys(window.desktop_widget()->GetNativeWindow());
+  keys.PressKey(ui::VKEY_OEM_1, ui::EF_NONE);
+  ASSERT_TRUE(base::test::RunUntil([&] { return !editor.recording(); }));
+  EXPECT_EQ(u"J\n;", editor.field_for_testing("scroll-down", true)->GetText());
+  views::test::ButtonTestApi(editor.save_for_testing()).NotifyDefaultMouseClick();
+  ASSERT_TRUE(base::test::RunUntil([&] { return !editor.search_for_testing(); }));
+  const auto config = window.commands().Read();
+  ASSERT_TRUE(config);
+  EXPECT_EQ((std::vector<std::string>{"J", ";"}), config->normal.at("scroll-down"));
+}
+
+IN_PROC_BROWSER_TEST_F(FlyWorkspaceBrowserTest,
+                       NativeKeyboardEditorPreservesConflictsAndConcurrentEdits) {
+  auto& window = FlyWindowController::Get();
+  const auto before = window.commands().Read();
+  ASSERT_TRUE(before);
+  ASSERT_TRUE(window.RunCommand(browser(), "toggle-help"));
+  auto& editor = window.keyboard_editor();
+  auto* record = editor.record_for_testing("go-back", false);
+  ASSERT_TRUE(record);
+  views::test::ButtonTestApi(record).NotifyDefaultMouseClick();
+  ui::test::EventGenerator keys(window.desktop_widget()->GetNativeWindow());
+  keys.PressKey(ui::VKEY_T, ui::EF_CONTROL_DOWN);
+  views::test::ButtonTestApi(editor.save_for_testing()).NotifyDefaultMouseClick();
+  EXPECT_TRUE(editor.active());
+  EXPECT_NE(std::u16string::npos, editor.error_for_testing().find(u"Conflicting"));
+  EXPECT_EQ(before, window.commands().Read());
+  auto external = before->ToValue();
+  external.FindDict("shortcuts")->Set("spawn-tab", base::ListValue().Append("Ctrl+Y"));
+  ASSERT_TRUE(window.commands().Save(external).config);
+  const auto newer = window.commands().Read();
+  views::test::ButtonTestApi(editor.save_for_testing()).NotifyDefaultMouseClick();
+  EXPECT_TRUE(editor.active());
+  EXPECT_NE(std::u16string::npos, editor.error_for_testing().find(u"changed"));
+  EXPECT_EQ(newer, window.commands().Read());
+  keys.PressKey(ui::VKEY_ESCAPE, ui::EF_NONE);
+  ASSERT_TRUE(base::test::RunUntil([&] { return !editor.search_for_testing(); }));
+}
+
+IN_PROC_BROWSER_TEST_F(FlyWorkspaceBrowserTest,
+                       NativeKeyboardRecordingCancelsAcrossWorkspaceChanges) {
+  auto& window = FlyWindowController::Get();
+  const auto before = window.commands().Read();
+  ASSERT_TRUE(window.RunCommand(browser(), "toggle-help"));
+  auto& editor = window.keyboard_editor();
+  auto* record = editor.record_for_testing("scroll-down", true);
+  ASSERT_TRUE(record);
+  views::test::ButtonTestApi(record).NotifyDefaultMouseClick();
+  ui::test::EventGenerator keys(window.desktop_widget()->GetNativeWindow());
+  keys.PressKey(ui::VKEY_Q, ui::EF_NONE);
+  keys.PressKey(ui::VKEY_ESCAPE, ui::EF_NONE);
+  EXPECT_FALSE(editor.recording());
+  EXPECT_TRUE(editor.active());
+  views::test::ButtonTestApi(record).NotifyDefaultMouseClick();
+  keys.PressKey(ui::VKEY_Q, ui::EF_NONE);
+  auto* second = SecondWorkspace();
+  ASSERT_TRUE(second);
+  ASSERT_TRUE(base::test::RunUntil([&] { return !editor.search_for_testing(); }));
+  EXPECT_FALSE(editor.recording());
+  ASSERT_TRUE(window.RunCommand(second, "toggle-help"));
+  EXPECT_EQ(u"J", editor.field_for_testing("scroll-down", true)->GetText());
+  EXPECT_EQ(before, window.commands().Read());
 }
 
 IN_PROC_BROWSER_TEST_F(FlyWorkspaceBrowserTest,

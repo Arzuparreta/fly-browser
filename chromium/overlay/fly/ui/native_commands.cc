@@ -281,6 +281,8 @@ bool NativeCommandAvailable(BrowserWindowInterface* browser,
                             std::string_view action) {
   if (!browser)
     return false;
+  if (action == "toggle-help")
+    return FlyWindowController::GetIfCreated() != nullptr;
   if (action == "toggle-private-mode") {
     const auto* window = FlyWindowController::GetIfCreated();
     return window && window->CanTogglePrivate(browser);
