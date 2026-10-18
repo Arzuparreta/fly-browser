@@ -6,30 +6,44 @@
  #include "base/memory/ptr_util.h"
 +#include "build/build_config.h"
 +#if BUILDFLAG(IS_LINUX) || BUILDFLAG(IS_WIN)
++#include "base/command_line.h"
 +#include "chrome/browser/ui/browser_window.h"
 +#include "chrome/browser/ui/browser_window/public/browser_window_interface.h"
-+#include "fly/ui/fly_window_controller.h"
 +#endif
  #include "chrome/browser/ui/browser_element_identifiers.h"
  #include "chrome/browser/ui/location_bar/location_bar.h"
  #include "chrome/browser/ui/location_bar/location_bar_override_data.h"
-@@ -155,6 +161,19 @@
+@@ -155,6 +161,21 @@
  }
  
  views::Widget* ChromeWebContentsViewFocusHelper::GetTopLevelWidget() {
 +#if BUILDFLAG(IS_LINUX) || BUILDFLAG(IS_WIN)
-+  // Native Fly browsers share an outer OS window but keep independent Views
-+  // FocusManagers. Walking to the outermost native widget saves the desktop's
-+  // focus instead of this profile's WebView/omnibox and loses it on restore.
-+  if (auto* tab = tabs::TabInterface::MaybeGetFromContents(&GetWebContents())) {
-+    auto* browser = tab->GetBrowserWindowInterface();
-+    if (browser && fly::FlyWindowController::ShouldEmbed(browser) &&
-+        browser->GetWindow()) {
-+      return views::Widget::GetWidgetForNativeView(
-+          browser->GetWindow()->GetNativeWindow());
++  // Native Fly browsers share an OS window but keep independent FocusManagers.
++  // This lower-level target cannot depend on the outer browser UI controller.
++  // The development gate and normal-window type identify the embedded browser.
++  if (base::CommandLine::ForCurrentProcess()->HasSwitch("fly-native")) {
++    if (auto* tab = tabs::TabInterface::MaybeGetFromContents(&GetWebContents())) {
++      auto* browser = tab->GetBrowserWindowInterface();
++      if (browser && browser->GetType() == BrowserWindowInterface::Type::TYPE_NORMAL &&
++          browser->GetWindow()) {
++        return views::Widget::GetWidgetForNativeView(
++            browser->GetWindow()->GetNativeWindow());
++      }
 +    }
 +  }
 +#endif
    return views::Widget::GetTopLevelWidgetForNativeView(GetActiveNativeView());
+ }
+ 
+--- a/chrome/browser/ui/views/tab_contents/BUILD.gn
++++ b/chrome/browser/ui/views/tab_contents/BUILD.gn
+@@ -66,6 +66,9 @@
+       "//content/public/common",
+     ]
+   }
++  if (is_linux || is_win) {
++    deps += [ "//chrome/browser/ui:browser_window_header" ]
++  }
+   deps += [ "//chrome/browser/ui/views:sad_tab_view" ]
  }
  
