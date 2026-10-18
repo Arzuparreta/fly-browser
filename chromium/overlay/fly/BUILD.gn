@@ -99,6 +99,7 @@ if (is_linux || is_win) {
       "//chrome/test/base:ui_test_utils",
       "//content/public/browser",
       "//content/test:test_support",
+      "//components/javascript_dialogs",
       "//extensions:test_support",
       "//net:test_support",
       "//testing/gtest",

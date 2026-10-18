@@ -19,6 +19,7 @@
 #include "base/strings/string_number_conversions.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/task/single_thread_task_runner.h"
+#include "chrome/app/chrome_command_ids.h"
 #include "chrome/browser/browser_process.h"
 #include "chrome/browser/lifetime/application_lifetime_desktop.h"
 #include "chrome/browser/profiles/profile.h"
@@ -323,11 +324,24 @@ void FlyWindowController::RebuildWorkspaceButtons() {
   }
   for (const auto& [browser, entry] : entries_) {
     if (!entry.browser_closed && entry.widget && entry.workspace_id.empty()) {
+      std::u16string label = u"Recovery";
+      if (browser->GetProfile()->IsOffTheRecord()) {
+        label = u"Private workspace";
+        const auto directory = browser->GetProfile()
+                                   ->GetOriginalProfile()
+                                   ->GetPath()
+                                   .BaseName()
+                                   .AsUTF8Unsafe();
+        const auto item = std::ranges::find(catalog->items, directory,
+                                             &Workspace::profile_directory);
+        if (item != catalog->items.end())
+          label = u"Private · " + base::UTF8ToUTF16(item->name);
+      }
       workspace_buttons_->AddChildView(std::make_unique<views::MdTextButton>(
           base::BindRepeating(&FlyWindowController::SelectWindow,
                               weak_factory_.GetWeakPtr(),
                               browser->GetWeakPtr()),
-          browser->GetProfile()->IsOffTheRecord() ? u"Private" : u"Recovery"));
+          label));
     }
   }
 }
@@ -440,6 +454,11 @@ void FlyWindowController::OnBrowserDidClose(BrowserWindowInterface* browser) {
     return;
   // This fires before the browser/tab-model teardown. The Widget observer
   // releases the native host later, without retaining a dead BWI meanwhile.
+  auto* closed_profile = browser->GetProfile();
+  const auto return_it = private_returns_.find(closed_profile);
+  const auto private_return = return_it == private_returns_.end()
+                                  ? base::WeakPtr<BrowserWindowInterface>()
+                                  : return_it->second;
   it->second.browser_closed = true;
   it->second.browser = nullptr;
   auto last = last_windows_.find(it->second.workspace_id);
@@ -459,19 +478,66 @@ void FlyWindowController::OnBrowserDidClose(BrowserWindowInterface* browser) {
         for (const auto& [next, entry] : entries_) {
           if (!entry.browser_closed && entry.widget &&
               (!same_workspace ||
-               entry.workspace_id == it->second.workspace_id)) {
+               (entry.workspace_id == it->second.workspace_id &&
+                (!entry.workspace_id.empty() ||
+                 entry.browser->GetProfile() == closed_profile)))) {
             Select(next, true);
             return true;
           }
         }
         return false;
       };
-      if (!choose(true))
-        choose(false);
+      if (!choose(true)) {
+        if (private_return && entries_.contains(private_return.get()) &&
+            !entries_.at(private_return.get()).browser_closed)
+          Select(private_return.get(), true);
+        else
+          choose(false);
+      }
     }
     UpdateModeLabel();
   }
+  if (closed_profile->IsOffTheRecord() &&
+      std::ranges::none_of(entries_, [&](const auto& pair) {
+        return !pair.second.browser_closed && pair.second.browser &&
+               pair.second.browser->GetProfile() == closed_profile;
+      })) {
+    private_returns_.erase(closed_profile);
+  }
   ScheduleWorkspaceRefresh();
+}
+
+bool FlyWindowController::CanTogglePrivate(
+    BrowserWindowInterface* browser) const {
+  return browser && (browser->GetProfile()->IsOffTheRecord() ||
+                     chrome::IsCommandEnabled(browser,
+                                              IDC_NEW_INCOGNITO_WINDOW));
+}
+
+void FlyWindowController::TogglePrivate(BrowserWindowInterface* browser) {
+  if (!CanTogglePrivate(browser))
+    return;
+  auto* profile = browser->GetProfile();
+  if (profile->IsOffTheRecord()) {
+    // The native close coordinator resolves all beforeunload decisions before
+    // closing this OTR profile's windows. Cancellation leaves them intact.
+    chrome::CloseAllBrowsersWithIncognitoProfile(profile,
+                                                /*skip_beforeunload=*/false);
+    return;
+  }
+  auto* private_profile = profile->GetPrimaryOTRProfile(true);
+  private_returns_[private_profile] = browser->GetWeakPtr();
+  for (const auto& [model, entry] : entries_) {
+    if (!entry.browser_closed && entry.widget &&
+        model->GetProfile() == private_profile) {
+      Select(model, true);
+      return;
+    }
+  }
+  // Standard Chromium creation owns OTR lifetime, extension incognito access,
+  // permissions, downloads and shutdown. No normal navigation/state is copied.
+  chrome::NewEmptyWindow(private_profile,
+                          /*should_trigger_session_restore=*/false);
 }
 
 void FlyWindowController::ArmCloseCallback() {
@@ -561,6 +627,10 @@ bool FlyWindowController::RunCommand(BrowserWindowInterface* browser,
     hints_->Cancel();
     palette_->Toggle(browser->GetTabStripModel()->GetActiveWebContents(),
                      commands_.Read().value_or(DefaultKeyboardConfig()));
+    return true;
+  }
+  if (action == "toggle-private-mode") {
+    TogglePrivate(browser);
     return true;
   }
   if (action == "trigger-hints") {
@@ -693,9 +763,11 @@ void FlyWindowController::UpdateModeLabel() {
                                                             : u"NORMAL");
     return;
   }
-  status_->SetText(
-      hints_ && hints_->active()
+  const std::u16string mode = hints_ && hints_->active()
           ? (hints_->truncated() ? u"HINTS (target limit)" : u"HINTS")
-          : NativePageModeLabel(selected_));
+          : NativePageModeLabel(selected_);
+  status_->SetText(selected_ && selected_->GetProfile()->IsOffTheRecord()
+                       ? u"PRIVATE · " + mode
+                       : mode);
 }
 }  // namespace fly
