@@ -1187,7 +1187,9 @@ IN_PROC_BROWSER_TEST_F(FlyWorkspaceBrowserTest,
   ASSERT_TRUE(base::test::RunUntil([&] {
     return window.hints().active() &&
            window.hints().target_count_for_testing() == 1;
-  }));
+  })) << "active=" << window.hints().active()
+      << " accessibility_root=" << (contents->GetAccessibilityRootNode() != nullptr)
+      << " native_focus=" << contents->GetRenderWidgetHostView()->HasFocus();
   EXPECT_EQ("visible", content::EvalJs(contents, "document.visibilityState"));
   EXPECT_EQ(true, content::EvalJs(contents, "document.hasFocus()"));
   EXPECT_EQ(0, content::EvalJs(contents, "visibilityEvents"));
@@ -1582,6 +1584,10 @@ IN_PROC_BROWSER_TEST_F(FlyWorkspaceBrowserTest,
   keys.PressKey(ui::VKEY_P, ui::EF_ALT_DOWN);
   ASSERT_TRUE(base::test::RunUntil(
       [&] { return window.palette().search_for_testing() == nullptr; }));
+  ASSERT_TRUE(base::test::RunUntil([&] {
+    return contents->GetRenderWidgetHostView()->HasFocus();
+  })) << "The dismissed palette must restore native page focus";
+  EXPECT_EQ("editable", content::EvalJs(contents, "document.activeElement.id"));
   keys.PressKey(ui::VKEY_J, ui::EF_NONE);
   ASSERT_TRUE(base::test::RunUntil([&] {
     return content::EvalJs(contents,
