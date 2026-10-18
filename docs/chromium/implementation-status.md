@@ -27,27 +27,36 @@ PCM audio fixtures (`control-smoke-a47ZFT` and `control-smoke-X0emxw`). Both con
 outputs remain independent. The full CI attempt at an earlier head timed out on
 Linux/macOS and lost the Windows runner; those are unverified builds.
 
-The native build and following unit/browser/media pipeline use the clean
-frozen `b98cae4` checkout on `codex/chromium-native-runtime` in the sidebar
-worktree. The external engine source has its nine-patch overlay, fingerprint
-`75a051104f8d5ef10732edca9b7144b01a7e18a9b65294694661af17390f07a0`.
-The build was interrupted by a signal after roughly 46,722 compilation steps,
-resumed with the existing output and completed successfully. The frozen native
-binary is SHA-256 `de7ebfdb766f3e32b9cf6a110f518fbefd050941f1b035abe2dc0cca52be5cd4`.
-Its official 31-case service runner passes. Browser tests are still compiling;
-full native acceptance remains pending. User units `fly-chromium-native-build.service`
-and `fly-chromium-native-acceptance.service` own these operations; inspect their
-live state before editing that checkout or the managed engine source. Follow-up
-source work uses the hints worktree. The matching inputs are recorded in external
-`evidence/native-preparation.json`; logs are `native-build-systemd.log` and
-`native-acceptance-systemd.log` under `/mnt/storage/fly-chromium/`.
+The first complete native build at frozen `b98cae4` succeeded (binary SHA-256
+`de7ebfdb766f3e32b9cf6a110f518fbefd050941f1b035abe2dc0cca52be5cd4`).
+Its real browser runner exposed a dangling browser pointer during posted Aura
+widget teardown. The repair at frozen `5fd0d8a` uses the browser's WeakPtr and
+passed full recompilation, all 31 official service cases, video/MV3 and PCM audio.
+The browser suite executed all 23 declarations: 14 succeeded, one failed and eight
+crashed. This is a failed acceptance result, not a completed milestone. Most
+crashes now came from test infrastructure: an EventGenerator given a non-root
+Aura window, fixture file access on the restricted UI thread, and a creation
+waiter retaining a closed browser. The background extension-window visibility
+failure still needs diagnosis.
 
-The pipeline waits for successful compilation, then runs native services, the
-frozen browser suite and video/audio fixtures, recording every actual exit status.
-That frozen runner predates strict browser-summary verification: independently
-inspect its test summary against its 23 declarations, including PRE cases, before
-accepting a successful process exit. This is a running operation, not a completed
-native test result. Do not edit its inputs during either service.
+Frozen `31279e3` on `codex/chromium-native-lifetime` in the sidebar worktree
+repairs those test lifetimes and input roots, retaining all assertions and adding
+visibility traces. The independent audit rejects missing or unsuccessful browser
+cases. The managed incremental refresh changed only that Fly test file and kept
+upstream bytes and timestamps unchanged. User units
+`fly-chromium-native-build.service`, `fly-chromium-native-acceptance.service` and
+`fly-chromium-native-summary-audit.service` now repeat the build and acceptance.
+Inspect their live state before editing that checkout or engine source. Inputs
+are in external `evidence/native-preparation.json`; current logs are
+`harness-build-systemd.log`, `harness-acceptance-systemd.log` and
+`harness-summary-audit.log` under `/mnt/storage/fly-chromium/`. Previous failing
+summaries and logs remain archived in `evidence/harness-before-*`.
+
+The separate hints worktree includes shared bookmarks, complete runtime-file
+provenance, safe incremental overlay refresh, canonical preference commands and
+these harness repairs. Its 46 browser declarations still require the complete
+current build. Neither earlier 31-case runtime nor 46-case service CI validates
+that newer source. Full native acceptance remains pending.
 
 Next: finish and inspect the frozen build/pipeline, repair actual runtime failures,
 then rebuild and run the complete current source. Finish the remaining M2–M6 work
