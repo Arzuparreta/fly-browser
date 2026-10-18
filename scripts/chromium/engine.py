@@ -8,10 +8,11 @@ import datetime
 import hashlib
 import json
 import os
-from pathlib import Path
+from pathlib import Path, PurePosixPath
 import platform
 import re
 import shutil
+import stat
 import subprocess
 import sys
 import tempfile
@@ -66,7 +67,125 @@ def git(directory, *args):
 
 
 def digest(file):
-    return hashlib.sha256(file.read_bytes()).hexdigest()
+    value = hashlib.sha256()
+    with file.open('rb') as stream:
+        for chunk in iter(lambda: stream.read(1024 * 1024), b''):
+            value.update(chunk)
+    return value.hexdigest()
+
+
+def runtime_path(name):
+    if not isinstance(name, str) or not name or '\0' in name:
+        fail('Invalid runtime path')
+    portable = name.replace('\\', '/')
+    path = PurePosixPath(portable)
+    if path.is_absolute() or any(part == '..' or ':' in part for part in path.parts):
+        fail('Runtime path escapes its output directory: ' + name)
+    result = path.as_posix()
+    if result == '.':
+        fail('Runtime closure must name specific outputs')
+    return result
+
+
+def runtime_snapshot(output, roots):
+    output = output.resolve(strict=True)
+    if not isinstance(roots, list) or not roots:
+        fail('Runtime closure is empty or malformed')
+    roots = sorted({runtime_path(name) for name in roots})
+    files, observed, hashes = {}, {}, {}
+
+    def identity(value):
+        return (value.st_dev, value.st_ino, value.st_size,
+                value.st_mtime_ns, value.st_mode)
+
+    def visit(name):
+        name = runtime_path(name)
+        if name in files:
+            return
+        file = output / name
+        resolved = file.resolve(strict=True)
+        if resolved == output or output not in resolved.parents:
+            fail('Runtime dependency resolves outside its output: ' + name)
+        before = file.lstat()
+        observed[name] = identity(before)
+        if file.is_symlink():
+            target = os.readlink(file)
+            if Path(target).is_absolute() or PurePosixPath(target.replace('\\', '/')).is_absolute() or ':' in target:
+                fail('Runtime symlinks must be portable and relative: ' + name)
+            files[name] = {'kind': 'symlink', 'target': target.replace('\\', '/')}
+            visit(resolved.relative_to(output).as_posix())
+        elif file.is_dir():
+            children = sorted(child.name for child in file.iterdir())
+            files[name] = {'kind': 'directory', 'children': children}
+            for child in children:
+                visit(name + '/' + child)
+        elif file.is_file():
+            key = (resolved, identity(before))
+            if key not in hashes:
+                hashes[key] = digest(file)
+            files[name] = {'kind': 'file', 'size': before.st_size,
+                           'sha256': hashes[key]}
+        else:
+            fail('Unsupported runtime file type: ' + name)
+        if not file.is_symlink() and resolved.relative_to(output).as_posix() != name:
+            canonical = resolved.relative_to(output).as_posix()
+            files[name]['resolved'] = canonical
+            visit(canonical)
+        if os.name != 'nt' and not file.is_symlink():
+            files[name]['mode'] = stat.S_IMODE(before.st_mode)
+
+    for name in roots:
+        visit(name)
+    # Catch concurrent link/resource changes across the entire snapshot.
+    for name, before in observed.items():
+        if identity((output / name).lstat()) != before:
+            fail('Runtime changed while recording: ' + name)
+    return {'schema': 1, 'roots': roots,
+            'files': dict(sorted(files.items()))}
+
+
+def verify_runtime(output, manifest):
+    if (not isinstance(manifest, dict) or type(manifest.get('schema')) is not int or
+            manifest.get('schema') != 1 or
+            not isinstance(manifest.get('files'), dict) or not manifest['files']):
+        fail('Invalid runtime manifest')
+    current = runtime_snapshot(output, manifest.get('roots'))
+    if current != manifest:
+        fail('Runtime files differ from the successful build manifest')
+    return current
+
+
+def capture_runtime(root, output, label, env, executable):
+    graph = json.loads(run(['gn', 'desc', output, '//chrome:chrome',
+                            'runtime_deps', '--format=json'], root / 'src', env, capture=True))
+    manifest = runtime_snapshot(output, graph['//chrome:chrome']['runtime_deps'])
+    main = executable.resolve().relative_to(output.resolve()).as_posix()
+    if main not in manifest['files']:
+        fail('Runtime closure does not contain the browser executable')
+    file = root / 'evidence' / (label + '-runtime-files.json')
+    atomic_json(file, manifest)
+    return {'file': str(file), 'sha256': digest(file), 'output': str(output.resolve()),
+            'entries': len(manifest['files'])}
+
+
+def require_runtime(metadata, output, executable, record_directory):
+    if (not isinstance(metadata, dict) or
+            any(not isinstance(metadata.get(key), str) or not metadata[key]
+                for key in ('file', 'output', 'sha256')) or
+            not re.fullmatch(r'[0-9a-f]{64}', metadata['sha256'])):
+        fail('A complete runtime manifest is required')
+    if Path(metadata['output']).resolve() != output.resolve():
+        fail('Runtime output differs from the build record')
+    file = Path(metadata['file']).resolve(strict=True)
+    if file.parent != record_directory.resolve(strict=True):
+        fail('Runtime manifest is outside its evidence directory')
+    if digest(file) != metadata.get('sha256'):
+        fail('Runtime manifest digest differs from the build record')
+    manifest = verify_runtime(output, json.loads(file.read_text()))
+    main = executable.resolve().relative_to(output.resolve()).as_posix()
+    if main not in manifest['files']:
+        fail('Runtime manifest excludes the browser executable')
+    return manifest
 
 
 def atomic_json(file, value):
@@ -263,6 +382,11 @@ def require_control(root, lock, config):
     executable = binary(root)
     if not executable.is_file() or digest(executable) != details.get('sha256'):
         fail('Browser executable differs from the successful build record')
+    # Historical M0 records predate runtime closure capture. They retain their
+    # original limited scope until an unmodified control build is rerun.
+    if 'runtime' in details:
+        require_runtime(details['runtime'], executable.parent if sys.platform != 'darwin'
+                        else root / 'src/out/FlyControl', executable, root / 'evidence')
     return details
 
 
@@ -331,7 +455,9 @@ def execute(args):
             verify(root, lock)
             evidence(root, 'build', lock, {'binary': str(binary(root)),
                                           'sha256': digest(binary(root)),
-                                          'args_sha256': digest(CONFIG)})
+                                          'args_sha256': digest(CONFIG),
+                                          'runtime': capture_runtime(root, root / 'src/out/FlyControl',
+                                                                     'control', env, binary(root))})
         elif args.command == 'run':
             require_control(root, lock, CONFIG)
             if not re.fullmatch(r'https?://[^\s]+|about:blank', args.url):

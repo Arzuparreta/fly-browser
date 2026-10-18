@@ -11,6 +11,11 @@ three official native service summaries contain 31 SUCCESS results. Follow-up wo
 PR [115](https://github.com/Arzuparreta/fly-browser/pull/115); the stacked feature
 PRs preserve their original review history. Its latest remote checks and explicit
 CI must finish successfully before merging.
+The consolidated head is `9aaf531`: its ordinary checks pass. Manual service run
+39144885256 has passed Linux and macOS with 46 SUCCESS results each; Windows is
+pending. Manual object run 39144886975 is separate and still pending. The local
+bookmark commit `0294989` follows that fixed integration head and is not part of
+its CI evidence.
 Official service CI at `e4150ad` passed all 37 cases on Linux, macOS and Windows,
 with downloaded per-test summaries verified. The current development source in the
 hints worktree has sixteen patches, 53 Linux partial service cases and 46 browser
@@ -22,12 +27,15 @@ PCM audio fixtures (`control-smoke-a47ZFT` and `control-smoke-X0emxw`). Both con
 outputs remain independent. The full CI attempt at an earlier head timed out on
 Linux/macOS and lost the Windows runner; those are unverified builds.
 
-The full native build and following unit/browser/media pipeline use the clean
+The native build and following unit/browser/media pipeline use the clean
 frozen `b98cae4` checkout on `codex/chromium-native-runtime` in the sidebar
 worktree. The external engine source has its nine-patch overlay, fingerprint
 `75a051104f8d5ef10732edca9b7144b01a7e18a9b65294694661af17390f07a0`.
-The build was interrupted by a signal after roughly 46,722 compilation steps and
-resumed with the existing output. User units `fly-chromium-native-build.service`
+The build was interrupted by a signal after roughly 46,722 compilation steps,
+resumed with the existing output and completed successfully. The frozen native
+binary is SHA-256 `de7ebfdb766f3e32b9cf6a110f518fbefd050941f1b035abe2dc0cca52be5cd4`.
+Its official 31-case service runner passes. Browser tests are still compiling;
+full native acceptance remains pending. User units `fly-chromium-native-build.service`
 and `fly-chromium-native-acceptance.service` own these operations; inspect their
 live state before editing that checkout or the managed engine source. Follow-up
 source work uses the hints worktree. The matching inputs are recorded in external
@@ -1286,3 +1294,71 @@ cancelled clicks and restored page typing/visibility. The browser cases remain
 unexecuted pending the complete current native build. Patch 16 registers the store
 and GN dependencies. The unmodified control and frozen nine-patch runtime build
 are separate snapshots; neither proves this bookmark implementation accepted.
+
+If bookmark data becomes invalid while its picker is open, the picker closes
+and the disabled sidebar button explains that recovery is needed and saved data
+is preserved. The browser case also covers this transition; it cannot appear to
+be an ordinary empty collection.
+
+## Complete runtime-file provenance
+
+New control/native build records capture GN's complete `//chrome:chrome`
+`runtime_deps` closure after successful compilation. Each file has a streaming
+SHA-256, size and POSIX mode where supported; directory contents, relative
+framework links and their resolved payloads are covered. Paths cannot escape the
+output directory. A complete snapshot rejects concurrent changes, missing files,
+extra directory entries, changed link destinations and altered code/resources.
+The browser executable must itself be included. Manifest bytes are bound into the
+build record with a separate digest.
+
+Native media fixtures now verify that closure before loading automation or
+creating fixture profiles. This closes the gap where an unchanged launcher could
+hide replaced component libraries. The verifier is a developer-side Python tool;
+it adds no Python dependency to the browser's runtime. Tests use data-only files,
+never a simulated browser. All 60 tooling cases pass locally, including replaced
+libraries, changed resources/modes, escaping paths, framework links, malformed
+manifests and pre-launch rejection. Malformed manifest metadata and paths outside the evidence directory are rejected
+before file hashing. The same C++ service source still has 53
+passing partial Linux cases; this tooling change proves no additional UI cases.
+
+The actual Linux GN probe returned 9,210 runtime dependency entries, 5,301 unique
+paths. That was a read-only graph query during the frozen build, not an attested
+finished runtime. Existing M0/control and frozen `b98cae4` records predate closure
+capture and retain their limited original scope. Their metadata is not silently
+upgraded. After the frozen pipeline completes, revert its managed overlay using
+its own frozen inputs, rerun the unmodified control build with the current tools,
+and capture its full closure before applying/building the current native source.
+The existing control executable/args checks remain available for those historical
+records; any present runtime manifest must validate, including malformed ones.
+
+An independent `fly-chromium-native-summary-audit.service` now waits for the frozen
+pipeline. It binds the browser-source hash, frozen commit/fingerprint and fresh
+summary timestamp, then requires every declared main case to finish SUCCESS
+(PRE outcomes are folded by Chromium's launcher). It records
+`evidence/native-acceptance-audit.json`; an empty, stale or incomplete summary
+cannot pass. This audit does not mutate the frozen checkout or engine source.
+
+## First complete native Linux executable
+
+The frozen `b98cae4` nine-patch browser build completed on the actual pinned
+source, with the matching H264/AAC control preset. `evidence/native-build.json`
+records the clean source, overlay fingerprint, arguments and executable hash.
+The following official native service run reports all 31 cases SUCCESS. The
+scoped browser runner is still compiling its additional test support; its case
+results must pass the independent summary audit before acceptance.
+
+The first actual native audio fixture passes under X11 with the sandbox enabled
+and focus emulation explicitly disabled. Evidence is
+`fixture-evidence/control-smoke-21MafT/result.json`. Its four checks cover focus in
+an editable field without hiding the page, tabs in the same native window,
+paused audio retaining its state across tab switches, and continuing background
+audio. It uses generated loopback PCM media and one profile; real Twitch/Pie,
+workspace/split lifecycle and packaged/platform acceptance remain unverified.
+
+A separate clean-profile launch was captured from the actual Xvfb desktop in
+`fixture-evidence/native-desktop-zva_t74q/desktop.png`; the visible Fly sidebar and
+embedded native browser confirm the Views shell is running. It also keeps the
+sandbox enabled. This is the older frozen snapshot: the blank-tab row fix,
+accountless defaults, clock/footer, preferences and bookmarks in later commits
+are not validated by that image. The screenshot is a launch observation, not a
+completed product UX or M1 acceptance result.

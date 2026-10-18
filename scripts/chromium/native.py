@@ -452,7 +452,8 @@ def execute(args):
                 details.update({'binary': str(executable.resolve()),
                                 'sha256': engine.digest(executable),
                                 'args_sha256': configured['args_sha256'],
-                                'native_desktop_supported': sys.platform in ('linux', 'win32')})
+                                'native_desktop_supported': sys.platform in ('linux', 'win32'),
+                                'runtime': engine.capture_runtime(root, output, 'native', env, executable)})
             engine.evidence(root, 'native-' + args.command, lock, details)
 
 

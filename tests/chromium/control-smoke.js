@@ -5,7 +5,7 @@ const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const path = require('node:path');
 const crypto = require('node:crypto');
-const {spawn} = require('node:child_process');
+const {spawn, spawnSync} = require('node:child_process');
 const {parseArgs} = require('node:util');
 const fixtures = require('./fixtures');
 
@@ -22,9 +22,16 @@ function validateNativeBuild(executable, recordFile) {
         'Native engine lock differs from the fixture checkout');
     assert.equal(fs.realpathSync(record.details.binary), fs.realpathSync(executable), 'Native executable path differs');
     assert.equal(record.details.sha256, sha256(executable), 'Native executable hash differs');
+    assert(record.details.runtime, 'Require complete native runtime manifest');
+    const runtime = spawnSync(process.env.FLY_PYTHON || (process.platform === 'win32' ? 'python' : 'python3'),
+        [path.resolve(__dirname, '../../scripts/chromium/verify-runtime.py'),
+            '--build-record', path.resolve(recordFile), '--executable', executable], {encoding: 'utf8'});
+    assert.equal(runtime.status, 0, 'Native runtime verification failed: ' + (runtime.stderr || runtime.error || ''));
+    const runtimeFiles = JSON.parse(runtime.stdout);
     return {file: path.resolve(recordFile), sha256: sha256(recordFile),
         overlayFingerprint: record.details.fingerprint, flyCommit: record.fly_commit,
-        flyDirty: record.fly_dirty, lockSha256: record.lock_sha256};
+        flyDirty: record.fly_dirty, lockSha256: record.lock_sha256,
+        runtimeManifestSha256: record.details.runtime.sha256, runtimeEntries: runtimeFiles.entries};
 }
 
 const pause = ms => new Promise(resolve => setTimeout(resolve, ms));

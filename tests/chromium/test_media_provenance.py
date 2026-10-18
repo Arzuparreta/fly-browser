@@ -3,6 +3,7 @@ import copy
 import hashlib
 import json
 import os
+import importlib.util
 from pathlib import Path
 import subprocess
 import tempfile
@@ -10,6 +11,9 @@ import unittest
 
 ROOT = Path(__file__).resolve().parents[2]
 HARNESS = ROOT / 'tests/chromium/control-smoke.js'
+spec = importlib.util.spec_from_file_location('fly_runtime_engine', ROOT / 'scripts/chromium/engine.py')
+engine = importlib.util.module_from_spec(spec)
+spec.loader.exec_module(engine)
 
 
 class MediaProvenanceTests(unittest.TestCase):
@@ -22,13 +26,20 @@ class MediaProvenanceTests(unittest.TestCase):
         self.executable.write_bytes(b'provenance fixture, not a browser')
         self.record = self.directory / 'native-build.json'
         self.work = self.directory / 'must-not-exist'
+        self.library = self.directory / 'libfixture.so'
+        self.library.write_bytes(b'provenance library fixture, never loaded')
+        self.runtime = self.directory / 'runtime.json'
+        self.runtime.write_text(json.dumps(engine.runtime_snapshot(
+            self.directory, [self.executable.name, self.library.name])))
         self.data = {
             'stage': 'native-build',
             'lock_sha256': hashlib.sha256((ROOT / 'chromium/upstream.lock.json').read_bytes()).hexdigest(),
             'fly_commit': 'fixture', 'fly_dirty': False,
             'details': {'target': 'chrome', 'native_desktop_supported': True,
                         'fingerprint': 'a' * 64, 'binary': str(self.executable),
-                        'sha256': hashlib.sha256(self.executable.read_bytes()).hexdigest()},
+                        'sha256': hashlib.sha256(self.executable.read_bytes()).hexdigest(),
+                        'runtime': {'file': str(self.runtime), 'output': str(self.directory.resolve()),
+                                    'sha256': engine.digest(self.runtime)}},
         }
 
     def reject(self, data, message):
@@ -76,6 +87,34 @@ class MediaProvenanceTests(unittest.TestCase):
         self.data['details']['binary'] = str(self.executable)
         self.executable.write_bytes(b'replaced')
         self.reject(self.data, 'Native executable hash differs')
+
+    def test_runtime_manifest_is_required_before_any_side_effect(self):
+        del self.data['details']['runtime']
+        self.reject(self.data, 'Require complete native runtime manifest')
+
+    def test_replaced_library_cannot_hide_behind_unchanged_executable(self):
+        self.library.write_bytes(b'replaced shared library')
+        self.reject(self.data, 'Runtime files differ from the successful build manifest')
+
+    def test_runtime_manifest_tampering_is_rejected(self):
+        self.runtime.write_text('{}')
+        self.reject(self.data, 'Runtime manifest digest differs')
+
+    def test_runtime_must_include_the_browser_not_just_a_library(self):
+        self.runtime.write_text(json.dumps(engine.runtime_snapshot(self.directory, [self.library.name])))
+        self.data['details']['runtime']['sha256'] = engine.digest(self.runtime)
+        self.reject(self.data, 'Runtime manifest excludes the browser executable')
+
+    def test_present_malformed_runtime_is_not_treated_as_a_legacy_record(self):
+        self.data['details']['runtime'] = {}
+        self.reject(self.data, 'A complete runtime manifest is required')
+
+    def test_manifest_cannot_redirect_reads_outside_the_evidence_directory(self):
+        with tempfile.TemporaryDirectory(prefix='fly-outside-evidence-') as directory:
+            outside = Path(directory) / 'runtime.json'
+            outside.write_bytes(self.runtime.read_bytes())
+            self.data['details']['runtime']['file'] = str(outside)
+            self.reject(self.data, 'Runtime manifest is outside its evidence directory')
 
     def test_matching_record_returns_auditable_provenance_without_launch(self):
         self.record.write_text(json.dumps(self.data))
