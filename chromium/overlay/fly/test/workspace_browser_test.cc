@@ -1805,6 +1805,14 @@ IN_PROC_BROWSER_TEST_F(FlyWorkspaceBrowserTest,
     return content::EvalJs(contents, "document.querySelector('#entry').value").ExtractString() == "j";
   }));
   EXPECT_EQ(0, content::EvalJs(contents, "visibilityEvents"));
+  ASSERT_TRUE(InvokeNativeCommand(browser(), "toggle-bookmarks"));
+  ASSERT_TRUE(picker.active());
+  const auto future = base::DictValue().Set("schema", 2).Set("items", base::ListValue());
+  g_browser_process->local_state()->SetDict(kBookmarksPref, future.Clone());
+  ASSERT_TRUE(base::test::RunUntil([&] { return !picker.search_for_testing(); }));
+  EXPECT_FALSE(window.bookmarks_button_for_testing()->GetEnabled());
+  EXPECT_FALSE(NativeCommandAvailable(browser(), "toggle-bookmarks"));
+  EXPECT_EQ(future, g_browser_process->local_state()->GetDict(kBookmarksPref));
 }
 
 class FlyTabMenuBrowserTest : public FlyWorkspaceBrowserTest {

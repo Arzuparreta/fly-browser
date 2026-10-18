@@ -249,7 +249,15 @@ std::vector<PaletteEntry> FlyWindowController::BookmarkEntries() {
   return entries;
 }
 void FlyWindowController::OnBookmarksChanged() {
-  bookmarks_button_->SetEnabled(selected_ && !closing_ && bookmarks_->Read().has_value());
+  const bool readable = bookmarks_->Read().has_value();
+  bookmarks_button_->SetEnabled(selected_ && !closing_ && readable);
+  bookmarks_button_->SetTooltipText(readable ? u"Search shared Fly bookmarks"
+      : u"Fly bookmarks need recovery. Saved data has been preserved.");
+  if (!readable) {
+    if (bookmark_picker_->active())
+      bookmark_picker_->Cancel(true);
+    return;
+  }
   if (bookmark_picker_->active())
     bookmark_picker_->UpdateItems(BookmarkEntries(), bookmarks_->CanEdit());
 }
