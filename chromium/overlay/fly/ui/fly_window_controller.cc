@@ -2,6 +2,9 @@
 // Use of this source code is governed by the GPL-3.0-or-later license in the
 // Fly repository.
 #include "fly/ui/fly_window_controller.h"
+#include "fly/commands/keyboard_router.h"
+#include "fly/ui/command_palette.h"
+#include "fly/ui/hint_controller.h"
 #include "fly/ui/native_commands.h"
 #include "fly/ui/tab_sidebar.h"
 
@@ -69,7 +72,7 @@ FlyWindowController::FlyWindowController()
     : workspaces_(*g_browser_process->local_state()),
       commands_(*g_browser_process->local_state()),
       keep_alive_(
-          std::make_unique<ScopedKeepAlive>(KeepAliveOrigin::BROWSER,
+          std::make_unique<ScopedKeepAlive>(KeepAliveOrigin::FLY_WINDOW,
                                             KeepAliveRestartOption::DISABLED)),
       desktop_(std::make_unique<views::Widget>()) {
   SetTitle(u"Fly");
@@ -80,8 +83,9 @@ FlyWindowController::FlyWindowController()
   auto* layout = root->SetLayoutManager(std::make_unique<views::BoxLayout>(
       views::BoxLayout::Orientation::kHorizontal));
   auto sidebar = std::make_unique<views::View>();
-  auto* sidebar_layout = sidebar->SetLayoutManager(std::make_unique<views::BoxLayout>(
-      views::BoxLayout::Orientation::kVertical, gfx::Insets(8), 6));
+  auto* sidebar_layout =
+      sidebar->SetLayoutManager(std::make_unique<views::BoxLayout>(
+          views::BoxLayout::Orientation::kVertical, gfx::Insets(8), 6));
   sidebar->SetPreferredSize(gfx::Size(280, 0));
   sidebar->AddChildView(std::make_unique<views::Label>(u"Fly"));
   sidebar->AddChildView(std::make_unique<views::MdTextButton>(
@@ -91,7 +95,9 @@ FlyWindowController::FlyWindowController()
   workspace_buttons_ = sidebar->AddChildView(std::make_unique<views::View>());
   workspace_buttons_->SetLayoutManager(std::make_unique<views::BoxLayout>(
       views::BoxLayout::Orientation::kVertical));
-  tab_sidebar_ = sidebar->AddChildView(std::make_unique<TabSidebar>());
+  tab_sidebar_ =
+      sidebar->AddChildView(std::make_unique<TabSidebar>(base::BindRepeating(
+          &FlyWindowController::CreateTab, weak_factory_.GetWeakPtr())));
   sidebar_layout->SetFlexForView(tab_sidebar_, 1);
   status_ = sidebar->AddChildView(std::make_unique<views::Label>(u"NORMAL"));
   root->AddChildView(std::move(sidebar));
@@ -105,6 +111,35 @@ FlyWindowController::FlyWindowController()
   params.name = "FlyDesktopWindow";
   params.bounds = gfx::Rect(80, 80, 1200, 800);
   desktop_->Init(std::move(params));
+  hints_ = std::make_unique<HintController>(
+      desktop_.get(), base::BindRepeating(
+                          [](base::WeakPtr<FlyWindowController> window, bool) {
+                            if (window)
+                              window->UpdateModeLabel();
+                          },
+                          weak_factory_.GetWeakPtr()));
+  palette_ = std::make_unique<CommandPalette>(
+      desktop_.get(),
+      base::BindRepeating(
+          [](base::WeakPtr<FlyWindowController> window,
+             std::string_view action) {
+            if (!window || !window->selected_ || window->closing_)
+              return false;
+            return action == "trigger-hints" || action == "focus-sidebar" ||
+                   action == "new-workspace" || action == "next-workspace" ||
+                   action == "previous-workspace" ||
+                   NativeCommandAvailable(window->selected_, action);
+          },
+          weak_factory_.GetWeakPtr()),
+      base::BindRepeating(
+          [](base::WeakPtr<FlyWindowController> window,
+             content::WebContents* source, std::string action) {
+            if (window && window->selected_ &&
+                window->selected_->GetTabStripModel()->GetActiveWebContents() ==
+                    source)
+              InvokeNativeCommand(window->selected_, std::move(action));
+          },
+          weak_factory_.GetWeakPtr()));
   desktop_->AddObserver(this);
   desktop_->GetNativeWindow()->AddPreTargetHandler(this);
   ArmCloseCallback();
@@ -117,6 +152,8 @@ FlyWindowController::FlyWindowController()
 FlyWindowController::~FlyWindowController() {
   CHECK(entries_.empty());
   weak_factory_.InvalidateWeakPtrs();
+  palette_.reset();
+  hints_.reset();
   desktop_->GetNativeWindow()->RemovePreTargetHandler(this);
   desktop_->RemoveObserver(this);
   // Destruction is only posted after all profile-bound BrowserWidgets finish
@@ -155,7 +192,11 @@ void FlyWindowController::Prepare(BrowserWindowInterface* browser) {
   auto* host =
       content_->AddChildView(std::make_unique<views::NativeViewHost>());
   host->SetVisible(false);
-  entries_.emplace(browser, Entry{browser, nullptr, host, workspace_id});
+  auto [entry, inserted] =
+      entries_.emplace(browser, Entry{browser, nullptr, host, workspace_id});
+  entry->second.closed_subscription =
+      browser->RegisterBrowserDidClose(base::BindRepeating(
+          &FlyWindowController::OnBrowserDidClose, weak_factory_.GetWeakPtr()));
   RebuildWorkspaceButtons();
 }
 
@@ -174,16 +215,21 @@ bool FlyWindowController::IsSelected(
 
 void FlyWindowController::Select(BrowserWindowInterface* browser, bool focus) {
   auto it = entries_.find(browser);
-  if (it == entries_.end() || !it->second.widget) {
+  if (it == entries_.end() || it->second.browser_closed || !it->second.widget) {
     return;
   }
   if (selected_ != browser) {
     if (selected_) {
       auto& previous = entries_.at(selected_);
+      if (auto* contents =
+              selected_->GetTabStripModel()->GetActiveWebContents())
+        contents->StoreFocus();
       previous.widget->OnNativeWidgetActivationChanged(false);
       previous.host->SetVisible(false);
       previous.widget->Hide();
     }
+    hints_->Cancel();
+    palette_->Cancel();
     selected_ = browser;
     tab_sidebar_->SetBrowser(browser);
     auto& next = it->second;
@@ -194,11 +240,14 @@ void FlyWindowController::Select(BrowserWindowInterface* browser, bool focus) {
     }
     next.widget->OnNativeWidgetActivationChanged(desktop_->IsActive());
   }
+  UpdateModeLabel();
   desktop_->Show();
   if (focus) {
     desktop_->Activate();
     if (auto* contents = browser->GetTabStripModel()->GetActiveWebContents()) {
-      contents->Focus();
+      auto* view = contents->GetRenderWidgetHostView();
+      if (!view || !view->HasFocus())
+        contents->RestoreFocus();
     }
   }
 }
@@ -218,7 +267,7 @@ void FlyWindowController::RebuildWorkspaceButtons() {
         base::UTF8ToUTF16(item.name)));
   }
   for (const auto& [browser, entry] : entries_) {
-    if (entry.workspace_id.empty()) {
+    if (!entry.browser_closed && entry.workspace_id.empty()) {
       workspace_buttons_->AddChildView(std::make_unique<views::MdTextButton>(
           base::BindRepeating(&FlyWindowController::Select,
                               weak_factory_.GetWeakPtr(), browser, true),
@@ -232,7 +281,7 @@ void FlyWindowController::OpenWorkspace(std::string id) {
     return;
   }
   for (const auto& [browser, entry] : entries_) {
-    if (entry.workspace_id == id) {
+    if (!entry.browser_closed && entry.workspace_id == id) {
       Select(browser, true);
       return;
     }
@@ -252,6 +301,22 @@ void FlyWindowController::OpenWorkspace(std::string id) {
   manager->CreateProfileAsync(
       path, base::BindOnce(&FlyWindowController::OnProfileReady,
                            weak_factory_.GetWeakPtr(), std::move(id)));
+}
+
+void FlyWindowController::CreateTab() {
+  if (closing_)
+    return;
+  if (selected_) {
+    chrome::NewTab(selected_, NewTabTypes::kNewTabCommand);
+    return;
+  }
+  const auto catalog = workspaces_.Read();
+  if (!catalog)
+    return;
+  if (catalog->items.empty())
+    CreateWorkspace();
+  else
+    OpenWorkspace(catalog->active_id);
 }
 
 void FlyWindowController::CreateWorkspace() {
@@ -302,6 +367,36 @@ void FlyWindowController::OnProfileReady(std::string id, Profile* profile) {
                           weak_factory_.GetWeakPtr()));
 }
 
+void FlyWindowController::OnBrowserDidClose(BrowserWindowInterface* browser) {
+  auto it = entries_.find(browser);
+  if (it == entries_.end())
+    return;
+  // This fires before the browser/tab-model teardown. The Widget observer
+  // releases the native host later, without retaining a dead BWI meanwhile.
+  it->second.browser_closed = true;
+  it->second.browser = nullptr;
+  if (selected_ == browser) {
+    hints_->Cancel();
+    palette_->Cancel();
+    tab_sidebar_->SetBrowser(nullptr);
+    selected_ = nullptr;
+    if (it->second.widget) {
+      it->second.host->SetVisible(false);
+      it->second.widget->Hide();
+    }
+    if (!closing_) {
+      for (const auto& [next, entry] : entries_) {
+        if (!entry.browser_closed && entry.widget) {
+          Select(next, true);
+          break;
+        }
+      }
+    }
+    UpdateModeLabel();
+  }
+  RebuildWorkspaceButtons();
+}
+
 void FlyWindowController::ArmCloseCallback() {
   desktop_->MakeCloseSynchronous(base::BindOnce(
       &FlyWindowController::RequestClose, weak_factory_.GetWeakPtr()));
@@ -311,6 +406,8 @@ void FlyWindowController::RequestClose(views::Widget::ClosedReason reason) {
   if (closing_) {
     return;
   }
+  hints_->Cancel();
+  palette_->Cancel();
   closing_ = true;
   if (entries_.empty()) {
     base::SingleThreadTaskRunner::GetCurrentDefault()->PostTask(
@@ -321,6 +418,10 @@ void FlyWindowController::RequestClose(views::Widget::ClosedReason reason) {
   }
 }
 void FlyWindowController::OnClosingAllBrowsers(bool closing) {
+  if (closing) {
+    hints_->Cancel();
+    palette_->Cancel();
+  }
   closing_ = closing;
   if (closing && entries_.empty()) {
     base::SingleThreadTaskRunner::GetCurrentDefault()->PostTask(
@@ -379,6 +480,16 @@ bool FlyWindowController::RunCommand(BrowserWindowInterface* browser,
                                      std::string_view action) {
   if (!entries_.contains(browser) || closing_)
     return false;
+  if (action == "toggle-palette") {
+    hints_->Cancel();
+    palette_->Toggle(browser->GetTabStripModel()->GetActiveWebContents(),
+                     commands_.Read().value_or(DefaultKeyboardConfig()));
+    return true;
+  }
+  if (action == "trigger-hints") {
+    hints_->Toggle(browser->GetTabStripModel()->GetActiveWebContents());
+    return true;
+  }
   if (action == "new-workspace") {
     CreateWorkspace();
     return true;
@@ -411,9 +522,70 @@ bool FlyWindowController::RunCommand(BrowserWindowInterface* browser,
 
 namespace fly {
 void FlyWindowController::OnKeyEvent(ui::KeyEvent* event) {
-  if (!selected_ || event->type() != ui::EventType::kKeyPressed ||
-      event->is_char())
+  if (event->type() != ui::EventType::kKeyPressed || event->is_char())
     return;
+  if (palette_->active()) {
+    if (palette_->HandleOverlayKey(*event)) {
+      event->SetHandled();
+      event->StopPropagation();
+    }
+    return;
+  }
+  if (!selected_) {
+    if (closing_)
+      return;
+    if (!empty_router_ || empty_generation_ != commands_.generation()) {
+      empty_router_ = std::make_unique<KeyboardRouter>(
+          commands_.Read().value_or(DefaultKeyboardConfig()));
+      empty_generation_ = commands_.generation();
+    }
+    const input::NativeWebKeyboardEvent native(*event);
+    auto* input = desktop_->GetInputMethod();
+    auto* client = input ? input->GetTextInputClient() : nullptr;
+    const auto key = empty_router_->Route(
+        {.stroke = NativeEventStroke(native),
+         .time = base::TimeTicks::Now(),
+         .repeat = event->is_repeat(),
+         .composing =
+             native.skip_if_unhandled ||
+             bool(native.GetModifiers() & (blink::WebInputEvent::kIsComposing |
+                                           blink::WebInputEvent::kAltGrKey)),
+         .editable =
+             client && client->GetTextInputType() != ui::TEXT_INPUT_TYPE_NONE});
+    UpdateModeLabel();
+    if (key.kind == KeyResultKind::kPass)
+      return;
+    if (key.kind == KeyResultKind::kAction) {
+      const auto catalog = workspaces_.Read();
+      if (key.action == "toggle-passthrough" || key.action == "enter-insert") {
+        UpdateModeLabel();
+      } else if (key.action == "new-workspace") {
+        CreateWorkspace();
+      } else if (key.action == "spawn-tab") {
+        CreateTab();
+      } else if ((key.action == "next-workspace" ||
+                  key.action == "previous-workspace") &&
+                 catalog && !catalog->items.empty()) {
+        auto current = std::ranges::find(catalog->items, catalog->active_id,
+                                         &Workspace::id);
+        const size_t count = catalog->items.size();
+        const size_t index = current == catalog->items.end()
+                                 ? 0
+                                 : current - catalog->items.begin();
+        OpenWorkspace(catalog
+                          ->items[key.action == "next-workspace"
+                                      ? (index + 1) % count
+                                      : (index + count - 1) % count]
+                          .id);
+      } else {
+        status_->SetText(
+            base::UTF8ToUTF16(ActionLabel(key.action) + ": unavailable"));
+      }
+    }
+    event->SetHandled();
+    event->StopPropagation();
+    return;
+  }
   auto* contents = selected_->GetTabStripModel()->GetActiveWebContents();
   // Page events use BrowserView::PreHandleKeyboardEvent after native IME
   // processing. Do not dispatch them a second time at the desktop ancestor.
@@ -430,5 +602,23 @@ void FlyWindowController::OnKeyEvent(ui::KeyEvent* event) {
     event->SetHandled();
     event->StopPropagation();
   }
+}
+}  // namespace fly
+
+namespace fly {
+void FlyWindowController::UpdateModeLabel() {
+  if (!status_)
+    return;
+  if (!selected_ && empty_router_) {
+    status_->SetText(
+        empty_router_->mode() == KeyboardMode::kPassthrough ? u"PASSTHROUGH"
+        : empty_router_->mode() == KeyboardMode::kInsert    ? u"INSERT"
+                                                            : u"NORMAL");
+    return;
+  }
+  status_->SetText(
+      hints_ && hints_->active()
+          ? (hints_->truncated() ? u"HINTS (target limit)" : u"HINTS")
+          : NativePageModeLabel(selected_));
 }
 }  // namespace fly

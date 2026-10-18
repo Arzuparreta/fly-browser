@@ -5,23 +5,23 @@ No native application, migration or package has passed acceptance yet.
 
 ## Current checkpoint
 
-PR [#112](https://github.com/Arzuparreta/fly-browser/pull/112) merged as
-`1b82cc5` after its latest-head ordinary checks and explicit native matrix passed.
-[Run 39071709021](https://github.com/Arzuparreta/fly-browser/actions/runs/39071709021)
-built and executed 26 native service tests on **Linux, macOS and Windows**, and
-passed all 27 Python tooling contracts on all three platforms. Downloaded
+PR [#113](https://github.com/Arzuparreta/fly-browser/pull/113) merged as
+`3a34888` after latest-head ordinary checks and the explicit native matrix passed.
+[Run 39075312206](https://github.com/Arzuparreta/fly-browser/actions/runs/39075312206)
+built and executed all 26 native service tests on **Linux, macOS and Windows**;
+all 27 Python tooling contracts also passed on all three. Downloaded
 `native-core-tests.json` files each contain 26 SUCCESS results, under external
-`evidence/ci-native-units-final/`. These are service tests, not browser acceptance.
+`evidence/ci-sidebar-final/`. These are service tests, not browser acceptance.
 
-The sidebar branch `codex/chromium-native-sidebar` is now based on that merged
-main. Its nine browser tests are source-checked but unexecuted. The dependent
-`codex/chromium-native-hints` branch is already committed/pushed at `003b2fd`;
-it adds native accessibility hints, empty-window input/lifetime handling and two
-more browser tests, with 28 service tests passing in the local bootstrap runner.
-It must be rebased after the sidebar PR merges. Further native page-scroll work
-is in `codex/chromium-native-page-scroll` in the managed hints worktree; inspect
-its status before switching branches. No source overlay has been applied to the
-active control checkout.
+The follow-up work is consolidated on `codex/chromium-browser-test-runner`,
+rebased onto that merged main: native hints, empty-window handling, focused page
+scrolling, command palette and a scoped browser-test executable. This replaces
+the earlier dependent-branch delivery sequence; the old pushed branches preserve
+intermediate checkpoints. The combined branch has 15 browser tests awaiting
+execution, 31 service tests passing in the pinned local partial runner, and
+successful full native GN generation/header checks in an isolated source shadow.
+An updated official 31-test CI matrix is still required. No source overlay has
+been applied to the active control checkout; its user service continues building.
 
 ## Source and working state
 
@@ -189,12 +189,12 @@ extension probe. The active log is `/mnt/storage/fly-chromium/build-systemd.log`
 inspect `.fly-engine-operation/owner.json` and the live processes before running
 another engine operation. Do not modify that source tree while it builds.
 
-Open/validate the sidebar PR, wait for its latest-head checks and manual native
-validation, then squash-merge and pull main. Rebase the dependent hints branch
-from its old sidebar base `65ce772` onto that merged main. Preserve the separate
-page-scroll work before switching its worktree. The retained Electron
-recorder/editable-page suite passed with a disposable profile and no page errors;
-its external log is `evidence/command-integration-electron-keyboard.log`.
+Open/validate the combined follow-up PR from
+`codex/chromium-browser-test-runner`, wait for all latest-head checks and the
+explicit native matrix, then squash-merge and pull main. The retained Electron
+recorder/editable-page suite passed in a private Xvfb display with a disposable
+profile and no page errors; its latest log is
+`evidence/palette-electron-keyboard-xvfb.log`.
 
 After the control passes, run the same-pin control fixtures, apply the complete
 managed overlay, configure/build the native browser, then run
@@ -438,3 +438,149 @@ profile-local `chrome.storage`, native tab/window IDs and active-tab query are
 asserted from a real content script/service worker. This is still unexecuted
 browser coverage; extension compatibility, blocking and media acceptance remain
 pending until real runs.
+
+
+## Native accessibility hints and empty-window commands
+
+The dependent `codex/chromium-native-hints` branch is in the managed
+`chromium-native-hints` worktree. It derives the hint alphabet and width-boundary
+fixtures from the retained `hinter.js`; generated-contract checking remains part
+of `npm test`. Two native unit tests verify the cross-language codes, bounded
+allocation, uniqueness and fixed-width prefixes. All 28 service tests pass in the
+external bootstrap runner (`evidence/build-hints-native.py`,
+`evidence/hints-native-tests.log`); an updated official GN run is still needed.
+
+HintController requests native accessibility only for its active WebContents and
+releases the scoped mode on completion/cancellation. Targets use native clipped
+screen-DIP bounds, live tree/node IDs and frame ownership checks. The overlay is
+a non-activating, pointer-transparent NativeWidgetAura child of the existing
+desktop, not a second OS window or page DOM. Selection issues native focus/default
+actions after validating the current node, owner and bounds again. AX notifications
+are coalesced and examined after their update stack unwinds. Navigation, blur,
+hiding, frame removal, window movement/deactivation and teardown cancel hints.
+No page scripts or web API replacements implement this path. Target count is
+bounded and the status label discloses truncation. Native keyboard integration,
+IME/AltGr handling and mode labels are wired, but real desktop acceptance is pending.
+
+The desktop has a distinct Fly keep-alive origin. Chromium intentionally ignores
+browser-only keep-alives when its last browser closes, so reusing BROWSER would
+prematurely start shutdown. A successful native browser close now clears its
+controller/sidebar references through RegisterBrowserDidClose before destruction;
+widget destruction later detaches the native host. The empty desktop routes
+validated bindings without a page and reopens its active workspace with either
+Ctrl+T or the sidebar's New tab button. Browser close still uses upstream unload
+processing and supports cancellation.
+
+Two more browser tests (11 total in this branch) inject native keyboard events to
+activate a hint without hiding/blurring the document, and close/reopen the last
+browser using keyboard and pointer flows. They are unexecuted until the full
+native browser/test link completes. Do not mark M1/M2 or A02/A03/A04/A08 passed
+from source checks or partial service tests.
+
+
+## Native focused-page scrolling
+
+The dependent `codex/chromium-native-page-scroll` branch extends the browser's
+existing ordered edit/input channel with a bounded C++ scroll-command enum.
+Chromium's public WebContents interface exposes document jumps but does not
+expose Fly's 80-CSS-pixel steps and half-viewport commands. The sixth integration
+patch maps these controls to private renderer input commands, which execute in
+the currently focused local frame and find its native scroll container through
+layout/shadow ancestry. Blink's own scrollBy/scrollTo implementations handle
+smooth scrolling, snapping and zoom; no injected script or page API replacement
+implements this path. The private names do not enter document.execCommand's
+web-exposed dispatch table. Ordinary edit commands retain their original path.
+
+The browser, Blink renderer and Fly dispatcher pass syntax checking with their
+actual respective pinned GN compile flags; raw output is external
+`evidence/scroll-syntax.log` and the three `scroll-*-syntax.log` files. The engine
+source remains unmodified while the control builds. Two more browser tests
+(13 total) cover focused-container steps, half-page/jump/horizontal movement at
+native zoom, editable typing, hostile page method overrides and a focused
+cross-origin/OOPIF scroll target. Native browser execution remains pending.
+
+Workspace switching also stores/restores native WebContents focus instead of
+unconditionally resetting it. The OOPIF case switches to a second profile and
+back before issuing its native scroll key, to check that the focused frame is
+retained. This remains an unexecuted browser assertion.
+
+## Native command palette
+
+The dependent `codex/chromium-native-palette` branch adds a native Views command
+surface inside the existing desktop Aura host. It searches the generated 46
+explicit palette entries and the remaining action catalogue, retaining explicit
+aliases and all 82 action routes. The displayed global and NORMAL bindings come
+from the current validated keyboard configuration; filtering uses Unicode case
+folding and requires every query word to match. It adds no renderer bridge,
+page scripts or privileged WebUI binding.
+
+The search field supports native typing/IME, arrows, Enter, Escape, pointer
+selection and dismissal outside the panel. The configured palette binding also
+closes it. Unsupported native actions remain disabled during this development
+stage. Selection posts execution until the native surface/row callbacks have
+finished, checks the originating WebContents and current profile again, and
+cancels on profile switch, navigation, tab hiding/destruction or desktop close.
+Cancellation restores the saved native page focus. Trusted native command
+invocation shares mode transitions with keyboard dispatch, so selecting INSERT
+or passthrough does not silently do nothing or apply a transition twice.
+
+The catalogue/filter tests and native-action routing case bring the Linux
+partial service runner to 31 passing C++ tests. This uses the pinned compiler,
+actual GN flags and already-linked upstream libraries; it is separate from the
+official GN test launcher and cannot pass browser acceptance. Evidence:
+`evidence/palette-native-tests-final.log`, `palette-syntax-final.log` and
+`palette-browser-syntax.log`. The UI, controller and dispatcher pass pinned-header
+syntax checks. Two new browser tests (15 total) cover native search/selection,
+editable-page isolation, a customised palette binding, focus restoration and
+cancellation on workspace switch. They have not run in a linked native browser.
+
+The full palette inspector/preferences, recent commands, extension/terminal
+entries and availability of all remaining actions are still pending M2/M3 work.
+This is a development component behind `--fly-native`, not a production cutover.
+
+Local repository checks (`npm test`, 27 Python tooling tests, documentation build
+and whitespace) pass for this branch. A repeat of the retained Electron keyboard
+scenario failed at `tests/keyboard-ui.test.js:183` because its test window closed;
+`evidence/palette-electron-keyboard.log` preserves the failure. A fresh disposable
+profile repeat is in progress in `palette-electron-keyboard-retry.log`. Neither
+attempt is native UI acceptance; the earlier retained-runtime pass remains in
+this record, and this branch changes no Electron keyboard implementation.
+
+## Focused native browser-test executable
+
+The dependent `codex/chromium-browser-test-runner` branch defines
+`//fly:fly_browser_tests`. It compiles the same Fly browser acceptance sources
+with Chromium's original `InProcessBrowserTest`, browser-test main, process
+launcher, renderer and extension test support, plus the native browser/resource
+runtime. It avoids building every unrelated upstream browser test merely to run
+Fly's filter. `native.py test-browser` selects this target by default;
+`--browser-target browser_tests` retains the original full-binary path. Both
+choices preserve the same fixture assertions and sandbox policy, and provenance
+records the actual target. The scoped native UI currently exists on Linux and
+Windows; this does not claim macOS native browser coverage.
+
+GN formatting and all declared upstream target labels have been checked against
+the pin. Linking and execution remain pending the full control/native builds.
+
+The complete native GN graph exposed an invalid direct dependency from the UI
+to the visibility-restricted accessibility platform target. The hint integration
+now uses the public `//ui/accessibility` aggregator; upstream visibility rules
+remain intact. Isolated generation with the full patch stack succeeds (35,555
+targets from 4,996 files). This graph validation does not modify the active
+control checkout or count as a native executable build.
+
+The retained Electron keyboard scenario subsequently **passed** in a private
+Xvfb display: recorder, customised bindings, editable input and guest scrolling
+(`errors: []`, 80 pixels). Log: `evidence/palette-electron-keyboard-xvfb.log`.
+The display used an externally extracted Arch package whose detached signature
+was verified against the host's Arch keyring; no system package or owner profile
+was changed. The prior desktop attempts remain recorded. The second was stopped
+after more than four minutes while a key dispatch was pending; its diagnostic
+is `palette-electron-keyboard-retry-timeout.txt`. The passing isolated run is
+baseline evidence only, not native acceptance.
+
+The isolated `gn check` passes for both `//fly:*` and
+`//chrome/browser/ui:ui`, including Fly's new native sources and the scoped test
+target. External evidence: `native-shadow-gn-retry.log` and
+`native-shadow-ui-headers.log`. The initial restricted-dependency failure is
+preserved in `native-shadow-gn.log`.

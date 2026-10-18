@@ -28,7 +28,10 @@ class Label;
 }  // namespace views
 
 namespace fly {
+class CommandPalette;
 class TabSidebar;
+class HintController;
+class KeyboardRouter;
 // One OS window. Each entry keeps an upstream BrowserView/BrowserWidget, native
 // tab model, profile and extension window ID. Its NativeWidgetAura does not
 // create an OS window. NativeViewHost controls actual clipping and visibility.
@@ -51,7 +54,12 @@ class FlyWindowController : public views::WidgetDelegate,
   bool IsSelected(const BrowserWindowInterface* browser) const;
   views::Widget* desktop_widget() const { return desktop_.get(); }
   CommandService& commands() { return commands_; }
+  BrowserWindowInterface* selected_browser_for_testing() { return selected_; }
+  CommandPalette& palette() { return *palette_; }
+  HintController& hints() { return *hints_; }
+  void UpdateModeLabel();
   TabSidebar* tab_sidebar_for_testing() { return tab_sidebar_; }
+  void CreateTab();
   void CreateWorkspace();
   bool RunCommand(BrowserWindowInterface* browser, std::string_view action);
 
@@ -67,10 +75,13 @@ class FlyWindowController : public views::WidgetDelegate,
     raw_ptr<views::Widget> widget = nullptr;
     raw_ptr<views::NativeViewHost> host;
     std::string workspace_id;
+    bool browser_closed = false;
+    base::CallbackListSubscription closed_subscription;
   };
   void RebuildWorkspaceButtons();
   void OpenWorkspace(std::string id);
   void OnProfileReady(std::string id, Profile* profile);
+  void OnBrowserDidClose(BrowserWindowInterface* browser);
   void RequestClose(views::Widget::ClosedReason reason);
   void OnClosingAllBrowsers(bool closing);
   void FinishClose();
@@ -78,6 +89,10 @@ class FlyWindowController : public views::WidgetDelegate,
 
   WorkspaceService workspaces_;
   CommandService commands_;
+  std::unique_ptr<HintController> hints_;
+  std::unique_ptr<CommandPalette> palette_;
+  std::unique_ptr<KeyboardRouter> empty_router_;
+  uint64_t empty_generation_ = 0;
   std::unique_ptr<ScopedKeepAlive> keep_alive_;
   std::unique_ptr<views::Widget> desktop_;
   raw_ptr<views::View> workspace_buttons_ = nullptr;

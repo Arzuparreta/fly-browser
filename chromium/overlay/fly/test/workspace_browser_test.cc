@@ -2,9 +2,12 @@
 // Use of this source code is governed by the GPL-3.0-or-later license in the
 // Fly repository.
 #include "fly/sessions/tab_identity.h"
+#include "fly/ui/command_palette.h"
 #include "fly/ui/fly_window_controller.h"
+#include "fly/ui/hint_controller.h"
 #include "fly/ui/native_commands.h"
 #include "fly/ui/tab_sidebar.h"
+#include "ui/views/controls/textfield/textfield.h"
 
 #include "base/command_line.h"
 #include "base/json/json_reader.h"
@@ -24,14 +27,17 @@
 #include "chrome/browser/ui/tabs/tab_strip_model.h"
 #include "chrome/test/base/in_process_browser_test.h"
 #include "chrome/test/base/ui_test_utils.h"
+#include "content/public/browser/render_frame_host.h"
 #include "content/public/browser/web_contents.h"
 #include "content/public/test/browser_test.h"
 #include "content/public/test/browser_test_utils.h"
 #include "extensions/test/test_extension_dir.h"
+#include "net/dns/mock_host_resolver.h"
 #include "net/test/embedded_test_server/embedded_test_server.h"
 #include "ui/aura/window.h"
 #include "ui/aura/window_tree_host.h"
 #include "ui/base/base_window.h"
+#include "ui/events/test/event_generator.h"
 #include "ui/views/controls/button/button.h"
 #include "ui/views/test/button_test_api.h"
 
@@ -384,6 +390,245 @@ IN_PROC_BROWSER_TEST_F(FlyWorkspaceBrowserTest,
     EXPECT_EQ(data->FindInt("tabId"), data->FindInt("activeTabId"));
     EXPECT_EQ(data->FindInt("tabId"), data->FindInt("activated"));
   }
+}
+
+IN_PROC_BROWSER_TEST_F(FlyWorkspaceBrowserTest,
+                       NativeHintKeysActivateWithoutHidingOrBlurringPage) {
+  ASSERT_TRUE(ui_test_utils::NavigateToURL(
+      browser(), embedded_test_server()->GetURL("/title1.html")));
+  auto* contents = Active(browser());
+  ASSERT_TRUE(content::ExecJs(contents, R"js(
+    document.body.innerHTML = '<button id="only">Hint fixture</button>';
+    document.querySelector('#only').onclick = () => document.title = 'hint activated';
+    window.visibilityEvents = 0;
+    document.addEventListener('visibilitychange', () => visibilityEvents++);
+  )js"));
+  auto& window = FlyWindowController::Get();
+  window.Select(browser(), true);
+  ui::test::EventGenerator keys(window.desktop_widget()->GetNativeWindow());
+  keys.PressKey(ui::VKEY_F, ui::EF_ALT_DOWN);
+  ASSERT_TRUE(base::test::RunUntil([&] {
+    return window.hints().active() &&
+           window.hints().target_count_for_testing() == 1;
+  }));
+  EXPECT_EQ("visible", content::EvalJs(contents, "document.visibilityState"));
+  EXPECT_EQ(true, content::EvalJs(contents, "document.hasFocus()"));
+  EXPECT_EQ(0, content::EvalJs(contents, "visibilityEvents"));
+  content::TitleWatcher title(contents, u"hint activated");
+  keys.PressKey(ui::VKEY_Q, ui::EF_NONE);
+  EXPECT_EQ(u"hint activated", title.WaitAndGetTitle());
+  EXPECT_FALSE(window.hints().active());
+  EXPECT_EQ(0, content::EvalJs(contents, "visibilityEvents"));
+}
+
+IN_PROC_BROWSER_TEST_F(FlyWorkspaceBrowserTest,
+                       EmptyDesktopSurvivesAndNewTabKeyReopensWorkspace) {
+  auto& window = FlyWindowController::Get();
+  auto original = browser()->GetWeakPtr();
+  ASSERT_TRUE(ExecuteNativeCommand(browser(), "remove-tab"));
+  ASSERT_TRUE(base::test::RunUntil([&] { return !original; }));
+  ASSERT_EQ(&window, FlyWindowController::GetIfCreated());
+  EXPECT_EQ(nullptr, window.selected_browser_for_testing());
+  EXPECT_TRUE(window.desktop_widget()->IsVisible());
+  ui::test::EventGenerator keys(window.desktop_widget()->GetNativeWindow());
+  keys.PressKey(ui::VKEY_T, ui::EF_CONTROL_DOWN);
+  ASSERT_TRUE(base::test::RunUntil(
+      [&] { return window.selected_browser_for_testing() != nullptr; }));
+  EXPECT_EQ(1,
+            window.selected_browser_for_testing()->GetTabStripModel()->count());
+  auto* reopened = window.selected_browser_for_testing();
+  auto reopened_lifetime = reopened->GetWeakPtr();
+  ASSERT_TRUE(ExecuteNativeCommand(reopened, "remove-tab"));
+  ASSERT_TRUE(base::test::RunUntil([&] { return !reopened_lifetime; }));
+  auto* new_tab = static_cast<views::Button*>(
+      window.tab_sidebar_for_testing()->children().front());
+  views::test::ButtonTestApi(new_tab).NotifyDefaultMouseClick();
+  ASSERT_TRUE(base::test::RunUntil(
+      [&] { return window.selected_browser_for_testing() != nullptr; }));
+  EXPECT_EQ(1,
+            window.selected_browser_for_testing()->GetTabStripModel()->count());
+}
+
+IN_PROC_BROWSER_TEST_F(FlyWorkspaceBrowserTest,
+                       NativePaletteSearchExecutesInItsProfileAfterDismissal) {
+  auto* contents = Active(browser());
+  ASSERT_TRUE(ui_test_utils::NavigateToURL(
+      browser(), embedded_test_server()->GetURL("/title1.html")));
+  ASSERT_TRUE(content::ExecJs(contents,
+                              "document.body.innerHTML = '<input id=editable>';"
+                              "document.querySelector('#editable').focus()"));
+  auto& window = FlyWindowController::Get();
+  window.Select(browser(), true);
+  ui::test::EventGenerator keys(window.desktop_widget()->GetNativeWindow());
+  keys.PressKey(ui::VKEY_P, ui::EF_CONTROL_DOWN);
+  ASSERT_TRUE(base::test::RunUntil([&] { return window.palette().active(); }));
+  for (auto key : {ui::VKEY_D, ui::VKEY_U, ui::VKEY_P, ui::VKEY_L, ui::VKEY_I,
+                   ui::VKEY_C, ui::VKEY_A, ui::VKEY_T, ui::VKEY_E})
+    keys.PressKey(key, ui::EF_NONE);
+  ASSERT_TRUE(base::test::RunUntil([&] {
+    return window.palette().search_for_testing()->GetText() == u"duplicate" &&
+           window.palette().result_count_for_testing() == 1;
+  }));
+  EXPECT_EQ("", content::EvalJs(contents,
+                                "document.querySelector('#editable').value"));
+  const int before = browser()->GetTabStripModel()->count();
+  keys.PressKey(ui::VKEY_RETURN, ui::EF_NONE);
+  ASSERT_TRUE(base::test::RunUntil(
+      [&] { return browser()->GetTabStripModel()->count() == before + 1; }));
+  EXPECT_FALSE(window.palette().active());
+  EXPECT_EQ(browser(), window.selected_browser_for_testing());
+}
+
+IN_PROC_BROWSER_TEST_F(FlyWorkspaceBrowserTest,
+                       NativePaletteCustomBindingCancelAndWorkspaceSwitch) {
+  ASSERT_TRUE(ui_test_utils::NavigateToURL(
+      browser(), embedded_test_server()->GetURL("/title1.html")));
+  auto* contents = Active(browser());
+  ASSERT_TRUE(content::ExecJs(contents,
+                              "document.body.innerHTML = '<input id=editable>';"
+                              "document.querySelector('#editable').focus()"));
+  auto& window = FlyWindowController::Get();
+  window.Select(browser(), true);
+  auto config = DefaultKeyboardConfig().ToValue();
+  config.FindDict("shortcuts")
+      ->Set("toggle-palette", base::ListValue().Append("Alt+P"));
+  ASSERT_TRUE(window.commands().Save(config).config);
+  ui::test::EventGenerator keys(window.desktop_widget()->GetNativeWindow());
+  keys.PressKey(ui::VKEY_P, ui::EF_ALT_DOWN);
+  ASSERT_TRUE(base::test::RunUntil([&] { return window.palette().active(); }));
+  keys.PressKey(ui::VKEY_P, ui::EF_ALT_DOWN);
+  ASSERT_TRUE(base::test::RunUntil(
+      [&] { return window.palette().search_for_testing() == nullptr; }));
+  keys.PressKey(ui::VKEY_J, ui::EF_NONE);
+  ASSERT_TRUE(base::test::RunUntil([&] {
+    return content::EvalJs(contents,
+                           "document.querySelector('#editable').value")
+               .ExtractString() == "j";
+  }));
+  keys.PressKey(ui::VKEY_P, ui::EF_ALT_DOWN);
+  ASSERT_TRUE(base::test::RunUntil([&] { return window.palette().active(); }));
+  ASSERT_TRUE(SecondWorkspace());
+  ASSERT_TRUE(base::test::RunUntil([&] { return !window.palette().active(); }));
+  EXPECT_NE(browser(), window.selected_browser_for_testing());
+}
+
+class FlyPageScrollBrowserTest : public FlyWorkspaceBrowserTest {
+ public:
+  void SetUpCommandLine(base::CommandLine* command_line) override {
+    FlyWorkspaceBrowserTest::SetUpCommandLine(command_line);
+    command_line->AppendSwitch("site-per-process");
+  }
+  void SetUpOnMainThread() override {
+    FlyWorkspaceBrowserTest::SetUpOnMainThread();
+    host_resolver()->AddRule("*", "127.0.0.1");
+  }
+};
+
+IN_PROC_BROWSER_TEST_F(FlyPageScrollBrowserTest,
+                       FocusedContainerPixelsHalfPageAndEditableKeys) {
+  ASSERT_TRUE(ui_test_utils::NavigateToURL(
+      browser(), embedded_test_server()->GetURL("/title1.html")));
+  auto* contents = Active(browser());
+  ASSERT_TRUE(ExecuteNativeCommand(browser(), "zoom-in"));
+  ASSERT_TRUE(content::ExecJs(contents, R"js(
+    document.body.innerHTML = `
+      <input id="editable">
+      <div id="box" tabindex="0" style="height:240px;width:240px;overflow:auto">
+        <div style="height:3000px;width:2000px">Scroll fixture</div>
+      </div>`;
+    document.body.style.height = '10000px';
+    window.scrollTo(0, 0);
+    const box = document.querySelector('#box');
+    box.focus();
+    // A hostile page override cannot intercept the browser's native command.
+    box.scrollBy = () => { throw new Error('Page scroll override called'); };
+    box.scrollTo = box.scrollBy;
+  )js"));
+  auto& window = FlyWindowController::Get();
+  window.Select(browser(), true);
+  ui::test::EventGenerator keys(window.desktop_widget()->GetNativeWindow());
+  auto wait_offset = [&](const char* axis, int offset) {
+    return base::test::RunUntil([&] {
+      return content::EvalJs(
+                 contents,
+                 content::JsReplace(
+                     "Math.round(document.querySelector('#box')[$1])", axis))
+                 .ExtractInt() == offset;
+    });
+  };
+  keys.PressKey(ui::VKEY_J, ui::EF_NONE);
+  ASSERT_TRUE(wait_offset("scrollTop", 80));
+  EXPECT_EQ(0, content::EvalJs(contents, "scrollY"));
+  const int half_page =
+      content::EvalJs(
+          contents,
+          "Math.floor(document.querySelector('#box').clientHeight / 2)")
+          .ExtractInt();
+  keys.PressKey(ui::VKEY_D, ui::EF_NONE);
+  ASSERT_TRUE(wait_offset("scrollTop", 80 + half_page));
+  keys.PressKey(ui::VKEY_U, ui::EF_NONE);
+  ASSERT_TRUE(wait_offset("scrollTop", 80));
+  keys.PressKey(ui::VKEY_L, ui::EF_NONE);
+  ASSERT_TRUE(wait_offset("scrollLeft", 80));
+  keys.PressKey(ui::VKEY_G, ui::EF_NONE);
+  keys.PressKey(ui::VKEY_G, ui::EF_NONE);
+  ASSERT_TRUE(wait_offset("scrollTop", 0));
+  ASSERT_TRUE(wait_offset("scrollLeft", 0));
+  keys.PressKey(ui::VKEY_G, ui::EF_SHIFT_DOWN);
+  const int bottom =
+      content::EvalJs(contents,
+                      "document.querySelector('#box').scrollHeight - "
+                      "document.querySelector('#box').clientHeight")
+          .ExtractInt();
+  ASSERT_TRUE(wait_offset("scrollTop", bottom));
+  ASSERT_TRUE(
+      content::ExecJs(contents, "document.querySelector('#editable').focus()"));
+  ASSERT_TRUE(base::test::RunUntil(
+      [&] { return contents->IsFocusedElementEditable(); }));
+  keys.PressKey(ui::VKEY_J, ui::EF_NONE);
+  ASSERT_TRUE(base::test::RunUntil([&] {
+    return content::EvalJs(contents,
+                           "document.querySelector('#editable').value")
+               .ExtractString() == "j";
+  }));
+  EXPECT_EQ(false, content::EvalJs(
+                       contents, "document.execCommand('FlyScrollStepDown')"));
+}
+
+IN_PROC_BROWSER_TEST_F(FlyPageScrollBrowserTest,
+                       NativeScrollUsesFocusedCrossOriginFrame) {
+  ASSERT_TRUE(ui_test_utils::NavigateToURL(
+      browser(), embedded_test_server()->GetURL("/title1.html")));
+  auto* contents = Active(browser());
+  const auto child_url =
+      embedded_test_server()->GetURL("frame.test", "/title1.html");
+  ASSERT_TRUE(content::ExecJs(contents, R"js(
+    document.body.innerHTML = '<iframe id="frame" style="height:200px"></iframe>';
+    document.body.style.height = '10000px';
+  )js"));
+  ASSERT_TRUE(content::NavigateIframeToURL(contents, "frame", child_url));
+  auto* child = content::ChildFrameAt(contents->GetPrimaryMainFrame(), 0);
+  ASSERT_TRUE(child);
+  ASSERT_NE(contents->GetPrimaryMainFrame()->GetProcess(), child->GetProcess());
+  ASSERT_TRUE(content::ExecJs(child, R"js(
+    document.body.innerHTML = '<button id="focus">Frame focus</button>';
+    document.body.style.height = '5000px';
+    document.querySelector('#focus').focus();
+  )js"));
+  auto& window = FlyWindowController::Get();
+  window.Select(browser(), true);
+  ASSERT_TRUE(base::test::RunUntil(
+      [&] { return contents->GetFocusedFrame() == child; }));
+  ASSERT_TRUE(SecondWorkspace());
+  window.Select(browser(), true);
+  ASSERT_TRUE(base::test::RunUntil(
+      [&] { return contents->GetFocusedFrame() == child; }));
+  ui::test::EventGenerator keys(window.desktop_widget()->GetNativeWindow());
+  keys.PressKey(ui::VKEY_J, ui::EF_NONE);
+  ASSERT_TRUE(base::test::RunUntil([&] {
+    return content::EvalJs(child, "Math.round(scrollY)").ExtractInt() == 80;
+  }));
+  EXPECT_EQ(0, content::EvalJs(contents, "scrollY"));
 }
 
 }  // namespace

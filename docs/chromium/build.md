@@ -196,11 +196,19 @@ After building the complete native browser, run:
 python3 scripts/chromium/native.py test-browser --root /path/to/fly-chromium
 ```
 
-This explicitly builds upstream `browser_tests` and runs only
-`FlyWorkspaceBrowserTest.*`, with disposable profiles owned by the upstream test
-harness. Its summary is `evidence/native-browser-tests.json`. These tests exercise
+This builds `fly_browser_tests` with Chromium's original in-process browser
+fixture and out-of-process test launcher. It runs `FlyWorkspaceBrowserTest.*`
+and `FlyPageScrollBrowserTest.*`, with disposable profiles owned by the upstream
+test harness. Its summary is `evidence/native-browser-tests.json`. These tests exercise
 real windows, profiles, content visibility and split models; service-unit results
-cannot substitute for them. The tests keep sandboxing enabled.
+cannot substitute for them. The tests keep sandboxing enabled. The scoped binary
+compiles Fly's cases and real browser/test support without the unrelated upstream test catalogue. Native
+browser embedding is currently implemented only on Linux and Windows.
+
+To exercise the same cases inside upstream's complete binary, add
+`--browser-target browser_tests`. Both choices use the same test sources and
+write the target into `evidence/native-test-browser.json`. This option does not
+run or pass additional upstream cases.
 
 Windows hosted-runner validation provisions the SDK required by the pinned
 Chromium source using the [official Microsoft installer](https://learn.microsoft.com/en-us/windows/apps/windows-sdk/downloads).
