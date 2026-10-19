@@ -1581,6 +1581,109 @@ IN_PROC_BROWSER_TEST_F(FlyWorkspaceBrowserTest,
 }
 
 IN_PROC_BROWSER_TEST_F(FlyWorkspaceBrowserTest,
+                       WorkspacePickerUsesNativeKeysAndRejectsStaleChoices) {
+  auto* first = browser();
+  ASSERT_TRUE(ui_test_utils::NavigateToURL(
+      first, embedded_test_server()->GetURL("/title1.html")));
+  auto* original_page = Active(first);
+  auto* second = SecondWorkspace();
+  ASSERT_TRUE(second);
+  auto& window = FlyWindowController::Get();
+  WorkspaceService service(*g_browser_process->local_state());
+  const auto catalog = service.Read();
+  ASSERT_TRUE(catalog);
+  const auto item = std::ranges::find(
+      catalog->items, second->GetProfile()->GetPath().BaseName().AsUTF8Unsafe(),
+      &Workspace::profile_directory);
+  ASSERT_NE(item, catalog->items.end());
+  ASSERT_TRUE(service.Rename(item->id, "Trabajo"));
+  window.Select(first, true);
+  original_page->Focus();
+  ui::test::EventGenerator keys(
+      window.desktop_widget()->GetNativeWindow()->GetRootWindow());
+  keys.PressKey(ui::VKEY_W, ui::EF_CONTROL_DOWN | ui::EF_SHIFT_DOWN);
+  auto& picker = window.workspace_picker();
+  ASSERT_TRUE(base::test::RunUntil([&] { return picker.active(); }));
+  ExpectVisible(original_page, true);
+  for (auto key : {ui::VKEY_T, ui::VKEY_R, ui::VKEY_A, ui::VKEY_B,
+                   ui::VKEY_A, ui::VKEY_J, ui::VKEY_O})
+    keys.PressKey(key, ui::EF_NONE);
+  ASSERT_TRUE(base::test::RunUntil([&] {
+    return picker.search_for_testing()->GetText() == u"trabajo" &&
+           picker.result_count_for_testing() == 1;
+  }));
+  keys.PressKey(ui::VKEY_RETURN, ui::EF_NONE);
+  ASSERT_TRUE(base::test::RunUntil([&] {
+    return !picker.search_for_testing() &&
+           window.selected_browser_for_testing() == second;
+  }));
+  ExpectVisible(original_page, false);
+  EXPECT_EQ(original_page, Active(first));
+
+  window.Select(first, true);
+  window.ToggleWorkspacePicker();
+  ASSERT_TRUE(picker.active());
+  picker.search_for_testing()->SetText(u"Trabajo");
+  picker.ContentsChanged(picker.search_for_testing(), u"Trabajo");
+  ASSERT_EQ(1u, picker.result_count_for_testing());
+  ui::KeyEvent enter(ui::EventType::kKeyPressed, ui::VKEY_RETURN, ui::EF_NONE);
+  ASSERT_TRUE(picker.HandleOverlayKey(enter));
+  window.Select(second, true);
+  window.Select(first, true);
+  ASSERT_TRUE(base::test::RunUntil([&] { return !picker.search_for_testing(); }));
+  EXPECT_EQ(first, window.selected_browser_for_testing());
+
+  ASSERT_TRUE(window.RunCommand(first, "toggle-private-mode"));
+  ASSERT_TRUE(base::test::RunUntil([&] {
+    return window.selected_browser_for_testing() != first;
+  }));
+  auto* private_browser = window.selected_browser_for_testing();
+  ASSERT_TRUE(private_browser->GetProfile()->IsOffTheRecord());
+  window.Select(second, true);
+  window.ToggleWorkspacePicker();
+  ASSERT_TRUE(picker.active());
+  picker.search_for_testing()->SetText(u"Private");
+  picker.ContentsChanged(picker.search_for_testing(), u"Private");
+  ASSERT_EQ(1u, picker.result_count_for_testing());
+  keys.PressKey(ui::VKEY_RETURN, ui::EF_NONE);
+  ASSERT_TRUE(base::test::RunUntil([&] {
+    return !picker.search_for_testing() &&
+           window.selected_browser_for_testing() == private_browser;
+  }));
+  EXPECT_EQ(catalog->items.size(), service.Read()->items.size());
+}
+
+IN_PROC_BROWSER_TEST_F(FlyWorkspaceBrowserTest,
+                       EmptyDesktopWorkspacePickerCreatesWithoutPlaceholderTabs) {
+  auto& window = FlyWindowController::Get();
+  auto original = browser()->GetWeakPtr();
+  const auto original_directory = browser()->GetProfile()->GetPath();
+  ASSERT_TRUE(ExecuteNativeCommand(browser(), "remove-tab"));
+  ASSERT_TRUE(base::test::RunUntil([&] { return !original; }));
+  ASSERT_EQ(nullptr, window.selected_browser_for_testing());
+  ui::test::EventGenerator keys(
+      window.desktop_widget()->GetNativeWindow()->GetRootWindow());
+  keys.PressKey(ui::VKEY_W, ui::EF_CONTROL_DOWN | ui::EF_SHIFT_DOWN);
+  auto& picker = window.workspace_picker();
+  ASSERT_TRUE(base::test::RunUntil([&] { return picker.active(); }));
+  EXPECT_EQ(nullptr, window.selected_browser_for_testing());
+  picker.search_for_testing()->SetText(u"New workspace");
+  picker.ContentsChanged(picker.search_for_testing(), u"New workspace");
+  ASSERT_EQ(1u, picker.result_count_for_testing());
+  keys.PressKey(ui::VKEY_RETURN, ui::EF_NONE);
+  ASSERT_TRUE(base::test::RunUntil([&] {
+    return !picker.search_for_testing() &&
+           window.selected_browser_for_testing() != nullptr;
+  }));
+  auto* created = window.selected_browser_for_testing();
+  EXPECT_NE(original_directory, created->GetProfile()->GetPath());
+  ASSERT_EQ(1, created->GetTabStripModel()->count());
+  ASSERT_TRUE(content::WaitForLoadStop(Active(created)));
+  EXPECT_EQ(GURL("about:blank"), Active(created)->GetLastCommittedURL());
+  EXPECT_EQ(created->GetProfile(), Active(created)->GetBrowserContext());
+}
+
+IN_PROC_BROWSER_TEST_F(FlyWorkspaceBrowserTest,
                        EmptyDesktopSurvivesAndNewTabKeyReopensWorkspace) {
   auto& window = FlyWindowController::Get();
   auto original = browser()->GetWeakPtr();

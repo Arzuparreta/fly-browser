@@ -303,6 +303,11 @@ bool NativeCommandAvailable(BrowserWindowInterface* browser,
                             std::string_view action) {
   if (!browser)
     return false;
+  if (action == "toggle-dashboard") {
+    const auto* window = FlyWindowController::GetIfCreated();
+    return window && window->IsSelected(browser) &&
+           window->CanShowWorkspacePicker();
+  }
   if (action == "toggle-global-audio-mute" || action == "toggle-global-media") {
     const auto* window = FlyWindowController::GetIfCreated();
     return window && window->IsSelected(browser) &&

@@ -88,6 +88,9 @@ class FlyWindowController : public views::WidgetDelegate,
   TabSidebar* tab_sidebar_for_testing() { return tab_sidebar_; }
   void CreateTab();
   void CreateWorkspace();
+  void ToggleWorkspacePicker();
+  bool CanShowWorkspacePicker() const { return workspaces_.Read().has_value(); }
+  CommandPalette& workspace_picker() { return *workspace_picker_; }
   bool CanTogglePrivate(BrowserWindowInterface* browser) const;
   views::View* workspace_buttons_for_testing() { return workspace_buttons_; }
   bool RunCommand(BrowserWindowInterface* browser, std::string_view action);
@@ -108,6 +111,10 @@ class FlyWindowController : public views::WidgetDelegate,
     uint64_t order = 0;
     base::CallbackListSubscription closed_subscription;
   };
+  std::vector<PaletteEntry> WorkspaceEntries();
+  bool WorkspaceChoiceAvailable(std::string_view action) const;
+  void ChooseWorkspace(content::WebContents* source, std::string action);
+  void OnWorkspacesChanged();
   void OnPreferencesChanged();
   std::vector<PaletteEntry> BookmarkEntries();
   void OnBookmarksChanged();
@@ -139,6 +146,8 @@ class FlyWindowController : public views::WidgetDelegate,
   std::unique_ptr<HintController> hints_;
   std::unique_ptr<CommandPalette> palette_;
   std::unique_ptr<CommandPalette> bookmark_picker_;
+  std::unique_ptr<CommandPalette> workspace_picker_;
+  std::map<std::string, base::WeakPtr<BrowserWindowInterface>> private_choices_;
   std::unique_ptr<KeyboardEditor> keyboard_editor_;
   std::unique_ptr<KeyboardRouter> empty_router_;
   uint64_t empty_generation_ = 0;

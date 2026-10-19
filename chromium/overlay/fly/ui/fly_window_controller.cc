@@ -105,7 +105,11 @@ FlyWindowController::FlyWindowController()
       sidebar->SetLayoutManager(std::make_unique<views::BoxLayout>(
           views::BoxLayout::Orientation::kVertical, gfx::Insets(8), 6));
   sidebar->SetPreferredSize(gfx::Size(280, 0));
-  sidebar->AddChildView(std::make_unique<views::Label>(u"Fly"));
+  auto* workspace_picker_button = sidebar->AddChildView(
+      std::make_unique<views::MdTextButton>(
+          base::BindRepeating(&FlyWindowController::ToggleWorkspacePicker,
+                              weak_factory_.GetWeakPtr()), u"Workspaces"));
+  workspace_picker_button->SetStyle(ui::ButtonStyle::kText);
   sidebar->AddChildView(std::make_unique<views::MdTextButton>(
       base::BindRepeating(&FlyWindowController::CreateWorkspace,
                           weak_factory_.GetWeakPtr()),
@@ -195,6 +199,14 @@ FlyWindowController::FlyWindowController()
                           weak_factory_.GetWeakPtr()),
       base::BindRepeating(&FlyWindowController::RemoveBookmark,
                           weak_factory_.GetWeakPtr()));
+  workspace_picker_ = std::make_unique<CommandPalette>(
+      desktop_.get(),
+      base::BindRepeating([](base::WeakPtr<FlyWindowController> window,
+                             std::string_view action) {
+        return window && window->WorkspaceChoiceAvailable(action);
+      }, weak_factory_.GetWeakPtr()),
+      base::BindRepeating(&FlyWindowController::ChooseWorkspace,
+                          weak_factory_.GetWeakPtr()));
   keyboard_editor_ =
       std::make_unique<KeyboardEditor>(desktop_.get(), commands_,
                                        *g_browser_process->local_state());
@@ -206,6 +218,9 @@ FlyWindowController::FlyWindowController()
                           weak_factory_.GetWeakPtr()));
   preferences_registrar_.Add(kBookmarksPref,
       base::BindRepeating(&FlyWindowController::OnBookmarksChanged,
+                          weak_factory_.GetWeakPtr()));
+  preferences_registrar_.Add(kWorkspacesPref,
+      base::BindRepeating(&FlyWindowController::OnWorkspacesChanged,
                           weak_factory_.GetWeakPtr()));
   OnPreferencesChanged();
   desktop_->GetNativeWindow()->AddPreTargetHandler(this);
@@ -222,6 +237,7 @@ FlyWindowController::~FlyWindowController() {
   clock_timer_.Stop();
   preferences_registrar_.RemoveAll();
   keyboard_editor_.reset();
+  workspace_picker_.reset();
   bookmark_picker_.reset();
   palette_.reset();
   hints_.reset();
@@ -400,6 +416,7 @@ void FlyWindowController::Select(BrowserWindowInterface* browser, bool focus) {
     }
     hints_->Cancel();
     palette_->Cancel();
+    workspace_picker_->Cancel();
     bookmark_picker_->Cancel();
     keyboard_editor_->Cancel();
     selected_ = browser;
@@ -459,6 +476,8 @@ void FlyWindowController::SelectWindow(
 
 void FlyWindowController::RebuildWorkspaceButtons() {
   workspace_refresh_pending_ = false;
+  if (workspace_picker_->active())
+    workspace_picker_->UpdateItems(WorkspaceEntries(), false);
   workspace_buttons_->RemoveAllChildViews();
   const auto catalog = workspaces_.Read();
   if (!catalog) {
@@ -525,6 +544,89 @@ void FlyWindowController::RebuildWorkspaceButtons() {
           label));
     }
   }
+}
+
+std::vector<PaletteEntry> FlyWindowController::WorkspaceEntries() {
+  private_choices_.clear();
+  std::vector<PaletteEntry> result;
+  const auto catalog = workspaces_.Read();
+  if (!catalog)
+    return result;
+  for (const auto& item : catalog->items) {
+    const auto action = "workspace/" + item.id;
+    result.push_back({action, action, item.name, "Workspace", {}, {}});
+  }
+  for (const auto& [browser, entry] : entries_) {
+    if (entry.browser_closed || !browser->GetProfile()->IsOffTheRecord())
+      continue;
+    const auto directory = browser->GetProfile()->GetOriginalProfile()
+                               ->GetPath().BaseName().AsUTF8Unsafe();
+    const auto item = std::ranges::find(catalog->items, directory,
+                                       &Workspace::profile_directory);
+    const auto title = item == catalog->items.end()
+                           ? std::string("Private workspace")
+                           : "Private · " + item->name;
+    const auto action = "private/" + base::NumberToString(entry.order);
+    private_choices_.emplace(action, browser->GetWeakPtr());
+    result.push_back({action, action, title, "Private window", {}, {}});
+  }
+  result.push_back({"create", "create", "New workspace", "", {}, {}});
+  return result;
+}
+
+bool FlyWindowController::WorkspaceChoiceAvailable(std::string_view action) const {
+  if (closing_)
+    return false;
+  const auto catalog = workspaces_.Read();
+  if (!catalog)
+    return false;
+  if (action == "create")
+    return !creating_profile_ && workspaces_.CanEdit();
+  if (action.starts_with("workspace/"))
+    return std::ranges::find(catalog->items, action.substr(10), &Workspace::id) !=
+           catalog->items.end();
+  const auto found = private_choices_.find(std::string(action));
+  return found != private_choices_.end() && found->second &&
+         !found->second->IsDeleteScheduled();
+}
+
+void FlyWindowController::ChooseWorkspace(content::WebContents* source,
+                                           std::string action) {
+  if (!WorkspaceChoiceAvailable(action) ||
+      (selected_ ? selected_->GetTabStripModel()->GetActiveWebContents() != source
+                 : source != nullptr))
+    return;
+  if (action == "create")
+    CreateWorkspace();
+  else if (action.starts_with("workspace/"))
+    OpenWorkspace(action.substr(10));
+  else if (const auto choice = private_choices_.find(action);
+           choice != private_choices_.end() && choice->second)
+    Select(choice->second.get(), true);
+}
+
+void FlyWindowController::ToggleWorkspacePicker() {
+  if (closing_ || !CanShowWorkspacePicker())
+    return;
+  hints_->Cancel();
+  palette_->Cancel();
+  bookmark_picker_->Cancel();
+  keyboard_editor_->Cancel();
+  const auto config = commands_.Read().value_or(DefaultKeyboardConfig());
+  workspace_picker_->ToggleItems(
+      selected_ ? selected_->GetTabStripModel()->GetActiveWebContents() : nullptr,
+      WorkspaceEntries(), config.shortcuts.at("toggle-dashboard"),
+      u"Search workspaces", false, true);
+}
+
+void FlyWindowController::OnWorkspacesChanged() {
+  ScheduleWorkspaceRefresh();
+  if (!workspace_picker_->active())
+    return;
+  if (!CanShowWorkspacePicker())
+    workspace_picker_->Cancel(true);
+  else
+    workspace_picker_->UpdateItems(WorkspaceEntries(), false);
 }
 
 void FlyWindowController::OpenWorkspace(std::string id) {
@@ -647,6 +749,7 @@ void FlyWindowController::OnBrowserDidClose(BrowserWindowInterface* browser) {
   if (selected_ == browser) {
     hints_->Cancel();
     palette_->Cancel();
+    workspace_picker_->Cancel();
     bookmark_picker_->Cancel();
     keyboard_editor_->Cancel();
     tab_sidebar_->SetBrowser(nullptr);
@@ -744,6 +847,7 @@ void FlyWindowController::RequestClose(views::Widget::ClosedReason reason) {
   }
   hints_->Cancel();
   palette_->Cancel();
+  workspace_picker_->Cancel();
   bookmark_picker_->Cancel();
   keyboard_editor_->Cancel();
   closing_ = true;
@@ -762,6 +866,7 @@ void FlyWindowController::OnClosingAllBrowsers(bool closing) {
   if (closing) {
     hints_->Cancel();
     palette_->Cancel();
+    workspace_picker_->Cancel();
     bookmark_picker_->Cancel();
     keyboard_editor_->Cancel();
   }
@@ -886,6 +991,7 @@ bool FlyWindowController::RunCommand(BrowserWindowInterface* browser,
       return false;
     hints_->Cancel();
     palette_->Cancel();
+    workspace_picker_->Cancel();
     keyboard_editor_->Cancel();
     const auto config = commands_.Read().value_or(DefaultKeyboardConfig());
     bookmark_picker_->ToggleItems(
@@ -895,6 +1001,7 @@ bool FlyWindowController::RunCommand(BrowserWindowInterface* browser,
     return true;
   }
   if (action == "toggle-palette") {
+    workspace_picker_->Cancel();
     bookmark_picker_->Cancel();
     hints_->Cancel();
     keyboard_editor_->Cancel();
@@ -907,6 +1014,7 @@ bool FlyWindowController::RunCommand(BrowserWindowInterface* browser,
     return true;
   }
   if (action == "trigger-hints") {
+    workspace_picker_->Cancel();
     bookmark_picker_->Cancel();
     keyboard_editor_->Cancel();
     hints_->Toggle(browser->GetTabStripModel()->GetActiveWebContents());
@@ -927,11 +1035,16 @@ bool FlyWindowController::RunCommand(BrowserWindowInterface* browser,
   if (action == "toggle-help" || action == "open-keyboard-settings") {
     hints_->Cancel();
     palette_->Cancel();
+    workspace_picker_->Cancel();
     bookmark_picker_->Cancel();
     if (action == "toggle-help" || !keyboard_editor_->active())
       keyboard_editor_->Toggle(browser->GetTabStripModel()->GetActiveWebContents());
     if (action == "open-keyboard-settings")
       keyboard_editor_->ShowKeyboard();
+    return true;
+  }
+  if (action == "toggle-dashboard") {
+    ToggleWorkspacePicker();
     return true;
   }
   if (action == "new-workspace") {
@@ -966,6 +1079,13 @@ bool FlyWindowController::RunCommand(BrowserWindowInterface* browser,
 
 namespace fly {
 void FlyWindowController::OnKeyEvent(ui::KeyEvent* event) {
+  if (workspace_picker_->active()) {
+    if (workspace_picker_->HandleOverlayKey(*event)) {
+      event->SetHandled();
+      event->StopPropagation();
+    }
+    return;
+  }
   if (bookmark_picker_->active()) {
     if (bookmark_picker_->HandleOverlayKey(*event)) {
       event->SetHandled();
@@ -1017,6 +1137,8 @@ void FlyWindowController::OnKeyEvent(ui::KeyEvent* event) {
       const auto catalog = workspaces_.Read();
       if (key.action == "toggle-passthrough" || key.action == "enter-insert") {
         UpdateModeLabel();
+      } else if (key.action == "toggle-dashboard") {
+        ToggleWorkspacePicker();
       } else if (key.action == "new-workspace") {
         CreateWorkspace();
       } else if (key.action == "spawn-tab") {

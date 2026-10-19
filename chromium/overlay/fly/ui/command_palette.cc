@@ -85,15 +85,18 @@ void CommandPalette::Toggle(content::WebContents* contents,
 void CommandPalette::ToggleItems(content::WebContents* contents,
                                  std::vector<PaletteEntry> items,
                                  std::vector<std::string> close_bindings,
-                                 std::u16string placeholder, bool removable) {
+                                 std::u16string placeholder, bool removable,
+                                 bool allow_empty_source) {
   if (overlay_) {
     Cancel(true);
     return;
   }
-  if (!desktop_ || !contents)
+  if (!desktop_ || (!contents && !allow_empty_source))
     return;
   Observe(contents);
-  contents->StoreFocus();
+  empty_source_ = !contents;
+  if (contents)
+    contents->StoreFocus();
   catalog_ = std::move(items);
   palette_bindings_ = std::move(close_bindings);
   removable_ = removable;
@@ -313,6 +316,8 @@ void CommandPalette::Cancel(bool restore_focus) {
 }
 void CommandPalette::FinishClose(bool restore_focus, std::string action) {
   auto contents = web_contents() ? web_contents()->GetWeakPtr() : nullptr;
+  const bool source_was_empty = empty_source_;
+  empty_source_ = false;
   Observe(nullptr);
   buttons_.clear();
   remove_buttons_.clear();
@@ -324,7 +329,7 @@ void CommandPalette::FinishClose(bool restore_focus, std::string action) {
   closing_ = false;
   if (restore_focus && contents && !cancelled_)
     contents->RestoreFocus();
-  if (!action.empty() && contents && !cancelled_)
+  if (!action.empty() && (contents || source_was_empty) && !cancelled_)
     execute_.Run(contents.get(), std::move(action));
 }
 void CommandPalette::OnWidgetBoundsChanged(views::Widget*, const gfx::Rect&) {

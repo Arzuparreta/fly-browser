@@ -56,12 +56,20 @@ profile-bound product blank-tab navigation, including private startup, new
 workspaces, adjacent tabs and splitting a one-tab workspace. Its independent
 audit and exact evidence are archived at `runtime-19bd656-before-global-media`.
 
-Current native runtime validation is frozen at `bf464eb` in the sidebar worktree.
-It adds global native tab muting and Media Session playback control. Its 51-case
-browser suite and acceptance stages must execute before accepting those features.
-Ongoing development is on `codex/chromium-native-devtools` in the hints worktree;
-its additional DevTools case is outside the frozen runtime. Latest PR 115 hosted
-Linux service validation passes; the remaining matrix jobs are still running.
+The `1c54c21` runtime also passes all 53 service cases, both PRE cases and all
+50 main browser cases, plus sandboxed video/MV3 and PCM fixtures. This covers
+global muting across hidden/private tabs, native Media Session handlers and
+fallback players, and real docked DevTools in two profile-isolated workspaces.
+The first fallback fixture failed because it reused a script-local variable;
+querying the DOM element in each evaluation repairs the fixture without weakening
+its native pause/resume or no-user-gesture assertions. The complete passing run
+and independent audit are archived at `runtime-1c54c21-before-workspace-picker`.
+
+The sidebar worktree remains frozen at `1c54c21`. Ongoing development is on
+`codex/chromium-native-workspace-picker` in the hints worktree, adding native
+workspace search and empty-desktop selection. Its two new cases are outside the
+passing runtime. PR 115 hosted Linux service validation passes; remaining matrix
+jobs are still running.
 
 Before changing frozen source or engine files, inspect user units
 `fly-chromium-native-build.service`, `fly-chromium-native-acceptance.service` and
@@ -69,7 +77,7 @@ Before changing frozen source or engine files, inspect user units
 engine root as `current-build-systemd.log`, `current-acceptance-systemd.log` and
 `current-summary-audit.log`. JSON and per-stage logs are in `evidence/`.
 
-Next: finish the `bf464eb` runtime run and the latest-head hosted matrices, repair
+Next: run the workspace chooser and finish the latest-head hosted matrices, repair
 any failure, then merge PR 115 only after all its gates pass. Continue native Fly
 UI, remaining commands/preferences/services, migration, all-platform packages,
 update rehearsals and the full acceptance matrix through M6. Electron remains
@@ -1501,3 +1509,18 @@ its script, so later evaluations raise ReferenceError. Querying the actual audio
 node by ID in each evaluation fixes the fixture without changing pause/resume
 assertions or injecting a synthetic user gesture. Preserve the failed summary
 and rerun the complete updated browser/media pipeline before accepting it.
+
+
+### Native workspace chooser follow-up
+
+The Workspaces button and `toggle-dashboard` open a native searchable chooser
+for persistent workspaces and live private windows. Selection uses stable
+workspace IDs or ephemeral weak native window identities. Catalog edits refresh
+the projection; malformed/future stores cannot be overwritten. Opening another
+surface, changing workspace, closing the source or starting quit cancels queued
+choices. The empty desktop uses an explicitly source-free picker, without a fake
+page; choosing New workspace creates one real profile-bound blank tab.
+Browser cases cover the actual shortcut and search keys, hidden-page visibility,
+stale queued choices, private selection without catalog writes and creation from
+the empty desktop. Execution remains pending. Rename/delete/reorder controls,
+tab transfer and the remaining workspace management UX are still outstanding.
