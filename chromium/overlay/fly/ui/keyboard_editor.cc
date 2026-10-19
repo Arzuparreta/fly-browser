@@ -223,9 +223,10 @@ void KeyboardEditor::ShowKeyboard() {
   sections_->SelectTabAt(2, false);
   search_->RequestFocus();
 }
-void KeyboardEditor::ShowAppearance() {
+void KeyboardEditor::ShowAppearance(bool return_to_page) {
   if (!active())
     return;
+  restore_page_focus_ |= return_to_page;
   sections_->SelectTabAt(0, false);
   appearance_.at("theme")->RequestFocus();
 }

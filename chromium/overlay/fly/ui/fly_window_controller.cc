@@ -258,7 +258,7 @@ FlyWindowController::FlyWindowController()
           [](base::WeakPtr<FlyWindowController> window) {
             if (window && window->selected_) {
               InvokeNativeCommand(window->selected_, "toggle-help");
-              window->keyboard_editor_->ShowAppearance();
+              window->keyboard_editor_->ShowAppearance(true);
             }
           }, weak_factory_.GetWeakPtr()), u"Preferences"));
   preferences_button_->SetEnabled(false);

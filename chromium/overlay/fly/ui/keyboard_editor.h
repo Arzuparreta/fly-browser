@@ -45,7 +45,8 @@ class KeyboardEditor : public views::TextfieldController,
   ~KeyboardEditor() override;
   void Toggle(content::WebContents* contents);
   void Cancel(bool restore_focus = false);
-  void ShowAppearance();
+  // Pointer settings buttons return to the page when the surface closes.
+  void ShowAppearance(bool return_to_page = false);
   void ShowPerformance();
   void ShowKeyboard();
   bool HandleOverlayKey(const ui::KeyEvent& event);
