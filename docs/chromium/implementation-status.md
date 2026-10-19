@@ -1492,3 +1492,12 @@ native frontend owns docking, target registration and lifecycle. A browser case
 opens and closes the real docked frontend in two isolated workspaces, verifies
 profile ownership and stable inspected tab identity, and checks that both the
 inspected page and docked frontend remain visible. Runtime execution is pending.
+
+
+The first `bf464eb` runtime pass succeeds for global muting and site-defined
+Media Session handlers. The no-handler fallback fixture references an `audio`
+lexical binding created in a previous `ExecJs` invocation; that harness scopes
+its script, so later evaluations raise ReferenceError. Querying the actual audio
+node by ID in each evaluation fixes the fixture without changing pause/resume
+assertions or injecting a synthetic user gesture. Preserve the failed summary
+and rerun the complete updated browser/media pipeline before accepting it.

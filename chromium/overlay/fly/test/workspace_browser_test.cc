@@ -825,6 +825,7 @@ IN_PROC_BROWSER_TEST_F(FlyWorkspaceBrowserTest,
   ASSERT_TRUE(InvokeNativeCommand(other, "toggle-global-media"));
   EXPECT_EQ(true, content::EvalJs(playing, R"(
     new Promise(resolve => {
+      const audio = document.getElementById('fly-media');
       if (audio.paused) resolve(true);
       else audio.addEventListener('pause', () => resolve(audio.paused),
                                   {once: true});
@@ -840,6 +841,7 @@ IN_PROC_BROWSER_TEST_F(FlyWorkspaceBrowserTest,
   ASSERT_TRUE(InvokeNativeCommand(other, "toggle-global-media"));
   EXPECT_EQ(true, content::EvalJs(playing, R"(
     new Promise(resolve => {
+      const audio = document.getElementById('fly-media');
       if (!audio.paused) resolve(true);
       else audio.addEventListener('playing', () => resolve(!audio.paused),
                                   {once: true});
@@ -848,7 +850,8 @@ IN_PROC_BROWSER_TEST_F(FlyWorkspaceBrowserTest,
   EXPECT_EQ(other, FlyWindowController::Get().selected_browser_for_testing());
   ExpectVisible(playing, false);
   ExpectVisible(Active(other), true);
-  ASSERT_TRUE(content::ExecJs(playing, "audio.pause()"));
+  ASSERT_TRUE(content::ExecJs(playing,
+                              "document.getElementById('fly-media').pause()"));
 }
 
 IN_PROC_BROWSER_TEST_F(FlyWorkspaceBrowserTest,
