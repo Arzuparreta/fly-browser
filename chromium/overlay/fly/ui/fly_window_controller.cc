@@ -1199,6 +1199,17 @@ void FlyWindowController::FinishTabMove(
       Select(destination.get(), true);
     }
   } else if (!closing_) {
+    // An unrelated native close can destroy the source while preparation is
+    // pending. Complete its deferred fallback only after releasing the move.
+    if (!selected_) {
+      for (const auto& [browser, entry] : entries_) {
+        if (!entry.browser_closed && entry.widget &&
+            !browser->IsDeleteScheduled()) {
+          Select(browser, true);
+          break;
+        }
+      }
+    }
     status_->SetText(u"Tab move cancelled. The destination or source changed.");
   }
 }
@@ -1371,7 +1382,11 @@ void FlyWindowController::OnBrowserDidClose(BrowserWindowInterface* browser) {
       it->second.host->SetVisible(false);
       it->second.widget->Hide();
     }
-    if (!closing_) {
+    // A committed move selects its prepared destination after native contents
+    // destruction. An intermediate normal-profile fallback would persist a
+    // private move's context into the normal workspace selection.
+    if (!closing_ &&
+        !(tab_move_ && move_source_browser_.get() == browser)) {
       auto choose = [&](bool same_workspace) {
         for (const auto& [next, entry] : entries_) {
           if (!entry.browser_closed && entry.widget &&

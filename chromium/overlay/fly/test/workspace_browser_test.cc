@@ -2361,6 +2361,8 @@ IN_PROC_BROWSER_TEST_F(FlyWorkspaceBrowserTest,
                       "window.onbeforeunload=()=> 'unsaved'"));
   content::PrepContentsForBeforeUnloadTest(contents);
   WorkspaceService service(*g_browser_process->local_state());
+  ASSERT_TRUE(service.Rename(service.Read()->items.back().id,
+                             "Move cancellation destination"));
   const auto catalog = service.Read();
   ASSERT_TRUE(catalog && catalog->items.size() == 3);
   const auto destination_name = catalog->items.back().name;
