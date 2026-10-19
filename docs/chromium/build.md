@@ -290,3 +290,6 @@ The ordinary `refresh-overlay` command continues to reject any upstream change.
 This opt-in does not change the source pin or promote a core/compile-only tree.
 Interrupted transactions use `native.py recover --root /path/to/engine`; unknown
 owner edits remain protected and require preservation before recovery can proceed.
+
+The optional [live Twitch/Pie desktop regression](./live-media.md) records real
+public-player behavior separately from deterministic local media fixtures.
