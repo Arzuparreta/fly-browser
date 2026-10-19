@@ -1545,3 +1545,14 @@ A three-profile browser case checks actual pointer menus, boundaries, keyboard
 workspace cycling after reordering, preserved cookies/metadata, and rejection of
 a queued move after a future schema arrives inside the menu loop. Runtime
 execution is pending; rename/delete controls and tab transfers remain unfinished.
+
+
+### Native overlay focus regression probe
+
+An actual workspace-picker compositor capture at
+`fixture-evidence/native-workspace-picker-RIXiNy` shows a focused native search
+field while the page still reports `document.hasFocus() === true`, with CDP focus
+emulation explicitly disabled again after initial frame capture. A native browser
+regression now checks this boundary without CDP and logs the Aura active/focused
+window names on failure. This probe is not an accepted fix; native activation
+ownership must be diagnosed and the full suite rerun before accepting a repair.

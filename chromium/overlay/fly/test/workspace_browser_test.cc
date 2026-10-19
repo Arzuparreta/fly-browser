@@ -77,6 +77,8 @@
 #include "net/test/embedded_test_server/embedded_test_server.h"
 #include "components/prefs/pref_service.h"
 #include "ui/aura/window.h"
+#include "ui/aura/client/focus_client.h"
+#include "ui/wm/public/activation_client.h"
 #include "ui/aura/window_tree_host.h"
 #include "ui/wm/core/coordinate_conversion.h"
 #include "ui/base/base_window.h"
@@ -1704,6 +1706,23 @@ IN_PROC_BROWSER_TEST_F(FlyWorkspaceBrowserTest,
   auto& picker = window.workspace_picker();
   ASSERT_TRUE(base::test::RunUntil([&] { return picker.active(); }));
   ExpectVisible(original_page, true);
+  EXPECT_TRUE(picker.search_for_testing()->HasFocus());
+  auto* root = window.desktop_widget()->GetNativeWindow()->GetRootWindow();
+  auto* activation = wm::GetActivationClient(root);
+  auto* focus = aura::client::GetFocusClient(root);
+  auto* active_window = activation ? activation->GetActiveWindow() : nullptr;
+  auto* focused_window = focus ? focus->GetFocusedWindow() : nullptr;
+  EXPECT_EQ(false, content::EvalJs(original_page, R"(
+    new Promise(resolve => setTimeout(() => resolve(document.hasFocus()), 0))
+  )", content::EXECUTE_SCRIPT_NO_USER_GESTURE))
+      << "active=" << (active_window ? active_window->GetName() : "<none>")
+      << " focused=" << (focused_window ? focused_window->GetName() : "<none>");
+  keys.PressKey(ui::VKEY_ESCAPE, ui::EF_NONE);
+  ASSERT_TRUE(base::test::RunUntil([&] { return !picker.search_for_testing(); }));
+  EXPECT_EQ(true, content::EvalJs(original_page, "document.hasFocus()",
+                                 content::EXECUTE_SCRIPT_NO_USER_GESTURE));
+  keys.PressKey(ui::VKEY_W, ui::EF_CONTROL_DOWN | ui::EF_SHIFT_DOWN);
+  ASSERT_TRUE(base::test::RunUntil([&] { return picker.active(); }));
   for (auto key : {ui::VKEY_T, ui::VKEY_R, ui::VKEY_A, ui::VKEY_B,
                    ui::VKEY_A, ui::VKEY_J, ui::VKEY_O})
     keys.PressKey(key, ui::EF_NONE);
