@@ -11,10 +11,19 @@ class BrowserWindowInterface;
 namespace input {
 struct NativeWebKeyboardEvent;
 }
+namespace content {
+class WebContents;
+}
 namespace fly {
 // Opens an actual about:blank navigation in this browser's own profile.
 // A nonnegative index requests native tab-strip placement, including pin rules.
 bool OpenNativeBlankTab(BrowserWindowInterface* browser, int index = -1);
+
+// Retained-document native freezing votes. A request is not a claim that the
+// policy has frozen the page: Chromium keeps its connected-page/protection rules.
+bool RequestNativeTabSuspension(content::WebContents* contents);
+void ResumeNativeTab(content::WebContents* contents);
+bool NativeTabSuspensionRequested(content::WebContents* contents);
 
 std::string NativeEventStroke(const input::NativeWebKeyboardEvent& event);
 std::u16string NativePageModeLabel(BrowserWindowInterface* browser);

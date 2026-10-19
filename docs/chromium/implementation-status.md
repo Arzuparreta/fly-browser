@@ -1616,3 +1616,43 @@ document.wasDiscarded and profile-local cookies. These cases need pinned compile
 and full runtime execution. This is identity preservation for Chromium memory
 reclamation, not the unfinished retained-document freeze/resume feature or its
 hibernate/wake commands.
+
+
+### Native retained-document suspension follow-up
+
+`hibernate-tabs` now requests native freezing votes for eligible hidden pages
+across the Fly desktop, including private contexts. `wake-all-tabs` withdraws
+Fly's requests only in the selected workspace/profile, without loading unopened
+or discarded tabs. The command adapter uses public PerformanceManager freezing
+APIs: Chromium controls connected browsing instances, visibility, locks, capture,
+WebRTC, loading and its normal recently-visible/audible grace periods. A request
+is distinct from the policy actually freezing a page. Fly additionally excludes
+pinned tabs, active video/media, debugger targets, unloaded documents and every
+tab in a profile with an active download.
+
+A scoped per-WebContents observer releases its vote on visibility, loading,
+primary-page replacement, media playback, pinning, debugger attachment, discard
+or destruction. Visibility restores either split pane through the same native
+path; no page script changes visibility, focus or media. The existing command
+adapter owns this small lifetime object, retaining the browser UI's current GN
+dependencies rather than adding a dependency from core session metadata to UI.
+Automatic suspension timeout preferences remain unfinished.
+
+The browser regression shortens only Chromium's test protection grace periods,
+then checks actual graph lifecycle transitions, retained unsaved JavaScript data,
+workspace-scoped resume, debugger/pin/visibility protection and unchanged Fly
+identity. Real audio coverage also rejects suspension of the already-playing
+hidden media fixture. A second real-audio case freezes a paused native session,
+then resumes it from another workspace without a synthetic user gesture. Global
+media resume first withdraws Fly's freeze vote so native/site playback handlers
+can run. Visible split panes reject suspension requests. Compiler checks and the full native pipeline must pass;
+this is not yet accepted A10 evidence. Ordinary Chromium memory discard remains
+a separate lifecycle operation with separate replacement/retention coverage.
+
+
+The preceding rename checkpoint `41b86d1` passes the complete Linux native
+pipeline: 53 unit cases, 56 browser declarations including two PRE stages,
+video/MV3 and audio/PCM. The independent summary audit reports no failures and
+matching source/binary provenance. Its evidence is preserved before starting the
+combined discard-identity and retained-freezing run; neither new lifecycle case
+inherits this earlier result.

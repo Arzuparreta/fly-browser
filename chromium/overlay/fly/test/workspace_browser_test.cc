@@ -40,6 +40,11 @@
 #include "base/strings/utf_string_conversions.h"
 #include "base/test/run_until.h"
 #include "base/test/scoped_feature_list.h"
+#include "components/performance_manager/public/features.h"
+#include "components/performance_manager/public/performance_manager.h"
+#include "components/performance_manager/public/graph/page_node.h"
+#include "content/public/browser/devtools_agent_host.h"
+#include "content/public/browser/devtools_agent_host_client.h"
 #include "content/public/common/content_features.h"
 #include "chrome/browser/resource_coordinator/tab_lifecycle_unit_external.h"
 #include "base/test/bind.h"
@@ -504,6 +509,9 @@ IN_PROC_BROWSER_TEST_F(FlyWorkspaceBrowserTest,
   ASSERT_TRUE(model->GetSplitForTab(model->active_index()));
   ExpectVisible(first, true);
   ExpectVisible(second, true);
+  ASSERT_TRUE(InvokeNativeCommand(browser(), "hibernate-tabs"));
+  EXPECT_FALSE(NativeTabSuspensionRequested(first));
+  EXPECT_FALSE(NativeTabSuspensionRequested(second));
   const auto active_before = model->active_index();
   ASSERT_TRUE(ExecuteNativeCommand(browser(), "switch-split-focus"));
   EXPECT_NE(active_before, model->active_index());
@@ -776,6 +784,7 @@ IN_PROC_BROWSER_TEST_F(FlyWorkspaceBrowserTest,
   ASSERT_TRUE(other);
   auto& window = FlyWindowController::Get();
   auto* empty_tab = Active(other);
+  EXPECT_FALSE(RequestNativeTabSuspension(playing));
   auto* empty_session = content::MediaSession::GetIfExists(empty_tab);
   ExpectVisible(playing, false);
   content::TitleWatcher paused(playing, u"paused-by-native-session");
@@ -1527,6 +1536,177 @@ IN_PROC_BROWSER_TEST_F(FlyExplicitBlankRestoreBrowserTest,
 IN_PROC_BROWSER_TEST_F(FlyExplicitBlankRestoreBrowserTest,
                        ExplicitBlankAddsToRestoredNativeTabs) {
   ExpectSessionFixture(true);
+}
+
+class FlyNativeFreezeBrowserTest : public FlyWorkspaceBrowserTest {
+ public:
+  FlyNativeFreezeBrowserTest() {
+    features_.InitWithFeaturesAndParameters(
+        {{performance_manager::features::kCPUMeasurementInFreezingPolicy,
+          {{"freezing_visible_protection_time", "0s"},
+           {"freezing_audio_protection_time", "0s"}}}},
+        {performance_manager::features::
+             kDiscardFrozenBrowsingInstancesWithGrowingPMF,
+         performance_manager::features::kInfiniteTabsFreezing});
+  }
+
+ private:
+  base::test::ScopedFeatureList features_;
+};
+
+class SuspensionDebuggerClient : public content::DevToolsAgentHostClient {
+ public:
+  explicit SuspensionDebuggerClient(content::WebContents* contents)
+      : host_(content::DevToolsAgentHost::GetOrCreateFor(contents)) {
+    attached_ = host_->AttachClient(this);
+  }
+  ~SuspensionDebuggerClient() override {
+    if (attached_)
+      host_->DetachClient(this);
+  }
+  bool attached() const { return attached_; }
+  void DispatchProtocolMessage(content::DevToolsAgentHost*,
+                               base::span<const uint8_t>) override {}
+  void AgentHostClosed(content::DevToolsAgentHost*) override {
+    attached_ = false;
+  }
+
+ private:
+  scoped_refptr<content::DevToolsAgentHost> host_;
+  bool attached_ = false;
+};
+
+IN_PROC_BROWSER_TEST_F(FlyNativeFreezeBrowserTest,
+                       RetainedFreezeProtectsPagesAndWakeUsesWorkspaceScope) {
+  auto* first = browser();
+  const auto url = embedded_test_server()->GetURL("/title1.html");
+  ASSERT_TRUE(ui_test_utils::NavigateToURL(first, url));
+  auto* background = Active(first);
+  const auto id = TabIdentity::Get(background);
+  ASSERT_TRUE(content::ExecJs(
+      background,
+      "window.unsavedFlyDocument = {text: 'retained', edits: 42};"));
+  ASSERT_TRUE(OpenNativeBlankTab(first));
+  auto* visible = Active(first);
+  ASSERT_TRUE(content::WaitForLoadStop(visible));
+  auto* second = SecondWorkspace();
+  ASSERT_TRUE(second);
+  ASSERT_TRUE(ui_test_utils::NavigateToURL(second, url));
+  auto* other = Active(second);
+  ASSERT_TRUE(content::ExecJs(other, "window.otherWorkspaceDraft = 73;"));
+  auto& window = FlyWindowController::Get();
+  window.Select(first, true);
+  auto frozen = [](content::WebContents* contents) {
+    auto node = performance_manager::PerformanceManager::
+        GetPrimaryPageNodeForWebContents(contents);
+    return node && node->GetLifecycleState() ==
+                       performance_manager::mojom::LifecycleState::kFrozen;
+  };
+  ASSERT_TRUE(NativeCommandAvailable(first, "hibernate-tabs"));
+  ASSERT_TRUE(InvokeNativeCommand(first, "hibernate-tabs"));
+  ASSERT_TRUE(base::test::RunUntil(
+      [&] { return frozen(background) && frozen(other); }));
+  EXPECT_TRUE(NativeTabSuspensionRequested(background));
+  EXPECT_TRUE(NativeTabSuspensionRequested(other));
+  EXPECT_FALSE(NativeTabSuspensionRequested(visible));
+  EXPECT_EQ(visible, Active(first));
+  EXPECT_EQ(content::Visibility::VISIBLE, visible->GetVisibility());
+  EXPECT_EQ(id, TabIdentity::Get(background));
+  EXPECT_FALSE(background->WasDiscarded());
+  // A workspace resume removes only this workspace's votes, with no reload.
+  ASSERT_TRUE(InvokeNativeCommand(first, "wake-all-tabs"));
+  ASSERT_TRUE(base::test::RunUntil([&] { return !frozen(background); }));
+  EXPECT_FALSE(NativeTabSuspensionRequested(background));
+  EXPECT_TRUE(frozen(other));
+  EXPECT_EQ("retained",
+            content::EvalJs(background, "window.unsavedFlyDocument.text",
+                            content::EXECUTE_SCRIPT_NO_USER_GESTURE));
+  EXPECT_EQ(42, content::EvalJs(background, "window.unsavedFlyDocument.edits",
+                                content::EXECUTE_SCRIPT_NO_USER_GESTURE));
+  EXPECT_EQ(false, content::EvalJs(background, "document.wasDiscarded"));
+
+  ASSERT_TRUE(RequestNativeTabSuspension(background));
+  ASSERT_TRUE(base::test::RunUntil([&] { return frozen(background); }));
+  {
+    SuspensionDebuggerClient debugger(background);
+    ASSERT_TRUE(debugger.attached());
+    ASSERT_TRUE(base::test::RunUntil([&] { return !frozen(background); }));
+    EXPECT_FALSE(NativeTabSuspensionRequested(background));
+    EXPECT_FALSE(RequestNativeTabSuspension(background));
+  }
+  ASSERT_TRUE(RequestNativeTabSuspension(background));
+  ASSERT_TRUE(base::test::RunUntil([&] { return frozen(background); }));
+  first->GetTabStripModel()->SetTabPinned(0, true);
+  ASSERT_TRUE(base::test::RunUntil([&] { return !frozen(background); }));
+  EXPECT_FALSE(NativeTabSuspensionRequested(background));
+  EXPECT_FALSE(RequestNativeTabSuspension(background));
+  EXPECT_FALSE(RequestNativeTabSuspension(visible));
+  first->GetTabStripModel()->SetTabPinned(0, false);
+  ASSERT_TRUE(RequestNativeTabSuspension(background));
+  ASSERT_TRUE(base::test::RunUntil([&] { return frozen(background); }));
+  first->GetTabStripModel()->ActivateTabAt(0);
+  ASSERT_TRUE(base::test::RunUntil([&] { return !frozen(background); }));
+  EXPECT_FALSE(NativeTabSuspensionRequested(background));
+  EXPECT_EQ(42, content::EvalJs(background, "window.unsavedFlyDocument.edits"));
+  EXPECT_EQ(id, TabIdentity::Get(background));
+  window.Select(second, true);
+  ASSERT_TRUE(base::test::RunUntil([&] { return !frozen(other); }));
+  EXPECT_FALSE(NativeTabSuspensionRequested(other));
+  EXPECT_EQ(73, content::EvalJs(other, "window.otherWorkspaceDraft"));
+}
+
+IN_PROC_BROWSER_TEST_F(FlyNativeFreezeBrowserTest,
+                       GlobalMediaResumeWakesFrozenPausedNativeSession) {
+  auto* first = browser();
+  ASSERT_TRUE(ui_test_utils::NavigateToURL(
+      first, embedded_test_server()->GetURL("/title1.html")));
+  auto* playing = Active(first);
+  ASSERT_TRUE(content::ExecJs(playing, R"js(
+    const audio = document.createElement('audio');
+    audio.id = 'freeze-player';
+    audio.src = '/media/engagement/engagement_valid_audio.webm';
+    audio.loop = true;
+    document.body.appendChild(audio);
+    audio.play();
+  )js"));
+  ASSERT_TRUE(base::test::RunUntil([&] {
+    auto* session = content::MediaSession::GetIfExists(playing);
+    if (!session)
+      return false;
+    const auto info = session->GetMediaSessionInfoSync();
+    return info && info->is_controllable;
+  }));
+  ASSERT_TRUE(InvokeNativeCommand(first, "toggle-global-media"));
+  auto* second = SecondWorkspace();
+  ASSERT_TRUE(second);
+  auto& window = FlyWindowController::Get();
+  ASSERT_TRUE(base::test::RunUntil([&] {
+    const auto info = content::MediaSession::GetIfExists(playing)
+                          ->GetMediaSessionInfoSync();
+    return !playing->IsCurrentlyAudible() && info && info->is_controllable &&
+           info->playback_state == media_session::mojom::MediaPlaybackState::kPaused;
+  }));
+  ASSERT_TRUE(RequestNativeTabSuspension(playing));
+  auto node = performance_manager::PerformanceManager::
+      GetPrimaryPageNodeForWebContents(playing);
+  ASSERT_TRUE(node);
+  ASSERT_TRUE(base::test::RunUntil([&] {
+    return node->GetLifecycleState() ==
+           performance_manager::mojom::LifecycleState::kFrozen;
+  }));
+  ASSERT_TRUE(InvokeNativeCommand(second, "toggle-global-media"));
+  EXPECT_FALSE(NativeTabSuspensionRequested(playing));
+  ASSERT_TRUE(base::test::RunUntil([&] {
+    return node->GetLifecycleState() ==
+           performance_manager::mojom::LifecycleState::kRunning;
+  }));
+  EXPECT_EQ(false, content::EvalJs(playing,
+      "new Promise(resolve => { const audio = document.querySelector('#freeze-player'); "
+      "if (!audio.paused) resolve(audio.paused); "
+      "else audio.addEventListener('playing', () => resolve(audio.paused), {once:true}); })",
+      content::EXECUTE_SCRIPT_NO_USER_GESTURE));
+  EXPECT_EQ(second, window.selected_browser_for_testing());
+  ExpectVisible(playing, false);
 }
 
 class FlyReplacementDiscardBrowserTest : public FlyWorkspaceBrowserTest {

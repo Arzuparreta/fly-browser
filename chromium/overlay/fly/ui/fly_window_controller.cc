@@ -1110,6 +1110,29 @@ bool FlyWindowController::RunCommand(BrowserWindowInterface* browser,
                                      std::string_view action) {
   if (!entries_.contains(browser) || closing_)
     return false;
+  if (action == "hibernate-tabs" || action == "wake-all-tabs") {
+    std::vector<base::WeakPtr<content::WebContents>> tabs;
+    const auto workspace = entries_.at(browser).workspace_id;
+    for (const auto& [window, entry] : entries_) {
+      if (entry.browser_closed ||
+          (action == "wake-all-tabs" &&
+           (workspace.empty() ? window->GetProfile() != browser->GetProfile()
+                              : entry.workspace_id != workspace)))
+        continue;
+      auto* model = window->GetTabStripModel();
+      for (int index = 0; index < model->count(); ++index)
+        tabs.push_back(model->GetWebContentsAt(index)->GetWeakPtr());
+    }
+    for (const auto& tab : tabs) {
+      if (!tab)
+        continue;
+      if (action == "hibernate-tabs")
+        RequestNativeTabSuspension(tab.get());
+      else
+        ResumeNativeTab(tab.get());
+    }
+    return true;
+  }
   if (action == "toggle-global-audio-mute" || action == "toggle-global-media") {
     // Snapshot identities before notifying native tab observers. Never iterate
     // the workspace/window map while a tab mutation may reenter its owner.
@@ -1146,10 +1169,12 @@ bool FlyWindowController::RunCommand(BrowserWindowInterface* browser,
                             : nullptr;
         if (!session)
           continue;
-        if (resume)
+        if (resume) {
+          ResumeNativeTab(tab.get());
           session->Resume(content::MediaSession::SuspendType::kUI);
-        else
+        } else {
           session->Suspend(content::MediaSession::SuspendType::kUI);
+        }
       }
       return true;
     }
