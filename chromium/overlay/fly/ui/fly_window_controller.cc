@@ -2,16 +2,21 @@
 // Use of this source code is governed by the GPL-3.0-or-later license in the
 // Fly repository.
 #include "fly/ui/fly_window_controller.h"
+#include "base/strings/string_number_conversions.h"
+#include "chrome/browser/ui/navigator/browser_navigator.h"
+#include "chrome/browser/ui/navigator/browser_navigator_params.h"
+#include "fly/bookmarks/bookmark_service.h"
+#include "fly/commands/calculator.h"
 #include "fly/commands/keyboard_router.h"
+#include "fly/preferences/search_service.h"
 #include "fly/ui/command_palette.h"
 #include "fly/ui/hint_controller.h"
 #include "fly/ui/keyboard_editor.h"
-#include "chrome/browser/ui/navigator/browser_navigator.h"
-#include "chrome/browser/ui/navigator/browser_navigator_params.h"
 #include "fly/ui/native_commands.h"
-#include "fly/bookmarks/bookmark_service.h"
 #include "fly/ui/status_bar.h"
 #include "fly/ui/tab_sidebar.h"
+#include "ui/base/clipboard/clipboard_buffer.h"
+#include "ui/base/clipboard/scoped_clipboard_writer.h"
 
 #include <algorithm>
 #include <cstddef>
@@ -194,6 +199,8 @@ FlyWindowController::FlyWindowController()
           std::make_unique<ScopedKeepAlive>(KeepAliveOrigin::FLY_WINDOW,
                                             KeepAliveRestartOption::DISABLED)),
       desktop_(std::make_unique<views::Widget>()) {
+  frequent_sites_ =
+      std::make_unique<FrequentSitesService>(*g_browser_process->local_state());
   SetTitle(u"Fly");
   SetCanResize(true);
   SetCanMinimize(true);
@@ -358,6 +365,49 @@ FlyWindowController::FlyWindowController()
               InvokeNativeCommand(window->selected_, std::move(action));
           },
           weak_factory_.GetWeakPtr()));
+  address_picker_ = std::make_unique<CommandPalette>(
+      desktop_.get(),
+      base::BindRepeating(
+          [](base::WeakPtr<FlyWindowController> window,
+             std::string_view action) {
+            return window && !window->closing_ &&
+                   window->address_choices_.contains(std::string(action));
+          },
+          weak_factory_.GetWeakPtr()),
+      base::BindRepeating(&FlyWindowController::ExecuteAddress,
+                          weak_factory_.GetWeakPtr()));
+  history_ = std::make_unique<HistoryService>(
+      *g_browser_process->profile_manager(), workspaces_);
+  history_->SetChangedCallback(base::BindRepeating(
+      [](base::WeakPtr<FlyWindowController> window) {
+        if (!window || window->closing_)
+          return;
+        if (window->history_picker_ && window->history_picker_->active())
+          window->LoadHistory(HistorySurface::kHistory);
+        else if (window->address_picker_ && window->address_picker_->active())
+          window->LoadHistory(HistorySurface::kAddress);
+        else if (window->bookmark_picker_ &&
+                 window->bookmark_picker_->active() &&
+                 window->preferences_.ReadFrequentSitesVisible() == true)
+          window->LoadHistory(HistorySurface::kBookmarks);
+        else {
+          window->history_entries_.clear();
+        }
+      },
+      weak_factory_.GetWeakPtr()));
+  history_clear_service_ = std::make_unique<HistoryService>(
+      *g_browser_process->profile_manager(), workspaces_);
+  history_picker_ = std::make_unique<CommandPalette>(
+      desktop_.get(),
+      base::BindRepeating(
+          [](base::WeakPtr<FlyWindowController> window,
+             std::string_view action) {
+            return window && !window->closing_ &&
+                   window->history_choices_.contains(std::string(action));
+          },
+          weak_factory_.GetWeakPtr()),
+      base::BindRepeating(&FlyWindowController::OpenHistory,
+                          weak_factory_.GetWeakPtr()));
   bookmark_picker_ = std::make_unique<CommandPalette>(
       desktop_.get(),
       base::BindRepeating([](base::WeakPtr<FlyWindowController> window,
@@ -434,7 +484,13 @@ FlyWindowController::~FlyWindowController() {
   rename_delegate_.reset();
   keyboard_editor_.reset();
   workspace_picker_.reset();
+  history_clear_widget_.reset();
+  history_clear_delegate_.reset();
+  history_.reset();
+  history_clear_service_.reset();
+  history_picker_.reset();
   bookmark_picker_.reset();
+  address_picker_.reset();
   palette_.reset();
   hints_.reset();
   // During application quit the native desktop can be destroyed before the
@@ -466,6 +522,329 @@ FlyWindowController::~FlyWindowController() {
   desktop_.reset();
 }
 
+void FlyWindowController::CancelHistory() {
+  ++history_generation_;
+  history_->Cancel();
+  history_picker_->Cancel();
+  history_entries_.clear();
+  history_choices_.clear();
+}
+std::vector<PaletteEntry> FlyWindowController::HistoryEntries() {
+  history_choices_.clear();
+  std::vector<PaletteEntry> result;
+  for (const auto& item : history_entries_) {
+    const auto action = item.url.spec();
+    if (!history_choices_.insert(action).second)
+      continue;
+    result.push_back(
+        {action,
+         action,
+         item.title.empty() ? action : base::UTF16ToUTF8(item.title),
+         action,
+         {},
+         {}});
+  }
+  if (!history_clear_running_) {
+    history_choices_.insert("clear-history");
+    result.push_back({"clear-history",
+                      "clear-history",
+                      "Clear history…",
+                      "All normal workspaces",
+                      {},
+                      {}});
+  }
+  return result;
+}
+void FlyWindowController::LoadHistory(HistorySurface surface) {
+  if (!selected_)
+    return;
+  auto* contents = selected_->GetTabStripModel()->GetActiveWebContents();
+  auto* picker = surface == HistorySurface::kAddress   ? address_picker_.get()
+                 : surface == HistorySurface::kHistory ? history_picker_.get()
+                                                       : bookmark_picker_.get();
+  if (!contents || !picker->active() ||
+      (surface == HistorySurface::kBookmarks &&
+       preferences_.ReadFrequentSitesVisible() != true))
+    return;
+  const auto generation = ++history_generation_;
+  history_->Query(base::BindOnce(
+      [](base::WeakPtr<FlyWindowController> window,
+         base::WeakPtr<content::WebContents> source, uint64_t generation,
+         HistorySurface surface,
+         std::optional<std::vector<HistoryEntry>> rows) {
+        if (!window || window->closing_ || !source || !window->selected_ ||
+            generation != window->history_generation_ ||
+            window->selected_->GetTabStripModel()->GetActiveWebContents() !=
+                source.get())
+          return;
+        auto* picker = surface == HistorySurface::kAddress
+                           ? window->address_picker_.get()
+                       : surface == HistorySurface::kHistory
+                           ? window->history_picker_.get()
+                           : window->bookmark_picker_.get();
+        if (!picker->active())
+          return;
+        window->history_entries_ = rows.value_or(std::vector<HistoryEntry>());
+        if (!rows)
+          window->status_->SetText(
+              u"History is unavailable. Saved data has been preserved.");
+        if (surface == HistorySurface::kAddress)
+          picker->RefreshQuery();
+        else if (surface == HistorySurface::kHistory)
+          picker->UpdateItems(window->HistoryEntries(), false);
+        else
+          picker->UpdateItems(window->BookmarkEntries(),
+                              window->bookmarks_->CanEdit());
+      },
+      weak_factory_.GetWeakPtr(), contents->GetWeakPtr(), generation, surface));
+}
+
+void FlyWindowController::ToggleHistory(BrowserWindowInterface* browser) {
+  if (history_picker_->active()) {
+    history_picker_->Cancel(true);
+    return;
+  }
+  hints_->Cancel();
+  palette_->Cancel();
+  address_picker_->Cancel();
+  workspace_picker_->Cancel();
+  tab_move_picker_->Cancel();
+  bookmark_picker_->Cancel();
+  keyboard_editor_->Cancel();
+  CancelHistory();
+  auto* contents = browser->GetTabStripModel()->GetActiveWebContents();
+  if (!contents)
+    return;
+  const auto config = commands_.Read().value_or(DefaultKeyboardConfig());
+  history_picker_->ToggleItems(contents, {},
+                               config.shortcuts.at("toggle-history"),
+                               u"Search workspace history", false);
+  LoadHistory(HistorySurface::kHistory);
+}
+void FlyWindowController::OpenHistory(content::WebContents* source,
+                                      std::string action) {
+  if (closing_ || !selected_ || !source ||
+      selected_->GetTabStripModel()->GetActiveWebContents() != source ||
+      !history_choices_.contains(action))
+    return;
+  if (action == "clear-history") {
+    ConfirmHistoryClear(source);
+    return;
+  }
+  // Requery the native stores after dismissal, so retired workspaces or deleted
+  // visits cannot execute stale cached rows. Keep the selected destination.
+  history_->Query(base::BindOnce(
+      [](base::WeakPtr<FlyWindowController> window,
+         base::WeakPtr<content::WebContents> source, std::string url,
+         std::optional<std::vector<HistoryEntry>> rows) {
+        if (!window || window->closing_ || !source || !window->selected_ ||
+            window->selected_->GetTabStripModel()->GetActiveWebContents() !=
+                source.get() ||
+            !rows || !std::ranges::any_of(*rows, [&](const HistoryEntry& item) {
+              return item.url.spec() == url;
+            }))
+          return;
+        NavigateParams params(window->selected_, GURL(url),
+                              ui::PAGE_TRANSITION_TYPED);
+        params.disposition = WindowOpenDisposition::CURRENT_TAB;
+        params.window_action = NavigateParams::WindowAction::kShowWindow;
+        Navigate(&params);
+      },
+      weak_factory_.GetWeakPtr(), source->GetWeakPtr(), std::move(action)));
+}
+
+views::Widget* FlyWindowController::history_clear_dialog_for_testing() const {
+  return history_clear_widget_ && !history_clear_widget_->IsClosed()
+             ? history_clear_widget_.get()
+             : nullptr;
+}
+void FlyWindowController::ConfirmHistoryClear(content::WebContents* source) {
+  if (history_clear_running_)
+    return;
+  CancelWorkspaceRename();
+  history_clear_widget_.reset();
+  history_clear_delegate_ = std::make_unique<views::DialogDelegate>();
+  history_clear_delegate_->SetOwnershipOfNewWidget(
+      views::Widget::InitParams::CLIENT_OWNS_WIDGET);
+  history_clear_delegate_->SetModalType(ui::mojom::ModalType::kWindow);
+  history_clear_delegate_->SetTitle(u"Clear browsing history");
+  history_clear_delegate_->SetButtonLabel(ui::mojom::DialogButton::kOk,
+                                          u"Clear history");
+  history_clear_delegate_->SetDefaultButton(
+      static_cast<int>(ui::mojom::DialogButton::kCancel));
+  auto body = std::make_unique<views::View>();
+  body->SetLayoutManager(std::make_unique<views::BoxLayout>(
+      views::BoxLayout::Orientation::kVertical, gfx::Insets(16), 8));
+  body->SetPreferredSize(gfx::Size(440, 140));
+  auto* message = body->AddChildView(std::make_unique<views::Label>(
+      u"Permanently remove browsing history from all normal workspaces? "
+      u"Cookies, logins and bookmarks are kept. Private visits are never "
+      u"saved."));
+  message->SetMultiLine(true);
+  history_clear_delegate_->SetContentsView(std::move(body));
+  history_clear_delegate_->SetAcceptCallback(base::BindOnce(
+      [](base::WeakPtr<FlyWindowController> window,
+         base::WeakPtr<content::WebContents> source) {
+        if (!window || window->closing_ || !source || !window->selected_ ||
+            window->selected_->GetTabStripModel()->GetActiveWebContents() !=
+                source.get())
+          return;
+        window->history_entries_.clear();
+        window->history_choices_.clear();
+        ++window->history_generation_;
+        window->status_->SetText(u"Clearing history…");
+        window->history_clear_running_ = true;
+        window->history_clear_service_->Clear(base::BindOnce(
+            [](base::WeakPtr<FlyWindowController> window, bool cleared) {
+              if (window && !window->closing_) {
+                window->history_clear_running_ = false;
+                window->status_->SetText(
+                    cleared
+                        ? u"Browsing history cleared."
+                        : u"History could not be cleared in every workspace.");
+                if (window->history_picker_->active())
+                  window->LoadHistory(HistorySurface::kHistory);
+                else if (window->address_picker_->active())
+                  window->LoadHistory(HistorySurface::kAddress);
+              }
+            },
+            window));
+      },
+      weak_factory_.GetWeakPtr(), source->GetWeakPtr()));
+  history_clear_widget_.reset(views::DialogDelegate::CreateDialogWidget(
+      history_clear_delegate_.get(), desktop_->GetNativeWindow(),
+      desktop_->GetNativeView()));
+  history_clear_widget_->Show();
+}
+
+void FlyWindowController::ToggleAddress(BrowserWindowInterface* browser) {
+  if (address_picker_->active()) {
+    address_picker_->Cancel(true);
+    return;
+  }
+  hints_->Cancel();
+  palette_->Cancel();
+  workspace_picker_->Cancel();
+  tab_move_picker_->Cancel();
+  bookmark_picker_->Cancel();
+  CancelHistory();
+  keyboard_editor_->Cancel();
+  auto* contents = browser->GetTabStripModel()->GetActiveWebContents();
+  if (!contents)
+    return;
+  const auto config = commands_.Read().value_or(DefaultKeyboardConfig());
+  const auto url = contents->GetVisibleURL();
+  address_picker_->ToggleQuery(
+      contents,
+      base::BindRepeating(
+          [](base::WeakPtr<FlyWindowController> window,
+             std::u16string_view query) {
+            return window ? window->AddressEntries(query)
+                          : std::vector<PaletteEntry>();
+          },
+          weak_factory_.GetWeakPtr()),
+      config.shortcuts.at("toggle-address"), u"Address or search",
+      url == GURL("about:blank") ? std::u16string()
+                                 : base::UTF8ToUTF16(url.spec()));
+  LoadHistory(HistorySurface::kAddress);
+}
+std::vector<PaletteEntry> FlyWindowController::AddressEntries(
+    std::u16string_view text) {
+  address_choices_.clear();
+  const auto input = base::UTF16ToUTF8(text);
+  std::vector<PaletteEntry> result;
+  auto add = [&](std::string kind, std::string payload, std::string title,
+                 std::string detail) {
+    const auto action = kind + ":" + payload;
+    address_choices_.emplace(action, payload);
+    result.push_back(
+        {action, action, std::move(title), std::move(detail), {}, {}});
+  };
+  if (input.empty())
+    return result;
+  const auto lower = base::ToLowerASCII(input);
+  if (lower.starts_with("ws:") || lower.starts_with("ws ")) {
+    const auto query = base::ToLowerASCII(std::string(
+        base::TrimWhitespaceASCII(input.substr(3), base::TRIM_ALL)));
+    if (const auto catalog = workspaces_.Read())
+      for (const auto& item : catalog->items)
+        if (base::ToLowerASCII(item.name).find(query) != std::string::npos)
+          add("workspace", item.id, "Switch to " + item.name, "Workspace");
+    return result;
+  }
+  if (const auto value = EvaluateAddressExpression(input)) {
+    const auto answer = base::NumberToString(*value);
+    add("calculate", input, "= " + answer, "Copy result");
+  }
+  SearchService search(*g_browser_process->local_state());
+  if (const auto target = search.ResolveNavigation(input))
+    add("navigate", input, target->spec(), "Open in this workspace");
+  // App bookmarks are an explicit shared product service, never workspace
+  // cookies or private history. Results are inert text in native controls.
+  if (const auto bookmarks = bookmarks_->Read())
+    for (const auto& item : *bookmarks)
+      if (result.size() < 12 &&
+          base::ToLowerASCII(item.title + " " + item.url).find(lower) !=
+              std::string::npos)
+        add("bookmark", item.url, item.title, item.url);
+  std::set<std::string> urls;
+  for (const auto& item : history_entries_)
+    if (result.size() < 12 && urls.insert(item.url.spec()).second &&
+        base::ToLowerASCII(base::UTF16ToUTF8(item.title) + " " +
+                           item.url.spec())
+                .find(lower) != std::string::npos)
+      add("history", item.url.spec(),
+          item.title.empty() ? item.url.spec() : base::UTF16ToUTF8(item.title),
+          item.url.spec());
+  return result;
+}
+void FlyWindowController::ExecuteAddress(content::WebContents* source,
+                                         std::string action) {
+  if (closing_ || !selected_ || !source ||
+      selected_->GetTabStripModel()->GetActiveWebContents() != source)
+    return;
+  const auto choice = address_choices_.find(action);
+  if (choice == address_choices_.end())
+    return;
+  const auto payload = choice->second;
+  address_choices_.clear();
+  if (action.starts_with("workspace:")) {
+    OpenWorkspace(payload);
+    return;
+  }
+  if (action.starts_with("calculate:")) {
+    if (const auto value = EvaluateAddressExpression(payload)) {
+      ui::ScopedClipboardWriter(ui::ClipboardBuffer::kCopyPaste)
+          .WriteText(base::UTF8ToUTF16(base::NumberToString(*value)));
+    }
+    return;
+  }
+  if (action.starts_with("history:")) {
+    history_choices_.insert(payload);
+    OpenHistory(source, payload);
+    return;
+  }
+  std::optional<GURL> target;
+  if (action.starts_with("bookmark:") && bookmarks_->Contains(payload))
+    target = GURL(payload);
+  else if (action.starts_with("navigate:"))
+    target = SearchService(*g_browser_process->local_state())
+                 .ResolveNavigation(payload);
+  if (!target || !target->is_valid())
+    return;
+  NavigateParams params(selected_, *target, ui::PAGE_TRANSITION_TYPED);
+  params.disposition = WindowOpenDisposition::CURRENT_TAB;
+  params.window_action = NavigateParams::WindowAction::kShowWindow;
+  Navigate(&params);
+}
+
+std::optional<std::vector<FrequentSite>> FlyWindowController::FrequentSites()
+    const {
+  std::vector<SiteVisit> visits;
+  for (const auto& row : history_entries_)
+    visits.push_back({row.url.spec(), row.visited});
+  return frequent_sites_->Read(visits);
+}
 std::vector<PaletteEntry> FlyWindowController::BookmarkEntries() {
   bookmark_urls_.clear();
   std::vector<PaletteEntry> entries;
@@ -476,6 +855,16 @@ std::vector<PaletteEntry> FlyWindowController::BookmarkEntries() {
                          bookmark.url, {}, {}});
     }
   }
+  if (const auto sites = FrequentSites())
+    for (const auto& site : *sites) {
+      bookmark_urls_.insert(site.url);
+      entries.push_back({site.url,
+                         site.url,
+                         site.title,
+                         "Frequent site · " + site.url,
+                         {},
+                         {}});
+    }
   return entries;
 }
 void FlyWindowController::OnBookmarksChanged() {
@@ -495,8 +884,36 @@ void FlyWindowController::OpenBookmark(content::WebContents* source,
                                       std::string url) {
   if (closing_ || !selected_ ||
       selected_->GetTabStripModel()->GetActiveWebContents() != source ||
-      !bookmarks_->Contains(url))
+      !bookmark_urls_.contains(url))
     return;
+  if (!bookmarks_->Contains(url)) {
+    // Recompute against current native history and explicit hidden/visibility
+    // choices after dismissal, rather than navigating a stale derived row.
+    history_->Query(base::BindOnce(
+        [](base::WeakPtr<FlyWindowController> window,
+           base::WeakPtr<content::WebContents> source, std::string url,
+           std::optional<std::vector<HistoryEntry>> rows) {
+          if (!window || window->closing_ || !source || !window->selected_ ||
+              window->selected_->GetTabStripModel()->GetActiveWebContents() !=
+                  source.get() ||
+              !rows)
+            return;
+          std::vector<SiteVisit> visits;
+          for (const auto& row : *rows)
+            visits.push_back({row.url.spec(), row.visited});
+          const auto sites = window->frequent_sites_->Read(visits);
+          if (!sites || std::ranges::find(*sites, url, &FrequentSite::url) ==
+                            sites->end())
+            return;
+          NavigateParams params(window->selected_, GURL(url),
+                                ui::PAGE_TRANSITION_AUTO_BOOKMARK);
+          params.disposition = WindowOpenDisposition::NEW_FOREGROUND_TAB;
+          params.window_action = NavigateParams::WindowAction::kShowWindow;
+          Navigate(&params);
+        },
+        weak_factory_.GetWeakPtr(), source->GetWeakPtr(), std::move(url)));
+    return;
+  }
   NavigateParams params(selected_, GURL(url), ui::PAGE_TRANSITION_AUTO_BOOKMARK);
   params.disposition = WindowOpenDisposition::NEW_FOREGROUND_TAB;
   params.window_action = NavigateParams::WindowAction::kShowWindow;
@@ -505,11 +922,29 @@ void FlyWindowController::OpenBookmark(content::WebContents* source,
 void FlyWindowController::RemoveBookmark(content::WebContents* source,
                                         std::string url) {
   if (!closing_ && selected_ &&
-      selected_->GetTabStripModel()->GetActiveWebContents() == source)
-    bookmarks_->Remove(url);
+      selected_->GetTabStripModel()->GetActiveWebContents() == source) {
+    if (bookmarks_->Contains(url))
+      bookmarks_->Remove(url);
+    else if (bookmark_urls_.contains(url))
+      frequent_sites_->Hide(url);
+  }
 }
 
 void FlyWindowController::OnPreferencesChanged() {
+  const auto frequent = preferences_.ReadFrequentSitesVisible();
+  if (frequent != applied_frequent_visibility_) {
+    applied_frequent_visibility_ = frequent;
+    if (bookmark_picker_ && bookmark_picker_->active()) {
+      if (frequent == true)
+        LoadHistory(HistorySurface::kBookmarks);
+      else {
+        ++history_generation_;
+        history_->Cancel();
+        history_entries_.clear();
+      }
+      bookmark_picker_->UpdateItems(BookmarkEntries(), bookmarks_->CanEdit());
+    }
+  }
   const auto theme = preferences_.ReadTheme();
   if (theme && theme != applied_theme_) {
     applied_theme_ = theme;
@@ -557,10 +992,12 @@ void FlyWindowController::StopSidebarFocusObservation() {
   }
 }
 bool FlyWindowController::SidebarOverlayBlocked() const {
-  return (palette_ && palette_->active()) ||
+  return (address_picker_ && address_picker_->active()) ||
+         (palette_ && palette_->active()) ||
          (workspace_picker_ && workspace_picker_->active()) ||
          (tab_move_picker_ && tab_move_picker_->active()) ||
          (bookmark_picker_ && bookmark_picker_->active()) ||
+         (history_picker_ && history_picker_->active()) ||
          (keyboard_editor_ && keyboard_editor_->active()) ||
          (hints_ && hints_->active());
 }
@@ -958,9 +1395,11 @@ void FlyWindowController::Select(BrowserWindowInterface* browser, bool focus) {
     }
     hints_->Cancel();
     palette_->Cancel();
+    address_picker_->Cancel();
     workspace_picker_->Cancel();
     tab_move_picker_->Cancel();
     bookmark_picker_->Cancel();
+    CancelHistory();
     keyboard_editor_->Cancel();
     selected_ = browser;
     preferences_button_->SetEnabled(true);
@@ -1142,6 +1581,8 @@ views::Widget* FlyWindowController::workspace_rename_dialog_for_testing() const 
 }
 
 void FlyWindowController::CancelWorkspaceRename() {
+  if (history_clear_widget_ && !history_clear_widget_->IsClosed())
+    history_clear_widget_->Close();
   if (rename_widget_ && !rename_widget_->IsClosed())
     rename_widget_->Close();
   if (remove_widget_ && !remove_widget_->IsClosed())
@@ -1185,9 +1626,11 @@ void FlyWindowController::RemoveWorkspace(std::string id) {
   CancelWorkspaceRename();
   hints_->Cancel();
   palette_->Cancel();
+  address_picker_->Cancel();
   workspace_picker_->Cancel();
   tab_move_picker_->Cancel();
   bookmark_picker_->Cancel();
+  CancelHistory();
   keyboard_editor_->Cancel();
   remove_widget_.reset();
   remove_delegate_ = std::make_unique<views::DialogDelegate>();
@@ -1305,9 +1748,11 @@ void FlyWindowController::RenameWorkspace(std::string id) {
     return;
   hints_->Cancel();
   palette_->Cancel();
+  address_picker_->Cancel();
   workspace_picker_->Cancel();
   tab_move_picker_->Cancel();
   bookmark_picker_->Cancel();
+  CancelHistory();
   keyboard_editor_->Cancel();
   // Both objects are client-owned. Destroy the old widget before its delegate;
   // no callback retains the workspace row that opened this dialog.
@@ -1417,8 +1862,10 @@ void FlyWindowController::ToggleWorkspacePicker() {
     return;
   hints_->Cancel();
   palette_->Cancel();
+  address_picker_->Cancel();
   tab_move_picker_->Cancel();
   bookmark_picker_->Cancel();
+  CancelHistory();
   keyboard_editor_->Cancel();
   const auto config = commands_.Read().value_or(DefaultKeyboardConfig());
   workspace_picker_->ToggleItems(
@@ -1499,7 +1946,9 @@ bool FlyWindowController::ShowTabMovePicker(BrowserWindowInterface* browser,
   CancelWorkspaceRename();
   hints_->Cancel();
   palette_->Cancel();
+  address_picker_->Cancel();
   bookmark_picker_->Cancel();
+  CancelHistory();
   workspace_picker_->Cancel();
   keyboard_editor_->Cancel();
   move_source_browser_ = browser->GetWeakPtr();
@@ -1760,9 +2209,11 @@ void FlyWindowController::OnBrowserDidClose(BrowserWindowInterface* browser) {
     CancelWorkspaceRename();
     hints_->Cancel();
     palette_->Cancel();
+    address_picker_->Cancel();
     workspace_picker_->Cancel();
     tab_move_picker_->Cancel();
     bookmark_picker_->Cancel();
+    CancelHistory();
     keyboard_editor_->Cancel();
     tab_sidebar_->SetBrowser(nullptr);
     compact_tab_sidebar_->SetBrowser(nullptr);
@@ -1867,9 +2318,11 @@ void FlyWindowController::RequestClose(views::Widget::ClosedReason reason) {
   }
   hints_->Cancel();
   palette_->Cancel();
+  address_picker_->Cancel();
   workspace_picker_->Cancel();
   tab_move_picker_->Cancel();
   bookmark_picker_->Cancel();
+  CancelHistory();
   keyboard_editor_->Cancel();
   closing_ = true;
   suspension_timer_.Stop();
@@ -1894,9 +2347,11 @@ void FlyWindowController::OnClosingAllBrowsers(bool closing) {
     CancelWorkspaceRename();
     hints_->Cancel();
     palette_->Cancel();
+    address_picker_->Cancel();
     workspace_picker_->Cancel();
     tab_move_picker_->Cancel();
     bookmark_picker_->Cancel();
+    CancelHistory();
     keyboard_editor_->Cancel();
   }
   closing_ = closing;
@@ -1969,6 +2424,14 @@ bool FlyWindowController::RunCommand(BrowserWindowInterface* browser,
                                      std::string_view action) {
   if (!entries_.contains(browser) || closing_)
     return false;
+  if (action == "toggle-history") {
+    ToggleHistory(browser);
+    return true;
+  }
+  if (action == "toggle-address") {
+    ToggleAddress(browser);
+    return true;
+  }
   if (action == "move-tab-to-workspace")
     return ShowTabMovePicker(
         browser, browser->GetTabStripModel()->GetActiveWebContents());
@@ -2055,22 +2518,27 @@ bool FlyWindowController::RunCommand(BrowserWindowInterface* browser,
   if (action == "toggle-bookmarks") {
     if (!bookmarks_->Read())
       return false;
+    CancelHistory();
     hints_->Cancel();
     palette_->Cancel();
+    address_picker_->Cancel();
     workspace_picker_->Cancel();
     tab_move_picker_->Cancel();
     keyboard_editor_->Cancel();
     const auto config = commands_.Read().value_or(DefaultKeyboardConfig());
     bookmark_picker_->ToggleItems(
         browser->GetTabStripModel()->GetActiveWebContents(), BookmarkEntries(),
-        config.shortcuts.at("toggle-bookmarks"), u"Search Fly bookmarks",
-        bookmarks_->CanEdit());
+        config.shortcuts.at("toggle-bookmarks"),
+        u"Search bookmarks and frequent sites", bookmarks_->CanEdit());
+    LoadHistory(HistorySurface::kBookmarks);
     return true;
   }
   if (action == "toggle-palette") {
+    address_picker_->Cancel();
     workspace_picker_->Cancel();
     tab_move_picker_->Cancel();
     bookmark_picker_->Cancel();
+    CancelHistory();
     hints_->Cancel();
     keyboard_editor_->Cancel();
     palette_->Toggle(browser->GetTabStripModel()->GetActiveWebContents(),
@@ -2082,9 +2550,11 @@ bool FlyWindowController::RunCommand(BrowserWindowInterface* browser,
     return true;
   }
   if (action == "trigger-hints") {
+    address_picker_->Cancel();
     workspace_picker_->Cancel();
     tab_move_picker_->Cancel();
     bookmark_picker_->Cancel();
+    CancelHistory();
     keyboard_editor_->Cancel();
     hints_->Toggle(browser->GetTabStripModel()->GetActiveWebContents());
     return true;
@@ -2112,9 +2582,11 @@ bool FlyWindowController::RunCommand(BrowserWindowInterface* browser,
   if (action == "toggle-help" || action == "open-keyboard-settings") {
     hints_->Cancel();
     palette_->Cancel();
+    address_picker_->Cancel();
     workspace_picker_->Cancel();
     tab_move_picker_->Cancel();
     bookmark_picker_->Cancel();
+    CancelHistory();
     if (action == "toggle-help" || !keyboard_editor_->active())
       keyboard_editor_->Toggle(browser->GetTabStripModel()->GetActiveWebContents());
     if (action == "open-keyboard-settings")
@@ -2158,8 +2630,16 @@ bool FlyWindowController::RunCommand(BrowserWindowInterface* browser,
 namespace fly {
 void FlyWindowController::OnKeyEvent(ui::KeyEvent* event) {
   if ((rename_widget_ && !rename_widget_->IsClosed()) ||
-      (remove_widget_ && !remove_widget_->IsClosed()))
+      (remove_widget_ && !remove_widget_->IsClosed()) ||
+      (history_clear_widget_ && !history_clear_widget_->IsClosed()))
     return;
+  if (address_picker_->active()) {
+    if (address_picker_->HandleOverlayKey(*event)) {
+      event->SetHandled();
+      event->StopPropagation();
+    }
+    return;
+  }
   if (tab_move_picker_->active()) {
     if (tab_move_picker_->HandleOverlayKey(*event)) {
       event->SetHandled();
@@ -2169,6 +2649,13 @@ void FlyWindowController::OnKeyEvent(ui::KeyEvent* event) {
   }
   if (workspace_picker_->active()) {
     if (workspace_picker_->HandleOverlayKey(*event)) {
+      event->SetHandled();
+      event->StopPropagation();
+    }
+    return;
+  }
+  if (history_picker_->active()) {
+    if (history_picker_->HandleOverlayKey(*event)) {
       event->SetHandled();
       event->StopPropagation();
     }

@@ -24,6 +24,8 @@ source_set("workspaces") {
 
 source_set("commands") {
   sources = [
+    "commands/calculator.cc",
+    "commands/calculator.h",
     "commands/command_service.cc",
     "commands/command_service.h",
     "commands/generated_contract.h",
@@ -50,22 +52,31 @@ source_set("preferences") {
   sources = [
     "preferences/preferences_service.cc",
     "preferences/preferences_service.h",
+    "preferences/search_service.cc",
+    "preferences/search_service.h",
   ]
   public_deps = [
     "//base",
     "//components/prefs",
   ]
-  deps = [ ":pref_storage" ]
+  deps = [
+    ":pref_storage",
+    "//components/url_formatter",
+  ]
+  public_deps += [ "//url" ]
 }
 
 source_set("bookmarks") {
   sources = [
     "bookmarks/bookmark_service.cc",
     "bookmarks/bookmark_service.h",
+    "bookmarks/frequent_sites_service.cc",
+    "bookmarks/frequent_sites_service.h",
   ]
   public_deps = [ "//base" ]
   deps = [
     ":pref_storage",
+    ":preferences",
     "//components/prefs",
     "//url",
   ]
@@ -87,11 +98,14 @@ source_set("session_metadata") {
 test("fly_unittests") {
   sources = [
     "bookmarks/bookmark_service_unittest.cc",
+    "bookmarks/frequent_sites_service_unittest.cc",
+    "commands/calculator_unittest.cc",
     "commands/command_service_unittest.cc",
     "commands/hint_codes_unittest.cc",
     "commands/keyboard_config_unittest.cc",
     "commands/palette_catalog_unittest.cc",
     "preferences/preferences_service_unittest.cc",
+    "preferences/search_service_unittest.cc",
     "workspaces/workspace_service_unittest.cc",
   ]
   deps = [
@@ -132,6 +146,8 @@ if (is_linux || is_win) {
       "//chrome/browser/devtools",
       "//chrome/browser/extensions",
       "//chrome/browser/extensions:test_support",
+      "//chrome/browser/history",
+      "//components/history/core/common",
       "//chrome/browser/profiles:profile",
       "//chrome/browser/profiles:profile_manager",
       "//chrome/browser/profiles/keep_alive",

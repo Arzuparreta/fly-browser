@@ -14,13 +14,14 @@
 #include "base/memory/raw_ref.h"
 #include "base/memory/weak_ptr.h"
 #include "base/timer/timer.h"
-#include "content/public/browser/web_contents_observer.h"
 #include "components/prefs/pref_change_registrar.h"
+#include "content/public/browser/web_contents_observer.h"
 #include "fly/commands/command_service.h"
 #include "fly/commands/palette_catalog.h"
 #include "fly/preferences/preferences_service.h"
-#include "ui/views/controls/textfield/textfield_controller.h"
+#include "fly/preferences/search_service.h"
 #include "ui/views/controls/tabbed_pane/tabbed_pane_listener.h"
+#include "ui/views/controls/textfield/textfield_controller.h"
 #include "ui/views/widget/widget_observer.h"
 
 namespace views {
@@ -48,6 +49,11 @@ class KeyboardEditor : public views::TextfieldController,
   // Pointer settings buttons return to the page when the surface closes.
   void ShowAppearance(bool return_to_page = false);
   void ShowPerformance();
+  void ShowSearch();
+  views::Textfield* search_setting_for_testing(std::string_view key);
+  views::MdTextButton* search_save_for_testing() { return search_save_; }
+  views::MdTextButton* alias_save_for_testing() { return alias_save_; }
+  views::MdTextButton* alias_remove_for_testing() { return alias_remove_; }
   void ShowKeyboard();
   bool HandleOverlayKey(const ui::KeyEvent& event);
   bool active() const { return overlay_ && !closing_; }
@@ -81,6 +87,9 @@ class KeyboardEditor : public views::TextfieldController,
   };
   void Refresh();
   void RefreshAppearance();
+  void BuildSearchSection();
+  void RefreshSearchSection();
+  void SaveSearchSetting(std::string action);
   void ChangeAppearance(std::string key);
   void CycleClockFormat();
   void CycleSuspendTimeout();
@@ -96,6 +105,13 @@ class KeyboardEditor : public views::TextfieldController,
   raw_ptr<views::Widget> desktop_;
   const raw_ref<CommandService> commands_;
   PreferencesService preferences_;
+  SearchService search_preferences_;
+  std::map<std::string, raw_ptr<views::Textfield>> search_settings_;
+  raw_ptr<views::MdTextButton> search_save_ = nullptr;
+  raw_ptr<views::MdTextButton> alias_save_ = nullptr;
+  raw_ptr<views::MdTextButton> alias_remove_ = nullptr;
+  raw_ptr<views::Label> search_settings_status_ = nullptr;
+  raw_ptr<views::Label> alias_list_ = nullptr;
   PrefChangeRegistrar preferences_registrar_;
   std::map<std::string, raw_ptr<views::Checkbox>> appearance_;
   raw_ptr<views::MdTextButton> clock_format_ = nullptr;

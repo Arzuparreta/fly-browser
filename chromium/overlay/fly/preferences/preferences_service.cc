@@ -66,8 +66,9 @@ bool PreferencesService::ValidStore() const {
   const auto* values = stored.FindDict("values");
   if (stored.FindInt("schema") != 1 || !values)
     return false;
-  for (auto key : {"show_clock", "show_status_bar", "sync_website_theme",
-                   "show_window_controls", "sidebar_auto_collapse"})
+  for (auto key :
+       {"show_clock", "show_status_bar", "sync_website_theme",
+        "show_window_controls", "sidebar_auto_collapse", "show_frequent_sites"})
     if (const auto* value = values->Find(key); value && !value->is_bool())
       return false;
   if (const auto* format = values->Find("clock_format");
@@ -194,6 +195,26 @@ bool PreferencesService::SetWindowControlsVisible(bool visible) {
   auto stored = local_state_->GetDict(kPreferencesPref).Clone();
   stored.Set("schema", 1);
   stored.EnsureDict("values")->Set("show_window_controls", visible);
+  local_state_->SetDict(kPreferencesPref, std::move(stored));
+  return true;
+}
+std::optional<bool> PreferencesService::ReadFrequentSitesVisible() const {
+  if (!ValidStore())
+    return std::nullopt;
+  const auto* values =
+      local_state_->GetDict(kPreferencesPref).FindDict("values");
+  return values ? values->FindBool("show_frequent_sites").value_or(true) : true;
+}
+bool PreferencesService::CanEditFrequentSites() const {
+  return ReadFrequentSitesVisible().has_value() &&
+         local_state_->FindPreference(kPreferencesPref)->IsUserModifiable();
+}
+bool PreferencesService::SetFrequentSitesVisible(bool visible) {
+  if (!CanEditFrequentSites())
+    return false;
+  auto stored = local_state_->GetDict(kPreferencesPref).Clone();
+  stored.Set("schema", 1);
+  stored.EnsureDict("values")->Set("show_frequent_sites", visible);
   local_state_->SetDict(kPreferencesPref, std::move(stored));
   return true;
 }

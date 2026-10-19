@@ -5,13 +5,48 @@ Full product, migration and packaged application acceptance remain outstanding.
 
 ## Active execution state
 
-Primary main is `9089776` after PR
-[126](https://github.com/Arzuparreta/fly-browser/pull/126) was squash-merged.
-All ordinary checks and both latest-head manual matrices passed. The downloaded
-artifacts were audited: 59 services on each platform; 50 compiler outputs on
-Linux/Windows and 39 on macOS. The macOS desktop adapter remains excluded and
-unimplemented. The primary checkout pulled main. The follow-up sidebar work
-has been rebased onto that merged main without conflicts.
+PR [127](https://github.com/Arzuparreta/fly-browser/pull/127) (window controls,
+sidebar expansion and indicators) is merged as `31bad18`, including a review
+follow-up: a repeated `focus-sidebar` after row activation now moves keyboard
+focus, the restore icon persists on hover and pointer motion only re-lays out the
+sidebar when it crosses its edge.
+
+The next pull request carries the address/search, history and frequent-site blocks
+described below. The frequent-site browser case failed only because the fixture
+server answers the opened origin with an error page; it now checks the committed
+origin, the destination profile and the retained cookie on a normal page.
+
+Local validation uses the engine checkout `/mnt/storage/fly-chromium`, output
+`src/out/FlyNative`, `native.py refresh-overlay` followed by an incremental
+`autoninja` of `chrome fly_unittests fly_browser_tests`. Browser cases run
+serially (`--test-launcher-jobs=1`) on an owned Xvfb/Openbox display: parallel
+jobs share one display and steal window activation, which produces focus
+failures unrelated to the code under test.
+
+## Historical checkpoint notes
+
+The sections below preserve earlier execution checkpoints. Their words
+“current”, “next” and “pending” refer to the checkpoint being recorded. Resume
+from **Active execution state** above and the reviewed native parity inventory.
+
+
+### Execution state recorded before PR 128
+
+Primary main is `9089776`, after squash-merging PR
+[126](https://github.com/Arzuparreta/fly-browser/pull/126). Its ordinary checks and
+both latest-head manual matrices pass. All six downloaded artifacts independently
+verify clean head `bbb8a09` and the pinned engine lock: 59 service cases on Linux,
+macOS and Windows, and 50 Linux / 50 Windows / 39 macOS compiler outputs.
+The external audit is `evidence/ci-bbb8a09-audit.json`. macOS object validation
+excludes the unimplemented desktop adapter; no cross-platform linked browser or
+package is implied.
+
+PR [127](https://github.com/Arzuparreta/fly-browser/pull/127) contains native window
+controls and sidebar expansion/indicators at `2b547de`, with one `impact:none`
+label and passing ordinary checks. Latest-head manual matrices 39287341694
+(services) and 39287345899 (objects) are running. Wait for all jobs, audit all six
+artifacts, fetch/check the main ancestor again and then squash-merge. Its C++ and
+patch stack are byte-identical to the accepted `9606b31` Linux checkpoint below.
 
 The complete `bbb8a09` Linux run passes 59 services, 71 browser declarations
 (69 main plus two PRE stages), H.264/AAC with MV3 and PCM audio. Independent audit
@@ -22,8 +57,8 @@ and summary SHA256
 Evidence is archived externally in
 `evidence/runtime-bbb8a09-before-window-controls`.
 
-The validated follow-up is on `codex/chromium-native-sidebar-validated`;
-address/search work continues separately. The preceding
+Development continues on `codex/chromium-native-history`, based on the unpublished
+address/search block in `codex/chromium-native-address-search`. The preceding
 window-control checkpoint `5d55d9a` passes the complete Linux run: 62 services,
 74 browser declarations, both media fixtures and independent audit, archived in
 `evidence/runtime-5d55d9a-before-sidebar-collapse`.
@@ -55,6 +90,71 @@ The retained Electron keyboard/editor/editable regression passes on owned
 Xvfb/Openbox in `evidence/native-sidebar-retained-keyboard-x11.log`; a headless
 attempt did not receive the opening shortcut and remains separate failed evidence.
 
+The address/search follow-up adds a floating native address surface using the
+shared modal picker, current-profile navigation, twelve built-in and editable
+custom aliases, DuckDuckGo bangs, workspace lookup, shared bookmark suggestions
+and a bounded calculator without page execution. A native Search preference tab
+edits the engine and aliases while preserving keyboard drafts, managed choices
+and future/malformed data. Queries are not written to preferences. The later blocks below add history
+suggestions and frequent sites; transactional legacy import remains outstanding.
+
+Checkpoint `438daa4` passed 74 service cases and nine directed browser cases
+with no retries (`evidence/native-address-438daa4-directed-audit.json`).
+`a6d787c` also passed 74 services and eleven directed cases. These are historical
+directed checks; the complete accepted address checkpoint follows below.
+
+The first complete address run at `ac6866a` passed 74 services, 82/83 browser
+stages and both media fixtures. It is failed evidence, archived in
+`evidence/runtime-ac6866a-address-workspace-fixture-failure`: the new combined
+workspace/bookmark fixture opened its selector before the newly created
+workspace's initial navigation committed. `ab4b496` explicitly navigates that
+fixture before opening the selector. Its complete Linux run passes all 74
+services, all 83 browser stages (81 main plus two PRE stages), both media
+fixtures and independent audit. The accepted archive is
+`evidence/runtime-ab4b496-address-search-accepted`, with fingerprint
+`dd2def3acba81d524bb23006289cef322e9ffb99e33001848c82e27bccb68c88` and summary
+SHA256 `225ce545986d1b7cdfe691b68b1365c7944074351c50423499015eb10f678478`.
+A subsequent platform fix sends Windows drive/UNC paths and POSIX home paths to
+Chromium's file fixup; platform-specific expectations await the next matrix.
+
+The history follow-up implements an app-wide, in-memory projection of native
+Chromium history. It loads only existing, authorized normal workspace profiles,
+keeps them alive during asynchronous queries, caps the combined projection at
+500 visits and never queries OTR profiles. It owns no parallel persistent history
+file. Native extensions still see only their profile's database. The native
+history selector searches these rows and navigates in the selected destination
+profile; address suggestions reuse the projection. Execution requeries native
+history so deleted visits or retired workspaces cannot execute cached rows.
+
+Clearing history uses an explicit native confirmation with Cancel as default,
+checks deletion policy in every workspace before deleting any database, and
+uses native expiration callbacks. Cookies, site storage and bookmarks remain
+untouched. Read-query cancellation is separate from an accepted clear operation.
+The five new browser cases (plus a PRE stage) cover aggregation, private
+exclusion, native profile scope, deletion policy/cookies, future authorization, selector/confirmation and
+live native deletions. Native history notifications refresh open projections;
+profile teardown notifications are deferred until their dispatch has finished.
+A PRE/restart case covers querying a dormant profile without opening a browser.
+Checkpoint `7dd9c75` passes all 74 services and seventeen directed browser
+stages (sixteen main plus one PRE stage), without retries. These include the new
+history cases, private/address navigation, alias settings, palette, sidebar and
+unloaded-profile restoration. Source compilation, GN checks and verification of
+all 249 pinned dependencies pass. Its logs and summaries are prefixed
+`evidence/native-history-7dd9c75`. This is directed validation; complete
+history/browser/media acceptance, crash recovery and other-platform runtime are
+still pending.
+
+The next local block derives five frequent sites from that bounded history,
+retaining the legacy seven-day half-life, future-time cap, exact-origin bookmark
+exclusion and explicit hiding. Hidden origins use a validated `hidden_sites`
+list in the shared bookmarks dictionary, preserving its items/unknown metadata
+and policy. This is not another visit log. A native Appearance checkbox controls
+`show_frequent_sites`; bookmark search offers the derived rows, opens them with
+the selected profile and hides them explicitly. Selection requeries native
+history and settings before navigation. Disabled display avoids loading history
+for bookmark search. New core and desktop cases await execution; do not claim
+complete acceptance from compilation checks.
+
 The first full sidebar run at `fdf867e` passed services and media but failed
 23 browser stages, primarily at Chromium's layer-order check, alongside focus
 and test-default issues. It is preserved in
@@ -66,14 +166,8 @@ before full acceptance. Tests use official signed Openbox extracted only for
 owned displays; no package was installed into the owner desktop.
 
 The [native parity inventory](./native-parity.md) records all 82 actions and
-28 preferences. Fifteen actions still have no native route; routed actions also
+28 preferences. Fourteen actions still have no native route; routed actions also
 retain explicit product/platform/recovery gaps. This is incomplete M0–M6 work.
-
-## Historical checkpoint notes
-
-The sections below preserve earlier execution checkpoints. Their words
-“current”, “next” and “pending” refer to the checkpoint being recorded. Resume
-from **Active execution state** above and the reviewed native parity inventory.
 
 ## Merged checkpoint before PR 126
 
