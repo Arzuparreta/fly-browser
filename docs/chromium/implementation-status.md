@@ -55,7 +55,7 @@ Retained Electron recorder/editable regression also passes with disposable data.
 Before changing frozen source or engine files, inspect user units
 `fly-chromium-native-build.service`, `fly-chromium-native-acceptance.service` and
 `fly-chromium-native-summary-audit.service`. All three completed successfully;
-the sidebar worktree is detached at `9ab2944` after directed workspace-removal
+the sidebar worktree is detached at `0c8506e` after directed removal/move
 validation. The full `ae5e12e` runtime evidence is archived in
 `evidence/runtime-ae5e12e-before-workspace-retirement`. Archive the current
 directed evidence before moving that worktree. Current logs are under `/mnt/storage/fly-chromium/` as
@@ -141,14 +141,33 @@ Cancellation or a lost destination retains the source. Unloaded profiles load
 asynchronously before requesting source close. Origin-bound blob/extension URLs,
 credentials in URLs and pending navigations are currently ineligible.
 
-Five new browser cases cover real menu/picker input, destination storage,
-identity/restore, beforeunload cancellation, destination loss, private isolation
-and both normal/private unloaded targets. Their runtime validation is pending.
+All five new move browser cases and both removal cases now pass together at
+`0c8506e`, independently checked against the exact seven-case result set in
+`evidence/native-tab-move-directed-audit.json`. All 59 native service tests pass
+at the earlier core-equivalent `8ef4793`; the complete latest-head run follows.
+The new cases cover real menu/picker input, destination storage, identity/restore,
+beforeunload cancellation, destination loss, private isolation and both
+normal/private unloaded targets. The retained Electron recorder/editable test
+passes with disposable data (`native-workspace-move-retained-keyboard.log`).
+
+Earlier move failures are retained: `8ef4793` rejected fresh destinations because
+Chromium creates an initial NavigationEntry; `aa61f6d` diagnostics isolated that
+condition. The fix requires native initial-blank state, no pending navigation and
+an initial entry. `156a2e0` then exposed a normal-workspace fallback persisting
+during private source closure, plus an ambiguous generated-name fixture query.
+`0c8506e` defers fallback until move completion and gives that fixture a unique
+name. Real pointer menu selection also waits for the visible title control.
+The original failed summaries/logs remain under their exact commit prefixes.
 The new cross-profile move is not yet crash-atomic across independent native
 session files; M4 transaction/recovery acceptance remains outstanding.
 
-Next: run the directed removal/move browser cases, then the full Linux native
-suite/media audit and latest-head hosted object/service matrices; integrate this
+PR [126](https://github.com/Arzuparreta/fly-browser/pull/126) is the active draft,
+with exactly one `impact:none` label. The first-head ordinary checks pass;
+manual object/service matrices 39255701582/39255705748 are superseded by the
+corrected head and must never be used as its acceptance evidence.
+
+Next: run the full Linux native suite/media audit and latest-head hosted
+object/service matrices; integrate this
 functional block only after those checks pass. Continue native Fly address/window
 UI, remaining commands/preferences, services, transactional migration, all-platform
 packages, update rehearsals and full acceptance through M6. Electron remains
