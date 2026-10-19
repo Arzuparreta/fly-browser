@@ -32,6 +32,11 @@ TEST_F(SearchServiceTest, BuiltinsEncodingAndDirectNavigationNeverWrite) {
   EXPECT_EQ(GURL("http://localhost:8000/fixture"),
             service_.ResolveNavigation("localhost:8000/fixture"));
   EXPECT_EQ(GURL("about:blank"), service_.ResolveNavigation("about:blank"));
+  // Unsupported schemes are never rewritten into an https URL for another host.
+  EXPECT_FALSE(service_.ResolveNavigation("mailto:user@example.com"));
+  EXPECT_FALSE(service_.ResolveNavigation("ftp://files.example.org"));
+  EXPECT_EQ(GURL("https://example.com:8443/path"),
+            service_.ResolveNavigation("example.com:8443/path"));
 #if BUILDFLAG(IS_WIN)
   EXPECT_EQ(GURL("file:///C:/Fly%20fixture.txt"),
             service_.ResolveNavigation("C:\\Fly fixture.txt"));

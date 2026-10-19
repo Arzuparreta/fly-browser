@@ -696,8 +696,12 @@ void FlyWindowController::ConfirmHistoryClear(content::WebContents* source) {
         window->history_clear_running_ = true;
         window->history_clear_service_->Clear(base::BindOnce(
             [](base::WeakPtr<FlyWindowController> window, bool cleared) {
-              if (window && !window->closing_) {
-                window->history_clear_running_ = false;
+              if (!window)
+                return;
+              // A cancelled quit clears `closing_` again; the lock must not
+              // outlive the operation.
+              window->history_clear_running_ = false;
+              if (!window->closing_) {
                 window->status_->SetText(
                     cleared
                         ? u"Browsing history cleared."

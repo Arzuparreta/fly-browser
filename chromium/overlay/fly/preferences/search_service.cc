@@ -227,6 +227,18 @@ std::optional<GURL> SearchService::ResolveNavigation(
           Expand(found->second.url, Trim(input.substr(separator)), true));
   } else {
     const bool local = lower == "localhost" || lower.starts_with("localhost:");
+    // "host.tld:port" is an address; any other "scheme:..." word (mailto:,
+    // ftp://, javascript:, ...) is not something this surface opens.
+    if (const auto colon = input.find(':');
+        !local && colon != std::string::npos &&
+        input.substr(0, colon).find('.') == std::string::npos) {
+      const auto tail = input.substr(colon + 1);
+      size_t digits = 0;
+      while (digits < tail.size() && base::IsAsciiDigit(tail[digits]))
+        ++digits;
+      if (digits == 0 || (digits < tail.size() && tail[digits] != '/'))
+        return std::nullopt;
+    }
     if (local || input.find('.') != std::string::npos)
       return CheckedURL(std::string(local ? "http://" : "https://") + input);
     if (input.find(':') != std::string::npos)
