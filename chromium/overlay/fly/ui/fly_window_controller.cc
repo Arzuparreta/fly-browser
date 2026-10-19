@@ -251,7 +251,7 @@ FlyWindowController::FlyWindowController()
   clock_ = sidebar->AddChildView(std::make_unique<views::MdTextButton>(
       base::BindRepeating(&FlyWindowController::CycleClockFormat,
                           weak_factory_.GetWeakPtr()),
-      u""));
+      u"Clock"));
   clock_->SetStyle(ui::ButtonStyle::kText);
   preferences_button_ = sidebar->AddChildView(std::make_unique<views::MdTextButton>(
       base::BindRepeating(
