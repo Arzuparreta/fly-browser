@@ -54,8 +54,9 @@ Current native runtime validation is frozen at `19bd656` in the sidebar worktree
 It adds profile-bound product blank-tab navigation, including private startup,
 new workspaces, adjacent tabs and splitting a one-tab workspace. The new 48-case
 browser suite and all acceptance stages must execute before accepting that
-follow-up. Ongoing development is on `codex/chromium-native-global-audio` in the
-hints worktree; its global tab-mute case is not part of the frozen runtime.
+follow-up. Ongoing development is on `codex/chromium-native-media-session` in the
+hints worktree; its global tab-mute and media-session cases are not part of the
+frozen runtime.
 
 Before changing frozen source or engine files, inspect user units
 `fly-chromium-native-build.service`, `fly-chromium-native-acceptance.service` and
@@ -1460,3 +1461,19 @@ windows are excluded and weak identities tolerate observer-driven destruction.
 A browser case covers mixed state, hidden/private tabs, native reasons, stable
 extension IDs, unchanged selection/visibility and newly created tabs. Runtime
 execution and latest-head hosted validation remain pending.
+
+
+### Native global media follow-up
+
+`toggle-global-media` now controls existing, controllable native Media Sessions
+across the Fly desktop. Each session's playback state is snapshotted before
+sending UI-originated suspend/resume requests. Chromium keeps its normal audio
+focus policy, renderer/player fallback and page-provided Media Session handlers.
+No product script enumerates or replaces media elements, and tabs without a
+session do not acquire one. This intentionally follows native controllable media
+semantics rather than reviving never-started elements on every page.
+Two real-audio browser fixtures exercise ordinary page action handlers and the
+native player fallback, then check pause/resume from another workspace while
+retaining native selection/visibility. Resume assertions run without a synthetic
+user gesture. Their execution is pending; this does not establish real Twitch/Pie
+acceptance.

@@ -63,6 +63,7 @@
 #include "content/public/browser/render_frame_host.h"
 #include "content/public/browser/render_widget_host_view.h"
 #include "content/public/browser/web_contents.h"
+#include "content/public/browser/media_session.h"
 #include "content/public/browser/navigation_controller.h"
 #include "content/public/browser/navigation_entry.h"
 #include "content/public/browser/favicon_status.h"
@@ -682,6 +683,123 @@ IN_PROC_BROWSER_TEST_F(FlyWorkspaceBrowserTest,
   EXPECT_EQ(row, sidebar->row_for_testing(contents));
   EXPECT_EQ(id, TabIdentity::Get(contents));
   EXPECT_EQ(GURL("about:blank"), contents->GetLastCommittedURL());
+}
+
+IN_PROC_BROWSER_TEST_F(FlyWorkspaceBrowserTest,
+                       GlobalMediaUsesNativeSessionHandlersInHiddenWorkspaces) {
+  auto* playing_browser = browser();
+  ASSERT_TRUE(ui_test_utils::NavigateToURL(
+      playing_browser, embedded_test_server()->GetURL("/title1.html")));
+  auto* playing = Active(playing_browser);
+  ASSERT_TRUE(content::ExecJs(playing, R"(
+    const audio = document.createElement('audio');
+    audio.id = 'fly-media';
+    audio.loop = true;
+    audio.src = '/media/engagement/engagement_valid_audio.webm';
+    document.body.append(audio);
+    navigator.mediaSession.setActionHandler('pause', () => {
+      audio.pause();
+      document.title = 'paused-by-native-session';
+    });
+    navigator.mediaSession.setActionHandler('play', async () => {
+      await audio.play();
+      document.title = 'played-by-native-session';
+    });
+    audio.play();
+  )"));
+  ASSERT_TRUE(base::test::RunUntil([&] {
+    auto* session = content::MediaSession::GetIfExists(playing);
+    if (!session)
+      return false;
+    const auto info = session->GetMediaSessionInfoSync();
+    return info && info->is_controllable &&
+           info->playback_state ==
+               media_session::mojom::MediaPlaybackState::kPlaying;
+  }));
+  auto* other = SecondWorkspace();
+  ASSERT_TRUE(other);
+  auto& window = FlyWindowController::Get();
+  auto* empty_tab = Active(other);
+  auto* empty_session = content::MediaSession::GetIfExists(empty_tab);
+  ExpectVisible(playing, false);
+  content::TitleWatcher paused(playing, u"paused-by-native-session");
+  ASSERT_TRUE(InvokeNativeCommand(other, "toggle-global-media"));
+  EXPECT_EQ(u"paused-by-native-session", paused.WaitAndGetTitle());
+  EXPECT_EQ(true, content::EvalJs(playing,
+                                 "document.getElementById('fly-media').paused"));
+  ASSERT_TRUE(base::test::RunUntil([&] {
+    const auto info = content::MediaSession::GetIfExists(playing)
+                          ->GetMediaSessionInfoSync();
+    return info && info->is_controllable &&
+           info->playback_state ==
+               media_session::mojom::MediaPlaybackState::kPaused;
+  }));
+  content::TitleWatcher resumed(playing, u"played-by-native-session");
+  ASSERT_TRUE(InvokeNativeCommand(other, "toggle-global-media"));
+  EXPECT_EQ(u"played-by-native-session", resumed.WaitAndGetTitle());
+  EXPECT_EQ(false, content::EvalJs(playing,
+                                  "document.getElementById('fly-media').paused"));
+  EXPECT_EQ(other, window.selected_browser_for_testing());
+  EXPECT_EQ(empty_tab, Active(other));
+  EXPECT_EQ(empty_session, content::MediaSession::GetIfExists(empty_tab));
+  ExpectVisible(playing, false);
+  ExpectVisible(empty_tab, true);
+  ASSERT_TRUE(content::ExecJs(playing,
+                              "document.getElementById('fly-media').pause()"));
+}
+
+IN_PROC_BROWSER_TEST_F(FlyWorkspaceBrowserTest,
+                       GlobalMediaFallsBackToNativePlayersWithoutSiteHandlers) {
+  auto* first = browser();
+  ASSERT_TRUE(ui_test_utils::NavigateToURL(
+      first, embedded_test_server()->GetURL("/title1.html")));
+  auto* playing = Active(first);
+  ASSERT_TRUE(content::ExecJs(playing, R"(
+    const audio = document.createElement('audio');
+    audio.id = 'fly-media';
+    audio.loop = true;
+    audio.src = '/media/engagement/engagement_valid_audio.webm';
+    document.body.append(audio);
+    audio.play();
+  )"));
+  ASSERT_TRUE(base::test::RunUntil([&] {
+    auto* session = content::MediaSession::GetIfExists(playing);
+    if (!session)
+      return false;
+    const auto info = session->GetMediaSessionInfoSync();
+    return info && info->is_controllable &&
+           info->playback_state ==
+               media_session::mojom::MediaPlaybackState::kPlaying;
+  }));
+  auto* other = SecondWorkspace();
+  ASSERT_TRUE(other);
+  ASSERT_TRUE(InvokeNativeCommand(other, "toggle-global-media"));
+  EXPECT_EQ(true, content::EvalJs(playing, R"(
+    new Promise(resolve => {
+      if (audio.paused) resolve(true);
+      else audio.addEventListener('pause', () => resolve(audio.paused),
+                                  {once: true});
+    })
+  )", content::EXECUTE_SCRIPT_NO_USER_GESTURE));
+  ASSERT_TRUE(base::test::RunUntil([&] {
+    const auto info = content::MediaSession::GetIfExists(playing)
+                          ->GetMediaSessionInfoSync();
+    return info && info->is_controllable &&
+           info->playback_state ==
+               media_session::mojom::MediaPlaybackState::kPaused;
+  }));
+  ASSERT_TRUE(InvokeNativeCommand(other, "toggle-global-media"));
+  EXPECT_EQ(true, content::EvalJs(playing, R"(
+    new Promise(resolve => {
+      if (!audio.paused) resolve(true);
+      else audio.addEventListener('playing', () => resolve(!audio.paused),
+                                  {once: true});
+    })
+  )", content::EXECUTE_SCRIPT_NO_USER_GESTURE));
+  EXPECT_EQ(other, FlyWindowController::Get().selected_browser_for_testing());
+  ExpectVisible(playing, false);
+  ExpectVisible(Active(other), true);
+  ASSERT_TRUE(content::ExecJs(playing, "audio.pause()"));
 }
 
 IN_PROC_BROWSER_TEST_F(FlyWorkspaceBrowserTest,

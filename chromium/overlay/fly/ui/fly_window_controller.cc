@@ -41,6 +41,7 @@
 #include "components/keep_alive_registry/scoped_keep_alive.h"
 #include "content/public/browser/render_widget_host_view.h"
 #include "content/public/browser/web_contents.h"
+#include "content/public/browser/media_session.h"
 #include "ui/aura/window.h"
 #include "ui/base/ime/input_method.h"
 #include "ui/base/ime/text_input_client.h"
@@ -825,7 +826,7 @@ bool FlyWindowController::RunCommand(BrowserWindowInterface* browser,
                                      std::string_view action) {
   if (!entries_.contains(browser) || closing_)
     return false;
-  if (action == "toggle-global-audio-mute") {
+  if (action == "toggle-global-audio-mute" || action == "toggle-global-media") {
     // Snapshot identities before notifying native tab observers. Never iterate
     // the workspace/window map while a tab mutation may reenter its owner.
     std::vector<base::WeakPtr<content::WebContents>> contents;
@@ -839,6 +840,34 @@ bool FlyWindowController::RunCommand(BrowserWindowInterface* browser,
         contents.push_back(tab->GetWeakPtr());
         any_unmuted |= !tab->IsAudioMuted();
       }
+    }
+    if (action == "toggle-global-media") {
+      std::vector<std::pair<base::WeakPtr<content::WebContents>, bool>> sessions;
+      for (const auto& tab : contents) {
+        auto* session = tab ? content::MediaSession::GetIfExists(tab.get())
+                            : nullptr;
+        if (!session)
+          continue;
+        const auto info = session->GetMediaSessionInfoSync();
+        if (info && info->is_controllable)
+          sessions.emplace_back(
+              tab, info->playback_state ==
+                       media_session::mojom::MediaPlaybackState::kPaused);
+      }
+      // Decide before dispatch: resuming one session may natively change audio
+      // focus in another. UI requests retain site Media Session handlers and
+      // Chromium's normal player fallback, without injecting media scripts.
+      for (const auto& [tab, resume] : sessions) {
+        auto* session = tab ? content::MediaSession::GetIfExists(tab.get())
+                            : nullptr;
+        if (!session)
+          continue;
+        if (resume)
+          session->Resume(content::MediaSession::SuspendType::kUI);
+        else
+          session->Suspend(content::MediaSession::SuspendType::kUI);
+      }
+      return true;
     }
     for (const auto& tab : contents) {
       if (tab)
