@@ -38,13 +38,19 @@ positions the panel's clip before showing it. Real page clicks cross the desktop
 and profile focus-manager boundary; address/toolbar focus remains deliberate.
 Pointer-opened Preferences explicitly returns to the page when dismissed.
 
-At `c536b6e`, 65 services and 20 of 21 directed browser stages pass, including
-session restoration, beforeunload, isolation, overlay hit testing/pinning,
-compact indicators, editable page clicks and toolbar focus. The remaining
-pointer-preferences focus case is fixed at `761b5bd`; all 65 services and the
-four affected directed cases now pass together. A complete fresh 78-stage,
-media and independent-audit run remains required. The next fixture assertion
-also verifies that mere sidebar hover retains actual document focus.
+The complete `9606b31` Linux run passes all 65 services, all 78 browser
+stages (76 main cases plus two PRE stages), H.264/AAC video with MV3 and PCM
+audio. Independent audit passes with fingerprint
+`81af250535f4ba7e8a1d41df3829d5a7d6d65f1b1da734bd8fd751c0d31fdb7d`
+and browser summary SHA256
+`225ce73b50e2b12606fc56544ff9edd699f1d9665adcb3d562ed6bd6c3870b12`.
+The accepted checkpoint is archived in external
+`evidence/runtime-9606b31-sidebar-accepted`. It covers native session restoration,
+beforeunload, isolation, physical overlay hit testing/pinning, compact indicators,
+editable page clicks, deliberate toolbar focus and actual document focus during
+mere sidebar hover. npm test, documentation build, whitespace checks and all
+88 Python tooling contracts pass. Hosted latest-head validation for this separate
+follow-up remains outstanding.
 The retained Electron keyboard/editor/editable regression passes on owned
 Xvfb/Openbox in `evidence/native-sidebar-retained-keyboard-x11.log`; a headless
 attempt did not receive the opening shortcut and remains separate failed evidence.
@@ -63,7 +69,13 @@ The [native parity inventory](./native-parity.md) records all 82 actions and
 28 preferences. Fifteen actions still have no native route; routed actions also
 retain explicit product/platform/recovery gaps. This is incomplete M0–M6 work.
 
-## Current checkpoint
+## Historical checkpoint notes
+
+The sections below preserve earlier execution checkpoints. Their words
+“current”, “next” and “pending” refer to the checkpoint being recorded. Resume
+from **Active execution state** above and the reviewed native parity inventory.
+
+## Merged checkpoint before PR 126
 
 Merged main is `00d6a2e` through PR
 [125](https://github.com/Arzuparreta/fly-browser/pull/125), following PR

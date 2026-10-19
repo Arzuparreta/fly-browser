@@ -10,9 +10,11 @@ Accepted Linux evidence through `bbb8a09` is archived in
 fixtures and independent audit pass. PR 126 hosted validation is still pending.
 The window-control checkpoint `5d55d9a` passes 62 services, all 74 browser
 declarations, both media fixtures and independent audit on Linux. The sidebar
-follow-up passes 65 services and 20/21 directed stages at `c536b6e`. The remaining
-pointer-preferences focus case is fixed at `761b5bd`, with all four affected
-directed cases passing together. Full-suite/platform checks remain pending.
+follow-up `9606b31` passes the complete Linux run: 65 services, all 78 browser
+stages, both media fixtures and independent audit. Its archive is
+`/mnt/storage/fly-chromium/evidence/runtime-9606b31-sidebar-accepted`.
+Latest-head hosted checks and other-platform runtime/package acceptance remain
+pending.
 
 Action routes live in `chromium/overlay/fly/ui/native_commands.cc` and
 `ui/fly_window_controller.cc`. Tests are in `test/workspace_browser_test.cc`;
