@@ -23,6 +23,7 @@
 #include "base/functional/bind.h"
 #include "base/no_destructor.h"
 #include "base/strings/string_number_conversions.h"
+#include "base/strings/string_util.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/task/single_thread_task_runner.h"
 #include "chrome/app/chrome_command_ids.h"
@@ -30,42 +31,48 @@
 #include "chrome/browser/lifetime/application_lifetime.h"
 #include "chrome/browser/lifetime/application_lifetime_desktop.h"
 #include "chrome/browser/profiles/profile.h"
+#include "chrome/browser/profiles/profile_attributes_storage.h"
 #include "chrome/browser/profiles/profile_manager.h"
 #include "chrome/browser/profiles/profiles_state.h"
 #include "chrome/browser/ui/browser_commands.h"
 #include "chrome/browser/ui/browser_window/public/browser_window_interface.h"
 #include "chrome/browser/ui/browser_window/public/create_browser_window.h"
-#include "chrome/browser/ui/tabs/tab_strip_model.h"
 #include "chrome/browser/ui/tabs/tab_muted_utils.h"
+#include "chrome/browser/ui/tabs/tab_strip_model.h"
+#include "chrome/common/pref_names.h"
 #include "components/input/native_web_keyboard_event.h"
 #include "components/keep_alive_registry/keep_alive_types.h"
 #include "components/keep_alive_registry/scoped_keep_alive.h"
+#include "components/prefs/pref_service.h"
+#include "content/public/browser/media_session.h"
+#include "content/public/browser/navigation_controller.h"
 #include "content/public/browser/render_widget_host_view.h"
 #include "content/public/browser/web_contents.h"
-#include "content/public/browser/media_session.h"
+#include "fly/ui/tab_move_transaction.h"
+#include "fly/ui/workspace_close_transaction.h"
 #include "ui/aura/window.h"
-#include "ui/base/ime/input_method.h"
 #include "ui/base/base_window.h"
+#include "ui/base/ime/input_method.h"
 #include "ui/base/ime/text_input_client.h"
 #include "ui/base/ime/text_input_type.h"
-#include "ui/events/event.h"
+#include "ui/base/metadata/metadata_impl_macros.h"
 #include "ui/color/color_id.h"
+#include "ui/events/event.h"
+#include "ui/menus/simple_menu_model.h"
 #include "ui/native_theme/native_theme.h"
+#include "ui/views/accessibility/view_accessibility.h"
 #include "ui/views/background.h"
 #include "ui/views/context_menu_controller.h"
-#include "ui/views/controls/menu/menu_runner.h"
-#include "ui/menus/simple_menu_model.h"
-#include "ui/base/metadata/metadata_impl_macros.h"
-#include "ui/views/accessibility/view_accessibility.h"
 #include "ui/views/controls/button/md_text_button.h"
 #include "ui/views/controls/label.h"
-#include "ui/views/controls/textfield/textfield.h"
-#include "ui/views/window/dialog_delegate.h"
+#include "ui/views/controls/menu/menu_runner.h"
 #include "ui/views/controls/native/native_view_host.h"
+#include "ui/views/controls/textfield/textfield.h"
 #include "ui/views/focus/focus_manager.h"
 #include "ui/views/layout/box_layout.h"
 #include "ui/views/layout/fill_layout.h"
 #include "ui/views/view.h"
+#include "ui/views/window/dialog_delegate.h"
 
 namespace fly {
 namespace {
@@ -74,18 +81,32 @@ class WorkspaceMenuButton : public views::MdTextButton,
                             public ui::SimpleMenuModel::Delegate {
   METADATA_HEADER(WorkspaceMenuButton, views::MdTextButton)
  public:
-  WorkspaceMenuButton(PressedCallback select, std::u16string_view name,
-                      std::string id, bool up, bool down,
+  WorkspaceMenuButton(PressedCallback select,
+                      std::u16string_view name,
+                      std::string id,
+                      bool up,
+                      bool down,
                       base::RepeatingCallback<void(int)> move,
-                      bool editable, base::RepeatingClosure rename)
+                      bool editable,
+                      base::RepeatingClosure rename,
+                      bool removable,
+                      base::RepeatingClosure remove)
       : views::MdTextButton(std::move(select), name),
-        id_(std::move(id)), up_(up), down_(down), move_(std::move(move)),
-        editable_(editable), rename_(std::move(rename)), model_(this) {
+        id_(std::move(id)),
+        up_(up),
+        down_(down),
+        move_(std::move(move)),
+        editable_(editable),
+        rename_(std::move(rename)),
+        removable_(removable),
+        remove_(std::move(remove)),
+        model_(this) {
     set_context_menu_controller(this);
     model_.AddItem(1, u"Move workspace up");
     model_.AddItem(2, u"Move workspace down");
     model_.AddSeparator(ui::NORMAL_SEPARATOR);
     model_.AddItem(3, u"Rename workspace");
+    model_.AddItem(4, u"Remove workspace");
     runner_ = std::make_unique<views::MenuRunner>(
         &model_, views::MenuRunner::CONTEXT_MENU);
   }
@@ -94,15 +115,17 @@ class WorkspaceMenuButton : public views::MdTextButton,
     return runner_->IsRunning() ? &model_ : nullptr;
   }
   bool IsCommandIdEnabled(int command) const override {
-    return command == 1 ? up_ : command == 2 ? down_
-                                                     : command == 3 && editable_;
+    return command == 1   ? up_
+           : command == 2 ? down_
+           : command == 3 ? editable_
+                          : command == 4 && removable_;
   }
   void ExecuteCommand(int command, int) override {
     if (!IsCommandIdEnabled(command))
       return;
-    auto task = command == 3
-                    ? base::BindOnce(rename_)
-                    : base::BindOnce(move_, command == 1 ? -1 : 1);
+    auto task = command == 4   ? base::BindOnce(remove_)
+                : command == 3 ? base::BindOnce(rename_)
+                               : base::BindOnce(move_, command == 1 ? -1 : 1);
     runner_->Cancel();
     // Reordering rebuilds this button. Complete menu dispatch first and only
     // then resolve the workspace's current stable identity in the catalog.
@@ -122,6 +145,8 @@ class WorkspaceMenuButton : public views::MdTextButton,
   base::RepeatingCallback<void(int)> move_;
   const bool editable_;
   base::RepeatingClosure rename_;
+  const bool removable_;
+  base::RepeatingClosure remove_;
   ui::SimpleMenuModel model_;
   std::unique_ptr<views::MenuRunner> runner_;
 };
@@ -274,6 +299,16 @@ FlyWindowController::FlyWindowController()
       }, weak_factory_.GetWeakPtr()),
       base::BindRepeating(&FlyWindowController::ChooseWorkspace,
                           weak_factory_.GetWeakPtr()));
+  tab_move_picker_ = std::make_unique<CommandPalette>(
+      desktop_.get(),
+      base::BindRepeating(
+          [](base::WeakPtr<FlyWindowController> window,
+             std::string_view action) {
+            return window && window->TabMoveDestinationAvailable(action);
+          },
+          weak_factory_.GetWeakPtr()),
+      base::BindRepeating(&FlyWindowController::ChooseTabMoveDestination,
+                          weak_factory_.GetWeakPtr()));
   keyboard_editor_ =
       std::make_unique<KeyboardEditor>(desktop_.get(), commands_,
                                        *g_browser_process->local_state());
@@ -299,6 +334,11 @@ FlyWindowController::FlyWindowController()
 }
 
 FlyWindowController::~FlyWindowController() {
+  tab_move_.reset();
+  tab_move_picker_.reset();
+  workspace_close_.reset();
+  remove_widget_.reset();
+  remove_delegate_.reset();
   CHECK(entries_.empty());
   weak_factory_.InvalidateWeakPtrs();
   clock_timer_.Stop();
@@ -533,6 +573,7 @@ void FlyWindowController::Select(BrowserWindowInterface* browser, bool focus) {
     hints_->Cancel();
     palette_->Cancel();
     workspace_picker_->Cancel();
+    tab_move_picker_->Cancel();
     bookmark_picker_->Cancel();
     keyboard_editor_->Cancel();
     selected_ = browser;
@@ -614,6 +655,9 @@ void FlyWindowController::RebuildWorkspaceButtons() {
                                 weak_factory_.GetWeakPtr(), item.id),
             editable,
             base::BindRepeating(&FlyWindowController::RenameWorkspace,
+                                weak_factory_.GetWeakPtr(), item.id),
+            editable && catalog->items.size() > 1 && !workspace_close_,
+            base::BindRepeating(&FlyWindowController::RemoveWorkspace,
                                 weak_factory_.GetWeakPtr(), item.id)));
     const bool active =
         selected_ && entries_.at(selected_).workspace_id == item.id;
@@ -709,6 +753,154 @@ views::Widget* FlyWindowController::workspace_rename_dialog_for_testing() const 
 void FlyWindowController::CancelWorkspaceRename() {
   if (rename_widget_ && !rename_widget_->IsClosed())
     rename_widget_->Close();
+  if (remove_widget_ && !remove_widget_->IsClosed())
+    remove_widget_->Close();
+}
+
+views::Widget* FlyWindowController::workspace_remove_dialog_for_testing()
+    const {
+  return remove_widget_ && !remove_widget_->IsClosed() ? remove_widget_.get()
+                                                       : nullptr;
+}
+
+bool FlyWindowController::CanRemoveWorkspace(std::string_view id,
+                                             const base::FilePath& path) const {
+  if (closing_ || creating_profile_ || tab_move_ || !workspaces_.CanEdit())
+    return false;
+  const auto catalog = workspaces_.Read();
+  if (!catalog || catalog->items.size() < 2)
+    return false;
+  const auto item = std::ranges::find(catalog->items, id, &Workspace::id);
+  return item != catalog->items.end() &&
+         path ==
+             g_browser_process->profile_manager()->user_data_dir().AppendASCII(
+                 item->profile_directory);
+}
+
+void FlyWindowController::RemoveWorkspace(std::string id) {
+  if (workspace_close_)
+    return;
+  const auto catalog = workspaces_.Read();
+  if (!catalog)
+    return;
+  const auto item = std::ranges::find(catalog->items, id, &Workspace::id);
+  if (item == catalog->items.end())
+    return;
+  const auto path =
+      g_browser_process->profile_manager()->user_data_dir().AppendASCII(
+          item->profile_directory);
+  if (!CanRemoveWorkspace(id, path))
+    return;
+  CancelWorkspaceRename();
+  hints_->Cancel();
+  palette_->Cancel();
+  workspace_picker_->Cancel();
+  tab_move_picker_->Cancel();
+  bookmark_picker_->Cancel();
+  keyboard_editor_->Cancel();
+  remove_widget_.reset();
+  remove_delegate_ = std::make_unique<views::DialogDelegate>();
+  remove_delegate_->SetOwnershipOfNewWidget(
+      views::Widget::InitParams::CLIENT_OWNS_WIDGET);
+  remove_delegate_->SetModalType(ui::mojom::ModalType::kWindow);
+  remove_delegate_->SetTitle(u"Remove workspace · " +
+                             base::UTF8ToUTF16(item->name));
+  remove_delegate_->SetButtonLabel(ui::mojom::DialogButton::kOk, u"Remove");
+  remove_delegate_->SetDefaultButton(
+      static_cast<int>(ui::mojom::DialogButton::kCancel));
+  auto body = std::make_unique<views::View>();
+  body->SetLayoutManager(std::make_unique<views::BoxLayout>(
+      views::BoxLayout::Orientation::kVertical, gfx::Insets(16), 8));
+  body->SetPreferredSize(gfx::Size(440, 160));
+  auto* message = body->AddChildView(std::make_unique<views::Label>(
+      u"Close this workspace's tabs and private windows and remove it from "
+      u"Fly? "
+      u"Downloads in its private windows will stop. Its local data is kept for "
+      u"recovery. Recreating the name starts fresh."));
+  message->SetMultiLine(true);
+  auto* error = body->AddChildView(std::make_unique<views::Label>());
+  error->SetID(2);
+  error->SetMultiLine(true);
+  remove_delegate_->SetContentsView(std::move(body));
+  remove_delegate_->SetAcceptCallbackWithClose(base::BindRepeating(
+      [](base::WeakPtr<FlyWindowController> window, std::string id,
+         base::FilePath path, views::Label* error) {
+        if (!window || window->closing_)
+          return true;
+        if (window->workspace_close_ || !window->CanRemoveWorkspace(id, path)) {
+          error->SetText(
+              u"The workspace must still be editable and at least "
+              u"one other workspace must remain.");
+          return false;
+        }
+        base::SingleThreadTaskRunner::GetCurrentDefault()->PostNonNestableTask(
+            FROM_HERE,
+            base::BindOnce(&FlyWindowController::BeginWorkspaceRemoval, window,
+                           std::move(id), std::move(path)));
+        return true;
+      },
+      weak_factory_.GetWeakPtr(), std::move(id), path, error));
+  remove_widget_.reset(views::DialogDelegate::CreateDialogWidget(
+      remove_delegate_.get(), desktop_->GetNativeWindow(),
+      desktop_->GetNativeView()));
+  remove_widget_->Show();
+}
+
+void FlyWindowController::BeginWorkspaceRemoval(std::string id,
+                                                base::FilePath path) {
+  if (workspace_close_ || !CanRemoveWorkspace(id, path))
+    return;
+  workspace_close_ = std::make_unique<WorkspaceCloseTransaction>(
+      path,
+      base::BindRepeating(
+          [](base::WeakPtr<FlyWindowController> window, const std::string& id,
+             const base::FilePath& path) {
+            return window && window->CanRemoveWorkspace(id, path);
+          },
+          weak_factory_.GetWeakPtr(), id, path),
+      base::BindOnce(&FlyWindowController::FinishWorkspaceRemoval,
+                     weak_factory_.GetWeakPtr(), id, path));
+  ScheduleWorkspaceRefresh();
+  workspace_close_->Start();
+}
+
+void FlyWindowController::FinishWorkspaceRemoval(std::string id,
+                                                 base::FilePath path,
+                                                 bool success) {
+  const bool removed =
+      success && CanRemoveWorkspace(id, path) && workspaces_.Remove(id);
+  if (removed) {
+    auto* local_state = g_browser_process->local_state();
+    const auto directory = path.BaseName().AsUTF8Unsafe();
+    auto active = local_state->GetList(prefs::kProfilesLastActive).Clone();
+    active.EraseIf([&](const base::Value& value) {
+      return value.is_string() &&
+             base::EqualsCaseInsensitiveASCII(value.GetString(), directory);
+    });
+    local_state->SetList(prefs::kProfilesLastActive, std::move(active));
+    const auto catalog = workspaces_.Read();
+    for (const auto& item : catalog->items)
+      if (item.id == catalog->active_id &&
+          local_state->GetFilePath(prefs::kProfileLastUsed) == path.BaseName())
+        local_state->SetFilePath(
+            prefs::kProfileLastUsed,
+            base::FilePath::FromUTF8Unsafe(item.profile_directory));
+    // Remove only the profile picker's metadata. ProfileManager retains native
+    // lifetime ownership; neither this operation nor retirement deletes files.
+    g_browser_process->profile_manager()
+        ->GetProfileAttributesStorage()
+        .RemoveProfile(path);
+  }
+  workspace_close_.reset();
+  ScheduleWorkspaceRefresh();
+  if (!removed) {
+    status_->SetText(
+        u"Workspace kept. Closing was cancelled or its data changed.");
+    return;
+  }
+  const auto catalog = workspaces_.Read();
+  if (!closing_ && catalog && !catalog->active_id.empty())
+    OpenWorkspace(catalog->active_id);
 }
 
 void FlyWindowController::RenameWorkspace(std::string id) {
@@ -723,6 +915,7 @@ void FlyWindowController::RenameWorkspace(std::string id) {
   hints_->Cancel();
   palette_->Cancel();
   workspace_picker_->Cancel();
+  tab_move_picker_->Cancel();
   bookmark_picker_->Cancel();
   keyboard_editor_->Cancel();
   // Both objects are client-owned. Destroy the old widget before its delegate;
@@ -833,6 +1026,7 @@ void FlyWindowController::ToggleWorkspacePicker() {
     return;
   hints_->Cancel();
   palette_->Cancel();
+  tab_move_picker_->Cancel();
   bookmark_picker_->Cancel();
   keyboard_editor_->Cancel();
   const auto config = commands_.Read().value_or(DefaultKeyboardConfig());
@@ -842,8 +1036,192 @@ void FlyWindowController::ToggleWorkspacePicker() {
       u"Search workspaces", false, true);
 }
 
+bool FlyWindowController::CanMoveTab(BrowserWindowInterface* browser,
+                                     content::WebContents* contents) const {
+  if (!browser || !contents || closing_ || creating_profile_ || tab_move_ ||
+      workspace_close_ || contents->GetController().GetPendingEntry() ||
+      selected_ != browser || !entries_.contains(browser) ||
+      entries_.at(browser).browser_closed ||
+      !TabMoveTransaction::CanMoveUrl(contents->GetLastCommittedURL()))
+    return false;
+  auto* tabs = browser->GetTabStripModel();
+  const auto index = tabs->GetIndexOfWebContents(contents);
+  if (index == TabStripModel::kNoTab ||
+      !tabs->IsContextMenuCommandEnabled(index, TabStripModel::CommandCloseTab))
+    return false;
+  const auto catalog = workspaces_.Read();
+  if (!catalog)
+    return false;
+  const auto original = browser->GetProfile()->GetOriginalProfile()->GetPath();
+  const auto root = g_browser_process->profile_manager()->user_data_dir();
+  const bool mapped =
+      std::ranges::any_of(catalog->items, [&](const Workspace& item) {
+        return root.AppendASCII(item.profile_directory) == original;
+      });
+  return mapped && !IsWorkspaceRetiring(original) &&
+         std::ranges::any_of(catalog->items, [&](const Workspace& item) {
+           const auto path = root.AppendASCII(item.profile_directory);
+           return path != original && !IsWorkspaceRetiring(path);
+         });
+}
+std::vector<PaletteEntry> FlyWindowController::TabMoveEntries() const {
+  std::vector<PaletteEntry> result;
+  if (!move_source_browser_)
+    return result;
+  const auto catalog = workspaces_.Read();
+  if (!catalog)
+    return result;
+  const auto original =
+      move_source_browser_->GetProfile()->GetOriginalProfile()->GetPath();
+  const auto root = g_browser_process->profile_manager()->user_data_dir();
+  for (const auto& item : catalog->items) {
+    const auto path = root.AppendASCII(item.profile_directory);
+    if (path != original && !IsWorkspaceRetiring(path)) {
+      const auto action = "move:" + item.id;
+      const auto label =
+          (move_source_browser_->GetProfile()->IsOffTheRecord() ? "Private · "
+                                                                : "") +
+          item.name;
+      result.push_back({action, action, label, "Workspaces", {}, {}});
+    }
+  }
+  return result;
+}
+bool FlyWindowController::TabMoveDestinationAvailable(
+    std::string_view action) const {
+  if (!CanMoveTab(move_source_browser_.get(), move_source_.get()))
+    return false;
+  return std::ranges::any_of(TabMoveEntries(), [&](const PaletteEntry& entry) {
+    return entry.action == action;
+  });
+}
+bool FlyWindowController::ShowTabMovePicker(BrowserWindowInterface* browser,
+                                            content::WebContents* contents) {
+  if (tab_move_picker_->active()) {
+    tab_move_picker_->Cancel(true);
+    return true;
+  }
+  if (!CanMoveTab(browser, contents))
+    return false;
+  auto* tabs = browser->GetTabStripModel();
+  tabs->ActivateTabAt(tabs->GetIndexOfWebContents(contents));
+  CancelWorkspaceRename();
+  hints_->Cancel();
+  palette_->Cancel();
+  bookmark_picker_->Cancel();
+  workspace_picker_->Cancel();
+  keyboard_editor_->Cancel();
+  move_source_browser_ = browser->GetWeakPtr();
+  move_source_ = contents->GetWeakPtr();
+  const auto config = commands_.Read().value_or(DefaultKeyboardConfig());
+  tab_move_picker_->ToggleItems(contents, TabMoveEntries(),
+                                config.shortcuts.at("move-tab-to-workspace"),
+                                u"Move tab to workspace", false);
+  return true;
+}
+bool FlyWindowController::ValidateTabMove(
+    base::WeakPtr<BrowserWindowInterface> source_browser,
+    base::WeakPtr<content::WebContents> source,
+    const std::string& destination_id,
+    const base::FilePath& destination_path,
+    bool require_selection) const {
+  if (closing_ || workspace_close_ || !source_browser || !source ||
+      !entries_.contains(source_browser.get()) ||
+      entries_.at(source_browser.get()).browser_closed ||
+      source_browser->GetTabStripModel()->GetIndexOfWebContents(source.get()) ==
+          TabStripModel::kNoTab ||
+      (require_selection &&
+       (selected_ != source_browser.get() ||
+        source_browser->GetTabStripModel()->GetActiveWebContents() !=
+            source.get())))
+    return false;
+  const auto catalog = workspaces_.Read();
+  if (!catalog)
+    return false;
+  const auto original =
+      source_browser->GetProfile()->GetOriginalProfile()->GetPath();
+  const auto root = g_browser_process->profile_manager()->user_data_dir();
+  if (IsWorkspaceRetiring(original) || IsWorkspaceRetiring(destination_path) ||
+      destination_path == original ||
+      std::ranges::none_of(catalog->items, [&](const Workspace& item) {
+        return root.AppendASCII(item.profile_directory) == original;
+      }))
+    return false;
+  const auto destination =
+      std::ranges::find(catalog->items, destination_id, &Workspace::id);
+  return destination != catalog->items.end() &&
+         destination_path == root.AppendASCII(destination->profile_directory);
+}
+void FlyWindowController::ChooseTabMoveDestination(content::WebContents* source,
+                                                   std::string action) {
+  if (!source || source != move_source_.get() ||
+      !TabMoveDestinationAvailable(action))
+    return;
+  const auto id = action.substr(5);
+  const auto catalog = workspaces_.Read();
+  const auto item = std::ranges::find(catalog->items, id, &Workspace::id);
+  const auto path =
+      g_browser_process->profile_manager()->user_data_dir().AppendASCII(
+          item->profile_directory);
+  auto source_browser = move_source_browser_;
+  auto contents = move_source_;
+  tab_move_ = std::make_unique<TabMoveTransaction>(
+      source_browser.get(), source, path,
+      base::BindRepeating(
+          [](base::WeakPtr<FlyWindowController> window,
+             base::WeakPtr<BrowserWindowInterface> browser,
+             base::WeakPtr<content::WebContents> contents,
+             const std::string& id, const base::FilePath& path,
+             bool require_selection) {
+            return window && window->ValidateTabMove(browser, contents, id,
+                                                     path, require_selection);
+          },
+          weak_factory_.GetWeakPtr(), source_browser, contents, id, path),
+      base::BindOnce(&FlyWindowController::FinishTabMove,
+                     weak_factory_.GetWeakPtr()));
+  status_->SetText(u"Preparing destination workspace…");
+  tab_move_->Start();
+}
+void FlyWindowController::FinishTabMove(
+    bool success,
+    base::WeakPtr<BrowserWindowInterface> destination,
+    base::WeakPtr<content::WebContents> contents) {
+  tab_move_.reset();
+  move_source_browser_.reset();
+  move_source_.reset();
+  ScheduleWorkspaceRefresh();
+  if (success && !closing_ && destination && contents &&
+      !destination->IsDeleteScheduled()) {
+    auto* tabs = destination->GetTabStripModel();
+    const auto index = tabs->GetIndexOfWebContents(contents.get());
+    if (index != TabStripModel::kNoTab) {
+      tabs->ActivateTabAt(index);
+      Select(destination.get(), true);
+    }
+  } else if (!closing_) {
+    // An unrelated native close can destroy the source while preparation is
+    // pending. Complete its deferred fallback only after releasing the move.
+    if (!selected_) {
+      for (const auto& [browser, entry] : entries_) {
+        if (!entry.browser_closed && entry.widget &&
+            !browser->IsDeleteScheduled()) {
+          Select(browser, true);
+          break;
+        }
+      }
+    }
+    status_->SetText(u"Tab move cancelled. The destination or source changed.");
+  }
+}
+
 void FlyWindowController::OnWorkspacesChanged() {
   ScheduleWorkspaceRefresh();
+  if (tab_move_picker_->active()) {
+    if (CanMoveTab(move_source_browser_.get(), move_source_.get()))
+      tab_move_picker_->UpdateItems(TabMoveEntries(), false);
+    else
+      tab_move_picker_->Cancel();
+  }
   if (!workspace_picker_->active())
     return;
   if (!CanShowWorkspacePicker())
@@ -936,7 +1314,8 @@ void FlyWindowController::CreateWorkspace() {
 bool FlyWindowController::WorkspaceMatchesProfile(std::string_view id,
                                                   Profile* profile) const {
   const auto catalog = workspaces_.Read();
-  if (!profile || profile->IsOffTheRecord() || !catalog)
+  if (!profile || profile->IsOffTheRecord() || !catalog ||
+      !profile->AllowsBrowserWindows())
     return false;
   const auto item = std::ranges::find(catalog->items, id, &Workspace::id);
   return item != catalog->items.end() &&
@@ -991,6 +1370,7 @@ void FlyWindowController::OnBrowserDidClose(BrowserWindowInterface* browser) {
     hints_->Cancel();
     palette_->Cancel();
     workspace_picker_->Cancel();
+    tab_move_picker_->Cancel();
     bookmark_picker_->Cancel();
     keyboard_editor_->Cancel();
     tab_sidebar_->SetBrowser(nullptr);
@@ -1002,7 +1382,11 @@ void FlyWindowController::OnBrowserDidClose(BrowserWindowInterface* browser) {
       it->second.host->SetVisible(false);
       it->second.widget->Hide();
     }
-    if (!closing_) {
+    // A committed move selects its prepared destination after native contents
+    // destruction. An intermediate normal-profile fallback would persist a
+    // private move's context into the normal workspace selection.
+    if (!closing_ &&
+        !(tab_move_ && move_source_browser_.get() == browser)) {
       auto choose = [&](bool same_workspace) {
         for (const auto& [next, entry] : entries_) {
           if (!entry.browser_closed && entry.widget &&
@@ -1038,7 +1422,7 @@ void FlyWindowController::OnBrowserDidClose(BrowserWindowInterface* browser) {
 
 bool FlyWindowController::CanTogglePrivate(
     BrowserWindowInterface* browser) const {
-  return browser &&
+  return browser && browser->GetProfile()->AllowsBrowserWindows() &&
          (browser->GetProfile()->IsOffTheRecord() ||
           chrome::IsCommandEnabled(browser, IDC_NEW_INCOGNITO_WINDOW));
 }
@@ -1082,6 +1466,8 @@ void FlyWindowController::ArmCloseCallback() {
       &FlyWindowController::RequestClose, weak_factory_.GetWeakPtr()));
 }
 void FlyWindowController::RequestClose(views::Widget::ClosedReason reason) {
+  tab_move_.reset();
+  workspace_close_.reset();
   CancelWorkspaceRename();
   ArmCloseCallback();
   if (closing_) {
@@ -1090,6 +1476,7 @@ void FlyWindowController::RequestClose(views::Widget::ClosedReason reason) {
   hints_->Cancel();
   palette_->Cancel();
   workspace_picker_->Cancel();
+  tab_move_picker_->Cancel();
   bookmark_picker_->Cancel();
   keyboard_editor_->Cancel();
   closing_ = true;
@@ -1108,12 +1495,15 @@ void FlyWindowController::RequestClose(views::Widget::ClosedReason reason) {
 }
 void FlyWindowController::OnClosingAllBrowsers(bool closing) {
   if (closing) {
+    tab_move_.reset();
+    workspace_close_.reset();
     suspension_timer_.Stop();
     ResumeAllTabs();
     CancelWorkspaceRename();
     hints_->Cancel();
     palette_->Cancel();
     workspace_picker_->Cancel();
+    tab_move_picker_->Cancel();
     bookmark_picker_->Cancel();
     keyboard_editor_->Cancel();
   }
@@ -1181,6 +1571,9 @@ bool FlyWindowController::RunCommand(BrowserWindowInterface* browser,
                                      std::string_view action) {
   if (!entries_.contains(browser) || closing_)
     return false;
+  if (action == "move-tab-to-workspace")
+    return ShowTabMovePicker(
+        browser, browser->GetTabStripModel()->GetActiveWebContents());
   if (action == "hibernate-tabs" || action == "wake-all-tabs") {
     std::vector<base::WeakPtr<content::WebContents>> tabs;
     const auto workspace = entries_.at(browser).workspace_id;
@@ -1267,6 +1660,7 @@ bool FlyWindowController::RunCommand(BrowserWindowInterface* browser,
     hints_->Cancel();
     palette_->Cancel();
     workspace_picker_->Cancel();
+    tab_move_picker_->Cancel();
     keyboard_editor_->Cancel();
     const auto config = commands_.Read().value_or(DefaultKeyboardConfig());
     bookmark_picker_->ToggleItems(
@@ -1277,6 +1671,7 @@ bool FlyWindowController::RunCommand(BrowserWindowInterface* browser,
   }
   if (action == "toggle-palette") {
     workspace_picker_->Cancel();
+    tab_move_picker_->Cancel();
     bookmark_picker_->Cancel();
     hints_->Cancel();
     keyboard_editor_->Cancel();
@@ -1290,6 +1685,7 @@ bool FlyWindowController::RunCommand(BrowserWindowInterface* browser,
   }
   if (action == "trigger-hints") {
     workspace_picker_->Cancel();
+    tab_move_picker_->Cancel();
     bookmark_picker_->Cancel();
     keyboard_editor_->Cancel();
     hints_->Toggle(browser->GetTabStripModel()->GetActiveWebContents());
@@ -1311,6 +1707,7 @@ bool FlyWindowController::RunCommand(BrowserWindowInterface* browser,
     hints_->Cancel();
     palette_->Cancel();
     workspace_picker_->Cancel();
+    tab_move_picker_->Cancel();
     bookmark_picker_->Cancel();
     if (action == "toggle-help" || !keyboard_editor_->active())
       keyboard_editor_->Toggle(browser->GetTabStripModel()->GetActiveWebContents());
@@ -1354,8 +1751,16 @@ bool FlyWindowController::RunCommand(BrowserWindowInterface* browser,
 
 namespace fly {
 void FlyWindowController::OnKeyEvent(ui::KeyEvent* event) {
-  if (rename_widget_ && !rename_widget_->IsClosed())
+  if ((rename_widget_ && !rename_widget_->IsClosed()) ||
+      (remove_widget_ && !remove_widget_->IsClosed()))
     return;
+  if (tab_move_picker_->active()) {
+    if (tab_move_picker_->HandleOverlayKey(*event)) {
+      event->SetHandled();
+      event->StopPropagation();
+    }
+    return;
+  }
   if (workspace_picker_->active()) {
     if (workspace_picker_->HandleOverlayKey(*event)) {
       event->SetHandled();

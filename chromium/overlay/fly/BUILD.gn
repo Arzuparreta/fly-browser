@@ -75,6 +75,8 @@ source_set("session_metadata") {
   sources = [
     "sessions/tab_identity.cc",
     "sessions/tab_identity.h",
+    "sessions/tab_move_gate.cc",
+    "sessions/tab_move_gate.h",
   ]
   public_deps = [
     "//base",
@@ -132,6 +134,7 @@ if (is_linux || is_win) {
       "//chrome/browser/extensions:test_support",
       "//chrome/browser/profiles:profile",
       "//chrome/browser/profiles:profile_manager",
+      "//chrome/browser/profiles/keep_alive",
       "//chrome/browser/profiles:profile_test_util",
       "//chrome/browser/resource_coordinator",
       "//chrome/browser/ssl",
@@ -151,6 +154,7 @@ if (is_linux || is_win) {
       "//content/public/browser",
       "//content/test:test_support",
       "//extensions:test_support",
+      "//extensions/browser:test_support",
       "//net:test_support",
       "//testing/gtest",
       "//ui/aura",

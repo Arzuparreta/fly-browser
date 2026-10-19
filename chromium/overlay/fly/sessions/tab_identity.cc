@@ -5,11 +5,14 @@
 
 #include <set>
 
+#include "base/check.h"
 #include "base/command_line.h"
 #include "base/no_destructor.h"
 #include "base/uuid.h"
 #include "content/public/browser/browser_context.h"
 #include "content/public/browser/browser_thread.h"
+#include "content/public/browser/navigation_controller.h"
+#include "content/public/browser/navigation_entry.h"
 #include "content/public/browser/web_contents.h"
 
 namespace fly {
@@ -63,6 +66,32 @@ const std::string& TabIdentity::Get(content::WebContents* contents) {
   DCHECK_CURRENTLY_ON(content::BrowserThread::UI);
   CreateForWebContents(contents, std::string());
   return FromWebContents(contents)->id_;
+}
+bool TabIdentity::PrepareProfileMove(content::WebContents* source,
+                                     content::WebContents* destination) {
+  DCHECK_CURRENTLY_ON(content::BrowserThread::UI);
+  if (!source || !destination || FromWebContents(destination) ||
+      source->GetBrowserContext() == destination->GetBrowserContext() ||
+      source->GetBrowserContext()->IsOffTheRecord() !=
+          destination->GetBrowserContext()->IsOffTheRecord())
+    return false;
+  auto& controller = destination->GetController();
+  // Chromium creates an initial NavigationEntry with every fresh FrameTree.
+  // Check its actual initial-document state, not an empty history count.
+  if (!controller.IsInitialBlankNavigation() || controller.GetPendingEntry() ||
+      !controller.GetLastCommittedEntry() ||
+      !controller.GetLastCommittedEntry()->IsInitialEntry())
+    return false;
+  Get(source);
+  auto* original = FromWebContents(source);
+  if (!original->owns_id_)
+    return false;
+  CreateForWebContents(destination, std::string());
+  auto* replacement = FromWebContents(destination);
+  LiveIds().erase(replacement->id_);
+  replacement->id_ = original->id_;
+  original->owns_id_ = false;
+  return true;
 }
 bool TabIdentity::CanPersist(content::WebContents* contents) {
   return base::CommandLine::ForCurrentProcess()->HasSwitch("fly-native") &&

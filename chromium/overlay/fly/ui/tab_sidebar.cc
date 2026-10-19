@@ -2,6 +2,7 @@
 // Use of this source code is governed by the GPL-3.0-or-later license in the
 // Fly repository.
 #include "fly/ui/tab_sidebar.h"
+#include "fly/ui/fly_window_controller.h"
 #include "fly/ui/native_commands.h"
 
 #include <limits>
@@ -66,6 +67,7 @@ class SidebarTabMenu : public ui::SimpleMenuModel::Delegate {
     kCloseOthers,
     kCloseRight,
     kReopen,
+    kMoveWorkspace,
   };
   SidebarTabMenu(BrowserWindowInterface* browser,
                  base::WeakPtr<content::WebContents> contents,
@@ -78,6 +80,7 @@ class SidebarTabMenu : public ui::SimpleMenuModel::Delegate {
     model_.AddSeparator(ui::NORMAL_SEPARATOR);
     model_.AddItem(kReload, u"Reload");
     model_.AddItem(kDuplicate, u"Duplicate");
+    model_.AddItem(kMoveWorkspace, u"Move to workspace…");
     const auto* tabs = browser->GetTabStripModel();
     const int index = tabs->GetIndexOfWebContents(contents_.get());
     model_.AddItem(kPin, tabs->IsTabPinned(index) ? u"Unpin" : u"Pin");
@@ -142,6 +145,10 @@ class SidebarTabMenu : public ui::SimpleMenuModel::Delegate {
             index, TabStripModel::CommandTogglePinned);
       case kMute:
         return true;
+      case kMoveWorkspace: {
+        const auto* window = FlyWindowController::GetIfCreated();
+        return window && window->CanMoveTab(browser, contents);
+      }
       case kClose:
         return !tabs->IsTabPinned(index) &&
                tabs->IsContextMenuCommandEnabled(
@@ -181,6 +188,9 @@ class SidebarTabMenu : public ui::SimpleMenuModel::Delegate {
       case kMute:
         SetTabAudioMuted(contents, !contents->IsAudioMuted(),
                          TabMutedReason::kAudioIndicator, std::string());
+        return;
+      case kMoveWorkspace:
+        FlyWindowController::Get().ShowTabMovePicker(browser, contents);
         return;
       case kClose:
         tabs->CloseWebContentsAt(

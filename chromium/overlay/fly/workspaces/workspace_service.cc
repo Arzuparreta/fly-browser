@@ -2,6 +2,8 @@
 // Use of this source code is governed by the GPL-3.0-or-later license in the
 // Fly repository.
 #include "fly/workspaces/workspace_service.h"
+
+#include "base/no_destructor.h"
 #include "fly/prefs/dictionary_store.h"
 
 #include <algorithm>
@@ -17,6 +19,11 @@
 namespace fly {
 namespace {
 constexpr int kSchema = 1;
+
+std::set<base::FilePath>& RetiringProfiles() {
+  static base::NoDestructor<std::set<base::FilePath>> paths;
+  return *paths;
+}
 
 bool ValidName(std::string_view name) {
   return !name.empty() && name.size() <= 4096 &&
@@ -62,6 +69,19 @@ bool NameUsed(const base::DictValue& catalog,
   return false;
 }
 }  // namespace
+
+ScopedWorkspaceRetirement::ScopedWorkspaceRetirement(
+    base::FilePath profile_path)
+    : profile_path_(std::move(profile_path)) {
+  CHECK(!profile_path_.empty());
+  CHECK(RetiringProfiles().insert(profile_path_).second);
+}
+ScopedWorkspaceRetirement::~ScopedWorkspaceRetirement() {
+  CHECK(RetiringProfiles().erase(profile_path_) == 1u);
+}
+bool IsWorkspaceRetiring(const base::FilePath& original_profile_path) {
+  return RetiringProfiles().contains(original_profile_path);
+}
 
 void WorkspaceService::RegisterLocalStatePrefs(PrefRegistrySimple* registry) {
   registry->RegisterDictionaryPref(kWorkspacesPref);
@@ -140,6 +160,19 @@ std::optional<WorkspaceCatalog> WorkspaceService::Read() const {
 
 bool WorkspaceService::CanEdit() const {
   return ReadValidated(true).has_value();
+}
+std::optional<bool> WorkspaceService::IsProfileRetired(
+    std::string_view profile_directory) const {
+  if (!ValidProfileDirectory(profile_directory))
+    return std::nullopt;
+  const auto catalog = ReadValidated();
+  if (!catalog)
+    return std::nullopt;
+  return std::ranges::any_of(*catalog->FindList("retired_profiles"),
+                             [&](const base::Value& value) {
+                               return base::EqualsCaseInsensitiveASCII(
+                                   value.GetString(), profile_directory);
+                             });
 }
 void WorkspaceService::Commit(base::DictValue catalog) {
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);

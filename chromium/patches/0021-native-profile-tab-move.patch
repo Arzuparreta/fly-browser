@@ -1,0 +1,103 @@
+--- a/chrome/browser/ui/tabs/tab_strip_model.cc
++++ b/chrome/browser/ui/tabs/tab_strip_model.cc
+@@ -3,6 +3,10 @@
+ // found in the LICENSE file.
+ 
+ #include "chrome/browser/ui/tabs/tab_strip_model.h"
++#include "build/build_config.h"
++#if BUILDFLAG(IS_LINUX) || BUILDFLAG(IS_WIN)
++#include "fly/sessions/tab_move_gate.h"
++#endif
+ 
+ #include <algorithm>
+ #include <cstddef>
+@@ -3572,6 +3576,11 @@
+ 
+ bool TabStripModel::ShouldRunUnloadListenerBeforeClosing(
+     content::WebContents* contents) {
++#if BUILDFLAG(IS_LINUX) || BUILDFLAG(IS_WIN)
++  if (fly::HasNativeTabMoveGate(contents)) {
++    return true;  // Defer fast shutdown until the scoped move can commit.
++  }
++#endif
+   return contents->NeedToFireBeforeUnloadOrUnloadEvents() ||
+          delegate_->ShouldRunUnloadListenerBeforeClosing(contents);
+ }
+@@ -4064,6 +4073,16 @@
+       continue;
+     }
+ 
++#if BUILDFLAG(IS_LINUX) || BUILDFLAG(IS_WIN)
++    if (!fly::CommitNativeTabMove(closing_contents)) {
++      closing_contents->SetClosedByUserGesture(false);
++      for (auto& observer : observers_) {
++        observer.OnTabCloseCancelled(GetTabAtIndex(current_index));
++      }
++      closed_all = false;
++      continue;
++    }
++#endif
+     tabs::TabModel* tab_model = GetTabModelAtIndex(current_index);
+     if (ShouldRunUnloadListenerBeforeClosing(closing_contents)) {
+       tab_model->WillDetach(base::PassKey<TabStripModel>(),
+@@ -4072,6 +4091,11 @@
+ 
+     bool create_historical_tab =
+         close_types & TabCloseTypes::CLOSE_CREATE_HISTORICAL_TAB;
++#if BUILDFLAG(IS_LINUX) || BUILDFLAG(IS_WIN)
++    if (fly::NativeTabMoveCommitted(closing_contents)) {
++      create_historical_tab = false;  // The logical tab now belongs to its destination.
++    }
++#endif
+ 
+     auto dt =
+         DetachTabImpl(original_indices[i], current_index, create_historical_tab,
+--- a/chrome/browser/ui/unload_controller.cc
++++ b/chrome/browser/ui/unload_controller.cc
+@@ -3,6 +3,10 @@
+ // found in the LICENSE file.
+ 
+ #include "chrome/browser/ui/unload_controller.h"
++#include "build/build_config.h"
++#if BUILDFLAG(IS_LINUX) || BUILDFLAG(IS_WIN)
++#include "fly/sessions/tab_move_gate.h"
++#endif
+ 
+ #include <algorithm>
+ 
+@@ -353,6 +357,11 @@
+ 
+ bool UnloadController::BeforeUnloadFired(content::WebContents* contents,
+                                          bool proceed) {
++#if BUILDFLAG(IS_LINUX) || BUILDFLAG(IS_WIN)
++  if (proceed && !fly::ValidateNativeTabMoveClose(contents)) {
++    proceed = false;
++  }
++#endif
+   if (!proceed) {
+     DevToolsWindow::OnPageCloseCanceled(contents);
+ 
+--- a/chrome/browser/ui/tabs/BUILD.gn
++++ b/chrome/browser/ui/tabs/BUILD.gn
+@@ -406,6 +406,10 @@
+     # TODO(crbug.com/40031409): Fix code that adds exit-time destructors and
+     # enable the diagnostic by removing this line.
+     configs += [ "//build/config/compiler:no_exit_time_destructors" ]
++    if (is_linux || is_win) {
++      deps += [ "//fly:session_metadata" ]
++    }
++
+   }
+ 
+   source_set("tabs") {
+--- a/chrome/browser/ui/BUILD.gn
++++ b/chrome/browser/ui/BUILD.gn
+@@ -792,6 +792,8 @@
+     sources += [
+       "//fly/ui/embedded_browser_frame.cc",
+       "//fly/ui/embedded_browser_frame.h",
++      "//fly/ui/tab_move_transaction.cc",
++      "//fly/ui/tab_move_transaction.h",
+       "//fly/ui/workspace_close_transaction.cc",
+       "//fly/ui/workspace_close_transaction.h",
+       "//fly/ui/fly_window_controller.cc",

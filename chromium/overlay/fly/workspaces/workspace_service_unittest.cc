@@ -75,6 +75,42 @@ TEST_F(WorkspaceServiceTest, DeleteAndRecreateNeverReviveOldCookies) {
   EXPECT_TRUE(service_.Read()->items.empty());
 }
 
+TEST_F(WorkspaceServiceTest, RetirementQueriesPreserveMetadataAndPolicy) {
+  const auto first = service_.Add("work", "Default");
+  const auto second = service_.Add("personal", "Profile 2");
+  ASSERT_TRUE(first && second);
+  ASSERT_TRUE(service_.Remove(second->id));
+  const auto before = prefs_.GetDict(kWorkspacesPref).Clone();
+  EXPECT_EQ(true, service_.IsProfileRetired("PROFILE 2"));
+  EXPECT_EQ(false, service_.IsProfileRetired("Default"));
+  EXPECT_EQ(false, service_.IsProfileRetired("Profile 3"));
+  EXPECT_FALSE(service_.IsProfileRetired("../Profile 2"));
+  EXPECT_EQ(before, prefs_.GetDict(kWorkspacesPref));
+  prefs_.ClearPref(kWorkspacesPref);
+  prefs_.SetManagedPref(kWorkspacesPref, base::Value(before.Clone()));
+  EXPECT_EQ(true, service_.IsProfileRetired("Profile 2"));
+  EXPECT_EQ(nullptr, prefs_.GetUserPref(kWorkspacesPref));
+  auto future = before.Clone();
+  future.Set("schema", 1000);
+  prefs_.SetManagedPref(kWorkspacesPref, base::Value(future.Clone()));
+  EXPECT_FALSE(service_.IsProfileRetired("Profile 2"));
+  EXPECT_EQ(future, prefs_.GetDict(kWorkspacesPref));
+}
+
+TEST_F(WorkspaceServiceTest, PendingRetirementIsScopedToOneExactProfilePath) {
+  const auto first = base::FilePath::FromASCII("root").AppendASCII("Profile 1");
+  const auto second =
+      base::FilePath::FromASCII("other").AppendASCII("Profile 1");
+  EXPECT_FALSE(IsWorkspaceRetiring(first));
+  {
+    ScopedWorkspaceRetirement pending(first);
+    EXPECT_TRUE(IsWorkspaceRetiring(first));
+    EXPECT_FALSE(IsWorkspaceRetiring(second));
+    EXPECT_EQ(nullptr, prefs_.GetUserPref(kWorkspacesPref));
+  }
+  EXPECT_FALSE(IsWorkspaceRetiring(first));
+}
+
 TEST_F(WorkspaceServiceTest, RejectPathsAndInvalidNamesWithoutChangingData) {
   ASSERT_TRUE(service_.Add("default", "Default"));
   const auto before = prefs_.GetDict(kWorkspacesPref).Clone();
