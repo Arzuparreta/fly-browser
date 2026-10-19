@@ -677,6 +677,41 @@ IN_PROC_BROWSER_TEST_F(FlySidebarBrowserTest,
 }
 
 IN_PROC_BROWSER_TEST_F(FlySidebarBrowserTest,
+                       RepeatedFocusAfterRowActivationMovesKeyboardFocus) {
+  ASSERT_TRUE(ui_test_utils::NavigateToURL(
+      browser(), embedded_test_server()->GetURL("/title1.html")));
+  auto* page = Active(browser());
+  ASSERT_TRUE(content::ExecJs(page, R"js(
+    document.body.innerHTML='<input id="edit" style="position:fixed;left:400px;top:40px">';
+    document.querySelector('#edit').focus();
+  )js"));
+  auto& window = FlyWindowController::Get();
+  MoveToPage();
+  ui::test::EventGenerator keys(
+      window.desktop_widget()->GetNativeWindow()->GetRootWindow());
+  auto row_focused = [&] {
+    auto* row = window.tab_sidebar_for_testing()->row_for_testing(page);
+    return window.sidebar_expanded_for_testing() && row &&
+           row->children().front()->HasFocus() &&
+           !content::EvalJs(page, "document.hasFocus()").ExtractBool();
+  };
+  ASSERT_TRUE(InvokeNativeCommand(browser(), "focus-sidebar"));
+  ASSERT_TRUE(base::test::RunUntil(row_focused));
+  // Enter activates the row and returns keyboard input to the page.
+  keys.PressKey(ui::VKEY_RETURN, ui::EF_NONE);
+  keys.ReleaseKey(ui::VKEY_RETURN, ui::EF_NONE);
+  ASSERT_TRUE(base::test::RunUntil([&] {
+    return content::EvalJs(page, "document.hasFocus()").ExtractBool();
+  }));
+  ASSERT_TRUE(InvokeNativeCommand(browser(), "focus-sidebar"));
+  ASSERT_TRUE(base::test::RunUntil(row_focused));
+  keys.PressKey(ui::VKEY_J, ui::EF_NONE);
+  keys.ReleaseKey(ui::VKEY_J, ui::EF_NONE);
+  base::RunLoop().RunUntilIdle();
+  EXPECT_EQ("", content::EvalJs(page, "document.querySelector('#edit').value"));
+}
+
+IN_PROC_BROWSER_TEST_F(FlySidebarBrowserTest,
                        NativePinAndAppearanceChangeOnlyReservedSidebarWidth) {
   ASSERT_TRUE(ui_test_utils::NavigateToURL(
       browser(), embedded_test_server()->GetURL("/title1.html")));

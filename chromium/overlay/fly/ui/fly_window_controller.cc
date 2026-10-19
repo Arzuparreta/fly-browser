@@ -662,6 +662,12 @@ void FlyWindowController::FocusSidebar() {
     return;
   }
   sidebar_keyboard_expanded_ = true;
+  // Activating a row sends Aura focus to the page while the desktop focus
+  // manager still records that row. Requesting the same view again would then
+  // be a no-op, leaving the expanded sidebar without keyboard focus.
+  if (sidebar_content_->Contains(
+          desktop_->GetFocusManager()->GetFocusedView()))
+    desktop_->GetFocusManager()->ClearFocus();
   UpdateSidebarBounds();
   UpdateSidebarVisibility();
   if (selected_ && !selected_->GetTabStripModel()->empty())
@@ -716,9 +722,13 @@ void FlyWindowController::OnMouseEvent(ui::MouseEvent* event) {
                            &point);
   auto bounds = desktop_->GetContentsView()->GetBoundsInScreen();
   bounds.set_width(sidebar_expanded_for_testing() ? 260 : 36);
+  const bool was_inside = sidebar_pointer_inside_;
   sidebar_pointer_inside_ = bounds.Contains(point);
-  if (!sidebar_pointer_inside_ &&
-      event->type() == ui::EventType::kMousePressed) {
+  const bool pressed = event->type() == ui::EventType::kMousePressed;
+  // Pointer motion only matters when it crosses the sidebar edge.
+  if (!pressed && was_inside == sidebar_pointer_inside_)
+    return;
+  if (!sidebar_pointer_inside_ && pressed) {
     sidebar_keyboard_expanded_ = false;
     sidebar_focus_inside_ = false;
     if (SidebarHasFocus() ||
@@ -754,11 +764,13 @@ void FlyWindowController::UpdateWindowControls() {
   window_controls_->SetVisible(visible);
   const bool maximized = desktop_->IsMaximized();
   auto* maximize = window_control_buttons_.at("maximize").get();
-  maximize->SetImageModel(
-      views::Button::STATE_NORMAL,
-      ui::ImageModel::FromVectorIcon(
-          maximized ? views::kChromeRestoreIcon : views::kChromeMaximizeIcon,
-          ui::kColorIcon, 16));
+  const auto icon = ui::ImageModel::FromVectorIcon(
+      maximized ? views::kChromeRestoreIcon : views::kChromeMaximizeIcon,
+      ui::kColorIcon, 16);
+  for (auto state : {views::Button::STATE_NORMAL, views::Button::STATE_HOVERED,
+                     views::Button::STATE_PRESSED,
+                     views::Button::STATE_DISABLED})
+    maximize->SetImageModel(state, icon);
   const auto* title = maximized ? u"Restore Fly" : u"Maximize Fly";
   maximize->SetTooltipText(title);
   maximize->GetViewAccessibility().SetName(title);
