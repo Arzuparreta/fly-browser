@@ -1,0 +1,15 @@
+--- a/chrome/browser/ui/BUILD.gn
++++ b/chrome/browser/ui/BUILD.gn
+@@ -799,5 +799,7 @@
+       "//fly/ui/fly_window_controller.cc",
+       "//fly/ui/fly_window_controller.h",
++      "//fly/ui/history_service.cc",
++      "//fly/ui/history_service.h",
+       "//fly/ui/native_commands.cc",
+       "//fly/ui/native_commands.h",
+       "//fly/ui/tab_sidebar.cc",
+@@ -1111,3 +1113,4 @@
+   if (is_linux || is_win) {
+     deps += [ "//fly:workspaces", "//fly:commands", "//fly:preferences", "//fly:bookmarks", "//chrome/browser/ui/navigator", "//chrome/browser/ssl", "//components/url_formatter", "//components/vector_icons", "//ui/accessibility", "//ui/wm" ]
++    deps += [ "//components/history/core/common" ]
+   }

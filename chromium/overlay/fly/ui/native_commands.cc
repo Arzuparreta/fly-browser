@@ -546,6 +546,11 @@ bool NativeCommandAvailable(BrowserWindowInterface* browser,
     return window && window->IsSelected(browser) &&
            !browser->GetTabStripModel()->empty();
   }
+  if (action == "toggle-history") {
+    const auto* window = FlyWindowController::GetIfCreated();
+    return window && window->IsSelected(browser) && window->CanShowHistory() &&
+           !browser->GetTabStripModel()->empty();
+  }
   if (action == "toggle-bookmarks" || action == "add-bookmark") {
     auto* window = FlyWindowController::GetIfCreated();
     auto* contents = browser->GetTabStripModel()->GetActiveWebContents();

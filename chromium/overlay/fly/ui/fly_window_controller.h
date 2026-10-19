@@ -16,9 +16,11 @@
 #include "base/memory/weak_ptr.h"
 #include "base/timer/timer.h"
 #include "components/prefs/pref_change_registrar.h"
+#include "fly/bookmarks/frequent_sites_service.h"
 #include "fly/commands/command_service.h"
 #include "fly/commands/palette_catalog.h"
 #include "fly/preferences/preferences_service.h"
+#include "fly/ui/history_service.h"
 #include "fly/workspaces/workspace_service.h"
 #include "ui/aura/client/focus_change_observer.h"
 #include "ui/events/event_handler.h"
@@ -88,6 +90,10 @@ class FlyWindowController : public views::WidgetDelegate,
   CommandService& commands() { return commands_; }
   BookmarkService& bookmarks() { return *bookmarks_; }
   CommandPalette& bookmark_picker() { return *bookmark_picker_; }
+  CommandPalette& address_picker() { return *address_picker_; }
+  CommandPalette& history_picker() { return *history_picker_; }
+  bool CanShowHistory() const { return workspaces_.Read().has_value(); }
+  views::Widget* history_clear_dialog_for_testing() const;
   PreferencesService& preferences() { return preferences_; }
   views::MdTextButton* clock_for_testing() { return clock_; }
   views::MdTextButton* preferences_button_for_testing() { return preferences_button_; }
@@ -198,6 +204,18 @@ class FlyWindowController : public views::WidgetDelegate,
   std::vector<PaletteEntry> BookmarkEntries();
   void OnBookmarksChanged();
   void OpenBookmark(content::WebContents* source, std::string url);
+  std::vector<PaletteEntry> AddressEntries(std::u16string_view query);
+  void ExecuteAddress(content::WebContents* source, std::string action);
+  void ToggleHistory(BrowserWindowInterface* browser);
+  enum class HistorySurface { kAddress, kHistory, kBookmarks };
+  void LoadHistory(HistorySurface surface);
+  std::optional<std::vector<FrequentSite>> FrequentSites() const;
+  void CancelHistory();
+  std::vector<PaletteEntry> HistoryEntries();
+  void OpenHistory(content::WebContents* source, std::string action);
+  void ConfirmHistoryClear(content::WebContents* source);
+
+  void ToggleAddress(BrowserWindowInterface* browser);
   void RemoveBookmark(content::WebContents* source, std::string url);
   void UpdateClock();
   void CycleClockFormat();
@@ -219,14 +237,25 @@ class FlyWindowController : public views::WidgetDelegate,
   CommandService commands_;
   PreferencesService preferences_;
   std::unique_ptr<BookmarkService> bookmarks_;
+  std::unique_ptr<FrequentSitesService> frequent_sites_;
+  std::unique_ptr<HistoryService> history_;
+  std::unique_ptr<HistoryService> history_clear_service_;
+  bool history_clear_running_ = false;
+  std::vector<HistoryEntry> history_entries_;
+  std::set<std::string> history_choices_;
+  uint64_t history_generation_ = 0;
   std::set<std::string> bookmark_urls_;
+  std::map<std::string, std::string> address_choices_;
   std::optional<ThemePreferences> applied_theme_;
+  std::optional<bool> applied_frequent_visibility_;
   PrefChangeRegistrar preferences_registrar_;
   base::RepeatingTimer clock_timer_;
   base::RepeatingTimer suspension_timer_;
   std::unique_ptr<HintController> hints_;
   std::unique_ptr<CommandPalette> palette_;
   std::unique_ptr<CommandPalette> bookmark_picker_;
+  std::unique_ptr<CommandPalette> address_picker_;
+  std::unique_ptr<CommandPalette> history_picker_;
   std::unique_ptr<CommandPalette> workspace_picker_;
   std::unique_ptr<CommandPalette> tab_move_picker_;
   base::WeakPtr<BrowserWindowInterface> move_source_browser_;
@@ -234,6 +263,8 @@ class FlyWindowController : public views::WidgetDelegate,
   std::unique_ptr<TabMoveTransaction> tab_move_;
   std::map<std::string, base::WeakPtr<BrowserWindowInterface>> private_choices_;
   std::unique_ptr<KeyboardEditor> keyboard_editor_;
+  std::unique_ptr<views::DialogDelegate> history_clear_delegate_;
+  std::unique_ptr<views::Widget> history_clear_widget_;
   std::unique_ptr<views::DialogDelegate> rename_delegate_;
   std::unique_ptr<views::Widget> rename_widget_;
   std::unique_ptr<views::DialogDelegate> remove_delegate_;

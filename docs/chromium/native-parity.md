@@ -7,7 +7,8 @@ partial or pending until the relevant complete acceptance outcomes pass.
 Accepted Linux evidence through `bbb8a09` is archived in
 `/mnt/storage/fly-chromium/evidence/runtime-bbb8a09-before-window-controls`:
 59 service tests, 71 browser declarations including two PRE stages, both media
-fixtures and independent audit pass. PR 126 hosted validation passed on all platforms and merged as `9089776`.
+fixtures and independent audit pass. PR 126 is merged as `9089776`: all three
+platform service and object matrices pass and their six artifacts are audited.
 The window-control checkpoint `5d55d9a` passes 62 services, all 74 browser
 declarations, both media fixtures and independent audit on Linux. The sidebar
 follow-up `9606b31` passes the complete Linux run: 65 services, all 78 browser
@@ -27,7 +28,7 @@ A native upstream route alone does not establish Fly UX parity.
 | --- | --- | --- |
 | `toggle-menu-bar` | partial | Native Chromium app menu opens; the complete Fly settings menu remains pending. |
 | `spawn-tab` | partial | Product blank tabs and native profile/session identity tested; complete all-input-path acceptance remains pending. |
-| `toggle-address` | partial | Native upstream location bar only; floating Fly UI, aliases, calculator and suggestion contracts remain pending. |
+| `toggle-address` | partial | Floating native address/search, aliases, bangs, workspace lookup, bookmarks and calculator pass the complete ab4b496 Linux suite. History suggestions, platform path handling and import require further acceptance. |
 | `toggle-dashboard` | partial | Native searchable workspace/private/empty desktop picker tested; full dashboard product layout remains pending. |
 | `reload-active-tab` | partial | Native command route exists; dedicated full keyboard, mouse and palette acceptance remains pending. |
 | `remove-tab` | partial | Pinned protection, beforeunload, close/reopen and native menu tested; complete all-input-path acceptance remains pending. |
@@ -42,11 +43,11 @@ A native upstream route alone does not establish Fly UX parity.
 | `toggle-devtools` | partial | Selected-profile docked native DevTools tested; full platform acceptance remains pending. |
 | `toggle-zen-mode` | partial | Toggles native automatic expansion/pinning without hover viewport reflow; full product/platform acceptance remains pending. |
 | `add-bookmark` | partial | Shared ordered flat Fly bookmarks tested; complete product/migration acceptance remains pending. |
-| `toggle-bookmarks` | partial | Shared ordered flat Fly bookmarks; private/destination identity and deletion tested. Frequent-site integration remains pending. |
+| `toggle-bookmarks` | partial | Shared ordered flat Fly bookmarks; private/destination identity and deletion tested. Frequent-site ranking/hiding/display integration is in development; complete runtime acceptance remains pending. |
 | `toggle-global-media` | partial | Native sessions plus fallback players tested across hidden workspaces; full platform acceptance remains pending. |
 | `toggle-tab-audio-mute` | partial | Native mute and extension reason reporting tested; full platform acceptance remains pending. |
 | `toggle-global-audio-mute` | partial | Native mute reasons and hidden/private tabs tested; full platform acceptance remains pending. |
-| `toggle-history` | pending | No native Fly action implementation yet. |
+| `toggle-history` | partial | Shared projection of authorized native profile histories, selector, destination navigation and confirmed clearing implemented; new runtime cases, frequent sites, import and platform acceptance remain pending. |
 | `toggle-downloads` | pending | No native Fly action implementation yet. |
 | `toggle-status-bar` | partial | Native hover, security/private context and persistence tested; full platform acceptance remains pending. |
 | `toggle-clock` | partial | Native live settings and no tick writes tested on Linux; full platform acceptance remains pending. |
@@ -121,7 +122,7 @@ declared supported because Chromium has a related global flag or policy.
 | `background_throttling` | pending | Fly setting/import/UI behavior not implemented yet. |
 | `process_limit` | pending | Fly setting/import/UI behavior not implemented yet. |
 | `email_handler` | pending | Fly setting/import/UI behavior not implemented yet. |
-| `search_engine` | pending | Fly setting/import/UI behavior not implemented yet. |
+| `search_engine` | partial | Typed app-level service and native Search preference tab; directed validation underway. Import and full acceptance remain pending. |
 | `spellchecker_language` | pending | Fly setting/import/UI behavior not implemented yet. |
 | `theme` | partial | Native light/dark, existing hidden/private pages tested; custom colors remain pending. |
 | `interface_scale` | pending | Fly setting/import/UI behavior not implemented yet. |
@@ -131,12 +132,12 @@ declared supported because Chromium has a related global flag or policy.
 | `sidebar_auto_collapse` | partial | Default enabled, native live Appearance control and recovery policy tested; import and full platform acceptance remain pending. |
 | `show_status_bar` | partial | Live native footer and persistent choice tested. |
 | `show_clock` | partial | Live native clock, private context and no per-tick writes tested. |
-| `show_frequent_sites` | pending | Fly setting/import/UI behavior not implemented yet. |
+| `show_frequent_sites` | partial | Typed native choice and live Appearance control, derived ranking, bookmark exclusions and explicit hiding implemented; new runtime cases and import/platform acceptance remain pending. |
 | `clock_format` | partial | Three existing formats and native preference changes tested. |
 | `theme_colors` | pending | Fly setting/import/UI behavior not implemented yet. |
 | `enable_diagnostics` | pending | Fly setting/import/UI behavior not implemented yet. |
 | `show_window_controls` | partial | Follow-up native preference, preservation/policy cases and real desktop controls tested; full-suite/platform acceptance pending. |
-| `custom_search_aliases` | pending | Fly setting/import/UI behavior not implemented yet. |
+| `custom_search_aliases` | partial | Twelve built-ins, custom override/edit/removal and native settings; recovery/policy/encoding service cases pass. UI, import and platform acceptance remain incomplete. |
 | `last_seen_version` | pending | Fly setting/import/UI behavior not implemented yet. |
 | `desktop_integration_offered` | pending | Fly setting/import/UI behavior not implemented yet. |
 | `extensions_enabled` | pending | Fly setting/import/UI behavior not implemented yet. |

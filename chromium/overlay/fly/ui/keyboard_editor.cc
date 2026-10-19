@@ -32,9 +32,13 @@
 #include "ui/wm/core/coordinate_conversion.h"
 
 namespace fly {
-KeyboardEditor::KeyboardEditor(views::Widget* desktop, CommandService& commands,
+KeyboardEditor::KeyboardEditor(views::Widget* desktop,
+                               CommandService& commands,
                                PrefService& local_state)
-    : desktop_(desktop), commands_(commands), preferences_(local_state) {
+    : desktop_(desktop),
+      commands_(commands),
+      preferences_(local_state),
+      search_preferences_(local_state) {
   desktop_->AddObserver(this);
   preferences_registrar_.Init(&local_state);
   preferences_registrar_.Add(
@@ -126,6 +130,7 @@ void KeyboardEditor::Toggle(content::WebContents* contents) {
        {std::pair{"theme", u"Dark interface"},
         std::pair{"sync_website_theme", u"Match website color scheme to Fly"},
         std::pair{"show_clock", u"Show clock"},
+        std::pair{"show_frequent_sites", u"Show frequent sites with bookmarks"},
         std::pair{"show_status_bar", u"Show status bar"},
         std::pair{"show_window_controls", u"Show window controls"},
         std::pair{"sidebar_auto_collapse",
@@ -209,12 +214,104 @@ void KeyboardEditor::Toggle(content::WebContents* contents) {
       base::BindRepeating(&KeyboardEditor::Cancel, weak_factory_.GetWeakPtr(), true),
       u"Close"));
   root->AddChildView(std::move(panel));
+  BuildSearchSection();
   overlay_->SetContentsView(std::move(root));
   RefreshAppearance();
   Refresh();
   overlay_->ShowInactive();
   desktop_->GetNativeWindow()->StackChildAtTop(overlay_->GetNativeWindow());
   ShowKeyboard();
+}
+void KeyboardEditor::BuildSearchSection() {
+  auto* scroll =
+      sections_->AddTab(u"Search", std::make_unique<views::ScrollView>());
+  scroll->SetHorizontalScrollBarMode(
+      views::ScrollView::ScrollBarMode::kDisabled);
+  auto* panel = scroll->SetContents(std::make_unique<views::View>());
+  panel->SetLayoutManager(std::make_unique<views::BoxLayout>(
+      views::BoxLayout::Orientation::kVertical, gfx::Insets(12), 8));
+  const auto settings = search_preferences_.Read();
+  for (const auto& [key, label] :
+       {std::pair{"engine", u"Search URL (%s is replaced by your query)"},
+        std::pair{"alias", u"Alias key"}, std::pair{"name", u"Alias name"},
+        std::pair{"url", u"Alias search URL"}}) {
+    panel->AddChildView(std::make_unique<views::Label>(label));
+    auto* field = panel->AddChildView(std::make_unique<views::Textfield>());
+    field->GetViewAccessibility().SetName(label);
+    search_settings_[key] = field;
+    if (std::string_view(key) == "engine" && settings)
+      field->SetText(base::UTF8ToUTF16(settings->engine));
+    if (std::string_view(key) == "engine")
+      search_save_ = panel->AddChildView(std::make_unique<views::MdTextButton>(
+          base::BindRepeating(&KeyboardEditor::SaveSearchSetting,
+                              weak_factory_.GetWeakPtr(), "engine"),
+          u"Save search engine"));
+  }
+  alias_save_ = panel->AddChildView(std::make_unique<views::MdTextButton>(
+      base::BindRepeating(&KeyboardEditor::SaveSearchSetting,
+                          weak_factory_.GetWeakPtr(), "alias"),
+      u"Add or update alias"));
+  alias_remove_ = panel->AddChildView(std::make_unique<views::MdTextButton>(
+      base::BindRepeating(&KeyboardEditor::SaveSearchSetting,
+                          weak_factory_.GetWeakPtr(), "remove"),
+      u"Remove custom alias by key"));
+  search_settings_status_ =
+      panel->AddChildView(std::make_unique<views::Label>());
+  search_settings_status_->SetMultiLine(true);
+  search_settings_status_->GetViewAccessibility().SetLiveRegionContainer(
+      views::ViewAccessibility::LiveRegionStatus::kPolite);
+  alias_list_ = panel->AddChildView(std::make_unique<views::Label>());
+  alias_list_->SetMultiLine(true);
+}
+void KeyboardEditor::RefreshSearchSection() {
+  if (!alias_list_)
+    return;
+  const auto settings = search_preferences_.Read();
+  const bool editable = search_preferences_.CanEdit();
+  for (auto& [key, field] : search_settings_)
+    field->SetEnabled(editable);
+  for (auto* button :
+       {search_save_.get(), alias_save_.get(), alias_remove_.get()})
+    button->SetEnabled(editable);
+  std::string aliases;
+  if (settings)
+    for (const auto& [key, alias] : settings->aliases)
+      aliases += key + " — " + alias.name + " — " + alias.url + "\n";
+  alias_list_->SetText(base::UTF8ToUTF16(aliases));
+  if (!editable)
+    search_settings_status_->SetText(
+        settings ? u"Search choices are managed."
+                 : u"Search settings need recovery. Saved choices have been "
+                   u"preserved.");
+}
+views::Textfield* KeyboardEditor::search_setting_for_testing(
+    std::string_view key) {
+  const auto found = search_settings_.find(std::string(key));
+  return found == search_settings_.end() ? nullptr : found->second.get();
+}
+void KeyboardEditor::ShowSearch() {
+  if (!active())
+    return;
+  StopRecording();
+  sections_->SelectTabAt(3, false);
+  search_settings_.at("engine")->RequestFocus();
+}
+void KeyboardEditor::SaveSearchSetting(std::string action) {
+  if (!active() || !search_preferences_.CanEdit())
+    return;
+  auto value = [&](std::string key) {
+    return base::UTF16ToUTF8(search_settings_.at(key)->GetText());
+  };
+  const bool saved =
+      action == "engine"  ? search_preferences_.SetEngine(value("engine"))
+      : action == "alias" ? search_preferences_.SetAlias(
+                                value("alias"), value("name"), value("url"))
+                          : search_preferences_.RemoveAlias(value("alias"));
+  search_settings_status_->SetText(saved
+                                       ? u"Search choices saved."
+                                       : u"Cannot save this choice. Check the "
+                                         u"alias key and HTTP or HTTPS URL.");
+  RefreshSearchSection();
 }
 void KeyboardEditor::ShowKeyboard() {
   if (!active())
@@ -244,6 +341,12 @@ void KeyboardEditor::TabSelectedAt(int index) {
 void KeyboardEditor::ClearAppearance() {
   if (sections_)
     sections_->SetListener(nullptr);
+  search_settings_.clear();
+  search_save_ = nullptr;
+  alias_save_ = nullptr;
+  alias_remove_ = nullptr;
+  search_settings_status_ = nullptr;
+  alias_list_ = nullptr;
   appearance_.clear();
   clock_format_ = nullptr;
   suspension_timeout_ = nullptr;
@@ -256,10 +359,12 @@ views::Checkbox* KeyboardEditor::appearance_for_testing(std::string_view key) {
   return it == appearance_.end() ? nullptr : it->second.get();
 }
 void KeyboardEditor::RefreshAppearance() {
+  RefreshSearchSection();
   if (appearance_.empty())
     return;
   const auto theme = preferences_.ReadTheme();
   const auto clock = preferences_.ReadClock();
+  const auto frequent = preferences_.ReadFrequentSitesVisible();
   const auto footer = preferences_.ReadStatusBarVisible();
   const auto controls = preferences_.ReadWindowControlsVisible();
   const auto collapse = preferences_.ReadSidebarAutoCollapse();
@@ -285,6 +390,8 @@ void KeyboardEditor::RefreshAppearance() {
   set("sync_website_theme", theme && theme->sync_websites,
       preferences_.CanEditTheme());
   set("show_clock", clock && clock->visible, preferences_.CanEditClock());
+  set("show_frequent_sites", frequent.value_or(false),
+      preferences_.CanEditFrequentSites());
   set("show_status_bar", footer.value_or(false), preferences_.CanEditStatusBar());
   set("show_window_controls", controls.value_or(false),
       preferences_.CanEditWindowControls());
@@ -296,7 +403,7 @@ void KeyboardEditor::RefreshAppearance() {
       : clock->format == "time" ? u"Clock: time"
                                  : u"Clock: date, time and seconds");
   appearance_status_->SetText(
-      !theme || !clock || !footer || !controls || !collapse
+      !theme || !clock || !footer || !controls || !collapse || !frequent
           ? u"Appearance settings need recovery. Saved data has been preserved."
       : !preferences_.CanEditTheme()
           ? u"Appearance settings are managed."
@@ -317,6 +424,8 @@ void KeyboardEditor::ChangeAppearance(std::string key) {
     preferences_.SetWebsiteThemeSync(checked);
   } else if (key == "show_clock") {
     preferences_.SetClockVisible(checked);
+  } else if (key == "show_frequent_sites") {
+    preferences_.SetFrequentSitesVisible(checked);
   } else if (key == "show_status_bar") {
     preferences_.SetStatusBarVisible(checked);
   } else if (key == "show_window_controls") {

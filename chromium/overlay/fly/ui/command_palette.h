@@ -41,6 +41,16 @@ class CommandPalette : public views::TextfieldController,
                    std::u16string placeholder, bool removable,
                    bool allow_empty_source = false);
   void UpdateItems(std::vector<PaletteEntry> items, bool removable);
+  // Local native query provider, run synchronously on edit. It must not retain
+  // row pointers or perform page script/network work.
+  using QueryProvider =
+      base::RepeatingCallback<std::vector<PaletteEntry>(std::u16string_view)>;
+  void ToggleQuery(content::WebContents* contents,
+                   QueryProvider provider,
+                   std::vector<std::string> close_bindings,
+                   std::u16string placeholder,
+                   std::u16string initial);
+  void RefreshQuery();
   void Cancel(bool restore_focus = false);
   bool HandleOverlayKey(const ui::KeyEvent& event);
   bool active() const { return overlay_ && !closing_; }
@@ -77,6 +87,7 @@ class CommandPalette : public views::TextfieldController,
   std::vector<std::string> palette_bindings_;
   std::vector<PaletteEntry> catalog_;
   std::vector<PaletteEntry> filtered_;
+  QueryProvider query_provider_;
   int selected_ = -1;
   bool empty_source_ = false;
   bool closing_ = false;

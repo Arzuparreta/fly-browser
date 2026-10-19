@@ -1,23 +1,30 @@
 // Copyright Fly Browser contributors. All rights reserved.
 // Use of this source code is governed by the GPL-3.0-or-later license in the
 // Fly repository.
-#include "fly/ui/keyboard_editor.h"
-#include "fly/bookmarks/bookmark_service.h"
 #include "chrome/browser/bookmarks/bookmark_model_factory.h"
+#include "chrome/browser/history/history_service_factory.h"
+#include "chrome/browser/ssl/chrome_security_state_util.h"
 #include "components/bookmarks/browser/bookmark_model.h"
+#include "components/history/core/browser/history_service.h"
+#include "components/history/core/common/pref_names.h"
 #include "components/password_manager/core/common/password_manager_pref_names.h"
 #include "components/signin/public/base/signin_pref_names.h"
+#include "fly/bookmarks/bookmark_service.h"
+#include "fly/bookmarks/frequent_sites_service.h"
+#include "fly/preferences/search_service.h"
 #include "fly/sessions/tab_identity.h"
 #include "fly/ui/command_palette.h"
 #include "fly/ui/fly_window_controller.h"
 #include "fly/ui/hint_controller.h"
+#include "fly/ui/history_service.h"
+#include "fly/ui/keyboard_editor.h"
 #include "fly/ui/native_commands.h"
-#include "fly/ui/tab_sidebar.h"
 #include "fly/ui/status_bar.h"
-#include "chrome/browser/ssl/chrome_security_state_util.h"
-#include "ui/views/controls/label.h"
+#include "fly/ui/tab_sidebar.h"
 #include "ui/views/controls/button/checkbox.h"
+#include "ui/views/controls/label.h"
 #include "ui/views/controls/textfield/textfield.h"
+#include "url/origin.h"
 
 #include <algorithm>
 #include <map>
@@ -3386,6 +3393,555 @@ IN_PROC_BROWSER_TEST_F(FlyWorkspaceBrowserTest,
             window.selected_browser_for_testing()->GetTabStripModel()->count());
 }
 
+IN_PROC_BROWSER_TEST_F(
+    FlyWorkspaceBrowserTest,
+    SharedHistoryQueriesNativeStoresAndExcludesPrivateVisits) {
+  const auto first_url =
+      embedded_test_server()->GetURL("/title1.html?history=first");
+  const auto second_url =
+      embedded_test_server()->GetURL("/title2.html?history=second");
+  const auto private_url =
+      embedded_test_server()->GetURL("/title1.html?history=private");
+  ASSERT_TRUE(ui_test_utils::NavigateToURL(browser(), first_url));
+  ASSERT_TRUE(content::ExecJs(Active(browser()),
+                              "document.cookie='history=retained';"));
+  auto* second = SecondWorkspace();
+  ASSERT_TRUE(second);
+  ASSERT_TRUE(ui_test_utils::NavigateToURL(second, second_url));
+  ASSERT_TRUE(InvokeNativeCommand(second, "toggle-private-mode"));
+  auto& window = FlyWindowController::Get();
+  ASSERT_TRUE(base::test::RunUntil([&] {
+    return window.selected_browser_for_testing()
+        ->GetProfile()
+        ->IsOffTheRecord();
+  }));
+  auto* private_browser = window.selected_browser_for_testing();
+  ASSERT_TRUE(ui_test_utils::NavigateToURL(private_browser, private_url));
+  WorkspaceService workspaces(*g_browser_process->local_state());
+  HistoryService history(*g_browser_process->profile_manager(), workspaces);
+  base::test::TestFuture<std::optional<std::vector<HistoryEntry>>> query;
+  history.Query(query.GetCallback());
+  const auto result = query.Take();
+  ASSERT_TRUE(result);
+  auto find = [&](const GURL& url) {
+    return std::ranges::find(*result, url, &HistoryEntry::url);
+  };
+  ASSERT_NE(result->end(), find(first_url));
+  ASSERT_NE(result->end(), find(second_url));
+  EXPECT_NE(find(first_url)->workspace_id, find(second_url)->workspace_id);
+  EXPECT_EQ(result->end(), find(private_url));
+  // An extension/native consumer in one profile still sees only that profile.
+  base::CancelableTaskTracker tracker;
+  base::test::TestFuture<history::QueryResults> native_query;
+  history::QueryOptions options;
+  options.max_count = 500;
+  HistoryServiceFactory::GetForProfile(browser()->GetProfile(),
+                                       ServiceAccessType::EXPLICIT_ACCESS)
+      ->QueryHistory({}, options, native_query.GetCallback(), &tracker);
+  const auto native = native_query.Take();
+  EXPECT_TRUE(std::ranges::any_of(
+      native, [&](const auto& row) { return row.url() == first_url; }));
+  EXPECT_FALSE(std::ranges::any_of(native, [&](const auto& row) {
+    return row.url() == second_url || row.url() == private_url;
+  }));
+  // Policy is checked in every profile before any history deletion starts.
+  second->GetProfile()->GetPrefs()->SetBoolean(
+      prefs::kAllowDeletingBrowserHistory, false);
+  base::test::TestFuture<bool> blocked;
+  history.Clear(blocked.GetCallback());
+  EXPECT_FALSE(blocked.Get());
+  second->GetProfile()->GetPrefs()->SetBoolean(
+      prefs::kAllowDeletingBrowserHistory, true);
+  base::test::TestFuture<std::optional<std::vector<HistoryEntry>>> retained;
+  history.Query(retained.GetCallback());
+  ASSERT_TRUE(retained.Get());
+  EXPECT_EQ(result->size(), retained.Get()->size());
+  base::test::TestFuture<bool> cleared;
+  history.Clear(cleared.GetCallback());
+  ASSERT_TRUE(cleared.Get());
+  base::test::TestFuture<std::optional<std::vector<HistoryEntry>>> empty;
+  history.Query(empty.GetCallback());
+  ASSERT_TRUE(empty.Get());
+  EXPECT_TRUE(empty.Get()->empty());
+  EXPECT_EQ("history=retained",
+            content::EvalJs(Active(browser()), "document.cookie"));
+  EXPECT_EQ(nullptr, g_browser_process->local_state()->GetUserPrefValue(
+                         kPreferencesPref));
+}
+
+IN_PROC_BROWSER_TEST_F(
+    FlyWorkspaceBrowserTest,
+    NativeHistorySearchNavigatesInDestinationAndConfirmsClear) {
+  const auto first_url =
+      embedded_test_server()->GetURL("/title1.html?history=first");
+  ASSERT_TRUE(ui_test_utils::NavigateToURL(browser(), first_url));
+  auto* second = SecondWorkspace();
+  ASSERT_TRUE(second);
+  ASSERT_TRUE(ui_test_utils::NavigateToURL(
+      second, embedded_test_server()->GetURL("/title2.html?history=second")));
+  auto* page = Active(second);
+  ASSERT_TRUE(content::ExecJs(page, "document.cookie='history=destination';"));
+  auto& window = FlyWindowController::Get();
+  ASSERT_TRUE(NativeCommandAvailable(second, "toggle-history"));
+  ASSERT_TRUE(InvokeNativeCommand(second, "toggle-history"));
+  auto& picker = window.history_picker();
+  ASSERT_TRUE(base::test::RunUntil([&] {
+    return picker.active() && picker.search_for_testing()->HasFocus() &&
+           picker.result_count_for_testing() >= 3;
+  }));
+  picker.search_for_testing()->SetText(u"history=first");
+  picker.ContentsChanged(picker.search_for_testing(), u"history=first");
+  ASSERT_EQ(1u, picker.result_count_for_testing());
+  ui::test::EventGenerator keys(
+      window.desktop_widget()->GetNativeWindow()->GetRootWindow());
+  keys.PressKey(ui::VKEY_RETURN, ui::EF_NONE);
+  ASSERT_TRUE(base::test::RunUntil([&] {
+    return !picker.search_for_testing() &&
+           page->GetLastCommittedURL() == first_url;
+  }));
+  EXPECT_EQ(second, window.selected_browser_for_testing());
+  EXPECT_EQ("history=destination", content::EvalJs(page, "document.cookie"));
+  auto open_clear = [&] {
+    ASSERT_TRUE(InvokeNativeCommand(second, "toggle-history"));
+    ASSERT_TRUE(base::test::RunUntil([&] {
+      return picker.active() && picker.result_count_for_testing() >= 3;
+    }));
+    picker.search_for_testing()->SetText(u"clear history");
+    picker.ContentsChanged(picker.search_for_testing(), u"clear history");
+    ASSERT_EQ(1u, picker.result_count_for_testing());
+    keys.PressKey(ui::VKEY_RETURN, ui::EF_NONE);
+    ASSERT_TRUE(base::test::RunUntil(
+        [&] { return window.history_clear_dialog_for_testing() != nullptr; }));
+  };
+  open_clear();
+  auto* confirmation = window.history_clear_dialog_for_testing();
+  ASSERT_TRUE(confirmation);
+  EXPECT_EQ(static_cast<int>(ui::mojom::DialogButton::kCancel),
+            confirmation->widget_delegate()
+                ->AsDialogDelegate()
+                ->GetDefaultDialogButton());
+  confirmation->widget_delegate()->AsDialogDelegate()->CancelDialog();
+  ASSERT_TRUE(base::test::RunUntil(
+      [&] { return !window.history_clear_dialog_for_testing(); }));
+  open_clear();
+  confirmation = window.history_clear_dialog_for_testing();
+  ASSERT_TRUE(confirmation);
+  confirmation->widget_delegate()->AsDialogDelegate()->AcceptDialog();
+  WorkspaceService workspaces(*g_browser_process->local_state());
+  HistoryService history(*g_browser_process->profile_manager(), workspaces);
+  base::test::TestFuture<std::optional<std::vector<HistoryEntry>>> empty;
+  history.Query(empty.GetCallback());
+  ASSERT_TRUE(empty.Get());
+  EXPECT_TRUE(empty.Get()->empty());
+  EXPECT_EQ("history=destination", content::EvalJs(page, "document.cookie"));
+}
+
+IN_PROC_BROWSER_TEST_F(FlyWorkspaceBrowserTest,
+                       NativeHistoryReflectsNativeDeletionsWhileOpen) {
+  const auto first_url =
+      embedded_test_server()->GetURL("/title1.html?history=deleted");
+  ASSERT_TRUE(ui_test_utils::NavigateToURL(browser(), first_url));
+  auto* second = SecondWorkspace();
+  ASSERT_TRUE(second);
+  ASSERT_TRUE(ui_test_utils::NavigateToURL(
+      second, embedded_test_server()->GetURL("/title2.html?history=retained")));
+  auto& window = FlyWindowController::Get();
+  ASSERT_TRUE(InvokeNativeCommand(second, "toggle-history"));
+  auto& picker = window.history_picker();
+  ASSERT_TRUE(base::test::RunUntil([&] {
+    return picker.active() && picker.result_count_for_testing() == 3;
+  }));
+  HistoryServiceFactory::GetForProfile(browser()->GetProfile(),
+                                       ServiceAccessType::EXPLICIT_ACCESS)
+      ->DeleteURLs({first_url});
+  ASSERT_TRUE(base::test::RunUntil([&] {
+    return picker.active() && picker.result_count_for_testing() == 2;
+  }));
+  picker.search_for_testing()->SetText(u"history=deleted");
+  picker.ContentsChanged(picker.search_for_testing(), u"history=deleted");
+  EXPECT_EQ(0u, picker.result_count_for_testing());
+}
+
+IN_PROC_BROWSER_TEST_F(FlyWorkspaceBrowserTest,
+                       NativeFrequentSitesNavigateHideAndHonorLiveChoices) {
+  const auto url = embedded_test_server()->GetURL("/title1.html");
+  ASSERT_TRUE(ui_test_utils::NavigateToURL(browser(), url));
+  ASSERT_TRUE(content::ExecJs(Active(browser()),
+                              "document.cookie='frequent=retained';"));
+  auto& window = FlyWindowController::Get();
+  auto& picker = window.bookmark_picker();
+  auto open_sites = [&] {
+    ASSERT_TRUE(InvokeNativeCommand(browser(), "toggle-bookmarks"));
+    ASSERT_TRUE(base::test::RunUntil([&] {
+      return picker.active() && picker.search_for_testing()->HasFocus() &&
+             picker.result_count_for_testing() == 1;
+    }));
+    picker.search_for_testing()->SetText(u"Frequent site");
+    picker.ContentsChanged(picker.search_for_testing(), u"Frequent site");
+    ASSERT_EQ(1u, picker.result_count_for_testing());
+  };
+  open_sites();
+  ASSERT_TRUE(window.preferences().SetFrequentSitesVisible(false));
+  EXPECT_EQ(0u, picker.result_count_for_testing());
+  ASSERT_TRUE(window.preferences().SetFrequentSitesVisible(true));
+  ASSERT_TRUE(base::test::RunUntil([&] {
+    return picker.result_count_for_testing() == 1;
+  }));
+  ASSERT_TRUE(window.bookmarks().Add(url.spec(), "Saved visit"));
+  EXPECT_EQ(0u, picker.result_count_for_testing());
+  ASSERT_TRUE(window.bookmarks().Remove(url.spec()));
+  EXPECT_EQ(1u, picker.result_count_for_testing());
+  const int count = browser()->tab_strip_model()->count();
+  ui::test::EventGenerator keys(
+      window.desktop_widget()->GetNativeWindow()->GetRootWindow());
+  keys.PressKey(ui::VKEY_RETURN, ui::EF_NONE);
+  ASSERT_TRUE(base::test::RunUntil([&] {
+    return !picker.search_for_testing() &&
+           browser()->tab_strip_model()->count() == count + 1;
+  }));
+  auto* opened = Active(browser());
+  // Frequent sites open the origin, which the fixture server answers with an
+  // error page; only the committed destination and its profile matter here.
+  content::WaitForLoadStop(opened);
+  EXPECT_EQ(url::Origin::Create(url).GetURL(), opened->GetLastCommittedURL());
+  EXPECT_EQ(browser()->GetProfile(), opened->GetBrowserContext());
+  ASSERT_TRUE(ui_test_utils::NavigateToURL(browser(), url));
+  EXPECT_EQ("frequent=retained",
+            content::EvalJs(Active(browser()), "document.cookie"));
+  open_sites();
+  ASSERT_TRUE(picker.remove_for_testing(0));
+  views::test::ButtonTestApi(picker.remove_for_testing(0))
+      .NotifyDefaultMouseClick();
+  ASSERT_TRUE(base::test::RunUntil([&] {
+    return picker.active() && picker.result_count_for_testing() == 0;
+  }));
+  const auto* hidden = g_browser_process->local_state()
+                           ->GetDict(kBookmarksPref)
+                           .FindList("hidden_sites");
+  ASSERT_TRUE(hidden);
+  ASSERT_EQ(1u, hidden->size());
+  EXPECT_EQ(url::Origin::Create(url).Serialize(), hidden->front().GetString());
+  EXPECT_TRUE(window.bookmarks().Read()->empty());
+  picker.Cancel(true);
+  ASSERT_TRUE(
+      base::test::RunUntil([&] { return !picker.search_for_testing(); }));
+  FrequentSitesService restarted(*g_browser_process->local_state());
+  const auto sites = restarted.Read({{url.spec(), base::Time::Now()}});
+  ASSERT_TRUE(sites);
+  EXPECT_TRUE(sites->empty());
+}
+
+class FlyHistoryRestoreBrowserTest : public FlyWorkspaceBrowserTest {};
+IN_PROC_BROWSER_TEST_F(FlyHistoryRestoreBrowserTest,
+                       PRE_SharedHistoryLoadsAnUnopenedWorkspaceAfterRestart) {
+  FrequentSitesService sites(*g_browser_process->local_state());
+  ASSERT_TRUE(sites.Hide("https://hidden.fixture.test/path"));
+  auto* manager = g_browser_process->profile_manager();
+  auto& profile = profiles::testing::CreateProfileSync(
+      manager, manager->GenerateNextProfileDirectoryPath());
+  WorkspaceService workspaces(*g_browser_process->local_state());
+  ASSERT_TRUE(workspaces.Add("Dormant history fixture",
+                             profile.GetPath().BaseName().AsUTF8Unsafe()));
+  auto* native = HistoryServiceFactory::GetForProfile(
+      &profile, ServiceAccessType::EXPLICIT_ACCESS);
+  ASSERT_TRUE(native);
+  const GURL url("https://history.fixture.test/dormant-workspace");
+  native->AddPage(url, base::Time::Now(), history::SOURCE_BROWSED);
+  base::CancelableTaskTracker tracker;
+  base::test::TestFuture<history::QueryResults> stored;
+  native->QueryHistory({}, history::QueryOptions(), stored.GetCallback(),
+                       &tracker);
+  EXPECT_TRUE(std::ranges::any_of(
+      stored.Get(), [&](const auto& row) { return row.url() == url; }));
+}
+IN_PROC_BROWSER_TEST_F(FlyHistoryRestoreBrowserTest,
+                       SharedHistoryLoadsAnUnopenedWorkspaceAfterRestart) {
+  FrequentSitesService sites(*g_browser_process->local_state());
+  const auto hidden =
+      sites.Read({{"https://hidden.fixture.test/another", base::Time::Now()}});
+  ASSERT_TRUE(hidden);
+  EXPECT_TRUE(hidden->empty());
+  auto* manager = g_browser_process->profile_manager();
+  WorkspaceService workspaces(*g_browser_process->local_state());
+  const auto catalog = workspaces.Read();
+  ASSERT_TRUE(catalog);
+  const auto item = std::ranges::find(catalog->items, "Dormant history fixture",
+                                      &Workspace::name);
+  ASSERT_NE(catalog->items.end(), item);
+  const auto path =
+      manager->user_data_dir().AppendASCII(item->profile_directory);
+  EXPECT_EQ(nullptr, manager->GetProfileByPath(path));
+  const auto workspace_id = item->id;
+  HistoryService history(*manager, workspaces);
+  base::test::TestFuture<std::optional<std::vector<HistoryEntry>>> loaded;
+  history.Query(loaded.GetCallback());
+  ASSERT_TRUE(loaded.Get());
+  EXPECT_TRUE(std::ranges::any_of(*loaded.Get(), [&](const auto& row) {
+    return row.url == GURL("https://history.fixture.test/dormant-workspace") &&
+           row.workspace_id == workspace_id;
+  }));
+  // Querying history does not open a browser or change the selected workspace.
+  EXPECT_EQ(browser(),
+            FlyWindowController::Get().selected_browser_for_testing());
+}
+
+IN_PROC_BROWSER_TEST_F(FlyWorkspaceBrowserTest,
+                       SharedHistoryRejectsChangedOrUnreadableAuthorization) {
+  ASSERT_TRUE(ui_test_utils::NavigateToURL(
+      browser(), embedded_test_server()->GetURL("/title1.html")));
+  auto* state = g_browser_process->local_state();
+  WorkspaceService workspaces(*state);
+  HistoryService history(*g_browser_process->profile_manager(), workspaces);
+  base::test::TestFuture<std::optional<std::vector<HistoryEntry>>> pending;
+  history.Query(pending.GetCallback());
+  const auto future =
+      base::DictValue().Set("schema", 2).Set("items", base::ListValue());
+  state->SetDict(kWorkspacesPref, future.Clone());
+  EXPECT_FALSE(pending.Get());
+  base::test::TestFuture<std::optional<std::vector<HistoryEntry>>> unreadable;
+  history.Query(unreadable.GetCallback());
+  EXPECT_FALSE(unreadable.Get());
+  base::test::TestFuture<bool> clear;
+  history.Clear(clear.GetCallback());
+  EXPECT_FALSE(clear.Get());
+  EXPECT_EQ(future, state->GetDict(kWorkspacesPref));
+}
+
+IN_PROC_BROWSER_TEST_F(
+    FlyWorkspaceBrowserTest,
+    NativeSearchPreferencesSaveWithoutChangingKeyboardDraft) {
+  auto& window = FlyWindowController::Get();
+  ASSERT_TRUE(InvokeNativeCommand(browser(), "toggle-help"));
+  auto& editor = window.keyboard_editor();
+  ASSERT_TRUE(editor.active());
+  auto* binding = editor.field_for_testing("spawn-tab", false);
+  ASSERT_TRUE(binding);
+  binding->SetText(u"Ctrl+Y");
+  editor.ContentsChanged(binding, u"Ctrl+Y");
+  editor.ShowSearch();
+  auto* engine = editor.search_setting_for_testing("engine");
+  ASSERT_TRUE(engine && engine->IsDrawn());
+  engine->SetText(u"https://example.test/?q=%s");
+  views::test::ButtonTestApi(editor.search_save_for_testing())
+      .NotifyDefaultMouseClick();
+  SearchService search(*g_browser_process->local_state());
+  ASSERT_TRUE(search.Read());
+  EXPECT_EQ("https://example.test/?q=%s", search.Read()->engine);
+  EXPECT_EQ(u"Ctrl+Y", binding->GetText());
+  editor.search_setting_for_testing("alias")->SetText(u"GH");
+  editor.search_setting_for_testing("name")->SetText(u"Custom code search");
+  editor.search_setting_for_testing("url")->SetText(
+      u"https://example.test/code?q=%s");
+  views::test::ButtonTestApi(editor.alias_save_for_testing())
+      .NotifyDefaultMouseClick();
+  EXPECT_EQ(GURL("https://example.test/code?q=c%2B%2B"),
+            search.ResolveNavigation("gh c++"));
+  editor.search_setting_for_testing("url")->SetText(u"javascript:alert(%s)");
+  const auto valid =
+      g_browser_process->local_state()->GetDict(kPreferencesPref).Clone();
+  views::test::ButtonTestApi(editor.alias_save_for_testing())
+      .NotifyDefaultMouseClick();
+  EXPECT_EQ(valid, g_browser_process->local_state()->GetDict(kPreferencesPref));
+  views::test::ButtonTestApi(editor.alias_remove_for_testing())
+      .NotifyDefaultMouseClick();
+  EXPECT_EQ(GURL("https://github.com/search?q=c%2B%2B"),
+            search.ResolveNavigation("gh c++"));
+  EXPECT_EQ(u"Ctrl+Y", binding->GetText());
+  const auto future =
+      base::DictValue().Set("schema", 2).Set("values", base::DictValue());
+  g_browser_process->local_state()->SetDict(kPreferencesPref, future.Clone());
+  EXPECT_FALSE(engine->GetEnabled());
+  EXPECT_FALSE(editor.search_save_for_testing()->GetEnabled());
+  EXPECT_FALSE(editor.alias_save_for_testing()->GetEnabled());
+  EXPECT_FALSE(editor.alias_remove_for_testing()->GetEnabled());
+  views::test::ButtonTestApi(editor.search_save_for_testing())
+      .NotifyDefaultMouseClick();
+  EXPECT_EQ(future,
+            g_browser_process->local_state()->GetDict(kPreferencesPref));
+  EXPECT_EQ(u"Ctrl+Y", binding->GetText());
+  editor.Cancel(true);
+  ASSERT_TRUE(
+      base::test::RunUntil([&] { return !editor.search_for_testing(); }));
+  EXPECT_EQ(nullptr, editor.search_setting_for_testing("engine"));
+  EXPECT_EQ(nullptr, editor.alias_save_for_testing());
+  EXPECT_EQ(nullptr, editor.alias_remove_for_testing());
+}
+
+IN_PROC_BROWSER_TEST_F(FlyWorkspaceBrowserTest,
+                       NativeAddressAliasesNavigateWithinSelectedProfile) {
+  auto* second = SecondWorkspace();
+  ASSERT_TRUE(second);
+  auto& window = FlyWindowController::Get();
+  ASSERT_TRUE(ui_test_utils::NavigateToURL(
+      second, embedded_test_server()->GetURL("/title1.html")));
+  auto* page = Active(second);
+  ASSERT_TRUE(content::ExecJs(page, "document.cookie='address=destination';"));
+  SearchService search(*g_browser_process->local_state());
+  const auto pattern =
+      embedded_test_server()->GetURL("/title2.html?q=%s").spec();
+  ASSERT_TRUE(search.SetAlias("fixture", "Local fixture", pattern));
+  const auto saved =
+      g_browser_process->local_state()->GetDict(kPreferencesPref).Clone();
+  const auto id = TabIdentity::Get(page);
+  ASSERT_TRUE(InvokeNativeCommand(second, "toggle-address"));
+  auto& address = window.address_picker();
+  ASSERT_TRUE(base::test::RunUntil([&] {
+    return address.active() && address.search_for_testing()->HasFocus();
+  }));
+  address.search_for_testing()->SetText(u"fixture c++ & rust");
+  address.ContentsChanged(address.search_for_testing(), u"fixture c++ & rust");
+  ASSERT_EQ(1u, address.result_count_for_testing());
+  ui::test::EventGenerator keys(
+      window.desktop_widget()->GetNativeWindow()->GetRootWindow());
+  keys.PressKey(ui::VKEY_RETURN, ui::EF_NONE);
+  ASSERT_TRUE(base::test::RunUntil([&] {
+    return page->GetLastCommittedURL() ==
+           embedded_test_server()->GetURL(
+               "/title2.html?q=c%2B%2B%20%26%20rust");
+  }));
+  EXPECT_EQ(page, Active(second));
+  EXPECT_EQ(id, TabIdentity::Get(page));
+  EXPECT_EQ("address=destination", content::EvalJs(page, "document.cookie"));
+  EXPECT_EQ(saved, g_browser_process->local_state()->GetDict(kPreferencesPref));
+  EXPECT_EQ(second, window.selected_browser_for_testing());
+}
+
+IN_PROC_BROWSER_TEST_F(
+    FlyWorkspaceBrowserTest,
+    NativeAddressPrivateNavigationKeepsNormalStateUntouched) {
+  auto& window = FlyWindowController::Get();
+  const auto url = embedded_test_server()->GetURL("/title1.html");
+  ASSERT_TRUE(ui_test_utils::NavigateToURL(browser(), url));
+  auto* normal = Active(browser());
+  ASSERT_TRUE(
+      content::ExecJs(normal, "document.cookie='normal=retained;path=/';"));
+  const auto preferences =
+      g_browser_process->local_state()->GetDict(kPreferencesPref).Clone();
+  ASSERT_TRUE(InvokeNativeCommand(browser(), "toggle-private-mode"));
+  ASSERT_TRUE(base::test::RunUntil(
+      [&] { return window.selected_browser_for_testing() != browser(); }));
+  auto* private_browser = window.selected_browser_for_testing();
+  ASSERT_TRUE(private_browser->GetProfile()->IsOffTheRecord());
+  auto* page = Active(private_browser);
+  ASSERT_TRUE(InvokeNativeCommand(private_browser, "toggle-address"));
+  auto& address = window.address_picker();
+  ASSERT_TRUE(address.active());
+  const auto input = base::UTF8ToUTF16(url.spec());
+  address.search_for_testing()->SetText(input);
+  address.ContentsChanged(address.search_for_testing(), input);
+  ui::test::EventGenerator keys(
+      window.desktop_widget()->GetNativeWindow()->GetRootWindow());
+  keys.PressKey(ui::VKEY_RETURN, ui::EF_NONE);
+  ASSERT_TRUE(
+      base::test::RunUntil([&] { return page->GetLastCommittedURL() == url; }));
+  EXPECT_EQ("", content::EvalJs(page, "document.cookie"));
+  EXPECT_EQ("normal=retained", content::EvalJs(normal, "document.cookie"));
+  EXPECT_EQ(url, normal->GetLastCommittedURL());
+  EXPECT_EQ(preferences,
+            g_browser_process->local_state()->GetDict(kPreferencesPref));
+  std::map<std::string, std::string> metadata;
+  TabIdentity::Populate(page, &metadata);
+  EXPECT_TRUE(metadata.empty());
+}
+
+IN_PROC_BROWSER_TEST_F(FlyWorkspaceBrowserTest,
+                       NativeAddressWorkspaceAndBookmarkChoicesUseNativeState) {
+  ASSERT_TRUE(ui_test_utils::NavigateToURL(
+      browser(), embedded_test_server()->GetURL("/title1.html")));
+  auto* page = Active(browser());
+  ASSERT_TRUE(content::ExecJs(page, "document.cookie='address=original';"));
+  auto* second = SecondWorkspace();
+  ASSERT_TRUE(second);
+  ASSERT_TRUE(ui_test_utils::NavigateToURL(
+      second, embedded_test_server()->GetURL("/title2.html?workspace=second")));
+  WorkspaceService service(*g_browser_process->local_state());
+  const auto catalog = service.Read();
+  ASSERT_TRUE(catalog);
+  const auto directory =
+      browser()->GetProfile()->GetPath().BaseName().AsUTF8Unsafe();
+  const auto item = std::ranges::find(catalog->items, directory,
+                                      &Workspace::profile_directory);
+  ASSERT_NE(item, catalog->items.end());
+  ASSERT_TRUE(service.Rename(item->id, "Address workspace fixture"));
+  auto& window = FlyWindowController::Get();
+  auto& address = window.address_picker();
+  ASSERT_TRUE(InvokeNativeCommand(second, "toggle-address"));
+  ASSERT_TRUE(base::test::RunUntil([&] {
+    return address.active() && address.search_for_testing()->HasFocus();
+  }));
+  address.search_for_testing()->SetText(u"ws:Address workspace fixture");
+  address.ContentsChanged(address.search_for_testing(),
+                          u"ws:Address workspace fixture");
+  ASSERT_EQ(1u, address.result_count_for_testing());
+  ui::test::EventGenerator keys(
+      window.desktop_widget()->GetNativeWindow()->GetRootWindow());
+  keys.PressKey(ui::VKEY_RETURN, ui::EF_NONE);
+  ASSERT_TRUE(base::test::RunUntil([&] {
+    return window.selected_browser_for_testing() == browser() &&
+           !address.search_for_testing();
+  }));
+  const auto target = embedded_test_server()->GetURL("/title2.html");
+  ASSERT_TRUE(
+      window.bookmarks().Add(target.spec(), "Address bookmark fixture"));
+  ASSERT_TRUE(InvokeNativeCommand(browser(), "toggle-address"));
+  ASSERT_TRUE(base::test::RunUntil([&] {
+    return address.active() && address.search_for_testing()->HasFocus();
+  }));
+  address.search_for_testing()->SetText(u"Address bookmark fixture");
+  address.ContentsChanged(address.search_for_testing(),
+                          u"Address bookmark fixture");
+  ASSERT_EQ(2u, address.result_count_for_testing());
+  keys.PressKey(ui::VKEY_DOWN, ui::EF_NONE);
+  keys.PressKey(ui::VKEY_RETURN, ui::EF_NONE);
+  ASSERT_TRUE(base::test::RunUntil(
+      [&] { return page->GetLastCommittedURL() == target; }));
+  EXPECT_EQ(page, Active(browser()));
+  EXPECT_EQ("address=original", content::EvalJs(page, "document.cookie"));
+  EXPECT_NE(target, Active(second)->GetLastCommittedURL());
+}
+
+IN_PROC_BROWSER_TEST_F(FlyWorkspaceBrowserTest,
+                       NativeAddressCancelAndWorkspaceChangeDiscardInput) {
+  ASSERT_TRUE(ui_test_utils::NavigateToURL(
+      browser(), embedded_test_server()->GetURL("/title1.html")));
+  auto* page = Active(browser());
+  ASSERT_TRUE(
+      content::ExecJs(page,
+                      "document.body.innerHTML='<input "
+                      "id=entry>';document.querySelector('#entry').focus();"));
+  auto& window = FlyWindowController::Get();
+  const auto original = page->GetLastCommittedURL();
+  ASSERT_TRUE(InvokeNativeCommand(browser(), "toggle-address"));
+  auto& address = window.address_picker();
+  ASSERT_TRUE(address.active());
+  address.search_for_testing()->SetText(u"never-persist-this-query");
+  address.ContentsChanged(address.search_for_testing(),
+                          u"never-persist-this-query");
+  ui::test::EventGenerator keys(
+      window.desktop_widget()->GetNativeWindow()->GetRootWindow());
+  keys.PressKey(ui::VKEY_ESCAPE, ui::EF_NONE);
+  ASSERT_TRUE(base::test::RunUntil([&] {
+    return !address.search_for_testing() &&
+           content::EvalJs(page, "document.hasFocus()").ExtractBool();
+  }));
+  EXPECT_EQ(original, page->GetLastCommittedURL());
+  EXPECT_EQ(nullptr, g_browser_process->local_state()->GetUserPrefValue(
+                         kPreferencesPref));
+  ASSERT_TRUE(InvokeNativeCommand(browser(), "toggle-address"));
+  ASSERT_TRUE(address.active());
+  address.search_for_testing()->SetText(u"1+2*3");
+  address.ContentsChanged(address.search_for_testing(), u"1+2*3");
+  EXPECT_EQ(2u, address.result_count_for_testing());
+  keys.PressKey(ui::VKEY_RETURN, ui::EF_NONE);
+  ASSERT_TRUE(
+      base::test::RunUntil([&] { return !address.search_for_testing(); }));
+  EXPECT_EQ(original, page->GetLastCommittedURL());
+  ASSERT_TRUE(InvokeNativeCommand(browser(), "toggle-address"));
+  ASSERT_TRUE(SecondWorkspace());
+  ASSERT_TRUE(base::test::RunUntil([&] { return !address.active(); }));
+  EXPECT_EQ(original, page->GetLastCommittedURL());
+}
+
 IN_PROC_BROWSER_TEST_F(FlyWorkspaceBrowserTest,
                        NativeClockUsesLiveAppPreferencesWithoutTickWrites) {
   auto& window = FlyWindowController::Get();
@@ -3751,7 +4307,9 @@ IN_PROC_BROWSER_TEST_F(FlyWorkspaceBrowserTest,
                            "document.querySelector('#editable').value")
                .ExtractString() == "j";
   }));
-  ASSERT_TRUE(window.RunCommand(browser(), "toggle-address"));
+  // Preserve upstream toolbar-focus restoration independently of Fly address
+  // UI.
+  ASSERT_TRUE(ExecuteNativeCommand(browser(), "toggle-address"));
   auto* widget = views::Widget::GetWidgetForNativeView(
       browser()->GetWindow()->GetNativeWindow());
   ASSERT_TRUE(widget);

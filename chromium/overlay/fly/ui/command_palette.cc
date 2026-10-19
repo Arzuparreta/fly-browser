@@ -168,17 +168,36 @@ void CommandPalette::UpdateItems(std::vector<PaletteEntry> items, bool removable
     }
   }
 }
+void CommandPalette::ToggleQuery(content::WebContents* contents,
+                                 QueryProvider provider,
+                                 std::vector<std::string> close_bindings,
+                                 std::u16string placeholder,
+                                 std::u16string initial) {
+  if (overlay_) {
+    Cancel(true);
+    return;
+  }
+  ToggleItems(contents, {}, std::move(close_bindings), std::move(placeholder),
+              false);
+  if (!active())
+    return;
+  query_provider_ = std::move(provider);
+  search_->SetText(initial);
+  search_->SelectAll(false);
+  Refresh();
+}
 void CommandPalette::Refresh() {
   if (!active())
     return;
-  filtered_ = FilterPalette(catalog_, search_->GetText());
+  filtered_ = query_provider_ ? query_provider_.Run(search_->GetText())
+                              : FilterPalette(catalog_, search_->GetText());
   buttons_.clear();
   remove_buttons_.clear();
   results_->RemoveAllChildViews();
   selected_ = -1;
   for (const auto& entry : filtered_) {
     auto text = entry.title;
-    if (remove_ && !entry.category.empty())
+    if ((remove_ || query_provider_) && !entry.category.empty())
       text += "\n" + entry.category;
     if (!entry.shortcuts.empty())
       text += "    " + base::JoinString(entry.shortcuts, " / ");
@@ -205,9 +224,8 @@ void CommandPalette::Refresh() {
     }
   }
   if (buttons_.empty())
-    results_->AddChildView(
-        std::make_unique<views::Label>(remove_ ? u"No matching bookmarks"
-                                              : u"No matching commands"));
+    results_->AddChildView(std::make_unique<views::Label>(
+        remove_ ? u"No matching bookmarks" : u"No matching results"));
   Select(1);
 }
 void CommandPalette::Select(int direction) {
@@ -225,6 +243,10 @@ void CommandPalette::Select(int direction) {
     }
   }
   selected_ = -1;
+}
+void CommandPalette::RefreshQuery() {
+  if (active() && query_provider_)
+    UpdateItems(catalog_, removable_);
 }
 void CommandPalette::ContentsChanged(views::Textfield*, const std::u16string&) {
   Refresh();
@@ -327,6 +349,7 @@ void CommandPalette::FinishClose(bool restore_focus, std::string action) {
   overlay_.reset();
   filtered_.clear();
   catalog_.clear();
+  query_provider_.Reset();
   closing_ = false;
   if (restore_focus && contents && !cancelled_) {
     if (restore_page_focus_)
