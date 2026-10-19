@@ -1597,3 +1597,22 @@ accelerators, checking Unicode names, duplicate rejection, cancellation, stale
 future-schema rejection, unchanged profile/tab identity and retained page cookies.
 Pinned-source compilation and the full runtime pipeline must pass before this
 follow-up is accepted. Delete and cross-profile tab transfer remain outstanding.
+
+
+### Native discard identity follow-up
+
+Pinned Chromium can either retain a WebContents during memory discard or replace
+it with a renderer-free WebContents. The latter invokes AboutToBeDiscarded before
+tab insertion. Fly now observes that native seam and transfers only its small
+product identity to the unpublished replacement in the same BrowserContext.
+The old instance relinquishes ownership of the live-ID reservation; its later
+destruction cannot allow a second restored tab to claim the replacement's ID.
+Already published identities and cross-context transfers remain forbidden.
+
+Two browser fixtures explicitly exercise both upstream feature configurations
+with real native lifecycle discard, verifying hidden pinned tabs, unchanged
+selection/profile, retained identity and collision protection, then native reload,
+document.wasDiscarded and profile-local cookies. These cases need pinned compile
+and full runtime execution. This is identity preservation for Chromium memory
+reclamation, not the unfinished retained-document freeze/resume feature or its
+hibernate/wake commands.

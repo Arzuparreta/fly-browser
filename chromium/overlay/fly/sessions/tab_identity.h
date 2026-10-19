@@ -8,12 +8,14 @@
 #include <string>
 
 #include "content/public/browser/web_contents_user_data.h"
+#include "content/public/browser/web_contents_observer.h"
 
 namespace fly {
 // Product identity, independent of native extension/session IDs. Persisted by
 // Chromium's session command store and closed-tab restore service, never in a
 // competing URL/session file. Private tabs have runtime identities only.
-class TabIdentity : public content::WebContentsUserData<TabIdentity> {
+class TabIdentity : public content::WebContentsUserData<TabIdentity>,
+                    public content::WebContentsObserver {
  public:
   static constexpr char kExtraDataKey[] = "fly.tab_id";
   static const std::string& Get(content::WebContents* contents);
@@ -25,11 +27,15 @@ class TabIdentity : public content::WebContentsUserData<TabIdentity> {
   static void Restore(content::WebContents* contents,
                       const std::map<std::string, std::string>& extra_data);
   ~TabIdentity() override;
+  void AboutToBeDiscarded(content::WebContents* new_contents) override;
 
  private:
   friend class content::WebContentsUserData<TabIdentity>;
   TabIdentity(content::WebContents* contents, const std::string& restored_id);
   std::string id_;
+  // During replacement discard both contents briefly represent one logical tab.
+  // Only the replacement releases the live-ID reservation on destruction.
+  bool owns_id_ = true;
   WEB_CONTENTS_USER_DATA_KEY_DECL();
 };
 }  // namespace fly

@@ -23,7 +23,8 @@ WEB_CONTENTS_USER_DATA_KEY_IMPL(TabIdentity);
 
 TabIdentity::TabIdentity(content::WebContents* contents,
                          const std::string& restored_id)
-    : content::WebContentsUserData<TabIdentity>(*contents) {
+    : content::WebContentsUserData<TabIdentity>(*contents),
+      content::WebContentsObserver(contents) {
   DCHECK_CURRENTLY_ON(content::BrowserThread::UI);
   const auto restored = base::Uuid::ParseLowercase(restored_id);
   if (CanPersist(contents) && restored.is_valid() &&
@@ -38,7 +39,25 @@ TabIdentity::TabIdentity(content::WebContents* contents,
 }
 TabIdentity::~TabIdentity() {
   DCHECK_CURRENTLY_ON(content::BrowserThread::UI);
-  LiveIds().erase(id_);
+  if (owns_id_)
+    LiveIds().erase(id_);
+}
+void TabIdentity::AboutToBeDiscarded(content::WebContents* new_contents) {
+  DCHECK_CURRENTLY_ON(content::BrowserThread::UI);
+  // Chromium calls this before attaching the empty replacement to its native
+  // tab. Never reassign an identity that has already been published, nor move
+  // metadata across a BrowserContext boundary.
+  if (!owns_id_ || !new_contents || FromWebContents(new_contents) ||
+      new_contents->GetBrowserContext() != web_contents()->GetBrowserContext())
+    return;
+  CreateForWebContents(new_contents, std::string());
+  auto* replacement = FromWebContents(new_contents);
+  LiveIds().erase(replacement->id_);
+  replacement->id_ = id_;
+  // Keep the original ID reserved throughout replacement. The old contents
+  // remain observable until Chromium finishes replacing the tab and deletes
+  // them, but their destructor must not release the new owner's reservation.
+  owns_id_ = false;
 }
 const std::string& TabIdentity::Get(content::WebContents* contents) {
   DCHECK_CURRENTLY_ON(content::BrowserThread::UI);

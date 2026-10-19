@@ -133,6 +133,7 @@ if (is_linux || is_win) {
       "//chrome/browser/profiles:profile",
       "//chrome/browser/profiles:profile_manager",
       "//chrome/browser/profiles:profile_test_util",
+      "//chrome/browser/resource_coordinator",
       "//chrome/browser/ssl",
       "//chrome/browser/ui",
       "//chrome/browser/ui/browser_window",

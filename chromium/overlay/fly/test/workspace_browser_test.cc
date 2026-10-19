@@ -39,6 +39,9 @@
 #include "base/json/json_writer.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/test/run_until.h"
+#include "base/test/scoped_feature_list.h"
+#include "content/public/common/content_features.h"
+#include "chrome/browser/resource_coordinator/tab_lifecycle_unit_external.h"
 #include "base/test/bind.h"
 #include "base/test/test_future.h"
 #include "base/uuid.h"
@@ -72,6 +75,7 @@
 #include "chrome/browser/ui/tabs/tab_muted_utils.h"
 #include "ui/views/controls/button/image_button.h"
 #include "content/public/test/browser_test.h"
+#include "content/public/test/test_navigation_observer.h"
 #include "content/public/test/browser_test_utils.h"
 #include "extensions/test/test_extension_dir.h"
 #include "net/dns/mock_host_resolver.h"
@@ -1523,6 +1527,79 @@ IN_PROC_BROWSER_TEST_F(FlyExplicitBlankRestoreBrowserTest,
 IN_PROC_BROWSER_TEST_F(FlyExplicitBlankRestoreBrowserTest,
                        ExplicitBlankAddsToRestoredNativeTabs) {
   ExpectSessionFixture(true);
+}
+
+class FlyReplacementDiscardBrowserTest : public FlyWorkspaceBrowserTest {
+ public:
+  FlyReplacementDiscardBrowserTest() {
+    features_.InitAndDisableFeature(features::kWebContentsDiscard);
+  }
+ private:
+  base::test::ScopedFeatureList features_;
+};
+class FlyRetainedDiscardBrowserTest : public FlyWorkspaceBrowserTest {
+ public:
+  FlyRetainedDiscardBrowserTest() {
+    features_.InitAndEnableFeature(features::kWebContentsDiscard);
+  }
+ private:
+  base::test::ScopedFeatureList features_;
+};
+
+void ExpectDiscardedTabKeepsFlyIdentity(BrowserWindowInterface* browser,
+                                       const GURL& url, bool replacement) {
+  ASSERT_TRUE(ui_test_utils::NavigateToURL(browser, url));
+  auto* model = browser->GetTabStripModel();
+  auto* original = model->GetActiveWebContents();
+  const std::string id = TabIdentity::Get(original);
+  auto* const profile = original->GetBrowserContext();
+  ASSERT_TRUE(content::ExecJs(original, "document.cookie='discard=retained'"));
+  // Discard a hidden, pinned tab, leaving another tab visible and focused.
+  model->SetTabPinned(0, true);
+  ASSERT_TRUE(OpenNativeBlankTab(browser));
+  ASSERT_EQ(2, model->count());
+  auto* selected = model->GetActiveWebContents();
+  ASSERT_NE(original, selected);
+  auto* lifecycle =
+      resource_coordinator::TabLifecycleUnitExternal::FromWebContents(original);
+  ASSERT_TRUE(lifecycle);
+  ASSERT_TRUE(lifecycle->DiscardTab(
+      ::mojom::LifecycleUnitDiscardReason::EXTERNAL));
+  auto* discarded = model->GetWebContentsAt(0);
+  EXPECT_EQ(replacement, discarded != original);
+  EXPECT_EQ(id, TabIdentity::Get(discarded));
+  EXPECT_EQ(profile, discarded->GetBrowserContext());
+  EXPECT_TRUE(model->IsTabPinned(0));
+  EXPECT_EQ(selected, model->GetActiveWebContents());
+  EXPECT_EQ(content::Visibility::HIDDEN, discarded->GetVisibility());
+  EXPECT_TRUE(discarded->WasDiscarded());
+  // The old contents' destructor must not make the ID available to a second
+  // restored tab. Private metadata remains non-persistable as usual.
+  auto probe = content::WebContents::Create(
+      content::WebContents::CreateParams(profile));
+  TabIdentity::Restore(probe.get(), {{TabIdentity::kExtraDataKey, id}});
+  EXPECT_NE(id, TabIdentity::Get(probe.get()));
+  std::map<std::string, std::string> metadata;
+  TabIdentity::Populate(discarded, &metadata);
+  EXPECT_EQ(id, metadata.at(TabIdentity::kExtraDataKey));
+  content::TestNavigationObserver reload(discarded);
+  model->ActivateTabAt(0);
+  reload.Wait();
+  EXPECT_EQ(discarded, model->GetActiveWebContents());
+  EXPECT_EQ(id, TabIdentity::Get(discarded));
+  EXPECT_EQ(true, content::EvalJs(discarded, "document.wasDiscarded"));
+  EXPECT_EQ("discard=retained", content::EvalJs(discarded, "document.cookie"));
+}
+
+IN_PROC_BROWSER_TEST_F(FlyReplacementDiscardBrowserTest,
+                       NativeReplacementDiscardPreservesFlyIdentity) {
+  ExpectDiscardedTabKeepsFlyIdentity(
+      browser(), embedded_test_server()->GetURL("/title1.html"), true);
+}
+IN_PROC_BROWSER_TEST_F(FlyRetainedDiscardBrowserTest,
+                       NativeRetainedDiscardPreservesFlyIdentity) {
+  ExpectDiscardedTabKeepsFlyIdentity(
+      browser(), embedded_test_server()->GetURL("/title1.html"), false);
 }
 
 IN_PROC_BROWSER_TEST_F(FlyWorkspaceBrowserTest,
