@@ -594,9 +594,11 @@ IN_PROC_BROWSER_TEST_F(FlySidebarBrowserTest,
   )js"));
   auto& window = FlyWindowController::Get();
   MoveToPage();
+  EXPECT_FALSE(window.clock_timer_running_for_testing());
   const int width = content::EvalJs(page, "innerWidth").ExtractInt();
   const auto page_bounds = page->GetRenderWidgetHostView()->GetViewBounds();
   OpenByPointer();
+  EXPECT_TRUE(window.clock_timer_running_for_testing());
   EXPECT_EQ(width, content::EvalJs(page, "innerWidth"));
   EXPECT_EQ(page_bounds, page->GetRenderWidgetHostView()->GetViewBounds());
   ExpectVisible(page, true);
@@ -612,6 +614,7 @@ IN_PROC_BROWSER_TEST_F(FlySidebarBrowserTest,
   mouse.ClickLeftButton();
   EXPECT_EQ(0, content::EvalJs(page, "clicks"));
   MoveToPage();
+  EXPECT_FALSE(window.clock_timer_running_for_testing());
   mouse.MoveMouseTo(covered);
   mouse.ClickLeftButton();
   ASSERT_TRUE(base::test::RunUntil(
@@ -825,6 +828,7 @@ IN_PROC_BROWSER_TEST_F(FlyWorkspaceBrowserTest,
     ASSERT_TRUE(base::test::RunUntil([&] {
       return button->IsDrawn() && !button->GetVisibleBounds().IsEmpty();
     }));
+    views::test::RunScheduledLayout(button->GetWidget());
     ui::test::EventGenerator mouse(desktop->GetNativeWindow()->GetRootWindow());
     mouse.MoveMouseTo(button->GetBoundsInScreen().CenterPoint());
     mouse.ClickLeftButton();
@@ -873,7 +877,7 @@ IN_PROC_BROWSER_TEST_F(FlyWorkspaceBrowserTest,
   ASSERT_TRUE(base::test::RunUntil([&] {
     return close->IsDrawn() && !close->GetVisibleBounds().IsEmpty();
   }));
-  views::test::RunScheduledLayout(window.desktop_widget());
+  views::test::RunScheduledLayout(close->GetWidget());
   auto point = close->GetVisibleBounds().CenterPoint();
   views::View::ConvertPointToScreen(close, &point);
   auto* root = close->GetWidget()->GetRootView();

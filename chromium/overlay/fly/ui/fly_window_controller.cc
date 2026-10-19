@@ -517,6 +517,7 @@ views::ImageButton* FlyWindowController::window_control_for_testing(
   return found == window_control_buttons_.end() ? nullptr : found->second.get();
 }
 void FlyWindowController::ClearSidebarViews() {
+  clock_timer_.Stop();
   window_control_buttons_.clear();
   window_controls_ = nullptr;
   workspace_buttons_ = nullptr;

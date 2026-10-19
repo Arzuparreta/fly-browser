@@ -132,6 +132,9 @@ class FlyWindowController : public views::WidgetDelegate,
                              const gfx::Rect& bounds) override;
   void FocusSidebar();
   bool sidebar_expanded_for_testing() const;
+  bool clock_timer_running_for_testing() const {
+    return clock_timer_.IsRunning();
+  }
   views::Widget* sidebar_widget_for_testing() { return sidebar_widget_.get(); }
   TabSidebar* compact_sidebar_for_testing() { return compact_tab_sidebar_; }
   views::MdTextButton* sidebar_pin_for_testing() { return sidebar_pin_button_; }
