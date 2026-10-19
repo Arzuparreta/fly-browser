@@ -578,6 +578,42 @@ IN_PROC_BROWSER_TEST_F(FlyWorkspaceBrowserTest,
 }
 
 IN_PROC_BROWSER_TEST_F(FlyWorkspaceBrowserTest,
+                       WindowControlsDriveTheSharedNativeDesktopState) {
+  auto& window = FlyWindowController::Get();
+  auto* desktop = window.desktop_widget();
+  auto* first = browser();
+  auto* second = SecondWorkspace();
+  ASSERT_TRUE(second);
+  ASSERT_TRUE(window.preferences().SetWindowControlsVisible(true));
+  auto click = [&](std::string_view action) {
+    auto* button = window.window_control_for_testing(action);
+    ASSERT_TRUE(button);
+    ASSERT_TRUE(base::test::RunUntil([&] {
+      return button->IsDrawn() && !button->GetVisibleBounds().IsEmpty();
+    }));
+    ui::test::EventGenerator mouse(desktop->GetNativeWindow()->GetRootWindow());
+    mouse.MoveMouseTo(button->GetBoundsInScreen().CenterPoint());
+    mouse.ClickLeftButton();
+  };
+  click("maximize");
+  ASSERT_TRUE(base::test::RunUntil([&] { return desktop->IsMaximized(); }));
+  EXPECT_TRUE(first->GetWindow()->IsMaximized());
+  EXPECT_TRUE(second->GetWindow()->IsMaximized());
+  click("maximize");
+  ASSERT_TRUE(base::test::RunUntil([&] { return !desktop->IsMaximized(); }));
+  EXPECT_FALSE(first->GetWindow()->IsMaximized());
+  EXPECT_FALSE(second->GetWindow()->IsMaximized());
+  click("minimize");
+  ASSERT_TRUE(base::test::RunUntil([&] { return desktop->IsMinimized(); }));
+  EXPECT_TRUE(first->GetWindow()->IsMinimized());
+  EXPECT_TRUE(second->GetWindow()->IsMinimized());
+  desktop->Restore();
+  ASSERT_TRUE(base::test::RunUntil([&] { return !desktop->IsMinimized(); }));
+  window.Select(second, true);
+  ExpectVisible(Active(second), true);
+}
+
+IN_PROC_BROWSER_TEST_F(FlyWorkspaceBrowserTest,
                        WindowCloseButtonHonoursBeforeUnloadCancellation) {
   auto first = browser()->GetWeakPtr();
   auto* second = SecondWorkspace();
