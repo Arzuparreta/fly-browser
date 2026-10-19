@@ -29,6 +29,19 @@ labelled `impact:none`. The fifteen follow-up commits were replayed onto main;
 remain the actual provenance recorded in archived evidence. Latest-head hosted
 validation for PR 124 must pass separately; PR 115 results are not inherited.
 
+The combined automatic-suspension checkpoint `c94412e` now passes all 57 service
+cases and all 64 browser declarations (62 main cases and two PRE stages), plus
+video/MV3 and audio/PCM. The independent audit has no failures and fingerprint
+`4f2772f2a4c8386386024137e0112382a8da14caa679436ae5e42a3aa4da4fa4`.
+Performance pointer/Space input, keyboard draft retention, explicit disabled
+preferences and actual automatic freeze/resume pass. The first missing-Space-
+release fixture failure is preserved at `runtime-84aee74-before-space-release`.
+Subsequent changes add only reviewed patch-refresh tooling, its Python tests
+and documentation; native C++/patch bytes are unchanged from this passing run.
+These completed follow-ups are being consolidated into PR 124 before its final
+latest-head hosted/native validation; the earlier `27f6838` hosted runs do not
+satisfy the new head's gate.
+
 The complete nineteen-patch Linux checkpoint at original `52d0f65` (rebased
 unchanged as `5970d1c`) passes all 53 service cases and all 60 browser declarations
 (58 main cases and two PRE stages), plus sandboxed H.264/AAC video with MV3 and
@@ -42,7 +55,7 @@ workspace ordering and rename, retained-document suspension, workspace-scoped
 resume, global playback waking a frozen paused session, both native memory discard
 paths and stable identity/collision protection. It is not full product acceptance.
 
-The latest published PR head `27f6838` passes 53 service cases, all 62 browser
+The earlier published PR head `27f6838` passes 53 service cases, all 62 browser
 declarations (60 main cases and two PRE stages), video/MV3 and audio/PCM. This
 includes the asynchronous workspace-load cancellation and actual pointer/input
 focus cases. Its independent audit verifies the clean commit, source case set,
@@ -1755,3 +1768,15 @@ and CLI scoping. This is tooling work on the independent
 npm/documentation/whitespace checks and any actual-engine exercise must be
 recorded before accepting it. Do not treat it as completed workspace deletion
 or retirement enforcement.
+
+
+The reviewed upstream refresh tooling passes all 85 Python contracts, npm tests,
+documentation build and whitespace checks. A real pinned-engine probe at tool
+commit `27641f2` privately replays the nineteen patches plus a temporary comment
+patch to `chrome/browser/profiles/profiles_state.cc`, applies that one changed
+source and restores the original stack. All source hashes return to the original
+overlay fingerprint and all 73 other managed files keep their timestamps. No
+public header or browser behavior changes. Evidence is
+`evidence/reviewed-patch-refresh-engine-proof.json`; the temporary probe patch
+was external and is not part of the product stack. This validates actual-engine
+incremental patch refresh, not workspace deletion itself.
