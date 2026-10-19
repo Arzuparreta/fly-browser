@@ -146,6 +146,51 @@ void KeyboardEditor::Toggle(content::WebContents* contents) {
                                    weak_factory_.GetWeakPtr(), std::string(key))));
     appearance_[key]->SetMultiLine(true);
   }
+  for (const auto& [key, label] :
+       {std::pair{"interface_scale", u"Large interface (125%)"},
+        std::pair{"web_notifications", u"Allow websites to ask to show notifications"}}) {
+    appearance_[key] = appearance->AddChildView(std::make_unique<views::Checkbox>(
+        label, base::BindRepeating(&KeyboardEditor::ChangeAppearance,
+                                   weak_factory_.GetWeakPtr(), std::string(key))));
+  }
+  appearance->AddChildView(std::make_unique<views::Label>(
+      u"Spellchecker language (for example en-GB; \"disabled\" turns it off)"));
+  spellcheck_ = appearance->AddChildView(std::make_unique<views::Textfield>());
+  spellcheck_->GetViewAccessibility().SetName(u"Spellchecker language");
+  appearance->AddChildView(std::make_unique<views::Label>(
+      u"Interface colours for the current theme (#rrggbb, empty uses the default)"));
+  for (const auto& [key, label] :
+       {std::pair{"accent", u"Accent"}, std::pair{"bg_main", u"Main background"},
+        std::pair{"bg_sidebar", u"Sidebar background"},
+        std::pair{"text", u"Text"}}) {
+    auto* row = appearance->AddChildView(std::make_unique<views::View>());
+    auto* row_layout = row->SetLayoutManager(std::make_unique<views::BoxLayout>(
+        views::BoxLayout::Orientation::kHorizontal, gfx::Insets(), 8));
+    auto* name = row->AddChildView(std::make_unique<views::Label>(label));
+    name->SetPreferredSize(gfx::Size(160, 24));
+    name->SetHorizontalAlignment(gfx::ALIGN_LEFT);
+    auto* field = row->AddChildView(std::make_unique<views::Textfield>());
+    field->GetViewAccessibility().SetName(std::u16string(label) + u" colour");
+    row_layout->SetFlexForView(field, 1);
+    color_fields_[key] = field;
+  }
+  auto* apply_row = appearance->AddChildView(std::make_unique<views::View>());
+  apply_row->SetLayoutManager(std::make_unique<views::BoxLayout>(
+      views::BoxLayout::Orientation::kHorizontal, gfx::Insets(), 8));
+  apply_row->AddChildView(std::make_unique<FlyButton>(
+      base::BindRepeating(&KeyboardEditor::ApplyProductTexts,
+                          weak_factory_.GetWeakPtr()),
+      u"Apply language and colours"));
+  apply_row->AddChildView(std::make_unique<FlyButton>(
+      base::BindRepeating(
+          [](base::WeakPtr<KeyboardEditor> editor) {
+            if (editor && editor->active()) {
+              editor->preferences_.ResetThemeColors();
+              editor->RefreshAppearance();
+            }
+          },
+          weak_factory_.GetWeakPtr()),
+      u"Default colours"));
   clock_format_ = appearance->AddChildView(std::make_unique<FlyButton>(
       base::BindRepeating(&KeyboardEditor::CycleClockFormat,
                           weak_factory_.GetWeakPtr()), u"Clock format"));
@@ -164,6 +209,29 @@ void KeyboardEditor::Toggle(content::WebContents* contents) {
   suspension_timeout_->SetTooltipText(
       u"Click to change the delay. Eligible pages pause without unloading. "
       u"Visible, pinned and busy pages keep running.");
+  for (const auto& [key, label] :
+       {std::pair{"disable_gpu",
+                  u"Disable GPU hardware acceleration (after restart)"},
+        std::pair{"background_throttling",
+                  u"Throttle timers in background pages (after restart)"},
+        std::pair{"enable_diagnostics",
+                  u"Record diagnostics events in memory"}}) {
+    appearance_[key] = performance->AddChildView(std::make_unique<views::Checkbox>(
+        label, base::BindRepeating(&KeyboardEditor::ChangeAppearance,
+                                   weak_factory_.GetWeakPtr(), std::string(key))));
+  }
+  process_limit_ = performance->AddChildView(std::make_unique<FlyButton>(
+      base::BindRepeating(
+          [](base::WeakPtr<KeyboardEditor> editor) {
+            if (!editor || !editor->active())
+              return;
+            const int limit =
+                editor->preferences_.ReadInt("process_limit").value_or(4);
+            editor->preferences_.SetInt("process_limit", limit % 5 + 1);
+            editor->RefreshAppearance();
+          },
+          weak_factory_.GetWeakPtr()),
+      u"Renderer process limit"));
   suspension_status_ =
       performance->AddChildView(std::make_unique<views::Label>());
   suspension_status_->SetMultiLine(true);
@@ -358,6 +426,9 @@ void KeyboardEditor::ClearAppearance() {
   search_settings_status_ = nullptr;
   alias_list_ = nullptr;
   appearance_.clear();
+  color_fields_.clear();
+  spellcheck_ = nullptr;
+  process_limit_ = nullptr;
   clock_format_ = nullptr;
   suspension_timeout_ = nullptr;
   suspension_status_ = nullptr;
@@ -407,6 +478,30 @@ void KeyboardEditor::RefreshAppearance() {
       preferences_.CanEditWindowControls());
   set("sidebar_auto_collapse", collapse.value_or(true),
       preferences_.CanEditSidebarAutoCollapse());
+  const bool editable = preferences_.CanEdit();
+  set("interface_scale",
+      preferences_.ReadString("interface_scale").value_or("normal") == "large",
+      editable);
+  for (const char* key : {"web_notifications", "disable_gpu",
+                          "background_throttling", "enable_diagnostics"})
+    set(key, preferences_.ReadBool(key).value_or(false), editable);
+  process_limit_->SetEnabled(editable);
+  process_limit_->SetText(
+      u"Renderer process limit: " +
+      base::NumberToString16(preferences_.ReadInt("process_limit").value_or(4)) +
+      u" (after restart)");
+  if (!spellcheck_->HasFocus())
+    spellcheck_->SetText(base::UTF8ToUTF16(
+        preferences_.ReadString("spellchecker_language").value_or("")));
+  spellcheck_->SetEnabled(editable);
+  const bool dark = theme && theme->mode == "dark";
+  for (auto& [key, field] : color_fields_) {
+    if (!field->HasFocus())
+      field->SetText(base::UTF8ToUTF16(
+          preferences_.ReadThemeColor(dark, key).value_or("")));
+    field->SetPlaceholderText(dark ? u"dark default" : u"light default");
+    field->SetEnabled(editable);
+  }
   clock_format_->SetEnabled(preferences_.CanEditClock());
   clock_format_->SetText(!clock ? u"Clock format unavailable"
       : clock->format == "datetime" ? u"Clock: date and time"
@@ -418,6 +513,27 @@ void KeyboardEditor::RefreshAppearance() {
       : !preferences_.CanEditTheme()
           ? u"Appearance settings are managed."
           : u"Appearance changes are saved immediately.");
+}
+void KeyboardEditor::ApplyProductTexts() {
+  if (!active())
+    return;
+  const auto language = base::UTF16ToUTF8(spellcheck_->GetText());
+  bool ok = preferences_.SetString(
+      "spellchecker_language",
+      std::string(base::TrimWhitespaceASCII(language, base::TRIM_ALL)));
+  const auto theme = preferences_.ReadTheme();
+  const bool dark = !theme || theme->mode == "dark";
+  for (auto& [key, field] : color_fields_) {
+    const auto value = std::string(base::TrimWhitespaceASCII(
+        base::UTF16ToUTF8(field->GetText()), base::TRIM_ALL));
+    if (value.empty())
+      continue;
+    ok &= preferences_.SetThemeColor(dark, key, value);
+  }
+  appearance_status_->SetText(
+      ok ? u"Language and colours saved."
+         : u"Some values were not saved: colours use #rrggbb.");
+  RefreshAppearance();
 }
 void KeyboardEditor::ChangeAppearance(std::string key) {
   if (!active())
@@ -442,6 +558,10 @@ void KeyboardEditor::ChangeAppearance(std::string key) {
     preferences_.SetWindowControlsVisible(checked);
   } else if (key == "sidebar_auto_collapse") {
     preferences_.SetSidebarAutoCollapse(checked);
+  } else if (key == "interface_scale") {
+    preferences_.SetString("interface_scale", checked ? "large" : "normal");
+  } else {
+    preferences_.SetBool(key, checked);
   }
   RefreshAppearance();
 }

@@ -189,7 +189,17 @@ SkColor FlyRoleColor(FlyRole role) {
       return colors.accent;
   }
 }
+namespace {
+float g_interface_scale = 1.0f;
+}  // namespace
+void SetFlyInterfaceScale(float scale) {
+  g_interface_scale = scale;
+}
+float GetFlyInterfaceScale() {
+  return g_interface_scale;
+}
 gfx::FontList FlyFont(FlyFace face, int size, gfx::Font::Weight weight) {
+  size = static_cast<int>(size * g_interface_scale + 0.5f);
   const char* family = face == FlyFace::kSans   ? "IBM Plex Sans"
                        : face == FlyFace::kMono ? "IBM Plex Mono"
                                                 : "Doto";
@@ -270,11 +280,18 @@ void FlyButton::SetFlyFont(FlyFace face, int size, gfx::Font::Weight weight) {
 void FlyButton::OnThemeChanged() {
   views::MdTextButton::OnThemeChanged();
   label()->SetFontList(FlyFont(face_, size_, weight_));
+  if (GetText().empty() && GetCustomPadding())
+    SetBorder(views::CreateEmptyBorder(*GetCustomPadding()));
   UpdateColors();
 }
 void FlyButton::StateChanged(ButtonState old_state) {
   views::MdTextButton::StateChanged(old_state);
   UpdateColors();
+}
+void FlyButton::SetText(std::u16string_view text) {
+  views::MdTextButton::SetText(text);
+  if (text.empty() && GetCustomPadding())
+    SetBorder(views::CreateEmptyBorder(*GetCustomPadding()));
 }
 void FlyButton::OnFocus() {
   views::MdTextButton::OnFocus();
@@ -357,7 +374,11 @@ FlyLabel::FlyLabel(std::u16string text,
                    int size,
                    gfx::Font::Weight weight,
                    Tone tone)
-    : views::Label(std::move(text)), tone_(tone) {
+    : views::Label(std::move(text)),
+      tone_(tone),
+      face_(face),
+      size_(size),
+      weight_(weight) {
   SetFontList(FlyFont(face, size, weight));
   SetAutoColorReadabilityEnabled(false);
   SetBackgroundColor(SK_ColorTRANSPARENT);
@@ -371,6 +392,7 @@ void FlyLabel::SetTone(Tone tone) {
 }
 void FlyLabel::OnThemeChanged() {
   views::Label::OnThemeChanged();
+  SetFontList(FlyFont(face_, size_, weight_));
   const auto& colors = GetFlyColors();
   SetEnabledColor(tone_ == Tone::kDim      ? colors.dim
                   : tone_ == Tone::kAccent ? colors.accent

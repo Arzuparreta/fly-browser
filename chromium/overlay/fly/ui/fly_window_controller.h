@@ -55,6 +55,7 @@ class SimpleMenuModel;
 namespace fly {
 class CommandPalette;
 class BookmarkService;
+class SettingsMenu;
 class FlyButton;
 class FlyLabel;
 class StatusBar;
@@ -131,6 +132,14 @@ class FlyWindowController : public views::WidgetDelegate,
   bool ShowTabMovePicker(BrowserWindowInterface* browser,
                          content::WebContents* contents);
   CommandPalette& tab_move_picker() { return *tab_move_picker_; }
+  CommandPalette& downloads_picker() { return *downloads_picker_; }
+  SettingsMenu& settings_menu() { return *settings_menu_; }
+  views::Widget* diagnostics_dialog_for_testing() const {
+    return diagnostics_widget_.get();
+  }
+  // Fly status line (footer mode badge), also kept in the in-memory
+  // diagnostics log while recording is enabled.
+  void ShowStatus(std::u16string text);
   bool tab_move_pending_for_testing() const { return bool(tab_move_); }
 
   void OnKeyEvent(ui::KeyEvent* event) override;
@@ -219,6 +228,14 @@ class FlyWindowController : public views::WidgetDelegate,
   void ConfirmHistoryClear(content::WebContents* source);
 
   void ToggleAddress(BrowserWindowInterface* browser);
+  bool RunProductAction(BrowserWindowInterface* browser,
+                        std::string_view action);
+  void ToggleDownloads(BrowserWindowInterface* browser);
+  std::vector<Profile*> WorkspaceProfiles() const;
+  void ShowDiagnostics();
+  void CheckUpdates(bool manual);
+  void MaybeShowWhatsNew();
+  void ApplyProfilePreferencesEverywhere();
   void RemoveBookmark(content::WebContents* source, std::string url);
   void UpdateClock();
   void UpdateWorkspaceHeader();
@@ -263,6 +280,14 @@ class FlyWindowController : public views::WidgetDelegate,
   std::unique_ptr<CommandPalette> history_picker_;
   std::unique_ptr<CommandPalette> workspace_picker_;
   std::unique_ptr<CommandPalette> tab_move_picker_;
+  std::unique_ptr<CommandPalette> downloads_picker_;
+  std::unique_ptr<SettingsMenu> settings_menu_;
+  std::unique_ptr<views::DialogDelegate> diagnostics_delegate_;
+  std::unique_ptr<views::Widget> diagnostics_widget_;
+  std::vector<std::u16string> diagnostics_events_;
+  std::optional<std::string> applied_profile_preferences_;
+  bool whats_new_checked_ = false;
+  bool update_checked_ = false;
   base::WeakPtr<BrowserWindowInterface> move_source_browser_;
   base::WeakPtr<content::WebContents> move_source_;
   std::unique_ptr<TabMoveTransaction> tab_move_;

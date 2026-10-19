@@ -1,0 +1,55 @@
+--- a/chrome/browser/metrics/BUILD.gn
++++ b/chrome/browser/metrics/BUILD.gn
+@@ -272,6 +272,7 @@
+   ]
+ 
+   deps = [
++    "//fly:preferences",
+     "//build/config/compiler:compiler_buildflags",
+     "//chrome/browser:browser_process_platform_part",
+     "//chrome/browser:chrome_browser_main",
+--- a/chrome/browser/metrics/chrome_feature_list_creator.cc
++++ b/chrome/browser/metrics/chrome_feature_list_creator.cc
+@@ -4,6 +4,8 @@
+ 
+ #include "chrome/browser/metrics/chrome_feature_list_creator.h"
+ 
++#include "fly/preferences/preferences_service.h"
++
+ #include <vector>
+ 
+ #include "base/command_line.h"
+@@ -201,6 +203,10 @@
+   about_flags::ConvertFlagsToSwitches(&flags_storage,
+                                       base::CommandLine::ForCurrentProcess(),
+                                       flags_ui::kAddSentinels);
++  // Fly product settings that only apply at process start (GPU, background
++  // throttling, renderer process limit, reader view).
++  fly::PreferencesService::ApplyStartupSwitches(
++      *local_state_, *base::CommandLine::ForCurrentProcess());
+ }
+ 
+ void ChromeFeatureListCreator::CreateNetworkTimeTracker() {
+--- a/chrome/browser/ui/BUILD.gn
++++ b/chrome/browser/ui/BUILD.gn
+@@ -796,6 +796,8 @@
+       "//fly/ui/tab_move_transaction.h",
+       "//fly/ui/workspace_close_transaction.cc",
+       "//fly/ui/workspace_close_transaction.h",
++      "//fly/ui/fly_actions.cc",
++      "//fly/ui/fly_actions.h",
+       "//fly/ui/fly_theme.cc",
+       "//fly/ui/fly_theme.h",
+       "//fly/ui/fly_window_controller.cc",
+@@ -1120,6 +1122,11 @@
+     deps += [ "//fly:workspaces", "//fly:commands", "//fly:preferences", "//fly:bookmarks", "//chrome/browser/ui/navigator", "//chrome/browser/ssl", "//components/url_formatter", "//components/vector_icons", "//ui/accessibility", "//ui/wm" ]
+     deps += [ "//components/history/core/common" ]
+     data_deps = [ "//fly:fonts" ]
++    deps += [
++      "//chrome/browser/dom_distiller",
++      "//components/dom_distiller/core",
++      "//components/spellcheck/browser",
++    ]
+     if (is_linux) {
+       deps += [ "//third_party/fontconfig" ]
+     }

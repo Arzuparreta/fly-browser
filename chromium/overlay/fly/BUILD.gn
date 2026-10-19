@@ -164,6 +164,8 @@ if (is_linux || is_win) {
       "//chrome/test/base:in_process_browser_test",
       "//chrome/test/base:ui_test_utils",
       "//components/javascript_dialogs",
+      "//components/content_settings/core/browser",
+      "//components/dom_distiller/core",
       "//components/performance_manager",
       "//components/password_manager/core/common",
       "//components/signin/public/base",
@@ -188,6 +190,7 @@ if (is_linux || is_win) {
       "//chrome/test/data/title1.html",
       "//chrome/test/data/favicon/page_with_favicon.html",
       "//chrome/test/data/favicon/icon.png",
+      "//chrome/test/data/dom_distiller/simple_article.html",
     ]
   }
 }

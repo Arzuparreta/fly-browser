@@ -11,6 +11,11 @@
 #include "fly/preferences/search_service.h"
 #include "fly/ui/command_palette.h"
 #include "fly/ui/fly_theme.h"
+#include "fly/ui/fly_actions.h"
+#include "base/version.h"
+#include "base/strings/stringprintf.h"
+#include "base/command_line.h"
+#include "fly/fly_version.h"
 #include "chrome/app/vector_icons/vector_icons.h"
 #include "components/omnibox/browser/vector_icons.h"
 #include "components/vector_icons/vector_icons.h"
@@ -511,7 +516,55 @@ FlyWindowController::FlyWindowController()
           weak_factory_.GetWeakPtr()),
       base::BindRepeating(&FlyWindowController::ChooseTabMoveDestination,
                           weak_factory_.GetWeakPtr()));
+  downloads_picker_ = std::make_unique<CommandPalette>(
+      desktop_.get(),
+      base::BindRepeating(
+          [](base::WeakPtr<FlyWindowController> window,
+             std::string_view action) {
+            return window && !window->closing_ &&
+                   (action == "downloads-page" ||
+                    action.starts_with("download:"));
+          },
+          weak_factory_.GetWeakPtr()),
+      base::BindRepeating(
+          [](base::WeakPtr<FlyWindowController> window, content::WebContents*,
+             std::string action) {
+            if (window && !window->closing_ &&
+                !OpenDownloadEntry(window->WorkspaceProfiles(),
+                                   window->selected_, action))
+              window->ShowStatus(u"That download is no longer available.");
+          },
+          weak_factory_.GetWeakPtr()),
+      base::BindRepeating(
+          [](base::WeakPtr<FlyWindowController> window, content::WebContents*,
+             std::string action) {
+            if (!window || window->closing_)
+              return;
+            RemoveDownloadEntry(window->WorkspaceProfiles(), action);
+            if (window->downloads_picker_->active())
+              window->downloads_picker_->UpdateItems(
+                  DownloadEntries(window->WorkspaceProfiles()), true);
+          },
+          weak_factory_.GetWeakPtr()));
+  settings_menu_ = std::make_unique<SettingsMenu>(
+      preferences_,
+      base::BindRepeating(
+          [](base::WeakPtr<FlyWindowController> window, std::string action) {
+            base::SingleThreadTaskRunner::GetCurrentDefault()->PostTask(
+                FROM_HERE,
+                base::BindOnce(
+                    [](base::WeakPtr<FlyWindowController> window,
+                       std::string action) {
+                      if (window && window->selected_ && !window->closing_)
+                        InvokeNativeCommand(window->selected_, action);
+                    },
+                    window, std::move(action)));
+          },
+          weak_factory_.GetWeakPtr()));
   using Layout = PaletteStyle::Layout;
+  downloads_picker_->SetStyle(
+      {Layout::kCentre, u"Downloads",
+       u"Enter opens, pauses or resumes. Remove cancels or clears.", 640});
   palette_->SetStyle({Layout::kCentre, u"Command Centre",
                       u"Actions, feature guide & keyboard shortcuts"});
   address_picker_->SetStyle({.layout = Layout::kTop, .width = 640});
@@ -569,6 +622,12 @@ FlyWindowController::~FlyWindowController() {
   StopSidebarFocusObservation();
   tab_move_.reset();
   tab_move_picker_.reset();
+  downloads_picker_.reset();
+  if (settings_menu_)
+    settings_menu_->Cancel();
+  settings_menu_.reset();
+  diagnostics_widget_.reset();
+  diagnostics_delegate_.reset();
   workspace_close_.reset();
   remove_widget_.reset();
   remove_delegate_.reset();
@@ -1059,6 +1118,8 @@ void FlyWindowController::OnPreferencesChanged() {
     // including hidden/split/private/extension pages. No web API is replaced.
     ui::NativeTheme::GetInstanceForWeb()->NotifyOnNativeThemeUpdated();
   }
+  ApplyFlyPalette();
+  ApplyProfilePreferencesEverywhere();
   UpdateClock();
   UpdateSidebarMode();
   UpdateWindowControls();
@@ -1102,6 +1163,7 @@ bool FlyWindowController::SidebarOverlayBlocked() const {
          (palette_ && palette_->active()) ||
          (workspace_picker_ && workspace_picker_->active()) ||
          (tab_move_picker_ && tab_move_picker_->active()) ||
+         (downloads_picker_ && downloads_picker_->active()) ||
          (bookmark_picker_ && bookmark_picker_->active()) ||
          (history_picker_ && history_picker_->active()) ||
          (keyboard_editor_ && keyboard_editor_->active()) ||
@@ -1407,7 +1469,25 @@ void FlyWindowController::ResumeAllTabs() {
 
 void FlyWindowController::ApplyFlyPalette() {
   const auto theme = preferences_.ReadTheme();
-  if (!SetFlyColors(DefaultFlyColors(!theme || theme->mode != "light")))
+  const bool dark = !theme || theme->mode != "light";
+  auto colors = DefaultFlyColors(dark);
+  const auto custom = [&](std::string_view key, SkColor& target) {
+    const auto hex = preferences_.ReadThemeColor(dark, key);
+    uint32_t rgb = 0;
+    if (hex && hex->size() == 7 && base::HexStringToUInt(hex->substr(1), &rgb))
+      target = SkColorSetRGB(rgb >> 16, (rgb >> 8) & 0xff, rgb & 0xff);
+  };
+  custom("accent", colors.accent);
+  custom("bg_main", colors.bg_main);
+  custom("bg_sidebar", colors.bg_sidebar);
+  custom("text", colors.text);
+  const float scale =
+      preferences_.ReadString("interface_scale").value_or("normal") == "large"
+          ? 1.25f
+          : 1.0f;
+  const bool scale_changed = scale != GetFlyInterfaceScale();
+  SetFlyInterfaceScale(scale);
+  if (!SetFlyColors(colors) && !scale_changed)
     return;
   for (auto* widget : {desktop_.get(), sidebar_widget_.get()}) {
     if (widget && widget->GetNativeWindow()) {
@@ -1547,6 +1627,7 @@ void FlyWindowController::Prepare(BrowserWindowInterface* browser) {
   entry->second.closed_subscription =
       browser->RegisterBrowserDidClose(base::BindRepeating(
           &FlyWindowController::OnBrowserDidClose, weak_factory_.GetWeakPtr()));
+  ApplyProfilePreferences(browser->GetProfile(), preferences_);
   ScheduleWorkspaceRefresh();
 }
 
@@ -1586,6 +1667,8 @@ void FlyWindowController::Select(BrowserWindowInterface* browser, bool focus) {
     workspace_picker_->Cancel();
     tab_move_picker_->Cancel();
     bookmark_picker_->Cancel();
+    downloads_picker_->Cancel();
+    settings_menu_->Cancel();
     CancelHistory();
     keyboard_editor_->Cancel();
     selected_ = browser;
@@ -1603,6 +1686,14 @@ void FlyWindowController::Select(BrowserWindowInterface* browser, bool focus) {
     }
     status_bar_->SetBrowser(browser, std::move(workspace_name));
     UpdateWorkspaceHeader();
+    // Browser tests run without network access to the release feed and
+    // assert that starting writes no product preference.
+    if (!update_checked_ &&
+        !base::CommandLine::ForCurrentProcess()->HasSwitch("test-type")) {
+      update_checked_ = true;
+      MaybeShowWhatsNew();
+      CheckUpdates(false);
+    }
     next.host->SetVisible(true);
     next.widget->ShowInactive();
     if (!next.workspace_id.empty()) {
@@ -2621,6 +2712,8 @@ bool FlyWindowController::RunCommand(BrowserWindowInterface* browser,
     ToggleAddress(browser);
     return true;
   }
+  if (RunProductAction(browser, action))
+    return true;
   if (action == "move-tab-to-workspace")
     return ShowTabMovePicker(
         browser, browser->GetTabStripModel()->GetActiveWebContents());
@@ -2979,5 +3072,244 @@ void FlyWindowController::UpdateModeLabel() {
   status_->SetText(selected_ && selected_->GetProfile()->IsOffTheRecord()
                        ? u"PRIVATE · " + mode
                        : mode);
+}
+
+void FlyWindowController::ShowStatus(std::u16string text) {
+  if (preferences_.ReadBool("enable_diagnostics").value_or(false)) {
+    base::Time::Exploded now;
+    base::Time::Now().LocalExplode(&now);
+    diagnostics_events_.push_back(
+        base::UTF8ToUTF16(base::StringPrintf("%02d:%02d:%02d ", now.hour,
+                                             now.minute, now.second)) +
+        text);
+    if (diagnostics_events_.size() > 100)
+      diagnostics_events_.erase(diagnostics_events_.begin());
+  }
+  if (status_)
+    status_->SetText(std::move(text));
+}
+std::vector<Profile*> FlyWindowController::WorkspaceProfiles() const {
+  std::vector<Profile*> profiles;
+  for (const auto& [browser, entry] : entries_) {
+    if (entry.browser_closed)
+      continue;
+    auto* profile = browser->GetProfile();
+    if (std::ranges::find(profiles, profile) == profiles.end())
+      profiles.push_back(profile);
+  }
+  return profiles;
+}
+void FlyWindowController::ApplyProfilePreferencesEverywhere() {
+  // Only rewrite per-profile state when the relevant product settings move.
+  const std::string key =
+      (preferences_.ReadBool("web_notifications").value_or(true) ? "1" : "0") +
+      preferences_.ReadString("spellchecker_language").value_or("");
+  if (applied_profile_preferences_ == key)
+    return;
+  applied_profile_preferences_ = key;
+  for (auto* profile : WorkspaceProfiles())
+    ApplyProfilePreferences(profile, preferences_);
+  if (status_bar_)
+    status_bar_->SetNotificationsEnabled(
+        preferences_.ReadBool("web_notifications").value_or(true));
+}
+void FlyWindowController::ToggleDownloads(BrowserWindowInterface* browser) {
+  if (closing_)
+    return;
+  hints_->Cancel();
+  palette_->Cancel();
+  address_picker_->Cancel();
+  workspace_picker_->Cancel();
+  tab_move_picker_->Cancel();
+  bookmark_picker_->Cancel();
+  CancelHistory();
+  keyboard_editor_->Cancel();
+  const auto config = commands_.Read().value_or(DefaultKeyboardConfig());
+  downloads_picker_->ToggleItems(
+      browser->GetTabStripModel()->GetActiveWebContents(),
+      DownloadEntries(WorkspaceProfiles()),
+      config.shortcuts.at("toggle-downloads"), u"Search downloads", true,
+      true);
+}
+void FlyWindowController::ShowDiagnostics() {
+  if (closing_)
+    return;
+  if (diagnostics_widget_ && !diagnostics_widget_->IsClosed()) {
+    diagnostics_widget_->Close();
+    return;
+  }
+  diagnostics_widget_.reset();
+  size_t workspaces = 0;
+  if (const auto catalog = workspaces_.Read())
+    workspaces = catalog->items.size();
+  const auto report = DiagnosticsReport(workspaces, diagnostics_events_);
+  diagnostics_delegate_ = std::make_unique<views::DialogDelegate>();
+  auto* delegate = diagnostics_delegate_.get();
+  delegate->SetOwnershipOfNewWidget(
+      views::Widget::InitParams::CLIENT_OWNS_WIDGET);
+  delegate->SetModalType(ui::mojom::ModalType::kWindow);
+  delegate->SetTitle(u"Fly diagnostics");
+  delegate->SetButtonLabel(ui::mojom::DialogButton::kOk, u"Copy report");
+  delegate->SetButtonLabel(ui::mojom::DialogButton::kCancel, u"Close");
+  delegate->SetExtraView(std::make_unique<FlyButton>(
+      base::BindRepeating(
+          [](base::WeakPtr<FlyWindowController> window) {
+            if (window && window->selected_)
+              chrome::OpenTaskManager(window->selected_);
+          },
+          weak_factory_.GetWeakPtr()),
+      u"Task Manager"));
+  auto* label = delegate->SetContentsView(std::make_unique<views::Label>(report));
+  label->SetMultiLine(true);
+  label->SetHorizontalAlignment(gfx::ALIGN_LEFT);
+  label->SetSelectable(true);
+  label->SetBorder(views::CreateEmptyBorder(gfx::Insets(16)));
+  delegate->SetAcceptCallback(base::BindOnce(
+      [](std::u16string report) {
+        ui::ScopedClipboardWriter(ui::ClipboardBuffer::kCopyPaste)
+            .WriteText(report);
+      },
+      report));
+  diagnostics_widget_.reset(views::DialogDelegate::CreateDialogWidget(
+      delegate, desktop_->GetNativeWindow(), nullptr));
+  diagnostics_widget_->Show();
+}
+void FlyWindowController::CheckUpdates(bool manual) {
+  if (manual)
+    ShowStatus(u"Checking for updates…");
+  CheckForUpdates(base::BindOnce(
+      [](base::WeakPtr<FlyWindowController> window, bool manual,
+         UpdateCheckResult result) {
+        if (!window || window->closing_)
+          return;
+        if (!result.ok) {
+          if (manual)
+            window->ShowStatus(u"Could not check for updates.");
+          return;
+        }
+        if (!result.newer) {
+          if (manual)
+            window->ShowStatus(u"Fly " + base::UTF8ToUTF16(std::string_view(kFlyVersion)) +
+                               u" is the latest version.");
+          return;
+        }
+        window->ShowStatus(u"Fly " + base::UTF8ToUTF16(result.latest) +
+                           u" is available. Check for Updates opens it.");
+        if (manual && window->selected_) {
+          NavigateParams params(window->selected_, result.page,
+                                ui::PAGE_TRANSITION_AUTO_TOPLEVEL);
+          params.disposition = WindowOpenDisposition::NEW_FOREGROUND_TAB;
+          Navigate(&params);
+        }
+      },
+      weak_factory_.GetWeakPtr(), manual));
+}
+void FlyWindowController::MaybeShowWhatsNew() {
+  if (whats_new_checked_ || !selected_ ||
+      selected_->GetProfile()->IsOffTheRecord())
+    return;
+  whats_new_checked_ = true;
+  const auto seen = preferences_.ReadString("last_seen_version");
+  if (!seen || !preferences_.CanEdit() || *seen == kFlyVersion)
+    return;
+  preferences_.SetString("last_seen_version", kFlyVersion);
+  // A new profile has nothing to catch up on; an upgraded one does.
+  if (seen->empty() || base::Version(*seen) >= base::Version(kFlyVersion))
+    return;
+  NavigateParams params(selected_, WhatsNewURL(*seen),
+                        ui::PAGE_TRANSITION_AUTO_TOPLEVEL);
+  params.disposition = WindowOpenDisposition::NEW_FOREGROUND_TAB;
+  Navigate(&params);
+}
+bool FlyWindowController::RunProductAction(BrowserWindowInterface* browser,
+                                           std::string_view action) {
+  auto* contents = browser->GetTabStripModel()->GetActiveWebContents();
+  const auto open = [&](const GURL& url, Profile* profile = nullptr) {
+    NavigateParams params(profile ? profile : browser->GetProfile(), url,
+                          ui::PAGE_TRANSITION_AUTO_TOPLEVEL);
+    if (!profile)
+      params.browser = browser;
+    params.disposition = WindowOpenDisposition::NEW_FOREGROUND_TAB;
+    Navigate(&params);
+  };
+  if (action == "toggle-menu-bar" ||
+      action == "toggle-native-menu-visibility") {
+    auto point = desktop_->GetContentsView()->GetBoundsInScreen().origin();
+    point.Offset(14, 14);
+    settings_menu_->Show(desktop_.get(), point);
+    return true;
+  }
+  if (action == "open-task-manager") {
+    chrome::OpenTaskManager(browser);
+    return true;
+  }
+  if (action == "toggle-downloads") {
+    ToggleDownloads(browser);
+    return true;
+  }
+  if (action == "toggle-reader-view") {
+    ToggleReaderView(
+        contents, base::BindOnce(
+                      [](base::WeakPtr<FlyWindowController> window, bool ok) {
+                        if (window && !ok)
+                          window->ShowStatus(
+                              u"Reader view is not available for this page.");
+                      },
+                      weak_factory_.GetWeakPtr()));
+    return true;
+  }
+  if (action == "open-scripts-dir" || action == "open-styles-dir" ||
+      action == "open-script-storage-dir") {
+    OpenUserContentDirectory(browser->GetProfile(),
+                             action == "open-scripts-dir"  ? "scripts"
+                             : action == "open-styles-dir" ? "styles"
+                                                           : "script-storage");
+    return true;
+  }
+  if (action == "test-google-signin") {
+    // A fresh off-the-record profile: no workspace cookies or tokens.
+    open(GURL("https://accounts.google.com/"),
+         browser->GetProfile()->GetOriginalProfile()->GetPrimaryOTRProfile(
+             /*create_if_needed=*/true));
+    return true;
+  }
+  if (action == "check-for-updates") {
+    CheckUpdates(true);
+    return true;
+  }
+  if (action == "show-whats-new") {
+    open(WhatsNewURL(""));
+    return true;
+  }
+  if (action == "open-diagnostics") {
+    ShowDiagnostics();
+    return true;
+  }
+  if (action == "toggle-diagnostics-recording") {
+    const bool enabled =
+        !preferences_.ReadBool("enable_diagnostics").value_or(false);
+    if (preferences_.SetBool("enable_diagnostics", enabled)) {
+      if (!enabled)
+        diagnostics_events_.clear();
+      ShowStatus(enabled ? u"Diagnostics recording on (memory only)."
+                         : u"Diagnostics recording off; events cleared.");
+    }
+    return true;
+  }
+  if (action == "toggle-notifications") {
+    const bool enabled =
+        !preferences_.ReadBool("web_notifications").value_or(true);
+    if (preferences_.SetBool("web_notifications", enabled))
+      ShowStatus(enabled ? u"Web notifications on." : u"Web notifications off.");
+    return true;
+  }
+  if (action == "focus-nav-buttons") {
+    FocusSidebar();
+    if (new_tab_button_ && sidebar_content_->Contains(
+            desktop_->GetFocusManager()->GetFocusedView()))
+      new_tab_button_->RequestFocus();
+    return true;
+  }
+  return false;
 }
 }  // namespace fly

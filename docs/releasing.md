@@ -20,11 +20,12 @@ While Fly is below 1.0 there is no major number to spend, so **minor carries wha
 
 `package.json` declares it. That is the only place it is decided. Electron reports it through `app.getVersion()`, so Preferences, the Welcome view, diagnostics reports and the update check all read it from there, and electron-builder names every package after it.
 
-Two files cannot read it and hold a copy, written by `scripts/version-sync.js`:
+Three files cannot read it and hold a copy, written by `scripts/version-sync.js`:
 
 ```
 package-lock.json            (twice: the root, and packages[""])
 modules/userScriptShim.js    (GM_info.version, injected into pages)
+chromium/overlay/fly/fly_version.h   (native Fly: update check, What's New, diagnostics)
 ```
 
 Copies drift, so `npm test` runs `node scripts/version-sync.js --check`, and fails if any copy disagrees. The release workflow refuses a tag that names a different version from the tree it points at.

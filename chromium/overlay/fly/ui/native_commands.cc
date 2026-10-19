@@ -260,9 +260,7 @@ constexpr std::pair<std::string_view, int> kNativeMappings[] = {
     {"print-page", IDC_PRINT},
     {"toggle-pin-tab", IDC_WINDOW_PIN_TAB},
     {"focus-webview", IDC_FOCUS_WEB_CONTENTS_PANE},
-    {"focus-nav-buttons", IDC_FOCUS_TOOLBAR},
-    {"toggle-address", IDC_FOCUS_LOCATION},
-    {"toggle-menu-bar", IDC_SHOW_APP_MENU}};
+    {"toggle-address", IDC_FOCUS_LOCATION}};
 class PageKeyboardState
     : public content::WebContentsObserver,
       public content::WebContentsUserData<PageKeyboardState> {
@@ -579,6 +577,19 @@ bool NativeCommandAvailable(BrowserWindowInterface* browser,
     return window && window->preferences().CanEditClock();
   }
   if (action == "toggle-help" || action == "open-keyboard-settings")
+    return FlyWindowController::GetIfCreated() != nullptr;
+  // Fly-owned surfaces (the Chromium toolbar and app menu are hidden).
+  constexpr std::string_view kProductActions[] = {
+      "toggle-menu-bar",        "toggle-native-menu-visibility",
+      "focus-nav-buttons",      "toggle-downloads",
+      "toggle-reader-view",     "open-scripts-dir",
+      "open-styles-dir",        "open-script-storage-dir",
+      "test-google-signin",     "check-for-updates",
+      "show-whats-new",         "open-diagnostics",
+      "toggle-diagnostics-recording", "toggle-notifications",
+      "open-task-manager"};
+  if (std::ranges::find(kProductActions, action) !=
+      std::end(kProductActions))
     return FlyWindowController::GetIfCreated() != nullptr;
   if (action == "toggle-private-mode") {
     const auto* window = FlyWindowController::GetIfCreated();

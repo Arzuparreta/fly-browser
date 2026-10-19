@@ -3,6 +3,8 @@
 // Fly repository.
 #include "fly/preferences/preferences_service.h"
 
+#include "base/command_line.h"
+
 #include "base/json/json_reader.h"
 #include "components/prefs/testing_pref_service.h"
 #include "fly/commands/generated_contract.h"
@@ -393,6 +395,46 @@ TEST_F(PreferencesServiceTest, MalformedFutureAndPolicyThemeDataIsPreserved) {
   EXPECT_FALSE(service_.ToggleTheme());
   EXPECT_FALSE(service_.SetWebsiteThemeSync(false));
   EXPECT_EQ(policy, prefs_.GetDict(kPreferencesPref));
+}
+TEST_F(PreferencesServiceTest, RemainingSettingsUseElectronDefaultsAndValidate) {
+  EXPECT_EQ(false, service_.ReadBool("disable_gpu"));
+  EXPECT_EQ(true, service_.ReadBool("background_throttling"));
+  EXPECT_EQ(true, service_.ReadBool("web_notifications"));
+  EXPECT_EQ(4, service_.ReadInt("process_limit"));
+  EXPECT_EQ("en-GB", service_.ReadString("spellchecker_language"));
+  EXPECT_EQ("normal", service_.ReadString("interface_scale"));
+  EXPECT_FALSE(service_.ReadBool("unknown"));
+  EXPECT_EQ(nullptr, prefs_.GetUserPref(kPreferencesPref));
+  EXPECT_FALSE(service_.SetInt("process_limit", 0));
+  EXPECT_FALSE(service_.SetString("interface_scale", "huge"));
+  EXPECT_FALSE(service_.SetThemeColor(true, "accent", "red"));
+  EXPECT_TRUE(service_.SetBool("disable_gpu", true));
+  EXPECT_TRUE(service_.SetInt("process_limit", 2));
+  EXPECT_TRUE(service_.SetString("interface_scale", "large"));
+  EXPECT_TRUE(service_.SetThemeColor(false, "accent", "#00AA11"));
+  PreferencesService restarted(prefs_);
+  EXPECT_EQ(true, restarted.ReadBool("disable_gpu"));
+  EXPECT_EQ(2, restarted.ReadInt("process_limit"));
+  EXPECT_EQ("large", restarted.ReadString("interface_scale"));
+  EXPECT_EQ("#00aa11", restarted.ReadThemeColor(false, "accent"));
+  EXPECT_EQ("", restarted.ReadThemeColor(true, "accent"));
+  EXPECT_TRUE(restarted.ResetThemeColors());
+  EXPECT_EQ("", restarted.ReadThemeColor(false, "accent"));
+  base::CommandLine command_line(base::CommandLine::NO_PROGRAM);
+  PreferencesService::ApplyStartupSwitches(prefs_, command_line);
+  EXPECT_TRUE(command_line.HasSwitch("disable-gpu"));
+  EXPECT_FALSE(command_line.HasSwitch("disable-background-timer-throttling"));
+  EXPECT_EQ("2", command_line.GetSwitchValueASCII("renderer-process-limit"));
+}
+TEST_F(PreferencesServiceTest, MalformedRemainingSettingsRequireRecovery) {
+  prefs_.SetDict(kPreferencesPref,
+                 base::DictValue().Set("schema", 1).Set(
+                     "values", base::DictValue().Set("process_limit", "four")));
+  EXPECT_FALSE(service_.ReadBool("disable_gpu"));
+  EXPECT_FALSE(service_.SetBool("disable_gpu", true));
+  base::CommandLine command_line(base::CommandLine::NO_PROGRAM);
+  PreferencesService::ApplyStartupSwitches(prefs_, command_line);
+  EXPECT_EQ("4", command_line.GetSwitchValueASCII("renderer-process-limit"));
 }
 }  // namespace
 }  // namespace fly

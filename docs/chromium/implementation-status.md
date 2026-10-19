@@ -25,6 +25,21 @@ workspace and clock badges); the clock wakes at the next visible change rather
 than every second. Preferences builds the first 25 keyboard actions at open
 (the whole catalogue took about a second) with a "Show all" control.
 
+The same pull request adds the remaining Fly actions that the hidden toolbar or
+the earlier native work did not cover (`fly/ui/fly_actions.{h,cc}`, patch 0024):
+the Fly settings menu, downloads picker, reader view on Chromium's DOM distiller,
+user content folders, Google sign-in test in a fresh off-the-record profile,
+update check (GitHub releases, at start and on demand), What's New after an
+upgrade, diagnostics dialog and in-memory recording, web notification default and
+focus of the sidebar navigation controls. `PreferencesService` validates the
+remaining Electron settings with their defaults, and
+`ApplyStartupSwitches` (called after Chromium converts about:flags in
+`chrome_feature_list_creator.cc`) applies GPU, background throttling, renderer
+process limit and the DOM distiller switch before any child process starts.
+`fly/fly_version.h` carries the product version, written by
+`scripts/version-sync.js`. Extensions, user scripts/styles, import and packages
+remain.
+
 Local validation uses the engine checkout `/mnt/storage/fly-chromium`, output
 `src/out/FlyNative`, `native.py refresh-overlay --include-upstream` followed by
 an incremental `autoninja` of `chrome fly_unittests fly_browser_tests`. Browser

@@ -93,6 +93,7 @@ class KeyboardEditor : public views::TextfieldController,
   void RefreshSearchSection();
   void SaveSearchSetting(std::string action);
   void ChangeAppearance(std::string key);
+  void ApplyProductTexts();
   void CycleClockFormat();
   void CycleSuspendTimeout();
   void ClearAppearance();
@@ -127,6 +128,9 @@ class KeyboardEditor : public views::TextfieldController,
   raw_ptr<views::View> rows_ = nullptr;
   raw_ptr<views::ScrollView> rows_scroll_ = nullptr;
   bool show_all_rows_ = false;
+  raw_ptr<views::Textfield> spellcheck_ = nullptr;
+  raw_ptr<views::MdTextButton> process_limit_ = nullptr;
+  std::map<std::string, raw_ptr<views::Textfield>> color_fields_;
   raw_ptr<views::Label> status_ = nullptr;
   raw_ptr<views::MdTextButton> save_ = nullptr;
   KeyboardConfig original_;

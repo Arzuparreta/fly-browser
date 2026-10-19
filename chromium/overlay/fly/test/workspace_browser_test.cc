@@ -15,6 +15,10 @@
 #include "fly/sessions/tab_identity.h"
 #include "fly/ui/command_palette.h"
 #include "fly/ui/fly_theme.h"
+#include "fly/ui/fly_actions.h"
+#include "chrome/browser/content_settings/host_content_settings_map_factory.h"
+#include "components/content_settings/core/browser/host_content_settings_map.h"
+#include "components/dom_distiller/core/url_utils.h"
 #include "fly/ui/fly_window_controller.h"
 #include "fly/ui/hint_controller.h"
 #include "fly/ui/history_service.h"
@@ -3632,6 +3636,83 @@ IN_PROC_BROWSER_TEST_F(FlyWorkspaceBrowserTest,
   const auto sites = restarted.Read({{url.spec(), base::Time::Now()}});
   ASSERT_TRUE(sites);
   EXPECT_TRUE(sites->empty());
+}
+
+IN_PROC_BROWSER_TEST_F(FlyWorkspaceBrowserTest,
+                       NativeSettingsMenuEditsStartupAndSidebarSettings) {
+  auto& window = FlyWindowController::Get();
+  ASSERT_TRUE(InvokeNativeCommand(browser(), "toggle-menu-bar"));
+  auto* menu = window.settings_menu().model_for_testing();
+  ASSERT_TRUE(menu);
+  EXPECT_GT(menu->GetItemCount(), 15u);
+  EXPECT_FALSE(window.settings_menu().IsCommandIdChecked(1));
+  window.settings_menu().ExecuteCommand(1, 0);
+  EXPECT_EQ(true, window.preferences().ReadBool("disable_gpu"));
+  window.settings_menu().ExecuteCommand(102, 0);
+  EXPECT_EQ(2, window.preferences().ReadInt("process_limit"));
+  EXPECT_TRUE(window.settings_menu().IsCommandIdChecked(102));
+  window.settings_menu().ExecuteCommand(230, 0);
+  EXPECT_EQ(30, window.preferences().ReadSuspendTimeoutMinutes());
+  window.settings_menu().Cancel();
+}
+
+IN_PROC_BROWSER_TEST_F(FlyWorkspaceBrowserTest,
+                       NativeNotificationsToggleChangesEveryWorkspaceDefault) {
+  auto* second = SecondWorkspace();
+  ASSERT_TRUE(second);
+  auto setting = [](BrowserWindowInterface* window) {
+    return HostContentSettingsMapFactory::GetForProfile(window->GetProfile())
+        ->GetDefaultContentSetting(ContentSettingsType::NOTIFICATIONS);
+  };
+  EXPECT_EQ(CONTENT_SETTING_ASK, setting(browser()));
+  ASSERT_TRUE(InvokeNativeCommand(browser(), "toggle-notifications"));
+  EXPECT_EQ(false, FlyWindowController::Get().preferences().ReadBool(
+                       "web_notifications"));
+  EXPECT_EQ(CONTENT_SETTING_BLOCK, setting(browser()));
+  EXPECT_EQ(CONTENT_SETTING_BLOCK, setting(second));
+  ASSERT_TRUE(InvokeNativeCommand(second, "toggle-notifications"));
+  EXPECT_EQ(CONTENT_SETTING_ASK, setting(browser()));
+  EXPECT_EQ(CONTENT_SETTING_ASK, setting(second));
+}
+
+IN_PROC_BROWSER_TEST_F(FlyWorkspaceBrowserTest,
+                       NativeDownloadsAndDiagnosticsSurfacesOpenAndClose) {
+  ASSERT_TRUE(ui_test_utils::NavigateToURL(
+      browser(), embedded_test_server()->GetURL("/title1.html")));
+  auto& window = FlyWindowController::Get();
+  ASSERT_TRUE(InvokeNativeCommand(browser(), "toggle-downloads"));
+  auto& picker = window.downloads_picker();
+  ASSERT_TRUE(base::test::RunUntil([&] { return picker.active(); }));
+  EXPECT_EQ(1u, picker.result_count_for_testing());
+  picker.Cancel(true);
+  ASSERT_TRUE(
+      base::test::RunUntil([&] { return !picker.search_for_testing(); }));
+  ASSERT_TRUE(InvokeNativeCommand(browser(), "open-diagnostics"));
+  auto* dialog = window.diagnostics_dialog_for_testing();
+  ASSERT_TRUE(dialog);
+  EXPECT_TRUE(dialog->IsVisible());
+  ASSERT_TRUE(InvokeNativeCommand(browser(), "open-diagnostics"));
+  ASSERT_TRUE(base::test::RunUntil([&] {
+    auto* current = window.diagnostics_dialog_for_testing();
+    return !current || current->IsClosed();
+  }));
+}
+
+IN_PROC_BROWSER_TEST_F(FlyWorkspaceBrowserTest,
+                       NativeReaderViewDistilsArticleAndReturns) {
+  const GURL article =
+      embedded_test_server()->GetURL("/dom_distiller/simple_article.html");
+  ASSERT_TRUE(ui_test_utils::NavigateToURL(browser(), article));
+  auto* contents = Active(browser());
+  ASSERT_TRUE(InvokeNativeCommand(browser(), "toggle-reader-view"));
+  ASSERT_TRUE(base::test::RunUntil([&] {
+    return dom_distiller::url_utils::IsDistilledPage(
+        contents->GetLastCommittedURL());
+  }));
+  ASSERT_TRUE(content::WaitForLoadStop(contents));
+  ASSERT_TRUE(InvokeNativeCommand(browser(), "toggle-reader-view"));
+  ASSERT_TRUE(base::test::RunUntil(
+      [&] { return contents->GetLastCommittedURL() == article; }));
 }
 
 class FlyHistoryRestoreBrowserTest : public FlyWorkspaceBrowserTest {};

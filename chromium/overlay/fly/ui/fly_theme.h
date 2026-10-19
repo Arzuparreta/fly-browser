@@ -50,6 +50,9 @@ enum class FlyFace { kSans, kMono, kDisplay };
 gfx::FontList FlyFont(FlyFace face,
                       int size,
                       gfx::Font::Weight weight = gfx::Font::Weight::NORMAL);
+// Electron's "large" interface scale (1.25) applies to every Fly font.
+void SetFlyInterfaceScale(float scale);
+float GetFlyInterfaceScale();
 // Makes the bundled product fonts (out/<dir>/fly_fonts) available to native UI.
 void RegisterFlyFonts();
 
@@ -98,6 +101,8 @@ class FlyButton : public views::MdTextButton {
   void OnThemeChanged() override;
   void StateChanged(ButtonState old_state) override;
   void OnPaintBackground(gfx::Canvas* canvas) override;
+  // MdTextButton drops its padding for empty text; Fly keeps the custom one.
+  void SetText(std::u16string_view text) override;
   void OnFocus() override;
   void OnBlur() override;
 
@@ -139,6 +144,9 @@ class FlyLabel : public views::Label {
 
  private:
   Tone tone_;
+  FlyFace face_;
+  int size_;
+  gfx::Font::Weight weight_;
 };
 }  // namespace fly
 
