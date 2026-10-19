@@ -3,6 +3,54 @@
 The native port is **incomplete**. Electron remains the production runtime.
 Full product, migration and packaged application acceptance remain outstanding.
 
+## Active execution state
+
+Primary main remains `00d6a2e`. PR
+[126](https://github.com/Arzuparreta/fly-browser/pull/126) is ready for review at
+`bbb8a09`, with one `impact:none` label and passing ordinary checks. Latest-head
+manual object matrix 39265354608 and service matrix 39265359598 are in progress;
+wait for all jobs and audit the downloaded evidence before merging. Earlier
+8ef4793/e1aa6dd matrices were cancelled and are not accepted-head evidence.
+
+The complete `bbb8a09` Linux run passes 59 service cases, all 71 browser
+declarations (69 main plus two PRE stages), H.264/AAC video with MV3 and PCM
+audio. Its independent audit passes: fingerprint
+`e77bf94a7625b99aa5fbe6f7ce4a4c67b3bab0bbe03fc98f5f0db93b3278b0b1`,
+summary SHA256
+`7376b157daea697650127e67ddf8094e0819ac3f5b160eca3fa054959b221b81`.
+The complete accepted checkpoint is archived under external
+`evidence/runtime-bbb8a09-before-window-controls`. The earlier failed full run
+is separate in `evidence/runtime-e1aa6dd-removal-pointer-failure`.
+
+Development continues in the hints worktree on
+`codex/chromium-native-window-controls`, containing PR 126 plus native optional
+minimize/maximize/restore/close controls and the corresponding live Appearance
+preference. This branch has not been pushed or accepted. All 62 service cases pass. At
+`ee16406`, all three new browser cases pass together on owned Xvfb/Openbox:
+settings/focus/recovery and cancellation of queued hidden actions, actual shared
+minimize/maximize/restore, and actual close-button/beforeunload cancellation.
+`evidence/native-window-controls-directed-audit.json` independently checks the
+exact three-case set and summary hash. Earlier failed attempts remain preserved.
+The sidebar worktree is frozen at `ee16406` after this directed retest. Check
+`fly-chromium-native-build.service` before changing frozen source. A complete
+74-case run on the real virtual window manager remains required. The old current
+full-build metadata is historical after these directed rebuilds; configure and
+build through native.py to capture fresh provenance before media/full acceptance.
+
+Openbox exposed a pre-existing activation/blank-page focus recursion; `7b52152`
+separates native control activation from page focus restoration. The next tests
+then exposed new control references released after desktop destruction and
+focus retained in hidden controls; `bc769d0` fixes both. Preserve the failed
+attempt directories and GDB log. Tests use an extracted official signed Openbox
+package only on owned displays; no package was installed into the owner desktop.
+Retained Electron recorder/editable regression passes again with disposable data
+in `evidence/native-window-controls-retained-keyboard.log`.
+
+The [native parity inventory](./native-parity.md) records each of the 82 actions
+and 28 preferences individually. Seventeen actions still have no native route;
+routed actions also retain explicit UX/platform/recovery gaps. Do not treat the
+inventory or either PR as completed M0–M6 acceptance.
+
 ## Current checkpoint
 
 Merged main is `00d6a2e` through PR
@@ -222,6 +270,8 @@ native extension registration and two visible split panes in one workspace.
 No mixed-profile tab strip, visibility override or cookie swapping is accepted.
 Actual upstream ownership seams must be inspected before implementing adapters.
 The [pinned-source audit](./upstream-ownership.md) records the real native seams.
+The reviewed [native action/preference inventory](./native-parity.md) records
+explicit partial/pending status for every action and preference.
 The generated [parity ledger](./parity-ledger.md) and
 `chromium/baseline-contracts.json` capture 82 actions, 46 explicit palette entries,
 28 preferences, 16 persisted inputs and the full product-feature checklist.
