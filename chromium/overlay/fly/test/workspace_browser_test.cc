@@ -2055,6 +2055,67 @@ IN_PROC_BROWSER_TEST_F(FlyWorkspaceBrowserTest,
 }
 
 IN_PROC_BROWSER_TEST_F(FlyWorkspaceBrowserTest,
+                       WorkspaceProfileCompletionRejectsRetiredAndFutureCatalogs) {
+  auto* first = browser();
+  auto& window = FlyWindowController::Get();
+  auto* manager = g_browser_process->profile_manager();
+  auto* prefs = g_browser_process->local_state();
+  WorkspaceService service(*prefs);
+  const auto before = service.Read();
+  ASSERT_TRUE(before);
+  ASSERT_EQ(1u, before->items.size());
+  auto has_browser = [](Profile* profile) {
+    bool found = false;
+    GlobalBrowserCollection::GetInstance()->ForEach(
+        [&](BrowserWindowInterface* model) {
+          found |= model->GetProfile() == profile;
+          return true;
+        });
+    return found;
+  };
+  window.CreateWorkspace();
+  const auto created = service.Read();
+  ASSERT_TRUE(created);
+  ASSERT_EQ(2u, created->items.size());
+  const auto retired = created->items.back();
+  const auto retired_path = manager->user_data_dir().AppendASCII(
+      retired.profile_directory);
+  // No browser exists yet: retire only the metadata while profile I/O is
+  // pending, before allowing the already queued completion to run.
+  ASSERT_TRUE(service.Remove(retired.id));
+  base::test::TestFuture<Profile*> retired_ready;
+  manager->CreateProfileAsync(retired_path, retired_ready.GetCallback());
+  auto* retired_profile = retired_ready.Get();
+  ASSERT_TRUE(retired_profile);
+  base::RunLoop().RunUntilIdle();
+  EXPECT_FALSE(has_browser(retired_profile));
+  EXPECT_EQ(first, window.selected_browser_for_testing());
+  ASSERT_TRUE(service.Read());
+  EXPECT_EQ(before->items, service.Read()->items);
+  EXPECT_FALSE(service.Add(retired.name, retired.profile_directory));
+
+  window.CreateWorkspace();
+  const auto pending = service.Read();
+  ASSERT_TRUE(pending);
+  ASSERT_EQ(2u, pending->items.size());
+  const auto pending_path = manager->user_data_dir().AppendASCII(
+      pending->items.back().profile_directory);
+  const auto valid = prefs->GetDict(kWorkspacesPref).Clone();
+  auto future = valid.Clone();
+  future.Set("schema", 99);
+  prefs->SetDict(kWorkspacesPref, future.Clone());
+  base::test::TestFuture<Profile*> future_ready;
+  manager->CreateProfileAsync(pending_path, future_ready.GetCallback());
+  auto* future_profile = future_ready.Get();
+  ASSERT_TRUE(future_profile);
+  base::RunLoop().RunUntilIdle();
+  EXPECT_FALSE(has_browser(future_profile));
+  EXPECT_EQ(first, window.selected_browser_for_testing());
+  EXPECT_EQ(future, prefs->GetDict(kWorkspacesPref));
+  prefs->SetDict(kWorkspacesPref, valid.Clone());
+}
+
+IN_PROC_BROWSER_TEST_F(FlyWorkspaceBrowserTest,
                        WorkspacePickerUsesNativeKeysAndRejectsStaleChoices) {
   auto* first = browser();
   ASSERT_TRUE(ui_test_utils::NavigateToURL(

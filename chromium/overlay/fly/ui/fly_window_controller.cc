@@ -45,6 +45,7 @@
 #include "content/public/browser/media_session.h"
 #include "ui/aura/window.h"
 #include "ui/base/ime/input_method.h"
+#include "ui/base/base_window.h"
 #include "ui/base/ime/text_input_client.h"
 #include "ui/base/ime/text_input_type.h"
 #include "ui/events/event.h"
@@ -886,9 +887,21 @@ void FlyWindowController::CreateWorkspace() {
   OpenWorkspace(added->id);
 }
 
+bool FlyWindowController::WorkspaceMatchesProfile(std::string_view id,
+                                                  Profile* profile) const {
+  const auto catalog = workspaces_.Read();
+  if (!profile || profile->IsOffTheRecord() || !catalog)
+    return false;
+  const auto item = std::ranges::find(catalog->items, id, &Workspace::id);
+  return item != catalog->items.end() &&
+         profile->GetPath() == g_browser_process->profile_manager()
+                                  ->user_data_dir()
+                                  .AppendASCII(item->profile_directory);
+}
+
 void FlyWindowController::OnProfileReady(std::string id, Profile* profile) {
   creating_profile_ = false;
-  if (!profile || closing_) {
+  if (closing_ || !WorkspaceMatchesProfile(id, profile)) {
     return;
   }
   BrowserWindowCreateParams params(*profile, true);
@@ -896,14 +909,19 @@ void FlyWindowController::OnProfileReady(std::string id, Profile* profile) {
   CreateBrowserWindow(std::move(params),
                       base::BindOnce(
                           [](base::WeakPtr<FlyWindowController> window,
-                             BrowserWindowInterface* browser) {
-                            if (!window || !browser) {
+                             std::string id, BrowserWindowInterface* browser) {
+                            if (!browser)
+                              return;
+                            if (!window || window->closing_ ||
+                                !window->WorkspaceMatchesProfile(
+                                    id, browser->GetProfile())) {
+                              browser->GetWindow()->Close();
                               return;
                             }
                             OpenNativeBlankTab(browser);
                             window->Select(browser, true);
                           },
-                          weak_factory_.GetWeakPtr()));
+                          weak_factory_.GetWeakPtr(), std::move(id)));
 }
 
 void FlyWindowController::OnBrowserDidClose(BrowserWindowInterface* browser) {

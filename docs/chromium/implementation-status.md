@@ -1656,3 +1656,19 @@ video/MV3 and audio/PCM. The independent summary audit reports no failures and
 matching source/binary provenance. Its evidence is preserved before starting the
 combined discard-identity and retained-freezing run; neither new lifecycle case
 inherits this earlier result.
+
+
+### Asynchronous workspace creation validation
+
+Profile-load and browser-factory completion now both re-resolve the requested
+stable workspace ID against the current catalog and exact ProfileManager child
+path. Retirement, schema recovery, profile reassignment or quit while the load
+is pending cannot open an unmapped recovery browser, create a fresh blank tab or
+switch the selected workspace. A browser created just before the second check
+fails is closed through the native window path before adding a tab. No original
+profile directory is deleted.
+
+A browser case starts real asynchronous profile creation, retires metadata or
+installs a future catalog before the queued completion, waits on a second native
+profile-ready callback and verifies no browser was opened, no selection changed
+and the retired/future data stayed intact. Runtime execution remains pending.

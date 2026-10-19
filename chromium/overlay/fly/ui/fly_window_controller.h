@@ -138,6 +138,7 @@ class FlyWindowController : public views::WidgetDelegate,
   void SelectWindow(base::WeakPtr<BrowserWindowInterface> browser);
   void OpenWorkspace(std::string id);
   void OnProfileReady(std::string id, Profile* profile);
+  bool WorkspaceMatchesProfile(std::string_view id, Profile* profile) const;
   void OnBrowserDidClose(BrowserWindowInterface* browser);
   void TogglePrivate(BrowserWindowInterface* browser);
   void RequestClose(views::Widget::ClosedReason reason);
