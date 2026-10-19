@@ -564,7 +564,11 @@ IN_PROC_BROWSER_TEST_F(FlyWorkspaceBrowserTest,
   ASSERT_TRUE(close);
   close->RequestFocus();
   ASSERT_TRUE(base::test::RunUntil([&] { return close->HasFocus(); }));
+  auto browser_alive = browser()->GetWeakPtr();
+  views::test::ButtonTestApi(close).NotifyDefaultMouseClick();
   ASSERT_TRUE(window.preferences().SetWindowControlsVisible(false));
+  base::RunLoop().RunUntilIdle();
+  ASSERT_TRUE(browser_alive);
   EXPECT_FALSE(controls->GetVisible());
   EXPECT_FALSE(close->HasFocus());
   const auto future =
