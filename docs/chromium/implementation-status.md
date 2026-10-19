@@ -5,90 +5,85 @@ Full product, migration and packaged application acceptance remain outstanding.
 
 ## Current checkpoint
 
-Merged main is `485d4bc` through PR
-[114](https://github.com/Arzuparreta/fly-browser/pull/114). The active integration
-PR is [115](https://github.com/Arzuparreta/fly-browser/pull/115), draft at
-`059735e`, labelled `impact:none`. Ordinary checks pass. Latest-head manual
-matrices 39185208752 (objects) and 39185210928 (services) are still running;
-inspect their actual conclusions before merging. Superseded PRs 116–123 are
+Merged main is `af2ad35` through PR
+[115](https://github.com/Arzuparreta/fly-browser/pull/115), squash-merged after
+both latest-head hosted matrices and ordinary checks passed. Its branch was
+deleted and the primary checkout pulled to main. Exactly one `impact:none`
+label covered the development-only integration. Superseded PRs 116–123 remain
 closed with their review history preserved.
 
-The complete nineteen-patch Linux build at `059735e` passes all 53 native service
-cases, both PRE cases and all 45 main browser cases. The independent audit checks
-all declared main cases, a newly written summary, source hash, clean commit and
-exact overlay fingerprint. Session restart, explicit command-line blank restore,
-profile isolation, split visibility, extension window topology, hints, unrelated
-frame deletion, overlay focus, keyboard recording/editing, pointer tab menus,
-focused cross-origin scrolling and beforeunload cancellation pass in these
-specific fixtures. This does not establish the full product acceptance matrix.
+At PR 115 head `059735e`, manual matrices 39185208752 (objects) and
+39185210928 (services) pass on Linux, macOS and Windows. Downloaded artifacts
+independently verify exactly 53 official service cases per platform, clean commit
+and current engine lock, and exactly 43 nonempty source-owned compiler outputs
+on Linux/Windows and 34 on macOS. The audit is
+`/mnt/storage/fly-chromium/evidence/ci-059735e-audit.json`. macOS excludes the
+unimplemented desktop adapter; objects/services do not establish a linked
+Windows/macOS browser or an installable package.
 
-The binary SHA-256 is
-`1aa6fc01120117393bb612638dcd018c2f233f775b354383da2917edbe610159`;
-the overlay fingerprint is
-`94cb30c1add91be1180568de79d33f4b11988ef80715e2a86edc9517843f9861`.
-Sandboxed H.264/AAC video with MV3 and PCM audio fixtures pass with complete
-runtime-file provenance: `control-smoke-8ODI3e` and `control-smoke-Tpak3B`.
-A real compositor screenshot at `native-current-desktop-gpe2BY` confirms rendered
-sidebar rows and an editable page; the Chromium toolbar remains visible and is
-not the completed Fly interface. All profiles are disposable. No owner profile
-has been read or migrated.
+Active development continues in PR
+[124](https://github.com/Arzuparreta/fly-browser/pull/124), branch
+`codex/chromium-native-pointer-page-focus`, based on that merged main and
+labelled `impact:none`. The fifteen follow-up commits were replayed onto main;
+`git range-diff` verified each change unchanged. Original runtime commit IDs below
+remain the actual provenance recorded in archived evidence. Latest-head hosted
+validation for PR 124 must pass separately; PR 115 results are not inherited.
 
-Verified evidence is archived outside Git under
-`/mnt/storage/fly-chromium/evidence/runtime-059735e-before-blank-navigation`,
-including exact browser summaries and the 53-case service identity audit.
-Earlier failed attempts remain preserved separately. The menu timeout at
-`919c32e` was fixed by creating its second profile before entering MenuRunner's
-nested loop; workspace switching and stale-command rejection still happen inside
-the actual menu callback. No acceptance assertion was removed.
+The complete nineteen-patch Linux checkpoint at original `52d0f65` (rebased
+unchanged as `5970d1c`) passes all 53 service cases and all 60 browser declarations
+(58 main cases and two PRE stages), plus sandboxed H.264/AAC video with MV3 and
+PCM audio. The independent audit checks source-declared cases, summary freshness
+and hash, clean source, exact overlay fingerprint and binary/runtime provenance.
+Its fingerprint is
+`702636761a1e5cd1a670d25c1bf285592fef284eb7a36315e6878e89085c2d8f`.
+This covers product blank navigation, global mute and native media handlers/player
+fallback, docked DevTools, searchable workspace/private selection, empty desktop,
+workspace ordering and rename, retained-document suspension, workspace-scoped
+resume, global playback waking a frozen paused session, both native memory discard
+paths and stable identity/collision protection. It is not full product acceptance.
 
-The preceding `98ecc7c` manual matrices both passed on all three platforms:
-39170219527 compiled 42 changed objects on Linux/Windows and 33 on macOS;
-39170220819 ran exactly 53 official service cases per system. Downloaded case
-summaries and nonempty compiler-output hashes were independently checked.
-macOS objects exclude the still-unimplemented native desktop adapter. Object and
-service passes do not establish a linked macOS/Windows browser or installable
-package. All 78 Python tooling contracts, retained Electron recorder/editable
-checks, npm tests and documentation build also pass at the integration checkpoint.
+The final PR head adds native asynchronous workspace-load cancellation and page
+pointer/keyboard focus cases. Their pinned Clang checks, npm tests, documentation
+build and whitespace checks pass; their full runtime execution remains pending.
+Retained Electron keyboard recorder/editable validation passes with disposable
+profiles. The external XTest compositor probe still fails to focus/type into its
+page field with guessed screen coordinates, even with a disposable i3 manager;
+keys reach the native address bar. Keep that evidence unresolved until actual
+native geometry/desktop input establishes the cause. A candidate Aura activation
+change was rejected because its original browser reproducer passed without it.
+No focus/visibility/media emulation is used to repair product behavior.
 
-The follow-up `19bd656` passes all 53 service cases, both PRE cases and all 46
-main browser cases, plus sandboxed video/MV3 and PCM fixtures. It adds
-profile-bound product blank-tab navigation, including private startup, new
-workspaces, adjacent tabs and splitting a one-tab workspace. Its independent
-audit and exact evidence are archived at `runtime-19bd656-before-global-media`.
+Runtime archives under `/mnt/storage/fly-chromium/evidence/` preserve the actual
+commits and both passing/failed attempts:
 
-The `1c54c21` runtime also passes all 53 service cases, both PRE cases and all
-50 main browser cases, plus sandboxed video/MV3 and PCM fixtures. This covers
-global muting across hidden/private tabs, native Media Session handlers and
-fallback players, and real docked DevTools in two profile-isolated workspaces.
-The first fallback fixture failed because it reused a script-local variable;
-querying the DOM element in each evaluation repairs the fixture without weakening
-its native pause/resume or no-user-gesture assertions. The complete passing run
-and independent audit are archived at `runtime-1c54c21-before-workspace-picker`.
-
-The `83ebf4b` workspace chooser runtime passes all 53 services, both PRE cases
-and all 52 main browser cases, plus sandboxed video/MV3 and PCM fixtures. Actual
-keyboard search, stale-choice cancellation, private selection without catalog
-writes, and workspace creation from the empty desktop pass. The sidebar worktree
-is frozen at this source. Ongoing development is on
-`codex/chromium-native-workspace-order` in the hints worktree, adding native
-workspace context-menu ordering; its extra case has not executed yet.
-
-PR 115 hosted Linux and macOS service validation both pass. Exact downloaded
-summaries match all 53 cases extracted from that Git commit, with clean source
-and the current engine lock verified. Windows services and all latest-head object
-matrix jobs remain in progress.
+- `runtime-059735e-before-blank-navigation`: 53 services, 47 browser declarations,
+  video/MV3 and audio/PCM; the merged PR 115 runtime.
+- `runtime-19bd656-before-global-media`: 53 services, 48 browser declarations and
+  both media fixtures, including one-tab blank split creation.
+- `runtime-1c54c21-before-workspace-picker`: 53 services, 52 browser declarations
+  and both media fixtures, covering global audio/media and native DevTools.
+- `runtime-83ebf4b-before-focus-regression`: 53 services, 54 browser declarations
+  and media fixtures, covering workspace search/private/empty selection.
+- `runtime-ce7f221-before-focus-precondition` and
+  `runtime-4c35a7d-before-workspace-rename`: 53 services, 55 browser declarations
+  and media fixtures, including ordering and explicit initial renderer focus.
+- `runtime-41b86d1-before-native-lifecycle`: 53 services, 56 browser declarations
+  and media fixtures, including native rename/dialog cancellation and stale edits.
 
 Before changing frozen source or engine files, inspect user units
 `fly-chromium-native-build.service`, `fly-chromium-native-acceptance.service` and
-`fly-chromium-native-summary-audit.service`. Their current logs are under the
-engine root as `current-build-systemd.log`, `current-acceptance-systemd.log` and
-`current-summary-audit.log`. JSON and per-stage logs are in `evidence/`.
+`fly-chromium-native-summary-audit.service`. The sidebar worktree is frozen at
+original `52d0f65` until its results are archived, then moves to the latest PR 124
+head for the remaining cases. Current logs are under the engine root as
+`current-build-systemd.log`, `current-acceptance-systemd.log` and
+`current-summary-audit.log`; JSON/per-stage logs live in `evidence/`.
 
-Next: run workspace ordering and finish the latest-head hosted matrices, repair
-any failure, then merge PR 115 only after all its gates pass. Continue native Fly
-UI, remaining commands/preferences/services, migration, all-platform packages,
-update rehearsals and the full acceptance matrix through M6. Electron remains
-production; no native package has passed acceptance.
+Next: validate the two latest browser cases and the latest-head hosted matrices,
+repair failures, then merge PR 124 only after every gate passes. Continue native
+Fly address/window UI, workspace deletion/transfers, remaining commands,
+preferences/services, migration, all-platform packages, update rehearsals and
+the full acceptance matrix through M6. Electron remains production. No owner
+profile was read or migrated, and no native package has passed acceptance.
 
 ## Source and working state
 
