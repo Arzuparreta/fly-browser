@@ -66,7 +66,8 @@ bool PreferencesService::ValidStore() const {
   const auto* values = stored.FindDict("values");
   if (stored.FindInt("schema") != 1 || !values)
     return false;
-  for (auto key : {"show_clock", "show_status_bar", "sync_website_theme"})
+  for (auto key : {"show_clock", "show_status_bar", "sync_website_theme",
+                   "show_window_controls"})
     if (const auto* value = values->Find(key); value && !value->is_bool())
       return false;
   if (const auto* format = values->Find("clock_format");
@@ -153,6 +154,27 @@ bool PreferencesService::SetWebsiteThemeSync(bool sync) {
     return false;
   theme->sync_websites = sync;
   return SaveTheme(*theme);
+}
+std::optional<bool> PreferencesService::ReadWindowControlsVisible() const {
+  if (!ValidStore())
+    return std::nullopt;
+  const auto* values =
+      local_state_->GetDict(kPreferencesPref).FindDict("values");
+  return values ? values->FindBool("show_window_controls").value_or(false)
+                : false;
+}
+bool PreferencesService::CanEditWindowControls() const {
+  return ReadWindowControlsVisible().has_value() &&
+         local_state_->FindPreference(kPreferencesPref)->IsUserModifiable();
+}
+bool PreferencesService::SetWindowControlsVisible(bool visible) {
+  if (!CanEditWindowControls())
+    return false;
+  auto stored = local_state_->GetDict(kPreferencesPref).Clone();
+  stored.Set("schema", 1);
+  stored.EnsureDict("values")->Set("show_window_controls", visible);
+  local_state_->SetDict(kPreferencesPref, std::move(stored));
+  return true;
 }
 std::optional<bool> PreferencesService::ReadStatusBarVisible() const {
   if (!ValidStore())

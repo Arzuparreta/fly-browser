@@ -549,6 +549,10 @@ bool NativeCommandAvailable(BrowserWindowInterface* browser,
     auto* window = FlyWindowController::GetIfCreated();
     return window && window->preferences().CanEditTheme();
   }
+  if (action == "toggle-window-controls") {
+    auto* window = FlyWindowController::GetIfCreated();
+    return window && window->preferences().CanEditWindowControls();
+  }
   if (action == "toggle-status-bar") {
     auto* window = FlyWindowController::GetIfCreated();
     return window && window->preferences().CanEditStatusBar();

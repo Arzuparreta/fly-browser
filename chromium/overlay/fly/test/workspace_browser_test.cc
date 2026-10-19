@@ -541,6 +541,84 @@ IN_PROC_BROWSER_TEST_F(FlyWorkspaceBrowserTest,
 }
 
 IN_PROC_BROWSER_TEST_F(FlyWorkspaceBrowserTest,
+                       WindowControlsFollowCommandSettingsAndRecoveryPolicy) {
+  auto& window = FlyWindowController::Get();
+  auto* controls = window.window_controls_for_testing();
+  EXPECT_FALSE(controls->GetVisible());
+  ASSERT_TRUE(NativeCommandAvailable(browser(), "toggle-window-controls"));
+  ASSERT_TRUE(InvokeNativeCommand(browser(), "toggle-window-controls"));
+  EXPECT_TRUE(controls->GetVisible());
+  ASSERT_TRUE(InvokeNativeCommand(browser(), "toggle-help"));
+  auto& editor = window.keyboard_editor();
+  ASSERT_TRUE(base::test::RunUntil([&] { return editor.active(); }));
+  editor.ShowAppearance();
+  auto* checkbox = editor.appearance_for_testing("show_window_controls");
+  ASSERT_TRUE(checkbox && checkbox->GetChecked());
+  views::test::ButtonTestApi(checkbox).NotifyDefaultMouseClick();
+  EXPECT_FALSE(controls->GetVisible());
+  EXPECT_EQ(false, window.preferences().ReadWindowControlsVisible());
+  editor.Cancel(true);
+  ASSERT_TRUE(base::test::RunUntil([&] { return !editor.active(); }));
+  ASSERT_TRUE(InvokeNativeCommand(browser(), "toggle-window-controls"));
+  auto* close = window.window_control_for_testing("close");
+  ASSERT_TRUE(close);
+  close->RequestFocus();
+  ASSERT_TRUE(base::test::RunUntil([&] { return close->HasFocus(); }));
+  ASSERT_TRUE(window.preferences().SetWindowControlsVisible(false));
+  EXPECT_FALSE(controls->GetVisible());
+  EXPECT_FALSE(close->HasFocus());
+  const auto future =
+      base::DictValue().Set("schema", 2).Set("values", base::DictValue());
+  g_browser_process->local_state()->SetDict(kPreferencesPref, future.Clone());
+  EXPECT_FALSE(NativeCommandAvailable(browser(), "toggle-window-controls"));
+  EXPECT_FALSE(window.RunCommand(browser(), "toggle-window-controls"));
+  EXPECT_FALSE(controls->GetVisible());
+  EXPECT_EQ(future,
+            g_browser_process->local_state()->GetDict(kPreferencesPref));
+}
+
+IN_PROC_BROWSER_TEST_F(FlyWorkspaceBrowserTest,
+                       WindowCloseButtonHonoursBeforeUnloadCancellation) {
+  auto first = browser()->GetWeakPtr();
+  auto* second = SecondWorkspace();
+  ASSERT_TRUE(second);
+  auto second_alive = second->GetWeakPtr();
+  ASSERT_TRUE(ui_test_utils::NavigateToURL(
+      second, embedded_test_server()->GetURL("/title1.html")));
+  auto* contents = Active(second);
+  ASSERT_TRUE(content::ExecJs(contents,
+                              "window.unsavedControls='keep'; "
+                              "window.onbeforeunload=()=> 'unsaved'"));
+  content::PrepContentsForBeforeUnloadTest(contents);
+  class CancellationObserver : public content::WebContentsObserver {
+   public:
+    explicit CancellationObserver(content::WebContents* contents)
+        : content::WebContentsObserver(contents) {}
+    void BeforeUnloadDialogCancelled() override { cancelled = true; }
+    bool cancelled = false;
+  } cancellation(contents);
+  auto& window = FlyWindowController::Get();
+  ASSERT_TRUE(window.preferences().SetWindowControlsVisible(true));
+  auto* close = window.window_control_for_testing("close");
+  ASSERT_TRUE(base::test::RunUntil([&] {
+    return close->IsDrawn() && !close->GetVisibleBounds().IsEmpty();
+  }));
+  ui::test::EventGenerator mouse(
+      window.desktop_widget()->GetNativeWindow()->GetRootWindow());
+  mouse.MoveMouseTo(close->GetBoundsInScreen().CenterPoint());
+  mouse.ClickLeftButton();
+  auto* dialog = ui_test_utils::WaitForAppModalDialog();
+  ASSERT_TRUE(dialog && dialog->is_before_unload_dialog());
+  dialog->view()->CancelAppModalDialog();
+  ASSERT_TRUE(base::test::RunUntil([&] { return cancellation.cancelled; }));
+  ASSERT_TRUE(first && second_alive);
+  EXPECT_EQ(&window, FlyWindowController::GetIfCreated());
+  EXPECT_EQ("keep", content::EvalJs(contents, "window.unsavedControls"));
+  EXPECT_TRUE(window.window_controls_for_testing()->GetVisible());
+  ASSERT_TRUE(content::ExecJs(contents, "window.onbeforeunload=null"));
+}
+
+IN_PROC_BROWSER_TEST_F(FlyWorkspaceBrowserTest,
                        DesktopQuitHonoursBeforeUnloadCancellation) {
   auto first = browser()->GetWeakPtr();
   auto* second = SecondWorkspace();

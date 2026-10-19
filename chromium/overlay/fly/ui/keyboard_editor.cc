@@ -125,7 +125,8 @@ void KeyboardEditor::Toggle(content::WebContents* contents) {
        {std::pair{"theme", u"Dark interface"},
         std::pair{"sync_website_theme", u"Match website color scheme to Fly"},
         std::pair{"show_clock", u"Show clock"},
-        std::pair{"show_status_bar", u"Show status bar"}}) {
+        std::pair{"show_status_bar", u"Show status bar"},
+        std::pair{"show_window_controls", u"Show window controls"}}) {
     appearance_[key] = appearance->AddChildView(std::make_unique<views::Checkbox>(
         label, base::BindRepeating(&KeyboardEditor::ChangeAppearance,
                                    weak_factory_.GetWeakPtr(), std::string(key))));
@@ -256,6 +257,7 @@ void KeyboardEditor::RefreshAppearance() {
   const auto theme = preferences_.ReadTheme();
   const auto clock = preferences_.ReadClock();
   const auto footer = preferences_.ReadStatusBarVisible();
+  const auto controls = preferences_.ReadWindowControlsVisible();
   const auto timeout = preferences_.ReadSuspendTimeoutMinutes();
   suspension_timeout_->SetEnabled(preferences_.CanEditSuspendTimeout());
   suspension_timeout_->SetText(
@@ -279,15 +281,19 @@ void KeyboardEditor::RefreshAppearance() {
       preferences_.CanEditTheme());
   set("show_clock", clock && clock->visible, preferences_.CanEditClock());
   set("show_status_bar", footer.value_or(false), preferences_.CanEditStatusBar());
+  set("show_window_controls", controls.value_or(false),
+      preferences_.CanEditWindowControls());
   clock_format_->SetEnabled(preferences_.CanEditClock());
   clock_format_->SetText(!clock ? u"Clock format unavailable"
       : clock->format == "datetime" ? u"Clock: date and time"
       : clock->format == "time" ? u"Clock: time"
                                  : u"Clock: date, time and seconds");
-  appearance_status_->SetText(!theme || !clock || !footer
-      ? u"Appearance settings need recovery. Saved data has been preserved."
-      : !preferences_.CanEditTheme() ? u"Appearance settings are managed."
-                                    : u"Appearance changes are saved immediately.");
+  appearance_status_->SetText(
+      !theme || !clock || !footer || !controls
+          ? u"Appearance settings need recovery. Saved data has been preserved."
+      : !preferences_.CanEditTheme()
+          ? u"Appearance settings are managed."
+          : u"Appearance changes are saved immediately.");
 }
 void KeyboardEditor::ChangeAppearance(std::string key) {
   if (!active())
@@ -306,6 +312,8 @@ void KeyboardEditor::ChangeAppearance(std::string key) {
     preferences_.SetClockVisible(checked);
   } else if (key == "show_status_bar") {
     preferences_.SetStatusBarVisible(checked);
+  } else if (key == "show_window_controls") {
+    preferences_.SetWindowControlsVisible(checked);
   }
   RefreshAppearance();
 }

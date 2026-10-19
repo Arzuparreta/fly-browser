@@ -15,6 +15,7 @@
 
 #include <algorithm>
 #include <cstddef>
+#include <tuple>
 #include <utility>
 #include <vector>
 
@@ -63,6 +64,7 @@
 #include "ui/views/accessibility/view_accessibility.h"
 #include "ui/views/background.h"
 #include "ui/views/context_menu_controller.h"
+#include "ui/views/controls/button/image_button.h"
 #include "ui/views/controls/button/md_text_button.h"
 #include "ui/views/controls/label.h"
 #include "ui/views/controls/menu/menu_runner.h"
@@ -71,6 +73,8 @@
 #include "ui/views/focus/focus_manager.h"
 #include "ui/views/layout/box_layout.h"
 #include "ui/views/layout/fill_layout.h"
+#include "ui/views/window/vector_icons/vector_icons.h"
+#include "ui/views/vector_icons.h"
 #include "ui/views/view.h"
 #include "ui/views/window/dialog_delegate.h"
 
@@ -197,6 +201,22 @@ FlyWindowController::FlyWindowController()
       sidebar->SetLayoutManager(std::make_unique<views::BoxLayout>(
           views::BoxLayout::Orientation::kVertical, gfx::Insets(8), 6));
   sidebar->SetPreferredSize(gfx::Size(280, 0));
+  window_controls_ = sidebar->AddChildView(std::make_unique<views::View>());
+  window_controls_->SetLayoutManager(std::make_unique<views::BoxLayout>(
+      views::BoxLayout::Orientation::kHorizontal, gfx::Insets(), 8));
+  for (const auto& [action, icon, label] :
+       {std::tuple{"minimize", &views::kChromeMinimizeIcon, u"Minimize Fly"},
+        std::tuple{"maximize", &views::kChromeMaximizeIcon, u"Maximize Fly"},
+        std::tuple{"close", &views::kCloseIcon, u"Close Fly"}}) {
+    auto* button =
+        window_controls_->AddChildView(views::ImageButton::CreateIconButton(
+            base::BindRepeating(&FlyWindowController::RunWindowControl,
+                                weak_factory_.GetWeakPtr(),
+                                std::string(action)),
+            *icon, label, views::ImageButton::MaterialIconStyle::kSmall));
+    button->SetPreferredSize(gfx::Size(36, 32));
+    window_control_buttons_.emplace(action, button);
+  }
   auto* workspace_picker_button = sidebar->AddChildView(
       std::make_unique<views::MdTextButton>(
           base::BindRepeating(&FlyWindowController::ToggleWorkspacePicker,
@@ -424,7 +444,64 @@ void FlyWindowController::OnPreferencesChanged() {
     ui::NativeTheme::GetInstanceForWeb()->NotifyOnNativeThemeUpdated();
   }
   UpdateClock();
+  UpdateWindowControls();
   UpdateSuspensionPolicy();
+}
+
+views::ImageButton* FlyWindowController::window_control_for_testing(
+    std::string_view action) const {
+  const auto found = window_control_buttons_.find(std::string(action));
+  return found == window_control_buttons_.end() ? nullptr : found->second.get();
+}
+void FlyWindowController::UpdateWindowControls() {
+  const bool visible = preferences_.ReadWindowControlsVisible().value_or(false);
+  if (!visible &&
+      window_controls_->Contains(
+          desktop_->GetFocusManager()->GetFocusedView()) &&
+      selected_) {
+    if (auto* contents = selected_->GetTabStripModel()->GetActiveWebContents())
+      contents->Focus();
+  }
+  window_controls_->SetVisible(visible);
+  const bool maximized = desktop_->IsMaximized();
+  auto* maximize = window_control_buttons_.at("maximize").get();
+  maximize->SetImageModel(
+      views::Button::STATE_NORMAL,
+      ui::ImageModel::FromVectorIcon(
+          maximized ? views::kChromeRestoreIcon : views::kChromeMaximizeIcon,
+          ui::kColorIcon, 16));
+  const auto* title = maximized ? u"Restore Fly" : u"Maximize Fly";
+  maximize->SetTooltipText(title);
+  maximize->GetViewAccessibility().SetName(title);
+}
+void FlyWindowController::RunWindowControl(std::string action) {
+  if (closing_ || !window_controls_->GetVisible())
+    return;
+  // Complete pointer/keyboard button dispatch before native close callbacks can
+  // destroy this control, the selected browser or the entire desktop.
+  base::SingleThreadTaskRunner::GetCurrentDefault()->PostNonNestableTask(
+      FROM_HERE,
+      base::BindOnce(
+          [](base::WeakPtr<FlyWindowController> window, std::string action) {
+            if (!window || window->closing_ ||
+                !window->preferences_.ReadWindowControlsVisible().value_or(
+                    false))
+              return;
+            if (action == "minimize")
+              window->desktop_->Minimize();
+            else if (action == "maximize") {
+              if (window->desktop_->IsMaximized())
+                window->desktop_->Restore();
+              else
+                window->desktop_->Maximize();
+            } else if (action == "close")
+              window->desktop_->Close();
+          },
+          weak_factory_.GetWeakPtr(), std::move(action)));
+}
+void FlyWindowController::OnWidgetShowStateChanged(views::Widget* widget) {
+  if (widget == desktop_.get())
+    UpdateWindowControls();
 }
 
 void FlyWindowController::UpdateSuspensionPolicy() {
@@ -1693,6 +1770,10 @@ bool FlyWindowController::RunCommand(BrowserWindowInterface* browser,
   }
   if (action == "toggle-theme")
     return preferences_.ToggleTheme();
+  if (action == "toggle-window-controls") {
+    const auto visible = preferences_.ReadWindowControlsVisible();
+    return visible && preferences_.SetWindowControlsVisible(!*visible);
+  }
   if (action == "toggle-status-bar") {
     const auto visible = preferences_.ReadStatusBarVisible();
     return visible && preferences_.SetStatusBarVisible(!*visible);

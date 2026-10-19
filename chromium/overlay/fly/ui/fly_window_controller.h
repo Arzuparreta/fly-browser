@@ -36,6 +36,7 @@ namespace views {
 class DialogDelegate;
 class NativeViewHost;
 class MdTextButton;
+class ImageButton;
 class View;
 class Label;
 }  // namespace views
@@ -85,6 +86,8 @@ class FlyWindowController : public views::WidgetDelegate,
   views::MdTextButton* bookmarks_button_for_testing() { return bookmarks_button_; }
   BrowserWindowInterface* selected_browser_for_testing() { return selected_; }
   CommandPalette& palette() { return *palette_; }
+  views::View* window_controls_for_testing() { return window_controls_; }
+  views::ImageButton* window_control_for_testing(std::string_view action) const;
   KeyboardEditor& keyboard_editor() { return *keyboard_editor_; }
   HintController& hints() { return *hints_; }
   void UpdateModeLabel();
@@ -119,6 +122,7 @@ class FlyWindowController : public views::WidgetDelegate,
   // WidgetObserver:
   void OnWidgetDestroying(views::Widget* widget) override;
   void OnWidgetActivationChanged(views::Widget* widget, bool active) override;
+  void OnWidgetShowStateChanged(views::Widget* widget) override;
 
  private:
   struct Entry {
@@ -157,6 +161,8 @@ class FlyWindowController : public views::WidgetDelegate,
                      base::WeakPtr<BrowserWindowInterface> destination,
                      base::WeakPtr<content::WebContents> contents);
   void OnPreferencesChanged();
+  void UpdateWindowControls();
+  void RunWindowControl(std::string action);
   void UpdateSuspensionPolicy();
   void SuspendIdleTabs();
   void ResumeAllTabs();
@@ -208,6 +214,8 @@ class FlyWindowController : public views::WidgetDelegate,
   uint64_t empty_generation_ = 0;
   std::unique_ptr<ScopedKeepAlive> keep_alive_;
   std::unique_ptr<views::Widget> desktop_;
+  raw_ptr<views::View> window_controls_ = nullptr;
+  std::map<std::string, raw_ptr<views::ImageButton>> window_control_buttons_;
   raw_ptr<views::View> workspace_buttons_ = nullptr;
   raw_ptr<views::View> content_ = nullptr;
   raw_ptr<views::Label> status_ = nullptr;
