@@ -10,6 +10,9 @@
 
 #include "chrome/app/chrome_command_ids.h"
 #include "chrome/browser/ui/browser_commands.h"
+#include "chrome/browser/ui/navigator/browser_navigator.h"
+#include "chrome/browser/ui/navigator/browser_navigator_params.h"
+#include "url/url_constants.h"
 #include "chrome/browser/ui/browser_window/public/browser_window_interface.h"
 #include "chrome/browser/ui/tabs/split_tab_metrics.h"
 #include "chrome/browser/ui/tabs/tab_muted_utils.h"
@@ -183,7 +186,8 @@ bool SplitCommand(BrowserWindowInterface* browser, std::string_view action) {
     return true;
   }
   if (model->count() < 2) {
-    chrome::NewTab(browser, NewTabTypes::kNewTabCommand);
+    if (!OpenNativeBlankTab(browser))
+      return false;
     model->AddToNewSplit({0, 1},
                          split_tabs::SplitTabVisualData(
                              action == "toggle-split-horizontal"
@@ -203,6 +207,21 @@ bool SplitCommand(BrowserWindowInterface* browser, std::string_view action) {
   return true;
 }
 }  // namespace
+
+bool OpenNativeBlankTab(BrowserWindowInterface* browser, int index) {
+  if (!browser || !chrome::IsCommandEnabled(browser, IDC_NEW_TAB))
+    return false;
+  NavigateParams params(browser, GURL(url::kAboutBlankURL),
+                        ui::PAGE_TRANSITION_TYPED);
+  params.disposition = WindowOpenDisposition::NEW_FOREGROUND_TAB;
+  params.window_action = NavigateParams::WindowAction::kShowWindow;
+  if (index >= 0) {
+    params.tabstrip_index = index;
+    params.tabstrip_add_types |= AddTabTypes::ADD_FORCE_INDEX;
+  }
+  Navigate(&params);
+  return params.navigated_or_inserted_contents != nullptr;
+}
 
 std::string NativeEventStroke(const input::NativeWebKeyboardEvent& event) {
   return EventStroke(event);
@@ -341,6 +360,8 @@ bool NativeCommandAvailable(BrowserWindowInterface* browser,
 
 bool ExecuteNativeCommand(BrowserWindowInterface* browser,
                           std::string_view action) {
+  if (action == "spawn-tab")
+    return OpenNativeBlankTab(browser);
   for (const auto& [name, command] : kNativeMappings) {
     if (action == name) {
       if (action == "remove-tab") {

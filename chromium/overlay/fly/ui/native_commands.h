@@ -12,6 +12,10 @@ namespace input {
 struct NativeWebKeyboardEvent;
 }
 namespace fly {
+// Opens an actual about:blank navigation in this browser's own profile.
+// A nonnegative index requests native tab-strip placement, including pin rules.
+bool OpenNativeBlankTab(BrowserWindowInterface* browser, int index = -1);
+
 std::string NativeEventStroke(const input::NativeWebKeyboardEvent& event);
 std::u16string NativePageModeLabel(BrowserWindowInterface* browser);
 

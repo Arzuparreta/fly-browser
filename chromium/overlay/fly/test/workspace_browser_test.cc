@@ -319,6 +319,58 @@ IN_PROC_BROWSER_TEST_F(FlyWorkspaceBrowserTest,
 }
 
 IN_PROC_BROWSER_TEST_F(FlyWorkspaceBrowserTest,
+                       ProductNewTabsAreBlankInPersistentAndPrivateProfiles) {
+  auto* original = browser();
+  ASSERT_TRUE(ui_test_utils::NavigateToURL(
+      original, embedded_test_server()->GetURL("/title1.html")));
+  auto& window = FlyWindowController::Get();
+  const int count = original->GetTabStripModel()->count();
+  ASSERT_TRUE(InvokeNativeCommand(original, "spawn-tab"));
+  ASSERT_EQ(count + 1, original->GetTabStripModel()->count());
+  ASSERT_TRUE(content::WaitForLoadStop(Active(original)));
+  EXPECT_EQ(GURL("about:blank"), Active(original)->GetLastCommittedURL());
+  EXPECT_EQ(original->GetProfile(), Active(original)->GetBrowserContext());
+
+  window.CreateTab();
+  ASSERT_EQ(count + 2, original->GetTabStripModel()->count());
+  ASSERT_TRUE(content::WaitForLoadStop(Active(original)));
+  EXPECT_EQ(GURL("about:blank"), Active(original)->GetLastCommittedURL());
+  ASSERT_TRUE(OpenNativeBlankTab(original, 1));
+  auto* inserted = original->GetTabStripModel()->GetWebContentsAt(1);
+  ASSERT_EQ(inserted, Active(original));
+  ASSERT_TRUE(content::WaitForLoadStop(inserted));
+  EXPECT_EQ(GURL("about:blank"), inserted->GetLastCommittedURL());
+
+  ASSERT_TRUE(window.RunCommand(original, "toggle-private-mode"));
+  ASSERT_TRUE(base::test::RunUntil([&] {
+    return window.selected_browser_for_testing() != original;
+  }));
+  auto* private_browser = window.selected_browser_for_testing();
+  ASSERT_TRUE(private_browser);
+  ASSERT_TRUE(private_browser->GetProfile()->IsOffTheRecord());
+  ASSERT_TRUE(content::WaitForLoadStop(Active(private_browser)));
+  EXPECT_EQ(GURL("about:blank"), Active(private_browser)->GetLastCommittedURL());
+  ASSERT_TRUE(InvokeNativeCommand(private_browser, "spawn-tab"));
+  ASSERT_TRUE(content::WaitForLoadStop(Active(private_browser)));
+  EXPECT_EQ(GURL("about:blank"), Active(private_browser)->GetLastCommittedURL());
+  EXPECT_EQ(private_browser->GetProfile(),
+            Active(private_browser)->GetBrowserContext());
+
+  window.Select(original, true);
+  window.CreateWorkspace();
+  ASSERT_TRUE(base::test::RunUntil([&] {
+    auto* selected = window.selected_browser_for_testing();
+    return selected && selected != original && selected != private_browser &&
+           selected->GetTabStripModel()->count() == 1;
+  }));
+  auto* created = window.selected_browser_for_testing();
+  ASSERT_FALSE(created->GetProfile()->IsOffTheRecord());
+  EXPECT_NE(original->GetProfile(), created->GetProfile());
+  ASSERT_TRUE(content::WaitForLoadStop(Active(created)));
+  EXPECT_EQ(GURL("about:blank"), Active(created)->GetLastCommittedURL());
+}
+
+IN_PROC_BROWSER_TEST_F(FlyWorkspaceBrowserTest,
                        PrivateExitHonoursBeforeUnloadCancellation) {
   auto* normal = browser();
   auto& window = FlyWindowController::Get();
@@ -2100,6 +2152,9 @@ IN_PROC_BROWSER_TEST_F(FlyTabMenuBrowserTest,
   ASSERT_TRUE(ExecuteNativeCommand(browser(), "spawn-tab"));
   Choose(target, u"New tab to the right");
   ASSERT_TRUE(base::test::RunUntil([&] { return model->count() == 3; }));
+  ASSERT_TRUE(content::WaitForLoadStop(model->GetWebContentsAt(1)));
+  EXPECT_EQ(GURL("about:blank"),
+            model->GetWebContentsAt(1)->GetLastCommittedURL());
   EXPECT_EQ(target, model->GetWebContentsAt(0));
   Choose(target, u"Close");
   ASSERT_TRUE(base::test::RunUntil([&] { return model->count() == 2; }));

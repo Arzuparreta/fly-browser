@@ -2,6 +2,7 @@
 // Use of this source code is governed by the GPL-3.0-or-later license in the
 // Fly repository.
 #include "fly/ui/tab_sidebar.h"
+#include "fly/ui/native_commands.h"
 
 #include <limits>
 #include <set>
@@ -166,8 +167,7 @@ class SidebarTabMenu : public ui::SimpleMenuModel::Delegate {
     const int index = tabs->GetIndexOfWebContents(contents);
     switch (action) {
       case kNew:
-        tabs->ExecuteContextMenuCommand(index,
-                                        TabStripModel::CommandNewTabToRight);
+        OpenNativeBlankTab(browser, index + 1);
         return;
       case kReload:
         tabs->ExecuteContextMenuCommand(index, TabStripModel::CommandReload);

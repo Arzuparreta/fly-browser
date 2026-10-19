@@ -567,7 +567,7 @@ void FlyWindowController::CreateTab() {
   if (closing_)
     return;
   if (selected_) {
-    chrome::NewTab(selected_, NewTabTypes::kNewTabCommand);
+    OpenNativeBlankTab(selected_);
     return;
   }
   const auto catalog = workspaces_.Read();
@@ -620,8 +620,7 @@ void FlyWindowController::OnProfileReady(std::string id, Profile* profile) {
                             if (!window || !browser) {
                               return;
                             }
-                            chrome::NewTab(browser,
-                                           NewTabTypes::kNewTabCommand);
+                            OpenNativeBlankTab(browser);
                             window->Select(browser, true);
                           },
                           weak_factory_.GetWeakPtr()));
@@ -720,8 +719,16 @@ void FlyWindowController::TogglePrivate(BrowserWindowInterface* browser) {
   }
   // Standard Chromium creation owns OTR lifetime, extension incognito access,
   // permissions, downloads and shutdown. No normal navigation/state is copied.
-  chrome::NewEmptyWindow(private_profile,
-                         /*should_trigger_session_restore=*/false);
+  BrowserWindowCreateParams params(*private_profile, true);
+  params.should_trigger_session_restore = false;
+  CreateBrowserWindow(std::move(params), base::BindOnce(
+      [](base::WeakPtr<FlyWindowController> window,
+         BrowserWindowInterface* private_browser) {
+        if (!window || window->closing_ || !private_browser)
+          return;
+        OpenNativeBlankTab(private_browser);
+        window->Select(private_browser, true);
+      }, weak_factory_.GetWeakPtr()));
 }
 
 void FlyWindowController::ArmCloseCallback() {

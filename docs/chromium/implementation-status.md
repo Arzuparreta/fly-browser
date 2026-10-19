@@ -1459,3 +1459,17 @@ checks the repeated entry/draft/focus transition and canonical clock action;
 those cases remain pending execution in the current full browser. Pinned Clang
 accepts the changed UI and test source. The retained Electron recorder/editable
 baseline is validated separately with a disposable Xvfb profile.
+
+## Native blank-tab navigation follow-up
+
+The `codex/chromium-native-blank-navigation` branch continues from the PR 115
+runtime/CI checkpoint without changing its frozen acceptance source. Product new
+tab actions now navigate to actual `about:blank` through Chromium NavigateParams
+in the owning browser/profile. Keyboard commands, the sidebar button, newly
+created persistent/private workspaces, split creation and adjacent-tab menus use
+the same function. Command enablement and native insertion/pin rules still apply.
+The new browser case covers committed blank URLs, insertion position and native
+BrowserContext identity; the physical adjacent-tab case also asserts the URL.
+Pinned Linux Clang accepts all four changed translation units and the browser
+fixture. This follow-up still requires a full runtime run and latest-head CI;
+it does not implement the remaining custom Fly new-tab page or floating address UI.
