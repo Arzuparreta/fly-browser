@@ -440,6 +440,22 @@ GURL WhatsNewURL(std::string_view from) {
   return url;
 }
 
+void ResolveWhatsNewURL(std::string from, base::OnceCallback<void(GURL)> done) {
+  base::ThreadPool::PostTaskAndReplyWithResult(
+      FROM_HERE, {base::MayBlock(), base::TaskPriority::USER_VISIBLE},
+      base::BindOnce(
+          [](std::string from) {
+            const GURL url = WhatsNewURL(from);
+            base::FilePath path;
+            if (url.SchemeIsFile() && net::FileURLToFilePath(url, &path) &&
+                base::PathExists(path))
+              return url;
+            return GURL(kReleasesPage);
+          },
+          std::move(from)),
+      std::move(done));
+}
+
 std::vector<PaletteEntry> DownloadEntries(
     const std::vector<Profile*>& profiles) {
   std::vector<std::pair<base::Time, PaletteEntry>> rows;

@@ -1691,8 +1691,17 @@ void FlyWindowController::Select(BrowserWindowInterface* browser, bool focus) {
     if (!update_checked_ &&
         !base::CommandLine::ForCurrentProcess()->HasSwitch("test-type")) {
       update_checked_ = true;
-      MaybeShowWhatsNew();
-      CheckUpdates(false);
+      // Selection happens inside session restore; opening a tab there would
+      // change the active tab under the restorer. Run after it finishes.
+      base::SingleThreadTaskRunner::GetCurrentDefault()->PostTask(
+          FROM_HERE, base::BindOnce(
+                         [](base::WeakPtr<FlyWindowController> window) {
+                           if (!window || window->closing_)
+                             return;
+                           window->MaybeShowWhatsNew();
+                           window->CheckUpdates(false);
+                         },
+                         weak_factory_.GetWeakPtr()));
     }
     next.host->SetVisible(true);
     next.widget->ShowInactive();
@@ -3216,8 +3225,13 @@ void FlyWindowController::MaybeShowWhatsNew() {
   // A new profile has nothing to catch up on; an upgraded one does.
   if (seen->empty() || base::Version(*seen) >= base::Version(kFlyVersion))
     return;
-  NavigateParams params(selected_, WhatsNewURL(*seen),
-                        ui::PAGE_TRANSITION_AUTO_TOPLEVEL);
+  ResolveWhatsNewURL(*seen, base::BindOnce(&FlyWindowController::OpenInNewTab,
+                                           weak_factory_.GetWeakPtr()));
+}
+void FlyWindowController::OpenInNewTab(GURL url) {
+  if (closing_ || !selected_)
+    return;
+  NavigateParams params(selected_, url, ui::PAGE_TRANSITION_AUTO_TOPLEVEL);
   params.disposition = WindowOpenDisposition::NEW_FOREGROUND_TAB;
   Navigate(&params);
 }
@@ -3278,7 +3292,8 @@ bool FlyWindowController::RunProductAction(BrowserWindowInterface* browser,
     return true;
   }
   if (action == "show-whats-new") {
-    open(WhatsNewURL(""));
+    ResolveWhatsNewURL("", base::BindOnce(&FlyWindowController::OpenInNewTab,
+                                          weak_factory_.GetWeakPtr()));
     return true;
   }
   if (action == "open-diagnostics") {

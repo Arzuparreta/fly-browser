@@ -235,6 +235,7 @@ class FlyWindowController : public views::WidgetDelegate,
   void ShowDiagnostics();
   void CheckUpdates(bool manual);
   void MaybeShowWhatsNew();
+  void OpenInNewTab(GURL url);
   void ApplyProfilePreferencesEverywhere();
   void RemoveBookmark(content::WebContents* source, std::string url);
   void UpdateClock();

@@ -82,6 +82,9 @@ void CheckForUpdates(base::OnceCallback<void(UpdateCheckResult)> done);
 // Local What's New page shipped next to the executable, or the online release
 // list when it is missing. `from` is the previously run version.
 GURL WhatsNewURL(std::string_view from);
+// Resolves WhatsNewURL off the UI thread, falling back to the release list
+// when the page is not installed (development builds).
+void ResolveWhatsNewURL(std::string from, base::OnceCallback<void(GURL)> done);
 
 // Downloads of the given profiles, newest first, as picker entries.
 std::vector<PaletteEntry> DownloadEntries(
