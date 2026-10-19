@@ -10,9 +10,9 @@ Accepted Linux evidence through `bbb8a09` is archived in
 fixtures and independent audit pass. PR 126 hosted validation is still pending.
 The window-control checkpoint `5d55d9a` passes 62 services, all 74 browser
 declarations, both media fixtures and independent audit on Linux. The sidebar
-follow-up `387e724` passes 65 services and nine directed Xvfb/Openbox cases,
-including four new sidebar cases. Full-suite/platform checks for that follow-up
-remain pending.
+follow-up passes 65 services and 20/21 directed stages at `c536b6e`. The remaining
+pointer-preferences focus case is fixed at `761b5bd`, with all four affected
+directed cases passing together. Full-suite/platform checks remain pending.
 
 Action routes live in `chromium/overlay/fly/ui/native_commands.cc` and
 `ui/fly_window_controller.cc`. Tests are in `test/workspace_browser_test.cc`;
@@ -29,7 +29,7 @@ A native upstream route alone does not establish Fly UX parity.
 | `toggle-dashboard` | partial | Native searchable workspace/private/empty desktop picker tested; full dashboard product layout remains pending. |
 | `reload-active-tab` | partial | Native command route exists; dedicated full keyboard, mouse and palette acceptance remains pending. |
 | `remove-tab` | partial | Pinned protection, beforeunload, close/reopen and native menu tested; complete all-input-path acceptance remains pending. |
-| `focus-sidebar` | partial | Native command route exists; dedicated full keyboard, mouse and palette acceptance remains pending. |
+| `focus-sidebar` | partial | Native panel focus and Escape back to editable page tested; complete accessibility, all-input-path and platform acceptance remains pending. |
 | `focus-nav-buttons` | partial | Native toolbar focus; final Fly navigation control layout remains pending. |
 | `focus-webview` | partial | Native command route exists; dedicated full keyboard, mouse and palette acceptance remains pending. |
 | `trigger-hints` | partial | Native hint input/activation and visibility tested; complete document/platform coverage remains pending. |

@@ -601,7 +601,9 @@ IN_PROC_BROWSER_TEST_F(FlySidebarBrowserTest,
   EXPECT_FALSE(window.clock_timer_running_for_testing());
   const int width = content::EvalJs(page, "innerWidth").ExtractInt();
   const auto page_bounds = page->GetRenderWidgetHostView()->GetViewBounds();
+  EXPECT_EQ(true, content::EvalJs(page, "document.hasFocus()"));
   OpenByPointer();
+  EXPECT_EQ(true, content::EvalJs(page, "document.hasFocus()"));
   EXPECT_TRUE(window.clock_timer_running_for_testing());
   EXPECT_EQ(width, content::EvalJs(page, "innerWidth"));
   EXPECT_EQ(page_bounds, page->GetRenderWidgetHostView()->GetViewBounds());

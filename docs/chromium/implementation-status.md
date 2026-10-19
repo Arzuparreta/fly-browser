@@ -8,66 +8,60 @@ Full product, migration and packaged application acceptance remain outstanding.
 Primary main remains `00d6a2e`. PR
 [126](https://github.com/Arzuparreta/fly-browser/pull/126) is ready for review at
 `bbb8a09`, with one `impact:none` label and passing ordinary checks. Latest-head
-manual object matrix 39265354608 and service matrix 39265359598 are in progress;
-wait for all jobs and audit the downloaded evidence before merging. Earlier
-8ef4793/e1aa6dd matrices were cancelled and are not accepted-head evidence.
+manual service matrix 39265359598 passes all 59 cases on Linux, macOS and
+Windows. Downloaded artifacts are independently audited against the exact clean
+commit and engine lock. Object matrix 39265354608 passes Linux (50 compiler
+outputs); macOS and Windows remain in progress. Wait for every job and audit all
+artifacts before merging. Earlier cancelled matrices are not accepted evidence.
 
-The complete `bbb8a09` Linux run passes 59 service cases, all 71 browser
-declarations (69 main plus two PRE stages), H.264/AAC video with MV3 and PCM
-audio. Its independent audit passes: fingerprint
-`e77bf94a7625b99aa5fbe6f7ce4a4c67b3bab0bbe03fc98f5f0db93b3278b0b1`,
-summary SHA256
+The complete `bbb8a09` Linux run passes 59 services, 71 browser declarations
+(69 main plus two PRE stages), H.264/AAC with MV3 and PCM audio. Independent audit
+passes with fingerprint
+`e77bf94a7625b99aa5fbe6f7ce4a4c67b3bab0bbe03fc98f5f0db93b3278b0b1`
+and summary SHA256
 `7376b157daea697650127e67ddf8094e0819ac3f5b160eca3fa054959b221b81`.
-The complete accepted checkpoint is archived under external
-`evidence/runtime-bbb8a09-before-window-controls`. The earlier failed full run
-is separate in `evidence/runtime-e1aa6dd-removal-pointer-failure`.
+Evidence is archived externally in
+`evidence/runtime-bbb8a09-before-window-controls`.
 
 Development continues on `codex/chromium-native-sidebar-indicators`. The preceding
-window-control checkpoint `5d55d9a` passed the complete Linux run: 62 services,
-74 browser declarations including two PRE stages, both media fixtures and the
-independent audit. Evidence is archived in external
+window-control checkpoint `5d55d9a` passes the complete Linux run: 62 services,
+74 browser declarations, both media fixtures and independent audit, archived in
 `evidence/runtime-5d55d9a-before-sidebar-collapse`.
 
-The follow-up implements automatic sidebar expansion over the page without
-resizing it, a compact native tab rail, persistent pinning, keyboard focus and
-Escape, live Appearance settings, and suspension of the hidden clock timer.
-At `387e724`, all 65 services and nine directed browser cases pass on owned
-Xvfb/Openbox, including all four new sidebar cases and the window controls.
-The separate child widget also receives live theme changes; a browser assertion
-checks its color mode against the desktop. Full 78-case, media and latest-head
-hosted validation remain required for this unpushed follow-up. Earlier failed
-attempts remain preserved. Check the three native validation services before
-changing the frozen worktree. Configure/build through native.py before full
-acceptance so directed rebuild metadata is not mistaken for accepted provenance.
-The first full sidebar run at `fdf867e` exposed a pointer-opened preferences
-focus regression: restoring saved BrowserWidget focus could return to the native
-sidebar instead of the page. The follow-up returns focus directly to the observed
-page in both shared overlay implementations, preserving Chromium's DOM focus.
-The baseline pinned-layout fixture now sets a test default rather than a user
-preference, preserving the existing no-write assertions. Compact native rows
-also retain scale-aware favicon, pin and audio indicators and audio accessibility
-state. The full attempt finished with 65 service passes, 55/78 browser
-passes and both media fixtures passing. Most browser failures share the native
-WindowReorderer ordering check: the independent sidebar was manually stacked
-among Views-owned browser layers. The follow-up hosts the sidebar through a
-NativeViewHost in that same View tree and removes manual Aura stacking. Hosting
-alone still triggers the check because profile BrowserWidgets retain native
-transient-window stacking. All Fly desktop NativeViewHosts therefore explicitly
-use Chromium's supported clip-window backend, with Aura consistently owning
-sibling layers. This is scoped to Fly's composed desktop, preserving Chromium's
-native transient/focus handling. The sidebar bounds remain outside layout,
-preserving the no-reflow hover contract. Directed validation remains required.
-The failed run is archived in external
-`evidence/runtime-fdf867e-sidebar-layer-and-focus-failure`. These fixes require a
-fresh directed and full run; the earlier run is not accepted coverage.
+The follow-up implements automatic sidebar expansion without page reflow, a
+compact native favicon/pin/audio rail, persistent pinning, keyboard focus and
+Escape, live Appearance settings, native theme updates and suspension of the
+hidden clock timer. Native profile windows and the sidebar use Chromium's
+clip-window NativeViewHost backend consistently, preserving native transient
+stacking while allowing the details panel to cover the page. Layout explicitly
+positions the panel's clip before showing it. Real page clicks cross the desktop
+and profile focus-manager boundary; address/toolbar focus remains deliberate.
+Pointer-opened Preferences explicitly returns to the page when dismissed.
 
-Tests use an extracted official signed Openbox package only on owned displays;
-no package was installed into the owner desktop.
+At `c536b6e`, 65 services and 20 of 21 directed browser stages pass, including
+session restoration, beforeunload, isolation, overlay hit testing/pinning,
+compact indicators, editable page clicks and toolbar focus. The remaining
+pointer-preferences focus case is fixed at `761b5bd`; all 65 services and the
+four affected directed cases now pass together. A complete fresh 78-stage,
+media and independent-audit run remains required. The next fixture assertion
+also verifies that mere sidebar hover retains actual document focus.
+The retained Electron keyboard/editor/editable regression passes on owned
+Xvfb/Openbox in `evidence/native-sidebar-retained-keyboard-x11.log`; a headless
+attempt did not receive the opening shortcut and remains separate failed evidence.
 
-The [native parity inventory](./native-parity.md) records each of the 82 actions
-and 28 preferences individually. Fifteen actions still have no native route;
-routed actions also retain explicit UX/platform/recovery gaps. Do not treat the
-inventory or either PR as completed M0–M6 acceptance.
+The first full sidebar run at `fdf867e` passed services and media but failed
+23 browser stages, primarily at Chromium's layer-order check, alongside focus
+and test-default issues. It is preserved in
+`evidence/runtime-fdf867e-sidebar-layer-and-focus-failure`. Subsequent directed
+attempts and their causes have separate commit-prefixed logs/audits. Do not use
+historical full-build metadata after directed rebuilds. Check all three native
+services before changing the frozen worktree; configure/build through native.py
+before full acceptance. Tests use official signed Openbox extracted only for
+owned displays; no package was installed into the owner desktop.
+
+The [native parity inventory](./native-parity.md) records all 82 actions and
+28 preferences. Fifteen actions still have no native route; routed actions also
+retain explicit product/platform/recovery gaps. This is incomplete M0–M6 work.
 
 ## Current checkpoint
 
