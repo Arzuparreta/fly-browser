@@ -1734,3 +1734,24 @@ this host, so the expected second cycle times out. Add the native release event
 and assert button focus, preserving the pointer and keyboard cycle assertions;
 rerun the complete pipeline before accepting the UI. Preserve this failed
 summary rather than treating the syntax/service passes as runtime acceptance.
+
+
+### Explicit reviewed upstream patch refresh
+
+The next browser-lifetime hooks require changing upstream C++/GN patches. The
+existing Fly-only incremental refresh deliberately rejects those changes. An
+explicit `refresh-overlay --include-upstream` mode now stages the entire reviewed
+stack against the unchanged pinned revision, validates existing managed hashes
+and new targets against pinned originals, and journals before writing. Added,
+changed and retired upstream targets participate in the same recovery protocol;
+unchanged source/header bytes retain their timestamps. Default refresh behavior
+and core/compile-only promotion guards remain unchanged.
+
+Seven disposable-Git regressions exercise opt-in changes, unchanged timestamps,
+added/retired targets, late-hunk preflight failure, interruptions before/after
+new/changed/restored writes, owner-edit races and recovery refusal, mode guards
+and CLI scoping. This is tooling work on the independent
+`codex/chromium-native-reviewed-patch-refresh` branch. Full Python contracts,
+npm/documentation/whitespace checks and any actual-engine exercise must be
+recorded before accepting it. Do not treat it as completed workspace deletion
+or retirement enforcement.
