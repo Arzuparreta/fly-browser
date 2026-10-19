@@ -9,6 +9,7 @@
 #include <string_view>
 #include <vector>
 
+#include "base/files/file_path.h"
 #include "base/memory/raw_ref.h"
 #include "base/sequence_checker.h"
 #include "base/values.h"
@@ -34,6 +35,22 @@ struct WorkspaceCatalog {
   std::string active_id;
 };
 
+// A pending UI close must not race an extension opening another browser for
+// that profile. This lease is process-local: a crash cancels an uncommitted
+// retirement instead of persisting an incomplete deletion.
+class ScopedWorkspaceRetirement {
+ public:
+  explicit ScopedWorkspaceRetirement(base::FilePath profile_path);
+  ~ScopedWorkspaceRetirement();
+  ScopedWorkspaceRetirement(const ScopedWorkspaceRetirement&) = delete;
+  ScopedWorkspaceRetirement& operator=(const ScopedWorkspaceRetirement&) =
+      delete;
+
+ private:
+  const base::FilePath profile_path_;
+};
+bool IsWorkspaceRetiring(const base::FilePath& original_profile_path);
+
 // Application-wide metadata only. ProfileManager owns Profiles and all site
 // state; this service never reads cookies or touches profile directories.
 // Private workspaces live in the window controller and must never enter this
@@ -51,6 +68,9 @@ class WorkspaceService {
   // nullopt means recovery is required, not an empty catalog.
   std::optional<WorkspaceCatalog> Read() const;
   bool CanEdit() const;
+  // nullopt is unreadable/future metadata, never permission to rewrite it.
+  std::optional<bool> IsProfileRetired(
+      std::string_view profile_directory) const;
   std::optional<Workspace> Add(std::string_view name,
                                std::string_view profile_directory);
   bool Rename(std::string_view id, std::string_view name);

@@ -24,78 +24,82 @@
 #include <set>
 
 #include "base/command_line.h"
-#include "base/functional/bind.h"
-#include "base/run_loop.h"
-#include "base/timer/timer.h"
-#include "ui/views/focus/focus_manager.h"
-#include "ui/views/widget/widget.h"
-#include "ui/views/window/dialog_delegate.h"
-#include "base/threading/thread_restrictions.h"
-#include "base/task/single_thread_task_runner.h"
-#include "ui/menus/simple_menu_model.h"
-#include "ui/base/mojom/menu_source_type.mojom.h"
 #include "base/files/file_util.h"
+#include "base/functional/bind.h"
 #include "base/json/json_reader.h"
 #include "base/json/json_writer.h"
+#include "base/run_loop.h"
 #include "base/strings/utf_string_conversions.h"
+#include "base/task/single_thread_task_runner.h"
+#include "base/test/bind.h"
 #include "base/test/run_until.h"
 #include "base/test/scoped_feature_list.h"
-#include "components/performance_manager/public/features.h"
-#include "components/performance_manager/public/performance_manager.h"
-#include "components/performance_manager/public/graph/page_node.h"
-#include "content/public/browser/devtools_agent_host.h"
-#include "content/public/browser/devtools_agent_host_client.h"
-#include "content/public/common/content_features.h"
-#include "chrome/browser/resource_coordinator/tab_lifecycle_unit_external.h"
-#include "base/test/bind.h"
 #include "base/test/test_future.h"
+#include "base/threading/thread_restrictions.h"
+#include "base/timer/timer.h"
 #include "base/uuid.h"
 #include "base/version_info/version_info.h"
 #include "chrome/browser/browser_process.h"
-#include "chrome/browser/extensions/chrome_test_extension_loader.h"
 #include "chrome/browser/devtools/devtools_window.h"
+#include "chrome/browser/extensions/chrome_test_extension_loader.h"
 #include "chrome/browser/extensions/extension_tab_util.h"
+#include "chrome/browser/profiles/keep_alive/profile_keep_alive_types.h"
+#include "chrome/browser/profiles/keep_alive/scoped_profile_keep_alive.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/profiles/profile_manager.h"
 #include "chrome/browser/profiles/profile_test_util.h"
+#include "chrome/browser/resource_coordinator/tab_lifecycle_unit_external.h"
 #include "chrome/browser/sessions/session_restore.h"
 #include "chrome/browser/ui/browser.h"
 #include "chrome/browser/ui/browser_commands.h"
-#include "components/javascript_dialogs/app_modal_dialog_controller.h"
-#include "components/javascript_dialogs/app_modal_dialog_view.h"
 #include "chrome/browser/ui/browser_window/public/create_browser_window.h"
 #include "chrome/browser/ui/browser_window/public/global_browser_collection.h"
+#include "chrome/browser/ui/tabs/tab_muted_utils.h"
 #include "chrome/browser/ui/tabs/tab_strip_model.h"
-#include "components/tabs/public/tab_interface.h"
+#include "chrome/common/pref_names.h"
 #include "chrome/test/base/browser_created_waiter.h"
 #include "chrome/test/base/in_process_browser_test.h"
 #include "chrome/test/base/ui_test_utils.h"
-#include "content/public/browser/render_frame_host.h"
-#include "content/public/browser/render_widget_host_view.h"
-#include "content/public/browser/web_contents.h"
+#include "components/javascript_dialogs/app_modal_dialog_controller.h"
+#include "components/javascript_dialogs/app_modal_dialog_view.h"
+#include "components/performance_manager/public/features.h"
+#include "components/performance_manager/public/graph/page_node.h"
+#include "components/performance_manager/public/performance_manager.h"
+#include "components/prefs/pref_service.h"
+#include "components/tabs/public/tab_interface.h"
+#include "content/public/browser/devtools_agent_host.h"
+#include "content/public/browser/devtools_agent_host_client.h"
+#include "content/public/browser/favicon_status.h"
 #include "content/public/browser/media_session.h"
 #include "content/public/browser/navigation_controller.h"
 #include "content/public/browser/navigation_entry.h"
-#include "content/public/browser/favicon_status.h"
-#include "chrome/browser/ui/tabs/tab_muted_utils.h"
-#include "ui/views/controls/button/image_button.h"
+#include "content/public/browser/render_frame_host.h"
+#include "content/public/browser/render_widget_host_view.h"
+#include "content/public/browser/web_contents.h"
+#include "content/public/common/content_features.h"
 #include "content/public/test/browser_test.h"
-#include "content/public/test/test_navigation_observer.h"
 #include "content/public/test/browser_test_utils.h"
+#include "content/public/test/test_navigation_observer.h"
+#include "extensions/browser/background_script_executor.h"
 #include "extensions/test/test_extension_dir.h"
 #include "net/dns/mock_host_resolver.h"
 #include "net/test/embedded_test_server/embedded_test_server.h"
-#include "components/prefs/pref_service.h"
-#include "ui/aura/window.h"
 #include "ui/aura/client/focus_client.h"
-#include "ui/wm/public/activation_client.h"
+#include "ui/aura/window.h"
 #include "ui/aura/window_tree_host.h"
-#include "ui/wm/core/coordinate_conversion.h"
 #include "ui/base/base_window.h"
+#include "ui/base/mojom/menu_source_type.mojom.h"
 #include "ui/events/test/event_generator.h"
+#include "ui/menus/simple_menu_model.h"
 #include "ui/views/controls/button/button.h"
+#include "ui/views/controls/button/image_button.h"
 #include "ui/views/controls/button/md_text_button.h"
+#include "ui/views/focus/focus_manager.h"
 #include "ui/views/test/button_test_api.h"
+#include "ui/views/widget/widget.h"
+#include "ui/views/window/dialog_delegate.h"
+#include "ui/wm/core/coordinate_conversion.h"
+#include "ui/wm/public/activation_client.h"
 
 namespace fly {
 namespace {
@@ -130,6 +134,37 @@ class FlyWorkspaceBrowserTest : public InProcessBrowserTest {
       FlyWindowController::Get().Select(second, true);
     }
     return second;
+  }
+  void OpenWorkspaceRemoval(const Workspace& item) {
+    auto& window = FlyWindowController::Get();
+    views::View* row = nullptr;
+    ASSERT_TRUE(base::test::RunUntil([&] {
+      for (const auto& child :
+           window.workspace_buttons_for_testing()->children()) {
+        auto* button = views::AsViewClass<views::MdTextButton>(child.get());
+        if (button && button->GetText() == base::UTF8ToUTF16(item.name)) {
+          row = button;
+          return true;
+        }
+      }
+      return false;
+    }));
+    base::RepeatingTimer choose;
+    choose.Start(
+        FROM_HERE, base::Milliseconds(1), base::BindLambdaForTesting([&] {
+          auto* model = window.workspace_context_menu_for_testing(item.id);
+          if (!model)
+            return;
+          choose.Stop();
+          EXPECT_TRUE(model->IsEnabledAt(4));
+          model->ActivatedAt(4);
+        }));
+    ui::test::EventGenerator mouse(
+        window.desktop_widget()->GetNativeWindow()->GetRootWindow());
+    mouse.MoveMouseTo(row->GetBoundsInScreen().CenterPoint());
+    mouse.ClickRightButton();
+    ASSERT_TRUE(base::test::RunUntil(
+        [&] { return window.workspace_remove_dialog_for_testing(); }));
   }
   content::WebContents* Active(BrowserWindowInterface* window) {
     return window->GetTabStripModel()->GetActiveWebContents();
@@ -2174,6 +2209,211 @@ IN_PROC_BROWSER_TEST_F(FlyWorkspaceBrowserTest,
   EXPECT_EQ(*valid.FindList("items"),
             *prefs->GetDict(kWorkspacesPref).FindList("items"));
   EXPECT_EQ(item.id, service.Read()->active_id);
+}
+
+IN_PROC_BROWSER_TEST_F(
+    FlyWorkspaceBrowserTest,
+    WorkspaceRemovalCancelsBeforeUnloadThenRetiresAllWindows) {
+  auto* first = browser();
+  auto* second = SecondWorkspace();
+  ASSERT_TRUE(second);
+  auto* profile = second->GetProfile();
+  ScopedProfileKeepAlive held(profile,
+                              ProfileKeepAliveOrigin::kProfileDeletionProcess);
+  auto second_weak = second->GetWeakPtr();
+  ASSERT_TRUE(ui_test_utils::NavigateToURL(
+      second, embedded_test_server()->GetURL("/title1.html")));
+  auto* page = Active(second);
+  ASSERT_TRUE(content::ExecJs(page,
+                              "document.cookie='retirement=source'; "
+                              "window.onbeforeunload=()=> 'unsaved'"));
+  content::PrepContentsForBeforeUnloadTest(page);
+  WorkspaceService service(*g_browser_process->local_state());
+  const auto before = service.Read();
+  ASSERT_TRUE(before);
+  ASSERT_EQ(2u, before->items.size());
+  const auto item = before->items.back();
+  const auto path = profile->GetPath();
+  auto& window = FlyWindowController::Get();
+  ASSERT_TRUE(window.RunCommand(second, "toggle-private-mode"));
+  ASSERT_TRUE(base::test::RunUntil(
+      [&] { return window.selected_browser_for_testing() != second; }));
+  auto* private_browser = window.selected_browser_for_testing();
+  ASSERT_TRUE(private_browser &&
+              private_browser->GetProfile()->IsOffTheRecord());
+  auto private_weak = private_browser->GetWeakPtr();
+  ASSERT_TRUE(ui_test_utils::NavigateToURL(
+      private_browser, embedded_test_server()->GetURL("/title1.html")));
+  ASSERT_TRUE(content::ExecJs(Active(private_browser),
+                              "document.cookie='private=temporary'"));
+
+  extensions::TestExtensionDir directory;
+  directory.WriteManifest(
+      base::DictValue()
+          .Set("manifest_version", 3)
+          .Set("name", "Fly retirement window probe")
+          .Set("version", std::string(version_info::GetVersionNumber()))
+          .Set("permissions", base::ListValue().Append("tabs"))
+          .Set("background",
+               base::DictValue().Set("service_worker", "worker.js")));
+  directory.WriteFile(FILE_PATH_LITERAL("worker.js"),
+                      "chrome.runtime.onInstalled.addListener(()=>{});");
+  extensions::ChromeTestExtensionLoader loader(profile);
+  const auto extension = loader.LoadExtension(directory.UnpackedPath());
+  ASSERT_TRUE(extension);
+  auto extension_attempt = [&](bool include_tabs) {
+    return extensions::BackgroundScriptExecutor::ExecuteScript(
+        profile, extension->id(),
+        content::JsReplace(R"(
+          const attempts = [
+            new Promise(resolve => chrome.windows.create({url:'about:blank'}, value =>
+              resolve({created:!!value, denied:!!chrome.runtime.lastError})))];
+          if ($1) attempts.push(new Promise(resolve =>
+            chrome.tabs.create({url:'about:blank'}, value =>
+              resolve({created:!!value, denied:!!chrome.runtime.lastError}))));
+          Promise.all(attempts).then(value => chrome.test.sendScriptResult(value));
+        )",
+                           include_tabs),
+        extensions::BackgroundScriptExecutor::ResultCapture::kSendScriptResult);
+  };
+  window.Select(first, true);
+  OpenWorkspaceRemoval(item);
+  auto* confirmation = window.workspace_remove_dialog_for_testing();
+  ASSERT_TRUE(confirmation);
+  confirmation->widget_delegate()->AsDialogDelegate()->AcceptDialog();
+  auto* dialog = ui_test_utils::WaitForAppModalDialog();
+  ASSERT_TRUE(dialog && dialog->is_before_unload_dialog());
+  EXPECT_TRUE(IsWorkspaceRetiring(path));
+  EXPECT_FALSE(profile->AllowsBrowserWindows());
+  const auto pending_attempt = extension_attempt(false);
+  ASSERT_TRUE(pending_attempt.is_list());
+  ASSERT_EQ(1u, pending_attempt.GetList().size());
+  for (const auto& result : pending_attempt.GetList()) {
+    EXPECT_EQ(false, result.GetDict().FindBool("created"));
+    EXPECT_EQ(true, result.GetDict().FindBool("denied"));
+  }
+  dialog->view()->CancelAppModalDialog();
+  ASSERT_TRUE(base::test::RunUntil(
+      [&] { return !window.workspace_removal_pending_for_testing(); }));
+  EXPECT_TRUE(second_weak && private_weak);
+  EXPECT_TRUE(profile->AllowsBrowserWindows());
+  EXPECT_FALSE(IsWorkspaceRetiring(path));
+  EXPECT_EQ(before->items, service.Read()->items);
+  EXPECT_EQ("retirement=source", content::EvalJs(page, "document.cookie"));
+  ASSERT_TRUE(content::ExecJs(page, "window.onbeforeunload=null"));
+
+  OpenWorkspaceRemoval(item);
+  confirmation = window.workspace_remove_dialog_for_testing();
+  ASSERT_TRUE(confirmation);
+  confirmation->widget_delegate()->AsDialogDelegate()->AcceptDialog();
+  ASSERT_TRUE(base::test::RunUntil([&] {
+    return !window.workspace_removal_pending_for_testing() &&
+           service.Read()->items.size() == 1 && !second_weak && !private_weak;
+  }));
+  EXPECT_EQ(first, window.selected_browser_for_testing());
+  EXPECT_FALSE(IsWorkspaceRetiring(path));
+  EXPECT_EQ(true, service.IsProfileRetired(item.profile_directory));
+  EXPECT_FALSE(profile->AllowsBrowserWindows());
+  EXPECT_EQ(BrowserWindowInterface::CreationStatus::kErrorProfileUnsuitable,
+            GetBrowserWindowCreationStatusForProfile(*profile));
+  const auto retired_attempt = extension_attempt(true);
+  ASSERT_TRUE(retired_attempt.is_list());
+  for (const auto& result : retired_attempt.GetList()) {
+    EXPECT_EQ(false, result.GetDict().FindBool("created"));
+    EXPECT_EQ(true, result.GetDict().FindBool("denied"));
+  }
+  {
+    base::ScopedAllowBlockingForTesting allow_files;
+    EXPECT_TRUE(base::DirectoryExists(path));
+  }
+  // Stale upstream startup metadata must not reload the retired profile.
+  auto* local_state = g_browser_process->local_state();
+  local_state->SetFilePath(prefs::kProfileLastUsed, path.BaseName());
+  EXPECT_NE(path.BaseName(), ProfileManager::GetLastUsedProfileBaseName());
+  local_state->SetList(
+      prefs::kProfilesLastActive,
+      base::ListValue()
+          .Append(item.profile_directory)
+          .Append(first->GetProfile()->GetPath().BaseName().AsUTF8Unsafe()));
+  for (auto* restored : ProfileManager::GetLastOpenedProfiles())
+    EXPECT_NE(path, restored->GetPath());
+  auto* recreated = SecondWorkspace();
+  ASSERT_TRUE(recreated);
+  EXPECT_EQ(item.name, service.Read()->items.back().name);
+  EXPECT_NE(item.id, service.Read()->items.back().id);
+  EXPECT_NE(path, recreated->GetProfile()->GetPath());
+  ASSERT_TRUE(ui_test_utils::NavigateToURL(
+      recreated, embedded_test_server()->GetURL("/title1.html")));
+  EXPECT_EQ("", content::EvalJs(Active(recreated), "document.cookie"));
+}
+
+IN_PROC_BROWSER_TEST_F(
+    FlyWorkspaceBrowserTest,
+    WorkspaceRemovalDialogRejectsStaleCatalogAndLastWorkspace) {
+  auto* second = SecondWorkspace();
+  ASSERT_TRUE(second);
+  auto second_weak = second->GetWeakPtr();
+  auto& window = FlyWindowController::Get();
+  WorkspaceService service(*g_browser_process->local_state());
+  const auto catalog = service.Read();
+  ASSERT_TRUE(catalog && catalog->items.size() == 2);
+  const auto item = catalog->items.back();
+  OpenWorkspaceRemoval(item);
+  auto* dialog = window.workspace_remove_dialog_for_testing();
+  ASSERT_TRUE(dialog);
+  ui::test::EventGenerator keys(dialog->GetNativeWindow()->GetRootWindow());
+  keys.PressKey(ui::VKEY_ESCAPE, ui::EF_NONE);
+  ASSERT_TRUE(base::test::RunUntil(
+      [&] { return !window.workspace_remove_dialog_for_testing(); }));
+  EXPECT_EQ(catalog->items, service.Read()->items);
+  EXPECT_TRUE(second_weak);
+  OpenWorkspaceRemoval(item);
+  dialog = window.workspace_remove_dialog_for_testing();
+  auto* prefs = g_browser_process->local_state();
+  const auto valid = prefs->GetDict(kWorkspacesPref).Clone();
+  auto future = valid.Clone();
+  future.Set("schema", 99);
+  prefs->SetDict(kWorkspacesPref, future.Clone());
+  dialog->widget_delegate()->AsDialogDelegate()->AcceptDialog();
+  EXPECT_FALSE(dialog->IsClosed());
+  EXPECT_EQ(future, prefs->GetDict(kWorkspacesPref));
+  EXPECT_TRUE(second_weak);
+  EXPECT_FALSE(window.workspace_removal_pending_for_testing());
+  prefs->SetDict(kWorkspacesPref, valid.Clone());
+  window.Select(browser(), true);
+  ASSERT_TRUE(base::test::RunUntil(
+      [&] { return !window.workspace_remove_dialog_for_testing(); }));
+  // The UI retains the legacy rule that the last workspace cannot be removed.
+  second->GetWindow()->Close();
+  ASSERT_TRUE(base::test::RunUntil([&] { return !second_weak; }));
+  ASSERT_TRUE(service.Remove(item.id));
+  views::View* row = nullptr;
+  ASSERT_TRUE(base::test::RunUntil([&] {
+    const auto& children = window.workspace_buttons_for_testing()->children();
+    if (children.size() == 1) {
+      row = children.front();
+      return true;
+    }
+    return false;
+  }));
+  base::RepeatingTimer check;
+  check.Start(
+      FROM_HERE, base::Milliseconds(1), base::BindLambdaForTesting([&] {
+        auto* menu = window.workspace_context_menu_for_testing(
+            service.Read()->items.front().id);
+        if (!menu)
+          return;
+        check.Stop();
+        EXPECT_FALSE(menu->IsEnabledAt(4));
+        ui::test::EventGenerator escape(
+            window.desktop_widget()->GetNativeWindow()->GetRootWindow());
+        escape.PressKey(ui::VKEY_ESCAPE, ui::EF_NONE);
+      }));
+  ui::test::EventGenerator mouse(
+      window.desktop_widget()->GetNativeWindow()->GetRootWindow());
+  mouse.MoveMouseTo(row->GetBoundsInScreen().CenterPoint());
+  mouse.ClickRightButton();
+  EXPECT_EQ(1u, service.Read()->items.size());
 }
 
 IN_PROC_BROWSER_TEST_F(FlyWorkspaceBrowserTest,

@@ -52,6 +52,7 @@ class KeyboardEditor;
 class TabSidebar;
 class HintController;
 class KeyboardRouter;
+class WorkspaceCloseTransaction;
 // One OS window. Each entry keeps an upstream BrowserView/BrowserWidget, native
 // tab model, profile and extension window ID. Its NativeWidgetAura does not
 // create an OS window. NativeViewHost controls actual clipping and visibility.
@@ -98,6 +99,10 @@ class FlyWindowController : public views::WidgetDelegate,
   CommandPalette& workspace_picker() { return *workspace_picker_; }
   ui::SimpleMenuModel* workspace_context_menu_for_testing(std::string_view id) const;
   views::Widget* workspace_rename_dialog_for_testing() const;
+  views::Widget* workspace_remove_dialog_for_testing() const;
+  bool workspace_removal_pending_for_testing() const {
+    return bool(workspace_close_);
+  }
   bool CanTogglePrivate(BrowserWindowInterface* browser) const;
   views::View* workspace_buttons_for_testing() { return workspace_buttons_; }
   bool RunCommand(BrowserWindowInterface* browser, std::string_view action);
@@ -125,6 +130,13 @@ class FlyWindowController : public views::WidgetDelegate,
   void ReorderWorkspace(std::string id, int direction);
   void RenameWorkspace(std::string id);
   void CancelWorkspaceRename();
+  void RemoveWorkspace(std::string id);
+  bool CanRemoveWorkspace(std::string_view id,
+                          const base::FilePath& path) const;
+  void BeginWorkspaceRemoval(std::string id, base::FilePath path);
+  void FinishWorkspaceRemoval(std::string id,
+                              base::FilePath path,
+                              bool success);
   void OnPreferencesChanged();
   void UpdateSuspensionPolicy();
   void SuspendIdleTabs();
@@ -166,6 +178,9 @@ class FlyWindowController : public views::WidgetDelegate,
   std::unique_ptr<KeyboardEditor> keyboard_editor_;
   std::unique_ptr<views::DialogDelegate> rename_delegate_;
   std::unique_ptr<views::Widget> rename_widget_;
+  std::unique_ptr<views::DialogDelegate> remove_delegate_;
+  std::unique_ptr<views::Widget> remove_widget_;
+  std::unique_ptr<WorkspaceCloseTransaction> workspace_close_;
   std::unique_ptr<KeyboardRouter> empty_router_;
   uint64_t empty_generation_ = 0;
   std::unique_ptr<ScopedKeepAlive> keep_alive_;

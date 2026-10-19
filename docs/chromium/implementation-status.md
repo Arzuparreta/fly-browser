@@ -1787,3 +1787,39 @@ public header or browser behavior changes. Evidence is
 `evidence/reviewed-patch-refresh-engine-proof.json`; the temporary probe patch
 was external and is not part of the product stack. This validates actual-engine
 incremental patch refresh, not workspace deletion itself.
+
+### Workspace retirement and cross-profile movement block
+
+PR [125](https://github.com/Arzuparreta/fly-browser/pull/125) is merged as
+`00d6a2e`; ordinary checks and explicit tooling run 39247855539 pass on all three
+platforms (88 cases each). Its branch is deleted and the primary checkout is on
+pulled main. The current local branch is
+`codex/chromium-native-workspace-retirement`, based on that merged checkpoint.
+
+The next functional block closes the workspace lifecycle and destination-profile
+move gaps. Pending retirement now has a process-local creation lease, with
+persistent retired-profile checks in native window eligibility and startup
+selection/restoration. No new browser for that original/OTR profile may race a
+pending close; cancelling or crashing before commit releases the lease without
+retiring metadata. Startup skips retired last-opened entries and a stale last-used
+choice falls back to a live catalog identity. An explicitly empty retired catalog
+gets a fresh recovery directory, never the old Default profile's cookies.
+
+A native removal confirmation retains the existing last-workspace restriction,
+validates current stable ID/path/managed/schema state and coordinates all native
+windows for the original profile, including OTR windows. Native warnings and
+beforeunload run before closing; metadata retires only after native close
+completion. Private downloads are explicitly covered by the removal confirmation
+because closing the complete OTR context ends them. Profile picker metadata is
+removed while native ProfileManager retains lifetime ownership. Original profile
+files remain available for recovery; a recreated display name receives a new
+storage identity. This does not implement secure erasure or migrate old data.
+
+Two service regressions cover retirement queries, managed/future metadata and
+scoped exact-path leases. Two browser regressions use actual context menus,
+confirmation/beforeunload cancellation, private windows, a real MV3 background
+worker attempting windows/tabs creation, stale startup entries, fresh recreated
+cookies and future/last-workspace refusal. Pinned syntax checks pass for the core,
+UI coordinator and changed upstream profile sources; linked targeted execution
+is still required. Cross-profile movement is the next implementation in this
+block. This source checkpoint is not yet accepted A05/A06 completion.
