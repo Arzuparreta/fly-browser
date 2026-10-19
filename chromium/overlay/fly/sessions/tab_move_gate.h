@@ -29,6 +29,7 @@ class ScopedTabMoveGate : public content::WebContentsObserver {
   bool committed() const { return committed_; }
 
  private:
+  void Unregister();
   const uintptr_t key_;
   base::RepeatingCallback<bool()> commit_;
   base::RepeatingCallback<bool()> validate_;

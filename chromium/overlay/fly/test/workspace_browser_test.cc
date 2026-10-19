@@ -147,6 +147,11 @@ class FlyWorkspaceBrowserTest : public InProcessBrowserTest {
         return window.tab_sidebar_for_testing()->row_for_testing(contents);
       }));
       auto* row = window.tab_sidebar_for_testing()->row_for_testing(contents);
+      auto* control = row->children().front().get();
+      ASSERT_TRUE(base::test::RunUntil([&] {
+        return control->IsDrawn() && !control->GetVisibleBounds().IsEmpty();
+      }));
+      bool menu_selected = false;
       base::RepeatingTimer choose;
       choose.Start(
           FROM_HERE, base::Milliseconds(1), base::BindLambdaForTesting([&] {
@@ -159,6 +164,7 @@ class FlyWorkspaceBrowserTest : public InProcessBrowserTest {
               if (menu->GetLabelAt(i) == u"Move to workspace…") {
                 EXPECT_TRUE(menu->IsEnabledAt(i));
                 menu->ActivatedAt(i);
+                menu_selected = true;
                 return;
               }
             }
@@ -167,8 +173,11 @@ class FlyWorkspaceBrowserTest : public InProcessBrowserTest {
           }));
       ui::test::EventGenerator mouse(
           window.desktop_widget()->GetNativeWindow()->GetRootWindow());
-      mouse.MoveMouseTo(row->GetBoundsInScreen().CenterPoint());
+      auto point = control->GetVisibleBounds().CenterPoint();
+      views::View::ConvertPointToScreen(control, &point);
+      mouse.MoveMouseTo(point);
       mouse.ClickRightButton();
+      ASSERT_TRUE(base::test::RunUntil([&] { return menu_selected; }));
     } else {
       ASSERT_TRUE(InvokeNativeCommand(source, "move-tab-to-workspace"));
     }
@@ -2288,8 +2297,17 @@ IN_PROC_BROWSER_TEST_F(FlyWorkspaceBrowserTest,
   WorkspaceService service(*g_browser_process->local_state());
   const auto catalog = service.Read();
   ASSERT_TRUE(catalog && catalog->items.size() == 2);
-  ChooseMoveDestination(source, catalog->items.front().name, true);
   auto& window = FlyWindowController::Get();
+  ASSERT_TRUE(window.ShowTabMovePicker(source, contents));
+  ASSERT_TRUE(
+      base::test::RunUntil([&] { return window.tab_move_picker().active(); }));
+  window.ToggleWorkspacePicker();
+  ASSERT_TRUE(base::test::RunUntil([&] {
+    return !window.tab_move_picker().active() &&
+           window.workspace_picker().active();
+  }));
+  window.workspace_picker().Cancel();
+  ChooseMoveDestination(source, catalog->items.front().name, true);
   ASSERT_TRUE(base::test::RunUntil([&] {
     return !source_weak && !window.tab_move_pending_for_testing() &&
            window.selected_browser_for_testing() == destination;

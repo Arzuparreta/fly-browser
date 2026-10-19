@@ -1026,6 +1026,7 @@ void FlyWindowController::ToggleWorkspacePicker() {
     return;
   hints_->Cancel();
   palette_->Cancel();
+  tab_move_picker_->Cancel();
   bookmark_picker_->Cancel();
   keyboard_editor_->Cancel();
   const auto config = commands_.Read().value_or(DefaultKeyboardConfig());

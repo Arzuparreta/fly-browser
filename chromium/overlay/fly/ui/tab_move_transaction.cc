@@ -7,6 +7,7 @@
 
 #include "base/check.h"
 #include "base/functional/bind.h"
+#include "base/logging.h"
 #include "base/task/single_thread_task_runner.h"
 #include "chrome/browser/browser_process.h"
 #include "chrome/browser/profiles/keep_alive/profile_keep_alive_types.h"
@@ -78,6 +79,7 @@ bool TabMoveTransaction::DestinationValid() const {
              BrowserWindowInterface::CreationStatus::kOk;
 }
 void TabMoveTransaction::Start() {
+  VLOG(1) << "Fly tab move: start";
   if (!CanMoveUrl(url_) || !SourceValid(true)) {
     ScheduleFinish(false);
     return;
@@ -105,6 +107,7 @@ void TabMoveTransaction::Start() {
                                         weak_factory_.GetWeakPtr()));
 }
 void TabMoveTransaction::OnProfileReady(Profile* original) {
+  VLOG(1) << "Fly tab move: profile ready; source=" << SourceValid(true);
   if (!SourceValid(true) || !original || original->IsOffTheRecord() ||
       original->GetPath() != destination_path_ ||
       !original->AllowsBrowserWindows()) {
@@ -143,6 +146,8 @@ void TabMoveTransaction::OnProfileReady(Profile* original) {
 void TabMoveTransaction::OnBrowserReady(BrowserWindowInterface* destination) {
   if (destination)
     destination_ = destination->GetWeakPtr();
+  VLOG(1) << "Fly tab move: browser ready; source=" << SourceValid(true)
+          << "; destination=" << DestinationValid();
   if (!SourceValid(true) || !DestinationValid()) {
     ScheduleFinish(false);
     return;
@@ -165,6 +170,8 @@ void TabMoveTransaction::OnBrowserReady(BrowserWindowInterface* destination) {
       source_.get(), TabCloseTypes::CLOSE_USER_GESTURE);
 }
 bool TabMoveTransaction::ValidateClose() {
+  VLOG(1) << "Fly tab move: close gate; source=" << SourceValid(false)
+          << "; destination=" << DestinationValid();
   if (!SourceValid(false) || !DestinationValid()) {
     aborted_ = true;
     ScheduleFinish(false);
@@ -173,6 +180,7 @@ bool TabMoveTransaction::ValidateClose() {
   return true;
 }
 bool TabMoveTransaction::Commit() {
+  VLOG(1) << "Fly tab move: committing";
   if (committed_)
     return true;
   if (!ValidateClose())
@@ -187,6 +195,7 @@ bool TabMoveTransaction::Commit() {
   auto fresh = content::WebContents::Create(
       content::WebContents::CreateParams(destination_->GetProfile()));
   if (!TabIdentity::PrepareProfileMove(source, fresh.get())) {
+    VLOG(1) << "Fly tab move: identity handoff rejected";
     aborted_ = true;
     ScheduleFinish(false);
     return false;
@@ -199,6 +208,7 @@ bool TabMoveTransaction::Commit() {
   CHECK_NE(index, TabStripModel::kNoTab);
   CHECK(moved_ && moved_->GetBrowserContext() == destination_->GetProfile());
   committed_ = true;
+  VLOG(1) << "Fly tab move: destination inserted";
   SetTabAudioMuted(moved_.get(), muted, TabMutedReason::kAudioIndicator, {});
   content::NavigationController::LoadURLParams params(url_);
   params.transition_type = ui::PAGE_TRANSITION_TYPED;
@@ -249,6 +259,8 @@ void TabMoveTransaction::ScheduleFinish(bool success) {
                                 weak_factory_.GetWeakPtr(), success));
 }
 void TabMoveTransaction::Finish(bool success) {
+  VLOG(1) << "Fly tab move: finished; success=" << success
+          << "; committed=" << committed_;
   if (!committed_)
     CloseUnusedDestination();
   std::move(done_).Run(success, destination_, moved_);

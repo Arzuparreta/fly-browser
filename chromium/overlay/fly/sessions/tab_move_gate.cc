@@ -32,10 +32,17 @@ ScopedTabMoveGate::ScopedTabMoveGate(content::WebContents* source,
   CHECK(Gates().emplace(key_, weak_factory_.GetWeakPtr()).second);
 }
 ScopedTabMoveGate::~ScopedTabMoveGate() {
-  Gates().erase(key_);
+  Unregister();
 }
 void ScopedTabMoveGate::WebContentsDestroyed() {
-  Gates().erase(key_);
+  Unregister();
+}
+void ScopedTabMoveGate::Unregister() {
+  // Source destruction unregisters before the posted transaction cleanup. A
+  // new WebContents may reuse its address before this gate's destructor runs.
+  const auto entry = Gates().find(key_);
+  if (entry != Gates().end() && entry->second.get() == this)
+    Gates().erase(entry);
 }
 bool ScopedTabMoveGate::Commit() {
   if (committed_)
