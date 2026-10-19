@@ -368,6 +368,20 @@ IN_PROC_BROWSER_TEST_F(FlyWorkspaceBrowserTest,
   EXPECT_NE(original->GetProfile(), created->GetProfile());
   ASSERT_TRUE(content::WaitForLoadStop(Active(created)));
   EXPECT_EQ(GURL("about:blank"), Active(created)->GetLastCommittedURL());
+
+  // Splitting a one-tab workspace must create the second pane through the
+  // same profile-bound blank navigation, without opening Chromium's NTP.
+  ASSERT_TRUE(ExecuteNativeCommand(created, "toggle-split"));
+  auto* split_model = created->GetTabStripModel();
+  ASSERT_EQ(2, split_model->count());
+  ASSERT_TRUE(split_model->GetSplitForTab(split_model->active_index()));
+  for (int index = 0; index < split_model->count(); ++index) {
+    auto* pane = split_model->GetWebContentsAt(index);
+    ASSERT_TRUE(content::WaitForLoadStop(pane));
+    EXPECT_EQ(GURL("about:blank"), pane->GetLastCommittedURL());
+    EXPECT_EQ(created->GetProfile(), pane->GetBrowserContext());
+    ExpectVisible(pane, true);
+  }
 }
 
 IN_PROC_BROWSER_TEST_F(FlyWorkspaceBrowserTest,
