@@ -2265,6 +2265,7 @@ IN_PROC_BROWSER_TEST_F(
     return extensions::BackgroundScriptExecutor::ExecuteScript(
         profile, extension->id(),
         content::JsReplace(R"(
+          (() => {
           const attempts = [
             new Promise(resolve => chrome.windows.create({url:'about:blank'}, value =>
               resolve({created:!!value, denied:!!chrome.runtime.lastError})))];
@@ -2272,6 +2273,7 @@ IN_PROC_BROWSER_TEST_F(
             chrome.tabs.create({url:'about:blank'}, value =>
               resolve({created:!!value, denied:!!chrome.runtime.lastError}))));
           Promise.all(attempts).then(value => chrome.test.sendScriptResult(value));
+          })();
         )",
                            include_tabs),
         extensions::BackgroundScriptExecutor::ResultCapture::kSendScriptResult);
