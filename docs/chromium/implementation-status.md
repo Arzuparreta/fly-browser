@@ -5,23 +5,96 @@ No native application, migration or package has passed acceptance yet.
 
 ## Current checkpoint
 
-PR [#113](https://github.com/Arzuparreta/fly-browser/pull/113) merged as
-`3a34888` after latest-head ordinary checks and the explicit native matrix passed.
-[Run 39075312206](https://github.com/Arzuparreta/fly-browser/actions/runs/39075312206)
-built and executed all 26 native service tests on **Linux, macOS and Windows**;
-all 27 Python tooling contracts also passed on all three. Downloaded
-`native-core-tests.json` files each contain 26 SUCCESS results, under external
-`evidence/ci-sidebar-final/`. These are service tests, not browser acceptance.
+Merged main includes PR [114](https://github.com/Arzuparreta/fly-browser/pull/114)
+as `485d4bc`. Its ordinary checks and manual matrix 39078704053 passed; all
+three official native service summaries contain 31 SUCCESS results. Follow-up work is consolidated into
+PR [115](https://github.com/Arzuparreta/fly-browser/pull/115); the stacked feature
+PRs preserve their original review history. Its latest remote checks and explicit
+CI must finish successfully before merging.
+The latest remote checkpoint `f7ef421` passes ordinary checks and tooling contracts
+on all three systems. Manual runs are 39166795264 (services) and 39166793504
+(objects). macOS objects failed the focus helper's header dependency check;
+Windows objects failed because a raw subprocess did not resolve `gn.bat`.
+The prepared repairs use the public `ui::BaseWindow` interface with the existing
+GN dependency and the engine's platform-aware command wrapper. Linux objects
+are still running. These failed jobs do not satisfy the merge gate.
 
-The follow-up work is consolidated on `codex/chromium-browser-test-runner`,
-rebased onto that merged main: native hints, empty-window handling, focused page
-scrolling, command palette and a scoped browser-test executable. This replaces
-the earlier dependent-branch delivery sequence; the old pushed branches preserve
-intermediate checkpoints. The combined branch has 15 browser tests awaiting
-execution, 31 service tests passing in the pinned local partial runner, and
-successful full native GN generation/header checks in an isolated source shadow.
-An updated official 31-test CI matrix is still required. No source overlay has
-been applied to the active control checkout; its user service continues building.
+The full eighteen-patch native source at frozen `02d63e4` built successfully.
+Its binary SHA-256 is
+`298389240de7aa1cd05ca8126ef1bf9d5a7807eeb01227eac988041b7f920d28`;
+its source fingerprint is
+`9043a3f95dbd922235f2238dade254624168cab1f63153a29e381a003e19fa92`.
+The complete GN runtime closure contains 5,301 files and is checked before smoke
+fixtures. All 53 native service cases passed. The browser suite executed 46
+declarations: both PRE cases passed; 33 of 44 main cases passed, 11 failed and
+none crashed. Failures cover session restoration, hints, pointer menus, focus
+after overlays and focused-frame scrolling. Background extension-window visibility
+now passes. This is failed acceptance, not a completed milestone.
+
+The pipeline's video fixture attached before Chromium published its initial page.
+Waiting for that actual page fixes the harness race. A real rerun against the same
+frozen binary passed video decoding, MV3 loading, native focus/visibility, paused
+media preservation and background audio (`control-smoke-OSHkYu`). PCM audio passed
+in the original pipeline (`control-smoke-UL55nX`). Sandbox and site isolation stay
+enabled. These synthetic single-profile fixtures do not establish real Twitch/Pie,
+packaged application or complete workspace acceptance.
+
+The focus repair at `98ecc7c` has completed its full Linux build and runtime
+pipeline: all 53 service cases pass; both PRE cases and 38 of 44 main browser
+cases pass. The five repaired cases cover palette dismissal, keyboard recorder,
+preferences, bookmark editing and focused cross-origin scrolling. The palette
+also preserves toolbar focus. Hints and both session cases fail; three pointer-menu
+cases time out. Both sandboxed media fixtures pass with full runtime provenance.
+The failed summaries are retained; no acceptance gate has been waived.
+
+The nineteen-patch frozen `919c32e` source completed its full Linux build and
+acceptance pipeline. All 53 native service cases, both PRE cases and 44 of 45
+main browser cases pass. Both ordinary restart and explicit command-line blank
+restore the expected profiles, windows, tab IDs, pinned state and cookies.
+Native focus, hints, unrelated-frame deletion, pointer pin/mute/close/reopen and
+quit cancellation pass. Sandboxed video/MV3 and PCM fixtures also pass with full
+runtime provenance. One menu case times out while its callback calls synchronous
+profile creation inside MenuRunner's nested loop. The prepared fixture correction
+creates the other profile before opening the menu and still switches workspaces
+inside its callback to verify the queued command's generation boundary.
+
+Patch 19 changes only the profile-picker preference default under `--fly-native`,
+retaining explicit user values and forced-picker policy. Persistent workspace
+selection updates Chromium's last-used profile through its public API. The tab
+sidebar uses a bounded ScrollView so both scrolling backends size its plain
+BoxLayout contents. Its test getter exposes only a running MenuRunner. The
+complete nineteen-patch replay and owning GN header checks pass. All 78 Python
+tooling contracts, npm tests and documentation build pass locally. The corrected
+menu fixture requires another complete runtime run before accepting this source.
+
+Manual CI at `98ecc7c` is now successful on all three systems: 39170219527
+(objects) and 39170220819 (53 official service cases). This validates the repaired
+macOS public header dependency and Windows GN batch launcher. The later runtime
+repairs still require latest-head CI before merging PR 115.
+
+Current source is developed in the hints worktree, then frozen in the sidebar
+worktree before each managed build. Inspect user units
+`fly-chromium-native-build.service`, `fly-chromium-native-acceptance.service` and
+`fly-chromium-native-summary-audit.service` before editing the frozen checkout or
+engine source. The `919c32e` pipeline and independent audit are complete and failed on the one
+remaining menu fixture; preserve their evidence before updating frozen source. Logs and
+JSON summaries remain under `/mnt/storage/fly-chromium/evidence`; service output
+is in `current-build-systemd.log`, `current-acceptance-systemd.log` and
+`current-summary-audit.log` under the engine root. No owner profile was accessed.
+
+Hosted object validation now queries GN source owners and retains compiler rules,
+flags, response files, outputs and generated-header/module dependencies in a
+separate Ninja manifest. The Linux plan has 42 changed objects, 24,707 prerequisite
+files and 13,246 commands; this graph inspection is not a hosted compilation pass.
+Official service run 39164821004 passed exactly 53 cases on each of Linux, macOS
+and Windows; all downloaded test identities were independently verified.
+All 78 Python tooling contracts pass locally, including real Ninja scheduling,
+escaped spaces, Windows command resolution, generated headers and byte preservation.
+
+Next: rebuild the focus repair and inspect every browser result, repair remaining
+runtime failures and finish latest-head CI before merging PR 115. Continue M2–M6,
+platform packages, migration and acceptance before default cutover. Electron
+remains production; no native package has passed acceptance.
 
 ## Source and working state
 
@@ -50,10 +123,10 @@ been applied to the active control checkout; its user service continues building
   it spent minutes reading upstream headers on the HDD. The control now uses
   upstream's normal `gn gen out/FlyControl`; compiler/header checks for Fly
   integration belong to its changed targets. Normal generation passed: 35,976
-  targets from 5,063 files in 57.174 seconds. The full `chrome` build is running;
-  no completed browser executable exists yet.
-  The external `.fly-engine-operation/owner.json` identifies the current process;
-  `configure-native.log` and `build.log` hold generation/build output.
+  targets from 5,063 files in 57.174 seconds. Both source-unmodified controls
+  have since completed. Full native compilation is now active as described above.
+  The external `.fly-engine-operation/owner.json` identifies the current engine
+  operation. Earlier configure/build logs remain historical evidence.
 
 ## Decisions and topology
 
@@ -94,8 +167,8 @@ live source or destination data has been modified.
 
 | Milestone | Status | Evidence / remaining gate |
 | --- | --- | --- |
-| M0 | pending | Source/tools/dependencies/hooks, generation and contract capture pass; control build/launch and clean second checkout outstanding |
-| M1 | pending | Native topology, shell, split and extension probe outstanding |
+| M0 | pending | Source/tools/dependencies/hooks, generation and contract capture pass; control builds/launch and codec-matched audio/video/MV3 fixtures pass; clean second checkout outstanding |
+| M1 | pending | Native source implemented, full compilation and 23-case runtime suite in progress; macOS adapter outstanding |
 | M2 | pending | Commands, preferences and product UI outstanding |
 | M3 | pending | Native services, blocker and user content outstanding |
 | M4 | pending | Import, recovery and rollback outstanding |
@@ -111,7 +184,7 @@ live source or destination data has been modified.
 | A05 | pending | Single-window multi-profile isolation and restart |
 | A06 | pending | Destination-profile moves and in-flight work |
 | A07 | pending | Native split visibility, focused pane and restore |
-| A08 | pending | Same-pin control and native Fly visibility, including minimise/restore |
+| A08 | pending | Same-pin control fixture passes; native Fly and minimise/restore outstanding |
 | A09 | pending | Native media, video and real Twitch/Pie |
 | A10 | pending | Freeze/resume eligibility versus discard |
 | A11 | pending | Native extension lifecycle, IDs, services and isolation |
@@ -182,12 +255,13 @@ on those platforms remains outstanding.
 
 ## Next action
 
-Wait for the resumed unmodified `chrome` build managed by the user service
-`fly-chromium-control-build.service`, inspect its exit and
-`evidence/build.json`, then run the same-pin control fixture with and without the
-extension probe. The active log is `/mnt/storage/fly-chromium/build-systemd.log`;
-inspect `.fly-engine-operation/owner.json` and the live processes before running
-another engine operation. Do not modify that source tree while it builds.
+The initial control build and both audio/extension smoke modes now pass. Preserve
+`out/FlyControl` and its `evidence/control-initial/` records before changing GN
+arguments. Build the codec-enabled source-unmodified control from the media
+branch and run the MP4 fixture, then apply the complete managed native overlay,
+configure/build Fly and execute the scoped native browser tests. Keep the initial
+control executable/output available as an independent checkpoint. Never mutate
+an active engine build's source or output.
 
 Open/validate the combined follow-up PR from
 `codex/chromium-browser-test-runner`, wait for all latest-head checks and the
@@ -584,3 +658,804 @@ The isolated `gn check` passes for both `//fly:*` and
 target. External evidence: `native-shadow-gn-retry.log` and
 `native-shadow-ui-headers.log`. The initial restricted-dependency failure is
 preserved in `native-shadow-gn.log`.
+
+## Shared native window geometry
+
+PR [#114](https://github.com/Arzuparreta/fly-browser/pull/114) contains the
+consolidated keyboard/UI follow-up. Its latest head `4bd4588` passed ordinary PR
+checks; the explicit all-platform unit matrix is
+[39078704053](https://github.com/Arzuparreta/fly-browser/actions/runs/39078704053)
+and is still running. All eight modified upstream implementation files now pass
+pinned-target syntax checks, including BrowserView/BrowserWidget, preferences
+and native session hooks (`evidence/upstream-native-syntax.log`).
+
+The dependent `codex/chromium-native-window-geometry` branch addresses another
+M1 API seam: the embedded BrowserView's browser-window GetBounds/SetBounds must
+represent Fly's shared OS desktop, including its sidebar/frame, rather than the
+profile child viewport. The eighth patch adapts those two BrowserWindow methods;
+native child view/layout geometry and native window handles remain real. This
+also routes extension window bounds through Chromium's existing window controller
+instead of fabricating extension responses. Restored bounds already use the
+shared desktop through the embedded native widget.
+
+A new browser assertion resizes the shared desktop through a background profile,
+checks both native BrowserWindows before/after workspace switching, and verifies
+the page viewport remains smaller. The real MV3 profile probe now asserts
+chrome.windows.get bounds in both profiles. There are 16 browser tests in this
+branch; execution remains pending, and no browser acceptance status changes from
+these source assertions.
+
+The geometry patch and updated 16-case browser-test source pass syntax checks
+with the pinned flags (`evidence/window-geometry-syntax.log` and
+`window-geometry-browser-syntax.log`). The embedding predicate is now a const
+query so BrowserWindow's const bounds method can use it without a cast. All
+eight ordered patches preflight cleanly over the original pinned files. Local
+repository/tooling/docs checks pass; these are still source checks rather than
+a linked native run.
+
+## Completed initial control and video coverage
+
+The systemd-managed initial control build completed successfully; the lease was
+released. Its `evidence/build.json` records the pinned source, clean Fly commit
+and executable SHA-256
+`f2dddc7d5ac03794095e779d421ba64f4b5af73476855b1156dfa9c348aa7e4a`.
+The actual executable matches that digest. Both pinned-engine fixture runs pass:
+`fixture-evidence/control-smoke-nULvg6/result.json` (audio) and
+`fixture-evidence/control-smoke-NMaq7o/result.json` (audio plus real MV3 probe).
+They verify same-window native tab visibility, editable focus, preserved pause
+and continuing background audio with sandboxing enabled. Raw logs are
+`evidence/pinned-control-audio.log` and `pinned-control-extension.log`.
+Build/configure/dependency records and original GN arguments are preserved in
+`evidence/control-initial/`. This is actual pinned control evidence, not native
+Fly acceptance or a clean second build.
+
+The dependent `codex/chromium-native-media-fixtures` branch adds a generated
+H264/AAC MP4 and `control-smoke.js --video`; `--native` runs the same single-profile
+fixture through the explicit Fly development gate. The video check requires real
+codec support and decoded video frames, then applies the same pause/background
+checks. No media methods or visibility APIs are replaced. The initial pinned
+control fails this test because its MP4 codec capability is empty (external
+`fixture-evidence/control-smoke-synIpw/result.json`). The existing system Chromium
+passes the new video-plus-MV3 harness in `control-smoke-zNXZ3E/result.json`; this
+validates the harness only and cannot pass pinned/native video acceptance.
+
+The common GN preset now requests `proprietary_codecs` and the upstream Chrome
+FFmpeg codec selection, without enabling Google product branding or credentials.
+It applies identically to future control and native builds. The matching rebuild
+has not completed yet. Full overlay application and control launch now require a
+build record with matching GN argument and executable hashes; changing args or
+losing/replacing the executable cannot reuse an earlier success marker. Two new
+transaction guards bring the Python suite to 29 passing tests. HLS/live Twitch, real Pie, DRM, hardware decode and platform
+packages remain unverified.
+
+## Multiple native window models in one workspace
+
+The dependent `codex/chromium-native-workspace-windows` branch keeps multiple
+normal BrowserWindowInterfaces created inside the same profile accessible in
+Fly's single desktop. A workspace with multiple native windows exposes a separate
+choice for each model, in creation order, using weak native identities. Opening
+a workspace returns to its last selected live model instead of whichever raw
+pointer happened to sort first. Closing its selected model prefers another live
+model in the same workspace before switching profiles. Native extension window
+and tab IDs remain untouched; no tab models or stores are combined.
+
+Workspace-button rebuilding is coalesced into a non-nestable task. Profile
+creation or close may complete inside a native button callback, so the callback's
+own view must survive until dispatch finishes. Closed/expired models are removed
+from the remembered choices. This changes selection memory only; automatic
+multi-workspace session startup is still pending.
+
+Two additional browser cases (18 total on this branch) cover pointer switching,
+remembering a workspace's selected native window, closing/removing that model,
+and a real MV3 service worker creating a normal window through chrome.windows.
+The latter must share Fly's OS host and remain selectable from its workspace.
+Both cases are syntax-checked but unexecuted; no M1 acceptance is claimed.
+Pinned-header source checks pass for the controller, embedded native widget and
+updated browser-test source. Logs: external `workspace-windows-syntax.log` and
+`workspace-windows-browser-syntax.log`.
+
+## Full manual CI preparation
+
+The dependent `codex/chromium-native-full-ci` branch extends only the existing
+explicit `workflow_dispatch` build depth. Ordinary PR CI remains unchanged.
+The prior hosted runs reported initial free space of 85.7 GiB (Linux), 95.7 GiB
+(macOS) and 146.9 GiB (Windows). The completed component/symbol-free local control
+occupies about 10 GiB. Full CI therefore reserves 80 GiB at initial inspection,
+60 GiB before the remaining dependency sync and 40 GiB for each compilation
+phase, rather than demanding the initial source-plus-two-build budget again
+after the source and control have already consumed part of it. Local native
+commands retain the existing 100-GiB default and accept an explicit floor of at
+least 40 GiB. Actual resource failures remain failures in the evidence.
+
+After compiling the native browser, Linux and Windows build/run the scoped
+browser suite. Linux uses an isolated Xvfb display installed only in that manual
+job. Before native test/build compilation, CI removes only recognised
+compilation-object/static archive files from the control's obj tree; its executable, shared libraries,
+resources, arguments and provenance remain available. The removed-file count and
+observed space reclaimed are recorded. macOS still has no native embedding, so
+its CI record explicitly says native desktop is unsupported rather than claiming
+browser-test coverage. The new full matrix has not completed yet.
+
+## Background native windows
+
+The dependent `codex/chromium-native-background-windows` branch makes native
+ShowInactive respect an already selected browser model. An extension-created
+normal window with focused:false remains a real separate native model but does
+not replace the visible workspace or briefly show its page. The picker can
+activate it later through the ordinary native selection path. No DOM visibility
+state is replaced. A nineteenth browser case installs a real MV3 worker, creates
+that background window, checks native hidden/active state and then selects it
+from the picker. Source checks pass; linked runtime execution remains pending.
+
+Full manual build matrix
+[39080367029](https://github.com/Arzuparreta/fly-browser/actions/runs/39080367029)
+is running at head `2755733` (the preceding 18-case source snapshot). Its tooling
+contracts pass on all three platforms; complete builds/browser results are still
+pending. The local codec-enabled control rebuild is managed by user unit
+`fly-chromium-codec-control-build.service`, log
+`/mnt/storage/fly-chromium/control-codec-systemd.log`. Its independent original
+control output is `src/out/FlyControlInitial`; the copy/configuration preparation
+is recorded in `evidence/control-codec-preparation.json`. The source remains
+unmodified until the matching control and fixtures pass.
+
+## Native session startup source
+
+The dependent `codex/chromium-native-session-startup` branch routes normal Fly
+startup through Chromium's existing per-profile SessionRestore and last-opened
+profile list. The development switch selects restore-last-session without
+overwriting the user's stored startup preference or mandatory policy. Existing
+guest/private guards still apply. The same upstream startup decision controls
+session cookie and storage retention. Explicit empty-workspace/new-window
+requests continue to suppress restoration within the running process.
+
+Patch nine changes the startup preference seam and honours the existing native
+BrowserInitState restore flag for Fly. There is no second URL/session store.
+The scoped browser suite now contains 21 cases, including a PRE/restart pair
+that records two profiles/three native windows, stable workspace/tab identities,
+pinned state and isolated session cookies, then verifies them after process
+restart in one OS host. These runtime assertions are pending execution.
+The startup and session-service translation units and browser test source pass
+pinned-header syntax checks (`session-startup-syntax.log` and
+`session-startup-browser-syntax.log`). All nine patches preflight over 20 original
+upstream files without modifying the active control checkout. Repository tests
+and the 29 tooling transaction tests pass.
+The complete isolated GN graph also generates and passes header ownership
+checks (`session-startup-gn.log`, 35,576 targets). This validation uses private
+patched copies and leaves the in-progress control source untouched.
+
+## Native media provenance
+
+The dependent `codex/chromium-native-provenance` branch makes native build evidence
+identify the executable path/hash, argument hash and whether a desktop adapter is
+implemented on that platform. The media harness requires this completed build
+record with `--native-record` when using `--native`, and checks its engine lock,
+overlay fingerprint format, desktop support and executable identity before
+creating a work directory, starting a server or loading Playwright. A browser
+ignoring the development switch can no longer be labelled native by that switch
+alone. macOS compilation cannot produce native desktop acceptance until its
+adapter exists. The record digest and build provenance accompany fixture results.
+Six boundary tests use inert file bytes and no browser launch; missing, control,
+unsupported-platform, different-lock, malformed-overlay and replaced-binary
+records fail before side effects. The tooling suite now has 35 passing tests.
+These tests validate evidence integrity; no native runtime result is claimed.
+
+## Private native workspace source
+
+The dependent `codex/chromium-native-private-workspaces` branch connects the
+private-mode command and palette entry to Chromium off-the-record profiles.
+Each persistent workspace has its own native OTR context; entering starts an
+empty private window in the shared desktop, preserving normal tabs in their
+original profile. Native incognito policy controls availability. Private choices
+and the return-window weak pointers live only in memory and do not enter the
+workspace catalog or persistent Fly tab metadata. The sidebar identifies the
+private workspace and the mode indicator includes PRIVATE.
+
+Exiting closes that OTR profile's native windows using Chromium's beforeunload
+coordinator, returning to its normal workspace after successful close. Cancelling
+a dialog retains the private window. Closing one of several private windows
+first selects another window of the same OTR profile. Native Chromium owns OTR
+service/storage destruction; Fly does not copy cookies or original navigations.
+This replaces Electron's shared private partition with workspace-isolated native
+private profiles. Extensions retain Chromium's user-controlled incognito access.
+
+There are now 23 browser cases. Two new cases cover per-workspace private
+isolation, normal-cookie preservation, native host identity, unchanged catalog,
+private metadata exclusion, closing/re-entering with empty cookies/local storage,
+and beforeunload cancellation. Their linked execution remains pending. Controller,
+native commands and browser-test translation units pass pinned source checks;
+repository and 35 tooling tests pass. No A17 completion is claimed yet.
+
+PR [114](https://github.com/Arzuparreta/fly-browser/pull/114) was squash-merged as
+`485d4bc` after ordinary checks and all six jobs in manual run
+[39078704053](https://github.com/Arzuparreta/fly-browser/actions/runs/39078704053)
+succeeded at its latest head. The downloaded Linux/macOS/Windows test summaries
+each contain 31 SUCCESS results (`evidence/ci-palette-final/`). The root checkout
+is pulled main. Later source changes in the dependent branches still need their
+own final delivery and runtime validation.
+
+## Matching codec control and bounded hosted compilation
+
+The codec-enabled source-unmodified control completed at
+`2026-10-18T00:43:15Z`, clean Fly source `2c3aead`, executable SHA-256
+`f66bf58d2cd2ea47159f4e68e0c8203a2dceb4d4366eb85007fb5b7f7b795d72` and
+argument digest `09a546dca3089bf4d9cc93de2555ebe54ff6528a214d099c6e2a9ccbbd6cd71d`.
+Its real H264/AAC video/MV3 fixture passes in
+`fixture-evidence/control-smoke-a47ZFT/result.json`; PCM audio passes in
+`control-smoke-X0emxw/result.json`. They verify decode, pause, native visibility
+and continuing background audio with sandboxing enabled. This is pinned control
+evidence, not Fly runtime acceptance. The original control remains independent.
+
+Full manual matrix 39080367029 did not complete: Linux and macOS hit the hosted
+5h50 limit during their initial control compilation (about 30,907/66,953 and
+27,862/70,761 actions respectively). Windows lost communication with its runner;
+its cause and compiler result are unknown. Downloaded Linux/macOS evidence is
+retained in `evidence/ci-full-first/`. Neither cancelled job is a source failure
+or a successful build, and Windows has no retained build log.
+
+The dependent `codex/chromium-native-ci-objects` branch adds explicit manual
+`objects` depth to validate actual compiler outputs and GN ownership within
+hosted resources. It retains generated prerequisites, resolves source-to-object
+edges from GN's Ninja files, prefers the scoped browser runner, fails on missing
+shared/compiler edges and records macOS-only desktop exclusions. A distinct
+compile-only transaction cannot authorise browser configuration/build; the
+completed matching-control requirement still guards full native builds. Hosted
+compilations use two workers, and active-stage metadata survives job timeout in
+retained evidence. Four new boundary tests bring tooling coverage to 39 tests.
+
+PR 114 is merged main `485d4bc`. Its eight dependent source commits were rebased
+onto that main in `codex/chromium-native-runtime` at `b98cae4`; the overlay is
+unchanged by the rebase. The clean sidebar worktree is frozen for user service
+`fly-chromium-native-build.service`. It independently seeds `out/FlyNative` from
+the matching control, then applies/configures/builds all nine patches and the
+23-case browser source. Log: `native-build-systemd.log`; preparation identity:
+`evidence/native-preparation.json`. Do not edit/switch that worktree during the
+build. Subsequent tooling work uses the hints worktree. Native runtime and
+remaining M0-M6 acceptance still require execution.
+The object resolver finds 31 compiler edges with no exclusions in the actual
+Linux native GN graph (`evidence/ci-objects-actual-plan.json`). This checks target
+selection only; hosted object compilation has not yet run on this branch.
+
+## Account and vault defaults source
+
+The dependent `codex/chromium-native-privacy-defaults` branch adds patch ten at
+the native profile preference registration seam, after keyed services register
+their preferences. For the development-native gate it disables browser sign-in
+(including the next-startup setting), password saving/autosign-in, browser passkey
+storage and automatic passkey upgrades by default. It changes native default
+values; user and enterprise preference precedence remains native. It does not
+copy an account/password database or disable website WebAuthn authenticators.
+
+A 24th browser case checks both newly created normal profiles and their OTR
+profile. The profile utility and 24-case browser-test source pass pinned compiler syntax
+checks. The full private GN graph generates and both Fly/profile utility header
+ownership checks pass (`privacy-defaults-gn.log`). All ten patches preflight over
+22 upstream files without modifying the active build source. Linked execution is
+pending. This branch is outside the frozen running 23-case build.
+Telemetry and the rest of the product privacy/service acceptance remain separate
+unverified gates. The running local acceptance pipeline waits for the complete
+build and will record native unit/browser/media exit statuses automatically; it
+does not turn an attempted stage into a pass.
+## Native blank tabs and restart test coverage
+
+`about:blank` is an ordinary native tab. Each workspace owns a Chromium Profile;
+its window models own their native TabStripModels and WebContents. The sidebar
+projects every tab from the selected model, including blank pages, new-tab pages
+and extension pages. URLs and titles are presentation data, never tab identity
+or a reason to discard a tab. Zero native tabs produces the empty desktop UI.
+There is no replacement blank WebContents, URL-only recreation or second tab
+registry. Chromium retains opener, origin inheritance, extension IDs and security
+semantics; Fly adds its independent UUID to the same native tab.
+
+The browser suite now contains 27 declarations, including two PRE restart phases
+and 25 main cases. New cases exercise a real page's `window.open('about:blank')`
+with inherited origin/opener, navigation without replacing the tab/sidebar row,
+and MV3 `chrome.tabs.create` with an explicit blank URL, native IDs, profile
+ownership, openerTabId, sidebar inclusion and native close/reopen identity.
+These source cases are not yet executed: the first full native link is pending.
+
+Restart coverage distinguishes an ordinary launch without URLs from a launch
+with an explicit command-line `about:blank`. Both must restore all saved native
+tabs, including a bare blank tab; the latter must also retain the newly requested
+blank as a separate native tab with its own identity. The general Chromium test
+fixture injects a command-line blank by default, so the ordinary-launch fixture
+explicitly disables that test-only argument. No product URL filtering is added.
+
+The browser runner selects all Fly browser fixtures and checks a newly generated
+upstream result summary against every main case declared in the source. Missing,
+failed, skipped and zero-test runs fail evidence recording; successful PRE phases
+are correctly folded into their main case by Chromium's launcher. An old summary
+is archived before execution and cannot satisfy a new run. All 43 Python tooling
+contracts pass locally; browser runtime acceptance remains pending.
+
+Windows object run 39120988598 exposed CRLF conversion of the product patch
+checkout before native application. A local reproduction confirms that an LF
+patch applies to exact upstream LF bytes while its CRLF-converted counterpart
+fails identically. Repository attributes now preserve all `chromium/` inputs
+byte for byte; a real temporary Git checkout with `core.autocrlf=true` verifies
+both patch/overlay bytes and successful patch preflight. No host-global Git
+setting is needed for these product files. The earlier failed run remains failed;
+the updated remote head must pass fresh CI.
+
+## Native keyboard preferences editor
+
+The dependent `codex/chromium-native-keyboard-editor` branch adds an actual
+browser-owned Views editor, reached through the existing keyboard-help action
+and palette. It exposes every action's global and NORMAL bindings, search,
+numbered-tab modifiers, shortcut recording, per-action clear/default and restore
+all defaults. Each binding occupies one editable line; punctuation such as `;`
+remains an actual key. Recording intercepts native keys before commands, ignores
+repeats and composition/AltGr, and shares the router's two-stroke timeout.
+Escape cancels recording first and closes the editor on a subsequent press.
+
+Edits stay in memory until the shared CommandService validates and saves the
+complete transaction. Invalid/conflicting bindings remain editable without
+partially saving; explicit disabled actions survive future default updates.
+A generation guard rejects overwriting settings changed elsewhere. Unrecognised
+or corrupt existing storage is preserved and cannot be overwritten by Apply.
+Navigation, profile changes, page destruction, desktop blur/close and resize
+cancel recording/drafts. Posted widget cleanup precedes restoring native focus.
+
+The complete source now has 33 browser declarations, including two PRE phases
+and 31 main cases. Five editor cases exercise real native key events, editable
+page focus, disabled/default shortcuts, two-stroke page scrolling, semicolon
+recording, conflicts, concurrent changes and cancellation on workspace switch.
+These native GUI cases await a linked browser/test executable. Source compilation
+checks and the independent GN/header checks cover the eleven-patch stack over
+22 upstream files, without changing the frozen engine source currently building.
+The retained Electron recorder/editable-page regression is run separately with
+a disposable profile and authenticated private Xvfb display; it cannot validate
+the new native UI. Native preferences beyond keyboard remain pending.
+
+Keyboard editor validation: pinned Clang accepts the editor, controller, command
+adapter and all 33 browser declarations; eleven-patch preflight and full GN graph
+plus Fly/UI/profile header ownership checks pass. All 43 Python tooling contracts,
+`npm test`, documentation build and whitespace check pass. The retained Electron
+keyboard test passes with `errors: []` and native guest scroll of 80 pixels under
+private Xvfb (`keyboard-editor-retained-electron-slow-start.log`). This run retained
+all assertions and raised only the Electron launch timeout from 30 to 120 seconds
+on the compiling host. Earlier attempts remain recorded: X11 launch timed out at
+30 seconds; headless launched but could not open Preferences through the focused
+shortcut. Neither attempted run is counted as a pass. The new native editor
+still requires actual linked runtime execution and platform acceptance.
+
+## Native clock and first app preferences group
+
+PR [116](https://github.com/Arzuparreta/fly-browser/pull/116) contains native
+keyboard preferences and account/vault defaults, based on PR 115's branch until
+that predecessor passes and merges. Its `b2a30b4` object matrix is run 39124090577.
+The next dependent branch is `codex/chromium-native-clock` in the hints worktree;
+none of these source changes enter the frozen nine-patch local build implicitly.
+
+The native sidebar now has a browser-owned live clock with the existing three
+formats (`datetime`, `time`, `seconds`), local 24-hour time, click-to-cycle,
+keyboard/palette `toggle-clock`, and immediate preference updates. The timer
+stops when the clock or desktop is hidden and never saves on ticks. Visibility
+and format live in `fly.preferences` in native Local State, schema 1 with a
+`values` dictionary. Reads do not write defaults before migration; mutations
+preserve other groups and unknown metadata. Malformed/future data is preserved
+and disables editing. Managed native preference precedence also disables edits.
+This is app presentation state shared across profiles, with no site/private tab
+metadata. The other 26 baseline preferences still need native implementation.
+
+Patch twelve registers the service and its actual GN dependencies, including
+both scoped and upstream browser-test targets. All twelve patches preflight over
+22 upstream files; complete GN generation (35,577 targets) and Fly/UI/profile
+header checks pass in the independent shadow. Six new preferences tests execute
+in the pinned Linux partial service runner: all **37 C++ service tests pass**.
+The raw log is `evidence/clock-native-tests.log`. This runner links actual pinned
+Chromium libraries and gtest; it is not full-browser or GUI acceptance.
+
+The source now has 34 browser declarations (two PRE phases, 32 main cases).
+The added native clock case checks sidebar rendering, no initial tick/default
+write, click format changes, command visibility changes and preserving future
+schema data. Pinned source checks pass; that GUI case remains unexecuted until
+a current native browser/test binary links. No clock acceptance or broader M2
+completion is claimed from the standalone service results.
+
+## CI progress retention
+
+The dependent `codex/chromium-ci-progress` branch addresses the missing Windows
+full-build diagnosis when its runner connection was lost before artifact upload.
+CI now preserves exact merged child stdout/stderr bytes and emits bounded live
+progress every fifteen seconds, plus failures immediately. Actual child exit
+codes and full log hashes still determine each recorded result; no time/resource
+failure becomes a pass. Source lines are prefixed in the console, including the
+bounded failure tail, so progress containing carriage returns or workflow-like
+text remains ordinary log output. A lost runner can still lose its artifact, but
+the server-side job log retains the latest emitted build progress.
+
+Four real subprocess logging cases pass locally, including failure exit status,
+non-UTF8 bytes, bounded noisy progress, carriage returns and a quiet successful
+child. The complete Python tooling suite passes **47 tests**. This changes no
+ordinary PR workflow or required check; existing manual engine jobs call the
+updated logger. The new native clock branch is PR
+[117](https://github.com/Arzuparreta/fly-browser/pull/117) at `e4150ad`; its manual
+service and object runs are 39124850207 and 39124851963.
+
+The earlier native service matrix 39120990306 at `39d68ec` has completed
+successfully on Linux, macOS and Windows. It precedes the Windows line-ending
+and browser-fixture repair, so it cannot substitute for the latest-head matrix
+39123604736 at `5d76c7e` required before merging PR 115.
+
+## Native sidebar favicons, audio and mute metadata
+
+The dependent `codex/chromium-native-tab-indicators` branch projects the native
+navigation entry's actual favicon into each existing sidebar row, with a native
+vector fallback for blank/unknown icons. It caches bitmap identity and uses
+16-DIP images. Pin/close controls are compact native icon buttons with tooltips
+and accessible names; all hover/pressed/disabled icon states follow changes.
+Rows and their weak WebContents identity survive favicon/title/pin updates.
+
+The audio control uses native mute state and RecentlyAudibleHelper, including its
+native two-second quiet-period notification. Clicking it resolves that row's
+current contents after moves and can mute background tabs without selecting
+them. Both this control and the shared mute command now call Chromium's
+`SetTabAudioMuted` with its user-audio-indicator reason. The earlier direct
+WebContents setter changed audio but omitted native extension mute metadata;
+standard `chrome.tabs` queries now receive the user reason and clear any previous
+extension ownership through the upstream utility. No media play/pause or web API
+is replaced, and this remains tab-specific rather than changing site permissions.
+
+Two source browser cases fetch/decode the real upstream favicon fixture, retain
+the same row/UUID through navigation to bare `about:blank`, and query mute state
+through a loaded MV3 extension after user/extension changes and a background-row
+move/click. The scoped runner declares its actual favicon HTML/PNG dependencies.
+There are now 36 browser declarations, two PRE phases and 34 main cases.
+These GUI/API cases remain unexecuted pending a current linked test binary.
+
+Pinned Clang accepts the sidebar, native commands, controller and all browser
+cases. All thirteen patches preflight over 22 upstream files; native GN
+generation and Fly/UI/profile header checks pass. The initial GN attempt exposed
+an incorrect vector icon generator target; the corrected stack uses the existing
+Views target and the explicit component icon dependency. All 47 Python tooling
+contracts, `npm test`, docs build and whitespace pass locally. This does not
+substitute for native GUI, audible playback or packaged acceptance.
+
+## Native product tab menu and pinned-tab protection
+
+The dependent `codex/chromium-native-tab-menu` branch adds the product's native
+sidebar context menu: adjacent blank tab, reload, duplicate, pin/unpin, tab-specific
+mute/unmute, close, close others/right and profile-native closed-tab recovery.
+Opening it preserves the selected tab. It resolves the target's weak native
+identity and current index again after menu dispatch; reorders do not retarget a
+command, and closed targets or a changed workspace generation cancel it. Native
+model/unload/session services perform the operations. Muting retains Chromium's
+user-indicator metadata and does not change site sound permissions.
+
+Pinned product tabs now reject the shared close action and disable the sidebar
+close button/context item until unpinned, matching the retained Fly guard.
+Extension APIs and whole-window shutdown keep their native close semantics.
+Native close-other/right commands already exclude pinned tabs in the pinned
+upstream implementation.
+
+Three additional browser cases use native pointer menu opening and cover
+background targeting, pinned protection, reorders, closed targets, workspace
+switch cancellation, adjacent creation and stable identity through close/reopen.
+There are 39 browser declarations (two PRE phases, 37 main cases). Source checks
+pass with the pinned compiler, and the complete thirteen-patch graph plus Fly/UI
+header ownership checks pass in an independent shadow. These new GUI cases
+remain unexecuted until a current browser-test executable links; the running
+complete native build stays frozen at its reviewed nine-patch snapshot.
+
+Local repository checks pass: `npm test`, 47 Python tooling contracts,
+documentation generation and whitespace. Retained Electron context-menu and
+recorder/editable-page regressions both pass under private authenticated Xvfb
+with disposable profiles (`tab-menu-retained-context.log` and
+`tab-menu-retained-keyboard.log`; keyboard errors empty, guest scroll 80).
+The keyboard run retains all assertions and uses the existing external wrapper
+that only raises its app-launch timeout on the compiling host. These passes are
+retained-runtime regression evidence, not execution of the new native cases.
+
+## Native footer status and security presentation
+
+The dependent `codex/chromium-native-status-bar` branch places the keyboard-mode
+label in a native footer alongside current URL/link target, native page security
+and workspace/private context. The read-only view observes the actual selected
+tab model and WebContents. Chromium's browser delegate forwards native pointer
+link targets; hidden tabs and other profile/window models cannot replace them.
+A separate target observer clears links when their pane hides, navigates or dies,
+including a visible unfocused split pane. URL formatting and the page's security
+level come from Chromium's existing formatter and Chrome security-state utility,
+not a scheme heuristic or renderer binding. Clearing the page also clears the
+accessible names and tooltips that could otherwise retain old private metadata.
+
+`show_status_bar` is now a third native presentation preference in the existing
+schema-1 app store. The shared command/palette action toggles it immediately.
+Reads do not save defaults; edits preserve clock and unknown data, respect native
+policy precedence, and reject malformed/future implemented groups. Two new
+service cases bring the pinned Linux partial runner to **39 passing C++ tests**
+(`status-bar-native-tests-final.log`). This remains separate from the official native
+GN launcher and cannot pass GUI acceptance.
+
+The fourteenth patch integrates the new view and browser-target forwarding seam.
+All fourteen patches preflight over 23 upstream files; independent full GN
+generation and Fly/UI/browser-delegate header ownership checks pass. Pinned Clang
+accepts the view, controller, command adapter, modified upstream delegate and all
+41 browser declarations (two PRE phases, 39 main cases). Evidence:
+`status-bar-gn-final.log`, `status-bar-syntax-final.log`,
+`status-delegate-syntax.log` and `status-bar-browser-syntax-final.log`.
+Two new native browser cases cover real pointer hover/exit, visibility preference,
+hidden/other-profile rejection, HTTPS engine state, a native test malware verdict,
+and private/blank state. They remain unexecuted pending a current linked test
+binary; the full active build keeps its earlier frozen inputs unchanged.
+
+The preference guard also detects a typed default/recommended fallback while an
+explicit user value is present. A corrupt non-dictionary preference remains
+untouched rather than being mistaken for a new store. The first synthetic case
+exposed the typed user getter's fatal mismatch diagnostic; the corrected guard
+uses read-only native provenance/effective-value APIs. The final native tests
+exercise both fallback and preservation boundaries.
+`npm test`, 47 Python tooling tests, documentation and whitespace pass locally.
+The retained menu/keyboard disposable-profile regressions passed immediately
+before this footer-only follow-up; native footer GUI acceptance remains pending.
+
+## Native interface and website color scheme
+
+The dependent `codex/chromium-native-theme` branch implements the native
+light/dark action and the `theme`/`sync_website_theme` preference group. The shared
+desktop uses Views color-provider overrides, inherited by its native child
+surfaces. An explicit native background keeps unpainted sidebar/content areas
+consistent with those colors. There is no CSS injection or web API replacement.
+
+The existing Chrome browser-client preference seam maps the selected website
+scheme to actual Blink preferences and native scrollbar appearance. Turning
+website synchronization off selects light, matching the retained product's
+`websiteTheme` function. The generator executes that exact repository function
+to capture all four supported mode/sync combinations for the C++ contract test.
+WebUI, native managed browser-color policy, enterprise isolation, forced colors
+and Chromium's guest-owner preference routing retain their original paths.
+Changes notify native web-theme observers, including hidden/private/extension
+contents, without changing the process-wide OS color preference. Clock ticks do
+not issue theme notifications or write preferences.
+
+Three new native service cases cover the retained contract, restart, independent
+UI/website choices, other-group metadata, malformed/future data and policy.
+All **42 C++ service tests pass** in the pinned Linux partial runner
+(`theme-native-tests.log`). Complete fifteen-patch preflight and independent GN
+checks pass for Fly, UI, browser delegate and browser core (`theme-gn.log`).
+Pinned Clang accepts the controller/dispatcher, modified browser-client
+implementation and all 42 browser declarations (two PRE phases, 40 main cases):
+`theme-ui-syntax-final.log`, `theme-client-syntax.log` and
+`theme-browser-syntax.log`.
+
+The new native browser case checks actual matchMedia output, live changes in
+already loaded/hidden profiles, private contents, native UI color keys, preserved
+editable focus and absence of preference writes from notification processing.
+It remains unexecuted until a current native test executable links. The complete
+running build still uses its frozen nine-patch inputs. Custom theme palettes,
+the general preferences UI and the remaining product settings are still pending;
+this does not pass A04/A15 or complete M2 from source checks alone.
+
+## Native presentation controls
+
+The native preferences surface now exposes the five implemented presentation
+settings: dark/light interface, website color synchronization, clock visibility,
+clock format and status-bar visibility. Native Views checkboxes and a format
+button occupy an independently scrollable Appearance tab. Keyboard keeps its
+own tab and native scroll viewport. They call the same app-wide PreferencesService
+used by commands; changes apply
+immediately. The sidebar has a Preferences button, disabled when no browser
+context exists. Keyboard edits remain drafts until Apply in the Keyboard tab, and Close or
+Escape discards only that keyboard draft. The panel states this distinction.
+
+A pref observer refreshes presentation controls after outside changes without
+rebuilding keyboard rows, dropping a draft or cancelling recording. Future,
+malformed or managed appearance data leaves controls disabled; preserved data is
+never replaced with defaults. Callbacks after cancellation cannot save a change.
+Observer subscriptions and control pointers are cleared before widget teardown.
+The native child surface shares the existing window and focus/IME lifecycle.
+
+Two additional browser cases cover pointer entry, all five settings, keyboard
+draft preservation, outside updates, close and restored page typing without
+visibility events; and unsupported data, live recovery and cancelled callbacks.
+These bring the current suite to 44 declarations including two PRE cases. They
+remain unexecuted pending the complete current native browser. This implements
+presentation controls, not the remaining preference groups or complete M2.
+
+Downloaded official summaries from run 39130191670 at `6ff2d1e` contain exactly
+39 SUCCESS results on each of Linux, macOS and Windows. Object compilation for
+that snapshot and later theme-source CI are separate, still pending operations.
+
+## Strict native dictionary storage
+
+The app-wide workspace and keyboard services now share the preference service's
+native dictionary provenance check. A wrong-typed user value can resolve through
+Chromium's typed getter to an empty default or recommended dictionary; treating
+that result as a new store would overwrite the original data. The common
+`fly/prefs/dictionary_store.h` guard uses read-only native preference provenance,
+preserves valid explicit empty dictionaries and avoids the typed user getter's
+fatal type-mismatch diagnostic. No private PrefService API is exposed or patched.
+
+Managed dictionaries remain readable with native precedence. Every workspace
+mutation and keyboard save also checks native user modifiability, preventing a
+hidden user write behind managed settings. The keyboard Apply button reflects
+that restriction, and workspace creation checks editability before allocating a
+profile directory. Malformed and future schemas remain fail-closed.
+
+Four regression cases failed against the earlier implementation while all 42
+existing cases passed. After the fix, all 46 cases pass in the partial local
+pinned Linux runner (`store-regression-before-final.log` and
+`store-native-tests-final.log`). The cases cover wrong string/bool/list roots,
+recommended fallback, managed read-only values, preserved raw data and valid empty
+user dictionaries. Official GN and three-platform execution remain a separate CI
+gate for the consolidated head.
+
+The integration branch retains the feature commits from PRs 116–123. Those PRs
+are superseded by PR 115 so that ordinary checks and explicit service/object CI
+can validate one complete source head. In-progress manual runs for their earlier
+snapshots are cancelled when superseded; completed results remain historical
+snapshot evidence, never results for the final combined source. This does not
+change ordinary PR workflows or native cutover requirements.
+
+## App-wide native Fly bookmarks
+
+The native BookmarkService owns Fly's shared flat collection in schema-1 Local
+State `fly.bookmarks`, independent of profile cookie/storage state. Explicit adds
+prepend a URL/title/timestamp row; exact duplicate URLs preserve the original
+entry and position. Exact removals preserve other row ordering, unknown row data
+and import metadata. Reads do not create a store. Typed-root fallback, future or
+malformed records and managed writes are rejected using the common provenance
+guard. Native PrefService owns asynchronous atomic disk persistence; storage-fault
+and interruption acceptance remain pending and are not established by these
+in-memory service tests.
+
+The collection has one authority. Chromium's profile BookmarkModel remains the
+separate native scope used by extensions and internal Chromium bookmark pages;
+there is no synchronization or API replacement between it and the explicitly
+labelled Fly collection. Final adaptation of remaining stock browser menu/toolbar
+bookmark surfaces is still an M2 task, so their profile scope must not be presented
+as the shared Fly list during default cutover.
+
+The shared list is available from the sidebar's Fly bookmarks button and the
+existing bookmark action/palette bindings. A native child picker searches titles
+and URLs, opens a new foreground tab through Chromium's real navigator in the
+selected browser's Profile, and supports pointer removal, arrow/page navigation,
+Enter, Escape and Delete. Delete retains normal text editing while a selection or
+text ahead of the cursor exists. Existing keyboard binding choices apply. The
+command palette and picker share native surface machinery with separate callback
+instances; URL strings never become command names or page-accessible APIs.
+
+Removal runs after the input callback returns and rechecks picker lifetime and
+membership. Store changes refresh the open list and native enabled state without
+clearing its query. Closing, navigation, profile switching and destroyed source
+contents cancel pending actions. Cached URL membership keeps row availability
+checks from repeatedly traversing the complete store. Pages retain real native
+visibility and restore their saved input focus on dismissal.
+
+Only explicit bookmark actions write this list. Merely visiting a page privately
+adds no entry; an explicit save from private mode follows the browser's usual
+user-requested persistent bookmark behavior. Unsafe executable/data URLs and blank
+tabs cannot be added. HTTP(S) origin exclusions retain scheme, host and port for
+later frequent-site integration; no new quickmark store is introduced.
+
+Seven new service cases bring the partial pinned Linux suite to 53 passing cases.
+Two browser cases bring the current declaration count to 46, including two PRE
+cases: shared-list navigation verifies distinct destination cookies and separate
+native profile bookmark models; deletion verifies native text editing, deferred
+cancelled clicks and restored page typing/visibility. The browser cases remain
+unexecuted pending the complete current native build. Patch 16 registers the store
+and GN dependencies. The unmodified control and frozen nine-patch runtime build
+are separate snapshots; neither proves this bookmark implementation accepted.
+
+If bookmark data becomes invalid while its picker is open, the picker closes
+and the disabled sidebar button explains that recovery is needed and saved data
+is preserved. The browser case also covers this transition; it cannot appear to
+be an ordinary empty collection.
+
+## Complete runtime-file provenance
+
+New control/native build records capture GN's complete `//chrome:chrome`
+`runtime_deps` closure after successful compilation. Each file has a streaming
+SHA-256, size and POSIX mode where supported; directory contents, relative
+framework links and their resolved payloads are covered. Paths cannot escape the
+output directory. A complete snapshot rejects concurrent changes, missing files,
+extra directory entries, changed link destinations and altered code/resources.
+The browser executable must itself be included. Manifest bytes are bound into the
+build record with a separate digest.
+
+Native media fixtures now verify that closure before loading automation or
+creating fixture profiles. This closes the gap where an unchanged launcher could
+hide replaced component libraries. The verifier is a developer-side Python tool;
+it adds no Python dependency to the browser's runtime. Tests use data-only files,
+never a simulated browser. All 60 tooling cases pass locally, including replaced
+libraries, changed resources/modes, escaping paths, framework links, malformed
+manifests and pre-launch rejection. Malformed manifest metadata and paths outside the evidence directory are rejected
+before file hashing. The same C++ service source still has 53
+passing partial Linux cases; this tooling change proves no additional UI cases.
+
+The actual Linux GN probe returned 9,210 runtime dependency entries, 5,301 unique
+paths. That was a read-only graph query during the frozen build, not an attested
+finished runtime. Existing M0/control and frozen `b98cae4` records predate closure
+capture and retain their limited original scope. Their metadata is not silently
+upgraded. After the frozen pipeline completes, revert its managed overlay using
+its own frozen inputs, rerun the unmodified control build with the current tools,
+and capture its full closure before applying/building the current native source.
+The existing control executable/args checks remain available for those historical
+records; any present runtime manifest must validate, including malformed ones.
+
+An independent `fly-chromium-native-summary-audit.service` now waits for the frozen
+pipeline. It binds the browser-source hash, frozen commit/fingerprint and fresh
+summary timestamp, then requires every declared main case to finish SUCCESS
+(PRE outcomes are folded by Chromium's launcher). It records
+`evidence/native-acceptance-audit.json`; an empty, stale or incomplete summary
+cannot pass. This audit does not mutate the frozen checkout or engine source.
+
+## First complete native Linux executable
+
+The frozen `b98cae4` nine-patch browser build completed on the actual pinned
+source, with the matching H264/AAC control preset. `evidence/native-build.json`
+records the clean source, overlay fingerprint, arguments and executable hash.
+The following official native service run reports all 31 cases SUCCESS. The
+scoped browser runner is still compiling its additional test support; its case
+results must pass the independent summary audit before acceptance.
+
+The first actual native audio fixture passes under X11 with the sandbox enabled
+and focus emulation explicitly disabled. Evidence is
+`fixture-evidence/control-smoke-21MafT/result.json`. Its four checks cover focus in
+an editable field without hiding the page, tabs in the same native window,
+paused audio retaining its state across tab switches, and continuing background
+audio. It uses generated loopback PCM media and one profile; real Twitch/Pie,
+workspace/split lifecycle and packaged/platform acceptance remain unverified.
+
+A separate clean-profile launch was captured from the actual Xvfb desktop in
+`fixture-evidence/native-desktop-zva_t74q/desktop.png`; the visible Fly sidebar and
+embedded native browser confirm the Views shell is running. It also keeps the
+sandbox enabled. This is the older frozen snapshot: the blank-tab row fix,
+accountless defaults, clock/footer, preferences and bookmarks in later commits
+are not validated by that image. The screenshot is a launch observation, not a
+completed product UX or M1 acceptance result.
+
+## Native teardown failure and current repair
+
+The first browser suite executed actual cases and repeatedly crashed during
+teardown. Chromium's dangling-pointer detector identifies
+`EmbeddedBrowserNativeWidget::~EmbeddedBrowserNativeWidget` releasing its raw
+BrowserWindowInterface pointer after BrowserManagerService deleted that model.
+The first six test bodies reached teardown without an assertion failure, but
+those crashes are failed tests, not passing cases.
+
+The owned acceptance pipeline was stopped, its lease owner verified dead, and
+its original logs/records archived as `evidence/lifetime-before-*`. The audit
+records all_passed=false. No dangling-pointer diagnostics were suppressed.
+Minimal repair `5fd0d8a` on `codex/chromium-native-lifetime` in the sidebar worktree
+uses the model's native WeakPtr and refuses stale activation/show requests. It
+passes pinned Linux Clang and npm test. Its new source fingerprint is
+`bd7881e588206f4ff1fafb7e89eb8b234c3087ecd50c9d1030fa657cd9b2cfc0`.
+
+That checkout and the reapplied nine-patch engine source are frozen again during
+`fly-chromium-native-build.service`, the restarted acceptance service and summary
+audit. New logs use `lifetime-build-systemd.log`,
+`lifetime-acceptance-systemd.log` and `lifetime-summary-audit.log`. The rebuild is
+still running. The repair is also cherry-picked onto the current development
+branch; it has not yet been added to PR 115, whose old head cannot be treated as
+runtime-safe. Finish the actual repaired browser/media tests before claiming M1.
+
+## Safe incremental Fly-source refresh
+
+`native.py refresh-overlay --root /mnt/storage/fly-chromium` updates only managed
+Fly-owned source files after verifying the current engine state and replaying the
+entire patch stack in a private staging directory. Upstream target paths and
+resulting patched bytes must be identical. Patch changes require the existing
+revert/apply path. Unchanged upstream/Fly files retain their timestamps, avoiding
+unnecessary invalidation of large public-header dependency trees.
+
+The operation journals both reviewed versions of changed owned files. An
+interrupted refresh can use `recover` to restore clean pinned upstream; unknown
+source edits still cause recovery to refuse writes. Core/compile-only overlays
+cannot be promoted through refresh. Five new disposable-tree regressions cover
+unchanged timestamps, add/remove, upstream/owner-edit rejection, interruption
+before/after a write and preservation of edits after interruption. All 65 tooling
+cases pass locally. This is tested tooling behavior; the running frozen repair
+uses its original tools and does not exercise the new command yet.
+
+## Canonical preference action entry points
+
+The native keyboard settings action now opens/focuses its existing Keyboard tab
+without closing the editor or discarding a draft when invoked again. Switching
+from Appearance uses the same native surface and stops any ongoing recording.
+`cycle-clock-format` also uses the shared validated preference service and native
+policy availability, matching the sidebar's cycle behavior. Browser coverage
+checks the repeated entry/draft/focus transition and canonical clock action;
+those cases remain pending execution in the current full browser. Pinned Clang
+accepts the changed UI and test source. The retained Electron recorder/editable
+baseline is validated separately with a disposable Xvfb profile.

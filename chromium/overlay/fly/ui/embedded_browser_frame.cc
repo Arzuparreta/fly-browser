@@ -3,7 +3,8 @@
 // Fly repository.
 #include "fly/ui/embedded_browser_frame.h"
 
-#include "base/memory/raw_ptr.h"
+#include "base/memory/weak_ptr.h"
+#include "chrome/browser/ui/browser_window/public/browser_window_interface.h"
 #include "chrome/browser/ui/views/frame/browser_frame_view.h"
 #include "chrome/browser/ui/views/frame/browser_native_widget.h"
 #include "chrome/browser/ui/views/frame/browser_view.h"
@@ -23,7 +24,7 @@ class EmbeddedBrowserNativeWidget final : public views::NativeWidgetAura,
                                           public BrowserNativeWidget {
  public:
   EmbeddedBrowserNativeWidget(BrowserWidget* widget, BrowserView* view)
-      : views::NativeWidgetAura(widget), browser_(view->browser()) {}
+      : views::NativeWidgetAura(widget), browser_(view->browser()->GetWeakPtr()) {}
   views::Widget::InitParams GetWidgetParams(
       views::Widget::InitParams::Ownership ownership) override {
     views::Widget::InitParams params(ownership);
@@ -58,18 +59,30 @@ class EmbeddedBrowserNativeWidget final : public views::NativeWidgetAura,
   }
   void Show(ui::mojom::WindowShowState state,
             const gfx::Rect& restore_bounds) override {
+    if (!browser_ || browser_->IsDeleteScheduled())
+      return;
+    auto& window = FlyWindowController::Get();
+    // A background native window is still a separate browser/tab model. It
+    // must not replace the currently visible workspace merely because Chrome
+    // requests ShowInactive (for example chrome.windows.create focused:false).
+    if (state == ui::mojom::WindowShowState::kInactive &&
+        window.has_selected_browser() && !window.IsSelected(browser_.get())) {
+      views::NativeWidgetAura::Hide();
+      return;
+    }
     views::NativeWidgetAura::Show(state, restore_bounds);
-    // Startup, session restore and extension-created windows use the normal
-    // upstream Show path. All of them select within the same desktop window.
-    FlyWindowController::Get().Select(browser_, false);
+    if (browser_)
+      window.Select(browser_.get(), false);
   }
   void Activate() override {
-    FlyWindowController::Get().Select(browser_, true);
+    if (auto* window = FlyWindowController::GetIfCreated(); window && browser_)
+      window->Select(browser_.get(), true);
   }
   void Deactivate() override { Desktop()->Deactivate(); }
   bool IsActive() const override {
-    return FlyWindowController::Get().IsSelected(browser_) &&
-           Desktop()->IsActive();
+    const auto* window = FlyWindowController::GetIfCreated();
+    return window && browser_ && window->IsSelected(browser_.get()) &&
+           window->desktop_widget()->IsActive();
   }
   void Maximize() override { Desktop()->Maximize(); }
   void Minimize() override { Desktop()->Minimize(); }
@@ -89,7 +102,9 @@ class EmbeddedBrowserNativeWidget final : public views::NativeWidgetAura,
   views::Widget* Desktop() const {
     return FlyWindowController::Get().desktop_widget();
   }
-  const raw_ptr<BrowserWindowInterface> browser_;
+  // Chromium deletes the browser model before the posted Aura window teardown.
+  // The widget must neither retain a dangling raw_ptr nor reactivate that model.
+  const base::WeakPtr<BrowserWindowInterface> browser_;
 };
 
 // Platform BrowserFrameViews assume a DesktopNativeWidgetAuraLinux/Win. The

@@ -1,0 +1,11 @@
+--- a/chrome/browser/ui/BUILD.gn
++++ b/chrome/browser/ui/BUILD.gn
+@@ -1107,7 +1107,7 @@
+     "//ui/webui",
+   ]
+   if (is_linux || is_win) {
+-    deps += [ "//fly:workspaces", "//fly:commands", "//fly:preferences", "//ui/accessibility", "//ui/wm" ]
++    deps += [ "//fly:workspaces", "//fly:commands", "//fly:preferences", "//components/vector_icons", "//ui/accessibility", "//ui/wm" ]
+   }
+   deps += [ "//fly:session_metadata" ]
+ 

@@ -5,11 +5,17 @@
 #include "fly/commands/keyboard_router.h"
 #include "fly/ui/command_palette.h"
 #include "fly/ui/hint_controller.h"
+#include "fly/ui/keyboard_editor.h"
+#include "chrome/browser/ui/navigator/browser_navigator.h"
+#include "chrome/browser/ui/navigator/browser_navigator_params.h"
 #include "fly/ui/native_commands.h"
+#include "fly/bookmarks/bookmark_service.h"
+#include "fly/ui/status_bar.h"
 #include "fly/ui/tab_sidebar.h"
 
 #include <algorithm>
 #include <utility>
+#include <vector>
 
 #include "base/check.h"
 #include "base/command_line.h"
@@ -18,10 +24,13 @@
 #include "base/strings/string_number_conversions.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/task/single_thread_task_runner.h"
+#include "chrome/app/chrome_command_ids.h"
 #include "chrome/browser/browser_process.h"
+#include "chrome/browser/lifetime/application_lifetime.h"
 #include "chrome/browser/lifetime/application_lifetime_desktop.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/profiles/profile_manager.h"
+#include "chrome/browser/profiles/profiles_state.h"
 #include "chrome/browser/ui/browser_commands.h"
 #include "chrome/browser/ui/browser_window/public/browser_window_interface.h"
 #include "chrome/browser/ui/browser_window/public/create_browser_window.h"
@@ -36,6 +45,10 @@
 #include "ui/base/ime/text_input_client.h"
 #include "ui/base/ime/text_input_type.h"
 #include "ui/events/event.h"
+#include "ui/color/color_id.h"
+#include "ui/native_theme/native_theme.h"
+#include "ui/views/background.h"
+#include "ui/views/accessibility/view_accessibility.h"
 #include "ui/views/controls/button/md_text_button.h"
 #include "ui/views/controls/label.h"
 #include "ui/views/controls/native/native_view_host.h"
@@ -52,7 +65,7 @@ std::unique_ptr<FlyWindowController>& Instance() {
 }
 }  // namespace
 
-bool FlyWindowController::ShouldEmbed(BrowserWindowInterface* browser) {
+bool FlyWindowController::ShouldEmbed(const BrowserWindowInterface* browser) {
   // Explicit development gate until migration and the acceptance suite pass.
   return base::CommandLine::ForCurrentProcess()->HasSwitch("fly-native") &&
          browser->GetType() == BrowserWindowInterface::Type::TYPE_NORMAL;
@@ -71,6 +84,8 @@ FlyWindowController* FlyWindowController::GetIfCreated() {
 FlyWindowController::FlyWindowController()
     : workspaces_(*g_browser_process->local_state()),
       commands_(*g_browser_process->local_state()),
+      preferences_(*g_browser_process->local_state()),
+      bookmarks_(std::make_unique<BookmarkService>(*g_browser_process->local_state())),
       keep_alive_(
           std::make_unique<ScopedKeepAlive>(KeepAliveOrigin::FLY_WINDOW,
                                             KeepAliveRestartOption::DISABLED)),
@@ -80,6 +95,7 @@ FlyWindowController::FlyWindowController()
   SetCanMinimize(true);
   SetCanMaximize(true);
   auto root = std::make_unique<views::View>();
+  root->SetBackground(views::CreateSolidBackground(ui::kColorDialogBackground));
   auto* layout = root->SetLayoutManager(std::make_unique<views::BoxLayout>(
       views::BoxLayout::Orientation::kHorizontal));
   auto sidebar = std::make_unique<views::View>();
@@ -99,11 +115,37 @@ FlyWindowController::FlyWindowController()
       sidebar->AddChildView(std::make_unique<TabSidebar>(base::BindRepeating(
           &FlyWindowController::CreateTab, weak_factory_.GetWeakPtr())));
   sidebar_layout->SetFlexForView(tab_sidebar_, 1);
-  status_ = sidebar->AddChildView(std::make_unique<views::Label>(u"NORMAL"));
+  clock_ = sidebar->AddChildView(std::make_unique<views::MdTextButton>(
+      base::BindRepeating(&FlyWindowController::CycleClockFormat,
+                          weak_factory_.GetWeakPtr()),
+      u""));
+  clock_->SetStyle(ui::ButtonStyle::kText);
+  preferences_button_ = sidebar->AddChildView(std::make_unique<views::MdTextButton>(
+      base::BindRepeating(
+          [](base::WeakPtr<FlyWindowController> window) {
+            if (window && window->selected_) {
+              InvokeNativeCommand(window->selected_, "toggle-help");
+              window->keyboard_editor_->ShowAppearance();
+            }
+          }, weak_factory_.GetWeakPtr()), u"Preferences"));
+  preferences_button_->SetEnabled(false);
+  bookmarks_button_ = sidebar->AddChildView(std::make_unique<views::MdTextButton>(
+      base::BindRepeating([](base::WeakPtr<FlyWindowController> window) {
+        if (window && window->selected_)
+          InvokeNativeCommand(window->selected_, "toggle-bookmarks");
+      }, weak_factory_.GetWeakPtr()), u"Fly bookmarks"));
+  bookmarks_button_->SetEnabled(false);
   root->AddChildView(std::move(sidebar));
-  content_ = root->AddChildView(std::make_unique<views::View>());
+  auto* column = root->AddChildView(std::make_unique<views::View>());
+  auto* column_layout =
+      column->SetLayoutManager(std::make_unique<views::BoxLayout>(
+          views::BoxLayout::Orientation::kVertical));
+  content_ = column->AddChildView(std::make_unique<views::View>());
   content_->SetLayoutManager(std::make_unique<views::FillLayout>());
-  layout->SetFlexForView(content_, 1);
+  column_layout->SetFlexForView(content_, 1);
+  status_bar_ = column->AddChildView(std::make_unique<StatusBar>());
+  status_ = status_bar_->mode_label();
+  layout->SetFlexForView(column, 1);
   SetContentsView(std::move(root));
   views::Widget::InitParams params(
       views::Widget::InitParams::CLIENT_OWNS_WIDGET);
@@ -140,29 +182,153 @@ FlyWindowController::FlyWindowController()
               InvokeNativeCommand(window->selected_, std::move(action));
           },
           weak_factory_.GetWeakPtr()));
+  bookmark_picker_ = std::make_unique<CommandPalette>(
+      desktop_.get(),
+      base::BindRepeating([](base::WeakPtr<FlyWindowController> window,
+                            std::string_view url) {
+        return window && !window->closing_ &&
+               window->bookmark_urls_.contains(std::string(url));
+      }, weak_factory_.GetWeakPtr()),
+      base::BindRepeating(&FlyWindowController::OpenBookmark,
+                          weak_factory_.GetWeakPtr()),
+      base::BindRepeating(&FlyWindowController::RemoveBookmark,
+                          weak_factory_.GetWeakPtr()));
+  keyboard_editor_ =
+      std::make_unique<KeyboardEditor>(desktop_.get(), commands_,
+                                       *g_browser_process->local_state());
   desktop_->AddObserver(this);
+  preferences_registrar_.Init(g_browser_process->local_state());
+  preferences_registrar_.Add(
+      kPreferencesPref,
+      base::BindRepeating(&FlyWindowController::OnPreferencesChanged,
+                          weak_factory_.GetWeakPtr()));
+  preferences_registrar_.Add(kBookmarksPref,
+      base::BindRepeating(&FlyWindowController::OnBookmarksChanged,
+                          weak_factory_.GetWeakPtr()));
+  OnPreferencesChanged();
   desktop_->GetNativeWindow()->AddPreTargetHandler(this);
   ArmCloseCallback();
   close_subscription_ = chrome::AddClosingAllBrowsersCallback(
       base::BindRepeating(&FlyWindowController::OnClosingAllBrowsers,
                           weak_factory_.GetWeakPtr()));
-  RebuildWorkspaceButtons();
+  ScheduleWorkspaceRefresh();
 }
 
 FlyWindowController::~FlyWindowController() {
   CHECK(entries_.empty());
   weak_factory_.InvalidateWeakPtrs();
+  clock_timer_.Stop();
+  preferences_registrar_.RemoveAll();
+  keyboard_editor_.reset();
+  bookmark_picker_.reset();
   palette_.reset();
   hints_.reset();
-  desktop_->GetNativeWindow()->RemovePreTargetHandler(this);
+  // During application quit the native desktop can be destroyed before the
+  // posted controller cleanup, while this client-owned Widget is still alive.
+  if (auto* native_window = desktop_->GetNativeWindow())
+    native_window->RemovePreTargetHandler(this);
   desktop_->RemoveObserver(this);
   // Destruction is only posted after all profile-bound BrowserWidgets finish
   // their own beforeunload and destruction paths.
   workspace_buttons_ = nullptr;
   content_ = nullptr;
   status_ = nullptr;
+  status_bar_ = nullptr;
+  clock_ = nullptr;
+  preferences_button_ = nullptr;
+  bookmarks_button_ = nullptr;
   tab_sidebar_ = nullptr;
   desktop_.reset();
+}
+
+std::vector<PaletteEntry> FlyWindowController::BookmarkEntries() {
+  bookmark_urls_.clear();
+  std::vector<PaletteEntry> entries;
+  if (const auto bookmarks = bookmarks_->Read()) {
+    for (const auto& bookmark : *bookmarks) {
+      bookmark_urls_.insert(bookmark.url);
+      entries.push_back({bookmark.url, bookmark.url, bookmark.title,
+                         bookmark.url, {}, {}});
+    }
+  }
+  return entries;
+}
+void FlyWindowController::OnBookmarksChanged() {
+  const bool readable = bookmarks_->Read().has_value();
+  bookmarks_button_->SetEnabled(selected_ && !closing_ && readable);
+  bookmarks_button_->SetTooltipText(readable ? u"Search shared Fly bookmarks"
+      : u"Fly bookmarks need recovery. Saved data has been preserved.");
+  if (!readable) {
+    if (bookmark_picker_->active())
+      bookmark_picker_->Cancel(true);
+    return;
+  }
+  if (bookmark_picker_->active())
+    bookmark_picker_->UpdateItems(BookmarkEntries(), bookmarks_->CanEdit());
+}
+void FlyWindowController::OpenBookmark(content::WebContents* source,
+                                      std::string url) {
+  if (closing_ || !selected_ ||
+      selected_->GetTabStripModel()->GetActiveWebContents() != source ||
+      !bookmarks_->Contains(url))
+    return;
+  NavigateParams params(selected_, GURL(url), ui::PAGE_TRANSITION_AUTO_BOOKMARK);
+  params.disposition = WindowOpenDisposition::NEW_FOREGROUND_TAB;
+  params.window_action = NavigateParams::WindowAction::kShowWindow;
+  Navigate(&params);
+}
+void FlyWindowController::RemoveBookmark(content::WebContents* source,
+                                        std::string url) {
+  if (!closing_ && selected_ &&
+      selected_->GetTabStripModel()->GetActiveWebContents() == source)
+    bookmarks_->Remove(url);
+}
+
+void FlyWindowController::OnPreferencesChanged() {
+  const auto theme = preferences_.ReadTheme();
+  if (theme && theme != applied_theme_) {
+    applied_theme_ = theme;
+    desktop_->SetColorModeOverride(
+        theme->mode == "dark" ? ui::ColorProviderKey::ColorMode::kDark
+                              : ui::ColorProviderKey::ColorMode::kLight);
+    // Native WebContents observers recompute actual renderer preferences,
+    // including hidden/split/private/extension pages. No web API is replaced.
+    ui::NativeTheme::GetInstanceForWeb()->NotifyOnNativeThemeUpdated();
+  }
+  UpdateClock();
+}
+
+void FlyWindowController::UpdateClock() {
+  if (status_bar_)
+    status_bar_->SetVisible(
+        preferences_.ReadStatusBarVisible().value_or(false));
+  const auto settings = preferences_.ReadClock();
+  const bool visible = settings && settings->visible;
+  if (!visible && clock_->HasFocus() && selected_) {
+    if (auto* contents = selected_->GetTabStripModel()->GetActiveWebContents())
+      contents->Focus();
+  }
+  clock_->SetVisible(visible);
+  clock_->SetEnabled(preferences_.CanEditClock());
+  if (!visible || !desktop_->IsVisible()) {
+    clock_timer_.Stop();
+    return;
+  }
+  const auto text = FormatClock(base::Time::Now(), settings->format);
+  if (clock_->GetText() != text.label)
+    clock_->SetText(text.label);
+  if (clock_->GetTooltipText() != text.tooltip)
+    clock_->SetTooltipText(text.tooltip);
+  if (!clock_timer_.IsRunning())
+    clock_timer_.Start(FROM_HERE, base::Seconds(1),
+                       base::BindRepeating(&FlyWindowController::UpdateClock,
+                                           weak_factory_.GetWeakPtr()));
+}
+void FlyWindowController::CycleClockFormat() {
+  preferences_.CycleClockFormat();
+}
+void FlyWindowController::OnWidgetVisibilityChanged(views::Widget*, bool) {
+  UpdateClock();
 }
 
 void FlyWindowController::Prepare(BrowserWindowInterface* browser) {
@@ -194,10 +360,11 @@ void FlyWindowController::Prepare(BrowserWindowInterface* browser) {
   host->SetVisible(false);
   auto [entry, inserted] =
       entries_.emplace(browser, Entry{browser, nullptr, host, workspace_id});
+  entry->second.order = next_window_order_++;
   entry->second.closed_subscription =
       browser->RegisterBrowserDidClose(base::BindRepeating(
           &FlyWindowController::OnBrowserDidClose, weak_factory_.GetWeakPtr()));
-  RebuildWorkspaceButtons();
+  ScheduleWorkspaceRefresh();
 }
 
 void FlyWindowController::Attach(BrowserWindowInterface* browser,
@@ -206,6 +373,7 @@ void FlyWindowController::Attach(BrowserWindowInterface* browser,
   entry.widget = child;
   child->AddObserver(this);
   entry.host->Attach(child->GetNativeView());
+  ScheduleWorkspaceRefresh();
 }
 
 bool FlyWindowController::IsSelected(
@@ -230,19 +398,37 @@ void FlyWindowController::Select(BrowserWindowInterface* browser, bool focus) {
     }
     hints_->Cancel();
     palette_->Cancel();
+    bookmark_picker_->Cancel();
+    keyboard_editor_->Cancel();
     selected_ = browser;
+    preferences_button_->SetEnabled(true);
+    OnBookmarksChanged();
     tab_sidebar_->SetBrowser(browser);
     auto& next = it->second;
+    std::u16string workspace_name;
+    if (const auto catalog = workspaces_.Read()) {
+      auto item =
+          std::ranges::find(catalog->items, next.workspace_id, &Workspace::id);
+      if (item != catalog->items.end())
+        workspace_name = base::UTF8ToUTF16(item->name);
+    }
+    status_bar_->SetBrowser(browser, std::move(workspace_name));
     next.host->SetVisible(true);
     next.widget->ShowInactive();
     if (!next.workspace_id.empty()) {
       workspaces_.Activate(next.workspace_id);
+      last_windows_[next.workspace_id] = browser->GetWeakPtr();
     }
     next.widget->OnNativeWidgetActivationChanged(desktop_->IsActive());
   }
+  ScheduleWorkspaceRefresh();
   UpdateModeLabel();
   desktop_->Show();
   if (focus) {
+    // Profile BrowserWidgets share one OS activation. Tell the native startup
+    // coordinator which persistent workspace the user actually selected.
+    if (!closing_ && !browser->GetProfile()->IsOffTheRecord())
+      profiles::SetLastUsedProfile(browser->GetProfile()->GetPath().BaseName());
     desktop_->Activate();
     if (auto* contents = browser->GetTabStripModel()->GetActiveWebContents()) {
       auto* view = contents->GetRenderWidgetHostView();
@@ -252,7 +438,25 @@ void FlyWindowController::Select(BrowserWindowInterface* browser, bool focus) {
   }
 }
 
+void FlyWindowController::ScheduleWorkspaceRefresh() {
+  if (workspace_refresh_pending_)
+    return;
+  workspace_refresh_pending_ = true;
+  // Profile loading and browser close may finish synchronously inside a button
+  // callback. Never destroy that originating button on its own dispatch stack.
+  base::SingleThreadTaskRunner::GetCurrentDefault()->PostNonNestableTask(
+      FROM_HERE, base::BindOnce(&FlyWindowController::RebuildWorkspaceButtons,
+                                weak_factory_.GetWeakPtr()));
+}
+
+void FlyWindowController::SelectWindow(
+    base::WeakPtr<BrowserWindowInterface> browser) {
+  if (browser)
+    Select(browser.get(), true);
+}
+
 void FlyWindowController::RebuildWorkspaceButtons() {
+  workspace_refresh_pending_ = false;
   workspace_buttons_->RemoveAllChildViews();
   const auto catalog = workspaces_.Read();
   if (!catalog) {
@@ -261,17 +465,62 @@ void FlyWindowController::RebuildWorkspaceButtons() {
     return;
   }
   for (const auto& item : catalog->items) {
-    workspace_buttons_->AddChildView(std::make_unique<views::MdTextButton>(
-        base::BindRepeating(&FlyWindowController::OpenWorkspace,
-                            weak_factory_.GetWeakPtr(), item.id),
-        base::UTF8ToUTF16(item.name)));
+    auto* button =
+        workspace_buttons_->AddChildView(std::make_unique<views::MdTextButton>(
+            base::BindRepeating(&FlyWindowController::OpenWorkspace,
+                                weak_factory_.GetWeakPtr(), item.id),
+            base::UTF8ToUTF16(item.name)));
+    const bool active =
+        selected_ && entries_.at(selected_).workspace_id == item.id;
+    button->SetStyle(active ? ui::ButtonStyle::kTonal : ui::ButtonStyle::kText);
+    std::vector<const Entry*> windows;
+    for (const auto& [browser, entry] : entries_)
+      if (!entry.browser_closed && entry.widget &&
+          entry.workspace_id == item.id)
+        windows.push_back(&entry);
+    std::ranges::sort(windows, {}, &Entry::order);
+    if (windows.size() < 2)
+      continue;
+    for (size_t i = 0; i < windows.size(); ++i) {
+      auto* browser = windows[i]->browser.get();
+      auto* contents = browser->GetTabStripModel()->GetActiveWebContents();
+      const auto title = contents && !contents->GetTitle().empty()
+                             ? contents->GetTitle()
+                             : u"New tab";
+      const auto text =
+          u"Window " + base::NumberToString16(i + 1) + u" · " + title;
+      auto* choice = workspace_buttons_->AddChildView(
+          std::make_unique<views::MdTextButton>(
+              base::BindRepeating(&FlyWindowController::SelectWindow,
+                                  weak_factory_.GetWeakPtr(),
+                                  browser->GetWeakPtr()),
+              text));
+      choice->SetStyle(selected_ == browser ? ui::ButtonStyle::kTonal
+                                            : ui::ButtonStyle::kText);
+      choice->GetViewAccessibility().SetName(base::UTF8ToUTF16(item.name) +
+                                             u", " + text);
+    }
   }
   for (const auto& [browser, entry] : entries_) {
-    if (!entry.browser_closed && entry.workspace_id.empty()) {
+    if (!entry.browser_closed && entry.widget && entry.workspace_id.empty()) {
+      std::u16string label = u"Recovery";
+      if (browser->GetProfile()->IsOffTheRecord()) {
+        label = u"Private workspace";
+        const auto directory = browser->GetProfile()
+                                   ->GetOriginalProfile()
+                                   ->GetPath()
+                                   .BaseName()
+                                   .AsUTF8Unsafe();
+        const auto item = std::ranges::find(catalog->items, directory,
+                                            &Workspace::profile_directory);
+        if (item != catalog->items.end())
+          label = u"Private · " + base::UTF8ToUTF16(item->name);
+      }
       workspace_buttons_->AddChildView(std::make_unique<views::MdTextButton>(
-          base::BindRepeating(&FlyWindowController::Select,
-                              weak_factory_.GetWeakPtr(), browser, true),
-          browser->GetProfile()->IsOffTheRecord() ? u"Private" : u"Recovery"));
+          base::BindRepeating(&FlyWindowController::SelectWindow,
+                              weak_factory_.GetWeakPtr(),
+                              browser->GetWeakPtr()),
+          label));
     }
   }
 }
@@ -280,8 +529,19 @@ void FlyWindowController::OpenWorkspace(std::string id) {
   if (closing_ || creating_profile_) {
     return;
   }
+  if (auto last = last_windows_.find(id); last != last_windows_.end()) {
+    if (last->second) {
+      const auto entry = entries_.find(last->second.get());
+      if (entry != entries_.end() && !entry->second.browser_closed &&
+          entry->second.widget) {
+        Select(last->second.get(), true);
+        return;
+      }
+    }
+    last_windows_.erase(last);
+  }
   for (const auto& [browser, entry] : entries_) {
-    if (!entry.browser_closed && entry.workspace_id == id) {
+    if (!entry.browser_closed && entry.widget && entry.workspace_id == id) {
       Select(browser, true);
       return;
     }
@@ -320,7 +580,7 @@ void FlyWindowController::CreateTab() {
 }
 
 void FlyWindowController::CreateWorkspace() {
-  if (closing_ || creating_profile_) {
+  if (closing_ || creating_profile_ || !workspaces_.CanEdit()) {
     return;
   }
   const auto catalog = workspaces_.Read();
@@ -342,7 +602,7 @@ void FlyWindowController::CreateWorkspace() {
   if (!added) {
     return;
   }
-  RebuildWorkspaceButtons();
+  ScheduleWorkspaceRefresh();
   OpenWorkspace(added->id);
 }
 
@@ -373,28 +633,95 @@ void FlyWindowController::OnBrowserDidClose(BrowserWindowInterface* browser) {
     return;
   // This fires before the browser/tab-model teardown. The Widget observer
   // releases the native host later, without retaining a dead BWI meanwhile.
+  auto* closed_profile = browser->GetProfile();
+  const auto return_it = private_returns_.find(closed_profile);
+  const auto private_return = return_it == private_returns_.end()
+                                  ? base::WeakPtr<BrowserWindowInterface>()
+                                  : return_it->second;
   it->second.browser_closed = true;
   it->second.browser = nullptr;
+  auto last = last_windows_.find(it->second.workspace_id);
+  if (last != last_windows_.end() && last->second.get() == browser)
+    last_windows_.erase(last);
   if (selected_ == browser) {
     hints_->Cancel();
     palette_->Cancel();
+    bookmark_picker_->Cancel();
+    keyboard_editor_->Cancel();
     tab_sidebar_->SetBrowser(nullptr);
+    status_bar_->SetBrowser(nullptr, u"");
     selected_ = nullptr;
+    preferences_button_->SetEnabled(false);
+    bookmarks_button_->SetEnabled(false);
     if (it->second.widget) {
       it->second.host->SetVisible(false);
       it->second.widget->Hide();
     }
     if (!closing_) {
-      for (const auto& [next, entry] : entries_) {
-        if (!entry.browser_closed && entry.widget) {
-          Select(next, true);
-          break;
+      auto choose = [&](bool same_workspace) {
+        for (const auto& [next, entry] : entries_) {
+          if (!entry.browser_closed && entry.widget &&
+              (!same_workspace ||
+               (entry.workspace_id == it->second.workspace_id &&
+                (!entry.workspace_id.empty() ||
+                 entry.browser->GetProfile() == closed_profile)))) {
+            Select(next, true);
+            return true;
+          }
         }
+        return false;
+      };
+      if (!choose(true)) {
+        if (private_return && entries_.contains(private_return.get()) &&
+            !entries_.at(private_return.get()).browser_closed)
+          Select(private_return.get(), true);
+        else
+          choose(false);
       }
     }
     UpdateModeLabel();
   }
-  RebuildWorkspaceButtons();
+  if (closed_profile->IsOffTheRecord() &&
+      std::ranges::none_of(entries_, [&](const auto& pair) {
+        return !pair.second.browser_closed && pair.second.browser &&
+               pair.second.browser->GetProfile() == closed_profile;
+      })) {
+    private_returns_.erase(closed_profile);
+  }
+  ScheduleWorkspaceRefresh();
+}
+
+bool FlyWindowController::CanTogglePrivate(
+    BrowserWindowInterface* browser) const {
+  return browser &&
+         (browser->GetProfile()->IsOffTheRecord() ||
+          chrome::IsCommandEnabled(browser, IDC_NEW_INCOGNITO_WINDOW));
+}
+
+void FlyWindowController::TogglePrivate(BrowserWindowInterface* browser) {
+  if (!CanTogglePrivate(browser))
+    return;
+  auto* profile = browser->GetProfile();
+  if (profile->IsOffTheRecord()) {
+    // The native close coordinator resolves all beforeunload decisions before
+    // closing this OTR profile's windows. Cancellation leaves them intact.
+    chrome::CloseAllBrowsersWithIncognitoProfile(profile,
+                                                 /*skip_beforeunload=*/false);
+    return;
+  }
+  auto* private_profile = profile->GetPrimaryOTRProfile(true);
+  private_returns_[private_profile] = browser->GetWeakPtr();
+  for (const auto& [model, entry] : entries_) {
+    if (!entry.browser_closed && entry.widget &&
+        model->GetProfile() == private_profile) {
+      Select(model, true);
+      return;
+    }
+  }
+  // Standard Chromium creation owns OTR lifetime, extension incognito access,
+  // permissions, downloads and shutdown. No normal navigation/state is copied.
+  chrome::NewEmptyWindow(private_profile,
+                         /*should_trigger_session_restore=*/false);
 }
 
 void FlyWindowController::ArmCloseCallback() {
@@ -408,19 +735,26 @@ void FlyWindowController::RequestClose(views::Widget::ClosedReason reason) {
   }
   hints_->Cancel();
   palette_->Cancel();
+  bookmark_picker_->Cancel();
+  keyboard_editor_->Cancel();
   closing_ = true;
   if (entries_.empty()) {
     base::SingleThreadTaskRunner::GetCurrentDefault()->PostTask(
         FROM_HERE, base::BindOnce(&FlyWindowController::FinishClose,
                                   weak_factory_.GetWeakPtr()));
   } else {
-    chrome::CloseAllBrowsers();
+    // This desktop represents the whole Fly application. Announce quit before
+    // closing profile windows so Chromium preserves its last-opened profiles
+    // and session services. The coordinator still honours unload cancellation.
+    chrome::AttemptExit();
   }
 }
 void FlyWindowController::OnClosingAllBrowsers(bool closing) {
   if (closing) {
     hints_->Cancel();
     palette_->Cancel();
+    bookmark_picker_->Cancel();
+    keyboard_editor_->Cancel();
   }
   closing_ = closing;
   if (closing && entries_.empty()) {
@@ -438,6 +772,8 @@ void FlyWindowController::FinishClose() {
 
 void FlyWindowController::OnWidgetDestroying(views::Widget* widget) {
   if (widget == desktop_.get()) {
+    clock_timer_.Stop();
+    preferences_registrar_.RemoveAll();
     return;
   }
   auto it = std::ranges::find_if(
@@ -449,11 +785,12 @@ void FlyWindowController::OnWidgetDestroying(views::Widget* widget) {
   const bool was_selected = selected_ == it->first;
   if (was_selected) {
     tab_sidebar_->SetBrowser(nullptr);
+    status_bar_->SetBrowser(nullptr, u"");
   }
   it->second.host->Detach();
   auto removed_host = content_->RemoveChildViewT(it->second.host.get());
   entries_.erase(it);
-  RebuildWorkspaceButtons();
+  ScheduleWorkspaceRefresh();
   if (was_selected) {
     selected_ = nullptr;
     if (!closing_ && !entries_.empty()) {
@@ -480,14 +817,62 @@ bool FlyWindowController::RunCommand(BrowserWindowInterface* browser,
                                      std::string_view action) {
   if (!entries_.contains(browser) || closing_)
     return false;
-  if (action == "toggle-palette") {
+  if (action == "add-bookmark") {
+    auto* contents = browser->GetTabStripModel()->GetActiveWebContents();
+    return contents && bookmarks_->Add(contents->GetLastCommittedURL().spec(),
+                                      base::UTF16ToUTF8(contents->GetTitle()));
+  }
+  if (action == "toggle-bookmarks") {
+    if (!bookmarks_->Read())
+      return false;
     hints_->Cancel();
+    palette_->Cancel();
+    keyboard_editor_->Cancel();
+    const auto config = commands_.Read().value_or(DefaultKeyboardConfig());
+    bookmark_picker_->ToggleItems(
+        browser->GetTabStripModel()->GetActiveWebContents(), BookmarkEntries(),
+        config.shortcuts.at("toggle-bookmarks"), u"Search Fly bookmarks",
+        bookmarks_->CanEdit());
+    return true;
+  }
+  if (action == "toggle-palette") {
+    bookmark_picker_->Cancel();
+    hints_->Cancel();
+    keyboard_editor_->Cancel();
     palette_->Toggle(browser->GetTabStripModel()->GetActiveWebContents(),
                      commands_.Read().value_or(DefaultKeyboardConfig()));
     return true;
   }
+  if (action == "toggle-private-mode") {
+    TogglePrivate(browser);
+    return true;
+  }
   if (action == "trigger-hints") {
+    bookmark_picker_->Cancel();
+    keyboard_editor_->Cancel();
     hints_->Toggle(browser->GetTabStripModel()->GetActiveWebContents());
+    return true;
+  }
+  if (action == "toggle-theme")
+    return preferences_.ToggleTheme();
+  if (action == "toggle-status-bar") {
+    const auto visible = preferences_.ReadStatusBarVisible();
+    return visible && preferences_.SetStatusBarVisible(!*visible);
+  }
+  if (action == "cycle-clock-format")
+    return preferences_.CycleClockFormat();
+  if (action == "toggle-clock") {
+    const auto clock = preferences_.ReadClock();
+    return clock && preferences_.SetClockVisible(!clock->visible);
+  }
+  if (action == "toggle-help" || action == "open-keyboard-settings") {
+    hints_->Cancel();
+    palette_->Cancel();
+    bookmark_picker_->Cancel();
+    if (action == "toggle-help" || !keyboard_editor_->active())
+      keyboard_editor_->Toggle(browser->GetTabStripModel()->GetActiveWebContents());
+    if (action == "open-keyboard-settings")
+      keyboard_editor_->ShowKeyboard();
     return true;
   }
   if (action == "new-workspace") {
@@ -522,6 +907,20 @@ bool FlyWindowController::RunCommand(BrowserWindowInterface* browser,
 
 namespace fly {
 void FlyWindowController::OnKeyEvent(ui::KeyEvent* event) {
+  if (bookmark_picker_->active()) {
+    if (bookmark_picker_->HandleOverlayKey(*event)) {
+      event->SetHandled();
+      event->StopPropagation();
+    }
+    return;
+  }
+  if (keyboard_editor_->active()) {
+    if (keyboard_editor_->HandleOverlayKey(*event)) {
+      event->SetHandled();
+      event->StopPropagation();
+    }
+    return;
+  }
   if (event->type() != ui::EventType::kKeyPressed || event->is_char())
     return;
   if (palette_->active()) {
@@ -606,6 +1005,12 @@ void FlyWindowController::OnKeyEvent(ui::KeyEvent* event) {
 }  // namespace fly
 
 namespace fly {
+void FlyWindowController::UpdateTargetURL(BrowserWindowInterface* browser,
+                                          content::WebContents* source,
+                                          const GURL& url) {
+  if (status_bar_ && selected_ == browser)
+    status_bar_->SetTargetURL(source, url);
+}
 void FlyWindowController::UpdateModeLabel() {
   if (!status_)
     return;
@@ -616,9 +1021,12 @@ void FlyWindowController::UpdateModeLabel() {
                                                             : u"NORMAL");
     return;
   }
-  status_->SetText(
+  const std::u16string mode =
       hints_ && hints_->active()
           ? (hints_->truncated() ? u"HINTS (target limit)" : u"HINTS")
-          : NativePageModeLabel(selected_));
+          : NativePageModeLabel(selected_);
+  status_->SetText(selected_ && selected_->GetProfile()->IsOffTheRecord()
+                       ? u"PRIVATE · " + mode
+                       : mode);
 }
 }  // namespace fly

@@ -1,0 +1,64 @@
+--- a/chrome/browser/profiles/pref_service_builder_utils.cc
++++ b/chrome/browser/profiles/pref_service_builder_utils.cc
+@@ -9,12 +9,14 @@
+ #include <memory>
+ #include <utility>
+ 
++#include "base/command_line.h"
+ #include "base/files/file_util.h"
+ #include "base/logging.h"
+ #include "base/path_service.h"
+ #include "base/strings/stringprintf.h"
+ #include "base/task/sequenced_task_runner.h"
+ #include "base/threading/scoped_blocking_call.h"
++#include "build/build_config.h"
+ #include "build/chromeos_buildflags.h"
+ #include "chrome/browser/browser_process.h"
+ #include "chrome/browser/policy/chrome_browser_policy_connector.h"
+@@ -29,9 +31,11 @@
+ #include "components/keyed_service/content/browser_context_dependency_manager.h"
+ #include "components/keyed_service/core/simple_dependency_manager.h"
+ #include "components/keyed_service/core/simple_keyed_service_factory.h"
++#include "components/password_manager/core/common/password_manager_pref_names.h"
+ #include "components/policy/core/common/cloud/cloud_policy_manager.h"
+ #include "components/pref_registry/pref_registry_syncable.h"
+ #include "components/prefs/pref_value_store.h"
++#include "components/signin/public/base/signin_pref_names.h"
+ #include "components/supervised_user/core/browser/family_link_settings_service.h"
+ #include "components/sync_preferences/pref_service_syncable.h"
+ #include "components/variations/service/variations_service.h"
+@@ -77,6 +81,24 @@
+       pref_registry);
+   BrowserContextDependencyManager::GetInstance()
+       ->RegisterProfilePrefsForServices(pref_registry);
++
++#if BUILDFLAG(IS_LINUX) || BUILDFLAG(IS_WIN) || BUILDFLAG(IS_MAC)
++  if (base::CommandLine::ForCurrentProcess()->HasSwitch("fly-native")) {
++    // Product defaults, after every keyed service registers its preferences.
++    // Preserve explicit user/enterprise choices through native PrefService
++    // precedence. Do not import or activate a browser account/password vault.
++    pref_registry->SetDefaultPrefValue(prefs::kSigninAllowed, base::Value(false));
++    pref_registry->SetDefaultPrefValue(prefs::kSigninAllowedOnNextStartup,
++                                       base::Value(false));
++    for (const char* name : {
++             password_manager::prefs::kCredentialsEnableService,
++             password_manager::prefs::kCredentialsEnableAutosignin,
++             password_manager::prefs::kCredentialsEnablePasskeys,
++             password_manager::prefs::kAutomaticPasskeyUpgrades}) {
++      pref_registry->SetDefaultPrefValue(name, base::Value(false));
++    }
++  }
++#endif
+ }
+ 
+ std::unique_ptr<sync_preferences::PrefServiceSyncable> CreateProfilePrefService(
+--- a/chrome/browser/profiles/BUILD.gn
++++ b/chrome/browser/profiles/BUILD.gn
+@@ -657,6 +657,7 @@
+     "//components/embedder_support:user_agent",
+     "//components/enterprise/common/proto:connectors_proto",
+     "//components/keyed_service/content",
++    "//components/password_manager/core/common",
+     "//components/policy/core/browser",
+     "//components/policy/core/common",
+     "//components/pref_registry",

@@ -2,6 +2,14 @@
 # existing chrome/browser/ui target to avoid introducing a circular dependency.
 import("//testing/test.gni")
 
+source_set("pref_storage") {
+  sources = [ "prefs/dictionary_store.h" ]
+  public_deps = [
+    "//base",
+    "//components/prefs",
+  ]
+}
+
 source_set("workspaces") {
   sources = [
     "workspaces/workspace_service.cc",
@@ -11,6 +19,7 @@ source_set("workspaces") {
     "//base",
     "//components/prefs",
   ]
+  deps = [ ":pref_storage" ]
 }
 
 source_set("commands") {
@@ -31,7 +40,35 @@ source_set("commands") {
     "//base",
     "//components/prefs",
   ]
-  deps = [ "//third_party/icu" ]
+  deps = [
+    ":pref_storage",
+    "//third_party/icu",
+  ]
+}
+
+source_set("preferences") {
+  sources = [
+    "preferences/preferences_service.cc",
+    "preferences/preferences_service.h",
+  ]
+  public_deps = [
+    "//base",
+    "//components/prefs",
+  ]
+  deps = [ ":pref_storage" ]
+}
+
+source_set("bookmarks") {
+  sources = [
+    "bookmarks/bookmark_service.cc",
+    "bookmarks/bookmark_service.h",
+  ]
+  public_deps = [ "//base" ]
+  deps = [
+    ":pref_storage",
+    "//components/prefs",
+    "//url",
+  ]
 }
 
 source_set("session_metadata") {
@@ -47,14 +84,18 @@ source_set("session_metadata") {
 
 test("fly_unittests") {
   sources = [
+    "bookmarks/bookmark_service_unittest.cc",
     "commands/command_service_unittest.cc",
     "commands/hint_codes_unittest.cc",
     "commands/keyboard_config_unittest.cc",
     "commands/palette_catalog_unittest.cc",
+    "preferences/preferences_service_unittest.cc",
     "workspaces/workspace_service_unittest.cc",
   ]
   deps = [
+    ":bookmarks",
     ":commands",
+    ":preferences",
     ":workspaces",
     "//base/test:run_all_unittests",
     "//base/test:test_support",
@@ -72,7 +113,9 @@ if (is_linux || is_win) {
     defines = [ "HAS_OUT_OF_PROC_TEST_RUNNER" ]
     sources = [ "test/workspace_browser_test.cc" ]
     deps = [
+      ":bookmarks",
       ":commands",
+      ":preferences",
       ":session_metadata",
       ":workspaces",
       "//base",
@@ -83,12 +126,15 @@ if (is_linux || is_win) {
       "//chrome:strings",
       "//chrome/browser",
       "//chrome/browser:browser_process",
+      "//chrome/browser/bookmarks",
       "//chrome/browser/extensions",
       "//chrome/browser/extensions:test_support",
       "//chrome/browser/profiles:profile",
       "//chrome/browser/profiles:profile_manager",
       "//chrome/browser/profiles:profile_test_util",
+      "//chrome/browser/ssl",
       "//chrome/browser/ui",
+      "//chrome/browser/ui/browser_window",
       "//chrome/browser/ui/browser_window:create_browser_window",
       "//chrome/browser/ui/tabs:tab_strip",
       "//chrome/renderer",
@@ -96,6 +142,9 @@ if (is_linux || is_win) {
       "//chrome/test/base:browser_tests_runner",
       "//chrome/test/base:in_process_browser_test",
       "//chrome/test/base:ui_test_utils",
+      "//components/javascript_dialogs",
+      "//components/password_manager/core/common",
+      "//components/signin/public/base",
       "//content/public/browser",
       "//content/test:test_support",
       "//extensions:test_support",
@@ -106,11 +155,16 @@ if (is_linux || is_win) {
       "//ui/events:test_support",
       "//ui/views",
       "//ui/views:test_support",
+      "//ui/wm",
     ]
     data_deps = [
       "//chrome",
       "//chrome:browser_tests_pak",
     ]
-    data = [ "//chrome/test/data/title1.html" ]
+    data = [
+      "//chrome/test/data/title1.html",
+      "//chrome/test/data/favicon/page_with_favicon.html",
+      "//chrome/test/data/favicon/icon.png",
+    ]
   }
 }

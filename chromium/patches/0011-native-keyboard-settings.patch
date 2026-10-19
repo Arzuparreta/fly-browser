@@ -1,0 +1,11 @@
+--- a/chrome/browser/ui/BUILD.gn
++++ b/chrome/browser/ui/BUILD.gn
+@@ -802,6 +802,8 @@
+       "//fly/ui/hint_controller.h",
+       "//fly/ui/command_palette.cc",
+       "//fly/ui/command_palette.h",
++      "//fly/ui/keyboard_editor.cc",
++      "//fly/ui/keyboard_editor.h",
+     ]
+   }
+ 

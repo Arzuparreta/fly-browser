@@ -1,0 +1,17 @@
+--- a/chrome/browser/profiles/profiles_state.cc
++++ b/chrome/browser/profiles/profiles_state.cc
+@@ -85,6 +85,14 @@
+   registry->RegisterBooleanPref(prefs::kForceBrowserSignin, false);
+   registry->RegisterBooleanPref(prefs::kBrowserShowProfilePickerOnStartup,
+                                 true);
++#if BUILDFLAG(IS_LINUX) || BUILDFLAG(IS_WIN)
++  if (base::CommandLine::ForCurrentProcess()->HasSwitch("fly-native")) {
++    // Fly restores its profile-isolated workspaces into one native desktop.
++    // Keep explicit user choices and the forced-picker policy authoritative.
++    registry->SetDefaultPrefValue(prefs::kBrowserShowProfilePickerOnStartup,
++                                  base::Value(false));
++  }
++#endif
+   registry->RegisterIntegerPref(
+       prefs::kBrowserProfilePickerAvailabilityOnStartup,
+       static_cast<int>(ProfilePicker::AvailabilityOnStartup::kEnabled));

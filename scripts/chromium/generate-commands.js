@@ -55,6 +55,14 @@ assert(/^[a-z]+$/.test(hintAlphabet) && new Set(hintAlphabet).size === hintAlpha
 const hintCases = [1, 12, 13, 144, 145, 500].map(count => ({count, ...JSON.parse(JSON.stringify(
     vm.runInNewContext('(' + generatorSource[0] + ')(' + count + ',' + JSON.stringify([...hintAlphabet]) + ')',
         Object.create(null), {timeout: 1000})))}));
+const websiteThemeSource = fs.readFileSync(path.join(root, 'main.js'), 'utf8')
+    .match(/function websiteTheme\(cfg\) \{[\s\S]*?\n\}/);
+assert(websiteThemeSource, 'Baseline website theme contract must remain discoverable');
+const websiteThemeCases = ['dark', 'light'].flatMap(theme => [true, false].map(sync => {
+    const input = {theme, sync_website_theme: sync};
+    return {input, expected: vm.runInNewContext('(' + websiteThemeSource[0] + ')(' + JSON.stringify(input) + ')',
+        Object.create(null), {timeout: 1000})};
+}));
 const paletteEntries = JSON.parse(fs.readFileSync(path.join(root, 'chromium/baseline-contracts.json'), 'utf8')).paletteEntries;
 assert(paletteEntries.every(item => keybinds.ACTION_METADATA[item.actionId]));
 const literal = value => `R"fly_json(${JSON.stringify(value)})fly_json"`;
@@ -66,6 +74,7 @@ namespace fly {
 inline constexpr std::string_view kActionMetadataJSON = ${literal(keybinds.ACTION_METADATA)};
 inline constexpr std::string_view kDefaultKeyboardJSON = ${literal(defaults.config)};
 inline constexpr std::string_view kKeyboardCasesJSON = ${literal(cases)};
+inline constexpr std::string_view kWebsiteThemeCasesJSON = ${literal(websiteThemeCases)};
 inline constexpr std::string_view kPaletteEntriesJSON = ${literal(paletteEntries)};
 inline constexpr std::string_view kHintAlphabet = ${JSON.stringify(hintAlphabet)};
 inline constexpr std::string_view kHintCasesJSON = ${literal(hintCases)};

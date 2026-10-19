@@ -214,3 +214,67 @@ Windows hosted-runner validation provisions the SDK required by the pinned
 Chromium source using the [official Microsoft installer](https://learn.microsoft.com/en-us/windows/apps/windows-sdk/downloads).
 The CI-only PowerShell script validates the Microsoft signature and retains the
 installer digest and installation logs. It never runs as part of local bootstrap.
+
+### Synthetic video checks
+
+The shared control/native GN preset enables upstream H264/AAC decoding through
+`proprietary_codecs` and the Chrome FFmpeg codec selection. This does not enable
+Google product branding. Control and Fly must use identical GN options before
+comparing media behaviour. Preserve an older output before reconfiguring; a
+successful build record with different arguments cannot authorise native apply.
+
+The media fixture is a generated local MP4 with a test pattern and quiet tone.
+After building the matching control, use:
+
+```sh
+node tests/chromium/control-smoke.js --executable /path/to/fly-chromium/src/out/FlyControl/chrome --work-dir /path/to/fly-chromium/fixture-evidence --backend x11 --video --extension
+```
+
+After building native Fly, select its executable and add
+`--native --native-record /path/to/fly-chromium/evidence/native-build.json`.
+The native build records the executable path/hash, overlay fingerprint and desktop
+support. The fixture checks those fields and the pinned engine lock before
+creating a profile or launching anything. A control/test record, changed binary
+or platform without the desktop adapter cannot authorise native media evidence.
+Omit
+`--video` to retain the PCM audio scenario; omit `--extension` for the baseline
+without the visibility-sensitive MV3 probe. Every run creates a new profile and
+records the executable/media hashes, codec capability, actual frame decode,
+visibility and pause/background checks. These fixtures do not establish live
+Twitch, real Pie, HLS, DRM or package acceptance.
+
+The manual workflow's `build` depth also runs the scoped browser suite on Linux
+and Windows after compilation. Linux installs Xvfb for an isolated test display.
+macOS currently validates compilation/services only, because its native desktop
+adapter is unfinished. CI uses explicit phase-specific free-space floors (80 GiB
+initially, 60 GiB before dependency sync, 40 GiB for compilation) and reclaims only
+control compilation objects before native compilation. Logs retain actual resource
+failures and test results; a successful run is not complete platform acceptance.
+Local native builds retain a 100-GiB default floor; `--minimum-free-gib` makes an
+explicit alternative of at least 40 GiB possible.
+
+### Hosted source compilation
+
+The manual workflow also accepts depth `objects`. It bootstraps the exact source
+and toolchain, applies a distinct compile-only overlay transaction and builds
+every modified upstream and Fly translation unit, including the scoped browser
+test source, with GN's original compiler rules, flags, response files and per-edge
+variables. A separate Ninja manifest retains generated header/module prerequisites
+and their original generators/tools. It excludes runtime-only data generation,
+such as snapshots whose generators would otherwise link most of Chromium.
+Original GN files and the derived recipes are hashed in the evidence. Two
+compiler workers bound hosted memory use. This validates compiler outputs and
+header dependencies; linking, runtime resources and browser acceptance belong
+to the separate full build.
+On macOS the unfinished desktop/browser-test sources are explicitly excluded;
+missing edges for shared/upstream sources fail validation.
+
+Local equivalent (use a dedicated engine checkout):
+
+```sh
+python3 scripts/chromium/native.py test-objects --root /path/to/fly-chromium --jobs 2 --minimum-free-gib 40
+```
+
+The transaction is tagged `objects` and cannot authorise native configure/build
+or media acceptance. Revert it before building the unmodified control and applying
+the full native overlay. Full build depth still requires the matching control.

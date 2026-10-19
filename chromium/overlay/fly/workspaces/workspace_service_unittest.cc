@@ -168,5 +168,47 @@ TEST_F(WorkspaceServiceTest, EditsPreserveUnknownMetadata) {
   EXPECT_EQ("retain",
             *after.FindList("items")->front().GetDict().FindString("layout"));
 }
+TEST_F(WorkspaceServiceTest, WrongTypedUserValuesCannotAllocateOrReplaceCatalog) {
+  for (const auto& invalid : {base::Value("corrupt"), base::Value(false),
+                              base::Value(base::ListValue())}) {
+    prefs_.SetUserPref(kWorkspacesPref, invalid.Clone());
+    EXPECT_FALSE(service_.Read());
+    EXPECT_FALSE(service_.CanEdit());
+    EXPECT_FALSE(service_.Add("work", "Profile 1"));
+    EXPECT_FALSE(service_.Rename("missing", "new name"));
+    EXPECT_FALSE(service_.Activate("missing"));
+    EXPECT_FALSE(service_.Remove("missing"));
+    EXPECT_FALSE(service_.Reorder({}));
+    ASSERT_TRUE(prefs_.GetUserPref(kWorkspacesPref));
+    EXPECT_EQ(invalid, *prefs_.GetUserPref(kWorkspacesPref));
+    prefs_.SetRecommendedPref(kWorkspacesPref, base::Value(base::DictValue()));
+    EXPECT_FALSE(service_.Read());
+    EXPECT_FALSE(service_.CanEdit());
+    EXPECT_FALSE(service_.Add("work", "Profile 2"));
+    EXPECT_EQ(invalid, *prefs_.GetUserPref(kWorkspacesPref));
+    prefs_.RemoveRecommendedPref(kWorkspacesPref);
+  }
+  prefs_.SetDict(kWorkspacesPref, base::DictValue());
+  EXPECT_TRUE(service_.Read());
+  EXPECT_TRUE(service_.CanEdit());
+  EXPECT_TRUE(service_.Add("work", "Profile 3"));
+}
+TEST_F(WorkspaceServiceTest, ManagedCatalogIsReadableWithoutCreatingUserWrites) {
+  const auto item = service_.Add("work", "Profile 1");
+  ASSERT_TRUE(item);
+  const auto policy = prefs_.GetDict(kWorkspacesPref).Clone();
+  prefs_.ClearPref(kWorkspacesPref);
+  prefs_.SetManagedPref(kWorkspacesPref, base::Value(policy.Clone()));
+  ASSERT_TRUE(service_.Read());
+  EXPECT_FALSE(service_.CanEdit());
+  EXPECT_EQ(*item, service_.Read()->items.front());
+  EXPECT_FALSE(service_.Add("second", "Profile 2"));
+  EXPECT_FALSE(service_.Rename(item->id, "changed"));
+  EXPECT_FALSE(service_.Activate(item->id));
+  EXPECT_FALSE(service_.Remove(item->id));
+  EXPECT_FALSE(service_.Reorder({item->id}));
+  EXPECT_EQ(nullptr, prefs_.GetUserPref(kWorkspacesPref));
+  EXPECT_EQ(policy, prefs_.GetDict(kWorkspacesPref));
+}
 }  // namespace
 }  // namespace fly

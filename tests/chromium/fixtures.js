@@ -69,22 +69,24 @@ const worker = `self.addEventListener('install', event => event.waitUntil(self.s
 self.addEventListener('activate', event => event.waitUntil(self.clients.claim()));
 self.addEventListener('message', event => { if (event.ports[0]) event.ports[0].postMessage('fly-fixture-worker'); });`;
 
-async function serve() {
+async function serve({video = false} = {}) {
     const requests = [];
-    const media = wave();
+    const media = video ? fs.readFileSync(path.join(__dirname, 'media/h264-aac.mp4')) : wave();
+    const html = video ? page.replace('<audio id="media" controls loop src="/media.wav"></audio>',
+        '<video id="media" controls loop playsinline width="320" height="180" src="/media.mp4"></video>') : page;
     const server = http.createServer((request, response) => {
         const url = new URL(request.url, 'http://127.0.0.1');
         requests.push(url.pathname);
         if (requests.length > 500) requests.shift();
         response.setHeader('Cache-Control', 'no-store');
         const routes = {
-            '/': ['text/html', page], '/second': ['text/html', page],
+            '/': ['text/html', html], '/second': ['text/html', html],
             '/frame': ['text/html', '<!doctype html><title>Frame</title><input aria-label="Frame input">'],
             '/fixture.js': ['text/javascript', script], '/worker.js': ['text/javascript', worker],
             '/blocked': ['text/plain', 'This request must not reach the server when blocking is enabled.'],
         };
-        if (url.pathname === '/media.wav') {
-            response.setHeader('Content-Type', 'audio/wav');
+        if (url.pathname === (video ? '/media.mp4' : '/media.wav')) {
+            response.setHeader('Content-Type', video ? 'video/mp4' : 'audio/wav');
             response.setHeader('Accept-Ranges', 'bytes');
             const range = request.headers.range?.match(/^bytes=(\d+)-(\d*)$/);
             const start = range ? Number(range[1]) : 0;
@@ -103,6 +105,7 @@ async function serve() {
         server.listen(0, '127.0.0.1', resolve);
     });
     return {url: 'http://127.0.0.1:' + server.address().port,
+        mediaSha256: crypto.createHash('sha256').update(media).digest('hex'),
         requests, close: () => new Promise(resolve => server.close(resolve))};
 }
 

@@ -7,7 +7,7 @@ on:
       depth:
         description: 'Tooling contracts, source configuration, or complete control/native builds'
         type: choice
-        options: [contracts, configure, units, build]
+        options: [contracts, configure, units, objects, build]
         default: configure
       platforms:
         description: 'Platforms to validate'
@@ -71,6 +71,9 @@ jobs:
         if: matrix.platform == 'windows' && (inputs.platforms == 'all' || inputs.platforms == matrix.platform)
         shell: pwsh
         run: ./scripts/chromium/ci-windows-sdk.ps1
+      - name: Install virtual-display prerequisites for native browser tests
+        if: matrix.platform == 'linux' && inputs.depth == 'build' && (inputs.platforms == 'all' || inputs.platforms == matrix.platform)
+        run: sudo apt-get update && sudo apt-get install -y xvfb xauth
       - name: Inspect resources and configure the exact upstream control
         if: inputs.platforms == 'all' || inputs.platforms == matrix.platform
         env:

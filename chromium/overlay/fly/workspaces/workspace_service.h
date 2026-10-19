@@ -50,6 +50,7 @@ class WorkspaceService {
 
   // nullopt means recovery is required, not an empty catalog.
   std::optional<WorkspaceCatalog> Read() const;
+  bool CanEdit() const;
   std::optional<Workspace> Add(std::string_view name,
                                std::string_view profile_directory);
   bool Rename(std::string_view id, std::string_view name);
@@ -61,7 +62,7 @@ class WorkspaceService {
   bool Reorder(const std::vector<std::string>& ids);
 
  private:
-  std::optional<base::DictValue> ReadValidated() const;
+  std::optional<base::DictValue> ReadValidated(bool for_write = false) const;
   void Commit(base::DictValue catalog);
 
   const raw_ref<PrefService> local_state_;

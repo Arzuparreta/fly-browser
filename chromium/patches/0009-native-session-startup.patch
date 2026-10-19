@@ -1,0 +1,42 @@
+--- a/chrome/browser/ui/startup/startup_browser_creator.cc
++++ b/chrome/browser/ui/startup/startup_browser_creator.cc
+@@ -950,6 +950,17 @@
+       pref.type = SessionStartupPref::LAST;
+     }
+   }
++#if BUILDFLAG(IS_LINUX) || BUILDFLAG(IS_WIN)
++  // Fly retains workspace tabs through Chromium's existing per-profile session
++  // service and last-opened-profile startup. Do not create a second URL/session
++  // authority or restore private state. Mandatory startup policy still applies.
++  if (command_line.HasSwitch("fly-native") &&
++      !command_line.HasSwitch(switches::kIncognito) &&
++      !SessionStartupPref::TypeIsManaged(prefs)) {
++    pref.type = SessionStartupPref::LAST;
++  }
++#endif
++
+   if ((pref.ShouldRestoreLastSession() && !pref.ShouldOpenUrls()) &&
+       (profile->IsGuestSession() || profile->IsOffTheRecord())) {
+     // We don't store session information when incognito. If the user has
+--- a/chrome/browser/sessions/session_service.cc
++++ b/chrome/browser/sessions/session_service.cc
+@@ -123,9 +123,16 @@
+ 
+ bool ShouldTriggerSessionRestoreForBrowser(BrowserWindowInterface* browser) {
+ #if BUILDFLAG(IS_MAC) || BUILDFLAG(IS_WIN) || BUILDFLAG(IS_LINUX)
+-  if (base::FeatureList::IsEnabled(
+-          features::kRespectShouldTriggerSessionRestoreOnDesktop) &&
+-      browser) {
++  bool respect_trigger = base::FeatureList::IsEnabled(
++      features::kRespectShouldTriggerSessionRestoreOnDesktop);
++#if BUILDFLAG(IS_LINUX) || BUILDFLAG(IS_WIN)
++  // Explicit empty workspace/new-window requests must stay empty during this
++  // process. The native startup path remains responsible for restart.
++  respect_trigger =
++      respect_trigger ||
++      base::CommandLine::ForCurrentProcess()->HasSwitch("fly-native");
++#endif
++  if (respect_trigger && browser) {
+     if (const auto* init_state = BrowserInitState::From(browser)) {
+       return init_state->should_trigger_session_restore();
+     }

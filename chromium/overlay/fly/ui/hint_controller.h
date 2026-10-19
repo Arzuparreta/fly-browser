@@ -6,6 +6,7 @@
 
 #include <memory>
 #include <string>
+#include <string_view>
 #include <vector>
 
 #include "base/functional/callback.h"
@@ -42,6 +43,7 @@ class HintController : public content::WebContentsObserver,
                  const input::NativeWebKeyboardEvent& event);
   bool active() const { return active_; }
   bool truncated() const { return truncated_; }
+  std::string_view cancellation_for_testing() const { return cancellation_; }
   size_t target_count_for_testing() const { return targets_.size(); }
 
   void AccessibilityEventReceived(const ui::AXUpdatesAndEvents&) override;
@@ -64,6 +66,7 @@ class HintController : public content::WebContentsObserver,
     gfx::Rect bounds;
     std::string code;
   };
+  void CancelWithReason(std::string_view reason);
   void ScheduleCollect();
   void Collect();
   void Draw();
@@ -79,6 +82,7 @@ class HintController : public content::WebContentsObserver,
   std::vector<Target> targets_;
   std::string prefix_;
   gfx::Rect viewport_;
+  std::string_view cancellation_ = "not-started";
   bool active_ = false;
   bool ready_ = false;
   bool truncated_ = false;

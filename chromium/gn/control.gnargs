@@ -6,3 +6,7 @@ blink_symbol_level = 0
 v8_symbol_level = 0
 use_remoteexec = false
 use_siso = true
+# Real H264/AAC decode in both the source-unmodified control and native Fly.
+# This selects FFmpeg codecs; it does not enable Google product branding.
+proprietary_codecs = true
+ffmpeg_branding = "Chrome"

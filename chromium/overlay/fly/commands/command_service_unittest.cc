@@ -104,5 +104,39 @@ TEST_F(CommandServiceTest, ReturningToDefaultsRemovesOldChoices) {
   EXPECT_TRUE(saved.FindDict("shortcuts")->empty());
   EXPECT_TRUE(saved.FindDict("normal")->empty());
 }
+TEST_F(CommandServiceTest, WrongTypedUserValuesNeverBecomeEditableDefaults) {
+  for (const auto& invalid : {base::Value("corrupt"), base::Value(false),
+                              base::Value(base::ListValue())}) {
+    prefs_.SetUserPref(kKeyboardPref, invalid.Clone());
+    EXPECT_FALSE(service_->Read());
+    EXPECT_FALSE(service_->CanEdit());
+    EXPECT_FALSE(service_->Save(DefaultKeyboardConfig().ToValue()).config);
+    ASSERT_TRUE(prefs_.GetUserPref(kKeyboardPref));
+    EXPECT_EQ(invalid, *prefs_.GetUserPref(kKeyboardPref));
+    prefs_.SetRecommendedPref(kKeyboardPref, base::Value(base::DictValue()));
+    EXPECT_FALSE(service_->Read());
+    EXPECT_FALSE(service_->CanEdit());
+    EXPECT_FALSE(service_->Save(DefaultKeyboardConfig().ToValue()).config);
+    EXPECT_EQ(invalid, *prefs_.GetUserPref(kKeyboardPref));
+    prefs_.RemoveRecommendedPref(kKeyboardPref);
+  }
+  prefs_.SetDict(kKeyboardPref, base::DictValue());
+  EXPECT_TRUE(service_->Read());
+  EXPECT_TRUE(service_->CanEdit());
+  EXPECT_TRUE(service_->Save(DefaultKeyboardConfig().ToValue()).config);
+}
+TEST_F(CommandServiceTest, ManagedBindingsAreReadableWithoutCreatingUserWrites) {
+  const auto policy = base::DictValue().Set("schema", 1)
+      .Set("shortcuts", base::DictValue().Set("spawn-tab", base::ListValue()))
+      .Set("normal", base::DictValue());
+  prefs_.SetManagedPref(kKeyboardPref, base::Value(policy.Clone()));
+  const auto keyboard = service_->Read();
+  ASSERT_TRUE(keyboard);
+  EXPECT_FALSE(service_->CanEdit());
+  EXPECT_TRUE(keyboard->shortcuts.at("spawn-tab").empty());
+  EXPECT_FALSE(service_->Save(DefaultKeyboardConfig().ToValue()).config);
+  EXPECT_EQ(nullptr, prefs_.GetUserPref(kKeyboardPref));
+  EXPECT_EQ(policy, prefs_.GetDict(kKeyboardPref));
+}
 }  // namespace
 }  // namespace fly

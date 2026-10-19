@@ -8,10 +8,12 @@ import argparse
 import hashlib
 import json
 import os
+import re
 from pathlib import Path, PurePosixPath
 import subprocess
 import sys
 import tempfile
+import time
 
 import engine
 
@@ -178,16 +180,7 @@ def apply_core(root, lock):
     verify_source(root, lock)
 
 
-def apply(root, lock):
-    if (root / MANIFEST).exists():
-        existing = verify_source(root, lock)
-        if existing.get('kind') == 'core':
-            engine.fail('Core-only overlay present; revert before applying browser hooks')
-        print('Native overlay already matches the reviewed inputs.')
-        return
-    engine.verify_checkout(root / 'src', lock['chromium'])
-    engine.require_stage(root, 'build', lock)
-    patches, overlay = inputs()
+def patch_paths(patches):
     touched = set()
     for patch in patches:
         old = []
@@ -204,9 +197,30 @@ def apply(root, lock):
             if name.startswith('fly/'):
                 engine.fail('//fly sources belong to the overlay, not upstream patches')
             touched.add(name)
+    return touched
+
+
+def apply(root, lock, objects_only=False):
+    if (root / MANIFEST).exists():
+        existing = verify_source(root, lock)
+        if existing.get('kind') == 'core':
+            engine.fail('Core-only overlay present; revert before applying browser hooks')
+        if existing.get('kind') == 'objects' and not objects_only:
+            engine.fail('Compile-only overlay present; revert and apply after the control build')
+        print('Native overlay already matches the reviewed inputs.')
+        return
+    engine.verify_checkout(root / 'src', lock['chromium'])
+    if objects_only:
+        engine.require_stage(root, 'hooks', lock)
+    else:
+        engine.require_control(root, lock, CONFIG)
+    patches, overlay = inputs()
+    touched = patch_paths(patches)
     manifest = {'schema': 1, 'phase': 'applying',
                 'upstream': lock['chromium']['revision'],
                 'fingerprint': fingerprint(), 'files': {}}
+    if objects_only:
+        manifest['kind'] = 'objects'
     # Exercise the entire ordered stack before touching the real source. This
     # catches a late failed hunk without leaving an earlier patch installed.
     with tempfile.TemporaryDirectory(prefix='fly-overlay-', dir=root) as tmp:
@@ -235,6 +249,66 @@ def apply(root, lock):
     verify_source(root, lock)
 
 
+def refresh_overlay(root, lock):
+    """Refresh only Fly-owned files; upstream patch output must stay identical."""
+    old = verify_source(root, lock, require_current=False)
+    if old.get('kind') in ('core', 'objects'):
+        engine.fail('Only a full native overlay may be refreshed')
+    expected_fingerprint = fingerprint()
+    patches, overlay = inputs()
+    touched = patch_paths(patches)
+    upstream = {name for name, record in old['files'].items() if record['before'] is not None}
+    if touched != upstream:
+        engine.fail('Upstream patch targets changed; revert and reapply')
+    with tempfile.TemporaryDirectory(prefix='fly-refresh-', dir=root) as tmp:
+        stage = Path(tmp)
+        engine.run(['git', 'init', '--quiet'], stage)
+        for name in sorted(touched):
+            atomic_bytes(stage / name, upstream_file(root / 'src', old['upstream'], name))
+        for patch in patches:
+            engine.run(['git', 'apply', '--check', '--whitespace=error-all', patch], stage)
+            engine.run(['git', 'apply', '--whitespace=error-all', patch], stage)
+        for name in touched:
+            if engine.digest(stage / name) != old['files'][name]['after']:
+                engine.fail('Upstream patch output changed; revert and reapply')
+    contents = {name: file.read_bytes() for name, file in overlay.items()}
+    desired = {name: {'before': None, 'after': bytes_digest(data)}
+               for name, data in contents.items()}
+    old_overlay = {name for name, record in old['files'].items() if record['before'] is None}
+    changed = {name for name in old_overlay | set(contents)
+               if old['files'].get(name, {}).get('after') != desired.get(name, {}).get('after')}
+    for name in contents.keys() - old_overlay:
+        if checked_path(root / 'src', name).exists():
+            engine.fail('New overlay destination already exists: ' + name)
+    if fingerprint() != expected_fingerprint:
+        engine.fail('Overlay inputs changed during refresh preflight')
+    records = {name: record for name, record in old['files'].items() if name in upstream}
+    records.update(desired)
+    final = dict(old, phase='applied', fingerprint=expected_fingerprint, files=records)
+    pending = dict(final, phase='applying', files=dict(records))
+    for name in changed:
+        transition = dict(pending['files'].get(name, {'before': None, 'after': None}))
+        if name in old_overlay:
+            transition['previous_after'] = old['files'][name]['after']
+        pending['files'][name] = transition
+    # Recovery may restore clean upstream from either reviewed overlay version.
+    # Unchanged files retain their bytes and timestamps, including public IPC
+    # headers that would otherwise invalidate large parts of Chromium.
+    engine.atomic_json(root / MANIFEST, pending)
+    for name in sorted(changed):
+        file = checked_path(root / 'src', name)
+        actual = engine.digest(file) if file.is_file() else None
+        if actual != old['files'].get(name, {}).get('after'):
+            engine.fail('Native source changed during refresh; preserve edits: ' + name)
+        if name in contents:
+            atomic_bytes(file, contents[name])
+        else:
+            file.unlink()
+    engine.atomic_json(root / MANIFEST, final)
+    verify_source(root, lock)
+    print('Refreshed', len(changed), 'Fly-owned files; upstream patch output unchanged.')
+
+
 def revert(root, lock, recover=False):
     if recover:
         manifest = read_manifest(root, lock, allow_pending=True)
@@ -247,7 +321,10 @@ def revert(root, lock, recover=False):
         for name, record in manifest['files'].items():
             file = checked_path(source, name)
             current = engine.digest(file) if file.is_file() else None
-            if current not in (record['before'], record['after']):
+            accepted = (record['before'], record['after'])
+            if 'previous_after' in record:
+                accepted += (record['previous_after'],)
+            if current not in accepted:
                 engine.fail('Edited transaction file must be preserved: ' + name)
     else:
         manifest = verify_source(root, lock, require_current=False)
@@ -274,6 +351,101 @@ def revert(root, lock, recover=False):
     (root / MANIFEST).unlink()
 
 
+def object_targets(output, manifest, platform, recipe_files=None):
+    """Resolve actual GN compiler edges, retaining GN-generated prerequisites."""
+    wanted = {name for name in manifest['files']
+              if name.endswith(('.cc', '.mm', '.c', '.m'))}
+    found = {name: [] for name in wanted}
+    source_names = {name.encode('utf-8'): name for name in wanted}
+    files = recipe_files if recipe_files is not None else output.rglob('*.ninja')
+    for file in files:
+        # GN variables may carry non-UTF8 bytes from third-party metadata.
+        # Decode only matching path tokens, not unrelated command variables.
+        for line in file.read_bytes().splitlines():
+            edge = re.match(rb'^build ([^ ]+): (?:cxx|cc|objcxx|objc) ../../([^ ]+)(?: |$)', line)
+            if edge and edge[2] in source_names:
+                target = edge[1].decode('utf-8')
+                relative_path(target)
+                found[source_names[edge[2]]].append(target)
+    missing = sorted(name for name, targets in found.items() if not targets)
+    skipped = [name for name in missing if platform == 'darwin' and
+               name.startswith(('fly/ui/', 'fly/test/'))]
+    unexpected = set(missing) - set(skipped)
+    if unexpected:
+        engine.fail('No GN compiler edge for native sources: ' + repr(sorted(unexpected)))
+    targets = {}
+    for name, candidates in found.items():
+        if candidates:
+            # The scoped runner and upstream browser_tests share the test TU.
+            # Prefer the scoped runner; never build the upstream test catalogue.
+            targets[name] = min(candidates, key=lambda target:
+                                (not target.startswith('obj/fly/'), len(target), target))
+    if not targets:
+        engine.fail('No native compiler targets selected')
+    return targets, skipped
+
+
+def compile_objects(root, lock, manifest, env, jobs):
+    relative = 'out/FlyObjects'
+    output = root / 'src' / relative
+    output.mkdir(parents=True, exist_ok=True)
+    config = output / 'args.gn'
+    if config.exists() and config.read_bytes() != CONFIG.read_bytes():
+        engine.fail('Object build arguments differ; preserve existing output')
+    config.write_bytes(CONFIG.read_bytes())
+    engine.run(['gn', 'gen', relative], root / 'src', env)
+    engine.run(['gn', 'check', relative, '//fly:*'], root / 'src', env)
+    engine.run(['gn', 'check', relative, '//chrome/browser/ui:ui'], root / 'src', env)
+    engine.run(['gn', 'check', relative, '//chrome/browser/ui/navigator:impl'], root / 'src', env)
+    engine.run(['gn', 'check', relative, '//chrome/browser/ui/views/tab_contents:tab_contents'], root / 'src', env)
+    engine.run(['gn', 'check', relative, '//chrome/browser:core'], root / 'src', env)
+    engine.run(['gn', 'check', relative, '//chrome/browser/prefs:impl'], root / 'src', env)
+    from object_plan import compiler_plan, recipe_files
+    files, owners = recipe_files(root, relative, manifest, env)
+    targets, skipped = object_targets(output, manifest, sys.platform, files)
+    plan = compiler_plan(output, targets)
+    details = {'fingerprint': manifest['fingerprint'], 'objects': targets,
+               'compiler_plan': plan, 'gn_source_owners': owners,
+               'platform_excluded_sources': skipped,
+               'native_desktop_supported': sys.platform in ('linux', 'win32'),
+               'acceptance': 'Object compilation only; no linked browser or runtime acceptance'}
+    engine.atomic_json(root / 'evidence/native-object-plan.json', details)
+    engine.run(['autoninja', '-C', relative, '-j', str(jobs),
+                '-f', plan['manifest'], plan['target']], root / 'src', env)
+    compiled = {}
+    for source, target in targets.items():
+        file = output / target
+        if not file.is_file() or file.stat().st_size == 0:
+            engine.fail('Compiler did not produce its declared object: ' + target)
+        compiled[source] = {'path': target, 'sha256': engine.digest(file),
+                            'size': file.stat().st_size}
+    details['compiler_outputs'] = compiled
+    verify_source(root, lock)
+    engine.evidence(root, 'native-test-objects', lock, details)
+
+
+def verify_browser_results(summary, source):
+    # PRE success is folded into its matching main result by Chromium's test
+    # launcher. A failed PRE propagates to that main result. See upstream
+    # base/test/launcher/test_results_tracker.cc::AddTestResult.
+    expected = {fixture + '.' + name for fixture, name in re.findall(
+        r'IN_PROC_BROWSER_TEST_F\(\s*(Fly\w*BrowserTest),\s*(\w+)\s*\)',
+        source.read_text()) if not name.startswith('PRE_')}
+    if not expected:
+        engine.fail('No native browser cases declared in the reviewed source')
+    report = json.loads(summary.read_text())
+    iterations = report.get('per_iteration_data', [])
+    if not iterations:
+        engine.fail('Native browser summary contains no test iterations')
+    for iteration in iterations:
+        for name in sorted(expected):
+            attempts = iteration.get(name, [])
+            if not attempts or attempts[-1].get('status') != 'SUCCESS':
+                engine.fail('Native browser case was missing or unsuccessful: ' + name)
+    return {'main_cases_per_iteration': len(expected),
+            'iterations': len(iterations), 'summary_sha256': engine.digest(summary)}
+
+
 def execute(args):
     lock = engine.read_lock()
     root = engine.engine_root(args.root)
@@ -282,6 +454,12 @@ def execute(args):
         if args.command == 'test-core':
             engine.require_stage(root, 'hooks', lock)
             apply_core(root, lock)
+        if args.command == 'test-objects':
+            engine.doctor(root, args.minimum_free_gib)
+            apply(root, lock, objects_only=True)
+        if args.command == 'refresh-overlay':
+            refresh_overlay(root, lock)
+            return
         if args.command == 'apply':
             # The control build verifies all dependency revisions. This command
             # only touches source files after its successful completion.
@@ -294,7 +472,13 @@ def execute(args):
         engine.verify_dependencies(root, source_verifier=lambda: verify_source(root, lock))
         env = engine.environment(root)
         output = root / 'src' / OUTPUT
-        if args.command == 'test-core':
+        if args.command in ('configure', 'build', 'test', 'test-browser'):
+            if manifest.get('kind') in ('core', 'objects'):
+                engine.fail('A full overlay after a matching control build is required')
+            engine.require_control(root, lock, CONFIG)
+        if args.command == 'test-objects':
+            compile_objects(root, lock, manifest, env, args.jobs)
+        elif args.command == 'test-core':
             # Service tests need no patched browser or claim of a complete
             # control build. Root-target keeps the real Chromium dependency
             # graph, toolchain, test launcher and platform implementations.
@@ -324,7 +508,7 @@ def execute(args):
             engine.evidence(root, 'native-configure', lock,
                             {'fingerprint': manifest['fingerprint'], 'args_sha256': engine.digest(config)})
         elif args.command in ('build', 'test', 'test-browser'):
-            engine.doctor(root)
+            engine.doctor(root, args.minimum_free_gib)
             engine.require_stage(root, 'native-configure', lock)
             configured = json.loads((root / 'evidence/native-configure.json').read_text())['details']
             if configured['fingerprint'] != manifest['fingerprint'] or engine.digest(output / 'args.gn') != configured['args_sha256']:
@@ -336,25 +520,46 @@ def execute(args):
                 engine.run([output / ('fly_unittests.exe' if sys.platform == 'win32' else 'fly_unittests')], root / 'src', env, foreground=True)
             if args.command == 'test-browser':
                 executable = output / (target + ('.exe' if sys.platform == 'win32' else ''))
-                engine.run([executable, '--gtest_filter=FlyWorkspaceBrowserTest.*:FlyPageScrollBrowserTest.*',
+                summary = root / 'evidence/native-browser-tests.json'
+                if summary.exists():
+                    summary.rename(summary.with_name(
+                        'native-browser-tests.previous-' + str(time.time_ns()) + '.json'))
+                engine.run([executable, '--gtest_filter=Fly*BrowserTest.*',
                             '--test-launcher-jobs=1',
-                            '--test-launcher-summary-output=' + str(root / 'evidence/native-browser-tests.json')], root / 'src', env, foreground=True)
+                            '--test-launcher-summary-output=' + str(summary)], root / 'src', env, foreground=True)
+                browser_results = verify_browser_results(
+                    summary, OVERLAY / 'fly/test/workspace_browser_test.cc')
             verify_source(root, lock)
-            engine.evidence(root, 'native-' + args.command, lock,
-                            {'fingerprint': manifest['fingerprint'], 'target': target})
+            details = {'fingerprint': manifest['fingerprint'], 'target': target}
+            if args.command == 'test-browser':
+                details.update(browser_results)
+            if args.command == 'build':
+                executable = (output / 'Chromium.app/Contents/MacOS/Chromium'
+                              if sys.platform == 'darwin' else
+                              output / ('chrome.exe' if sys.platform == 'win32' else 'chrome'))
+                details.update({'binary': str(executable.resolve()),
+                                'sha256': engine.digest(executable),
+                                'args_sha256': configured['args_sha256'],
+                                'native_desktop_supported': sys.platform in ('linux', 'win32'),
+                                'runtime': engine.capture_runtime(root, output, 'native', env, executable)})
+            engine.evidence(root, 'native-' + args.command, lock, details)
 
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument('command', choices=['apply', 'verify', 'configure', 'build', 'test', 'test-browser', 'test-core', 'revert', 'recover'])
+    parser.add_argument('command', choices=['apply', 'refresh-overlay', 'verify', 'configure', 'build', 'test', 'test-browser', 'test-core', 'test-objects', 'revert', 'recover'])
     parser.add_argument('--root', required=True)
     parser.add_argument('--browser-target', choices=['fly_browser_tests', 'browser_tests'],
                         default='fly_browser_tests',
                         help='Scoped Fly acceptance runner or the complete upstream test binary')
+    parser.add_argument('--minimum-free-gib', type=int, default=100,
+                        help='explicit free-space floor for native compilation')
     parser.add_argument('--jobs', type=int, default=min(8, os.cpu_count() or 1))
     args = parser.parse_args()
     if args.jobs < 1:
         parser.error('--jobs must be positive')
+    if args.minimum_free_gib < 40:
+        parser.error('--minimum-free-gib must be at least 40')
     try:
         execute(args)
     except (RuntimeError, OSError, subprocess.CalledProcessError, ValueError, KeyError) as error:

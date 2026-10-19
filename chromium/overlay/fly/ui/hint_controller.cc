@@ -74,18 +74,24 @@ void HintController::Toggle(content::WebContents* contents) {
     return;
   Observe(contents);
   active_ = true;
+  cancellation_ = "none";
   state_changed_.Run(true);
   accessibility_ =
       content::BrowserAccessibilityState::GetInstance()
           ->CreateScopedModeForWebContents(contents, ui::kAXModeBasic);
   startup_timeout_.Start(
       FROM_HERE, base::Seconds(5),
-      base::BindOnce(&HintController::Cancel, weak_factory_.GetWeakPtr()));
+      base::BindOnce(&HintController::CancelWithReason,
+                     weak_factory_.GetWeakPtr(), "startup-timeout"));
   ScheduleCollect();
 }
 void HintController::Cancel() {
+  CancelWithReason("command");
+}
+void HintController::CancelWithReason(std::string_view reason) {
   if (!active_)
     return;
+  cancellation_ = reason;
   active_ = false;
   ready_ = false;
   truncated_ = false;
@@ -310,30 +316,36 @@ void HintController::AccessibilityLocationChangesReceived(
   ScheduleValidation();
 }
 void HintController::PrimaryPageChanged(content::Page&) {
-  Cancel();
+  CancelWithReason("navigation");
 }
-void HintController::RenderFrameDeleted(content::RenderFrameHost*) {
-  Cancel();
+void HintController::RenderFrameDeleted(content::RenderFrameHost* frame) {
+  // A previous navigation's RFH can finish deletion after hint startup. Only
+  // invalidate the current page or a frame that actually owns a hint target.
+  if ((web_contents() && frame == web_contents()->GetPrimaryMainFrame()) ||
+      std::ranges::any_of(targets_, [&](const Target& target) {
+        return target.tree == frame->GetAXTreeID();
+      }))
+    CancelWithReason("target-frame-deleted");
 }
 void HintController::OnVisibilityChanged(content::Visibility visibility) {
   if (visibility != content::Visibility::VISIBLE)
-    Cancel();
+    CancelWithReason("page-hidden");
 }
 void HintController::OnWebContentsLostFocus(content::RenderWidgetHost*) {
-  Cancel();
+  CancelWithReason("page-focus-lost");
 }
 void HintController::WebContentsDestroyed() {
-  Cancel();
+  CancelWithReason("contents-destroyed");
 }
 void HintController::OnWidgetBoundsChanged(views::Widget*, const gfx::Rect&) {
-  Cancel();
+  CancelWithReason("desktop-bounds");
 }
 void HintController::OnWidgetActivationChanged(views::Widget*, bool active) {
   if (!active)
-    Cancel();
+    CancelWithReason("desktop-inactive");
 }
 void HintController::OnWidgetDestroying(views::Widget*) {
-  Cancel();
+  CancelWithReason("desktop-destroyed");
   desktop_->RemoveObserver(this);
   desktop_ = nullptr;
 }
