@@ -1,0 +1,38 @@
+--- a/chrome/browser/ui/BUILD.gn
++++ b/chrome/browser/ui/BUILD.gn
+@@ -796,6 +796,8 @@
+       "//fly/ui/tab_move_transaction.h",
+       "//fly/ui/workspace_close_transaction.cc",
+       "//fly/ui/workspace_close_transaction.h",
++      "//fly/ui/fly_theme.cc",
++      "//fly/ui/fly_theme.h",
+       "//fly/ui/fly_window_controller.cc",
+       "//fly/ui/fly_window_controller.h",
+       "//fly/ui/history_service.cc",
+@@ -1117,6 +1119,10 @@
+   if (is_linux || is_win) {
+     deps += [ "//fly:workspaces", "//fly:commands", "//fly:preferences", "//fly:bookmarks", "//chrome/browser/ui/navigator", "//chrome/browser/ssl", "//components/url_formatter", "//components/vector_icons", "//ui/accessibility", "//ui/wm" ]
+     deps += [ "//components/history/core/common" ]
++    data_deps = [ "//fly:fonts" ]
++    if (is_linux) {
++      deps += [ "//third_party/fontconfig" ]
++    }
+   }
+   deps += [ "//fly:session_metadata" ]
+ 
+--- a/chrome/browser/ui/views/frame/browser_view.cc
++++ b/chrome/browser/ui/views/frame/browser_view.cc
+@@ -3095,6 +3095,13 @@
+   }
+ #endif
+ 
++#if BUILDFLAG(IS_LINUX) || BUILDFLAG(IS_WIN)
++  // Fly's desktop owns navigation, address and extension surfaces. Its
++  // embedded profile windows keep the native toolbar model without showing it.
++  if (fly::FlyWindowController::ShouldEmbed(browser())) {
++    return false;
++  }
++#endif
+   // It's possible to reach here before we've been notified of being added to a
+   // widget, so |toolbar_| is still null.  Return false in this case so callers
+   // don't assume they can access the toolbar yet.

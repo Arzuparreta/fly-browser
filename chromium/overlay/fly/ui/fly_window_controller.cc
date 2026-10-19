@@ -10,6 +10,10 @@
 #include "fly/commands/keyboard_router.h"
 #include "fly/preferences/search_service.h"
 #include "fly/ui/command_palette.h"
+#include "fly/ui/fly_theme.h"
+#include "chrome/app/vector_icons/vector_icons.h"
+#include "components/omnibox/browser/vector_icons.h"
+#include "components/vector_icons/vector_icons.h"
 #include "fly/ui/hint_controller.h"
 #include "fly/ui/keyboard_editor.h"
 #include "fly/ui/native_commands.h"
@@ -91,10 +95,10 @@
 
 namespace fly {
 namespace {
-class WorkspaceMenuButton : public views::MdTextButton,
+class WorkspaceMenuButton : public FlyButton,
                             public views::ContextMenuController,
                             public ui::SimpleMenuModel::Delegate {
-  METADATA_HEADER(WorkspaceMenuButton, views::MdTextButton)
+  METADATA_HEADER(WorkspaceMenuButton, FlyButton)
  public:
   WorkspaceMenuButton(PressedCallback select,
                       std::u16string_view name,
@@ -106,7 +110,7 @@ class WorkspaceMenuButton : public views::MdTextButton,
                       base::RepeatingClosure rename,
                       bool removable,
                       base::RepeatingClosure remove)
-      : views::MdTextButton(std::move(select), name),
+      : FlyButton(std::move(select), name),
         id_(std::move(id)),
         up_(up),
         down_(down),
@@ -205,21 +209,34 @@ FlyWindowController::FlyWindowController()
   SetCanResize(true);
   SetCanMinimize(true);
   SetCanMaximize(true);
+  RegisterFlyFonts();
   auto root = std::make_unique<views::View>();
-  root->SetBackground(views::CreateSolidBackground(ui::kColorDialogBackground));
+  root->SetBackground(FlyBackground(FlyRole::kMain));
   auto* layout = root->SetLayoutManager(std::make_unique<views::BoxLayout>(
       views::BoxLayout::Orientation::kHorizontal));
+  auto command = [this](std::string action) {
+    return base::BindRepeating(
+        [](base::WeakPtr<FlyWindowController> window, std::string action) {
+          if (window && window->selected_ && !window->closing_)
+            InvokeNativeCommand(window->selected_, action);
+        },
+        weak_factory_.GetWeakPtr(), std::move(action));
+  };
   auto sidebar = std::make_unique<views::View>();
   sidebar_content_ = sidebar.get();
-  sidebar->SetBackground(
-      views::CreateSolidBackground(ui::kColorDialogBackground));
+  sidebar->SetBackground(FlyBackground(FlyRole::kSidebar));
+  sidebar->SetBorder(FlyEdgeBorder(FlyRole::kBorder, gfx::Insets::TLBR(0, 0, 0, 1),
+                                   gfx::Insets::TLBR(8, 8, 8, 8)));
   auto* sidebar_layout =
       sidebar->SetLayoutManager(std::make_unique<views::BoxLayout>(
-          views::BoxLayout::Orientation::kVertical, gfx::Insets(8), 6));
+          views::BoxLayout::Orientation::kVertical, gfx::Insets(), 6));
+  sidebar_layout->set_cross_axis_alignment(
+      views::BoxLayout::CrossAxisAlignment::kStretch);
   sidebar->SetPreferredSize(gfx::Size(260, 0));
   window_controls_ = sidebar->AddChildView(std::make_unique<views::View>());
   window_controls_->SetLayoutManager(std::make_unique<views::BoxLayout>(
-      views::BoxLayout::Orientation::kHorizontal, gfx::Insets(), 8));
+      views::BoxLayout::Orientation::kHorizontal, gfx::Insets(), 4))
+      ->set_main_axis_alignment(views::BoxLayout::MainAxisAlignment::kEnd);
   for (const auto& [action, icon, label] :
        {std::tuple{"minimize", &views::kChromeMinimizeIcon, u"Minimize Fly"},
         std::tuple{"maximize", &views::kChromeMaximizeIcon, u"Maximize Fly"},
@@ -230,72 +247,122 @@ FlyWindowController::FlyWindowController()
                                 weak_factory_.GetWeakPtr(),
                                 std::string(action)),
             *icon, label, views::ImageButton::MaterialIconStyle::kSmall));
-    button->SetPreferredSize(gfx::Size(36, 32));
+    button->SetPreferredSize(gfx::Size(28, 24));
     window_control_buttons_.emplace(action, button);
   }
-  sidebar_pin_button_ =
-      sidebar->AddChildView(std::make_unique<views::MdTextButton>(
-          base::BindRepeating(&FlyWindowController::ToggleSidebarAutoCollapse,
-                              weak_factory_.GetWeakPtr()),
-          u"Pin sidebar"));
-  workspace_picker_button_ =
-      sidebar->AddChildView(std::make_unique<views::MdTextButton>(
-          base::BindRepeating(&FlyWindowController::ToggleWorkspacePicker,
-                              weak_factory_.GetWeakPtr()),
-          u"Workspaces"));
-  workspace_picker_button_->SetStyle(ui::ButtonStyle::kText);
-  sidebar->AddChildView(std::make_unique<views::MdTextButton>(
-      base::BindRepeating(&FlyWindowController::CreateWorkspace,
+  // Header: workspace (opens the dashboard), new tab and page history.
+  auto* top = sidebar->AddChildView(std::make_unique<views::View>());
+  auto* top_layout = top->SetLayoutManager(std::make_unique<views::BoxLayout>(
+      views::BoxLayout::Orientation::kHorizontal, gfx::Insets(), 2));
+  top_layout->set_cross_axis_alignment(
+      views::BoxLayout::CrossAxisAlignment::kCenter);
+  workspace_badge_ = top->AddChildView(std::make_unique<FlyLabel>(
+      u"1", FlyFace::kMono, 10, gfx::Font::Weight::BOLD));
+  workspace_badge_->SetBackground(FlyBackground(FlyRole::kCell, 2));
+  workspace_badge_->SetHorizontalAlignment(gfx::ALIGN_CENTER);
+  workspace_badge_->SetPreferredSize(gfx::Size(18, 18));
+  workspace_picker_button_ = top->AddChildView(std::make_unique<FlyButton>(
+      base::BindRepeating(&FlyWindowController::ToggleWorkspacePicker,
                           weak_factory_.GetWeakPtr()),
-      u"New workspace"));
+      u"Workspace", FlyFace::kSans, 13));
+  workspace_picker_button_->SetFlyFont(FlyFace::kSans, 13,
+                                       gfx::Font::Weight::SEMIBOLD);
+  workspace_picker_button_->SetTooltipText(
+      u"Workspace: open the workspace dashboard");
+  workspace_picker_button_->SetCustomPadding(gfx::Insets::VH(4, 4));
+  top_layout->SetFlexForView(workspace_picker_button_, 1);
+  new_tab_button_ = top->AddChildView(MakeFlyIconButton(
+      base::BindRepeating(&FlyWindowController::CreateTab,
+                          weak_factory_.GetWeakPtr()),
+      kAddIcon, u"New tab", 26));
+  top->AddChildView(MakeFlyIconButton(command("go-back"),
+                                      vector_icons::kArrowBackIcon,
+                                      u"Go back", 26));
+  top->AddChildView(MakeFlyIconButton(command("go-forward"),
+                                      vector_icons::kArrowForwardIcon,
+                                      u"Go forward", 26));
   workspace_buttons_ = sidebar->AddChildView(std::make_unique<views::View>());
   workspace_buttons_->SetLayoutManager(std::make_unique<views::BoxLayout>(
-      views::BoxLayout::Orientation::kVertical));
+      views::BoxLayout::Orientation::kVertical, gfx::Insets(), 2));
   tab_sidebar_ =
       sidebar->AddChildView(std::make_unique<TabSidebar>(base::BindRepeating(
           &FlyWindowController::CreateTab, weak_factory_.GetWeakPtr())));
   sidebar_layout->SetFlexForView(tab_sidebar_, 1);
-  clock_ = sidebar->AddChildView(std::make_unique<views::MdTextButton>(
+  clock_ = sidebar->AddChildView(std::make_unique<FlyButton>(
       base::BindRepeating(&FlyWindowController::CycleClockFormat,
                           weak_factory_.GetWeakPtr()),
-      u"Clock"));
-  clock_->SetStyle(ui::ButtonStyle::kText);
-  preferences_button_ = sidebar->AddChildView(std::make_unique<views::MdTextButton>(
+      u"Clock", FlyFace::kMono, 11));
+  clock_->SetVectorIcon(kTimerIcon, 12);
+  clock_->SetHorizontalAlignment(gfx::ALIGN_LEFT);
+  // Footer actions, in the Electron order.
+  auto* actions = sidebar->AddChildView(std::make_unique<views::View>());
+  actions->SetLayoutManager(std::make_unique<views::BoxLayout>(
+      views::BoxLayout::Orientation::kHorizontal, gfx::Insets(), 2));
+  sidebar_pin_button_ = actions->AddChildView(MakeFlyIconButton(
+      base::BindRepeating(&FlyWindowController::ToggleSidebarAutoCollapse,
+                          weak_factory_.GetWeakPtr()),
+      views::kKeepIcon, u"Pin sidebar", 26));
+  actions->AddChildView(MakeFlyIconButton(
+      command("toggle-split"), kSplitSceneIcon,
+      u"Toggle split view", 26));
+  actions->AddChildView(MakeFlyIconButton(
+      command("toggle-reader-view"), kMenuBookIcon,
+      u"Toggle reader view", 26));
+  actions->AddChildView(MakeFlyIconButton(
+      command("toggle-address"), vector_icons::kSearchIcon,
+      u"Search or enter address", 26));
+  bookmarks_button_ = actions->AddChildView(MakeFlyIconButton(
+      base::BindRepeating([](base::WeakPtr<FlyWindowController> window) {
+        if (window && window->selected_)
+          InvokeNativeCommand(window->selected_, "toggle-bookmarks");
+      }, weak_factory_.GetWeakPtr()),
+      omnibox::kBookmarkChromeRefreshOldIcon, u"Fly bookmarks", 26));
+  bookmarks_button_->SetEnabled(false);
+  actions->AddChildView(MakeFlyIconButton(
+      command("open-extension-actions"), vector_icons::kExtensionOldIcon,
+      u"Extensions", 26));
+  preferences_button_ = actions->AddChildView(MakeFlyIconButton(
       base::BindRepeating(
           [](base::WeakPtr<FlyWindowController> window) {
             if (window && window->selected_) {
               InvokeNativeCommand(window->selected_, "toggle-help");
               window->keyboard_editor_->ShowAppearance(true);
             }
-          }, weak_factory_.GetWeakPtr()), u"Preferences"));
+          }, weak_factory_.GetWeakPtr()),
+      vector_icons::kSettingsIcon, u"Preferences", 26));
   preferences_button_->SetEnabled(false);
-  bookmarks_button_ = sidebar->AddChildView(std::make_unique<views::MdTextButton>(
-      base::BindRepeating([](base::WeakPtr<FlyWindowController> window) {
-        if (window && window->selected_)
-          InvokeNativeCommand(window->selected_, "toggle-bookmarks");
-      }, weak_factory_.GetWeakPtr()), u"Fly bookmarks"));
-  bookmarks_button_->SetEnabled(false);
   sidebar_slot_ = root->AddChildView(std::make_unique<views::View>());
   sidebar_slot_->SetPreferredSize(gfx::Size(260, 0));
   sidebar_slot_->SetLayoutManager(std::make_unique<views::FillLayout>());
   compact_rail_ = sidebar_slot_->AddChildView(std::make_unique<views::View>());
+  compact_rail_->SetBackground(FlyBackground(FlyRole::kSidebar));
+  compact_rail_->SetBorder(FlyEdgeBorder(FlyRole::kBorder,
+                                         gfx::Insets::TLBR(0, 0, 0, 1),
+                                         gfx::Insets::VH(6, 2)));
   auto* compact_layout =
       compact_rail_->SetLayoutManager(std::make_unique<views::BoxLayout>(
-          views::BoxLayout::Orientation::kVertical, gfx::Insets(2), 2));
-  auto* expand =
-      compact_rail_->AddChildView(std::make_unique<views::MdTextButton>(
-          base::BindRepeating(&FlyWindowController::FocusSidebar,
-                              weak_factory_.GetWeakPtr()),
-          u">"));
-  expand->SetBorder(views::CreateEmptyBorder(gfx::Insets(4)));
-  expand->SetMinSize(gfx::Size(32, 32));
-  expand->GetViewAccessibility().SetName(u"Expand sidebar");
+          views::BoxLayout::Orientation::kVertical, gfx::Insets(), 4));
+  compact_layout->set_cross_axis_alignment(
+      views::BoxLayout::CrossAxisAlignment::kCenter);
+  compact_workspace_ = compact_rail_->AddChildView(std::make_unique<FlyButton>(
+      base::BindRepeating(&FlyWindowController::FocusSidebar,
+                          weak_factory_.GetWeakPtr()),
+      u"W1", FlyFace::kMono, 11));
+  compact_workspace_->SetFlyFont(FlyFace::kMono, 11, gfx::Font::Weight::BOLD);
+  compact_workspace_->SetCustomPadding(gfx::Insets());
+  compact_workspace_->SetHorizontalAlignment(gfx::ALIGN_CENTER);
+  compact_workspace_->SetPreferredSize(gfx::Size(30, 30));
+  compact_workspace_->GetViewAccessibility().SetName(u"Expand sidebar");
   compact_tab_sidebar_ =
       compact_rail_->AddChildView(std::make_unique<TabSidebar>(
           base::BindRepeating(&FlyWindowController::CreateTab,
                               weak_factory_.GetWeakPtr()),
           true));
   compact_layout->SetFlexForView(compact_tab_sidebar_, 1);
+  compact_pin_button_ = compact_rail_->AddChildView(MakeFlyIconButton(
+      base::BindRepeating(&FlyWindowController::ToggleSidebarAutoCollapse,
+                          weak_factory_.GetWeakPtr()),
+      views::kKeepIcon, u"Pin sidebar", 28));
   auto* column = root->AddChildView(std::make_unique<views::View>());
   auto* column_layout =
       column->SetLayoutManager(std::make_unique<views::BoxLayout>(
@@ -303,7 +370,14 @@ FlyWindowController::FlyWindowController()
   content_ = column->AddChildView(std::make_unique<views::View>());
   content_->SetLayoutManager(std::make_unique<views::FillLayout>());
   column_layout->SetFlexForView(content_, 1);
-  status_bar_ = column->AddChildView(std::make_unique<StatusBar>());
+  status_bar_ = column->AddChildView(std::make_unique<StatusBar>(StatusBar::Actions{
+      .zoom = command("reset-zoom"),
+      .notifications = command("toggle-notifications"),
+      .workspace = base::BindRepeating(&FlyWindowController::ToggleWorkspacePicker,
+                                       weak_factory_.GetWeakPtr()),
+      .clock = base::BindRepeating(&FlyWindowController::CycleClockFormat,
+                                   weak_factory_.GetWeakPtr()),
+  }));
   status_ = status_bar_->mode_label();
   layout->SetFlexForView(column, 1);
   SetContentsView(std::move(root));
@@ -437,6 +511,29 @@ FlyWindowController::FlyWindowController()
           weak_factory_.GetWeakPtr()),
       base::BindRepeating(&FlyWindowController::ChooseTabMoveDestination,
                           weak_factory_.GetWeakPtr()));
+  using Layout = PaletteStyle::Layout;
+  palette_->SetStyle({Layout::kCentre, u"Command Centre",
+                      u"Actions, feature guide & keyboard shortcuts"});
+  address_picker_->SetStyle({.layout = Layout::kTop, .width = 640});
+  history_picker_->SetStyle({.layout = Layout::kTop, .width = 600});
+  auto page_insets = base::BindRepeating(
+      [](base::WeakPtr<FlyWindowController> window) {
+        if (!window || !window->sidebar_slot_)
+          return gfx::Insets();
+        return gfx::Insets::TLBR(
+            0, window->sidebar_slot_->width(),
+            window->status_bar_ && window->status_bar_->GetVisible()
+                ? window->status_bar_->height()
+                : 0,
+            0);
+      },
+      weak_factory_.GetWeakPtr());
+  bookmark_picker_->SetStyle(
+      {Layout::kPage, u"Bookmarks Manager", u"", 720, page_insets});
+  workspace_picker_->SetStyle(
+      {Layout::kPage, u"Workspace Dashboard", u"", 720, page_insets});
+  tab_move_picker_->SetStyle(
+      {Layout::kCentre, u"Move tab to workspace", u"", 560});
   keyboard_editor_ =
       std::make_unique<KeyboardEditor>(desktop_.get(), commands_,
                                        *g_browser_process->local_state());
@@ -952,6 +1049,7 @@ void FlyWindowController::OnPreferencesChanged() {
   const auto theme = preferences_.ReadTheme();
   if (theme && theme != applied_theme_) {
     applied_theme_ = theme;
+    ApplyFlyPalette();
     const auto color_mode = theme->mode == "dark"
                                 ? ui::ColorProviderKey::ColorMode::kDark
                                 : ui::ColorProviderKey::ColorMode::kLight;
@@ -983,6 +1081,10 @@ void FlyWindowController::ClearSidebarViews() {
   tab_sidebar_ = nullptr;
   sidebar_content_ = nullptr;
   sidebar_pin_button_ = nullptr;
+  compact_pin_button_ = nullptr;
+  new_tab_button_ = nullptr;
+  compact_workspace_ = nullptr;
+  workspace_badge_ = nullptr;
   workspace_picker_button_ = nullptr;
 }
 void FlyWindowController::StopSidebarFocusObservation() {
@@ -1028,8 +1130,17 @@ void FlyWindowController::UpdateSidebarMode() {
   const bool changed = collapse != sidebar_auto_collapse_;
   sidebar_auto_collapse_ = collapse;
   sidebar_slot_->SetPreferredSize(gfx::Size(collapse ? 36 : 260, 0));
-  sidebar_pin_button_->SetText(collapse ? u"Pin sidebar" : u"Unpin sidebar");
-  sidebar_pin_button_->SetEnabled(preferences_.CanEditSidebarAutoCollapse());
+  for (auto* pin : {sidebar_pin_button_.get(), compact_pin_button_.get()}) {
+    if (!pin)
+      continue;
+    const auto* label = collapse ? u"Pin sidebar" : u"Unpin sidebar";
+    pin->SetVectorIcon(collapse ? views::kKeepIcon : views::kKeepFilledIcon,
+                       14);
+    pin->SetSelected(!collapse);
+    pin->SetTooltipText(label);
+    pin->GetViewAccessibility().SetName(label);
+    pin->SetEnabled(preferences_.CanEditSidebarAutoCollapse());
+  }
   if (changed && collapse) {
     sidebar_keyboard_expanded_ = false;
     sidebar_focus_inside_ = false;
@@ -1294,12 +1405,58 @@ void FlyWindowController::ResumeAllTabs() {
       ResumeNativeTab(page.get());
 }
 
+void FlyWindowController::ApplyFlyPalette() {
+  const auto theme = preferences_.ReadTheme();
+  if (!SetFlyColors(DefaultFlyColors(!theme || theme->mode != "light")))
+    return;
+  for (auto* widget : {desktop_.get(), sidebar_widget_.get()}) {
+    if (widget && widget->GetNativeWindow()) {
+      widget->ThemeChanged();
+      widget->GetRootView()->SchedulePaint();
+    }
+  }
+}
+void FlyWindowController::UpdateWorkspaceHeader() {
+  if (!workspace_picker_button_)
+    return;
+  std::u16string name = u"Workspace";
+  std::u16string badge = u"?";
+  std::u16string compact = u"W";
+  const bool is_private =
+      selected_ && selected_->GetProfile()->IsOffTheRecord();
+  const auto catalog = workspaces_.Read();
+  if (is_private) {
+    name = u"Private";
+    badge = u"P";
+    compact = u"P";
+  } else if (catalog && selected_) {
+    const auto& id = entries_.at(selected_).workspace_id;
+    for (size_t i = 0; i < catalog->items.size(); ++i) {
+      if (catalog->items[i].id != id)
+        continue;
+      name = base::UTF8ToUTF16(catalog->items[i].name);
+      badge = base::NumberToString16(i + 1);
+      compact = u"W" + badge;
+    }
+  }
+  workspace_badge_->SetText(badge);
+  workspace_picker_button_->SetText(name);
+  workspace_picker_button_->GetViewAccessibility().SetName(
+      u"Workspace " + name + u": open the workspace dashboard");
+  compact_workspace_->SetText(compact);
+  compact_workspace_->SetTooltipText(name);
+  // The list is only needed to reach other workspaces or windows directly.
+  workspace_buttons_->SetVisible(
+      (catalog && catalog->items.size() > 1) ||
+      workspace_buttons_->children().size() > (catalog ? catalog->items.size()
+                                                       : 0));
+}
 void FlyWindowController::UpdateClock() {
   if (!clock_)
     return;
+  const bool footer = preferences_.ReadStatusBarVisible().value_or(false);
   if (status_bar_)
-    status_bar_->SetVisible(
-        preferences_.ReadStatusBarVisible().value_or(false));
+    status_bar_->SetVisible(footer);
   const auto settings = preferences_.ReadClock();
   const bool visible = settings && settings->visible;
   if (!visible && clock_->HasFocus() && selected_) {
@@ -1308,20 +1465,46 @@ void FlyWindowController::UpdateClock() {
   }
   clock_->SetVisible(visible);
   clock_->SetEnabled(preferences_.CanEditClock());
-  if (!visible || !desktop_->IsVisible() || desktop_->IsMinimized() ||
-      !sidebar_widget_->IsVisible()) {
+  const bool desktop_shown = desktop_->IsVisible() && !desktop_->IsMinimized();
+  const bool sidebar_shown = sidebar_widget_->IsVisible();
+  if (!visible || !desktop_shown || (!sidebar_shown && !footer)) {
+    if (status_bar_)
+      status_bar_->SetClockVisible(visible);
     clock_timer_.Stop();
     return;
   }
-  const auto text = FormatClock(base::Time::Now(), settings->format);
+  const auto now = base::Time::Now();
+  const auto text = FormatClock(now, settings->format);
   if (clock_->GetText() != text.label)
     clock_->SetText(text.label);
   if (clock_->GetTooltipText() != text.tooltip)
     clock_->SetTooltipText(text.tooltip);
-  if (!clock_timer_.IsRunning())
-    clock_timer_.Start(FROM_HERE, base::Seconds(1),
-                       base::BindRepeating(&FlyWindowController::UpdateClock,
-                                           weak_factory_.GetWeakPtr()));
+  if (status_bar_) {
+    // The footer draws the date and the time separately (time in the accent
+    // display face), like the Electron clock badge.
+    std::u16string date;
+    std::u16string time = text.label;
+    if (settings->format == "datetime") {
+      const auto split = text.label.rfind(u' ');
+      if (split != std::u16string::npos) {
+        date = text.label.substr(0, split);
+        base::TrimWhitespace(date, base::TRIM_TRAILING, &date);
+        time = text.label.substr(split + 1);
+      }
+    }
+    status_bar_->SetClock(date, time, text.tooltip, true);
+  }
+  // Wake at the next visible change only: the next second for the seconds
+  // format, otherwise the next minute.
+  base::Time::Exploded local;
+  now.LocalExplode(&local);
+  const auto delay =
+      settings->format == "seconds"
+          ? base::Milliseconds(1000 - local.millisecond)
+          : base::Seconds(60 - local.second) - base::Milliseconds(local.millisecond);
+  clock_timer_.Start(FROM_HERE, delay + base::Milliseconds(5),
+                     base::BindOnce(&FlyWindowController::UpdateClock,
+                                    weak_factory_.GetWeakPtr()));
 }
 void FlyWindowController::CycleClockFormat() {
   preferences_.CycleClockFormat();
@@ -1419,6 +1602,7 @@ void FlyWindowController::Select(BrowserWindowInterface* browser, bool focus) {
         workspace_name = base::UTF8ToUTF16(item->name);
     }
     status_bar_->SetBrowser(browser, std::move(workspace_name));
+    UpdateWorkspaceHeader();
     next.host->SetVisible(true);
     next.widget->ShowInactive();
     if (!next.workspace_id.empty()) {
@@ -1472,8 +1656,8 @@ void FlyWindowController::RebuildWorkspaceButtons() {
   workspace_buttons_->RemoveAllChildViews();
   const auto catalog = workspaces_.Read();
   if (!catalog) {
-    workspace_buttons_->AddChildView(
-        std::make_unique<views::Label>(u"Workspace data needs recovery"));
+    workspace_buttons_->AddChildView(std::make_unique<FlyLabel>(
+        u"Workspace data needs recovery", FlyFace::kSans, 12));
     return;
   }
   const bool editable = workspaces_.CanEdit();
@@ -1513,7 +1697,7 @@ void FlyWindowController::RebuildWorkspaceButtons() {
       const auto text =
           u"Window " + base::NumberToString16(i + 1) + u" · " + title;
       auto* choice = workspace_buttons_->AddChildView(
-          std::make_unique<views::MdTextButton>(
+          std::make_unique<FlyButton>(
               base::BindRepeating(&FlyWindowController::SelectWindow,
                                   weak_factory_.GetWeakPtr(),
                                   browser->GetWeakPtr()),
@@ -1539,13 +1723,14 @@ void FlyWindowController::RebuildWorkspaceButtons() {
         if (item != catalog->items.end())
           label = u"Private · " + base::UTF8ToUTF16(item->name);
       }
-      workspace_buttons_->AddChildView(std::make_unique<views::MdTextButton>(
+      workspace_buttons_->AddChildView(std::make_unique<FlyButton>(
           base::BindRepeating(&FlyWindowController::SelectWindow,
                               weak_factory_.GetWeakPtr(),
                               browser->GetWeakPtr()),
           label));
     }
   }
+  UpdateWorkspaceHeader();
 }
 
 ui::SimpleMenuModel* FlyWindowController::workspace_context_menu_for_testing(

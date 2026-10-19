@@ -2,6 +2,9 @@
 // Use of this source code is governed by the GPL-3.0-or-later license in the
 // Fly repository.
 #include "fly/ui/keyboard_editor.h"
+#include "fly/ui/fly_theme.h"
+
+#include <limits>
 
 #include <algorithm>
 #include <set>
@@ -54,6 +57,7 @@ KeyboardEditor::~KeyboardEditor() {
   search_ = nullptr;
   tabs_ = nullptr;
   rows_ = nullptr;
+  rows_scroll_ = nullptr;
   status_ = nullptr;
   save_ = nullptr;
   ClearAppearance();
@@ -87,6 +91,7 @@ void KeyboardEditor::Toggle(content::WebContents* contents) {
           base::UTF8ToUTF16(base::JoinString(bindings, "\n"));
   tab_modifiers_ = base::UTF8ToUTF16(original_.tabs);
   closing_ = cancelled_ = false;
+  show_all_rows_ = false;
   overlay_ = std::make_unique<views::Widget>();
   views::Widget::InitParams params(
       views::Widget::InitParams::CLIENT_OWNS_WIDGET,
@@ -112,10 +117,11 @@ void KeyboardEditor::Toggle(content::WebContents* contents) {
   auto* layout = panel->SetLayoutManager(std::make_unique<views::BoxLayout>(
       views::BoxLayout::Orientation::kVertical, gfx::Insets(12), 8));
   panel->SetPreferredSize(gfx::Size(900, std::max(160, bounds.height() - 32)));
-  panel->SetBackground(
-      views::CreateSolidBackground(ui::kColorDialogBackground));
-  panel->AddChildView(
-      std::make_unique<views::Label>(u"Preferences"));
+  panel->SetBackground(FlyBackground(FlyRole::kSidebar, 4));
+  panel->SetBorder(FlyBorder(FlyRole::kBorder, 1, 4));
+  auto* heading = panel->AddChildView(std::make_unique<FlyLabel>(
+      u"Preferences", FlyFace::kSans, 15, gfx::Font::Weight::SEMIBOLD));
+  heading->SetHorizontalAlignment(gfx::ALIGN_LEFT);
   sections_ = panel->AddChildView(std::make_unique<views::TabbedPane>());
   sections_->SetListener(this);
   layout->SetFlexForView(sections_, 1);
@@ -140,7 +146,7 @@ void KeyboardEditor::Toggle(content::WebContents* contents) {
                                    weak_factory_.GetWeakPtr(), std::string(key))));
     appearance_[key]->SetMultiLine(true);
   }
-  clock_format_ = appearance->AddChildView(std::make_unique<views::MdTextButton>(
+  clock_format_ = appearance->AddChildView(std::make_unique<FlyButton>(
       base::BindRepeating(&KeyboardEditor::CycleClockFormat,
                           weak_factory_.GetWeakPtr()), u"Clock format"));
   clock_format_->SetTooltipText(u"Click to change the clock format");
@@ -151,7 +157,7 @@ void KeyboardEditor::Toggle(content::WebContents* contents) {
   performance->SetLayoutManager(std::make_unique<views::BoxLayout>(
       views::BoxLayout::Orientation::kVertical, gfx::Insets(12), 12));
   suspension_timeout_ =
-      performance->AddChildView(std::make_unique<views::MdTextButton>(
+      performance->AddChildView(std::make_unique<FlyButton>(
           base::BindRepeating(&KeyboardEditor::CycleSuspendTimeout,
                               weak_factory_.GetWeakPtr()),
           u"Suspend background pages"));
@@ -185,6 +191,9 @@ void KeyboardEditor::Toggle(content::WebContents* contents) {
   auto* scroll = keyboard->AddChildView(std::make_unique<views::ScrollView>());
   scroll->SetHorizontalScrollBarMode(
       views::ScrollView::ScrollBarMode::kDisabled);
+  rows_scroll_ = scroll;
+  // A bounded viewport gives the BoxLayout contents real bounds.
+  scroll->ClipHeightTo(0, std::numeric_limits<int>::max());
   rows_ = scroll->SetContents(std::make_unique<views::View>());
   rows_->SetLayoutManager(std::make_unique<views::BoxLayout>(
       views::BoxLayout::Orientation::kVertical, gfx::Insets(), 10));
@@ -196,21 +205,22 @@ void KeyboardEditor::Toggle(content::WebContents* contents) {
   auto* buttons = keyboard->AddChildView(std::make_unique<views::View>());
   buttons->SetLayoutManager(std::make_unique<views::BoxLayout>(
       views::BoxLayout::Orientation::kHorizontal, gfx::Insets(), 8));
-  buttons->AddChildView(std::make_unique<views::MdTextButton>(
+  buttons->AddChildView(std::make_unique<FlyButton>(
       base::BindRepeating(&KeyboardEditor::ResetAll,
                           weak_factory_.GetWeakPtr()),
       u"Restore defaults"));
-  save_ = buttons->AddChildView(std::make_unique<views::MdTextButton>(
+  save_ = buttons->AddChildView(std::make_unique<FlyButton>(
       base::BindRepeating(&KeyboardEditor::Save, weak_factory_.GetWeakPtr()),
       u"Apply"));
   save_->SetStyle(ui::ButtonStyle::kProminent);
+  static_cast<FlyButton*>(save_.get())->SetAccentText(true);
   save_->SetEnabled(commands_->CanEdit());
   if (!current)
     status_->SetText(
         u"Existing keyboard settings need recovery. They have been preserved.");
   else if (!commands_->CanEdit())
     status_->SetText(u"Keyboard settings are managed.");
-  panel->AddChildView(std::make_unique<views::MdTextButton>(
+  panel->AddChildView(std::make_unique<FlyButton>(
       base::BindRepeating(&KeyboardEditor::Cancel, weak_factory_.GetWeakPtr(), true),
       u"Close"));
   root->AddChildView(std::move(panel));
@@ -242,16 +252,16 @@ void KeyboardEditor::BuildSearchSection() {
     if (std::string_view(key) == "engine" && settings)
       field->SetText(base::UTF8ToUTF16(settings->engine));
     if (std::string_view(key) == "engine")
-      search_save_ = panel->AddChildView(std::make_unique<views::MdTextButton>(
+      search_save_ = panel->AddChildView(std::make_unique<FlyButton>(
           base::BindRepeating(&KeyboardEditor::SaveSearchSetting,
                               weak_factory_.GetWeakPtr(), "engine"),
           u"Save search engine"));
   }
-  alias_save_ = panel->AddChildView(std::make_unique<views::MdTextButton>(
+  alias_save_ = panel->AddChildView(std::make_unique<FlyButton>(
       base::BindRepeating(&KeyboardEditor::SaveSearchSetting,
                           weak_factory_.GetWeakPtr(), "alias"),
       u"Add or update alias"));
-  alias_remove_ = panel->AddChildView(std::make_unique<views::MdTextButton>(
+  alias_remove_ = panel->AddChildView(std::make_unique<FlyButton>(
       base::BindRepeating(&KeyboardEditor::SaveSearchSetting,
                           weak_factory_.GetWeakPtr(), "remove"),
       u"Remove custom alias by key"));
@@ -446,9 +456,23 @@ void KeyboardEditor::CycleSuspendTimeout() {
 void KeyboardEditor::Refresh() {
   StopRecording();
   fields_.clear();
-  rows_->RemoveAllChildViews();
-  for (const auto& entry : FilterPalette(catalog_, search_->GetText())) {
-    auto* row = rows_->AddChildView(std::make_unique<views::View>());
+  // Build the rows detached and attach them once: adding layered views one by
+  // one to a live widget reorders every layer each time (seconds for the full
+  // catalogue).
+  auto rows = std::make_unique<views::View>();
+  rows->SetLayoutManager(std::make_unique<views::BoxLayout>(
+      views::BoxLayout::Orientation::kVertical, gfx::Insets(), 10));
+  // Each action carries two editors and six buttons. Building the whole
+  // catalogue costs about a second, so the list starts with the first actions;
+  // searching or "Show all" reaches the rest.
+  constexpr size_t kInitialRows = 25;
+  const auto matches = FilterPalette(catalog_, search_->GetText());
+  const bool limited = !show_all_rows_ && search_->GetText().empty() &&
+                       matches.size() > kInitialRows;
+  for (const auto& entry : matches) {
+    if (limited && rows->children().size() == kInitialRows)
+      break;
+    auto* row = rows->AddChildView(std::make_unique<views::View>());
     row->SetLayoutManager(std::make_unique<views::BoxLayout>(
         views::BoxLayout::Orientation::kVertical));
     row->AddChildView(
@@ -469,21 +493,38 @@ void KeyboardEditor::Refresh() {
           base::UTF8ToUTF16(entry.title) +
           (normal ? u", NORMAL bindings" : u", global bindings"));
       layout->SetFlexForView(field, 1);
-      auto* record = scope->AddChildView(std::make_unique<views::MdTextButton>(
+      auto* record = scope->AddChildView(std::make_unique<FlyButton>(
           base::BindRepeating(&KeyboardEditor::StartRecording,
                               weak_factory_.GetWeakPtr(), key),
           u"Add key"));
-      scope->AddChildView(std::make_unique<views::MdTextButton>(
+      scope->AddChildView(std::make_unique<FlyButton>(
           base::BindRepeating(&KeyboardEditor::WriteField,
                               weak_factory_.GetWeakPtr(), key, u""),
           u"Clear"));
-      scope->AddChildView(std::make_unique<views::MdTextButton>(
+      scope->AddChildView(std::make_unique<FlyButton>(
           base::BindRepeating(&KeyboardEditor::ResetField,
                               weak_factory_.GetWeakPtr(), key),
           u"Default"));
       fields_.emplace(key, Field{field, record});
     }
   }
+  if (limited) {
+    auto* more = rows->AddChildView(std::make_unique<FlyButton>(
+        base::BindRepeating(
+            [](base::WeakPtr<KeyboardEditor> editor) {
+              if (!editor || !editor->active())
+                return;
+              editor->show_all_rows_ = true;
+              editor->Refresh();
+            },
+            weak_factory_.GetWeakPtr()),
+        u"Show all " + base::NumberToString16(matches.size()) +
+            u" actions"));
+    more->SetStyle(ui::ButtonStyle::kText);
+  }
+  rows_ = nullptr;
+  rows_ = rows_scroll_->SetContents(std::move(rows));
+  rows_scroll_->InvalidateLayout();
 }
 void KeyboardEditor::ContentsChanged(views::Textfield* sender,
                                      const std::u16string& text) {
@@ -655,6 +696,7 @@ void KeyboardEditor::FinishClose(bool restore_focus) {
   search_ = nullptr;
   tabs_ = nullptr;
   rows_ = nullptr;
+  rows_scroll_ = nullptr;
   status_ = nullptr;
   save_ = nullptr;
   ClearAppearance();
@@ -669,13 +711,23 @@ void KeyboardEditor::FinishClose(bool restore_focus) {
       contents->RestoreFocus();
   }
 }
+void KeyboardEditor::EnsureRowForTesting(std::string_view action,
+                                         bool normal) {
+  if (active() && !fields_.contains({std::string(action), normal}) &&
+      !show_all_rows_) {
+    show_all_rows_ = true;
+    Refresh();
+  }
+}
 views::Textfield* KeyboardEditor::field_for_testing(std::string_view action,
                                                     bool normal) {
+  EnsureRowForTesting(action, normal);
   auto it = fields_.find({std::string(action), normal});
   return it == fields_.end() ? nullptr : it->second.input.get();
 }
 views::MdTextButton* KeyboardEditor::record_for_testing(std::string_view action,
                                                         bool normal) {
+  EnsureRowForTesting(action, normal);
   auto it = fields_.find({std::string(action), normal});
   return it == fields_.end() ? nullptr : it->second.record.get();
 }

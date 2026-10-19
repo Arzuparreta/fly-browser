@@ -3,21 +3,163 @@
 // Fly repository.
 #include "fly/ui/status_bar.h"
 
+#include "base/i18n/case_conversion.h"
+#include "base/strings/string_number_conversions.h"
+#include "base/strings/string_util.h"
+#include "base/strings/utf_string_conversions.h"
+#include "cc/paint/paint_flags.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/ssl/chrome_security_state_util.h"
 #include "chrome/browser/ui/browser_window/public/browser_window_interface.h"
 #include "chrome/browser/ui/tabs/tab_strip_model.h"
+#include "components/omnibox/browser/vector_icons.h"
 #include "components/url_formatter/url_formatter.h"
+#include "components/vector_icons/vector_icons.h"
 #include "content/public/browser/navigation_handle.h"
 #include "content/public/browser/web_contents.h"
+#include "fly/ui/fly_theme.h"
 #include "ui/base/metadata/metadata_impl_macros.h"
-#include "ui/color/color_id.h"
+#include "ui/gfx/canvas.h"
+#include "ui/gfx/color_utils.h"
 #include "ui/views/accessibility/view_accessibility.h"
 #include "ui/views/background.h"
-#include "ui/views/controls/label.h"
+#include "ui/views/border.h"
 #include "ui/views/layout/box_layout.h"
+#include "ui/views/vector_icons.h"
+#include "ui/views/view_class_properties.h"
+#include "chrome/app/vector_icons/vector_icons.h"
 
 namespace fly {
+// A footer badge (style.css .status-badge): tinted fill and 1px outline.
+class StatusBadge : public FlyButton {
+  METADATA_HEADER(StatusBadge, FlyButton)
+
+ public:
+  enum class Tone { kNeutral, kSecure, kInsecure, kLocal, kPrivate, kPlain };
+  StatusBadge(PressedCallback callback, const gfx::VectorIcon& icon)
+      : FlyButton(std::move(callback), u"", FlyFace::kMono, 10) {
+    SetFlyFont(FlyFace::kMono, 10, gfx::Font::Weight::BOLD);
+    SetVectorIcon(icon, 10);
+    SetCustomPadding(gfx::Insets::VH(1, 6));
+    SetImageLabelSpacing(5);
+    SetMinSize(gfx::Size(0, 16));
+    if (!callback_set_)
+      SetFocusBehavior(FocusBehavior::NEVER);
+  }
+  void SetTone(Tone tone) {
+    if (tone_ == tone)
+      return;
+    tone_ = tone;
+    SetAccentText(tone == Tone::kInsecure || tone == Tone::kPrivate);
+    SchedulePaint();
+  }
+  // A second label drawn after the text (the clock's accent time).
+  FlyLabel* SetTrailing(std::unique_ptr<FlyLabel> label) {
+    trailing_ = AddChildView(std::move(label));
+    trailing_->SetCanProcessEventsWithinSubtree(false);
+    return trailing_;
+  }
+  gfx::Size CalculatePreferredSize(
+      const views::SizeBounds& available) const override {
+    auto size = FlyButton::CalculatePreferredSize(available);
+    if (trailing_ && !trailing_->GetText().empty())
+      size.Enlarge(trailing_->GetPreferredSize().width() + 6, 0);
+    return size;
+  }
+  void Layout(PassKey) override {
+    LayoutSuperclass<FlyButton>(this);
+    if (!trailing_)
+      return;
+    const auto size = trailing_->GetPreferredSize();
+    trailing_->SetBounds(width() - size.width() - 6,
+                         (height() - size.height()) / 2, size.width(),
+                         size.height());
+    auto text = label()->bounds();
+    text.set_width(std::max(0, trailing_->x() - 6 - text.x()));
+    label()->SetBoundsRect(text);
+  }
+  void set_has_action(bool action) {
+    callback_set_ = action;
+    SetFocusBehavior(action ? FocusBehavior::ACCESSIBLE_ONLY
+                            : FocusBehavior::NEVER);
+  }
+  void OnPaintBackground(gfx::Canvas* canvas) override {
+    const auto& colors = GetFlyColors();
+    SkColor fill = SkColorSetA(SK_ColorWHITE, 10);
+    SkColor stroke = colors.border;
+    switch (tone_) {
+      case Tone::kSecure:
+        fill = SkColorSetARGB(31, 158, 206, 106);
+        stroke = SkColorSetARGB(64, 158, 206, 106);
+        break;
+      case Tone::kInsecure:
+      case Tone::kPrivate:
+        fill = SkColorSetARGB(38, 247, 118, 142);
+        stroke = SkColorSetARGB(89, 247, 118, 142);
+        break;
+      case Tone::kLocal:
+        fill = SkColorSetARGB(31, 125, 207, 255);
+        stroke = SkColorSetARGB(64, 125, 207, 255);
+        break;
+      case Tone::kPlain:
+      case Tone::kNeutral:
+        break;
+    }
+    if (!colors.dark && fill == SkColorSetA(SK_ColorWHITE, 10))
+      fill = SkColorSetA(SK_ColorBLACK, 10);
+    const bool hot = callback_set_ && (GetVisualState() == STATE_HOVERED ||
+                                       GetVisualState() == STATE_PRESSED);
+    gfx::RectF bounds(GetLocalBounds());
+    cc::PaintFlags flags;
+    flags.setAntiAlias(true);
+    flags.setColor(hot ? colors.selected : fill);
+    canvas->DrawRoundRect(bounds, 3, flags);
+    flags.setStyle(cc::PaintFlags::kStroke_Style);
+    flags.setStrokeWidth(1);
+    flags.setColor(hot || HasFocus() ? colors.accent : stroke);
+    bounds.Inset(0.5f);
+    canvas->DrawRoundRect(bounds, 3, flags);
+  }
+
+ private:
+  Tone tone_ = Tone::kNeutral;
+  bool callback_set_ = false;
+  raw_ptr<FlyLabel> trailing_ = nullptr;
+};
+BEGIN_METADATA(StatusBadge)
+END_METADATA
+
+namespace {
+// The mode badge (#StatusBarMode): cell fill with an accent left edge.
+class ModeLabel : public FlyLabel {
+  METADATA_HEADER(ModeLabel, FlyLabel)
+
+ public:
+  ModeLabel()
+      : FlyLabel(u"NORMAL", FlyFace::kDisplay, 11, gfx::Font::Weight::BLACK) {
+    SetBorder(views::CreateEmptyBorder(gfx::Insets::TLBR(1, 8, 1, 6)));
+    SetHorizontalAlignment(gfx::ALIGN_CENTER);
+    SetTooltipText(u"Keyboard mode");
+  }
+  void OnPaintBackground(gfx::Canvas* canvas) override {
+    const auto& colors = GetFlyColors();
+    cc::PaintFlags flags;
+    flags.setAntiAlias(true);
+    flags.setColor(colors.cell);
+    canvas->DrawRoundRect(gfx::RectF(GetLocalBounds()), 2, flags);
+    canvas->FillRect(gfx::Rect(0, 0, 2, height()), colors.accent);
+  }
+  gfx::Size CalculatePreferredSize(
+      const views::SizeBounds& available) const override {
+    auto size = FlyLabel::CalculatePreferredSize(available);
+    size.set_width(std::max(size.width(), 60));
+    return size;
+  }
+};
+BEGIN_METADATA(ModeLabel)
+END_METADATA
+}  // namespace
+
 class StatusBar::TargetObserver : public content::WebContentsObserver {
  public:
   explicit TargetObserver(StatusBar* owner) : owner_(owner) {}
@@ -32,25 +174,73 @@ class StatusBar::TargetObserver : public content::WebContentsObserver {
  private:
   raw_ptr<StatusBar> owner_;
 };
-StatusBar::StatusBar()
+StatusBar::StatusBar(Actions actions)
     : target_observer_(std::make_unique<TargetObserver>(this)) {
   auto* layout = SetLayoutManager(std::make_unique<views::BoxLayout>(
-      views::BoxLayout::Orientation::kHorizontal, gfx::Insets::VH(3, 8), 12));
-  SetBackground(views::CreateSolidBackground(ui::kColorDialogBackground));
-  mode_ = AddChildView(std::make_unique<views::Label>(u"NORMAL"));
-  mode_->SetTooltipText(u"Keyboard mode");
-  location_ = AddChildView(std::make_unique<views::Label>());
+      views::BoxLayout::Orientation::kHorizontal, gfx::Insets::VH(2, 10), 8));
+  layout->set_cross_axis_alignment(
+      views::BoxLayout::CrossAxisAlignment::kCenter);
+  SetBackground(FlyBackground(FlyRole::kSidebar));
+  SetBorder(FlyEdgeBorder(FlyRole::kBorder, gfx::Insets::TLBR(1, 0, 0, 0)));
+  mode_ = AddChildView(std::make_unique<ModeLabel>());
+  location_ = AddChildView(std::make_unique<FlyLabel>(
+      u"", FlyFace::kMono, 11, gfx::Font::Weight::NORMAL,
+      FlyLabel::Tone::kDim));
   location_->SetHorizontalAlignment(gfx::ALIGN_LEFT);
   location_->SetElideBehavior(gfx::ELIDE_MIDDLE);
   layout->SetFlexForView(location_, 1);
-  security_ = AddChildView(std::make_unique<views::Label>());
-  workspace_ = AddChildView(std::make_unique<views::Label>());
+  zoom_ = AddChildView(std::make_unique<FlyButton>(std::move(actions.zoom),
+                                                   u"100%", FlyFace::kMono, 10));
+  zoom_->SetVectorIcon(vector_icons::kSearchIcon, 11);
+  zoom_->SetCustomPadding(gfx::Insets::VH(1, 6));
+  zoom_->SetImageLabelSpacing(4);
+  zoom_->SetOutlined(true);
+  zoom_->SetTooltipText(u"Page zoom: reset to 100%");
+  extensions_ = AddChildView(std::make_unique<views::View>());
+  extensions_->SetLayoutManager(std::make_unique<views::BoxLayout>(
+      views::BoxLayout::Orientation::kHorizontal, gfx::Insets(), 2));
+  notifications_ = AddChildView(MakeFlyIconButton(
+      std::move(actions.notifications),
+      vector_icons::kNotificationsIcon, u"Toggle web notifications", 18));
+  notifications_->SetVectorIcon(vector_icons::kNotificationsIcon, 12);
+  security_ = AddChildView(std::make_unique<StatusBadge>(
+      views::Button::PressedCallback(), vector_icons::kLockIcon));
+  workspace_ = AddChildView(std::make_unique<StatusBadge>(
+      std::move(actions.workspace), vector_icons::kFolderOldIcon));
+  workspace_->set_has_action(true);
+  workspace_->GetViewAccessibility().SetName(u"Workspace");
+  security_->GetViewAccessibility().SetName(u"Connection");
+  clock_ = AddChildView(std::make_unique<StatusBadge>(
+      std::move(actions.clock), kTimerIcon));
+  clock_->set_has_action(true);
+  clock_->GetViewAccessibility().SetName(u"Clock");
+  clock_->SetFlyFont(FlyFace::kMono, 10, gfx::Font::Weight::MEDIUM);
+  clock_time_ = clock_->SetTrailing(std::make_unique<FlyLabel>(
+      u"", FlyFace::kDisplay, 11, gfx::Font::Weight::EXTRA_BOLD,
+      FlyLabel::Tone::kAccent));
+  clock_->SetVisible(false);
 }
 StatusBar::~StatusBar() {
+  zoom_observation_.Reset();
   target_observer_.reset();
   Observe(nullptr);
   if (model_)
     model_->RemoveObserver(this);
+}
+views::Label* StatusBar::mode_label() const {
+  return mode_;
+}
+views::Label* StatusBar::location_for_testing() const {
+  return location_;
+}
+FlyButton* StatusBar::security_for_testing() const {
+  return security_;
+}
+FlyButton* StatusBar::workspace_for_testing() const {
+  return workspace_;
+}
+FlyButton* StatusBar::zoom_for_testing() const {
+  return zoom_;
 }
 void StatusBar::SetBrowser(BrowserWindowInterface* browser,
                            std::u16string workspace) {
@@ -60,15 +250,51 @@ void StatusBar::SetBrowser(BrowserWindowInterface* browser,
   model_ = browser ? browser->GetTabStripModel() : nullptr;
   if (model_)
     model_->AddObserver(this);
-  workspace_->SetText(browser && browser->GetProfile()->IsOffTheRecord()
-                          ? u"Private"
-                          : std::move(workspace));
-  workspace_->GetViewAccessibility().SetName(
-      u"Workspace: " + std::u16string(workspace_->GetText()));
+  private_ = browser && browser->GetProfile()->IsOffTheRecord();
+  workspace_->SetText(private_ ? u"PRIVATE PROFILE"
+                               : base::i18n::ToUpper(workspace));
+  workspace_->SetTone(private_ ? StatusBadge::Tone::kPrivate
+                               : StatusBadge::Tone::kNeutral);
+  workspace_->SetVectorIcon(private_ ? views::kIncognitoIcon
+                                     : vector_icons::kFolderOldIcon,
+                            10);
+  const std::u16string name = private_ ? u"Private" : workspace;
+  workspace_->SetTooltipText(u"Workspace: " + name +
+                             u" (click to manage workspaces)");
+  workspace_->GetViewAccessibility().SetName(u"Workspace: " + name);
   target_ = GURL();
   target_observer_->Set(nullptr);
   Observe(nullptr);
   SelectContents();
+}
+void StatusBar::SetClock(const std::u16string& date,
+                         const std::u16string& time,
+                         const std::u16string& tooltip,
+                         bool visible) {
+  clock_->SetVisible(visible);
+  // The date uses the badge label; the time is drawn in the display face and
+  // accent colour, like the Electron clock.
+  clock_->SetText(date);
+  clock_->SetTooltipText(tooltip);
+  clock_->GetViewAccessibility().SetName(tooltip);
+  if (clock_time_->GetText() != time) {
+    clock_time_->SetText(time);
+    clock_->InvalidateLayout();
+    InvalidateLayout();
+  }
+}
+void StatusBar::SetClockVisible(bool visible) {
+  // A hidden or paused clock keeps its last text and accessible name.
+  clock_->SetVisible(visible && !clock_time_->GetText().empty());
+}
+void StatusBar::SetNotificationsEnabled(bool enabled) {
+  notifications_->SetVectorIcon(enabled ? vector_icons::kNotificationsIcon
+                                        : vector_icons::kNotificationsOffIcon,
+                                12);
+  notifications_->SetTooltipText(enabled ? u"Web notifications on"
+                                         : u"Web notifications off");
+  notifications_->GetViewAccessibility().SetName(
+      notifications_->GetTooltipText());
 }
 void StatusBar::SelectContents() {
   auto* selected = model_ ? model_->GetActiveWebContents() : nullptr;
@@ -76,6 +302,11 @@ void StatusBar::SelectContents() {
     target_ = GURL();
     target_observer_->Set(nullptr);
     Observe(selected);
+    zoom_observation_.Reset();
+    if (auto* zoom =
+            selected ? zoom::ZoomController::FromWebContents(selected)
+                     : nullptr)
+      zoom_observation_.Observe(zoom);
   }
   Update();
 }
@@ -100,43 +331,79 @@ void StatusBar::ClearTarget() {
   target_observer_->Set(nullptr);
   Update();
 }
+void StatusBar::UpdateZoom() {
+  auto* zoom = web_contents()
+                   ? zoom::ZoomController::FromWebContents(web_contents())
+                   : nullptr;
+  const int percent = zoom ? zoom->GetZoomPercent() : 100;
+  zoom_->SetText(base::NumberToString16(percent) + u"%");
+  zoom_->GetViewAccessibility().SetName(u"Page zoom " +
+                                        base::NumberToString16(percent) +
+                                        u"%: reset to 100%");
+  zoom_->SetAccentText(percent != 100);
+}
 void StatusBar::Update() {
+  // Like the Electron footer, the location shows only a hovered link target.
+  const auto location =
+      target_.is_empty() ? std::u16string() : url_formatter::FormatUrl(target_);
+  location_->SetText(location);
+  location_->SetTooltipText(location);
+  location_->GetViewAccessibility().SetName(
+      location.empty() ? std::u16string() : u"Link: " + location);
+  UpdateZoom();
   if (!web_contents()) {
-    location_->SetText(u"");
-    location_->SetTooltipText(u"");
-    location_->GetViewAccessibility().SetName(u"");
-    security_->SetText(u"");
-    security_->SetTooltipText(u"");
-    security_->GetViewAccessibility().SetName(u"");
+    security_->SetText(u"BLANK");
+    security_->SetTone(StatusBadge::Tone::kNeutral);
+    security_->SetTooltipText(u"Empty page");
+    security_->GetViewAccessibility().SetName(u"Empty page");
     return;
   }
   const GURL page = web_contents()->GetVisibleURL();
-  const auto location =
-      url_formatter::FormatUrl(target_.is_empty() ? page : target_);
-  location_->SetText(target_.is_empty() ? location : u"Link: " + location);
-  location_->SetTooltipText(std::u16string(location_->GetText()));
-  location_->GetViewAccessibility().SetName(
-      std::u16string(location_->GetText()));
+  std::u16string text;
+  const gfx::VectorIcon* icon = &vector_icons::kLockIcon;
+  auto tone = StatusBadge::Tone::kNeutral;
+  if (page.is_empty() || page.IsAboutBlank()) {
+    text = u"BLANK";
+    icon = &vector_icons::kGlobeIcon;
+  } else if (page.SchemeIs(url::kHttpsScheme)) {
+    text = u"HTTPS";
+  } else if (page.SchemeIs(url::kHttpScheme)) {
+    text = u"HTTP";
+    icon = &vector_icons::kNotSecureWarningOldIcon;
+  } else if (page.SchemeIsFile()) {
+    text = u"FILE";
+    icon = &vector_icons::kCodeIcon;
+    tone = StatusBadge::Tone::kLocal;
+  } else {
+    text = base::i18n::ToUpper(base::UTF8ToUTF16(page.scheme()));
+    icon = &vector_icons::kGlobeIcon;
+  }
   std::u16string security;
   switch (chrome_security_state::GetSecurityLevel(web_contents())) {
     case security_state::SECURE:
       security = u"Page secure";
+      tone = StatusBadge::Tone::kSecure;
       break;
     case security_state::WARNING:
       security = u"Page not secure";
+      tone = StatusBadge::Tone::kInsecure;
       break;
     case security_state::DANGEROUS:
       security = u"Page security warning";
+      tone = StatusBadge::Tone::kInsecure;
+      icon = &vector_icons::kDangerousFilledIcon;
       break;
     default:
-      security = u"";
       break;
   }
-  security_->SetText(security);
-  security_->SetTooltipText(
-      security.empty() ? u""
-                       : security + u": " + url_formatter::FormatUrl(page));
-  security_->GetViewAccessibility().SetName(security_->GetTooltipText());
+  security_->SetText(text);
+  security_->SetVectorIcon(*icon, 10);
+  security_->SetTone(tone);
+  const auto formatted = url_formatter::FormatUrl(page);
+  const auto tooltip =
+      security.empty() ? text + u": " + formatted : security + u": " + formatted;
+  security_->SetTooltipText(tooltip);
+  security_->GetViewAccessibility().SetName(tooltip);
 }
 void StatusBar::OnTabStripModelChanged(TabStripModel*,
                                        const TabStripModelChange&,
@@ -146,6 +413,7 @@ void StatusBar::OnTabStripModelChanged(TabStripModel*,
 void StatusBar::OnTabStripModelDestroyed(TabStripModel*) {
   model_ = nullptr;
   browser_.reset();
+  zoom_observation_.Reset();
   Observe(nullptr);
   ClearTarget();
 }
@@ -158,8 +426,16 @@ void StatusBar::DidChangeVisibleSecurityState() {
   Update();
 }
 void StatusBar::WebContentsDestroyed() {
+  zoom_observation_.Reset();
   Observe(nullptr);
   ClearTarget();
+}
+void StatusBar::OnZoomControllerDestroyed(zoom::ZoomController*) {
+  zoom_observation_.Reset();
+}
+void StatusBar::OnZoomChanged(
+    const zoom::ZoomController::ZoomChangedEventData&) {
+  UpdateZoom();
 }
 BEGIN_METADATA(StatusBar)
 END_METADATA

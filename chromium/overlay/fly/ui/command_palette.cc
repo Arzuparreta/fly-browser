@@ -13,6 +13,9 @@
 #include "ui/base/metadata/metadata_impl_macros.h"
 #include "content/public/browser/web_contents.h"
 #include "fly/ui/native_commands.h"
+#include "fly/ui/fly_theme.h"
+#include "chrome/app/vector_icons/vector_icons.h"
+#include "components/vector_icons/vector_icons.h"
 #include "ui/aura/window.h"
 #include "ui/color/color_id.h"
 #include "ui/events/event.h"
@@ -30,16 +33,94 @@
 
 namespace fly {
 namespace {
-class PickerButton : public views::MdTextButton {
-  METADATA_HEADER(PickerButton, views::MdTextButton)
+// One result row: title, optional secondary line (address, bookmark and
+// history rows) and right-aligned tags (category and shortcuts).
+class PickerButton : public FlyButton {
+  METADATA_HEADER(PickerButton, FlyButton)
+
  public:
-  PickerButton(PressedCallback callback, std::u16string_view text)
-      : views::MdTextButton(std::move(callback), text) {
-    label()->SetMultiLine(true);
+  PickerButton(PressedCallback callback,
+               std::u16string_view title,
+               std::u16string_view subtitle,
+               const std::vector<std::u16string>& tags,
+               bool first_tag_is_category)
+      : FlyButton(std::move(callback), title, FlyFace::kSans, 13) {
+    SetCustomPadding(gfx::Insets::VH(6, 10));
+    SetHorizontalAlignment(gfx::ALIGN_LEFT);
+    if (!subtitle.empty()) {
+      subtitle_ = AddChildView(std::make_unique<FlyLabel>(
+          std::u16string(subtitle), FlyFace::kMono, 10,
+          gfx::Font::Weight::NORMAL, FlyLabel::Tone::kLink));
+      subtitle_->SetHorizontalAlignment(gfx::ALIGN_LEFT);
+      subtitle_->SetElideBehavior(gfx::ELIDE_MIDDLE);
+      subtitle_->SetCanProcessEventsWithinSubtree(false);
+    }
+    if (!tags.empty()) {
+      tags_ = AddChildView(std::make_unique<views::View>());
+      tags_->SetLayoutManager(std::make_unique<views::BoxLayout>(
+          views::BoxLayout::Orientation::kHorizontal, gfx::Insets(), 4));
+      tags_->SetCanProcessEventsWithinSubtree(false);
+      for (size_t i = 0; i < tags.size(); ++i) {
+        const bool category = first_tag_is_category && i == 0;
+        auto* tag = tags_->AddChildView(std::make_unique<FlyLabel>(
+            tags[i], FlyFace::kMono, category ? 9 : 10,
+            gfx::Font::Weight::NORMAL,
+            category ? FlyLabel::Tone::kAccent : FlyLabel::Tone::kText));
+        tag->SetBorder(FlyBorder(FlyRole::kBorder, 1, 2,
+                                 gfx::Insets::VH(1, 5)));
+        if (!category)
+          tag->SetBackground(FlyBackground(FlyRole::kCell, 2));
+      }
+    }
   }
+  gfx::Size CalculatePreferredSize(
+      const views::SizeBounds& available) const override {
+    auto size = FlyButton::CalculatePreferredSize(available);
+    size.set_height(subtitle_ ? 44 : 32);
+    if (tags_)
+      size.Enlarge(tags_->GetPreferredSize().width() + 12, 0);
+    return size;
+  }
+  void Layout(PassKey) override {
+    LayoutSuperclass<FlyButton>(this);
+    int right = width() - 10;
+    if (tags_) {
+      const auto size = tags_->GetPreferredSize();
+      tags_->SetBounds(right - size.width(), (height() - size.height()) / 2,
+                       size.width(), size.height());
+      right = tags_->x() - 12;
+    }
+    auto title = label()->bounds();
+    title.set_width(std::max(0, right - title.x()));
+    if (subtitle_) {
+      title.set_y(7);
+      title.set_height(17);
+      subtitle_->SetBounds(title.x(), 26, title.width(), 13);
+    }
+    label()->SetBoundsRect(title);
+  }
+
+ private:
+  raw_ptr<FlyLabel> subtitle_ = nullptr;
+  raw_ptr<views::View> tags_ = nullptr;
 };
 BEGIN_METADATA(PickerButton)
 END_METADATA
+// Fixed width; height follows the contents up to an optional maximum.
+class SizedPanel : public views::View {
+ public:
+  SizedPanel(int width, int max_height) : width_(width), max_(max_height) {}
+  gfx::Size CalculatePreferredSize(
+      const views::SizeBounds&) const override {
+    const int height = GetLayoutManager()->GetPreferredHeightForWidth(
+        this, width_);
+    return gfx::Size(width_, max_ > 0 ? std::min(height, max_) : height);
+  }
+
+ private:
+  const int width_;
+  const int max_;
+};
 class DismissSurface : public views::View {
  public:
   explicit DismissSurface(base::RepeatingClosure dismiss)
@@ -114,34 +195,94 @@ void CommandPalette::ToggleItems(content::WebContents* contents,
   params.native_widget = new views::NativeWidgetAura(overlay_.get());
   params.name = "FlyCommandPalette";
   params.bounds = desktop_->GetContentsView()->GetBoundsInScreen();
+  if (style_.layout == PaletteStyle::Layout::kPage && style_.page_insets)
+    params.bounds.Inset(style_.page_insets.Run());
   wm::ConvertRectFromScreen(desktop_->GetNativeWindow(), &params.bounds);
   const auto bounds = params.bounds;
   overlay_->Init(std::move(params));
   auto root = std::make_unique<DismissSurface>(base::BindRepeating(
       &CommandPalette::Cancel, weak_factory_.GetWeakPtr(), true));
-  root->SetBackground(
-      views::CreateSolidBackground(SkColorSetARGB(96, 0, 0, 0)));
-  const int margin = std::max(8, (bounds.width() - 640) / 2);
+  const auto& colors = GetFlyColors();
+  const bool top = style_.layout == PaletteStyle::Layout::kTop;
+  const bool page = style_.layout == PaletteStyle::Layout::kPage;
+  root->SetBackground(views::CreateSolidBackground(
+      top ? SkColorSetARGB(1, 0, 0, 0)
+          : SkColorSetA(colors.dark ? SK_ColorBLACK : colors.text,
+                        page ? 0 : 150)));
+  const int width = page ? std::max(200, bounds.width() - 32)
+                         : std::min(style_.width, bounds.width() - 16);
+  const int margin = std::max(8, (bounds.width() - width) / 2);
+  const int vertical = page ? 16 : top ? 14 : 36;
   root->SetLayoutManager(std::make_unique<views::BoxLayout>(
       views::BoxLayout::Orientation::kVertical,
-      gfx::Insets::TLBR(24, margin, 24, margin)));
-  auto panel = std::make_unique<views::View>();
+      gfx::Insets::TLBR(vertical, margin, vertical, margin)));
+  const int max_height = bounds.height() - 2 * vertical;
+  std::unique_ptr<views::View> panel;
+  if (top)
+    panel = std::make_unique<SizedPanel>(width, max_height);
+  else
+    panel = std::make_unique<views::View>();
   auto* layout = panel->SetLayoutManager(std::make_unique<views::BoxLayout>(
-      views::BoxLayout::Orientation::kVertical, gfx::Insets(12), 8));
-  panel->SetPreferredSize(
-      gfx::Size(640, std::max(80, std::min(520, bounds.height() - 48))));
-  panel->SetBackground(
-      views::CreateSolidBackground(ui::kColorDialogBackground));
+      views::BoxLayout::Orientation::kVertical,
+      page ? gfx::Insets::VH(18, 22) : gfx::Insets(12), 10));
+  layout->set_cross_axis_alignment(
+      views::BoxLayout::CrossAxisAlignment::kStretch);
+  if (!top)
+    panel->SetPreferredSize(gfx::Size(
+        width, page ? max_height : std::max(80, std::min(640, max_height))));
+  panel->SetBackground(FlyBackground(page ? FlyRole::kMain : FlyRole::kSidebar,
+                                     4));
+  panel->SetBorder(FlyBorder(FlyRole::kBorder, 1, 4));
+  if (!style_.title.empty()) {
+    auto* header = panel->AddChildView(std::make_unique<views::View>());
+    auto* header_layout =
+        header->SetLayoutManager(std::make_unique<views::BoxLayout>(
+            views::BoxLayout::Orientation::kHorizontal, gfx::Insets(), 8));
+    header_layout->set_cross_axis_alignment(
+        views::BoxLayout::CrossAxisAlignment::kCenter);
+    auto* titles = header->AddChildView(std::make_unique<views::View>());
+    titles->SetLayoutManager(std::make_unique<views::BoxLayout>(
+        views::BoxLayout::Orientation::kVertical, gfx::Insets(), 2));
+    auto* title = titles->AddChildView(std::make_unique<FlyLabel>(
+        style_.title, FlyFace::kSans, page ? 18 : 15,
+        gfx::Font::Weight::SEMIBOLD,
+        page ? FlyLabel::Tone::kAccent : FlyLabel::Tone::kText));
+    title->SetHorizontalAlignment(gfx::ALIGN_LEFT);
+    if (!style_.subtitle.empty()) {
+      auto* subtitle = titles->AddChildView(std::make_unique<FlyLabel>(
+          style_.subtitle, FlyFace::kSans, 11, gfx::Font::Weight::NORMAL,
+          FlyLabel::Tone::kDim));
+      subtitle->SetHorizontalAlignment(gfx::ALIGN_LEFT);
+    }
+    header_layout->SetFlexForView(titles, 1);
+    header->AddChildView(MakeFlyIconButton(
+        base::BindRepeating(&CommandPalette::Cancel, weak_factory_.GetWeakPtr(),
+                            true),
+        vector_icons::kCloseIcon, u"Close", 26));
+  }
   search_ = panel->AddChildView(std::make_unique<views::Textfield>());
   search_->SetPlaceholderText(placeholder);
   search_->GetViewAccessibility().SetName(placeholder);
   search_->set_controller(this);
+  search_->SetFontList(FlyFont(FlyFace::kSans, 13));
+  search_->SetBackgroundColor(colors.bg_main);
+  search_->SetBorder(FlyBorder(FlyRole::kAccent, 1, top ? 18 : 3,
+                               gfx::Insets::VH(7, top ? 14 : 10)));
+  search_->RemoveHoverEffect();
   auto* scroll = panel->AddChildView(std::make_unique<views::ScrollView>());
-  scroll->ClipHeightTo(0, 440);
+  scroll->ClipHeightTo(0, page ? max_height : top ? 380 : 520);
+  scroll->SetBackgroundColor(page ? colors.bg_main : colors.bg_sidebar);
+  scroll->SetDrawOverflowIndicator(false);
   results_ = scroll->SetContents(std::make_unique<views::View>());
   results_->SetLayoutManager(std::make_unique<views::BoxLayout>(
-      views::BoxLayout::Orientation::kVertical));
+      views::BoxLayout::Orientation::kVertical, gfx::Insets(), 2));
   layout->SetFlexForView(scroll, 1);
+  if (style_.layout == PaletteStyle::Layout::kCentre) {
+    auto* hint = panel->AddChildView(std::make_unique<FlyLabel>(
+        u"↑↓ Navigate    Enter Select    Esc Close", FlyFace::kMono,
+        10, gfx::Font::Weight::NORMAL, FlyLabel::Tone::kDim));
+    hint->SetHorizontalAlignment(gfx::ALIGN_LEFT);
+  }
   root->AddChildView(std::move(panel));
   overlay_->SetContentsView(std::move(root));
   Refresh();
@@ -195,37 +336,53 @@ void CommandPalette::Refresh() {
   remove_buttons_.clear();
   results_->RemoveAllChildViews();
   selected_ = -1;
+  const bool secondary_line = remove_ || query_provider_;
   for (const auto& entry : filtered_) {
     auto text = entry.title;
-    if ((remove_ || query_provider_) && !entry.category.empty())
+    if (secondary_line && !entry.category.empty())
       text += "\n" + entry.category;
     if (!entry.shortcuts.empty())
       text += "    " + base::JoinString(entry.shortcuts, " / ");
     if (!entry.normal.empty())
       text += "    " + base::JoinString(entry.normal, " / ") + " (NORMAL)";
+    std::vector<std::u16string> tags;
+    if (!secondary_line && !entry.category.empty())
+      tags.push_back(base::UTF8ToUTF16(entry.category));
+    for (const auto& shortcut : entry.shortcuts)
+      tags.push_back(base::UTF8ToUTF16(shortcut));
+    for (const auto& key : entry.normal)
+      tags.push_back(base::UTF8ToUTF16(key) + u" (NORMAL)");
     auto* row = results_->AddChildView(std::make_unique<views::View>());
     auto* row_layout = row->SetLayoutManager(std::make_unique<views::BoxLayout>(
-        views::BoxLayout::Orientation::kHorizontal, gfx::Insets(), 4));
+        views::BoxLayout::Orientation::kHorizontal, gfx::Insets(), 6));
+    row_layout->set_cross_axis_alignment(
+        views::BoxLayout::CrossAxisAlignment::kCenter);
     auto* button = row->AddChildView(std::make_unique<PickerButton>(
         base::BindRepeating(&CommandPalette::Activate,
                             weak_factory_.GetWeakPtr(), entry.action),
-        base::UTF8ToUTF16(text)));
+        base::UTF8ToUTF16(entry.title),
+        secondary_line ? base::UTF8ToUTF16(entry.category) : std::u16string(),
+        tags, !secondary_line && !entry.category.empty()));
     button->SetEnabled(available_.Run(entry.action));
     row_layout->SetFlexForView(button, 1);
     button->GetViewAccessibility().SetName(base::UTF8ToUTF16(text));
     buttons_.push_back(button);
     if (remove_) {
-      auto* remove = row->AddChildView(std::make_unique<views::MdTextButton>(
+      auto* remove = row->AddChildView(std::make_unique<FlyButton>(
           base::BindRepeating(&CommandPalette::Remove, weak_factory_.GetWeakPtr(),
-                              entry.action), u"Remove"));
+                              entry.action), u"Remove", FlyFace::kSans, 11));
+      remove->SetOutlined(true);
       remove->SetEnabled(removable_ && available_.Run(entry.action));
       remove->GetViewAccessibility().SetName(u"Remove " + base::UTF8ToUTF16(text));
       remove_buttons_.push_back(remove);
     }
   }
-  if (buttons_.empty())
-    results_->AddChildView(std::make_unique<views::Label>(
-        remove_ ? u"No matching bookmarks" : u"No matching results"));
+  if (buttons_.empty()) {
+    auto* empty = results_->AddChildView(std::make_unique<FlyLabel>(
+        remove_ ? u"No bookmarks found." : u"No matching results",
+        FlyFace::kSans, 12, gfx::Font::Weight::NORMAL, FlyLabel::Tone::kDim));
+    empty->SetBorder(views::CreateEmptyBorder(gfx::Insets(24)));
+  }
   Select(1);
 }
 void CommandPalette::Select(int direction) {

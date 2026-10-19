@@ -191,3 +191,18 @@ if (is_linux || is_win) {
     ]
   }
 }
+
+# Product fonts used by the native interface (IBM Plex and Doto, SIL OFL 1.1).
+# RegisterFlyFonts() adds this directory to the browser's fontconfig.
+copy("fonts") {
+  sources = [
+    "resources/fonts/Doto.ttf",
+    "resources/fonts/IBMPlexMono-Medium.ttf",
+    "resources/fonts/IBMPlexMono-Regular.ttf",
+    "resources/fonts/IBMPlexSans.ttf",
+    "resources/fonts/doto-OFL.txt",
+    "resources/fonts/ibmplexmono-OFL.txt",
+    "resources/fonts/ibmplexsans-OFL.txt",
+  ]
+  outputs = [ "$root_out_dir/fly_fonts/{{source_file_part}}" ]
+}

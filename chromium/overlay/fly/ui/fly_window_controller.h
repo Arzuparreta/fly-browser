@@ -55,6 +55,8 @@ class SimpleMenuModel;
 namespace fly {
 class CommandPalette;
 class BookmarkService;
+class FlyButton;
+class FlyLabel;
 class StatusBar;
 class KeyboardEditor;
 class TabSidebar;
@@ -95,9 +97,9 @@ class FlyWindowController : public views::WidgetDelegate,
   bool CanShowHistory() const { return workspaces_.Read().has_value(); }
   views::Widget* history_clear_dialog_for_testing() const;
   PreferencesService& preferences() { return preferences_; }
-  views::MdTextButton* clock_for_testing() { return clock_; }
-  views::MdTextButton* preferences_button_for_testing() { return preferences_button_; }
-  views::MdTextButton* bookmarks_button_for_testing() { return bookmarks_button_; }
+  FlyButton* clock_for_testing() { return clock_; }
+  FlyButton* preferences_button_for_testing() { return preferences_button_; }
+  FlyButton* bookmarks_button_for_testing() { return bookmarks_button_; }
   BrowserWindowInterface* selected_browser_for_testing() { return selected_; }
   CommandPalette& palette() { return *palette_; }
   views::View* window_controls_for_testing() { return window_controls_; }
@@ -144,7 +146,8 @@ class FlyWindowController : public views::WidgetDelegate,
   }
   views::Widget* sidebar_widget_for_testing() { return sidebar_widget_.get(); }
   TabSidebar* compact_sidebar_for_testing() { return compact_tab_sidebar_; }
-  views::MdTextButton* sidebar_pin_for_testing() { return sidebar_pin_button_; }
+  FlyButton* sidebar_pin_for_testing() { return sidebar_pin_button_; }
+  FlyButton* new_tab_button_for_testing() { return new_tab_button_; }
 
   // WidgetObserver:
   void OnWidgetDestroying(views::Widget* widget) override;
@@ -218,6 +221,8 @@ class FlyWindowController : public views::WidgetDelegate,
   void ToggleAddress(BrowserWindowInterface* browser);
   void RemoveBookmark(content::WebContents* source, std::string url);
   void UpdateClock();
+  void UpdateWorkspaceHeader();
+  void ApplyFlyPalette();
   void CycleClockFormat();
   void OnWidgetVisibilityChanged(views::Widget*, bool visible) override;
   void ScheduleWorkspaceRefresh();
@@ -249,7 +254,7 @@ class FlyWindowController : public views::WidgetDelegate,
   std::optional<ThemePreferences> applied_theme_;
   std::optional<bool> applied_frequent_visibility_;
   PrefChangeRegistrar preferences_registrar_;
-  base::RepeatingTimer clock_timer_;
+  base::OneShotTimer clock_timer_;
   base::RepeatingTimer suspension_timer_;
   std::unique_ptr<HintController> hints_;
   std::unique_ptr<CommandPalette> palette_;
@@ -280,8 +285,12 @@ class FlyWindowController : public views::WidgetDelegate,
   raw_ptr<views::NativeViewHost> sidebar_host_ = nullptr;
   raw_ptr<views::View> compact_rail_ = nullptr;
   raw_ptr<TabSidebar> compact_tab_sidebar_ = nullptr;
-  raw_ptr<views::MdTextButton> sidebar_pin_button_ = nullptr;
-  raw_ptr<views::MdTextButton> workspace_picker_button_ = nullptr;
+  raw_ptr<FlyButton> sidebar_pin_button_ = nullptr;
+  raw_ptr<FlyButton> compact_pin_button_ = nullptr;
+  raw_ptr<FlyButton> new_tab_button_ = nullptr;
+  raw_ptr<FlyButton> compact_workspace_ = nullptr;
+  raw_ptr<FlyLabel> workspace_badge_ = nullptr;
+  raw_ptr<FlyButton> workspace_picker_button_ = nullptr;
   raw_ptr<aura::client::FocusClient> sidebar_focus_client_ = nullptr;
   bool observing_sidebar_focus_ = false;
   bool sidebar_auto_collapse_ = true;
@@ -294,9 +303,9 @@ class FlyWindowController : public views::WidgetDelegate,
   raw_ptr<views::View> content_ = nullptr;
   raw_ptr<views::Label> status_ = nullptr;
   raw_ptr<StatusBar> status_bar_ = nullptr;
-  raw_ptr<views::MdTextButton> clock_ = nullptr;
-  raw_ptr<views::MdTextButton> preferences_button_ = nullptr;
-  raw_ptr<views::MdTextButton> bookmarks_button_ = nullptr;
+  raw_ptr<FlyButton> clock_ = nullptr;
+  raw_ptr<FlyButton> preferences_button_ = nullptr;
+  raw_ptr<FlyButton> bookmarks_button_ = nullptr;
   raw_ptr<TabSidebar> tab_sidebar_ = nullptr;
   std::map<BrowserWindowInterface*, Entry> entries_;
   raw_ptr<BrowserWindowInterface> selected_ = nullptr;

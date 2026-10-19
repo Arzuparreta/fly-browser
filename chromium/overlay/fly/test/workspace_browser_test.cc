@@ -14,6 +14,7 @@
 #include "fly/preferences/search_service.h"
 #include "fly/sessions/tab_identity.h"
 #include "fly/ui/command_palette.h"
+#include "fly/ui/fly_theme.h"
 #include "fly/ui/fly_window_controller.h"
 #include "fly/ui/hint_controller.h"
 #include "fly/ui/history_service.h"
@@ -562,6 +563,9 @@ class FlySidebarBrowserTest : public FlyWorkspaceBrowserTest {
     FlyWorkspaceBrowserTest::SetUpOnMainThread();
     ASSERT_TRUE(
         FlyWindowController::Get().preferences().SetSidebarAutoCollapse(true));
+    // The footer clock ticks independently; these cases observe the sidebar's.
+    ASSERT_TRUE(
+        FlyWindowController::Get().preferences().SetStatusBarVisible(false));
   }
 
  protected:
@@ -3384,9 +3388,8 @@ IN_PROC_BROWSER_TEST_F(FlyWorkspaceBrowserTest,
   auto reopened_lifetime = reopened->GetWeakPtr();
   ASSERT_TRUE(ExecuteNativeCommand(reopened, "remove-tab"));
   ASSERT_TRUE(base::test::RunUntil([&] { return !reopened_lifetime; }));
-  auto* new_tab = static_cast<views::Button*>(
-      window.tab_sidebar_for_testing()->children().front());
-  views::test::ButtonTestApi(new_tab).NotifyDefaultMouseClick();
+  views::test::ButtonTestApi(window.new_tab_button_for_testing())
+      .NotifyDefaultMouseClick();
   ASSERT_TRUE(base::test::RunUntil(
       [&] { return window.selected_browser_for_testing() != nullptr; }));
   EXPECT_EQ(1,
@@ -4307,22 +4310,6 @@ IN_PROC_BROWSER_TEST_F(FlyWorkspaceBrowserTest,
                            "document.querySelector('#editable').value")
                .ExtractString() == "j";
   }));
-  // Preserve upstream toolbar-focus restoration independently of Fly address
-  // UI.
-  ASSERT_TRUE(ExecuteNativeCommand(browser(), "toggle-address"));
-  auto* widget = views::Widget::GetWidgetForNativeView(
-      browser()->GetWindow()->GetNativeWindow());
-  ASSERT_TRUE(widget);
-  auto* toolbar_focus = widget->GetFocusManager()->GetFocusedView();
-  ASSERT_TRUE(toolbar_focus);
-  ASSERT_FALSE(contents->GetRenderWidgetHostView()->HasFocus());
-  keys.PressKey(ui::VKEY_P, ui::EF_ALT_DOWN);
-  ASSERT_TRUE(base::test::RunUntil([&] { return window.palette().active(); }));
-  keys.PressKey(ui::VKEY_P, ui::EF_ALT_DOWN);
-  ASSERT_TRUE(base::test::RunUntil(
-      [&] { return window.palette().search_for_testing() == nullptr; }));
-  EXPECT_EQ(toolbar_focus, widget->GetFocusManager()->GetFocusedView());
-  EXPECT_FALSE(contents->GetRenderWidgetHostView()->HasFocus());
   keys.PressKey(ui::VKEY_P, ui::EF_ALT_DOWN);
   ASSERT_TRUE(base::test::RunUntil([&] { return window.palette().active(); }));
   ASSERT_TRUE(SecondWorkspace());
@@ -4415,11 +4402,11 @@ IN_PROC_BROWSER_TEST_F(FlyWorkspaceBrowserTest,
   pointer.MoveMouseTo(bounds.origin() + gfx::Vector2d(40, 35));
   ASSERT_TRUE(base::test::RunUntil([&] {
     const auto& text = status->location_for_testing()->GetText();
-    return text.starts_with(u"Link: ") && text.find(u"example.invalid/fixture") != std::u16string::npos;
+    return text.find(u"example.invalid/fixture") != std::u16string::npos;
   }));
   pointer.MoveMouseTo(window.workspace_buttons_for_testing()->GetBoundsInScreen().CenterPoint());
   ASSERT_TRUE(base::test::RunUntil([&] {
-    return !status->location_for_testing()->GetText().starts_with(u"Link: ");
+    return status->location_for_testing()->GetText().empty();
   }));
   ASSERT_TRUE(InvokeNativeCommand(browser(), "toggle-status-bar"));
   EXPECT_FALSE(status->GetVisible());
@@ -4447,25 +4434,30 @@ IN_PROC_BROWSER_TEST_F(FlyWorkspaceBrowserTest,
   auto* status = window.status_bar_for_testing();
   ASSERT_EQ(security_state::SECURE, chrome_security_state::GetSecurityLevel(contents));
   ASSERT_TRUE(base::test::RunUntil([&] {
-    return status->security_for_testing()->GetText() == u"Page secure";
+    return status->security_for_testing()->GetText() == u"HTTPS" &&
+           status->security_for_testing()->GetTooltipText().starts_with(
+               u"Page secure");
   }));
   {
     chrome_security_state::ScopedMaliciousContentStatusForTesting verdict(
         security_state::MALICIOUS_CONTENT_STATUS_MALWARE);
     status->DidChangeVisibleSecurityState();
-    EXPECT_EQ(u"Page security warning", status->security_for_testing()->GetText());
+    EXPECT_TRUE(status->security_for_testing()->GetTooltipText().starts_with(
+        u"Page security warning"));
   }
   status->DidChangeVisibleSecurityState();
-  EXPECT_EQ(u"Page secure", status->security_for_testing()->GetText());
+  EXPECT_TRUE(status->security_for_testing()->GetTooltipText().starts_with(
+      u"Page secure"));
   ASSERT_TRUE(ui_test_utils::NavigateToURL(browser(), GURL("about:blank")));
-  EXPECT_TRUE(status->security_for_testing()->GetText().empty());
+  EXPECT_EQ(u"BLANK", status->security_for_testing()->GetText());
   ASSERT_TRUE(window.RunCommand(browser(), "toggle-private-mode"));
   ASSERT_TRUE(base::test::RunUntil([&] {
     auto* selected = window.selected_browser_for_testing();
     return selected && selected->GetProfile()->IsOffTheRecord();
   }));
-  EXPECT_EQ(u"Private", status->workspace_for_testing()->GetText());
-  EXPECT_TRUE(status->security_for_testing()->GetText().empty());
+  EXPECT_EQ(u"PRIVATE PROFILE", status->workspace_for_testing()->GetText());
+  EXPECT_FALSE(status->security_for_testing()->GetTooltipText().starts_with(
+      u"Page secure"));
 }
 
 IN_PROC_BROWSER_TEST_F(FlyWorkspaceBrowserTest,

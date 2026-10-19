@@ -25,6 +25,7 @@
 #include "ui/views/widget/widget_observer.h"
 
 namespace views {
+class ScrollView;
 class Widget;
 class View;
 class Label;
@@ -59,6 +60,7 @@ class KeyboardEditor : public views::TextfieldController,
   bool active() const { return overlay_ && !closing_; }
   bool recording() const { return recording_.has_value(); }
   views::Textfield* field_for_testing(std::string_view action, bool normal);
+  void EnsureRowForTesting(std::string_view action, bool normal);
   views::MdTextButton* record_for_testing(std::string_view action, bool normal);
   views::MdTextButton* save_for_testing() { return save_; }
   views::Textfield* search_for_testing() { return search_; }
@@ -123,6 +125,8 @@ class KeyboardEditor : public views::TextfieldController,
   raw_ptr<views::Textfield> search_ = nullptr;
   raw_ptr<views::Textfield> tabs_ = nullptr;
   raw_ptr<views::View> rows_ = nullptr;
+  raw_ptr<views::ScrollView> rows_scroll_ = nullptr;
+  bool show_all_rows_ = false;
   raw_ptr<views::Label> status_ = nullptr;
   raw_ptr<views::MdTextButton> save_ = nullptr;
   KeyboardConfig original_;

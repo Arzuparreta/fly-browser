@@ -5,23 +5,32 @@ Full product, migration and packaged application acceptance remain outstanding.
 
 ## Active execution state
 
-PR [127](https://github.com/Arzuparreta/fly-browser/pull/127) (window controls,
-sidebar expansion and indicators) is merged as `31bad18`, including a review
-follow-up: a repeated `focus-sidebar` after row activation now moves keyboard
-focus, the restore icon persists on hover and pointer motion only re-lays out the
-sidebar when it crosses its edge.
+PRs [127](https://github.com/Arzuparreta/fly-browser/pull/127) (window controls,
+sidebar expansion and indicators) and
+[128](https://github.com/Arzuparreta/fly-browser/pull/128) (address/search,
+shared history, frequent sites) are merged.
 
-The next pull request carries the address/search, history and frequent-site blocks
-described below. The frequent-site browser case failed only because the fixture
-server answers the opened origin with an error page; it now checks the committed
-origin, the destination profile and the retained cookie on a normal page.
+The shell-look block gives native Fly the Electron interface instead of
+Chromium's: the embedded profile windows no longer show Chromium's toolbar
+(`BrowserView::IsToolbarVisible`, patch 0023), so the sign-in button and
+omnibox are gone and Fly's floating address surface is the only address UI.
+`fly/ui/fly_theme.{h,cc}` carries the product palette (dark and light defaults
+from `main.js`), the bundled IBM Plex Sans/Mono and Doto fonts (TTF copies of
+`assets/fonts`, registered with the browser's fontconfig at start) and the
+shared `FlyButton`/`FlyLabel`/background/border helpers. The sidebar,
+compact rail, footer, pickers (Command Centre, address, history, Bookmarks
+Manager, Workspace Dashboard) and Preferences use them. The footer follows the
+Electron layout (mode badge, hovered link, zoom, notifications, connection,
+workspace and clock badges); the clock wakes at the next visible change rather
+than every second. Preferences builds the first 25 keyboard actions at open
+(the whole catalogue took about a second) with a "Show all" control.
 
 Local validation uses the engine checkout `/mnt/storage/fly-chromium`, output
-`src/out/FlyNative`, `native.py refresh-overlay` followed by an incremental
-`autoninja` of `chrome fly_unittests fly_browser_tests`. Browser cases run
-serially (`--test-launcher-jobs=1`) on an owned Xvfb/Openbox display: parallel
-jobs share one display and steal window activation, which produces focus
-failures unrelated to the code under test.
+`src/out/FlyNative`, `native.py refresh-overlay --include-upstream` followed by
+an incremental `autoninja` of `chrome fly_unittests fly_browser_tests`. Browser
+cases run serially (`--test-launcher-jobs=1`) on an owned Xvfb/Openbox display:
+parallel jobs share one display and steal window activation, which produces
+focus failures unrelated to the code under test.
 
 ## Historical checkpoint notes
 
