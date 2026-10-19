@@ -1672,3 +1672,18 @@ A browser case starts real asynchronous profile creation, retires metadata or
 installs a future catalog before the queued completion, waits on a second native
 profile-ready callback and verifies no browser was opened, no selection changed
 and the retired/future data stayed intact. Runtime execution remains pending.
+
+
+### Native page pointer/keyboard focus coverage
+
+The external XTest capture still fails to focus/type into its page field when
+using guessed compositor coordinates, including with an isolated i3 window
+manager. Its key reaches Chromium's address bar instead. The regression suite
+now adds a stricter browser-owned input case: start focused on a native sidebar
+control, click the renderer input using RenderWidgetHostView screen geometry,
+type through native events, open the workspace overlay, verify renderer blur
+without hidden visibility, Escape and continue editing the same field. It uses
+no WebContents::Focus call or CDP input/emulation to establish page focus, and
+logs renderer/desktop geometry on failure. Execution is pending. This does not
+resolve the external capture discrepancy or establish packaged desktop input
+acceptance by itself.

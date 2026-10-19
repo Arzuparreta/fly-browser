@@ -2656,6 +2656,61 @@ IN_PROC_BROWSER_TEST_F(FlyWorkspaceBrowserTest,
 }
 
 IN_PROC_BROWSER_TEST_F(FlyWorkspaceBrowserTest,
+                       NativePointerFocusTypesAndReturnsFromWorkspaceOverlay) {
+  ASSERT_TRUE(ui_test_utils::NavigateToURL(
+      browser(), embedded_test_server()->GetURL("/title1.html")));
+  auto* contents = Active(browser());
+  auto& window = FlyWindowController::Get();
+  ASSERT_TRUE(content::ExecJs(contents, R"js(
+    document.body.innerHTML = '<input id="native-edit" '
+      + 'style="position:fixed;left:40px;top:40px;width:250px;height:24px">';
+  )js"));
+  window.Select(browser(), true);
+  window.clock_for_testing()->RequestFocus();
+  ASSERT_TRUE(base::test::RunUntil([&] {
+    return window.clock_for_testing()->HasFocus();
+  }));
+  ui::test::EventGenerator input(
+      window.desktop_widget()->GetNativeWindow()->GetRootWindow());
+  const auto bounds = contents->GetRenderWidgetHostView()->GetViewBounds();
+  input.MoveMouseTo(bounds.origin() + gfx::Vector2d(70, 52));
+  input.ClickLeftButton();
+  ASSERT_TRUE(base::test::RunUntil([&] {
+    return contents->GetRenderWidgetHostView()->HasFocus() &&
+           content::EvalJs(contents,
+               "document.hasFocus() && document.activeElement.id === 'native-edit'",
+               content::EXECUTE_SCRIPT_NO_USER_GESTURE) == true;
+  })) << "render_view=" << bounds.ToString()
+      << " desktop=" << window.desktop_widget()->GetWindowBoundsInScreen().ToString();
+  input.PressKey(ui::VKEY_A, ui::EF_NONE);
+  ASSERT_TRUE(base::test::RunUntil([&] {
+    return content::EvalJs(contents,
+        "document.querySelector('#native-edit').value",
+        content::EXECUTE_SCRIPT_NO_USER_GESTURE) == "a";
+  }));
+  input.PressKey(ui::VKEY_W, ui::EF_CONTROL_DOWN | ui::EF_SHIFT_DOWN);
+  ASSERT_TRUE(base::test::RunUntil([&] {
+    return window.workspace_picker().active() &&
+           window.workspace_picker().search_for_testing()->HasFocus();
+  }));
+  EXPECT_EQ(false, content::EvalJs(contents, "document.hasFocus()",
+                                  content::EXECUTE_SCRIPT_NO_USER_GESTURE));
+  EXPECT_EQ(false, content::EvalJs(contents, "document.hidden"));
+  input.PressKey(ui::VKEY_ESCAPE, ui::EF_NONE);
+  ASSERT_TRUE(base::test::RunUntil([&] {
+    return !window.workspace_picker().search_for_testing() &&
+           content::EvalJs(contents, "document.hasFocus()",
+                           content::EXECUTE_SCRIPT_NO_USER_GESTURE) == true;
+  }));
+  input.PressKey(ui::VKEY_B, ui::EF_NONE);
+  ASSERT_TRUE(base::test::RunUntil([&] {
+    return content::EvalJs(contents,
+        "document.querySelector('#native-edit').value",
+        content::EXECUTE_SCRIPT_NO_USER_GESTURE) == "ab";
+  }));
+}
+
+IN_PROC_BROWSER_TEST_F(FlyWorkspaceBrowserTest,
                        NativeStatusTracksRealHoverAndPersistentVisibility) {
   ASSERT_TRUE(ui_test_utils::NavigateToURL(
       browser(), embedded_test_server()->GetURL("/title1.html")));
