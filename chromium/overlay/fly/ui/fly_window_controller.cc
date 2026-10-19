@@ -319,9 +319,15 @@ FlyWindowController::FlyWindowController()
   sidebar_widget_->Init(std::move(sidebar_params));
   sidebar_widget_->SetContentsView(std::move(sidebar));
   sidebar_widget_->AddObserver(this);
-  sidebar_host_ = desktop_->GetContentsView()->AddChildView(
-      std::make_unique<views::NativeViewHost>());
-  sidebar_host_->SetProperty(views::kViewIgnoredByLayoutKey, true);
+  auto sidebar_host = std::make_unique<views::NativeViewHost>();
+  // Profile BrowserWidgets retain Chromium's native transient-window stacking.
+  // Use the clip-window host for every desktop child so Aura owns all sibling
+  // layers consistently; Views-managed layer reordering cannot order this
+  // transient hierarchy against independent native controls.
+  sidebar_host->SetLayerManagedByViews(false);
+  sidebar_host->SetProperty(views::kViewIgnoredByLayoutKey, true);
+  sidebar_host_ =
+      desktop_->GetContentsView()->AddChildView(std::move(sidebar_host));
   sidebar_host_->Attach(sidebar_widget_->GetNativeView());
   hints_ = std::make_unique<HintController>(
       desktop_.get(), base::BindRepeating(
@@ -864,8 +870,9 @@ void FlyWindowController::Prepare(BrowserWindowInterface* browser) {
       }
     }
   }
-  auto* host =
-      content_->AddChildView(std::make_unique<views::NativeViewHost>());
+  auto native_host = std::make_unique<views::NativeViewHost>();
+  native_host->SetLayerManagedByViews(false);
+  auto* host = content_->AddChildView(std::move(native_host));
   host->SetVisible(false);
   auto [entry, inserted] =
       entries_.emplace(browser, Entry{browser, nullptr, host, workspace_id});

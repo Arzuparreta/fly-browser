@@ -50,8 +50,13 @@ state. The full attempt finished with 65 service passes, 55/78 browser
 passes and both media fixtures passing. Most browser failures share the native
 WindowReorderer ordering check: the independent sidebar was manually stacked
 among Views-owned browser layers. The follow-up hosts the sidebar through a
-NativeViewHost in that same View tree and removes manual Aura stacking. Its
-bounds remain outside layout, preserving the no-reflow hover contract.
+NativeViewHost in that same View tree and removes manual Aura stacking. Hosting
+alone still triggers the check because profile BrowserWidgets retain native
+transient-window stacking. All Fly desktop NativeViewHosts therefore explicitly
+use Chromium's supported clip-window backend, with Aura consistently owning
+sibling layers. This is scoped to Fly's composed desktop, preserving Chromium's
+native transient/focus handling. The sidebar bounds remain outside layout,
+preserving the no-reflow hover contract. Directed validation remains required.
 The failed run is archived in external
 `evidence/runtime-fdf867e-sidebar-layer-and-focus-failure`. These fixes require a
 fresh directed and full run; the earlier run is not accepted coverage.
