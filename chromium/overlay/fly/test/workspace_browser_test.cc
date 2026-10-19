@@ -98,6 +98,7 @@
 #include "ui/views/focus/focus_manager.h"
 #include "ui/views/test/button_test_api.h"
 #include "ui/views/widget/widget.h"
+#include "ui/views/test/views_test_utils.h"
 #include "ui/views/window/dialog_delegate.h"
 #include "ui/wm/core/coordinate_conversion.h"
 #include "ui/wm/public/activation_client.h"
@@ -643,9 +644,19 @@ IN_PROC_BROWSER_TEST_F(FlyWorkspaceBrowserTest,
   ASSERT_TRUE(base::test::RunUntil([&] {
     return close->IsDrawn() && !close->GetVisibleBounds().IsEmpty();
   }));
+  views::test::RunScheduledLayout(window.desktop_widget());
+  auto point = close->GetVisibleBounds().CenterPoint();
+  views::View::ConvertPointToScreen(close, &point);
+  auto* root = window.desktop_widget()->GetRootView();
+  auto view_point = point;
+  views::View::ConvertPointFromScreen(root, &view_point);
+  auto* hit = root->GetEventHandlerForPoint(view_point);
+  ASSERT_TRUE(close->Contains(hit))
+      << "close=" << close->GetBoundsInScreen().ToString()
+      << " hit=" << (hit ? hit->GetClassName() : "none");
   ui::test::EventGenerator mouse(
       window.desktop_widget()->GetNativeWindow()->GetRootWindow());
-  mouse.MoveMouseTo(close->GetBoundsInScreen().CenterPoint());
+  mouse.MoveMouseTo(point);
   mouse.ClickLeftButton();
   auto* dialog = ui_test_utils::WaitForAppModalDialog();
   ASSERT_TRUE(dialog && dialog->is_before_unload_dialog());
