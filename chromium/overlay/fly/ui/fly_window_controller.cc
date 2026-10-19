@@ -23,6 +23,7 @@
 #include "base/command_line.h"
 #include "base/functional/bind.h"
 #include "base/no_destructor.h"
+#include "base/logging.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/strings/string_util.h"
 #include "base/strings/utf_string_conversions.h"
@@ -478,6 +479,7 @@ void FlyWindowController::UpdateWindowControls() {
   maximize->GetViewAccessibility().SetName(title);
 }
 void FlyWindowController::RunWindowControl(std::string action) {
+  VLOG(1) << "Fly window control requested: " << action;
   if (closing_ || !window_controls_->GetVisible())
     return;
   // Complete pointer/keyboard button dispatch before native close callbacks can
@@ -490,6 +492,7 @@ void FlyWindowController::RunWindowControl(std::string action) {
                 !window->preferences_.ReadWindowControlsVisible().value_or(
                     false))
               return;
+            VLOG(1) << "Fly window control executing: " << action;
             if (action == "minimize")
               window->desktop_->Minimize();
             else if (action == "maximize") {
