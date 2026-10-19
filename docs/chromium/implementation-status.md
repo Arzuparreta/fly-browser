@@ -161,6 +161,14 @@ The original failed summaries/logs remain under their exact commit prefixes.
 The new cross-profile move is not yet crash-atomic across independent native
 session files; M4 transaction/recovery acceptance remains outstanding.
 
+The first complete `e1aa6dd` runtime attempt passes 59 service cases, 70 of
+71 browser stages and both multimedia fixtures. One repeat removal-menu action
+missed a rebuilt row before layout; the run and failing independent audit are
+preserved under `evidence/runtime-e1aa6dd-removal-pointer-failure`. The fixture now
+waits for the row's drawn visible hit area and confirms actual menu dispatch
+before awaiting the dialog. The full suite must be repeated at that correction;
+the failed run is not accepted as a pass.
+
 PR [126](https://github.com/Arzuparreta/fly-browser/pull/126) is the active draft,
 with exactly one `impact:none` label. The first-head ordinary checks pass;
 manual object/service matrices 39255701582/39255705748 are superseded by the

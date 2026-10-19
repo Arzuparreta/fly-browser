@@ -201,13 +201,15 @@ class FlyWorkspaceBrowserTest : public InProcessBrowserTest {
       for (const auto& child :
            window.workspace_buttons_for_testing()->children()) {
         auto* button = views::AsViewClass<views::MdTextButton>(child.get());
-        if (button && button->GetText() == base::UTF8ToUTF16(item.name)) {
+        if (button && button->GetText() == base::UTF8ToUTF16(item.name) &&
+            button->IsDrawn() && !button->GetVisibleBounds().IsEmpty()) {
           row = button;
           return true;
         }
       }
       return false;
     }));
+    bool menu_selected = false;
     base::RepeatingTimer choose;
     choose.Start(
         FROM_HERE, base::Milliseconds(1), base::BindLambdaForTesting([&] {
@@ -217,11 +219,17 @@ class FlyWorkspaceBrowserTest : public InProcessBrowserTest {
           choose.Stop();
           EXPECT_TRUE(model->IsEnabledAt(4));
           model->ActivatedAt(4);
+          menu_selected = true;
         }));
     ui::test::EventGenerator mouse(
         window.desktop_widget()->GetNativeWindow()->GetRootWindow());
-    mouse.MoveMouseTo(row->GetBoundsInScreen().CenterPoint());
+    // A catalog notification can replace the row before its first layout.
+    // Target its visible hit area rather than an unlaid-out preferred rect.
+    auto point = row->GetVisibleBounds().CenterPoint();
+    views::View::ConvertPointToScreen(row, &point);
+    mouse.MoveMouseTo(point);
     mouse.ClickRightButton();
+    ASSERT_TRUE(base::test::RunUntil([&] { return menu_selected; }));
     ASSERT_TRUE(base::test::RunUntil(
         [&] { return window.workspace_remove_dialog_for_testing(); }));
   }
