@@ -45,7 +45,8 @@ class KeyboardEditor : public views::TextfieldController,
   ~KeyboardEditor() override;
   void Toggle(content::WebContents* contents);
   void Cancel(bool restore_focus = false);
-  void ShowAppearance();
+  // Pointer settings buttons return to the page when the surface closes.
+  void ShowAppearance(bool return_to_page = false);
   void ShowPerformance();
   void ShowKeyboard();
   bool HandleOverlayKey(const ui::KeyEvent& event);
@@ -120,6 +121,7 @@ class KeyboardEditor : public views::TextfieldController,
   uint64_t generation_ = 0;
   bool closing_ = false;
   bool cancelled_ = false;
+  bool restore_page_focus_ = false;
   base::WeakPtrFactory<KeyboardEditor> weak_factory_{this};
 };
 }  // namespace fly

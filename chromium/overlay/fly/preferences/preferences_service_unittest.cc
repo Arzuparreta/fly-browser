@@ -18,6 +18,91 @@ class PreferencesServiceTest : public testing::Test {
   TestingPrefServiceSimple prefs_;
   PreferencesService service_;
 };
+TEST_F(PreferencesServiceTest, SidebarAutoCollapseDefaultsWithoutWriting) {
+  EXPECT_EQ(true, service_.ReadSidebarAutoCollapse());
+  EXPECT_EQ(nullptr, prefs_.GetUserPref(kPreferencesPref));
+  ASSERT_TRUE(service_.SetSidebarAutoCollapse(false));
+  PreferencesService restarted(prefs_);
+  EXPECT_EQ(false, restarted.ReadSidebarAutoCollapse());
+  ASSERT_TRUE(restarted.SetSidebarAutoCollapse(true));
+  EXPECT_EQ(true, service_.ReadSidebarAutoCollapse());
+}
+TEST_F(PreferencesServiceTest, SidebarChoicePreservesOtherSettingsAndMetadata) {
+  ASSERT_TRUE(service_.SetWindowControlsVisible(true));
+  auto stored = prefs_.GetDict(kPreferencesPref).Clone();
+  stored.Set("source", "keep");
+  stored.EnsureDict("values")->Set("future", base::ListValue().Append("keep"));
+  prefs_.SetDict(kPreferencesPref, stored.Clone());
+  ASSERT_TRUE(service_.SetSidebarAutoCollapse(false));
+  stored.EnsureDict("values")->Set("sidebar_auto_collapse", false);
+  EXPECT_EQ(stored, prefs_.GetDict(kPreferencesPref));
+}
+TEST_F(PreferencesServiceTest, SidebarChoiceRejectsRecoveryAndManagedWrites) {
+  for (const auto& stored :
+       {base::DictValue().Set("schema", 2).Set("values", base::DictValue()),
+        base::DictValue()
+            .Set("schema", 1)
+            .Set("values",
+                 base::DictValue().Set("sidebar_auto_collapse", "true"))}) {
+    prefs_.SetDict(kPreferencesPref, stored.Clone());
+    EXPECT_FALSE(service_.ReadSidebarAutoCollapse());
+    EXPECT_FALSE(service_.SetSidebarAutoCollapse(false));
+    EXPECT_EQ(stored, prefs_.GetDict(kPreferencesPref));
+  }
+  const auto policy =
+      base::DictValue()
+          .Set("schema", 1)
+          .Set("values", base::DictValue().Set("sidebar_auto_collapse", true));
+  prefs_.SetManagedPref(kPreferencesPref, base::Value(policy.Clone()));
+  EXPECT_EQ(true, service_.ReadSidebarAutoCollapse());
+  EXPECT_FALSE(service_.CanEditSidebarAutoCollapse());
+  EXPECT_FALSE(service_.SetSidebarAutoCollapse(false));
+  EXPECT_EQ(policy, prefs_.GetDict(kPreferencesPref));
+}
+TEST_F(PreferencesServiceTest, WindowControlsDefaultIsHiddenAndChoicePersists) {
+  EXPECT_EQ(false, service_.ReadWindowControlsVisible());
+  EXPECT_EQ(nullptr, prefs_.GetUserPref(kPreferencesPref));
+  ASSERT_TRUE(service_.SetWindowControlsVisible(true));
+  PreferencesService restarted(prefs_);
+  EXPECT_EQ(true, restarted.ReadWindowControlsVisible());
+  ASSERT_TRUE(restarted.SetWindowControlsVisible(false));
+  EXPECT_EQ(false, service_.ReadWindowControlsVisible());
+}
+TEST_F(PreferencesServiceTest,
+       WindowControlsPreserveOtherGroupsAndUnknownData) {
+  ASSERT_TRUE(service_.SetStatusBarVisible(false));
+  auto stored = prefs_.GetDict(kPreferencesPref).Clone();
+  stored.Set("import", base::DictValue().Set("source", "preserved"));
+  stored.EnsureDict("values")->Set("future", "keep");
+  prefs_.SetDict(kPreferencesPref, stored.Clone());
+  ASSERT_TRUE(service_.SetWindowControlsVisible(true));
+  auto expected = stored.Clone();
+  expected.EnsureDict("values")->Set("show_window_controls", true);
+  EXPECT_EQ(expected, prefs_.GetDict(kPreferencesPref));
+}
+TEST_F(PreferencesServiceTest,
+       WindowControlsCannotRewriteRecoveryOrManagedData) {
+  for (const auto& stored :
+       {base::DictValue().Set("schema", 2).Set("values", base::DictValue()),
+        base::DictValue()
+            .Set("schema", 1)
+            .Set("values",
+                 base::DictValue().Set("show_window_controls", "true"))}) {
+    prefs_.SetDict(kPreferencesPref, stored.Clone());
+    EXPECT_FALSE(service_.ReadWindowControlsVisible());
+    EXPECT_FALSE(service_.SetWindowControlsVisible(true));
+    EXPECT_EQ(stored, prefs_.GetDict(kPreferencesPref));
+  }
+  const auto policy =
+      base::DictValue()
+          .Set("schema", 1)
+          .Set("values", base::DictValue().Set("show_window_controls", true));
+  prefs_.SetManagedPref(kPreferencesPref, base::Value(policy.Clone()));
+  EXPECT_EQ(true, service_.ReadWindowControlsVisible());
+  EXPECT_FALSE(service_.CanEditWindowControls());
+  EXPECT_FALSE(service_.SetWindowControlsVisible(false));
+  EXPECT_EQ(policy, prefs_.GetDict(kPreferencesPref));
+}
 TEST_F(PreferencesServiceTest, SuspendTimeoutDefaultsAndDisabledChoicePersist) {
   EXPECT_EQ(15, service_.ReadSuspendTimeoutMinutes());
   EXPECT_EQ(nullptr, prefs_.GetUserPref(kPreferencesPref));

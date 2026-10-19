@@ -442,6 +442,14 @@ bool MaybeAutoSuspendNativeTab(content::WebContents* contents,
   return TabSuspension::MaybeAuto(contents, timeout, now);
 }
 
+bool ShouldRestoreNativePageFocus(content::WebContents* contents) {
+  if (!contents)
+    return false;
+  auto* view = contents->GetRenderWidgetHostView();
+  auto* window = FlyWindowController::GetIfCreated();
+  return (view && view->HasFocus()) || (window && window->SidebarHasFocus());
+}
+
 std::string NativeEventStroke(const input::NativeWebKeyboardEvent& event) {
   return EventStroke(event);
 }
@@ -548,6 +556,14 @@ bool NativeCommandAvailable(BrowserWindowInterface* browser,
   if (action == "toggle-theme") {
     auto* window = FlyWindowController::GetIfCreated();
     return window && window->preferences().CanEditTheme();
+  }
+  if (action == "toggle-zen-mode" || action == "toggle-sidebar-pin") {
+    auto* window = FlyWindowController::GetIfCreated();
+    return window && window->preferences().CanEditSidebarAutoCollapse();
+  }
+  if (action == "toggle-window-controls") {
+    auto* window = FlyWindowController::GetIfCreated();
+    return window && window->preferences().CanEditWindowControls();
   }
   if (action == "toggle-status-bar") {
     auto* window = FlyWindowController::GetIfCreated();

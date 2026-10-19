@@ -98,6 +98,7 @@
 #include "ui/views/focus/focus_manager.h"
 #include "ui/views/test/button_test_api.h"
 #include "ui/views/widget/widget.h"
+#include "ui/views/test/views_test_utils.h"
 #include "ui/views/window/dialog_delegate.h"
 #include "ui/wm/core/coordinate_conversion.h"
 #include "ui/wm/public/activation_client.h"
@@ -111,6 +112,14 @@ class FlyWorkspaceBrowserTest : public InProcessBrowserTest {
   }
   void SetUpOnMainThread() override {
     ASSERT_TRUE(embedded_test_server()->Start());
+    // Baseline fixtures exercise the pinned layout explicitly. Sidebar tests
+    // opt into the product's default auto-collapse mode below.
+    g_browser_process->local_state()->SetDefaultPrefValue(
+        kPreferencesPref,
+        base::Value(base::DictValue()
+                        .Set("schema", 1)
+                        .Set("values", base::DictValue().Set(
+                                           "sidebar_auto_collapse", false))));
   }
   void TearDownOnMainThread() override {
     if (auto* window = FlyWindowController::GetIfCreated()) {
@@ -538,6 +547,417 @@ IN_PROC_BROWSER_TEST_F(FlyWorkspaceBrowserTest,
     return !normal->GetProfile()->HasPrimaryOTRProfile();
   }));
   EXPECT_EQ(normal, window.selected_browser_for_testing());
+}
+
+class FlySidebarBrowserTest : public FlyWorkspaceBrowserTest {
+ public:
+  void SetUpOnMainThread() override {
+    FlyWorkspaceBrowserTest::SetUpOnMainThread();
+    ASSERT_TRUE(
+        FlyWindowController::Get().preferences().SetSidebarAutoCollapse(true));
+  }
+
+ protected:
+  void MovePointer(gfx::Point point) {
+    ui::test::EventGenerator mouse(FlyWindowController::Get()
+                                       .desktop_widget()
+                                       ->GetNativeWindow()
+                                       ->GetRootWindow());
+    mouse.MoveMouseTo(point);
+  }
+  void OpenByPointer() {
+    auto& window = FlyWindowController::Get();
+    const auto bounds =
+        window.desktop_widget()->GetContentsView()->GetBoundsInScreen();
+    MovePointer(gfx::Point(bounds.x() + 18, bounds.y() + 200));
+    ASSERT_TRUE(base::test::RunUntil(
+        [&] { return window.sidebar_expanded_for_testing(); }));
+  }
+  void MoveToPage() {
+    auto& window = FlyWindowController::Get();
+    auto* contents = Active(window.selected_browser_for_testing());
+    contents->Focus();
+    MovePointer(
+        contents->GetRenderWidgetHostView()->GetViewBounds().CenterPoint());
+    ASSERT_TRUE(base::test::RunUntil(
+        [&] { return !window.sidebar_expanded_for_testing(); }));
+  }
+};
+
+IN_PROC_BROWSER_TEST_F(FlySidebarBrowserTest,
+                       HoverKeepsViewportVisibilityAndBlocksPageClickThrough) {
+  ASSERT_TRUE(ui_test_utils::NavigateToURL(
+      browser(), embedded_test_server()->GetURL("/title1.html")));
+  auto* page = Active(browser());
+  ASSERT_TRUE(content::ExecJs(page, R"js(
+    document.body.innerHTML='<button id="covered" style="position:fixed;left:80px;top:400px;width:80px;height:32px">Target</button>';
+    window.clicks=0; window.resizes=0; window.visibilityEvents=[];
+    document.querySelector('#covered').onclick=()=>window.clicks++;
+    onresize=()=>window.resizes++;
+    document.addEventListener('visibilitychange',()=>visibilityEvents.push(document.visibilityState));
+  )js"));
+  auto& window = FlyWindowController::Get();
+  MoveToPage();
+  EXPECT_FALSE(window.clock_timer_running_for_testing());
+  const int width = content::EvalJs(page, "innerWidth").ExtractInt();
+  const auto page_bounds = page->GetRenderWidgetHostView()->GetViewBounds();
+  EXPECT_EQ(true, content::EvalJs(page, "document.hasFocus()"));
+  OpenByPointer();
+  EXPECT_EQ(true, content::EvalJs(page, "document.hasFocus()"));
+  EXPECT_TRUE(window.clock_timer_running_for_testing());
+  EXPECT_EQ(width, content::EvalJs(page, "innerWidth"));
+  EXPECT_EQ(page_bounds, page->GetRenderWidgetHostView()->GetViewBounds());
+  ExpectVisible(page, true);
+  const auto covered = page_bounds.origin() + gfx::Vector2d(100, 416);
+  auto native_point = covered;
+  auto* root = window.desktop_widget()->GetNativeWindow()->GetRootWindow();
+  wm::ConvertPointFromScreen(root, &native_point);
+  auto* hit = root->GetEventHandlerForPoint(native_point);
+  ASSERT_TRUE(
+      window.sidebar_widget_for_testing()->GetNativeWindow()->Contains(hit));
+  ui::test::EventGenerator mouse(root);
+  mouse.MoveMouseTo(covered);
+  mouse.ClickLeftButton();
+  EXPECT_EQ(0, content::EvalJs(page, "clicks"));
+  MoveToPage();
+  EXPECT_FALSE(window.clock_timer_running_for_testing());
+  mouse.MoveMouseTo(covered);
+  mouse.ClickLeftButton();
+  ASSERT_TRUE(base::test::RunUntil(
+      [&] { return content::EvalJs(page, "clicks").ExtractInt() == 1; }));
+  EXPECT_EQ(width, content::EvalJs(page, "innerWidth"));
+  EXPECT_EQ(0, content::EvalJs(page, "resizes"));
+  EXPECT_EQ(0, content::EvalJs(page, "visibilityEvents.length"));
+}
+
+IN_PROC_BROWSER_TEST_F(FlySidebarBrowserTest,
+                       KeyboardFocusHoldsPanelAndEscapeRestoresEditablePage) {
+  ASSERT_TRUE(ui_test_utils::NavigateToURL(
+      browser(), embedded_test_server()->GetURL("/title1.html")));
+  auto* page = Active(browser());
+  ASSERT_TRUE(content::ExecJs(page, R"js(
+    document.body.innerHTML='<input id="edit" style="position:fixed;left:400px;top:40px"><div style="height:6000px"></div>';
+    document.querySelector('#edit').focus();
+  )js"));
+  auto& window = FlyWindowController::Get();
+  MoveToPage();
+  ASSERT_TRUE(base::test::RunUntil([&] {
+    return content::EvalJs(page, "document.hasFocus()").ExtractBool();
+  }));
+  ui::test::EventGenerator keys(
+      window.desktop_widget()->GetNativeWindow()->GetRootWindow());
+  keys.PressKey(ui::VKEY_J, ui::EF_NONE);
+  keys.ReleaseKey(ui::VKEY_J, ui::EF_NONE);
+  ASSERT_TRUE(base::test::RunUntil([&] {
+    return content::EvalJs(page, "document.querySelector('#edit').value")
+               .ExtractString() == "j";
+  }));
+  ASSERT_TRUE(InvokeNativeCommand(browser(), "focus-sidebar"));
+  ASSERT_TRUE(base::test::RunUntil([&] {
+    auto* row = window.tab_sidebar_for_testing()->row_for_testing(page);
+    return window.sidebar_expanded_for_testing() && row &&
+           row->children().front()->HasFocus();
+  }));
+  MovePointer(page->GetRenderWidgetHostView()->GetViewBounds().CenterPoint());
+  EXPECT_TRUE(window.sidebar_expanded_for_testing());
+  ExpectVisible(page, true);
+  keys.PressKey(ui::VKEY_ESCAPE, ui::EF_NONE);
+  keys.ReleaseKey(ui::VKEY_ESCAPE, ui::EF_NONE);
+  ASSERT_TRUE(base::test::RunUntil([&] {
+    return !window.sidebar_expanded_for_testing() &&
+           content::EvalJs(page, "document.hasFocus()").ExtractBool();
+  }));
+  keys.PressKey(ui::VKEY_J, ui::EF_NONE);
+  keys.ReleaseKey(ui::VKEY_J, ui::EF_NONE);
+  ASSERT_TRUE(base::test::RunUntil([&] {
+    return content::EvalJs(page, "document.querySelector('#edit').value")
+               .ExtractString() == "jj";
+  }));
+  EXPECT_EQ(0, content::EvalJs(page, "scrollY"));
+}
+
+IN_PROC_BROWSER_TEST_F(FlySidebarBrowserTest,
+                       RepeatedFocusAfterRowActivationMovesKeyboardFocus) {
+  ASSERT_TRUE(ui_test_utils::NavigateToURL(
+      browser(), embedded_test_server()->GetURL("/title1.html")));
+  auto* page = Active(browser());
+  ASSERT_TRUE(content::ExecJs(page, R"js(
+    document.body.innerHTML='<input id="edit" style="position:fixed;left:400px;top:40px">';
+    document.querySelector('#edit').focus();
+  )js"));
+  auto& window = FlyWindowController::Get();
+  MoveToPage();
+  ui::test::EventGenerator keys(
+      window.desktop_widget()->GetNativeWindow()->GetRootWindow());
+  auto row_focused = [&] {
+    auto* row = window.tab_sidebar_for_testing()->row_for_testing(page);
+    return window.sidebar_expanded_for_testing() && row &&
+           row->children().front()->HasFocus() &&
+           !content::EvalJs(page, "document.hasFocus()").ExtractBool();
+  };
+  ASSERT_TRUE(InvokeNativeCommand(browser(), "focus-sidebar"));
+  ASSERT_TRUE(base::test::RunUntil(row_focused));
+  // Enter activates the row and returns keyboard input to the page.
+  keys.PressKey(ui::VKEY_RETURN, ui::EF_NONE);
+  keys.ReleaseKey(ui::VKEY_RETURN, ui::EF_NONE);
+  ASSERT_TRUE(base::test::RunUntil([&] {
+    return content::EvalJs(page, "document.hasFocus()").ExtractBool();
+  }));
+  ASSERT_TRUE(InvokeNativeCommand(browser(), "focus-sidebar"));
+  ASSERT_TRUE(base::test::RunUntil(row_focused));
+  keys.PressKey(ui::VKEY_J, ui::EF_NONE);
+  keys.ReleaseKey(ui::VKEY_J, ui::EF_NONE);
+  base::RunLoop().RunUntilIdle();
+  EXPECT_EQ("", content::EvalJs(page, "document.querySelector('#edit').value"));
+}
+
+IN_PROC_BROWSER_TEST_F(FlySidebarBrowserTest,
+                       NativePinAndAppearanceChangeOnlyReservedSidebarWidth) {
+  ASSERT_TRUE(ui_test_utils::NavigateToURL(
+      browser(), embedded_test_server()->GetURL("/title1.html")));
+  auto* page = Active(browser());
+  auto& window = FlyWindowController::Get();
+  MoveToPage();
+  const auto width = page->GetRenderWidgetHostView()->GetViewBounds().width();
+  OpenByPointer();
+  auto* pin = window.sidebar_pin_for_testing();
+  views::test::RunScheduledLayout(pin->GetWidget());
+  ui::test::EventGenerator mouse(
+      window.desktop_widget()->GetNativeWindow()->GetRootWindow());
+  mouse.MoveMouseTo(pin->GetBoundsInScreen().CenterPoint());
+  mouse.ClickLeftButton();
+  ASSERT_TRUE(base::test::RunUntil(
+      [&] { return window.preferences().ReadSidebarAutoCollapse() == false; }));
+  ASSERT_TRUE(base::test::RunUntil([&] {
+    return page->GetRenderWidgetHostView()->GetViewBounds().width() ==
+           width - 224;
+  }));
+  MovePointer(page->GetRenderWidgetHostView()->GetViewBounds().CenterPoint());
+  EXPECT_TRUE(window.sidebar_expanded_for_testing());
+  ASSERT_TRUE(InvokeNativeCommand(browser(), "toggle-help"));
+  auto& editor = window.keyboard_editor();
+  ASSERT_TRUE(base::test::RunUntil([&] { return editor.active(); }));
+  editor.ShowAppearance();
+  auto* checkbox = editor.appearance_for_testing("sidebar_auto_collapse");
+  ASSERT_TRUE(checkbox && !checkbox->GetChecked());
+  views::test::ButtonTestApi(checkbox).NotifyDefaultMouseClick();
+  EXPECT_EQ(true, window.preferences().ReadSidebarAutoCollapse());
+  editor.Cancel(true);
+  ASSERT_TRUE(base::test::RunUntil([&] {
+    return !editor.active() &&
+           page->GetRenderWidgetHostView()->GetViewBounds().width() == width;
+  }));
+  MoveToPage();
+  EXPECT_TRUE(NativeCommandAvailable(browser(), "toggle-sidebar-pin"));
+  EXPECT_TRUE(NativeCommandAvailable(browser(), "toggle-zen-mode"));
+  const auto future =
+      base::DictValue().Set("schema", 2).Set("values", base::DictValue());
+  g_browser_process->local_state()->SetDict(kPreferencesPref, future.Clone());
+  EXPECT_FALSE(NativeCommandAvailable(browser(), "toggle-sidebar-pin"));
+  EXPECT_FALSE(window.RunCommand(browser(), "toggle-sidebar-pin"));
+  EXPECT_FALSE(window.sidebar_pin_for_testing()->GetEnabled());
+  EXPECT_EQ(future,
+            g_browser_process->local_state()->GetDict(kPreferencesPref));
+}
+
+IN_PROC_BROWSER_TEST_F(FlySidebarBrowserTest,
+                       CompactRowsAndMenusKeepNativeIdentityAcrossProfiles) {
+  auto* first = browser();
+  const auto first_id = TabIdentity::Get(Active(first));
+  ASSERT_TRUE(ExecuteNativeCommand(first, "spawn-tab"));
+  auto* target = Active(first);
+  const auto id = TabIdentity::Get(target);
+  auto* second = SecondWorkspace();
+  ASSERT_TRUE(second);
+  auto& window = FlyWindowController::Get();
+  auto* rail = window.compact_sidebar_for_testing();
+  ASSERT_TRUE(base::test::RunUntil([&] {
+    return rail->row_count_for_testing() == 1 &&
+           rail->row_for_testing(Active(second));
+  }));
+  window.Select(first, true);
+  ASSERT_TRUE(base::test::RunUntil([&] {
+    return rail->row_count_for_testing() == 2 && rail->row_for_testing(target);
+  }));
+  EXPECT_EQ(first_id,
+            TabIdentity::Get(first->GetTabStripModel()->GetWebContentsAt(0)));
+  EXPECT_EQ(id, TabIdentity::Get(target));
+  MoveToPage();
+  auto* button = rail->row_for_testing(target)->children().front().get();
+  auto* select = views::AsViewClass<views::MdTextButton>(button);
+  ASSERT_TRUE(select);
+  ASSERT_TRUE(select->GetImageModel(views::Button::STATE_NORMAL));
+  const auto initial_icon = select->GetImageModel(views::Button::STATE_NORMAL)
+                                ->Rasterize(select->GetColorProvider());
+  EXPECT_EQ(gfx::Size(24, 24), initial_icon.size());
+  SetTabAudioMuted(target, true, TabMutedReason::kAudioIndicator, {});
+  ASSERT_TRUE(base::test::RunUntil([&] {
+    return select->GetTooltipText().find(u", muted") != std::u16string::npos;
+  }));
+  const auto muted_icon = select->GetImageModel(views::Button::STATE_NORMAL)
+                              ->Rasterize(select->GetColorProvider());
+  EXPECT_FALSE(initial_icon.BackedBySameObjectAs(muted_icon));
+  SetTabAudioMuted(target, false, TabMutedReason::kAudioIndicator, {});
+  ASSERT_TRUE(base::test::RunUntil([&] {
+    return select->GetTooltipText().find(u", muted") == std::u16string::npos;
+  }));
+  views::test::RunScheduledLayout(button->GetWidget());
+  const auto point = button->GetBoundsInScreen().CenterPoint();
+  bool inspected = false;
+  base::RepeatingTimer menu;
+  menu.Start(FROM_HERE, base::Milliseconds(1), base::BindLambdaForTesting([&] {
+               auto* model = rail->context_menu_for_testing();
+               if (!model)
+                 return;
+               menu.Stop();
+               for (size_t i = 0; i < model->GetItemCount(); ++i) {
+                 if (model->GetLabelAt(i) == u"Pin") {
+                   EXPECT_TRUE(model->IsEnabledAt(i));
+                   model->ActivatedAt(i);
+                   inspected = true;
+                   return;
+                 }
+               }
+               ADD_FAILURE() << "Missing native Pin command in compact rail";
+               rail->CloseContextMenu();
+             }));
+  ui::test::EventGenerator mouse(
+      window.desktop_widget()->GetNativeWindow()->GetRootWindow());
+  mouse.MoveMouseTo(point);
+  mouse.ClickRightButton();
+  ASSERT_TRUE(base::test::RunUntil(
+      [&] { return inspected && first->GetTabStripModel()->IsTabPinned(0); }));
+  EXPECT_EQ(id, TabIdentity::Get(target));
+  EXPECT_EQ(first, window.selected_browser_for_testing());
+}
+
+IN_PROC_BROWSER_TEST_F(FlyWorkspaceBrowserTest,
+                       WindowControlsFollowCommandSettingsAndRecoveryPolicy) {
+  auto& window = FlyWindowController::Get();
+  auto* controls = window.window_controls_for_testing();
+  EXPECT_FALSE(controls->GetVisible());
+  ASSERT_TRUE(NativeCommandAvailable(browser(), "toggle-window-controls"));
+  ASSERT_TRUE(InvokeNativeCommand(browser(), "toggle-window-controls"));
+  EXPECT_TRUE(controls->GetVisible());
+  ASSERT_TRUE(InvokeNativeCommand(browser(), "toggle-help"));
+  auto& editor = window.keyboard_editor();
+  ASSERT_TRUE(base::test::RunUntil([&] { return editor.active(); }));
+  editor.ShowAppearance();
+  auto* checkbox = editor.appearance_for_testing("show_window_controls");
+  ASSERT_TRUE(checkbox && checkbox->GetChecked());
+  views::test::ButtonTestApi(checkbox).NotifyDefaultMouseClick();
+  EXPECT_FALSE(controls->GetVisible());
+  EXPECT_EQ(false, window.preferences().ReadWindowControlsVisible());
+  editor.Cancel(true);
+  ASSERT_TRUE(base::test::RunUntil([&] { return !editor.active(); }));
+  ASSERT_TRUE(InvokeNativeCommand(browser(), "toggle-window-controls"));
+  auto* close = window.window_control_for_testing("close");
+  ASSERT_TRUE(close);
+  close->RequestFocus();
+  ASSERT_TRUE(base::test::RunUntil([&] { return close->HasFocus(); }));
+  auto browser_alive = browser()->GetWeakPtr();
+  views::test::ButtonTestApi(close).NotifyDefaultMouseClick();
+  ASSERT_TRUE(window.preferences().SetWindowControlsVisible(false));
+  base::RunLoop().RunUntilIdle();
+  ASSERT_TRUE(browser_alive);
+  EXPECT_FALSE(controls->GetVisible());
+  EXPECT_FALSE(close->HasFocus());
+  const auto future =
+      base::DictValue().Set("schema", 2).Set("values", base::DictValue());
+  g_browser_process->local_state()->SetDict(kPreferencesPref, future.Clone());
+  EXPECT_FALSE(NativeCommandAvailable(browser(), "toggle-window-controls"));
+  EXPECT_FALSE(window.RunCommand(browser(), "toggle-window-controls"));
+  EXPECT_FALSE(controls->GetVisible());
+  EXPECT_EQ(future,
+            g_browser_process->local_state()->GetDict(kPreferencesPref));
+}
+
+IN_PROC_BROWSER_TEST_F(FlyWorkspaceBrowserTest,
+                       WindowControlsDriveTheSharedNativeDesktopState) {
+  auto& window = FlyWindowController::Get();
+  auto* desktop = window.desktop_widget();
+  auto* first = browser();
+  auto* second = SecondWorkspace();
+  ASSERT_TRUE(second);
+  ASSERT_TRUE(window.preferences().SetWindowControlsVisible(true));
+  auto click = [&](std::string_view action) {
+    auto* button = window.window_control_for_testing(action);
+    ASSERT_TRUE(button);
+    ASSERT_TRUE(base::test::RunUntil([&] {
+      return button->IsDrawn() && !button->GetVisibleBounds().IsEmpty();
+    }));
+    views::test::RunScheduledLayout(button->GetWidget());
+    ui::test::EventGenerator mouse(desktop->GetNativeWindow()->GetRootWindow());
+    mouse.MoveMouseTo(button->GetBoundsInScreen().CenterPoint());
+    mouse.ClickLeftButton();
+  };
+  click("maximize");
+  ASSERT_TRUE(base::test::RunUntil([&] { return desktop->IsMaximized(); }));
+  EXPECT_TRUE(first->GetWindow()->IsMaximized());
+  EXPECT_TRUE(second->GetWindow()->IsMaximized());
+  click("maximize");
+  ASSERT_TRUE(base::test::RunUntil([&] { return !desktop->IsMaximized(); }));
+  EXPECT_FALSE(first->GetWindow()->IsMaximized());
+  EXPECT_FALSE(second->GetWindow()->IsMaximized());
+  click("minimize");
+  ASSERT_TRUE(base::test::RunUntil([&] { return desktop->IsMinimized(); }));
+  EXPECT_TRUE(first->GetWindow()->IsMinimized());
+  EXPECT_TRUE(second->GetWindow()->IsMinimized());
+  desktop->Restore();
+  ASSERT_TRUE(base::test::RunUntil([&] { return !desktop->IsMinimized(); }));
+  window.Select(second, true);
+  ExpectVisible(Active(second), true);
+}
+
+IN_PROC_BROWSER_TEST_F(FlyWorkspaceBrowserTest,
+                       WindowCloseButtonHonoursBeforeUnloadCancellation) {
+  auto first = browser()->GetWeakPtr();
+  auto* second = SecondWorkspace();
+  ASSERT_TRUE(second);
+  auto second_alive = second->GetWeakPtr();
+  ASSERT_TRUE(ui_test_utils::NavigateToURL(
+      second, embedded_test_server()->GetURL("/title1.html")));
+  auto* contents = Active(second);
+  ASSERT_TRUE(content::ExecJs(contents,
+                              "window.unsavedControls='keep'; "
+                              "window.onbeforeunload=()=> 'unsaved'"));
+  content::PrepContentsForBeforeUnloadTest(contents);
+  class CancellationObserver : public content::WebContentsObserver {
+   public:
+    explicit CancellationObserver(content::WebContents* contents)
+        : content::WebContentsObserver(contents) {}
+    void BeforeUnloadDialogCancelled() override { cancelled = true; }
+    bool cancelled = false;
+  } cancellation(contents);
+  auto& window = FlyWindowController::Get();
+  ASSERT_TRUE(window.preferences().SetWindowControlsVisible(true));
+  auto* close = window.window_control_for_testing("close");
+  ASSERT_TRUE(base::test::RunUntil([&] {
+    return close->IsDrawn() && !close->GetVisibleBounds().IsEmpty();
+  }));
+  views::test::RunScheduledLayout(close->GetWidget());
+  auto point = close->GetVisibleBounds().CenterPoint();
+  views::View::ConvertPointToScreen(close, &point);
+  auto* root = close->GetWidget()->GetRootView();
+  auto view_point = point;
+  views::View::ConvertPointFromScreen(root, &view_point);
+  auto* hit = root->GetEventHandlerForPoint(view_point);
+  ASSERT_TRUE(close->Contains(hit))
+      << "close=" << close->GetBoundsInScreen().ToString()
+      << " hit=" << (hit ? hit->GetClassName() : "none");
+  ui::test::EventGenerator mouse(
+      window.desktop_widget()->GetNativeWindow()->GetRootWindow());
+  mouse.MoveMouseTo(point);
+  mouse.ClickLeftButton();
+  auto* dialog = ui_test_utils::WaitForAppModalDialog();
+  ASSERT_TRUE(dialog && dialog->is_before_unload_dialog());
+  dialog->view()->CancelAppModalDialog();
+  ASSERT_TRUE(base::test::RunUntil([&] { return cancellation.cancelled; }));
+  ASSERT_TRUE(first && second_alive);
+  EXPECT_EQ(&window, FlyWindowController::GetIfCreated());
+  EXPECT_EQ("keep", content::EvalJs(contents, "window.unsavedControls"));
+  EXPECT_TRUE(window.window_controls_for_testing()->GetVisible());
+  ASSERT_TRUE(content::ExecJs(contents, "window.onbeforeunload=null"));
 }
 
 IN_PROC_BROWSER_TEST_F(FlyWorkspaceBrowserTest,
@@ -3370,7 +3790,17 @@ IN_PROC_BROWSER_TEST_F(FlyWorkspaceBrowserTest,
   ui::test::EventGenerator input(
       window.desktop_widget()->GetNativeWindow()->GetRootWindow());
   const auto bounds = contents->GetRenderWidgetHostView()->GetViewBounds();
-  input.MoveMouseTo(bounds.origin() + gfx::Vector2d(70, 52));
+  const auto click_point = bounds.origin() + gfx::Vector2d(70, 52);
+  auto native_point = click_point;
+  auto* root = window.desktop_widget()->GetNativeWindow()->GetRootWindow();
+  wm::ConvertPointFromScreen(root, &native_point);
+  auto* hit = root->GetEventHandlerForPoint(native_point);
+  EXPECT_TRUE(contents->GetNativeView()->Contains(hit))
+      << "hit=" << (hit ? hit->GetName() : "none") << " sidebar="
+      << window.sidebar_widget_for_testing()
+             ->GetWindowBoundsInScreen()
+             .ToString();
+  input.MoveMouseTo(click_point);
   input.ClickLeftButton();
   ASSERT_TRUE(base::test::RunUntil([&] {
     return contents->GetRenderWidgetHostView()->HasFocus() &&
@@ -3493,7 +3923,12 @@ IN_PROC_BROWSER_TEST_F(FlyWorkspaceBrowserTest,
   )js"));
   auto& window = FlyWindowController::Get();
   const auto mode = [&] {
-    return window.desktop_widget()->GetColorProviderKeyForTesting().color_mode;
+    const auto desktop_mode =
+        window.desktop_widget()->GetColorProviderKeyForTesting().color_mode;
+    EXPECT_EQ(desktop_mode, window.sidebar_widget_for_testing()
+                                ->GetColorProviderKeyForTesting()
+                                .color_mode);
+    return desktop_mode;
   };
   const auto dark = [](content::WebContents* contents) {
     return content::EvalJs(contents, "matchMedia('(prefers-color-scheme: dark)').matches").ExtractBool();

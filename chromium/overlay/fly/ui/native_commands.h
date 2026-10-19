@@ -31,6 +31,10 @@ bool MaybeAutoSuspendNativeTab(content::WebContents* contents,
                                base::TimeDelta timeout,
                                base::TimeTicks now);
 
+// Capture before opening an overlay. Sidebar buttons return to the page;
+// deliberate address/toolbar focus must retain Chromium's stored focus target.
+bool ShouldRestoreNativePageFocus(content::WebContents* contents);
+
 std::string NativeEventStroke(const input::NativeWebKeyboardEvent& event);
 std::u16string NativePageModeLabel(BrowserWindowInterface* browser);
 

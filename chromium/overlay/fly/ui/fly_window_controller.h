@@ -20,7 +20,9 @@
 #include "fly/commands/palette_catalog.h"
 #include "fly/preferences/preferences_service.h"
 #include "fly/workspaces/workspace_service.h"
+#include "ui/aura/client/focus_change_observer.h"
 #include "ui/events/event_handler.h"
+#include "ui/views/focus/focus_manager.h"
 #include "ui/views/widget/widget.h"
 #include "ui/views/widget/widget_delegate.h"
 #include "ui/views/widget/widget_observer.h"
@@ -29,6 +31,9 @@ class BrowserWindowInterface;
 class Profile;
 class ScopedKeepAlive;
 class GURL;
+namespace aura::client {
+class FocusClient;
+}
 namespace content {
 class WebContents;
 }
@@ -36,6 +41,7 @@ namespace views {
 class DialogDelegate;
 class NativeViewHost;
 class MdTextButton;
+class ImageButton;
 class View;
 class Label;
 }  // namespace views
@@ -59,7 +65,9 @@ class TabMoveTransaction;
 // create an OS window. NativeViewHost controls actual clipping and visibility.
 class FlyWindowController : public views::WidgetDelegate,
                             public views::WidgetObserver,
-                            public ui::EventHandler {
+                            public ui::EventHandler,
+                            public views::FocusChangeListener,
+                            public aura::client::FocusChangeObserver {
  public:
   static bool ShouldEmbed(const BrowserWindowInterface* browser);
   static FlyWindowController& Get();
@@ -75,6 +83,7 @@ class FlyWindowController : public views::WidgetDelegate,
   void Select(BrowserWindowInterface* browser, bool focus);
   bool IsSelected(const BrowserWindowInterface* browser) const;
   bool has_selected_browser() const { return selected_ != nullptr; }
+  bool SidebarHasFocus() const;
   views::Widget* desktop_widget() const { return desktop_.get(); }
   CommandService& commands() { return commands_; }
   BookmarkService& bookmarks() { return *bookmarks_; }
@@ -85,6 +94,8 @@ class FlyWindowController : public views::WidgetDelegate,
   views::MdTextButton* bookmarks_button_for_testing() { return bookmarks_button_; }
   BrowserWindowInterface* selected_browser_for_testing() { return selected_; }
   CommandPalette& palette() { return *palette_; }
+  views::View* window_controls_for_testing() { return window_controls_; }
+  views::ImageButton* window_control_for_testing(std::string_view action) const;
   KeyboardEditor& keyboard_editor() { return *keyboard_editor_; }
   HintController& hints() { return *hints_; }
   void UpdateModeLabel();
@@ -115,10 +126,24 @@ class FlyWindowController : public views::WidgetDelegate,
   bool tab_move_pending_for_testing() const { return bool(tab_move_); }
 
   void OnKeyEvent(ui::KeyEvent* event) override;
+  void OnMouseEvent(ui::MouseEvent* event) override;
+  void OnDidChangeFocus(views::View* before, views::View* now) override;
+  void OnWindowFocused(aura::Window* gained, aura::Window* lost) override;
+  void OnWidgetBoundsChanged(views::Widget* widget,
+                             const gfx::Rect& bounds) override;
+  void FocusSidebar();
+  bool sidebar_expanded_for_testing() const;
+  bool clock_timer_running_for_testing() const {
+    return clock_timer_.IsRunning();
+  }
+  views::Widget* sidebar_widget_for_testing() { return sidebar_widget_.get(); }
+  TabSidebar* compact_sidebar_for_testing() { return compact_tab_sidebar_; }
+  views::MdTextButton* sidebar_pin_for_testing() { return sidebar_pin_button_; }
 
   // WidgetObserver:
   void OnWidgetDestroying(views::Widget* widget) override;
   void OnWidgetActivationChanged(views::Widget* widget, bool active) override;
+  void OnWidgetShowStateChanged(views::Widget* widget) override;
 
  private:
   struct Entry {
@@ -157,6 +182,16 @@ class FlyWindowController : public views::WidgetDelegate,
                      base::WeakPtr<BrowserWindowInterface> destination,
                      base::WeakPtr<content::WebContents> contents);
   void OnPreferencesChanged();
+  void UpdateWindowControls();
+  bool SidebarOverlayBlocked() const;
+  void UpdateSidebarMode();
+  void UpdateSidebarVisibility();
+  void UpdateSidebarBounds();
+  void StopSidebarFocusObservation();
+  void ToggleSidebarAutoCollapse();
+  void ReturnFocusFromSidebar();
+  void ClearSidebarViews();
+  void RunWindowControl(std::string action);
   void UpdateSuspensionPolicy();
   void SuspendIdleTabs();
   void ResumeAllTabs();
@@ -208,6 +243,22 @@ class FlyWindowController : public views::WidgetDelegate,
   uint64_t empty_generation_ = 0;
   std::unique_ptr<ScopedKeepAlive> keep_alive_;
   std::unique_ptr<views::Widget> desktop_;
+  std::unique_ptr<views::Widget> sidebar_widget_;
+  raw_ptr<views::View> sidebar_content_ = nullptr;
+  raw_ptr<views::View> sidebar_slot_ = nullptr;
+  raw_ptr<views::NativeViewHost> sidebar_host_ = nullptr;
+  raw_ptr<views::View> compact_rail_ = nullptr;
+  raw_ptr<TabSidebar> compact_tab_sidebar_ = nullptr;
+  raw_ptr<views::MdTextButton> sidebar_pin_button_ = nullptr;
+  raw_ptr<views::MdTextButton> workspace_picker_button_ = nullptr;
+  raw_ptr<aura::client::FocusClient> sidebar_focus_client_ = nullptr;
+  bool observing_sidebar_focus_ = false;
+  bool sidebar_auto_collapse_ = true;
+  bool sidebar_pointer_inside_ = false;
+  bool sidebar_focus_inside_ = false;
+  bool sidebar_keyboard_expanded_ = false;
+  raw_ptr<views::View> window_controls_ = nullptr;
+  std::map<std::string, raw_ptr<views::ImageButton>> window_control_buttons_;
   raw_ptr<views::View> workspace_buttons_ = nullptr;
   raw_ptr<views::View> content_ = nullptr;
   raw_ptr<views::Label> status_ = nullptr;

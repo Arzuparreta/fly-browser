@@ -3,7 +3,79 @@
 The native port is **incomplete**. Electron remains the production runtime.
 Full product, migration and packaged application acceptance remain outstanding.
 
-## Current checkpoint
+## Active execution state
+
+Primary main is `9089776` after PR
+[126](https://github.com/Arzuparreta/fly-browser/pull/126) was squash-merged.
+All ordinary checks and both latest-head manual matrices passed. The downloaded
+artifacts were audited: 59 services on each platform; 50 compiler outputs on
+Linux/Windows and 39 on macOS. The macOS desktop adapter remains excluded and
+unimplemented. The primary checkout pulled main. The follow-up sidebar work
+has been rebased onto that merged main without conflicts.
+
+The complete `bbb8a09` Linux run passes 59 services, 71 browser declarations
+(69 main plus two PRE stages), H.264/AAC with MV3 and PCM audio. Independent audit
+passes with fingerprint
+`e77bf94a7625b99aa5fbe6f7ce4a4c67b3bab0bbe03fc98f5f0db93b3278b0b1`
+and summary SHA256
+`7376b157daea697650127e67ddf8094e0819ac3f5b160eca3fa054959b221b81`.
+Evidence is archived externally in
+`evidence/runtime-bbb8a09-before-window-controls`.
+
+The validated follow-up is on `codex/chromium-native-sidebar-validated`;
+address/search work continues separately. The preceding
+window-control checkpoint `5d55d9a` passes the complete Linux run: 62 services,
+74 browser declarations, both media fixtures and independent audit, archived in
+`evidence/runtime-5d55d9a-before-sidebar-collapse`.
+
+The follow-up implements automatic sidebar expansion without page reflow, a
+compact native favicon/pin/audio rail, persistent pinning, keyboard focus and
+Escape, live Appearance settings, native theme updates and suspension of the
+hidden clock timer. Native profile windows and the sidebar use Chromium's
+clip-window NativeViewHost backend consistently, preserving native transient
+stacking while allowing the details panel to cover the page. Layout explicitly
+positions the panel's clip before showing it. Real page clicks cross the desktop
+and profile focus-manager boundary; address/toolbar focus remains deliberate.
+Pointer-opened Preferences explicitly returns to the page when dismissed.
+
+The complete `9606b31` Linux run passes all 65 services, all 78 browser
+stages (76 main cases plus two PRE stages), H.264/AAC video with MV3 and PCM
+audio. Independent audit passes with fingerprint
+`81af250535f4ba7e8a1d41df3829d5a7d6d65f1b1da734bd8fd751c0d31fdb7d`
+and browser summary SHA256
+`225ce73b50e2b12606fc56544ff9edd699f1d9665adcb3d562ed6bd6c3870b12`.
+The accepted checkpoint is archived in external
+`evidence/runtime-9606b31-sidebar-accepted`. It covers native session restoration,
+beforeunload, isolation, physical overlay hit testing/pinning, compact indicators,
+editable page clicks, deliberate toolbar focus and actual document focus during
+mere sidebar hover. npm test, documentation build, whitespace checks and all
+88 Python tooling contracts pass. Hosted latest-head validation for this separate
+follow-up remains outstanding.
+The retained Electron keyboard/editor/editable regression passes on owned
+Xvfb/Openbox in `evidence/native-sidebar-retained-keyboard-x11.log`; a headless
+attempt did not receive the opening shortcut and remains separate failed evidence.
+
+The first full sidebar run at `fdf867e` passed services and media but failed
+23 browser stages, primarily at Chromium's layer-order check, alongside focus
+and test-default issues. It is preserved in
+`evidence/runtime-fdf867e-sidebar-layer-and-focus-failure`. Subsequent directed
+attempts and their causes have separate commit-prefixed logs/audits. Do not use
+historical full-build metadata after directed rebuilds. Check all three native
+services before changing the frozen worktree; configure/build through native.py
+before full acceptance. Tests use official signed Openbox extracted only for
+owned displays; no package was installed into the owner desktop.
+
+The [native parity inventory](./native-parity.md) records all 82 actions and
+28 preferences. Fifteen actions still have no native route; routed actions also
+retain explicit product/platform/recovery gaps. This is incomplete M0–M6 work.
+
+## Historical checkpoint notes
+
+The sections below preserve earlier execution checkpoints. Their words
+“current”, “next” and “pending” refer to the checkpoint being recorded. Resume
+from **Active execution state** above and the reviewed native parity inventory.
+
+## Merged checkpoint before PR 126
 
 Merged main is `00d6a2e` through PR
 [125](https://github.com/Arzuparreta/fly-browser/pull/125), following PR
@@ -222,6 +294,8 @@ native extension registration and two visible split panes in one workspace.
 No mixed-profile tab strip, visibility override or cookie swapping is accepted.
 Actual upstream ownership seams must be inspected before implementing adapters.
 The [pinned-source audit](./upstream-ownership.md) records the real native seams.
+The reviewed [native action/preference inventory](./native-parity.md) records
+explicit partial/pending status for every action and preference.
 The generated [parity ledger](./parity-ledger.md) and
 `chromium/baseline-contracts.json` capture 82 actions, 46 explicit palette entries,
 28 preferences, 16 persisted inputs and the full product-feature checklist.

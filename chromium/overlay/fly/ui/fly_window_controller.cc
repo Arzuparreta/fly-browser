@@ -15,12 +15,14 @@
 
 #include <algorithm>
 #include <cstddef>
+#include <tuple>
 #include <utility>
 #include <vector>
 
 #include "base/check.h"
 #include "base/command_line.h"
 #include "base/functional/bind.h"
+#include "base/logging.h"
 #include "base/no_destructor.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/strings/string_util.h"
@@ -50,6 +52,7 @@
 #include "content/public/browser/web_contents.h"
 #include "fly/ui/tab_move_transaction.h"
 #include "fly/ui/workspace_close_transaction.h"
+#include "ui/aura/client/focus_client.h"
 #include "ui/aura/window.h"
 #include "ui/base/base_window.h"
 #include "ui/base/ime/input_method.h"
@@ -62,7 +65,9 @@
 #include "ui/native_theme/native_theme.h"
 #include "ui/views/accessibility/view_accessibility.h"
 #include "ui/views/background.h"
+#include "ui/views/border.h"
 #include "ui/views/context_menu_controller.h"
+#include "ui/views/controls/button/image_button.h"
 #include "ui/views/controls/button/md_text_button.h"
 #include "ui/views/controls/label.h"
 #include "ui/views/controls/menu/menu_runner.h"
@@ -71,8 +76,13 @@
 #include "ui/views/focus/focus_manager.h"
 #include "ui/views/layout/box_layout.h"
 #include "ui/views/layout/fill_layout.h"
+#include "ui/views/vector_icons.h"
 #include "ui/views/view.h"
+#include "ui/views/view_class_properties.h"
+#include "ui/views/widget/native_widget_aura.h"
 #include "ui/views/window/dialog_delegate.h"
+#include "ui/views/window/vector_icons/vector_icons.h"
+#include "ui/wm/core/coordinate_conversion.h"
 
 namespace fly {
 namespace {
@@ -193,15 +203,40 @@ FlyWindowController::FlyWindowController()
   auto* layout = root->SetLayoutManager(std::make_unique<views::BoxLayout>(
       views::BoxLayout::Orientation::kHorizontal));
   auto sidebar = std::make_unique<views::View>();
+  sidebar_content_ = sidebar.get();
+  sidebar->SetBackground(
+      views::CreateSolidBackground(ui::kColorDialogBackground));
   auto* sidebar_layout =
       sidebar->SetLayoutManager(std::make_unique<views::BoxLayout>(
           views::BoxLayout::Orientation::kVertical, gfx::Insets(8), 6));
-  sidebar->SetPreferredSize(gfx::Size(280, 0));
-  auto* workspace_picker_button = sidebar->AddChildView(
-      std::make_unique<views::MdTextButton>(
+  sidebar->SetPreferredSize(gfx::Size(260, 0));
+  window_controls_ = sidebar->AddChildView(std::make_unique<views::View>());
+  window_controls_->SetLayoutManager(std::make_unique<views::BoxLayout>(
+      views::BoxLayout::Orientation::kHorizontal, gfx::Insets(), 8));
+  for (const auto& [action, icon, label] :
+       {std::tuple{"minimize", &views::kChromeMinimizeIcon, u"Minimize Fly"},
+        std::tuple{"maximize", &views::kChromeMaximizeIcon, u"Maximize Fly"},
+        std::tuple{"close", &views::kCloseIcon, u"Close Fly"}}) {
+    auto* button =
+        window_controls_->AddChildView(views::ImageButton::CreateIconButton(
+            base::BindRepeating(&FlyWindowController::RunWindowControl,
+                                weak_factory_.GetWeakPtr(),
+                                std::string(action)),
+            *icon, label, views::ImageButton::MaterialIconStyle::kSmall));
+    button->SetPreferredSize(gfx::Size(36, 32));
+    window_control_buttons_.emplace(action, button);
+  }
+  sidebar_pin_button_ =
+      sidebar->AddChildView(std::make_unique<views::MdTextButton>(
+          base::BindRepeating(&FlyWindowController::ToggleSidebarAutoCollapse,
+                              weak_factory_.GetWeakPtr()),
+          u"Pin sidebar"));
+  workspace_picker_button_ =
+      sidebar->AddChildView(std::make_unique<views::MdTextButton>(
           base::BindRepeating(&FlyWindowController::ToggleWorkspacePicker,
-                              weak_factory_.GetWeakPtr()), u"Workspaces"));
-  workspace_picker_button->SetStyle(ui::ButtonStyle::kText);
+                              weak_factory_.GetWeakPtr()),
+          u"Workspaces"));
+  workspace_picker_button_->SetStyle(ui::ButtonStyle::kText);
   sidebar->AddChildView(std::make_unique<views::MdTextButton>(
       base::BindRepeating(&FlyWindowController::CreateWorkspace,
                           weak_factory_.GetWeakPtr()),
@@ -216,14 +251,14 @@ FlyWindowController::FlyWindowController()
   clock_ = sidebar->AddChildView(std::make_unique<views::MdTextButton>(
       base::BindRepeating(&FlyWindowController::CycleClockFormat,
                           weak_factory_.GetWeakPtr()),
-      u""));
+      u"Clock"));
   clock_->SetStyle(ui::ButtonStyle::kText);
   preferences_button_ = sidebar->AddChildView(std::make_unique<views::MdTextButton>(
       base::BindRepeating(
           [](base::WeakPtr<FlyWindowController> window) {
             if (window && window->selected_) {
               InvokeNativeCommand(window->selected_, "toggle-help");
-              window->keyboard_editor_->ShowAppearance();
+              window->keyboard_editor_->ShowAppearance(true);
             }
           }, weak_factory_.GetWeakPtr()), u"Preferences"));
   preferences_button_->SetEnabled(false);
@@ -233,7 +268,27 @@ FlyWindowController::FlyWindowController()
           InvokeNativeCommand(window->selected_, "toggle-bookmarks");
       }, weak_factory_.GetWeakPtr()), u"Fly bookmarks"));
   bookmarks_button_->SetEnabled(false);
-  root->AddChildView(std::move(sidebar));
+  sidebar_slot_ = root->AddChildView(std::make_unique<views::View>());
+  sidebar_slot_->SetPreferredSize(gfx::Size(260, 0));
+  sidebar_slot_->SetLayoutManager(std::make_unique<views::FillLayout>());
+  compact_rail_ = sidebar_slot_->AddChildView(std::make_unique<views::View>());
+  auto* compact_layout =
+      compact_rail_->SetLayoutManager(std::make_unique<views::BoxLayout>(
+          views::BoxLayout::Orientation::kVertical, gfx::Insets(2), 2));
+  auto* expand =
+      compact_rail_->AddChildView(std::make_unique<views::MdTextButton>(
+          base::BindRepeating(&FlyWindowController::FocusSidebar,
+                              weak_factory_.GetWeakPtr()),
+          u">"));
+  expand->SetBorder(views::CreateEmptyBorder(gfx::Insets(4)));
+  expand->SetMinSize(gfx::Size(32, 32));
+  expand->GetViewAccessibility().SetName(u"Expand sidebar");
+  compact_tab_sidebar_ =
+      compact_rail_->AddChildView(std::make_unique<TabSidebar>(
+          base::BindRepeating(&FlyWindowController::CreateTab,
+                              weak_factory_.GetWeakPtr()),
+          true));
+  compact_layout->SetFlexForView(compact_tab_sidebar_, 1);
   auto* column = root->AddChildView(std::make_unique<views::View>());
   auto* column_layout =
       column->SetLayoutManager(std::make_unique<views::BoxLayout>(
@@ -251,6 +306,29 @@ FlyWindowController::FlyWindowController()
   params.name = "FlyDesktopWindow";
   params.bounds = gfx::Rect(80, 80, 1200, 800);
   desktop_->Init(std::move(params));
+  sidebar_widget_ = std::make_unique<views::Widget>();
+  views::Widget::InitParams sidebar_params(
+      views::Widget::InitParams::CLIENT_OWNS_WIDGET,
+      views::Widget::InitParams::TYPE_CONTROL);
+  sidebar_params.parent = desktop_->GetNativeWindow();
+  sidebar_params.child = true;
+  sidebar_params.activatable = views::Widget::InitParams::Activatable::kNo;
+  sidebar_params.native_widget =
+      new views::NativeWidgetAura(sidebar_widget_.get());
+  sidebar_params.name = "FlyNativeSidebar";
+  sidebar_widget_->Init(std::move(sidebar_params));
+  sidebar_widget_->SetContentsView(std::move(sidebar));
+  sidebar_widget_->AddObserver(this);
+  auto sidebar_host = std::make_unique<views::NativeViewHost>();
+  // Profile BrowserWidgets retain Chromium's native transient-window stacking.
+  // Use the clip-window host for every desktop child so Aura owns all sibling
+  // layers consistently; Views-managed layer reordering cannot order this
+  // transient hierarchy against independent native controls.
+  sidebar_host->SetLayerManagedByViews(false);
+  sidebar_host->SetProperty(views::kViewIgnoredByLayoutKey, true);
+  sidebar_host_ =
+      desktop_->GetContentsView()->AddChildView(std::move(sidebar_host));
+  sidebar_host_->Attach(sidebar_widget_->GetNativeView());
   hints_ = std::make_unique<HintController>(
       desktop_.get(), base::BindRepeating(
                           [](base::WeakPtr<FlyWindowController> window, bool) {
@@ -313,6 +391,12 @@ FlyWindowController::FlyWindowController()
       std::make_unique<KeyboardEditor>(desktop_.get(), commands_,
                                        *g_browser_process->local_state());
   desktop_->AddObserver(this);
+  desktop_->GetFocusManager()->AddFocusChangeListener(this);
+  observing_sidebar_focus_ = true;
+  sidebar_focus_client_ = aura::client::GetFocusClient(
+      desktop_->GetNativeWindow()->GetRootWindow());
+  if (sidebar_focus_client_)
+    sidebar_focus_client_->AddObserver(this);
   preferences_registrar_.Init(g_browser_process->local_state());
   preferences_registrar_.Add(
       kPreferencesPref,
@@ -334,6 +418,8 @@ FlyWindowController::FlyWindowController()
 }
 
 FlyWindowController::~FlyWindowController() {
+  closing_ = true;
+  StopSidebarFocusObservation();
   tab_move_.reset();
   tab_move_picker_.reset();
   workspace_close_.reset();
@@ -358,7 +444,18 @@ FlyWindowController::~FlyWindowController() {
   desktop_->RemoveObserver(this);
   // Destruction is only posted after all profile-bound BrowserWidgets finish
   // their own beforeunload and destruction paths.
-  workspace_buttons_ = nullptr;
+  ClearSidebarViews();
+  if (sidebar_host_) {
+    sidebar_host_->Detach();
+    sidebar_host_ = nullptr;
+  }
+  if (sidebar_widget_) {
+    sidebar_widget_->RemoveObserver(this);
+    sidebar_widget_.reset();
+  }
+  sidebar_slot_ = nullptr;
+  compact_rail_ = nullptr;
+  compact_tab_sidebar_ = nullptr;
   content_ = nullptr;
   status_ = nullptr;
   status_bar_ = nullptr;
@@ -416,15 +513,300 @@ void FlyWindowController::OnPreferencesChanged() {
   const auto theme = preferences_.ReadTheme();
   if (theme && theme != applied_theme_) {
     applied_theme_ = theme;
-    desktop_->SetColorModeOverride(
-        theme->mode == "dark" ? ui::ColorProviderKey::ColorMode::kDark
-                              : ui::ColorProviderKey::ColorMode::kLight);
+    const auto color_mode = theme->mode == "dark"
+                                ? ui::ColorProviderKey::ColorMode::kDark
+                                : ui::ColorProviderKey::ColorMode::kLight;
+    desktop_->SetColorModeOverride(color_mode);
+    sidebar_widget_->SetColorModeOverride(color_mode);
     // Native WebContents observers recompute actual renderer preferences,
     // including hidden/split/private/extension pages. No web API is replaced.
     ui::NativeTheme::GetInstanceForWeb()->NotifyOnNativeThemeUpdated();
   }
   UpdateClock();
+  UpdateSidebarMode();
+  UpdateWindowControls();
   UpdateSuspensionPolicy();
+}
+
+views::ImageButton* FlyWindowController::window_control_for_testing(
+    std::string_view action) const {
+  const auto found = window_control_buttons_.find(std::string(action));
+  return found == window_control_buttons_.end() ? nullptr : found->second.get();
+}
+void FlyWindowController::ClearSidebarViews() {
+  clock_timer_.Stop();
+  window_control_buttons_.clear();
+  window_controls_ = nullptr;
+  workspace_buttons_ = nullptr;
+  clock_ = nullptr;
+  preferences_button_ = nullptr;
+  bookmarks_button_ = nullptr;
+  tab_sidebar_ = nullptr;
+  sidebar_content_ = nullptr;
+  sidebar_pin_button_ = nullptr;
+  workspace_picker_button_ = nullptr;
+}
+void FlyWindowController::StopSidebarFocusObservation() {
+  if (sidebar_focus_client_) {
+    sidebar_focus_client_->RemoveObserver(this);
+    sidebar_focus_client_ = nullptr;
+  }
+  if (observing_sidebar_focus_) {
+    desktop_->GetFocusManager()->RemoveFocusChangeListener(this);
+    observing_sidebar_focus_ = false;
+  }
+}
+bool FlyWindowController::SidebarOverlayBlocked() const {
+  return (palette_ && palette_->active()) ||
+         (workspace_picker_ && workspace_picker_->active()) ||
+         (tab_move_picker_ && tab_move_picker_->active()) ||
+         (bookmark_picker_ && bookmark_picker_->active()) ||
+         (keyboard_editor_ && keyboard_editor_->active()) ||
+         (hints_ && hints_->active());
+}
+void FlyWindowController::UpdateSidebarBounds() {
+  if (!sidebar_widget_ || !sidebar_widget_->GetNativeWindow() ||
+      !desktop_->GetNativeWindow())
+    return;
+  auto bounds = desktop_->GetContentsView()->GetLocalBounds();
+  if (bounds.IsEmpty())
+    return;
+  // Keep the compact rail's hit targets stable while the details panel opens.
+  // Replacing the rail under a hovering pointer can activate another command.
+  if (sidebar_auto_collapse_)
+    bounds.Offset(36, 0);
+  bounds.set_width(sidebar_auto_collapse_ ? 224 : 260);
+  sidebar_host_->SetBoundsRect(bounds);
+  // This overlay is excluded from BoxLayout; update its native clip explicitly.
+  sidebar_host_->DeprecatedLayoutImmediately();
+}
+void FlyWindowController::UpdateSidebarMode() {
+  if (!sidebar_content_)
+    return;
+  const bool collapse = preferences_.ReadSidebarAutoCollapse().value_or(false);
+  const bool changed = collapse != sidebar_auto_collapse_;
+  sidebar_auto_collapse_ = collapse;
+  sidebar_slot_->SetPreferredSize(gfx::Size(collapse ? 36 : 260, 0));
+  sidebar_pin_button_->SetText(collapse ? u"Pin sidebar" : u"Unpin sidebar");
+  sidebar_pin_button_->SetEnabled(preferences_.CanEditSidebarAutoCollapse());
+  if (changed && collapse) {
+    sidebar_keyboard_expanded_ = false;
+    sidebar_focus_inside_ = false;
+    if (sidebar_content_->Contains(
+            desktop_->GetFocusManager()->GetFocusedView()))
+      ReturnFocusFromSidebar();
+  }
+  UpdateSidebarBounds();
+  UpdateSidebarVisibility();
+}
+bool FlyWindowController::sidebar_expanded_for_testing() const {
+  return sidebar_widget_ && sidebar_widget_->IsVisible();
+}
+void FlyWindowController::UpdateSidebarVisibility() {
+  if (closing_ || !sidebar_content_ || !sidebar_widget_->GetNativeWindow())
+    return;
+  bool menu_open = tab_sidebar_->context_menu_for_testing() ||
+                   compact_tab_sidebar_->context_menu_for_testing() ||
+                   workspace_rename_dialog_for_testing() ||
+                   workspace_remove_dialog_for_testing();
+  for (const auto& child : workspace_buttons_->children()) {
+    auto* button = views::AsViewClass<WorkspaceMenuButton>(child.get());
+    menu_open |= button && button->running_model();
+  }
+  const bool blocked = SidebarOverlayBlocked();
+  const bool expanded =
+      !sidebar_auto_collapse_ ||
+      (!blocked && (sidebar_pointer_inside_ || sidebar_focus_inside_ ||
+                    sidebar_keyboard_expanded_ || menu_open));
+  compact_rail_->SetVisible(sidebar_auto_collapse_);
+  // Participate in the same Views layer ordering as the embedded browsers.
+  // Manually stacking an independent Aura window among Views-owned browser
+  // layers can violate WindowReorderer's ordering during tab rebuilds.
+  sidebar_host_->SetVisible(expanded);
+  if (expanded) {
+    sidebar_host_->DeprecatedLayoutImmediately();
+    if (!blocked) {
+      auto* clip = sidebar_host_->GetNativeViewContainer();
+      if (clip && clip->parent())
+        clip->parent()->StackChildAtTop(clip);
+    }
+  }
+  if (expanded && !sidebar_widget_->IsVisible())
+    sidebar_widget_->ShowInactive();
+  else if (!expanded && sidebar_widget_->IsVisible())
+    sidebar_widget_->Hide();
+  UpdateClock();
+}
+void FlyWindowController::ToggleSidebarAutoCollapse() {
+  const auto collapse = preferences_.ReadSidebarAutoCollapse();
+  if (collapse)
+    preferences_.SetSidebarAutoCollapse(!*collapse);
+}
+void FlyWindowController::ReturnFocusFromSidebar() {
+  sidebar_keyboard_expanded_ = false;
+  sidebar_focus_inside_ = false;
+  if (sidebar_content_ &&
+      sidebar_content_->Contains(desktop_->GetFocusManager()->GetFocusedView()))
+    desktop_->GetFocusManager()->ClearFocus();
+  if (selected_) {
+    if (auto* contents = selected_->GetTabStripModel()->GetActiveWebContents())
+      contents->Focus();
+  }
+  UpdateSidebarVisibility();
+}
+void FlyWindowController::FocusSidebar() {
+  if (closing_ || !sidebar_content_)
+    return;
+  if (sidebar_focus_inside_) {
+    ReturnFocusFromSidebar();
+    return;
+  }
+  sidebar_keyboard_expanded_ = true;
+  // Activating a row sends Aura focus to the page while the desktop focus
+  // manager still records that row. Requesting the same view again would then
+  // be a no-op, leaving the expanded sidebar without keyboard focus.
+  if (sidebar_content_->Contains(
+          desktop_->GetFocusManager()->GetFocusedView()))
+    desktop_->GetFocusManager()->ClearFocus();
+  UpdateSidebarBounds();
+  UpdateSidebarVisibility();
+  if (selected_ && !selected_->GetTabStripModel()->empty())
+    tab_sidebar_->FocusActiveTab();
+  else
+    workspace_picker_button_->RequestFocus();
+}
+bool FlyWindowController::SidebarHasFocus() const {
+  if (!sidebar_content_ || !sidebar_focus_client_ || !sidebar_widget_)
+    return false;
+  const auto* focused = sidebar_focus_client_->GetFocusedWindow();
+  return focused && (sidebar_widget_->GetNativeWindow()->Contains(focused) ||
+                     (focused == desktop_->GetNativeWindow() &&
+                      sidebar_content_->Contains(
+                          desktop_->GetFocusManager()->GetFocusedView())));
+}
+void FlyWindowController::OnDidChangeFocus(views::View*, views::View* now) {
+  if (closing_ || !sidebar_content_)
+    return;
+  sidebar_focus_inside_ = sidebar_content_->Contains(now);
+  if (sidebar_focus_inside_)
+    sidebar_keyboard_expanded_ = false;
+  UpdateSidebarVisibility();
+}
+void FlyWindowController::OnWindowFocused(aura::Window* gained, aura::Window*) {
+  if (closing_ || !sidebar_content_ || !sidebar_widget_->GetNativeWindow())
+    return;
+  const auto* native = sidebar_widget_->GetNativeWindow();
+  sidebar_focus_inside_ =
+      gained &&
+      (native->Contains(gained) || gained == desktop_->GetNativeWindow()) &&
+      sidebar_content_->Contains(desktop_->GetFocusManager()->GetFocusedView());
+  if (!sidebar_focus_inside_)
+    sidebar_keyboard_expanded_ = false;
+  UpdateSidebarVisibility();
+}
+void FlyWindowController::OnWidgetBoundsChanged(views::Widget* widget,
+                                                const gfx::Rect&) {
+  if (widget == desktop_.get())
+    UpdateSidebarBounds();
+}
+void FlyWindowController::OnMouseEvent(ui::MouseEvent* event) {
+  if (closing_ || !sidebar_content_ || SidebarOverlayBlocked())
+    return;
+  if (event->type() != ui::EventType::kMouseMoved &&
+      event->type() != ui::EventType::kMouseEntered &&
+      event->type() != ui::EventType::kMouseExited &&
+      event->type() != ui::EventType::kMousePressed)
+    return;
+  auto point = event->root_location();
+  wm::ConvertPointToScreen(desktop_->GetNativeWindow()->GetRootWindow(),
+                           &point);
+  auto bounds = desktop_->GetContentsView()->GetBoundsInScreen();
+  bounds.set_width(sidebar_expanded_for_testing() ? 260 : 36);
+  const bool was_inside = sidebar_pointer_inside_;
+  sidebar_pointer_inside_ = bounds.Contains(point);
+  const bool pressed = event->type() == ui::EventType::kMousePressed;
+  // Pointer motion only matters when it crosses the sidebar edge.
+  if (!pressed && was_inside == sidebar_pointer_inside_)
+    return;
+  if (!sidebar_pointer_inside_ && pressed) {
+    sidebar_keyboard_expanded_ = false;
+    sidebar_focus_inside_ = false;
+    if (SidebarHasFocus() ||
+        sidebar_content_->Contains(
+            desktop_->GetFocusManager()->GetFocusedView())) {
+      desktop_->GetFocusManager()->ClearFocus();
+      // Desktop and profile BrowserWidget focus managers are distinct. A real
+      // page click crosses that boundary; Chrome toolbar clicks keep their
+      // own native handling.
+      auto* page = selected_
+                       ? selected_->GetTabStripModel()->GetActiveWebContents()
+                       : nullptr;
+      auto* view = page ? page->GetRenderWidgetHostView() : nullptr;
+      if (view && view->GetViewBounds().Contains(point))
+        page->Focus();
+    }
+  }
+  UpdateSidebarVisibility();
+}
+
+void FlyWindowController::UpdateWindowControls() {
+  if (!window_controls_)
+    return;
+  const bool visible = preferences_.ReadWindowControlsVisible().value_or(false);
+  if (!visible &&
+      window_controls_->Contains(
+          desktop_->GetFocusManager()->GetFocusedView()) &&
+      selected_) {
+    desktop_->GetFocusManager()->ClearFocus();
+    if (auto* contents = selected_->GetTabStripModel()->GetActiveWebContents())
+      contents->Focus();
+  }
+  window_controls_->SetVisible(visible);
+  const bool maximized = desktop_->IsMaximized();
+  auto* maximize = window_control_buttons_.at("maximize").get();
+  const auto icon = ui::ImageModel::FromVectorIcon(
+      maximized ? views::kChromeRestoreIcon : views::kChromeMaximizeIcon,
+      ui::kColorIcon, 16);
+  for (auto state : {views::Button::STATE_NORMAL, views::Button::STATE_HOVERED,
+                     views::Button::STATE_PRESSED,
+                     views::Button::STATE_DISABLED})
+    maximize->SetImageModel(state, icon);
+  const auto* title = maximized ? u"Restore Fly" : u"Maximize Fly";
+  maximize->SetTooltipText(title);
+  maximize->GetViewAccessibility().SetName(title);
+}
+void FlyWindowController::RunWindowControl(std::string action) {
+  VLOG(1) << "Fly window control requested: " << action;
+  if (closing_ || !window_controls_->GetVisible())
+    return;
+  // Complete pointer/keyboard button dispatch before native close callbacks can
+  // destroy this control, the selected browser or the entire desktop.
+  base::SingleThreadTaskRunner::GetCurrentDefault()->PostNonNestableTask(
+      FROM_HERE,
+      base::BindOnce(
+          [](base::WeakPtr<FlyWindowController> window, std::string action) {
+            if (!window || window->closing_ ||
+                !window->preferences_.ReadWindowControlsVisible().value_or(
+                    false))
+              return;
+            VLOG(1) << "Fly window control executing: " << action;
+            if (action == "minimize")
+              window->desktop_->Minimize();
+            else if (action == "maximize") {
+              if (window->desktop_->IsMaximized())
+                window->desktop_->Restore();
+              else
+                window->desktop_->Maximize();
+            } else if (action == "close")
+              window->desktop_->Close();
+          },
+          weak_factory_.GetWeakPtr(), std::move(action)));
+}
+void FlyWindowController::OnWidgetShowStateChanged(views::Widget* widget) {
+  if (widget == desktop_.get()) {
+    UpdateWindowControls();
+    UpdateClock();
+  }
 }
 
 void FlyWindowController::UpdateSuspensionPolicy() {
@@ -472,6 +854,8 @@ void FlyWindowController::ResumeAllTabs() {
 }
 
 void FlyWindowController::UpdateClock() {
+  if (!clock_)
+    return;
   if (status_bar_)
     status_bar_->SetVisible(
         preferences_.ReadStatusBarVisible().value_or(false));
@@ -483,7 +867,8 @@ void FlyWindowController::UpdateClock() {
   }
   clock_->SetVisible(visible);
   clock_->SetEnabled(preferences_.CanEditClock());
-  if (!visible || !desktop_->IsVisible()) {
+  if (!visible || !desktop_->IsVisible() || desktop_->IsMinimized() ||
+      !sidebar_widget_->IsVisible()) {
     clock_timer_.Stop();
     return;
   }
@@ -528,8 +913,9 @@ void FlyWindowController::Prepare(BrowserWindowInterface* browser) {
       }
     }
   }
-  auto* host =
-      content_->AddChildView(std::make_unique<views::NativeViewHost>());
+  auto native_host = std::make_unique<views::NativeViewHost>();
+  native_host->SetLayerManagedByViews(false);
+  auto* host = content_->AddChildView(std::move(native_host));
   host->SetVisible(false);
   auto [entry, inserted] =
       entries_.emplace(browser, Entry{browser, nullptr, host, workspace_id});
@@ -580,6 +966,7 @@ void FlyWindowController::Select(BrowserWindowInterface* browser, bool focus) {
     preferences_button_->SetEnabled(true);
     OnBookmarksChanged();
     tab_sidebar_->SetBrowser(browser);
+    compact_tab_sidebar_->SetBrowser(browser);
     auto& next = it->second;
     std::u16string workspace_name;
     if (const auto catalog = workspaces_.Read()) {
@@ -600,6 +987,8 @@ void FlyWindowController::Select(BrowserWindowInterface* browser, bool focus) {
   ScheduleWorkspaceRefresh();
   UpdateModeLabel();
   desktop_->Show();
+  UpdateSidebarBounds();
+  UpdateSidebarVisibility();
   if (focus) {
     // Profile BrowserWidgets share one OS activation. Tell the native startup
     // coordinator which persistent workspace the user actually selected.
@@ -633,6 +1022,8 @@ void FlyWindowController::SelectWindow(
 
 void FlyWindowController::RebuildWorkspaceButtons() {
   workspace_refresh_pending_ = false;
+  if (!workspace_buttons_)
+    return;
   if (workspace_picker_->active())
     workspace_picker_->UpdateItems(WorkspaceEntries(), false);
   workspace_buttons_->RemoveAllChildViews();
@@ -1374,6 +1765,7 @@ void FlyWindowController::OnBrowserDidClose(BrowserWindowInterface* browser) {
     bookmark_picker_->Cancel();
     keyboard_editor_->Cancel();
     tab_sidebar_->SetBrowser(nullptr);
+    compact_tab_sidebar_->SetBrowser(nullptr);
     status_bar_->SetBrowser(nullptr, u"");
     selected_ = nullptr;
     preferences_button_->SetEnabled(false);
@@ -1524,7 +1916,12 @@ void FlyWindowController::FinishClose() {
 }
 
 void FlyWindowController::OnWidgetDestroying(views::Widget* widget) {
+  if (widget == sidebar_widget_.get()) {
+    ClearSidebarViews();
+    return;
+  }
   if (widget == desktop_.get()) {
+    StopSidebarFocusObservation();
     clock_timer_.Stop();
     suspension_timer_.Stop();
     preferences_registrar_.RemoveAll();
@@ -1539,6 +1936,7 @@ void FlyWindowController::OnWidgetDestroying(views::Widget* widget) {
   const bool was_selected = selected_ == it->first;
   if (was_selected) {
     tab_sidebar_->SetBrowser(nullptr);
+    compact_tab_sidebar_->SetBrowser(nullptr);
     status_bar_->SetBrowser(nullptr, u"");
   }
   it->second.host->Detach();
@@ -1693,6 +2091,14 @@ bool FlyWindowController::RunCommand(BrowserWindowInterface* browser,
   }
   if (action == "toggle-theme")
     return preferences_.ToggleTheme();
+  if (action == "toggle-zen-mode" || action == "toggle-sidebar-pin") {
+    const auto collapse = preferences_.ReadSidebarAutoCollapse();
+    return collapse && preferences_.SetSidebarAutoCollapse(!*collapse);
+  }
+  if (action == "toggle-window-controls") {
+    const auto visible = preferences_.ReadWindowControlsVisible();
+    return visible && preferences_.SetWindowControlsVisible(!*visible);
+  }
   if (action == "toggle-status-bar") {
     const auto visible = preferences_.ReadStatusBarVisible();
     return visible && preferences_.SetStatusBarVisible(!*visible);
@@ -1724,7 +2130,7 @@ bool FlyWindowController::RunCommand(BrowserWindowInterface* browser,
     return true;
   }
   if (action == "focus-sidebar") {
-    tab_sidebar_->FocusActiveTab();
+    FocusSidebar();
     return true;
   }
   if (action == "next-workspace" || action == "previous-workspace") {
@@ -1789,6 +2195,12 @@ void FlyWindowController::OnKeyEvent(ui::KeyEvent* event) {
       event->SetHandled();
       event->StopPropagation();
     }
+    return;
+  }
+  if (event->key_code() == ui::VKEY_ESCAPE && sidebar_focus_inside_) {
+    ReturnFocusFromSidebar();
+    event->SetHandled();
+    event->StopPropagation();
     return;
   }
   if (!selected_) {

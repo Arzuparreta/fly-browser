@@ -42,9 +42,10 @@ class TabSidebar : public views::View,
   METADATA_HEADER(TabSidebar, views::View)
 
  public:
-  explicit TabSidebar(base::RepeatingClosure new_tab);
+  explicit TabSidebar(base::RepeatingClosure new_tab, bool compact = false);
   ~TabSidebar() override;
   void SetBrowser(BrowserWindowInterface* browser);
+  void OnThemeChanged() override;
   void FocusActiveTab();
   size_t row_count_for_testing() const;
   views::View* row_for_testing(content::WebContents* contents) const;
@@ -84,6 +85,7 @@ class TabSidebar : public views::View,
     bool favicon_initialized = false;
     bool pinned = false;
     bool muted = false;
+    bool audible = false;
     base::CallbackListSubscription audible_subscription;
   };
   std::map<content::WebContents*, Row> tab_rows_;
@@ -92,6 +94,7 @@ class TabSidebar : public views::View,
   raw_ptr<BrowserWindowInterface> browser_ = nullptr;
   raw_ptr<TabStripModel> model_ = nullptr;
   raw_ptr<views::View> rows_ = nullptr;
+  const bool compact_;
   bool refresh_pending_ = false;
   base::WeakPtrFactory<TabSidebar> weak_factory_{this};
 };
