@@ -43,7 +43,9 @@ jobs:
       - name: Checkout and overlay transaction tests
         run: python -B -m unittest discover -s tests/chromium -p 'test_*.py'
       - name: JavaScript harness syntax
-        run: node --check tests/chromium/control-smoke.js
+        run: |
+          node --check tests/chromium/control-smoke.js
+          node --check tests/chromium/live-twitch.js
 
   engine:
     if: inputs.depth != 'contracts'
