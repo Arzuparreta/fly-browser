@@ -302,6 +302,11 @@ bool NativeCommandAvailable(BrowserWindowInterface* browser,
                             std::string_view action) {
   if (!browser)
     return false;
+  if (action == "toggle-global-audio-mute") {
+    const auto* window = FlyWindowController::GetIfCreated();
+    return window && window->IsSelected(browser) &&
+           !browser->GetTabStripModel()->empty();
+  }
   if (action == "toggle-bookmarks" || action == "add-bookmark") {
     auto* window = FlyWindowController::GetIfCreated();
     auto* contents = browser->GetTabStripModel()->GetActiveWebContents();

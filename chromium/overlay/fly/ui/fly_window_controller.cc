@@ -35,6 +35,7 @@
 #include "chrome/browser/ui/browser_window/public/browser_window_interface.h"
 #include "chrome/browser/ui/browser_window/public/create_browser_window.h"
 #include "chrome/browser/ui/tabs/tab_strip_model.h"
+#include "chrome/browser/ui/tabs/tab_muted_utils.h"
 #include "components/input/native_web_keyboard_event.h"
 #include "components/keep_alive_registry/keep_alive_types.h"
 #include "components/keep_alive_registry/scoped_keep_alive.h"
@@ -824,6 +825,28 @@ bool FlyWindowController::RunCommand(BrowserWindowInterface* browser,
                                      std::string_view action) {
   if (!entries_.contains(browser) || closing_)
     return false;
+  if (action == "toggle-global-audio-mute") {
+    // Snapshot identities before notifying native tab observers. Never iterate
+    // the workspace/window map while a tab mutation may reenter its owner.
+    std::vector<base::WeakPtr<content::WebContents>> contents;
+    bool any_unmuted = false;
+    for (const auto& [window, entry] : entries_) {
+      if (entry.browser_closed)
+        continue;
+      auto* model = window->GetTabStripModel();
+      for (int index = 0; index < model->count(); ++index) {
+        auto* tab = model->GetWebContentsAt(index);
+        contents.push_back(tab->GetWeakPtr());
+        any_unmuted |= !tab->IsAudioMuted();
+      }
+    }
+    for (const auto& tab : contents) {
+      if (tab)
+        SetTabAudioMuted(tab.get(), any_unmuted,
+                         TabMutedReason::kAudioIndicator, std::string());
+    }
+    return !contents.empty();
+  }
   if (action == "add-bookmark") {
     auto* contents = browser->GetTabStripModel()->GetActiveWebContents();
     return contents && bookmarks_->Add(contents->GetLastCommittedURL().spec(),

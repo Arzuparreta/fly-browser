@@ -685,6 +685,63 @@ IN_PROC_BROWSER_TEST_F(FlyWorkspaceBrowserTest,
 }
 
 IN_PROC_BROWSER_TEST_F(FlyWorkspaceBrowserTest,
+                       GlobalMuteUsesNativeTabsAcrossHiddenAndPrivateWorkspaces) {
+  auto* first = browser();
+  auto& window = FlyWindowController::Get();
+  auto* first_tab = Active(first);
+  ASSERT_TRUE(OpenNativeBlankTab(first));
+  auto* second_tab = Active(first);
+  auto* other = SecondWorkspace();
+  ASSERT_TRUE(other);
+  auto* hidden_tab = Active(other);
+  ASSERT_TRUE(window.RunCommand(other, "toggle-private-mode"));
+  ASSERT_TRUE(base::test::RunUntil([&] {
+    return window.selected_browser_for_testing() != other;
+  }));
+  auto* private_browser = window.selected_browser_for_testing();
+  ASSERT_TRUE(private_browser);
+  ASSERT_TRUE(private_browser->GetProfile()->IsOffTheRecord());
+  auto* private_tab = Active(private_browser);
+  ASSERT_TRUE(private_tab);
+  EXPECT_TRUE(NativeCommandAvailable(private_browser, "toggle-global-audio-mute"));
+
+  // Mixed tab state always converges to muted, including nonaudible pages.
+  SetTabAudioMuted(first_tab, true, TabMutedReason::kAudioIndicator, {});
+  const std::vector<content::WebContents*> tabs = {
+      first_tab, second_tab, hidden_tab, private_tab};
+  const std::vector<int> ids = {
+      extensions::ExtensionTabUtil::GetTabId(first_tab),
+      extensions::ExtensionTabUtil::GetTabId(second_tab),
+      extensions::ExtensionTabUtil::GetTabId(hidden_tab),
+      extensions::ExtensionTabUtil::GetTabId(private_tab)};
+  ASSERT_TRUE(InvokeNativeCommand(private_browser, "toggle-global-audio-mute"));
+  for (auto* tab : tabs) {
+    EXPECT_TRUE(tab->IsAudioMuted());
+    EXPECT_EQ(TabMutedReason::kAudioIndicator, GetTabAudioMutedReason(tab));
+  }
+  EXPECT_EQ(private_browser, window.selected_browser_for_testing());
+  EXPECT_EQ(second_tab, Active(first));
+  EXPECT_EQ(hidden_tab, Active(other));
+  ExpectVisible(second_tab, false);
+  ExpectVisible(hidden_tab, false);
+  ExpectVisible(private_tab, true);
+
+  ASSERT_TRUE(InvokeNativeCommand(private_browser, "toggle-global-audio-mute"));
+  for (size_t index = 0; index < tabs.size(); ++index) {
+    EXPECT_FALSE(tabs[index]->IsAudioMuted());
+    EXPECT_EQ(ids[index], extensions::ExtensionTabUtil::GetTabId(tabs[index]));
+  }
+  // This is an operation on existing tabs, not a persisted global mute policy.
+  ASSERT_TRUE(InvokeNativeCommand(private_browser, "toggle-global-audio-mute"));
+  ASSERT_TRUE(OpenNativeBlankTab(private_browser));
+  EXPECT_FALSE(Active(private_browser)->IsAudioMuted());
+  ASSERT_TRUE(InvokeNativeCommand(private_browser, "toggle-global-audio-mute"));
+  EXPECT_TRUE(Active(private_browser)->IsAudioMuted());
+  EXPECT_EQ(private_browser->GetProfile(),
+            Active(private_browser)->GetBrowserContext());
+}
+
+IN_PROC_BROWSER_TEST_F(FlyWorkspaceBrowserTest,
                        SidebarAndCommandsExposeNativeMuteReasonsToExtensions) {
   extensions::TestExtensionDir directory;
   directory.WriteManifest(
@@ -750,6 +807,19 @@ IN_PROC_BROWSER_TEST_F(FlyWorkspaceBrowserTest,
   EXPECT_EQ(false, info->FindBool("muted"));
   EXPECT_EQ("user", *info->FindString("reason"));
   EXPECT_FALSE(info->contains("extensionId"));
+  ASSERT_TRUE(InvokeNativeCommand(browser(), "toggle-global-audio-mute"));
+  info = read_info();
+  ASSERT_TRUE(info);
+  EXPECT_EQ(true, info->FindBool("muted"));
+  ASSERT_TRUE(info->FindString("reason"));
+  EXPECT_EQ("user", *info->FindString("reason"));
+  EXPECT_FALSE(info->contains("extensionId"));
+  EXPECT_TRUE(other->IsAudioMuted());
+  ASSERT_TRUE(InvokeNativeCommand(browser(), "toggle-global-audio-mute"));
+  info = read_info();
+  ASSERT_TRUE(info);
+  EXPECT_EQ(false, info->FindBool("muted"));
+  EXPECT_FALSE(other->IsAudioMuted());
 }
 
 IN_PROC_BROWSER_TEST_F(FlyWorkspaceBrowserTest,

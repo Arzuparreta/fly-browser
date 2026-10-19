@@ -1,100 +1,73 @@
 # Native Chromium implementation record
 
 The native port is **incomplete**. Electron remains the production runtime.
-No native application, migration or package has passed acceptance yet.
+Full product, migration and packaged application acceptance remain outstanding.
 
 ## Current checkpoint
 
-Merged main includes PR [114](https://github.com/Arzuparreta/fly-browser/pull/114)
-as `485d4bc`. Its ordinary checks and manual matrix 39078704053 passed; all
-three official native service summaries contain 31 SUCCESS results. Follow-up work is consolidated into
-PR [115](https://github.com/Arzuparreta/fly-browser/pull/115); the stacked feature
-PRs preserve their original review history. Its latest remote checks and explicit
-CI must finish successfully before merging.
-The latest remote checkpoint `f7ef421` passes ordinary checks and tooling contracts
-on all three systems. Manual runs are 39166795264 (services) and 39166793504
-(objects). macOS objects failed the focus helper's header dependency check;
-Windows objects failed because a raw subprocess did not resolve `gn.bat`.
-The prepared repairs use the public `ui::BaseWindow` interface with the existing
-GN dependency and the engine's platform-aware command wrapper. Linux objects
-are still running. These failed jobs do not satisfy the merge gate.
+Merged main is `485d4bc` through PR
+[114](https://github.com/Arzuparreta/fly-browser/pull/114). The active integration
+PR is [115](https://github.com/Arzuparreta/fly-browser/pull/115), draft at
+`059735e`, labelled `impact:none`. Ordinary checks pass. Latest-head manual
+matrices 39185208752 (objects) and 39185210928 (services) are still running;
+inspect their actual conclusions before merging. Superseded PRs 116–123 are
+closed with their review history preserved.
 
-The full eighteen-patch native source at frozen `02d63e4` built successfully.
-Its binary SHA-256 is
-`298389240de7aa1cd05ca8126ef1bf9d5a7807eeb01227eac988041b7f920d28`;
-its source fingerprint is
-`9043a3f95dbd922235f2238dade254624168cab1f63153a29e381a003e19fa92`.
-The complete GN runtime closure contains 5,301 files and is checked before smoke
-fixtures. All 53 native service cases passed. The browser suite executed 46
-declarations: both PRE cases passed; 33 of 44 main cases passed, 11 failed and
-none crashed. Failures cover session restoration, hints, pointer menus, focus
-after overlays and focused-frame scrolling. Background extension-window visibility
-now passes. This is failed acceptance, not a completed milestone.
+The complete nineteen-patch Linux build at `059735e` passes all 53 native service
+cases, both PRE cases and all 45 main browser cases. The independent audit checks
+all declared main cases, a newly written summary, source hash, clean commit and
+exact overlay fingerprint. Session restart, explicit command-line blank restore,
+profile isolation, split visibility, extension window topology, hints, unrelated
+frame deletion, overlay focus, keyboard recording/editing, pointer tab menus,
+focused cross-origin scrolling and beforeunload cancellation pass in these
+specific fixtures. This does not establish the full product acceptance matrix.
 
-The pipeline's video fixture attached before Chromium published its initial page.
-Waiting for that actual page fixes the harness race. A real rerun against the same
-frozen binary passed video decoding, MV3 loading, native focus/visibility, paused
-media preservation and background audio (`control-smoke-OSHkYu`). PCM audio passed
-in the original pipeline (`control-smoke-UL55nX`). Sandbox and site isolation stay
-enabled. These synthetic single-profile fixtures do not establish real Twitch/Pie,
-packaged application or complete workspace acceptance.
+The binary SHA-256 is
+`1aa6fc01120117393bb612638dcd018c2f233f775b354383da2917edbe610159`;
+the overlay fingerprint is
+`94cb30c1add91be1180568de79d33f4b11988ef80715e2a86edc9517843f9861`.
+Sandboxed H.264/AAC video with MV3 and PCM audio fixtures pass with complete
+runtime-file provenance: `control-smoke-8ODI3e` and `control-smoke-Tpak3B`.
+A real compositor screenshot at `native-current-desktop-gpe2BY` confirms rendered
+sidebar rows and an editable page; the Chromium toolbar remains visible and is
+not the completed Fly interface. All profiles are disposable. No owner profile
+has been read or migrated.
 
-The focus repair at `98ecc7c` has completed its full Linux build and runtime
-pipeline: all 53 service cases pass; both PRE cases and 38 of 44 main browser
-cases pass. The five repaired cases cover palette dismissal, keyboard recorder,
-preferences, bookmark editing and focused cross-origin scrolling. The palette
-also preserves toolbar focus. Hints and both session cases fail; three pointer-menu
-cases time out. Both sandboxed media fixtures pass with full runtime provenance.
-The failed summaries are retained; no acceptance gate has been waived.
+Verified evidence is archived outside Git under
+`/mnt/storage/fly-chromium/evidence/runtime-059735e-before-blank-navigation`,
+including exact browser summaries and the 53-case service identity audit.
+Earlier failed attempts remain preserved separately. The menu timeout at
+`919c32e` was fixed by creating its second profile before entering MenuRunner's
+nested loop; workspace switching and stale-command rejection still happen inside
+the actual menu callback. No acceptance assertion was removed.
 
-The nineteen-patch frozen `919c32e` source completed its full Linux build and
-acceptance pipeline. All 53 native service cases, both PRE cases and 44 of 45
-main browser cases pass. Both ordinary restart and explicit command-line blank
-restore the expected profiles, windows, tab IDs, pinned state and cookies.
-Native focus, hints, unrelated-frame deletion, pointer pin/mute/close/reopen and
-quit cancellation pass. Sandboxed video/MV3 and PCM fixtures also pass with full
-runtime provenance. One menu case times out while its callback calls synchronous
-profile creation inside MenuRunner's nested loop. The prepared fixture correction
-creates the other profile before opening the menu and still switches workspaces
-inside its callback to verify the queued command's generation boundary.
+The preceding `98ecc7c` manual matrices both passed on all three platforms:
+39170219527 compiled 42 changed objects on Linux/Windows and 33 on macOS;
+39170220819 ran exactly 53 official service cases per system. Downloaded case
+summaries and nonempty compiler-output hashes were independently checked.
+macOS objects exclude the still-unimplemented native desktop adapter. Object and
+service passes do not establish a linked macOS/Windows browser or installable
+package. All 78 Python tooling contracts, retained Electron recorder/editable
+checks, npm tests and documentation build also pass at the integration checkpoint.
 
-Patch 19 changes only the profile-picker preference default under `--fly-native`,
-retaining explicit user values and forced-picker policy. Persistent workspace
-selection updates Chromium's last-used profile through its public API. The tab
-sidebar uses a bounded ScrollView so both scrolling backends size its plain
-BoxLayout contents. Its test getter exposes only a running MenuRunner. The
-complete nineteen-patch replay and owning GN header checks pass. All 78 Python
-tooling contracts, npm tests and documentation build pass locally. The corrected
-menu fixture requires another complete runtime run before accepting this source.
+Current native runtime validation is frozen at `19bd656` in the sidebar worktree.
+It adds profile-bound product blank-tab navigation, including private startup,
+new workspaces, adjacent tabs and splitting a one-tab workspace. The new 48-case
+browser suite and all acceptance stages must execute before accepting that
+follow-up. Ongoing development is on `codex/chromium-native-global-audio` in the
+hints worktree; its global tab-mute case is not part of the frozen runtime.
 
-Manual CI at `98ecc7c` is now successful on all three systems: 39170219527
-(objects) and 39170220819 (53 official service cases). This validates the repaired
-macOS public header dependency and Windows GN batch launcher. The later runtime
-repairs still require latest-head CI before merging PR 115.
-
-Current source is developed in the hints worktree, then frozen in the sidebar
-worktree before each managed build. Inspect user units
+Before changing frozen source or engine files, inspect user units
 `fly-chromium-native-build.service`, `fly-chromium-native-acceptance.service` and
-`fly-chromium-native-summary-audit.service` before editing the frozen checkout or
-engine source. The `919c32e` pipeline and independent audit are complete and failed on the one
-remaining menu fixture; preserve their evidence before updating frozen source. Logs and
-JSON summaries remain under `/mnt/storage/fly-chromium/evidence`; service output
-is in `current-build-systemd.log`, `current-acceptance-systemd.log` and
-`current-summary-audit.log` under the engine root. No owner profile was accessed.
+`fly-chromium-native-summary-audit.service`. Their current logs are under the
+engine root as `current-build-systemd.log`, `current-acceptance-systemd.log` and
+`current-summary-audit.log`. JSON and per-stage logs are in `evidence/`.
 
-Hosted object validation now queries GN source owners and retains compiler rules,
-flags, response files, outputs and generated-header/module dependencies in a
-separate Ninja manifest. The Linux plan has 42 changed objects, 24,707 prerequisite
-files and 13,246 commands; this graph inspection is not a hosted compilation pass.
-Official service run 39164821004 passed exactly 53 cases on each of Linux, macOS
-and Windows; all downloaded test identities were independently verified.
-All 78 Python tooling contracts pass locally, including real Ninja scheduling,
-escaped spaces, Windows command resolution, generated headers and byte preservation.
-
-Next: rebuild the focus repair and inspect every browser result, repair remaining
-runtime failures and finish latest-head CI before merging PR 115. Continue M2–M6,
-platform packages, migration and acceptance before default cutover. Electron
-remains production; no native package has passed acceptance.
+Next: finish the `19bd656` runtime run and the latest-head hosted matrices, repair
+any failure, then merge PR 115 only after all its gates pass. Continue native Fly
+UI, remaining commands/preferences/services, migration, all-platform packages,
+update rehearsals and the full acceptance matrix through M6. Electron remains
+production; no native package has passed acceptance.
 
 ## Source and working state
 
@@ -1473,3 +1446,17 @@ BrowserContext identity; the physical adjacent-tab case also asserts the URL.
 Pinned Linux Clang accepts all four changed translation units and the browser
 fixture. This follow-up still requires a full runtime run and latest-head CI;
 it does not implement the remaining custom Fly new-tab page or floating address UI.
+
+
+### Native global tab audio follow-up
+
+`toggle-global-audio-mute` now snapshots the Fly desktop's live native tab
+identities across hidden persistent windows and off-the-record contexts. As in
+the retained product, any unmuted tab makes the operation mute all existing tabs;
+when all are muted, it unmutes them. Native `SetTabAudioMuted` records the user
+reason and notifies the existing tab/extension infrastructure. It neither writes
+a global preference nor changes profile, selection or page visibility. Closed
+windows are excluded and weak identities tolerate observer-driven destruction.
+A browser case covers mixed state, hidden/private tabs, native reasons, stable
+extension IDs, unchanged selection/visibility and newly created tabs. Runtime
+execution and latest-head hosted validation remain pending.
