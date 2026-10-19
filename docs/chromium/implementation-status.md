@@ -1576,3 +1576,24 @@ root cause or a product repair. The browser regression now explicitly waits for
 both native render-widget focus and `document.hasFocus()` before opening the
 chooser, preventing an initially unfocused page from making its blur assertion
 pass vacuously. The strengthened case needs its own runtime execution.
+
+
+### Native workspace rename follow-up
+
+Persistent workspace context menus now offer Rename workspace. A native,
+window-modal Views dialog edits the display name through the existing validated
+catalog transaction. Duplicate, empty, oversized/invalid names and a stale or
+policy/future catalog leave the dialog open with an error instead of overwriting
+data. The callback re-resolves the stable workspace ID; it holds neither the
+originating row nor a browser/profile pointer. Name changes keep profile storage,
+tabs, extension identity and the active workspace. The selected workspace's
+status heading updates immediately.
+
+The widget and delegate are both client-owned and destroyed in that order.
+Workspace selection, selected-browser close and application quit cancel the
+editor. Escape cancels, Return saves, and the modal surface receives keys before
+Fly page shortcuts. A browser regression uses the actual context menu and dialog
+accelerators, checking Unicode names, duplicate rejection, cancellation, stale
+future-schema rejection, unchanged profile/tab identity and retained page cookies.
+Pinned-source compilation and the full runtime pipeline must pass before this
+follow-up is accepted. Delete and cross-profile tab transfer remain outstanding.

@@ -58,6 +58,8 @@
 #include "ui/views/accessibility/view_accessibility.h"
 #include "ui/views/controls/button/md_text_button.h"
 #include "ui/views/controls/label.h"
+#include "ui/views/controls/textfield/textfield.h"
+#include "ui/views/window/dialog_delegate.h"
 #include "ui/views/controls/native/native_view_host.h"
 #include "ui/views/focus/focus_manager.h"
 #include "ui/views/layout/box_layout.h"
@@ -73,13 +75,16 @@ class WorkspaceMenuButton : public views::MdTextButton,
  public:
   WorkspaceMenuButton(PressedCallback select, std::u16string_view name,
                       std::string id, bool up, bool down,
-                      base::RepeatingCallback<void(int)> move)
+                      base::RepeatingCallback<void(int)> move,
+                      bool editable, base::RepeatingClosure rename)
       : views::MdTextButton(std::move(select), name),
         id_(std::move(id)), up_(up), down_(down), move_(std::move(move)),
-        model_(this) {
+        editable_(editable), rename_(std::move(rename)), model_(this) {
     set_context_menu_controller(this);
     model_.AddItem(1, u"Move workspace up");
     model_.AddItem(2, u"Move workspace down");
+    model_.AddSeparator(ui::NORMAL_SEPARATOR);
+    model_.AddItem(3, u"Rename workspace");
     runner_ = std::make_unique<views::MenuRunner>(
         &model_, views::MenuRunner::CONTEXT_MENU);
   }
@@ -88,17 +93,20 @@ class WorkspaceMenuButton : public views::MdTextButton,
     return runner_->IsRunning() ? &model_ : nullptr;
   }
   bool IsCommandIdEnabled(int command) const override {
-    return command == 1 ? up_ : command == 2 && down_;
+    return command == 1 ? up_ : command == 2 ? down_
+                                                     : command == 3 && editable_;
   }
   void ExecuteCommand(int command, int) override {
     if (!IsCommandIdEnabled(command))
       return;
-    auto move = move_;
+    auto task = command == 3
+                    ? base::BindOnce(rename_)
+                    : base::BindOnce(move_, command == 1 ? -1 : 1);
     runner_->Cancel();
     // Reordering rebuilds this button. Complete menu dispatch first and only
     // then resolve the workspace's current stable identity in the catalog.
     base::SingleThreadTaskRunner::GetCurrentDefault()->PostNonNestableTask(
-        FROM_HERE, base::BindOnce(std::move(move), command == 1 ? -1 : 1));
+        FROM_HERE, std::move(task));
   }
   void ShowContextMenuForViewImpl(
       views::View*, const gfx::Point& point,
@@ -111,6 +119,8 @@ class WorkspaceMenuButton : public views::MdTextButton,
   const bool up_;
   const bool down_;
   base::RepeatingCallback<void(int)> move_;
+  const bool editable_;
+  base::RepeatingClosure rename_;
   ui::SimpleMenuModel model_;
   std::unique_ptr<views::MenuRunner> runner_;
 };
@@ -292,6 +302,8 @@ FlyWindowController::~FlyWindowController() {
   weak_factory_.InvalidateWeakPtrs();
   clock_timer_.Stop();
   preferences_registrar_.RemoveAll();
+  rename_widget_.reset();
+  rename_delegate_.reset();
   keyboard_editor_.reset();
   workspace_picker_.reset();
   bookmark_picker_.reset();
@@ -461,6 +473,7 @@ void FlyWindowController::Select(BrowserWindowInterface* browser, bool focus) {
     return;
   }
   if (selected_ != browser) {
+    CancelWorkspaceRename();
     if (selected_) {
       auto& previous = entries_.at(selected_);
       if (auto* contents =
@@ -551,6 +564,9 @@ void FlyWindowController::RebuildWorkspaceButtons() {
             editable && &item != &catalog->items.front(),
             editable && &item != &catalog->items.back(),
             base::BindRepeating(&FlyWindowController::ReorderWorkspace,
+                                weak_factory_.GetWeakPtr(), item.id),
+            editable,
+            base::BindRepeating(&FlyWindowController::RenameWorkspace,
                                 weak_factory_.GetWeakPtr(), item.id)));
     const bool active =
         selected_ && entries_.at(selected_).workspace_id == item.id;
@@ -636,6 +652,74 @@ void FlyWindowController::ReorderWorkspace(std::string id, int direction) {
     order.push_back(workspace.id);
   std::swap(order[index], order[target]);
   workspaces_.Reorder(order);
+}
+
+views::Widget* FlyWindowController::workspace_rename_dialog_for_testing() const {
+  return rename_widget_ && !rename_widget_->IsClosed() ? rename_widget_.get()
+                                                     : nullptr;
+}
+
+void FlyWindowController::CancelWorkspaceRename() {
+  if (rename_widget_ && !rename_widget_->IsClosed())
+    rename_widget_->Close();
+}
+
+void FlyWindowController::RenameWorkspace(std::string id) {
+  if (closing_ || !workspaces_.CanEdit())
+    return;
+  const auto catalog = workspaces_.Read();
+  if (!catalog)
+    return;
+  const auto item = std::ranges::find(catalog->items, id, &Workspace::id);
+  if (item == catalog->items.end())
+    return;
+  hints_->Cancel();
+  palette_->Cancel();
+  workspace_picker_->Cancel();
+  bookmark_picker_->Cancel();
+  keyboard_editor_->Cancel();
+  // Both objects are client-owned. Destroy the old widget before its delegate;
+  // no callback retains the workspace row that opened this dialog.
+  rename_widget_.reset();
+  rename_delegate_ = std::make_unique<views::DialogDelegate>();
+  rename_delegate_->SetOwnershipOfNewWidget(
+      views::Widget::InitParams::CLIENT_OWNS_WIDGET);
+  rename_delegate_->SetModalType(ui::mojom::ModalType::kWindow);
+  rename_delegate_->SetTitle(u"Rename workspace");
+  rename_delegate_->SetButtonLabel(ui::mojom::DialogButton::kOk, u"Save");
+  auto body = std::make_unique<views::View>();
+  body->SetLayoutManager(std::make_unique<views::BoxLayout>(
+      views::BoxLayout::Orientation::kVertical, gfx::Insets(16), 8));
+  body->SetPreferredSize(gfx::Size(400, 110));
+  auto* field = body->AddChildView(std::make_unique<views::Textfield>());
+  field->SetID(1);
+  field->SetText(base::UTF8ToUTF16(item->name));
+  field->GetViewAccessibility().SetName(u"Workspace name");
+  auto* error = body->AddChildView(std::make_unique<views::Label>());
+  error->SetID(2);
+  error->SetMultiLine(true);
+  rename_delegate_->SetInitiallyFocusedView(field);
+  rename_delegate_->SetContentsView(std::move(body));
+  rename_delegate_->SetAcceptCallbackWithClose(base::BindRepeating(
+      [](base::WeakPtr<FlyWindowController> window, std::string id,
+         views::Textfield* field, views::Label* error) {
+        if (!window || window->closing_)
+          return true;
+        if (!window->workspaces_.Rename(id, base::UTF16ToUTF8(field->GetText()))) {
+          error->SetText(u"Use a unique, non-empty workspace name. "
+                         u"The workspace must still be editable.");
+          return false;
+        }
+        if (window->selected_ &&
+            window->entries_.at(window->selected_).workspace_id == id)
+          window->status_bar_->SetBrowser(window->selected_, std::u16string(field->GetText()));
+        return true;
+      }, weak_factory_.GetWeakPtr(), std::move(id), field, error));
+  rename_widget_.reset(views::DialogDelegate::CreateDialogWidget(
+      rename_delegate_.get(), desktop_->GetNativeWindow(),
+      desktop_->GetNativeView()));
+  rename_widget_->Show();
+  field->SelectAll(false);
 }
 
 std::vector<PaletteEntry> FlyWindowController::WorkspaceEntries() {
@@ -839,6 +923,7 @@ void FlyWindowController::OnBrowserDidClose(BrowserWindowInterface* browser) {
   if (last != last_windows_.end() && last->second.get() == browser)
     last_windows_.erase(last);
   if (selected_ == browser) {
+    CancelWorkspaceRename();
     hints_->Cancel();
     palette_->Cancel();
     workspace_picker_->Cancel();
@@ -933,6 +1018,7 @@ void FlyWindowController::ArmCloseCallback() {
       &FlyWindowController::RequestClose, weak_factory_.GetWeakPtr()));
 }
 void FlyWindowController::RequestClose(views::Widget::ClosedReason reason) {
+  CancelWorkspaceRename();
   ArmCloseCallback();
   if (closing_) {
     return;
@@ -956,6 +1042,7 @@ void FlyWindowController::RequestClose(views::Widget::ClosedReason reason) {
 }
 void FlyWindowController::OnClosingAllBrowsers(bool closing) {
   if (closing) {
+    CancelWorkspaceRename();
     hints_->Cancel();
     palette_->Cancel();
     workspace_picker_->Cancel();
@@ -1171,6 +1258,8 @@ bool FlyWindowController::RunCommand(BrowserWindowInterface* browser,
 
 namespace fly {
 void FlyWindowController::OnKeyEvent(ui::KeyEvent* event) {
+  if (rename_widget_ && !rename_widget_->IsClosed())
+    return;
   if (workspace_picker_->active()) {
     if (workspace_picker_->HandleOverlayKey(*event)) {
       event->SetHandled();

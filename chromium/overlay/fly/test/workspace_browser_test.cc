@@ -29,6 +29,7 @@
 #include "base/timer/timer.h"
 #include "ui/views/focus/focus_manager.h"
 #include "ui/views/widget/widget.h"
+#include "ui/views/window/dialog_delegate.h"
 #include "base/threading/thread_restrictions.h"
 #include "base/task/single_thread_task_runner.h"
 #include "ui/menus/simple_menu_model.h"
@@ -1679,6 +1680,121 @@ IN_PROC_BROWSER_TEST_F(FlyWorkspaceBrowserTest,
   prefs->SetDict(kWorkspacesPref, valid.Clone());
   EXPECT_EQ(first, window.selected_browser_for_testing());
   EXPECT_EQ(original_page, Active(first));
+}
+
+IN_PROC_BROWSER_TEST_F(FlyWorkspaceBrowserTest,
+                       WorkspacePointerRenamePreservesProfileAndRejectsStaleEdits) {
+  auto* first = browser();
+  ASSERT_TRUE(ui_test_utils::NavigateToURL(
+      first, embedded_test_server()->GetURL("/title1.html")));
+  auto* page = Active(first);
+  ASSERT_TRUE(content::ExecJs(page, "document.cookie='rename=first'"));
+  auto* second = SecondWorkspace();
+  ASSERT_TRUE(second);
+  auto& window = FlyWindowController::Get();
+  window.Select(first, true);
+  WorkspaceService service(*g_browser_process->local_state());
+  const auto before = service.Read();
+  ASSERT_TRUE(before);
+  ASSERT_EQ(2u, before->items.size());
+  const auto item = before->items.back();
+  const auto directory = second->GetProfile()->GetPath();
+  const auto tab_id = TabIdentity::Get(Active(second));
+  auto open = [&] {
+    views::View* row = nullptr;
+    ASSERT_TRUE(base::test::RunUntil([&] {
+      for (const auto& child : window.workspace_buttons_for_testing()->children()) {
+        auto* button = views::AsViewClass<views::MdTextButton>(child.get());
+        if (button && button->GetText() ==
+                          base::UTF8ToUTF16(service.Read()->items.back().name)) {
+          row = button;
+          return true;
+        }
+      }
+      return false;
+    }));
+    base::RepeatingTimer choose;
+    choose.Start(FROM_HERE, base::Milliseconds(1),
+        base::BindLambdaForTesting([&] {
+          auto* model = window.workspace_context_menu_for_testing(item.id);
+          if (!model)
+            return;
+          choose.Stop();
+          EXPECT_TRUE(model->IsEnabledAt(3));
+          model->ActivatedAt(3);
+        }));
+    ui::test::EventGenerator mouse(
+        window.desktop_widget()->GetNativeWindow()->GetRootWindow());
+    mouse.MoveMouseTo(row->GetBoundsInScreen().CenterPoint());
+    mouse.ClickRightButton();
+    ASSERT_TRUE(base::test::RunUntil([&] {
+      return window.workspace_rename_dialog_for_testing();
+    }));
+  };
+  open();
+  auto* dialog = window.workspace_rename_dialog_for_testing();
+  ASSERT_TRUE(dialog);
+  auto* field = views::AsViewClass<views::Textfield>(
+      dialog->GetContentsView()->GetViewByID(1));
+  ASSERT_TRUE(field);
+  ASSERT_TRUE(base::test::RunUntil([&] { return field->HasFocus(); }));
+  ExpectVisible(page, true);
+  EXPECT_EQ(first, window.selected_browser_for_testing());
+  auto* delegate = dialog->widget_delegate()->AsDialogDelegate();
+  ASSERT_TRUE(delegate);
+  field->SetText(base::UTF8ToUTF16(before->items.front().name));
+  delegate->AcceptDialog();
+  EXPECT_FALSE(dialog->IsClosed());
+  EXPECT_EQ(before->items, service.Read()->items);
+  auto* error = views::AsViewClass<views::Label>(
+      dialog->GetContentsView()->GetViewByID(2));
+  ASSERT_TRUE(error);
+  EXPECT_FALSE(error->GetText().empty());
+  field->SetText(u"Diseño / 日本語");
+  // Use the dialog's actual Return accelerator to submit the valid name.
+  ui::test::EventGenerator keys(dialog->GetNativeWindow()->GetRootWindow());
+  keys.PressKey(ui::VKEY_RETURN, ui::EF_NONE);
+  ASSERT_TRUE(base::test::RunUntil([&] {
+    return !window.workspace_rename_dialog_for_testing();
+  }));
+  ASSERT_TRUE(service.Read());
+  EXPECT_EQ("Diseño / 日本語", service.Read()->items.back().name);
+  EXPECT_EQ(item.id, service.Read()->items.back().id);
+  EXPECT_EQ(item.profile_directory, service.Read()->items.back().profile_directory);
+  EXPECT_EQ(directory, second->GetProfile()->GetPath());
+  EXPECT_EQ(tab_id, TabIdentity::Get(Active(second)));
+  EXPECT_EQ(first, window.selected_browser_for_testing());
+  EXPECT_EQ("rename=first", content::EvalJs(page, "document.cookie"));
+
+  open();
+  dialog = window.workspace_rename_dialog_for_testing();
+  ASSERT_TRUE(dialog);
+  ui::test::EventGenerator cancel(dialog->GetNativeWindow()->GetRootWindow());
+  cancel.PressKey(ui::VKEY_ESCAPE, ui::EF_NONE);
+  ASSERT_TRUE(base::test::RunUntil([&] {
+    return !window.workspace_rename_dialog_for_testing();
+  }));
+  EXPECT_EQ("Diseño / 日本語", service.Read()->items.back().name);
+
+  open();
+  dialog = window.workspace_rename_dialog_for_testing();
+  ASSERT_TRUE(dialog);
+  auto* prefs = g_browser_process->local_state();
+  const auto valid = prefs->GetDict(kWorkspacesPref).Clone();
+  auto future = valid.Clone();
+  future.Set("schema", 99);
+  prefs->SetDict(kWorkspacesPref, future.Clone());
+  dialog->widget_delegate()->AsDialogDelegate()->AcceptDialog();
+  EXPECT_FALSE(dialog->IsClosed());
+  EXPECT_EQ(future, prefs->GetDict(kWorkspacesPref));
+  prefs->SetDict(kWorkspacesPref, valid.Clone());
+  window.Select(second, true);
+  ASSERT_TRUE(base::test::RunUntil([&] {
+    return !window.workspace_rename_dialog_for_testing();
+  }));
+  EXPECT_EQ(*valid.FindList("items"),
+            *prefs->GetDict(kWorkspacesPref).FindList("items"));
+  EXPECT_EQ(item.id, service.Read()->active_id);
 }
 
 IN_PROC_BROWSER_TEST_F(FlyWorkspaceBrowserTest,

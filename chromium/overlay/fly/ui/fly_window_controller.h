@@ -33,6 +33,7 @@ namespace content {
 class WebContents;
 }
 namespace views {
+class DialogDelegate;
 class NativeViewHost;
 class MdTextButton;
 class View;
@@ -96,6 +97,7 @@ class FlyWindowController : public views::WidgetDelegate,
   bool CanShowWorkspacePicker() const { return workspaces_.Read().has_value(); }
   CommandPalette& workspace_picker() { return *workspace_picker_; }
   ui::SimpleMenuModel* workspace_context_menu_for_testing(std::string_view id) const;
+  views::Widget* workspace_rename_dialog_for_testing() const;
   bool CanTogglePrivate(BrowserWindowInterface* browser) const;
   views::View* workspace_buttons_for_testing() { return workspace_buttons_; }
   bool RunCommand(BrowserWindowInterface* browser, std::string_view action);
@@ -121,6 +123,8 @@ class FlyWindowController : public views::WidgetDelegate,
   void ChooseWorkspace(content::WebContents* source, std::string action);
   void OnWorkspacesChanged();
   void ReorderWorkspace(std::string id, int direction);
+  void RenameWorkspace(std::string id);
+  void CancelWorkspaceRename();
   void OnPreferencesChanged();
   std::vector<PaletteEntry> BookmarkEntries();
   void OnBookmarksChanged();
@@ -155,6 +159,8 @@ class FlyWindowController : public views::WidgetDelegate,
   std::unique_ptr<CommandPalette> workspace_picker_;
   std::map<std::string, base::WeakPtr<BrowserWindowInterface>> private_choices_;
   std::unique_ptr<KeyboardEditor> keyboard_editor_;
+  std::unique_ptr<views::DialogDelegate> rename_delegate_;
+  std::unique_ptr<views::Widget> rename_widget_;
   std::unique_ptr<KeyboardRouter> empty_router_;
   uint64_t empty_generation_ = 0;
   std::unique_ptr<ScopedKeepAlive> keep_alive_;
