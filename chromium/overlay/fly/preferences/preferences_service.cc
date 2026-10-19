@@ -4,6 +4,7 @@
 #include "fly/preferences/preferences_service.h"
 #include "fly/prefs/dictionary_store.h"
 
+#include <algorithm>
 #include <array>
 
 #include "base/strings/stringprintf.h"
@@ -13,6 +14,10 @@
 
 namespace fly {
 namespace {
+constexpr std::array kSuspendMinutes = {0, 5, 15, 30, 60};
+bool ValidSuspendMinutes(int minutes) {
+  return std::ranges::find(kSuspendMinutes, minutes) != kSuspendMinutes.end();
+}
 bool ValidFormat(std::string_view format) {
   return format == "datetime" || format == "time" || format == "seconds";
 }
@@ -71,7 +76,41 @@ bool PreferencesService::ValidStore() const {
       theme && (!theme->is_string() || (theme->GetString() != "dark" &&
                                         theme->GetString() != "light")))
     return false;
+  if (const auto* timeout = values->Find("tab_suspend_timeout_minutes");
+      timeout &&
+      (!timeout->is_int() || !ValidSuspendMinutes(timeout->GetInt())))
+    return false;
   return true;
+}
+std::optional<int> PreferencesService::ReadSuspendTimeoutMinutes() const {
+  if (!ValidStore())
+    return std::nullopt;
+  const auto* values =
+      local_state_->GetDict(kPreferencesPref).FindDict("values");
+  return values ? values->FindInt("tab_suspend_timeout_minutes").value_or(15)
+                : 15;
+}
+bool PreferencesService::CanEditSuspendTimeout() const {
+  return ReadSuspendTimeoutMinutes().has_value() &&
+         local_state_->FindPreference(kPreferencesPref)->IsUserModifiable();
+}
+bool PreferencesService::SetSuspendTimeoutMinutes(int minutes) {
+  if (!CanEditSuspendTimeout() || !ValidSuspendMinutes(minutes))
+    return false;
+  auto stored = local_state_->GetDict(kPreferencesPref).Clone();
+  stored.Set("schema", 1);
+  stored.EnsureDict("values")->Set("tab_suspend_timeout_minutes", minutes);
+  local_state_->SetDict(kPreferencesPref, std::move(stored));
+  return true;
+}
+bool PreferencesService::CycleSuspendTimeout() {
+  const auto minutes = ReadSuspendTimeoutMinutes();
+  if (!minutes)
+    return false;
+  const auto current = std::ranges::find(kSuspendMinutes, *minutes);
+  const auto index =
+      (current - kSuspendMinutes.begin() + 1) % kSuspendMinutes.size();
+  return SetSuspendTimeoutMinutes(kSuspendMinutes[index]);
 }
 std::optional<ThemePreferences> PreferencesService::ReadTheme() const {
   if (!ValidStore())

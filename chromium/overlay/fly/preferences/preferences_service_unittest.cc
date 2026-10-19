@@ -18,6 +18,77 @@ class PreferencesServiceTest : public testing::Test {
   TestingPrefServiceSimple prefs_;
   PreferencesService service_;
 };
+TEST_F(PreferencesServiceTest, SuspendTimeoutDefaultsAndDisabledChoicePersist) {
+  EXPECT_EQ(15, service_.ReadSuspendTimeoutMinutes());
+  EXPECT_EQ(nullptr, prefs_.GetUserPref(kPreferencesPref));
+  ASSERT_TRUE(service_.SetSuspendTimeoutMinutes(0));
+  PreferencesService restarted(prefs_);
+  EXPECT_EQ(0, restarted.ReadSuspendTimeoutMinutes());
+  for (int expected : {5, 15, 30, 60, 0}) {
+    ASSERT_TRUE(restarted.CycleSuspendTimeout());
+    EXPECT_EQ(expected, restarted.ReadSuspendTimeoutMinutes());
+  }
+}
+TEST_F(PreferencesServiceTest,
+       SuspendTimeoutRejectsInvalidAndPreservesMetadata) {
+  prefs_.SetDict(kPreferencesPref,
+                 base::DictValue()
+                     .Set("schema", 1)
+                     .Set("import", base::DictValue().Set("fixture", "keep"))
+                     .Set("values", base::DictValue()
+                                        .Set("show_clock", false)
+                                        .Set("unknown", "preserved")));
+  ASSERT_TRUE(service_.SetSuspendTimeoutMinutes(30));
+  auto before = prefs_.GetDict(kPreferencesPref).Clone();
+  EXPECT_FALSE(service_.SetSuspendTimeoutMinutes(-1));
+  EXPECT_FALSE(service_.SetSuspendTimeoutMinutes(1));
+  EXPECT_EQ(before, prefs_.GetDict(kPreferencesPref));
+  ASSERT_TRUE(service_.SetSuspendTimeoutMinutes(60));
+  const auto& stored = prefs_.GetDict(kPreferencesPref);
+  EXPECT_EQ(*before.FindDict("import"), *stored.FindDict("import"));
+  EXPECT_FALSE(*stored.FindDict("values")->FindBool("show_clock"));
+  EXPECT_EQ("preserved", *stored.FindDict("values")->FindString("unknown"));
+}
+TEST_F(PreferencesServiceTest, SuspendTimeoutCannotOverwriteRecoveryData) {
+  base::ListValue invalid;
+  invalid.Append("15");
+  invalid.Append(-1);
+  invalid.Append(10);
+  invalid.Append(true);
+  for (const auto& value : invalid) {
+    auto stored =
+        base::DictValue()
+            .Set("schema", 1)
+            .Set("values", base::DictValue().Set("tab_suspend_timeout_minutes",
+                                                 value.Clone()));
+    prefs_.SetDict(kPreferencesPref, stored.Clone());
+    EXPECT_FALSE(service_.ReadSuspendTimeoutMinutes());
+    EXPECT_FALSE(service_.CanEditSuspendTimeout());
+    EXPECT_FALSE(service_.SetSuspendTimeoutMinutes(15));
+    EXPECT_FALSE(service_.CycleSuspendTimeout());
+    EXPECT_EQ(stored, prefs_.GetDict(kPreferencesPref));
+  }
+  auto future =
+      base::DictValue().Set("schema", 99).Set("values", base::DictValue());
+  prefs_.SetDict(kPreferencesPref, future.Clone());
+  EXPECT_FALSE(service_.ReadSuspendTimeoutMinutes());
+  EXPECT_FALSE(service_.SetSuspendTimeoutMinutes(0));
+  EXPECT_EQ(future, prefs_.GetDict(kPreferencesPref));
+}
+TEST_F(PreferencesServiceTest, ManagedSuspendTimeoutReadsWithoutUserWrites) {
+  auto policy = base::DictValue()
+                    .Set("schema", 1)
+                    .Set("values", base::DictValue().Set(
+                                       "tab_suspend_timeout_minutes", 0));
+  prefs_.SetManagedPref(kPreferencesPref, base::Value(policy.Clone()));
+  EXPECT_EQ(0, service_.ReadSuspendTimeoutMinutes());
+  EXPECT_FALSE(service_.CanEditSuspendTimeout());
+  EXPECT_FALSE(service_.SetSuspendTimeoutMinutes(5));
+  EXPECT_FALSE(service_.CycleSuspendTimeout());
+  EXPECT_EQ(nullptr, prefs_.GetUserPref(kPreferencesPref));
+  EXPECT_EQ(policy, prefs_.GetDict(kPreferencesPref));
+}
+
 TEST_F(PreferencesServiceTest, ReadAndClockTicksDoNotWriteBeforeImport) {
   ASSERT_TRUE(service_.ReadClock());
   EXPECT_EQ(ClockPreferences(), *service_.ReadClock());

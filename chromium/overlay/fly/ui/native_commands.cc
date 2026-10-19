@@ -6,6 +6,7 @@
 
 #include <algorithm>
 #include <memory>
+#include <optional>
 #include "base/callback_list.h"
 #include "base/functional/bind.h"
 #include "components/performance_manager/public/freezing/freezing.h"
@@ -55,23 +56,34 @@ class TabSuspension : public content::WebContentsUserData<TabSuspension>,
   static bool Request(content::WebContents* contents);
   static void Resume(content::WebContents* contents);
   static bool Requested(content::WebContents* contents);
+  static bool MaybeAuto(content::WebContents* contents,
+                        base::TimeDelta timeout,
+                        base::TimeTicks now);
   ~TabSuspension() override;
 
   void OnVisibilityChanged(content::Visibility visibility) override;
   void DidStartLoading() override;
+  void DidStopLoading() override;
   void PrimaryPageChanged(content::Page&) override;
   void MediaStartedPlaying(const MediaPlayerInfo&,
                            const content::MediaPlayerId&) override;
+  void MediaStoppedPlaying(const MediaPlayerInfo&,
+                           const content::MediaPlayerId&,
+                           WebContentsObserver::MediaStoppedReason) override;
   void OnAudioStateChanged(bool audible) override;
   void AboutToBeDiscarded(content::WebContents*) override;
   void WasDiscarded() override;
   void WebContentsDestroyed() override;
   void DevToolsAgentHostAttached(content::DevToolsAgentHost* host) override;
+  void DevToolsAgentHostDetached(content::DevToolsAgentHost* host) override;
 
  private:
   friend class content::WebContentsUserData<TabSuspension>;
   explicit TabSuspension(content::WebContents* contents);
   static bool Eligible(content::WebContents* contents);
+  void Reset();
+  std::optional<base::TimeTicks> quiet_since_;
+  bool automatic_ = false;
   base::CallbackListSubscription pinned_subscription_;
   std::unique_ptr<performance_manager::freezing::FreezingVote> vote_;
   WEB_CONTENTS_USER_DATA_KEY_DECL();
@@ -85,10 +97,7 @@ TabSuspension::TabSuspension(content::WebContents* contents)
   content::DevToolsAgentHost::AddObserver(this);
   if (auto* tab = tabs::TabInterface::MaybeGetFromContents(contents)) {
     pinned_subscription_ = tab->RegisterPinnedStateChanged(base::BindRepeating(
-        [](TabSuspension* state, tabs::TabInterface*, bool pinned) {
-          if (pinned)
-            state->vote_.reset();
-        },
+        [](TabSuspension* state, tabs::TabInterface*, bool) { state->Reset(); },
         base::Unretained(this)));
   }
 }
@@ -129,6 +138,8 @@ bool TabSuspension::Request(content::WebContents* contents) {
     return false;
   CreateForWebContents(contents);
   auto* state = FromWebContents(contents);
+  state->automatic_ = false;
+  state->quiet_since_.reset();
   if (!state->vote_)
     state->vote_ =
         std::make_unique<performance_manager::freezing::FreezingVote>(contents);
@@ -138,7 +149,7 @@ void TabSuspension::Resume(content::WebContents* contents) {
   if (!contents)
     return;
   if (auto* state = FromWebContents(contents))
-    state->vote_.reset();
+    state->Reset();
 }
 bool TabSuspension::Requested(content::WebContents* contents) {
   if (!contents)
@@ -146,37 +157,84 @@ bool TabSuspension::Requested(content::WebContents* contents) {
   auto* state = FromWebContents(contents);
   return state && state->vote_;
 }
-void TabSuspension::OnVisibilityChanged(content::Visibility visibility) {
-  if (visibility != content::Visibility::HIDDEN)
-    vote_.reset();
+bool TabSuspension::MaybeAuto(content::WebContents* contents,
+                              base::TimeDelta timeout,
+                              base::TimeTicks now) {
+  if (!contents)
+    return false;
+  if (!Eligible(contents)) {
+    Resume(contents);
+    return false;
+  }
+  CreateForWebContents(contents);
+  auto* state = FromWebContents(contents);
+  if (!timeout.is_positive()) {
+    if (state->automatic_)
+      state->vote_.reset();
+    state->automatic_ = false;
+    state->quiet_since_.reset();
+    return false;
+  }
+  if (state->vote_)
+    return state->automatic_;
+  if (!state->quiet_since_ || now < *state->quiet_since_) {
+    state->quiet_since_ = now;
+    return false;
+  }
+  if (now - *state->quiet_since_ < timeout)
+    return false;
+  state->automatic_ = true;
+  state->vote_ =
+      std::make_unique<performance_manager::freezing::FreezingVote>(contents);
+  return true;
+}
+void TabSuspension::Reset() {
+  vote_.reset();
+  automatic_ = false;
+  quiet_since_.reset();
+}
+void TabSuspension::OnVisibilityChanged(content::Visibility) {
+  Reset();
 }
 void TabSuspension::DidStartLoading() {
-  vote_.reset();
+  Reset();
+}
+void TabSuspension::DidStopLoading() {
+  Reset();
 }
 void TabSuspension::PrimaryPageChanged(content::Page&) {
-  vote_.reset();
+  Reset();
 }
 void TabSuspension::MediaStartedPlaying(const MediaPlayerInfo&,
                                         const content::MediaPlayerId&) {
-  vote_.reset();
+  Reset();
 }
-void TabSuspension::OnAudioStateChanged(bool audible) {
-  if (audible)
-    vote_.reset();
+void TabSuspension::MediaStoppedPlaying(const MediaPlayerInfo&,
+                                        const content::MediaPlayerId&,
+                                        MediaStoppedReason) {
+  Reset();
+}
+void TabSuspension::OnAudioStateChanged(bool) {
+  Reset();
 }
 void TabSuspension::AboutToBeDiscarded(content::WebContents*) {
-  vote_.reset();
+  Reset();
 }
 void TabSuspension::WasDiscarded() {
-  vote_.reset();
+  Reset();
 }
 void TabSuspension::WebContentsDestroyed() {
-  vote_.reset();
+  Reset();
 }
 void TabSuspension::DevToolsAgentHostAttached(
     content::DevToolsAgentHost* host) {
   if (host->GetWebContents() == web_contents())
-    vote_.reset();
+    Reset();
+}
+void TabSuspension::DevToolsAgentHostDetached(
+    content::DevToolsAgentHost* host) {
+  if (host->GetWebContents() == web_contents())
+    quiet_since_.reset();
 }
 
 constexpr std::pair<std::string_view, int> kNativeMappings[] = {
@@ -376,6 +434,12 @@ void ResumeNativeTab(content::WebContents* contents) {
 }
 bool NativeTabSuspensionRequested(content::WebContents* contents) {
   return TabSuspension::Requested(contents);
+}
+
+bool MaybeAutoSuspendNativeTab(content::WebContents* contents,
+                               base::TimeDelta timeout,
+                               base::TimeTicks now) {
+  return TabSuspension::MaybeAuto(contents, timeout, now);
 }
 
 std::string NativeEventStroke(const input::NativeWebKeyboardEvent& event) {

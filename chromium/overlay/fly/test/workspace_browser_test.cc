@@ -1655,6 +1655,126 @@ IN_PROC_BROWSER_TEST_F(FlyNativeFreezeBrowserTest,
   EXPECT_EQ(73, content::EvalJs(other, "window.otherWorkspaceDraft"));
 }
 
+IN_PROC_BROWSER_TEST_F(
+    FlyNativeFreezeBrowserTest,
+    AutomaticSuspendUsesQuietDeadlineAndHonorsDisabledChoice) {
+  auto& window = FlyWindowController::Get();
+  ASSERT_TRUE(window.preferences().SetSuspendTimeoutMinutes(0));
+  ASSERT_TRUE(ui_test_utils::NavigateToURL(
+      browser(), embedded_test_server()->GetURL("/title1.html")));
+  auto* background = Active(browser());
+  ASSERT_TRUE(content::ExecJs(background, "window.autoSuspendDraft = 99;"));
+  ASSERT_TRUE(OpenNativeBlankTab(browser()));
+  ASSERT_TRUE(content::WaitForLoadStop(Active(browser())));
+  const auto now = base::TimeTicks::Now();
+  const auto timeout = base::Minutes(5);
+  auto frozen = [&] {
+    auto node = performance_manager::PerformanceManager::
+        GetPrimaryPageNodeForWebContents(background);
+    return node && node->GetLifecycleState() ==
+                       performance_manager::mojom::LifecycleState::kFrozen;
+  };
+  EXPECT_FALSE(MaybeAutoSuspendNativeTab(background, timeout, now));
+  EXPECT_FALSE(
+      MaybeAutoSuspendNativeTab(background, timeout, now + base::Minutes(4)));
+  EXPECT_FALSE(NativeTabSuspensionRequested(background));
+  EXPECT_TRUE(
+      MaybeAutoSuspendNativeTab(background, timeout, now + base::Minutes(6)));
+  ASSERT_TRUE(base::test::RunUntil(frozen));
+  ASSERT_TRUE(window.preferences().SetSuspendTimeoutMinutes(15));
+  ASSERT_TRUE(window.preferences().SetSuspendTimeoutMinutes(0));
+  ASSERT_TRUE(base::test::RunUntil([&] { return !frozen(); }));
+  EXPECT_FALSE(NativeTabSuspensionRequested(background));
+  EXPECT_EQ(99, content::EvalJs(background, "window.autoSuspendDraft"));
+  // Disabling the automatic timeout preserves an explicit manual request.
+  ASSERT_TRUE(RequestNativeTabSuspension(background));
+  ASSERT_TRUE(base::test::RunUntil(frozen));
+  ASSERT_TRUE(window.preferences().SetSuspendTimeoutMinutes(15));
+  ASSERT_TRUE(window.preferences().SetSuspendTimeoutMinutes(0));
+  EXPECT_TRUE(NativeTabSuspensionRequested(background));
+  EXPECT_TRUE(frozen());
+  ResumeNativeTab(background);
+  ASSERT_TRUE(base::test::RunUntil([&] { return !frozen(); }));
+  // Resume restarts the quiet interval instead of immediately refreezing.
+  EXPECT_FALSE(
+      MaybeAutoSuspendNativeTab(background, timeout, now + base::Minutes(9)));
+  EXPECT_FALSE(
+      MaybeAutoSuspendNativeTab(background, timeout, now + base::Minutes(13)));
+  EXPECT_TRUE(
+      MaybeAutoSuspendNativeTab(background, timeout, now + base::Minutes(15)));
+  ASSERT_TRUE(base::test::RunUntil(frozen));
+  auto* model = browser()->GetTabStripModel();
+  model->SetTabPinned(0, true);
+  ASSERT_TRUE(base::test::RunUntil([&] { return !frozen(); }));
+  EXPECT_FALSE(
+      MaybeAutoSuspendNativeTab(background, timeout, now + base::Minutes(20)));
+  model->SetTabPinned(0, false);
+  EXPECT_FALSE(
+      MaybeAutoSuspendNativeTab(background, timeout, now + base::Minutes(21)));
+  EXPECT_FALSE(
+      MaybeAutoSuspendNativeTab(background, timeout, now + base::Minutes(25)));
+  EXPECT_TRUE(
+      MaybeAutoSuspendNativeTab(background, timeout, now + base::Minutes(27)));
+  ASSERT_TRUE(base::test::RunUntil(frozen));
+  model->ActivateTabAt(0);
+  ASSERT_TRUE(base::test::RunUntil([&] { return !frozen(); }));
+  EXPECT_FALSE(NativeTabSuspensionRequested(background));
+  EXPECT_EQ(99, content::EvalJs(background, "window.autoSuspendDraft"));
+  EXPECT_EQ(false, content::EvalJs(background, "document.wasDiscarded"));
+}
+
+IN_PROC_BROWSER_TEST_F(
+    FlyWorkspaceBrowserTest,
+    PerformancePreferencesPreserveKeyboardDraftAndFutureData) {
+  auto& window = FlyWindowController::Get();
+  ASSERT_TRUE(window.preferences().SetSuspendTimeoutMinutes(0));
+  const auto keyboard_before = window.commands().Read();
+  ASSERT_TRUE(InvokeNativeCommand(browser(), "open-keyboard-settings"));
+  auto& editor = window.keyboard_editor();
+  ASSERT_TRUE(editor.active());
+  auto* draft = editor.field_for_testing("spawn-tab", false);
+  ASSERT_TRUE(draft);
+  draft->SetText(u"Ctrl+Alt+Y");
+  editor.ContentsChanged(draft, u"Ctrl+Alt+Y");
+  views::test::ButtonTestApi(editor.record_for_testing("spawn-tab", false))
+      .NotifyDefaultMouseClick();
+  ASSERT_TRUE(editor.recording());
+  editor.ShowPerformance();
+  EXPECT_FALSE(editor.recording());
+  auto* timeout = editor.suspension_timeout_for_testing();
+  ASSERT_TRUE(timeout);
+  ASSERT_TRUE(base::test::RunUntil([&] {
+    return timeout->IsDrawn() && !timeout->GetVisibleBounds().IsEmpty();
+  }));
+  EXPECT_TRUE(timeout->GetText().ends_with(u"Off"));
+  ui::test::EventGenerator input(
+      window.desktop_widget()->GetNativeWindow()->GetRootWindow());
+  input.MoveMouseTo(timeout->GetBoundsInScreen().CenterPoint());
+  input.ClickLeftButton();
+  ASSERT_TRUE(base::test::RunUntil(
+      [&] { return window.preferences().ReadSuspendTimeoutMinutes() == 5; }));
+  timeout->RequestFocus();
+  input.PressKey(ui::VKEY_SPACE, ui::EF_NONE);
+  ASSERT_TRUE(base::test::RunUntil(
+      [&] { return window.preferences().ReadSuspendTimeoutMinutes() == 15; }));
+  EXPECT_EQ(keyboard_before, window.commands().Read());
+  auto* prefs = g_browser_process->local_state();
+  const auto valid = prefs->GetDict(kPreferencesPref).Clone();
+  auto future = valid.Clone();
+  future.Set("schema", 99);
+  prefs->SetDict(kPreferencesPref, future.Clone());
+  EXPECT_FALSE(timeout->GetEnabled());
+  views::test::ButtonTestApi(timeout).NotifyDefaultMouseClick();
+  EXPECT_EQ(future, prefs->GetDict(kPreferencesPref));
+  prefs->SetDict(kPreferencesPref, valid.Clone());
+  EXPECT_TRUE(timeout->GetEnabled());
+  editor.ShowKeyboard();
+  draft = editor.field_for_testing("spawn-tab", false);
+  ASSERT_TRUE(draft);
+  EXPECT_EQ(u"Ctrl+Alt+Y", draft->GetText());
+  EXPECT_EQ(keyboard_before, window.commands().Read());
+}
+
 IN_PROC_BROWSER_TEST_F(FlyNativeFreezeBrowserTest,
                        GlobalMediaResumeWakesFrozenPausedNativeSession) {
   auto* first = browser();

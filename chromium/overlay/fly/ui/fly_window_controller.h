@@ -126,6 +126,9 @@ class FlyWindowController : public views::WidgetDelegate,
   void RenameWorkspace(std::string id);
   void CancelWorkspaceRename();
   void OnPreferencesChanged();
+  void UpdateSuspensionPolicy();
+  void SuspendIdleTabs();
+  void ResumeAllTabs();
   std::vector<PaletteEntry> BookmarkEntries();
   void OnBookmarksChanged();
   void OpenBookmark(content::WebContents* source, std::string url);
@@ -154,6 +157,7 @@ class FlyWindowController : public views::WidgetDelegate,
   std::optional<ThemePreferences> applied_theme_;
   PrefChangeRegistrar preferences_registrar_;
   base::RepeatingTimer clock_timer_;
+  base::RepeatingTimer suspension_timer_;
   std::unique_ptr<HintController> hints_;
   std::unique_ptr<CommandPalette> palette_;
   std::unique_ptr<CommandPalette> bookmark_picker_;

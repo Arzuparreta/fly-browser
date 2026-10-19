@@ -5,6 +5,7 @@
 #define FLY_UI_NATIVE_COMMANDS_H_
 #include <string>
 #include <string_view>
+#include "base/time/time.h"
 #include "content/public/browser/keyboard_event_processing_result.h"
 
 class BrowserWindowInterface;
@@ -24,6 +25,11 @@ bool OpenNativeBlankTab(BrowserWindowInterface* browser, int index = -1);
 bool RequestNativeTabSuspension(content::WebContents* contents);
 void ResumeNativeTab(content::WebContents* contents);
 bool NativeTabSuspensionRequested(content::WebContents* contents);
+// The scheduler supplies monotonic time. Protection/visibility changes reset
+// the quiet interval; a disabled timeout withdraws only automatic requests.
+bool MaybeAutoSuspendNativeTab(content::WebContents* contents,
+                               base::TimeDelta timeout,
+                               base::TimeTicks now);
 
 std::string NativeEventStroke(const input::NativeWebKeyboardEvent& event);
 std::u16string NativePageModeLabel(BrowserWindowInterface* browser);

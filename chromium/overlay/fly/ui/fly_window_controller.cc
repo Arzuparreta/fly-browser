@@ -302,6 +302,7 @@ FlyWindowController::~FlyWindowController() {
   CHECK(entries_.empty());
   weak_factory_.InvalidateWeakPtrs();
   clock_timer_.Stop();
+  suspension_timer_.Stop();
   preferences_registrar_.RemoveAll();
   rename_widget_.reset();
   rename_delegate_.reset();
@@ -383,6 +384,51 @@ void FlyWindowController::OnPreferencesChanged() {
     ui::NativeTheme::GetInstanceForWeb()->NotifyOnNativeThemeUpdated();
   }
   UpdateClock();
+  UpdateSuspensionPolicy();
+}
+
+void FlyWindowController::UpdateSuspensionPolicy() {
+  SuspendIdleTabs();
+  const auto minutes = preferences_.ReadSuspendTimeoutMinutes();
+  if (closing_ || !minutes || *minutes == 0) {
+    suspension_timer_.Stop();
+  } else if (!suspension_timer_.IsRunning()) {
+    suspension_timer_.Start(
+        FROM_HERE, base::Seconds(30),
+        base::BindRepeating(&FlyWindowController::SuspendIdleTabs,
+                            weak_factory_.GetWeakPtr()));
+  }
+}
+void FlyWindowController::SuspendIdleTabs() {
+  if (closing_)
+    return;
+  std::vector<base::WeakPtr<content::WebContents>> pages;
+  for (const auto& [browser, entry] : entries_) {
+    if (entry.browser_closed)
+      continue;
+    auto* model = browser->GetTabStripModel();
+    for (int index = 0; index < model->count(); ++index)
+      pages.push_back(model->GetWebContentsAt(index)->GetWeakPtr());
+  }
+  const auto timeout =
+      base::Minutes(preferences_.ReadSuspendTimeoutMinutes().value_or(0));
+  const auto now = base::TimeTicks::Now();
+  for (const auto& page : pages)
+    if (page)
+      MaybeAutoSuspendNativeTab(page.get(), timeout, now);
+}
+void FlyWindowController::ResumeAllTabs() {
+  std::vector<base::WeakPtr<content::WebContents>> pages;
+  for (const auto& [browser, entry] : entries_) {
+    if (entry.browser_closed)
+      continue;
+    auto* model = browser->GetTabStripModel();
+    for (int index = 0; index < model->count(); ++index)
+      pages.push_back(model->GetWebContentsAt(index)->GetWeakPtr());
+  }
+  for (const auto& page : pages)
+    if (page)
+      ResumeNativeTab(page.get());
 }
 
 void FlyWindowController::UpdateClock() {
@@ -1047,6 +1093,8 @@ void FlyWindowController::RequestClose(views::Widget::ClosedReason reason) {
   bookmark_picker_->Cancel();
   keyboard_editor_->Cancel();
   closing_ = true;
+  suspension_timer_.Stop();
+  ResumeAllTabs();
   if (entries_.empty()) {
     base::SingleThreadTaskRunner::GetCurrentDefault()->PostTask(
         FROM_HERE, base::BindOnce(&FlyWindowController::FinishClose,
@@ -1060,6 +1108,8 @@ void FlyWindowController::RequestClose(views::Widget::ClosedReason reason) {
 }
 void FlyWindowController::OnClosingAllBrowsers(bool closing) {
   if (closing) {
+    suspension_timer_.Stop();
+    ResumeAllTabs();
     CancelWorkspaceRename();
     hints_->Cancel();
     palette_->Cancel();
@@ -1068,6 +1118,8 @@ void FlyWindowController::OnClosingAllBrowsers(bool closing) {
     keyboard_editor_->Cancel();
   }
   closing_ = closing;
+  if (!closing)
+    UpdateSuspensionPolicy();
   if (closing && entries_.empty()) {
     base::SingleThreadTaskRunner::GetCurrentDefault()->PostTask(
         FROM_HERE, base::BindOnce(&FlyWindowController::FinishClose,
@@ -1084,6 +1136,7 @@ void FlyWindowController::FinishClose() {
 void FlyWindowController::OnWidgetDestroying(views::Widget* widget) {
   if (widget == desktop_.get()) {
     clock_timer_.Stop();
+    suspension_timer_.Stop();
     preferences_registrar_.RemoveAll();
     return;
   }

@@ -42,16 +42,25 @@ workspace ordering and rename, retained-document suspension, workspace-scoped
 resume, global playback waking a frozen paused session, both native memory discard
 paths and stable identity/collision protection. It is not full product acceptance.
 
-The final PR head adds native asynchronous workspace-load cancellation and page
-pointer/keyboard focus cases. Their pinned Clang checks, npm tests, documentation
-build and whitespace checks pass; their full runtime execution remains pending.
+The latest published PR head `27f6838` passes 53 service cases, all 62 browser
+declarations (60 main cases and two PRE stages), video/MV3 and audio/PCM. This
+includes the asynchronous workspace-load cancellation and actual pointer/input
+focus cases. Its independent audit verifies the clean commit, source case set,
+summary freshness/hash and overlay fingerprint
+`6a5165fa8fac50aad9c76eb2ef8c2e100b0b9c55f153b769587a7d9b055dceeb`.
+Pinned Clang, npm tests, documentation and whitespace checks also pass.
 Retained Electron keyboard recorder/editable validation passes with disposable
-profiles. The external XTest compositor probe still fails to focus/type into its
-page field with guessed screen coordinates, even with a disposable i3 manager;
-keys reach the native address bar. Keep that evidence unresolved until actual
-native geometry/desktop input establishes the cause. A candidate Aura activation
-change was rejected because its original browser reproducer passed without it.
-No focus/visibility/media emulation is used to repair product behavior.
+profiles. Three strict physical-input runs also pass in separate disposable
+i3/Xvfb sessions: click/typing reaches the actual field, the workspace overlay
+blurs the renderer without hiding the page, and Escape permits continued editing
+of the same text. Their fixture directories are `native-workspace-physical-yewmVJ`,
+`native-workspace-physical-d1UhUj` and `native-workspace-physical-ILAxZZ`.
+Earlier captures queried zero outer-window dimensions and stale viewport
+geometry immediately after DOM readiness. Waiting for initial native
+compositor/layout readiness yields the passing physical runs. Direct CDP input
+focus is not a substitute for this test. A speculative Aura activation change
+was rejected because the native regression already passed without it. No
+focus/visibility/media emulation repairs product behavior.
 
 Runtime archives under `/mnt/storage/fly-chromium/evidence/` preserve the actual
 commits and both passing/failed attempts:
@@ -72,14 +81,17 @@ commits and both passing/failed attempts:
 
 Before changing frozen source or engine files, inspect user units
 `fly-chromium-native-build.service`, `fly-chromium-native-acceptance.service` and
-`fly-chromium-native-summary-audit.service`. The sidebar worktree is frozen at
-original `52d0f65` until its results are archived, then moves to the latest PR 124
-head for the remaining cases. Current logs are under the engine root as
+`fly-chromium-native-summary-audit.service`. The sidebar worktree is frozen at PR 124 head `27f6838`; all three units completed
+successfully. Archive this evidence before moving it to the independent automatic
+suspension branch. The remote PR 124 head and hosted matrices remain unchanged. Current logs are under the engine root as
 `current-build-systemd.log`, `current-acceptance-systemd.log` and
 `current-summary-audit.log`; JSON/per-stage logs live in `evidence/`.
 
-Next: validate the two latest browser cases and the latest-head hosted matrices,
-repair failures, then merge PR 124 only after every gate passes. Continue native
+Next: finish the PR 124 latest-head hosted matrices 39193424988 (objects) and
+39193426993 (services), repair failures, then merge only after every gate passes.
+Independent local work on `codex/chromium-native-suspension-timeout` adds the
+remaining automatic suspension preference, native Performance UI and scheduler;
+it must pass its own complete runtime before acceptance. Continue native
 Fly address/window UI, workspace deletion/transfers, remaining commands,
 preferences/services, migration, all-platform packages, update rehearsals and
 the full acceptance matrix through M6. Electron remains production. No owner
@@ -1682,3 +1694,34 @@ no WebContents::Focus call or CDP input/emulation to establish page focus, and
 logs renderer/desktop geometry on failure. Execution is pending. This does not
 resolve the external capture discrepancy or establish packaged desktop input
 acceptance by itself.
+
+
+### Automatic native suspension timeout and Performance preferences
+
+The native preference service validates the existing 0/5/15/30/60-minute contract,
+with 15 as the missing default and 0 as an explicit disabled choice. Reads/ticks
+never create a preference write; changes preserve unrelated and unknown metadata.
+Malformed/future stores and policy-managed values cannot be overwritten.
+A native Performance tab edits this setting immediately with pointer or keyboard,
+without applying/discarding an existing keyboard-binding draft or leaving its
+recorder active when switching sections.
+
+A thirty-second desktop scheduler snapshots live native tab identities and
+requests freezing only after a continuously quiet eligible hidden interval.
+Visibility, navigation/loading, pinning, playback, debugger transitions and
+manual resume reset that interval. Disabled or unreadable settings immediately
+withdraw automatic requests; an explicit manual suspension remains a separate
+choice until a resume/protection event. This deliberately gives the disabled
+setting an automatic-only scope; the legacy periodic scan resumes every frozen
+page when its timeout is zero, including manual requests. App close withdraws all Fly requests before native beforeunload handling;
+close cancellation restarts the configured scheduler. Native Chromium still owns
+actual freezing, connected-page eligibility and its protection grace periods.
+
+Four native service cases cover defaults, disabled/restart persistence, allowed
+values, metadata preservation, malformed/future data and managed precedence.
+Two browser cases drive controlled monotonic scheduler ticks through actual
+native graph freeze/unfreeze and retained document assertions, and use the
+Performance control with real pointer/Space input while checking keyboard drafts
+and future-store refusal. Pinned compile, Electron recorder/editable regression
+and the full native run remain required; no new automatic-suspension acceptance
+is claimed before those results.
