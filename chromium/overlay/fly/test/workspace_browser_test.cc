@@ -39,6 +39,7 @@
 #include "base/timer/timer.h"
 #include "base/uuid.h"
 #include "base/version_info/version_info.h"
+#include "chrome/app/chrome_command_ids.h"
 #include "chrome/browser/browser_process.h"
 #include "chrome/browser/devtools/devtools_window.h"
 #include "chrome/browser/extensions/chrome_test_extension_loader.h"
@@ -134,6 +135,55 @@ class FlyWorkspaceBrowserTest : public InProcessBrowserTest {
       FlyWindowController::Get().Select(second, true);
     }
     return second;
+  }
+  void ChooseMoveDestination(BrowserWindowInterface* source,
+                             const std::string& name,
+                             bool pointer = false) {
+    auto& window = FlyWindowController::Get();
+    window.Select(source, true);
+    if (pointer) {
+      auto* contents = Active(source);
+      ASSERT_TRUE(base::test::RunUntil([&] {
+        return window.tab_sidebar_for_testing()->row_for_testing(contents);
+      }));
+      auto* row = window.tab_sidebar_for_testing()->row_for_testing(contents);
+      base::RepeatingTimer choose;
+      choose.Start(
+          FROM_HERE, base::Milliseconds(1), base::BindLambdaForTesting([&] {
+            auto* menu =
+                window.tab_sidebar_for_testing()->context_menu_for_testing();
+            if (!menu)
+              return;
+            choose.Stop();
+            for (size_t i = 0; i < menu->GetItemCount(); ++i) {
+              if (menu->GetLabelAt(i) == u"Move to workspace…") {
+                EXPECT_TRUE(menu->IsEnabledAt(i));
+                menu->ActivatedAt(i);
+                return;
+              }
+            }
+            ADD_FAILURE() << "Native tab menu is missing Move to workspace";
+            window.tab_sidebar_for_testing()->CloseContextMenu();
+          }));
+      ui::test::EventGenerator mouse(
+          window.desktop_widget()->GetNativeWindow()->GetRootWindow());
+      mouse.MoveMouseTo(row->GetBoundsInScreen().CenterPoint());
+      mouse.ClickRightButton();
+    } else {
+      ASSERT_TRUE(InvokeNativeCommand(source, "move-tab-to-workspace"));
+    }
+    auto& picker = window.tab_move_picker();
+    ASSERT_TRUE(base::test::RunUntil([&] {
+      return picker.active() && picker.search_for_testing()->HasFocus();
+    }));
+    auto* search = picker.search_for_testing();
+    search->SetText(base::UTF8ToUTF16(name));
+    picker.ContentsChanged(search, std::u16string(search->GetText()));
+    ASSERT_EQ(1u, picker.result_count_for_testing());
+    ui::test::EventGenerator keys(
+        window.desktop_widget()->GetNativeWindow()->GetRootWindow());
+    keys.PressKey(ui::VKEY_RETURN, ui::EF_NONE);
+    keys.ReleaseKey(ui::VKEY_RETURN, ui::EF_NONE);
   }
   void OpenWorkspaceRemoval(const Workspace& item) {
     auto& window = FlyWindowController::Get();
@@ -2211,6 +2261,261 @@ IN_PROC_BROWSER_TEST_F(FlyWorkspaceBrowserTest,
   EXPECT_EQ(item.id, service.Read()->active_id);
 }
 
+IN_PROC_BROWSER_TEST_F(FlyWorkspaceBrowserTest,
+                       NativeTabMoveUsesDestinationIdentityAndNativeRestore) {
+  auto* destination = browser();
+  ASSERT_TRUE(ui_test_utils::NavigateToURL(
+      destination, embedded_test_server()->GetURL("/title1.html")));
+  ASSERT_TRUE(content::ExecJs(Active(destination),
+                              "document.cookie='move=destination'; "
+                              "localStorage.identity='destination'"));
+  destination->GetTabStripModel()->SetTabPinned(0, true);
+  auto* source = SecondWorkspace();
+  ASSERT_TRUE(source);
+  ASSERT_TRUE(ui_test_utils::NavigateToURL(
+      source, embedded_test_server()->GetURL("/title1.html")));
+  auto* contents = Active(source);
+  ASSERT_TRUE(content::ExecJs(
+      contents,
+      "document.cookie='move=source'; localStorage.identity='source'; "
+      "window.unsavedMove='source-only'"));
+  source->GetTabStripModel()->SetTabPinned(0, true);
+  SetTabAudioMuted(contents, true, TabMutedReason::kAudioIndicator, {});
+  const auto id = TabIdentity::Get(contents);
+  const auto native_id = extensions::ExtensionTabUtil::GetTabId(contents);
+  const auto source_profile = source->GetProfile()->GetPath();
+  const auto source_weak = contents->GetWeakPtr();
+  WorkspaceService service(*g_browser_process->local_state());
+  const auto catalog = service.Read();
+  ASSERT_TRUE(catalog && catalog->items.size() == 2);
+  ChooseMoveDestination(source, catalog->items.front().name, true);
+  auto& window = FlyWindowController::Get();
+  ASSERT_TRUE(base::test::RunUntil([&] {
+    return !source_weak && !window.tab_move_pending_for_testing() &&
+           window.selected_browser_for_testing() == destination;
+  }));
+  auto* moved = Active(destination);
+  ASSERT_TRUE(moved);
+  ASSERT_TRUE(content::WaitForLoadStop(moved));
+  EXPECT_EQ(destination->GetProfile(), moved->GetBrowserContext());
+  EXPECT_NE(source_profile, destination->GetProfile()->GetPath());
+  EXPECT_EQ(id, TabIdentity::Get(moved));
+  EXPECT_NE(native_id, extensions::ExtensionTabUtil::GetTabId(moved));
+  EXPECT_TRUE(destination->GetTabStripModel()->IsTabPinned(1));
+  EXPECT_EQ(1, destination->GetTabStripModel()->active_index());
+  EXPECT_TRUE(moved->IsAudioMuted());
+  EXPECT_EQ("move=destination", content::EvalJs(moved, "document.cookie"));
+  EXPECT_EQ("destination", content::EvalJs(moved, "localStorage.identity"));
+  EXPECT_EQ(true,
+            content::EvalJs(moved, "typeof window.unsavedMove==='undefined'"));
+  ExpectVisible(moved, true);
+  auto moved_weak = moved->GetWeakPtr();
+  destination->GetTabStripModel()->CloseWebContents(
+      moved, TabCloseTypes::CLOSE_USER_GESTURE |
+                 TabCloseTypes::CLOSE_CREATE_HISTORICAL_TAB);
+  ASSERT_TRUE(base::test::RunUntil([&] { return !moved_weak; }));
+  ASSERT_TRUE(chrome::IsCommandEnabled(destination, IDC_RESTORE_TAB));
+  chrome::ExecuteCommand(destination, IDC_RESTORE_TAB);
+  ASSERT_TRUE(base::test::RunUntil([&] {
+    return destination->GetTabStripModel()->count() == 2 &&
+           TabIdentity::Get(Active(destination)) == id;
+  }));
+  EXPECT_EQ(destination->GetProfile(),
+            Active(destination)->GetBrowserContext());
+  EXPECT_EQ(catalog->items, service.Read()->items);
+}
+
+IN_PROC_BROWSER_TEST_F(FlyWorkspaceBrowserTest,
+                       NativeTabMoveCancellationAndLostDestinationKeepSource) {
+  auto* source = SecondWorkspace();
+  ASSERT_TRUE(source);
+  auto* destination = SecondWorkspace();
+  ASSERT_TRUE(destination);
+  auto destination_weak = destination->GetWeakPtr();
+  ASSERT_TRUE(ui_test_utils::NavigateToURL(
+      source, embedded_test_server()->GetURL("/title1.html")));
+  auto* contents = Active(source);
+  auto source_weak = contents->GetWeakPtr();
+  const auto id = TabIdentity::Get(contents);
+  ASSERT_TRUE(
+      content::ExecJs(contents,
+                      "document.cookie='move=kept'; window.unsavedMove='kept'; "
+                      "window.onbeforeunload=()=> 'unsaved'"));
+  content::PrepContentsForBeforeUnloadTest(contents);
+  WorkspaceService service(*g_browser_process->local_state());
+  const auto catalog = service.Read();
+  ASSERT_TRUE(catalog && catalog->items.size() == 3);
+  const auto destination_name = catalog->items.back().name;
+  FlyWindowController::Get().Select(source, true);
+  const int destination_count = destination->GetTabStripModel()->count();
+  ChooseMoveDestination(source, destination_name);
+  auto* dialog = ui_test_utils::WaitForAppModalDialog();
+  ASSERT_TRUE(dialog && dialog->is_before_unload_dialog());
+  EXPECT_EQ(destination_count, destination->GetTabStripModel()->count());
+  dialog->view()->CancelAppModalDialog();
+  auto& window = FlyWindowController::Get();
+  ASSERT_TRUE(base::test::RunUntil(
+      [&] { return !window.tab_move_pending_for_testing(); }));
+  EXPECT_TRUE(source_weak);
+  EXPECT_EQ("kept", content::EvalJs(contents, "window.unsavedMove"));
+  EXPECT_EQ(id, TabIdentity::Get(contents));
+  EXPECT_EQ(destination_count, destination->GetTabStripModel()->count());
+  ChooseMoveDestination(source, destination_name);
+  dialog = ui_test_utils::WaitForAppModalDialog();
+  ASSERT_TRUE(dialog && dialog->is_before_unload_dialog());
+  destination->GetWindow()->Close();
+  ASSERT_TRUE(base::test::RunUntil([&] { return !destination_weak; }));
+  // User consent cannot close the source when its prepared destination is gone.
+  dialog->view()->AcceptAppModalDialog();
+  ASSERT_TRUE(base::test::RunUntil(
+      [&] { return !window.tab_move_pending_for_testing(); }));
+  ASSERT_TRUE(source_weak);
+  EXPECT_EQ(source, window.selected_browser_for_testing());
+  EXPECT_EQ("kept", content::EvalJs(contents, "window.unsavedMove"));
+  EXPECT_EQ("move=kept", content::EvalJs(contents, "document.cookie"));
+  EXPECT_EQ(id, TabIdentity::Get(contents));
+  EXPECT_EQ(catalog->items, service.Read()->items);
+  ASSERT_TRUE(content::ExecJs(contents, "window.onbeforeunload=null"));
+}
+
+IN_PROC_BROWSER_TEST_F(
+    FlyWorkspaceBrowserTest,
+    NativeTabMoveKeepsPrivateDestinationAndPersistentStateSeparate) {
+  auto* normal_source = SecondWorkspace();
+  ASSERT_TRUE(normal_source);
+  ASSERT_TRUE(ui_test_utils::NavigateToURL(
+      normal_source, embedded_test_server()->GetURL("/title1.html")));
+  ASSERT_TRUE(content::ExecJs(Active(normal_source),
+                              "document.cookie='move=normal-source'"));
+  auto& window = FlyWindowController::Get();
+  ASSERT_TRUE(window.RunCommand(normal_source, "toggle-private-mode"));
+  ASSERT_TRUE(base::test::RunUntil(
+      [&] { return window.selected_browser_for_testing() != normal_source; }));
+  auto* private_source = window.selected_browser_for_testing();
+  ASSERT_TRUE(private_source && private_source->GetProfile()->IsOffTheRecord());
+  ASSERT_TRUE(ui_test_utils::NavigateToURL(
+      private_source, embedded_test_server()->GetURL("/title1.html")));
+  auto* source = Active(private_source);
+  auto source_weak = source->GetWeakPtr();
+  const auto id = TabIdentity::Get(source);
+  ASSERT_TRUE(content::ExecJs(source, "document.cookie='move=private-source'"));
+  window.Select(browser(), true);
+  ASSERT_TRUE(ui_test_utils::NavigateToURL(
+      browser(), embedded_test_server()->GetURL("/title1.html")));
+  ASSERT_TRUE(content::ExecJs(Active(browser()),
+                              "document.cookie='move=normal-destination'"));
+  ASSERT_TRUE(window.RunCommand(browser(), "toggle-private-mode"));
+  ASSERT_TRUE(base::test::RunUntil(
+      [&] { return window.selected_browser_for_testing() != browser(); }));
+  auto* destination = window.selected_browser_for_testing();
+  ASSERT_TRUE(destination && destination->GetProfile()->IsOffTheRecord());
+  ASSERT_TRUE(ui_test_utils::NavigateToURL(
+      destination, embedded_test_server()->GetURL("/title1.html")));
+  ASSERT_TRUE(content::ExecJs(Active(destination),
+                              "document.cookie='move=private-destination'"));
+  WorkspaceService service(*g_browser_process->local_state());
+  const auto catalog = service.Read();
+  ASSERT_TRUE(catalog);
+  window.Select(private_source, true);
+  ChooseMoveDestination(private_source,
+                        "Private · " + catalog->items.front().name);
+  ASSERT_TRUE(base::test::RunUntil([&] {
+    return !source_weak && !window.tab_move_pending_for_testing() &&
+           window.selected_browser_for_testing() == destination;
+  }));
+  auto* moved = Active(destination);
+  ASSERT_TRUE(content::WaitForLoadStop(moved));
+  EXPECT_TRUE(destination->GetProfile()->IsOffTheRecord());
+  EXPECT_EQ(destination->GetProfile(), moved->GetBrowserContext());
+  EXPECT_EQ(id, TabIdentity::Get(moved));
+  EXPECT_EQ("move=private-destination",
+            content::EvalJs(moved, "document.cookie"));
+  EXPECT_EQ("move=normal-source",
+            content::EvalJs(Active(normal_source), "document.cookie"));
+  EXPECT_EQ("move=normal-destination",
+            content::EvalJs(Active(browser()), "document.cookie"));
+  std::map<std::string, std::string> extra;
+  TabIdentity::Populate(moved, &extra);
+  EXPECT_TRUE(extra.empty());
+  EXPECT_FALSE(TabIdentity::CanPersist(moved));
+  EXPECT_EQ(catalog->items, service.Read()->items);
+  EXPECT_EQ(catalog->active_id, service.Read()->active_id);
+}
+
+IN_PROC_BROWSER_TEST_F(FlyWorkspaceBrowserTest,
+                       NativeTabMoveOpensPreviouslyUnloadedDestinationProfile) {
+  auto* source = SecondWorkspace();
+  ASSERT_TRUE(source);
+  ASSERT_TRUE(ui_test_utils::NavigateToURL(
+      source, embedded_test_server()->GetURL("/title1.html")));
+  auto source_weak = Active(source)->GetWeakPtr();
+  const auto id = TabIdentity::Get(Active(source));
+  ASSERT_TRUE(content::ExecJs(Active(source), "document.cookie='move=source'"));
+  auto* manager = g_browser_process->profile_manager();
+  const auto path = manager->GenerateNextProfileDirectoryPath();
+  WorkspaceService service(*g_browser_process->local_state());
+  const auto destination =
+      service.Add("Dormant destination", path.BaseName().AsUTF8Unsafe());
+  ASSERT_TRUE(destination);
+  EXPECT_EQ(nullptr, manager->GetProfileByPath(path));
+  const auto before = service.Read();
+  ChooseMoveDestination(source, destination->name);
+  auto& window = FlyWindowController::Get();
+  ASSERT_TRUE(base::test::RunUntil(
+      [&] { return !source_weak && !window.tab_move_pending_for_testing(); }));
+  auto* target = window.selected_browser_for_testing();
+  ASSERT_TRUE(target);
+  EXPECT_EQ(path, target->GetProfile()->GetPath());
+  auto* moved = Active(target);
+  ASSERT_TRUE(moved);
+  ASSERT_TRUE(content::WaitForLoadStop(moved));
+  EXPECT_EQ(id, TabIdentity::Get(moved));
+  EXPECT_EQ("", content::EvalJs(moved, "document.cookie"));
+  EXPECT_EQ(before->items, service.Read()->items);
+  EXPECT_EQ(destination->id, service.Read()->active_id);
+}
+
+IN_PROC_BROWSER_TEST_F(
+    FlyWorkspaceBrowserTest,
+    NativePrivateTabMoveLoadsDestinationWithoutPersistingItsUrl) {
+  auto* normal_source = SecondWorkspace();
+  ASSERT_TRUE(normal_source);
+  auto& window = FlyWindowController::Get();
+  ASSERT_TRUE(window.RunCommand(normal_source, "toggle-private-mode"));
+  ASSERT_TRUE(base::test::RunUntil(
+      [&] { return window.selected_browser_for_testing() != normal_source; }));
+  auto* source = window.selected_browser_for_testing();
+  ASSERT_TRUE(source && source->GetProfile()->IsOffTheRecord());
+  ASSERT_TRUE(ui_test_utils::NavigateToURL(
+      source, embedded_test_server()->GetURL("/title1.html")));
+  auto source_weak = Active(source)->GetWeakPtr();
+  const auto id = TabIdentity::Get(Active(source));
+  ASSERT_TRUE(
+      content::ExecJs(Active(source), "document.cookie='move=private-source'"));
+  auto* manager = g_browser_process->profile_manager();
+  const auto path = manager->GenerateNextProfileDirectoryPath();
+  WorkspaceService service(*g_browser_process->local_state());
+  const auto target = service.Add("Dormant private destination",
+                                  path.BaseName().AsUTF8Unsafe());
+  ASSERT_TRUE(target);
+  const auto before = service.Read();
+  EXPECT_EQ(nullptr, manager->GetProfileByPath(path));
+  ChooseMoveDestination(source, "Private · " + target->name);
+  ASSERT_TRUE(base::test::RunUntil(
+      [&] { return !source_weak && !window.tab_move_pending_for_testing(); }));
+  auto* destination = window.selected_browser_for_testing();
+  ASSERT_TRUE(destination && destination->GetProfile()->IsOffTheRecord());
+  EXPECT_EQ(path, destination->GetProfile()->GetOriginalProfile()->GetPath());
+  auto* moved = Active(destination);
+  ASSERT_TRUE(moved);
+  ASSERT_TRUE(content::WaitForLoadStop(moved));
+  EXPECT_EQ(id, TabIdentity::Get(moved));
+  EXPECT_EQ("", content::EvalJs(moved, "document.cookie"));
+  EXPECT_FALSE(TabIdentity::CanPersist(moved));
+  EXPECT_EQ(before->items, service.Read()->items);
+  EXPECT_EQ(before->active_id, service.Read()->active_id);
+}
+
 IN_PROC_BROWSER_TEST_F(
     FlyWorkspaceBrowserTest,
     WorkspaceRemovalCancelsBeforeUnloadThenRetiresAllWindows) {
@@ -3414,9 +3719,9 @@ IN_PROC_BROWSER_TEST_F(FlyTabMenuBrowserTest,
   auto* selected = Active(browser());
   ASSERT_NE(target, selected);
   Menu(target, base::BindOnce([](ui::SimpleMenuModel* menu) {
-    EXPECT_EQ(12u, menu->GetItemCount());
-    EXPECT_FALSE(menu->IsEnabledAt(Item(menu, u"Reopen closed tab")));
-  }));
+         EXPECT_EQ(13u, menu->GetItemCount());
+         EXPECT_FALSE(menu->IsEnabledAt(Item(menu, u"Reopen closed tab")));
+       }));
   EXPECT_EQ(selected, Active(browser()));
   Choose(target, u"Pin");
   ASSERT_TRUE(base::test::RunUntil([&] { return model->IsTabPinned(0); }));

@@ -521,6 +521,12 @@ bool NativeCommandAvailable(BrowserWindowInterface* browser,
                             std::string_view action) {
   if (!browser)
     return false;
+  if (action == "move-tab-to-workspace") {
+    const auto* window = FlyWindowController::GetIfCreated();
+    return window &&
+           window->CanMoveTab(
+               browser, browser->GetTabStripModel()->GetActiveWebContents());
+  }
   if (action == "toggle-dashboard") {
     const auto* window = FlyWindowController::GetIfCreated();
     return window && window->IsSelected(browser) &&

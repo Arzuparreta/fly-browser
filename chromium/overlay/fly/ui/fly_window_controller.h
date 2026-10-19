@@ -53,6 +53,7 @@ class TabSidebar;
 class HintController;
 class KeyboardRouter;
 class WorkspaceCloseTransaction;
+class TabMoveTransaction;
 // One OS window. Each entry keeps an upstream BrowserView/BrowserWidget, native
 // tab model, profile and extension window ID. Its NativeWidgetAura does not
 // create an OS window. NativeViewHost controls actual clipping and visibility.
@@ -106,6 +107,12 @@ class FlyWindowController : public views::WidgetDelegate,
   bool CanTogglePrivate(BrowserWindowInterface* browser) const;
   views::View* workspace_buttons_for_testing() { return workspace_buttons_; }
   bool RunCommand(BrowserWindowInterface* browser, std::string_view action);
+  bool CanMoveTab(BrowserWindowInterface* browser,
+                  content::WebContents* contents) const;
+  bool ShowTabMovePicker(BrowserWindowInterface* browser,
+                         content::WebContents* contents);
+  CommandPalette& tab_move_picker() { return *tab_move_picker_; }
+  bool tab_move_pending_for_testing() const { return bool(tab_move_); }
 
   void OnKeyEvent(ui::KeyEvent* event) override;
 
@@ -137,6 +144,18 @@ class FlyWindowController : public views::WidgetDelegate,
   void FinishWorkspaceRemoval(std::string id,
                               base::FilePath path,
                               bool success);
+  std::vector<PaletteEntry> TabMoveEntries() const;
+  bool TabMoveDestinationAvailable(std::string_view action) const;
+  void ChooseTabMoveDestination(content::WebContents* source,
+                                std::string action);
+  bool ValidateTabMove(base::WeakPtr<BrowserWindowInterface> source_browser,
+                       base::WeakPtr<content::WebContents> source,
+                       const std::string& destination_id,
+                       const base::FilePath& destination_path,
+                       bool require_selection) const;
+  void FinishTabMove(bool success,
+                     base::WeakPtr<BrowserWindowInterface> destination,
+                     base::WeakPtr<content::WebContents> contents);
   void OnPreferencesChanged();
   void UpdateSuspensionPolicy();
   void SuspendIdleTabs();
@@ -174,6 +193,10 @@ class FlyWindowController : public views::WidgetDelegate,
   std::unique_ptr<CommandPalette> palette_;
   std::unique_ptr<CommandPalette> bookmark_picker_;
   std::unique_ptr<CommandPalette> workspace_picker_;
+  std::unique_ptr<CommandPalette> tab_move_picker_;
+  base::WeakPtr<BrowserWindowInterface> move_source_browser_;
+  base::WeakPtr<content::WebContents> move_source_;
+  std::unique_ptr<TabMoveTransaction> tab_move_;
   std::map<std::string, base::WeakPtr<BrowserWindowInterface>> private_choices_;
   std::unique_ptr<KeyboardEditor> keyboard_editor_;
   std::unique_ptr<views::DialogDelegate> rename_delegate_;

@@ -5,8 +5,9 @@ Full product, migration and packaged application acceptance remain outstanding.
 
 ## Current checkpoint
 
-Merged main is `8492cc9` through PR
-[124](https://github.com/Arzuparreta/fly-browser/pull/124), squash-merged after
+Merged main is `00d6a2e` through PR
+[125](https://github.com/Arzuparreta/fly-browser/pull/125), following PR
+[124](https://github.com/Arzuparreta/fly-browser/pull/124). Both were squash-merged after
 all ordinary checks and both latest-head manual matrices passed. The branch
 was deleted and the primary checkout pulled to main. Exactly one `impact:none`
 label covered the development-only integration. Previous integration PR
@@ -54,8 +55,10 @@ Retained Electron recorder/editable regression also passes with disposable data.
 Before changing frozen source or engine files, inspect user units
 `fly-chromium-native-build.service`, `fly-chromium-native-acceptance.service` and
 `fly-chromium-native-summary-audit.service`. All three completed successfully;
-the sidebar worktree is detached at `ae5e12e`. Archive its current evidence
-before moving it. Current logs are under `/mnt/storage/fly-chromium/` as
+the sidebar worktree is detached at `9ab2944` after directed workspace-removal
+validation. The full `ae5e12e` runtime evidence is archived in
+`evidence/runtime-ae5e12e-before-workspace-retirement`. Archive the current
+directed evidence before moving that worktree. Current logs are under `/mnt/storage/fly-chromium/` as
 `current-build-systemd.log`, `current-acceptance-systemd.log` and
 `current-summary-audit.log`; JSON/per-stage logs are under `evidence/`.
 
@@ -66,8 +69,7 @@ including `runtime-059735e-before-blank-navigation`,
 release fixture failure), and `runtime-c94412e-before-pr124-tooling-head`.
 Do not infer later runtime acceptance from an earlier archive.
 
-Active follow-up branch: `codex/chromium-native-live-media`, based on the merged
-main, adds maintained live Twitch/Pie desktop evidence. The official signed
+Merged PR 125 adds maintained live Twitch/Pie desktop evidence. The official signed
 Chrome Pie package is external and never bundled. No owner profile is used.
 All four maintained channel runs pass with identical harness/input hashes:
 
@@ -108,14 +110,50 @@ badge is outside the channel player's LIVE label. The homepage pause sequence
 has not been accepted: a channel result does not establish that separate flow.
 See [live-media.md](./live-media.md) for reproducible commands and limitations.
 All 88 Python tooling/fixture guards, npm tests, documentation build and whitespace
-checks pass. Hosted validation for this harness branch remains required.
+checks pass. The latest-head hosted contracts matrix 39247855539 also passes
+all 88 cases on Linux, Windows and macOS; ordinary PR checks passed before merge.
 
-Next: finish hosted validation and integrate this harness, then continue native Fly
-address/window UI, workspace deletion/transfers, remaining commands/preferences,
-services, transactional migration, all-platform packages, update rehearsals and
-full acceptance through M6. Electron remains production. No owner profile has
-been read or migrated, no native package has passed acceptance and no release
-has been published.
+Active branch: `codex/chromium-native-workspace-retirement`, based on merged
+main. Commits `67f5506` and `9ab2944` implement removal through the actual native
+context menu, confirmation and coordinated normal/private browser close. A
+process-local retirement lease prevents new windows during close; persistent
+retired metadata prevents extension or stale startup entries reopening removed
+profiles. Cancellation retains the catalog and files; confirmed removal retains
+profile files for recovery while a recreated workspace gets a fresh directory.
+Native private download termination is disclosed in the confirmation.
+
+Directed Linux validation passes all 14 workspace service cases and both new
+removal browser cases. The initial browser attempt exposed repeated top-level
+`const` declarations in the extension probe; the corrected IIFE probe passes.
+The failed attempt is preserved in
+`evidence/retirement-targeted-67f5506-before-worker-scope-fix/`; accepted directed
+results are `evidence/retirement-targeted-browser-fixed.json` and
+`evidence/retirement-targeted-stage.json`, tied to `9ab2944`. This is directed
+coverage, not a new full-suite or cross-platform acceptance claim.
+
+The same functional block adds the native Move to workspace action and tab
+context menu, searchable destination picker and scoped native-close transaction.
+A move opens a fresh destination-profile WebContents only after native close
+consent, transfers Fly's logical UUID plus pin/mute metadata, and navigates using
+the destination's own cookies. Native extension tab/window identities remain
+Chromium-owned. Private moves stay in the destination's off-the-record profile.
+Cancellation or a lost destination retains the source. Unloaded profiles load
+asynchronously before requesting source close. Origin-bound blob/extension URLs,
+credentials in URLs and pending navigations are currently ineligible.
+
+Five new browser cases cover real menu/picker input, destination storage,
+identity/restore, beforeunload cancellation, destination loss, private isolation
+and both normal/private unloaded targets. Their runtime validation is pending.
+The new cross-profile move is not yet crash-atomic across independent native
+session files; M4 transaction/recovery acceptance remains outstanding.
+
+Next: run the directed removal/move browser cases, then the full Linux native
+suite/media audit and latest-head hosted object/service matrices; integrate this
+functional block only after those checks pass. Continue native Fly address/window
+UI, remaining commands/preferences, services, transactional migration, all-platform
+packages, update rehearsals and full acceptance through M6. Electron remains
+production. No owner profile has been read or migrated, no native package has
+passed acceptance and no release has been published.
 
 ## Source and working state
 

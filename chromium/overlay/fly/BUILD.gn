@@ -75,6 +75,8 @@ source_set("session_metadata") {
   sources = [
     "sessions/tab_identity.cc",
     "sessions/tab_identity.h",
+    "sessions/tab_move_gate.cc",
+    "sessions/tab_move_gate.h",
   ]
   public_deps = [
     "//base",
