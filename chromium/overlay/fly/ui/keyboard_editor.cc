@@ -6,6 +6,7 @@
 #include <algorithm>
 #include <set>
 #include "base/functional/bind.h"
+#include "base/strings/string_number_conversions.h"
 #include "base/strings/string_split.h"
 #include "base/strings/string_util.h"
 #include "base/strings/utf_string_conversions.h"
@@ -18,12 +19,12 @@
 #include "ui/events/event.h"
 #include "ui/views/accessibility/view_accessibility.h"
 #include "ui/views/background.h"
-#include "ui/views/controls/button/md_text_button.h"
 #include "ui/views/controls/button/checkbox.h"
+#include "ui/views/controls/button/md_text_button.h"
 #include "ui/views/controls/label.h"
 #include "ui/views/controls/scroll_view.h"
-#include "ui/views/controls/textarea/textarea.h"
 #include "ui/views/controls/tabbed_pane/tabbed_pane.h"
+#include "ui/views/controls/textarea/textarea.h"
 #include "ui/views/controls/textfield/textfield.h"
 #include "ui/views/layout/box_layout.h"
 #include "ui/views/widget/native_widget_aura.h"
@@ -136,6 +137,21 @@ void KeyboardEditor::Toggle(content::WebContents* contents) {
   clock_format_->SetTooltipText(u"Click to change the clock format");
   appearance_status_ = appearance->AddChildView(std::make_unique<views::Label>());
   appearance_status_->SetMultiLine(true);
+  auto* performance =
+      sections_->AddTab(u"Performance", std::make_unique<views::View>());
+  performance->SetLayoutManager(std::make_unique<views::BoxLayout>(
+      views::BoxLayout::Orientation::kVertical, gfx::Insets(12), 12));
+  suspension_timeout_ =
+      performance->AddChildView(std::make_unique<views::MdTextButton>(
+          base::BindRepeating(&KeyboardEditor::CycleSuspendTimeout,
+                              weak_factory_.GetWeakPtr()),
+          u"Suspend background pages"));
+  suspension_timeout_->SetTooltipText(
+      u"Click to change the delay. Eligible pages pause without unloading. "
+      u"Visible, pinned and busy pages keep running.");
+  suspension_status_ =
+      performance->AddChildView(std::make_unique<views::Label>());
+  suspension_status_->SetMultiLine(true);
   auto* keyboard = sections_->AddTab(u"Keyboard", std::make_unique<views::View>());
   auto* keyboard_layout = keyboard->SetLayoutManager(std::make_unique<views::BoxLayout>(
       views::BoxLayout::Orientation::kVertical, gfx::Insets(8), 8));
@@ -200,7 +216,7 @@ void KeyboardEditor::ShowKeyboard() {
   if (!active())
     return;
   StopRecording();
-  sections_->SelectTabAt(1, false);
+  sections_->SelectTabAt(2, false);
   search_->RequestFocus();
 }
 void KeyboardEditor::ShowAppearance() {
@@ -209,8 +225,15 @@ void KeyboardEditor::ShowAppearance() {
   sections_->SelectTabAt(0, false);
   appearance_.at("theme")->RequestFocus();
 }
+void KeyboardEditor::ShowPerformance() {
+  if (!active())
+    return;
+  StopRecording();
+  sections_->SelectTabAt(1, false);
+  suspension_timeout_->RequestFocus();
+}
 void KeyboardEditor::TabSelectedAt(int index) {
-  if (index == 0)
+  if (index != 2)
     StopRecording();
 }
 void KeyboardEditor::ClearAppearance() {
@@ -218,6 +241,8 @@ void KeyboardEditor::ClearAppearance() {
     sections_->SetListener(nullptr);
   appearance_.clear();
   clock_format_ = nullptr;
+  suspension_timeout_ = nullptr;
+  suspension_status_ = nullptr;
   appearance_status_ = nullptr;
   sections_ = nullptr;
 }
@@ -231,6 +256,19 @@ void KeyboardEditor::RefreshAppearance() {
   const auto theme = preferences_.ReadTheme();
   const auto clock = preferences_.ReadClock();
   const auto footer = preferences_.ReadStatusBarVisible();
+  const auto timeout = preferences_.ReadSuspendTimeoutMinutes();
+  suspension_timeout_->SetEnabled(preferences_.CanEditSuspendTimeout());
+  suspension_timeout_->SetText(
+      !timeout        ? u"Automatic suspension unavailable"
+      : *timeout == 0 ? u"Automatically suspend background pages: Off"
+                      : u"Automatically suspend after " +
+                            base::NumberToString16(*timeout) + u" minutes");
+  suspension_status_->SetText(
+      !timeout ? u"Performance settings need recovery. Saved data has been "
+                 u"preserved."
+      : !preferences_.CanEditSuspendTimeout()
+          ? u"Performance settings are managed."
+          : u"Changes are saved immediately. Protected pages stay running.");
   const auto set = [&](const char* key, bool checked, bool enabled) {
     auto* checkbox = appearance_.at(key).get();
     checkbox->SetChecked(checked);
@@ -274,6 +312,10 @@ void KeyboardEditor::ChangeAppearance(std::string key) {
 void KeyboardEditor::CycleClockFormat() {
   if (active())
     preferences_.CycleClockFormat();
+}
+void KeyboardEditor::CycleSuspendTimeout() {
+  if (active())
+    preferences_.CycleSuspendTimeout();
 }
 void KeyboardEditor::Refresh() {
   StopRecording();

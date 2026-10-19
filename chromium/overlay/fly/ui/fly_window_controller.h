@@ -33,11 +33,16 @@ namespace content {
 class WebContents;
 }
 namespace views {
+class DialogDelegate;
 class NativeViewHost;
 class MdTextButton;
 class View;
 class Label;
 }  // namespace views
+
+namespace ui {
+class SimpleMenuModel;
+}
 
 namespace fly {
 class CommandPalette;
@@ -88,6 +93,11 @@ class FlyWindowController : public views::WidgetDelegate,
   TabSidebar* tab_sidebar_for_testing() { return tab_sidebar_; }
   void CreateTab();
   void CreateWorkspace();
+  void ToggleWorkspacePicker();
+  bool CanShowWorkspacePicker() const { return workspaces_.Read().has_value(); }
+  CommandPalette& workspace_picker() { return *workspace_picker_; }
+  ui::SimpleMenuModel* workspace_context_menu_for_testing(std::string_view id) const;
+  views::Widget* workspace_rename_dialog_for_testing() const;
   bool CanTogglePrivate(BrowserWindowInterface* browser) const;
   views::View* workspace_buttons_for_testing() { return workspace_buttons_; }
   bool RunCommand(BrowserWindowInterface* browser, std::string_view action);
@@ -108,7 +118,17 @@ class FlyWindowController : public views::WidgetDelegate,
     uint64_t order = 0;
     base::CallbackListSubscription closed_subscription;
   };
+  std::vector<PaletteEntry> WorkspaceEntries();
+  bool WorkspaceChoiceAvailable(std::string_view action) const;
+  void ChooseWorkspace(content::WebContents* source, std::string action);
+  void OnWorkspacesChanged();
+  void ReorderWorkspace(std::string id, int direction);
+  void RenameWorkspace(std::string id);
+  void CancelWorkspaceRename();
   void OnPreferencesChanged();
+  void UpdateSuspensionPolicy();
+  void SuspendIdleTabs();
+  void ResumeAllTabs();
   std::vector<PaletteEntry> BookmarkEntries();
   void OnBookmarksChanged();
   void OpenBookmark(content::WebContents* source, std::string url);
@@ -121,6 +141,7 @@ class FlyWindowController : public views::WidgetDelegate,
   void SelectWindow(base::WeakPtr<BrowserWindowInterface> browser);
   void OpenWorkspace(std::string id);
   void OnProfileReady(std::string id, Profile* profile);
+  bool WorkspaceMatchesProfile(std::string_view id, Profile* profile) const;
   void OnBrowserDidClose(BrowserWindowInterface* browser);
   void TogglePrivate(BrowserWindowInterface* browser);
   void RequestClose(views::Widget::ClosedReason reason);
@@ -136,10 +157,15 @@ class FlyWindowController : public views::WidgetDelegate,
   std::optional<ThemePreferences> applied_theme_;
   PrefChangeRegistrar preferences_registrar_;
   base::RepeatingTimer clock_timer_;
+  base::RepeatingTimer suspension_timer_;
   std::unique_ptr<HintController> hints_;
   std::unique_ptr<CommandPalette> palette_;
   std::unique_ptr<CommandPalette> bookmark_picker_;
+  std::unique_ptr<CommandPalette> workspace_picker_;
+  std::map<std::string, base::WeakPtr<BrowserWindowInterface>> private_choices_;
   std::unique_ptr<KeyboardEditor> keyboard_editor_;
+  std::unique_ptr<views::DialogDelegate> rename_delegate_;
+  std::unique_ptr<views::Widget> rename_widget_;
   std::unique_ptr<KeyboardRouter> empty_router_;
   uint64_t empty_generation_ = 0;
   std::unique_ptr<ScopedKeepAlive> keep_alive_;

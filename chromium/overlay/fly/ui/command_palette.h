@@ -34,9 +34,12 @@ class CommandPalette : public views::TextfieldController,
                                               std::string)> remove = {});
   ~CommandPalette() override;
   void Toggle(content::WebContents* contents, const KeyboardConfig& config);
+  // Only app-scoped choices may explicitly allow an initially empty source.
+  // Destruction of an observed page always cancels its queued action.
   void ToggleItems(content::WebContents* contents, std::vector<PaletteEntry> items,
                    std::vector<std::string> close_bindings,
-                   std::u16string placeholder, bool removable);
+                   std::u16string placeholder, bool removable,
+                   bool allow_empty_source = false);
   void UpdateItems(std::vector<PaletteEntry> items, bool removable);
   void Cancel(bool restore_focus = false);
   bool HandleOverlayKey(const ui::KeyEvent& event);
@@ -75,6 +78,7 @@ class CommandPalette : public views::TextfieldController,
   std::vector<PaletteEntry> catalog_;
   std::vector<PaletteEntry> filtered_;
   int selected_ = -1;
+  bool empty_source_ = false;
   bool closing_ = false;
   bool cancelled_ = false;
   bool removable_ = false;

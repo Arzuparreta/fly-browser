@@ -249,8 +249,8 @@ def apply(root, lock, objects_only=False):
     verify_source(root, lock)
 
 
-def refresh_overlay(root, lock):
-    """Refresh only Fly-owned files; upstream patch output must stay identical."""
+def refresh_overlay(root, lock, include_upstream=False):
+    """Replay reviewed inputs and update only changed, journaled source bytes."""
     old = verify_source(root, lock, require_current=False)
     if old.get('kind') in ('core', 'objects'):
         engine.fail('Only a full native overlay may be refreshed')
@@ -258,47 +258,65 @@ def refresh_overlay(root, lock):
     patches, overlay = inputs()
     touched = patch_paths(patches)
     upstream = {name for name, record in old['files'].items() if record['before'] is not None}
-    if touched != upstream:
+    if not include_upstream and touched != upstream:
         engine.fail('Upstream patch targets changed; revert and reapply')
+    originals = {}
+    patched = {}
     with tempfile.TemporaryDirectory(prefix='fly-refresh-', dir=root) as tmp:
         stage = Path(tmp)
         engine.run(['git', 'init', '--quiet'], stage)
-        for name in sorted(touched):
-            atomic_bytes(stage / name, upstream_file(root / 'src', old['upstream'], name))
+        for name in sorted(touched | upstream):
+            originals[name] = upstream_file(root / 'src', old['upstream'], name)
+            original_hash = bytes_digest(originals[name])
+            if name in upstream and old['files'][name]['before'] != original_hash:
+                engine.fail('Original content does not match manifest: ' + name)
+            if name not in upstream:
+                file = checked_path(root / 'src', name)
+                if not file.is_file() or engine.digest(file) != original_hash:
+                    engine.fail('New patch target differs from pinned upstream: ' + name)
+            atomic_bytes(stage / name, originals[name])
         for patch in patches:
             engine.run(['git', 'apply', '--check', '--whitespace=error-all', patch], stage)
             engine.run(['git', 'apply', '--whitespace=error-all', patch], stage)
         for name in touched:
-            if engine.digest(stage / name) != old['files'][name]['after']:
+            patched[name] = (stage / name).read_bytes()
+            if not include_upstream and bytes_digest(patched[name]) != old['files'][name]['after']:
                 engine.fail('Upstream patch output changed; revert and reapply')
-    contents = {name: file.read_bytes() for name, file in overlay.items()}
-    desired = {name: {'before': None, 'after': bytes_digest(data)}
-               for name, data in contents.items()}
+    owned = {name: file.read_bytes() for name, file in overlay.items()}
     old_overlay = {name for name, record in old['files'].items() if record['before'] is None}
-    changed = {name for name in old_overlay | set(contents)
-               if old['files'].get(name, {}).get('after') != desired.get(name, {}).get('after')}
-    for name in contents.keys() - old_overlay:
+    for name in owned.keys() - old_overlay:
         if checked_path(root / 'src', name).exists():
             engine.fail('New overlay destination already exists: ' + name)
+    contents = dict(patched)
+    contents.update({name: originals[name] for name in upstream - touched})
+    contents.update(owned)
+    records = {name: {'before': bytes_digest(originals[name]),
+                      'after': bytes_digest(patched[name])} for name in touched}
+    records.update({name: {'before': None, 'after': bytes_digest(data)}
+                    for name, data in owned.items()})
+    before = {name: record['after'] for name, record in old['files'].items()}
+    before.update({name: bytes_digest(originals[name]) for name in touched - upstream})
+    after = {name: bytes_digest(data) for name, data in contents.items()}
+    changed = {name for name in set(before) | set(after)
+               if before.get(name) != after.get(name)}
     if fingerprint() != expected_fingerprint:
         engine.fail('Overlay inputs changed during refresh preflight')
-    records = {name: record for name, record in old['files'].items() if name in upstream}
-    records.update(desired)
     final = dict(old, phase='applied', fingerprint=expected_fingerprint, files=records)
     pending = dict(final, phase='applying', files=dict(records))
     for name in changed:
-        transition = dict(pending['files'].get(name, {'before': None, 'after': None}))
-        if name in old_overlay:
+        original_hash = (bytes_digest(originals[name]) if name in originals else None)
+        transition = {'before': original_hash, 'after': after.get(name)}
+        if name in old['files']:
             transition['previous_after'] = old['files'][name]['after']
         pending['files'][name] = transition
-    # Recovery may restore clean upstream from either reviewed overlay version.
-    # Unchanged files retain their bytes and timestamps, including public IPC
-    # headers that would otherwise invalidate large parts of Chromium.
+    # The journal accepts either reviewed version during recovery, including
+    # restored upstream paths removed from the final patch stack. Unknown edits
+    # still refuse writes. Unchanged bytes retain their compilation timestamps.
     engine.atomic_json(root / MANIFEST, pending)
     for name in sorted(changed):
         file = checked_path(root / 'src', name)
         actual = engine.digest(file) if file.is_file() else None
-        if actual != old['files'].get(name, {}).get('after'):
+        if actual != before.get(name):
             engine.fail('Native source changed during refresh; preserve edits: ' + name)
         if name in contents:
             atomic_bytes(file, contents[name])
@@ -306,7 +324,8 @@ def refresh_overlay(root, lock):
             file.unlink()
     engine.atomic_json(root / MANIFEST, final)
     verify_source(root, lock)
-    print('Refreshed', len(changed), 'Fly-owned files; upstream patch output unchanged.')
+    print('Refreshed', len(changed), 'managed native files.' if include_upstream else
+          'Fly-owned files; upstream patch output unchanged.')
 
 
 def revert(root, lock, recover=False):
@@ -458,7 +477,7 @@ def execute(args):
             engine.doctor(root, args.minimum_free_gib)
             apply(root, lock, objects_only=True)
         if args.command == 'refresh-overlay':
-            refresh_overlay(root, lock)
+            refresh_overlay(root, lock, include_upstream=getattr(args, 'include_upstream', False))
             return
         if args.command == 'apply':
             # The control build verifies all dependency revisions. This command
@@ -549,6 +568,8 @@ def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('command', choices=['apply', 'refresh-overlay', 'verify', 'configure', 'build', 'test', 'test-browser', 'test-core', 'test-objects', 'revert', 'recover'])
     parser.add_argument('--root', required=True)
+    parser.add_argument('--include-upstream', action='store_true',
+                        help='refresh-overlay only: replay and journal reviewed upstream patch changes')
     parser.add_argument('--browser-target', choices=['fly_browser_tests', 'browser_tests'],
                         default='fly_browser_tests',
                         help='Scoped Fly acceptance runner or the complete upstream test binary')
@@ -556,6 +577,8 @@ def main():
                         help='explicit free-space floor for native compilation')
     parser.add_argument('--jobs', type=int, default=min(8, os.cpu_count() or 1))
     args = parser.parse_args()
+    if args.include_upstream and args.command != 'refresh-overlay':
+        parser.error('--include-upstream requires refresh-overlay')
     if args.jobs < 1:
         parser.error('--jobs must be positive')
     if args.minimum_free_gib < 40:

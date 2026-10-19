@@ -5,12 +5,28 @@
 #include "fly/bookmarks/bookmark_service.h"
 
 #include <algorithm>
+#include <memory>
+#include <optional>
+#include "base/callback_list.h"
+#include "base/functional/bind.h"
+#include "components/performance_manager/public/freezing/freezing.h"
+#include "components/performance_manager/public/performance_manager.h"
+#include "components/tabs/public/tab_interface.h"
+#include "content/public/browser/browser_context.h"
+#include "content/public/browser/devtools_agent_host.h"
+#include "content/public/browser/devtools_agent_host_observer.h"
+#include "content/public/browser/download_manager.h"
+#include "content/public/browser/media_session.h"
+#include "content/public/browser/render_frame_host.h"
+
 #include <utility>
 #include "base/strings/utf_string_conversions.h"
 
 #include "chrome/app/chrome_command_ids.h"
 #include "chrome/browser/ui/browser_commands.h"
 #include "chrome/browser/ui/browser_window/public/browser_window_interface.h"
+#include "chrome/browser/ui/navigator/browser_navigator.h"
+#include "chrome/browser/ui/navigator/browser_navigator_params.h"
 #include "chrome/browser/ui/tabs/split_tab_metrics.h"
 #include "chrome/browser/ui/tabs/tab_muted_utils.h"
 #include "chrome/browser/ui/tabs/tab_strip_model.h"
@@ -29,9 +45,198 @@
 #include "ui/events/keycodes/dom/dom_code.h"
 #include "ui/events/keycodes/dom/dom_key.h"
 #include "ui/events/keycodes/dom/keycode_converter.h"
+#include "url/url_constants.h"
 
 namespace fly {
 namespace {
+class TabSuspension : public content::WebContentsUserData<TabSuspension>,
+                      public content::WebContentsObserver,
+                      public content::DevToolsAgentHostObserver {
+ public:
+  static bool Request(content::WebContents* contents);
+  static void Resume(content::WebContents* contents);
+  static bool Requested(content::WebContents* contents);
+  static bool MaybeAuto(content::WebContents* contents,
+                        base::TimeDelta timeout,
+                        base::TimeTicks now);
+  ~TabSuspension() override;
+
+  void OnVisibilityChanged(content::Visibility visibility) override;
+  void DidStartLoading() override;
+  void DidStopLoading() override;
+  void PrimaryPageChanged(content::Page&) override;
+  void MediaStartedPlaying(const MediaPlayerInfo&,
+                           const content::MediaPlayerId&) override;
+  void MediaStoppedPlaying(const MediaPlayerInfo&,
+                           const content::MediaPlayerId&,
+                           WebContentsObserver::MediaStoppedReason) override;
+  void OnAudioStateChanged(bool audible) override;
+  void AboutToBeDiscarded(content::WebContents*) override;
+  void WasDiscarded() override;
+  void WebContentsDestroyed() override;
+  void DevToolsAgentHostAttached(content::DevToolsAgentHost* host) override;
+  void DevToolsAgentHostDetached(content::DevToolsAgentHost* host) override;
+
+ private:
+  friend class content::WebContentsUserData<TabSuspension>;
+  explicit TabSuspension(content::WebContents* contents);
+  static bool Eligible(content::WebContents* contents);
+  void Reset();
+  std::optional<base::TimeTicks> quiet_since_;
+  bool automatic_ = false;
+  base::CallbackListSubscription pinned_subscription_;
+  std::unique_ptr<performance_manager::freezing::FreezingVote> vote_;
+  WEB_CONTENTS_USER_DATA_KEY_DECL();
+};
+
+WEB_CONTENTS_USER_DATA_KEY_IMPL(TabSuspension);
+
+TabSuspension::TabSuspension(content::WebContents* contents)
+    : content::WebContentsUserData<TabSuspension>(*contents),
+      content::WebContentsObserver(contents) {
+  content::DevToolsAgentHost::AddObserver(this);
+  if (auto* tab = tabs::TabInterface::MaybeGetFromContents(contents)) {
+    pinned_subscription_ = tab->RegisterPinnedStateChanged(base::BindRepeating(
+        [](TabSuspension* state, tabs::TabInterface*, bool) { state->Reset(); },
+        base::Unretained(this)));
+  }
+}
+TabSuspension::~TabSuspension() {
+  vote_.reset();
+  content::DevToolsAgentHost::RemoveObserver(this);
+}
+bool TabSuspension::Eligible(content::WebContents* contents) {
+  if (!contents || contents->IsBeingDestroyed() ||
+      contents->GetVisibility() != content::Visibility::HIDDEN ||
+      contents->IsLoading() || contents->IsCurrentlyAudible() ||
+      contents->IsBeingCaptured() ||
+      contents->GetCurrentlyPlayingVideoCount() ||
+      !contents->GetPrimaryMainFrame() ||
+      !contents->GetPrimaryMainFrame()->IsRenderFrameLive() ||
+      content::DevToolsAgentHost::IsDebuggerAttached(contents))
+    return false;
+  auto* tab = tabs::TabInterface::MaybeGetFromContents(contents);
+  if (!tab || tab->IsPinned())
+    return false;
+  auto* downloads = contents->GetBrowserContext()->GetDownloadManager();
+  // Conservatively protect the whole profile while a download is active.
+  if (downloads && downloads->InProgressCount())
+    return false;
+  if (auto* session = content::MediaSession::GetIfExists(contents)) {
+    const auto info = session->GetMediaSessionInfoSync();
+    if (info && info->is_controllable &&
+        info->playback_state ==
+            media_session::mojom::MediaPlaybackState::kPlaying)
+      return false;
+  }
+  return performance_manager::PerformanceManager::IsAvailable() &&
+         performance_manager::PerformanceManager::
+             GetPrimaryPageNodeForWebContents(contents);
+}
+bool TabSuspension::Request(content::WebContents* contents) {
+  if (!Eligible(contents))
+    return false;
+  CreateForWebContents(contents);
+  auto* state = FromWebContents(contents);
+  state->automatic_ = false;
+  state->quiet_since_.reset();
+  if (!state->vote_)
+    state->vote_ =
+        std::make_unique<performance_manager::freezing::FreezingVote>(contents);
+  return true;
+}
+void TabSuspension::Resume(content::WebContents* contents) {
+  if (!contents)
+    return;
+  if (auto* state = FromWebContents(contents))
+    state->Reset();
+}
+bool TabSuspension::Requested(content::WebContents* contents) {
+  if (!contents)
+    return false;
+  auto* state = FromWebContents(contents);
+  return state && state->vote_;
+}
+bool TabSuspension::MaybeAuto(content::WebContents* contents,
+                              base::TimeDelta timeout,
+                              base::TimeTicks now) {
+  if (!contents)
+    return false;
+  if (!Eligible(contents)) {
+    Resume(contents);
+    return false;
+  }
+  CreateForWebContents(contents);
+  auto* state = FromWebContents(contents);
+  if (!timeout.is_positive()) {
+    if (state->automatic_)
+      state->vote_.reset();
+    state->automatic_ = false;
+    state->quiet_since_.reset();
+    return false;
+  }
+  if (state->vote_)
+    return state->automatic_;
+  if (!state->quiet_since_ || now < *state->quiet_since_) {
+    state->quiet_since_ = now;
+    return false;
+  }
+  if (now - *state->quiet_since_ < timeout)
+    return false;
+  state->automatic_ = true;
+  state->vote_ =
+      std::make_unique<performance_manager::freezing::FreezingVote>(contents);
+  return true;
+}
+void TabSuspension::Reset() {
+  vote_.reset();
+  automatic_ = false;
+  quiet_since_.reset();
+}
+void TabSuspension::OnVisibilityChanged(content::Visibility) {
+  Reset();
+}
+void TabSuspension::DidStartLoading() {
+  Reset();
+}
+void TabSuspension::DidStopLoading() {
+  Reset();
+}
+void TabSuspension::PrimaryPageChanged(content::Page&) {
+  Reset();
+}
+void TabSuspension::MediaStartedPlaying(const MediaPlayerInfo&,
+                                        const content::MediaPlayerId&) {
+  Reset();
+}
+void TabSuspension::MediaStoppedPlaying(const MediaPlayerInfo&,
+                                        const content::MediaPlayerId&,
+                                        MediaStoppedReason) {
+  Reset();
+}
+void TabSuspension::OnAudioStateChanged(bool) {
+  Reset();
+}
+void TabSuspension::AboutToBeDiscarded(content::WebContents*) {
+  Reset();
+}
+void TabSuspension::WasDiscarded() {
+  Reset();
+}
+void TabSuspension::WebContentsDestroyed() {
+  Reset();
+}
+void TabSuspension::DevToolsAgentHostAttached(
+    content::DevToolsAgentHost* host) {
+  if (host->GetWebContents() == web_contents())
+    Reset();
+}
+void TabSuspension::DevToolsAgentHostDetached(
+    content::DevToolsAgentHost* host) {
+  if (host->GetWebContents() == web_contents())
+    quiet_since_.reset();
+}
+
 constexpr std::pair<std::string_view, int> kNativeMappings[] = {
     {"spawn-tab", IDC_NEW_TAB},
     {"remove-tab", IDC_CLOSE_TAB},
@@ -50,6 +255,7 @@ constexpr std::pair<std::string_view, int> kNativeMappings[] = {
     {"zoom-out", IDC_ZOOM_MINUS},
     {"reset-zoom", IDC_ZOOM_NORMAL},
     {"toggle-find", IDC_FIND},
+    {"toggle-devtools", IDC_DEV_TOOLS},
     {"toggle-fullscreen", IDC_FULLSCREEN},
     {"print-page", IDC_PRINT},
     {"toggle-pin-tab", IDC_WINDOW_PIN_TAB},
@@ -183,7 +389,8 @@ bool SplitCommand(BrowserWindowInterface* browser, std::string_view action) {
     return true;
   }
   if (model->count() < 2) {
-    chrome::NewTab(browser, NewTabTypes::kNewTabCommand);
+    if (!OpenNativeBlankTab(browser))
+      return false;
     model->AddToNewSplit({0, 1},
                          split_tabs::SplitTabVisualData(
                              action == "toggle-split-horizontal"
@@ -203,6 +410,37 @@ bool SplitCommand(BrowserWindowInterface* browser, std::string_view action) {
   return true;
 }
 }  // namespace
+
+bool OpenNativeBlankTab(BrowserWindowInterface* browser, int index) {
+  if (!browser || !chrome::IsCommandEnabled(browser, IDC_NEW_TAB))
+    return false;
+  NavigateParams params(browser, GURL(url::kAboutBlankURL),
+                        ui::PAGE_TRANSITION_TYPED);
+  params.disposition = WindowOpenDisposition::NEW_FOREGROUND_TAB;
+  params.window_action = NavigateParams::WindowAction::kShowWindow;
+  if (index >= 0) {
+    params.tabstrip_index = index;
+    params.tabstrip_add_types |= AddTabTypes::ADD_FORCE_INDEX;
+  }
+  Navigate(&params);
+  return params.navigated_or_inserted_contents != nullptr;
+}
+
+bool RequestNativeTabSuspension(content::WebContents* contents) {
+  return TabSuspension::Request(contents);
+}
+void ResumeNativeTab(content::WebContents* contents) {
+  TabSuspension::Resume(contents);
+}
+bool NativeTabSuspensionRequested(content::WebContents* contents) {
+  return TabSuspension::Requested(contents);
+}
+
+bool MaybeAutoSuspendNativeTab(content::WebContents* contents,
+                               base::TimeDelta timeout,
+                               base::TimeTicks now) {
+  return TabSuspension::MaybeAuto(contents, timeout, now);
+}
 
 std::string NativeEventStroke(const input::NativeWebKeyboardEvent& event) {
   return EventStroke(event);
@@ -283,6 +521,17 @@ bool NativeCommandAvailable(BrowserWindowInterface* browser,
                             std::string_view action) {
   if (!browser)
     return false;
+  if (action == "toggle-dashboard") {
+    const auto* window = FlyWindowController::GetIfCreated();
+    return window && window->IsSelected(browser) &&
+           window->CanShowWorkspacePicker();
+  }
+  if (action == "toggle-global-audio-mute" || action == "toggle-global-media" ||
+      action == "hibernate-tabs" || action == "wake-all-tabs") {
+    const auto* window = FlyWindowController::GetIfCreated();
+    return window && window->IsSelected(browser) &&
+           !browser->GetTabStripModel()->empty();
+  }
   if (action == "toggle-bookmarks" || action == "add-bookmark") {
     auto* window = FlyWindowController::GetIfCreated();
     auto* contents = browser->GetTabStripModel()->GetActiveWebContents();
@@ -341,6 +590,8 @@ bool NativeCommandAvailable(BrowserWindowInterface* browser,
 
 bool ExecuteNativeCommand(BrowserWindowInterface* browser,
                           std::string_view action) {
+  if (action == "spawn-tab")
+    return OpenNativeBlankTab(browser);
   for (const auto& [name, command] : kNativeMappings) {
     if (action == name) {
       if (action == "remove-tab") {

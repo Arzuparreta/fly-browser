@@ -34,7 +34,7 @@ struct ThemePreferences {
 bool WebsiteUsesDarkTheme(const ThemePreferences& theme);
 
 // App-wide product preferences, separate from each Profile's native site state.
-// Clock, footer visibility and light/dark theme are implemented groups. Other
+// Clock, footer, theme and suspension timeout are implemented groups. Other
 // settings remain pending; unknown fields are preserved for later groups
 // and importer versions. A malformed/future store requires recovery, never an
 // implicit default write.
@@ -56,6 +56,10 @@ class PreferencesService {
   bool CanEditTheme() const;
   bool ToggleTheme();
   bool SetWebsiteThemeSync(bool sync);
+  std::optional<int> ReadSuspendTimeoutMinutes() const;
+  bool CanEditSuspendTimeout() const;
+  bool SetSuspendTimeoutMinutes(int minutes);
+  bool CycleSuspendTimeout();
 
  private:
   bool ValidStore() const;

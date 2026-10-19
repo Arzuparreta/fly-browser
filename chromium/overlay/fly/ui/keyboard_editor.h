@@ -46,6 +46,7 @@ class KeyboardEditor : public views::TextfieldController,
   void Toggle(content::WebContents* contents);
   void Cancel(bool restore_focus = false);
   void ShowAppearance();
+  void ShowPerformance();
   void ShowKeyboard();
   bool HandleOverlayKey(const ui::KeyEvent& event);
   bool active() const { return overlay_ && !closing_; }
@@ -57,6 +58,9 @@ class KeyboardEditor : public views::TextfieldController,
   std::u16string error_for_testing() const;
   views::Checkbox* appearance_for_testing(std::string_view key);
   views::MdTextButton* clock_format_for_testing() { return clock_format_; }
+  views::MdTextButton* suspension_timeout_for_testing() {
+    return suspension_timeout_;
+  }
 
   void ContentsChanged(views::Textfield*, const std::u16string&) override;
   void TabSelectedAt(int index) override;
@@ -78,6 +82,7 @@ class KeyboardEditor : public views::TextfieldController,
   void RefreshAppearance();
   void ChangeAppearance(std::string key);
   void CycleClockFormat();
+  void CycleSuspendTimeout();
   void ClearAppearance();
   void ResetAll();
   void WriteField(Key key, std::u16string value);
@@ -93,6 +98,8 @@ class KeyboardEditor : public views::TextfieldController,
   PrefChangeRegistrar preferences_registrar_;
   std::map<std::string, raw_ptr<views::Checkbox>> appearance_;
   raw_ptr<views::MdTextButton> clock_format_ = nullptr;
+  raw_ptr<views::MdTextButton> suspension_timeout_ = nullptr;
+  raw_ptr<views::Label> suspension_status_ = nullptr;
   raw_ptr<views::Label> appearance_status_ = nullptr;
   raw_ptr<views::TabbedPane> sections_ = nullptr;
   std::unique_ptr<views::Widget> overlay_;

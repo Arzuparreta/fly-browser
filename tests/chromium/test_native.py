@@ -173,6 +173,148 @@ class NativeOverlayTests(unittest.TestCase):
             native.revert(self.root, self.lock, recover=True)
         self.assertEqual(destination.read_text(), 'owner edits after interruption\n')
 
+    def add_second_upstream_file(self):
+        (self.source / 'second.cc').write_text('second original\n')
+        self.git('add', 'second.cc')
+        self.git('commit', '--quiet', '-m', 'second upstream file')
+        self.lock['chromium']['revision'] = self.git('rev-parse', 'HEAD')
+        (self.patches / 'second.patch').write_text(
+            '--- a/second.cc\n+++ b/second.cc\n@@ -1 +1 @@\n'
+            '-second original\n+second adapted\n')
+
+    def test_explicit_refresh_updates_reviewed_patch_and_retains_unchanged_timestamps(self):
+        (self.overlay / 'fly/unchanged.h').write_text('unchanged\n')
+        native.apply(self.root, self.lock)
+        watched = [self.source / 'fly/unchanged.h', self.source / 'fly/native.cc']
+        before = {file: file.stat().st_mtime_ns for file in watched}
+        file = self.patches / 'first.patch'
+        file.write_text(file.read_text().replace('+adapted', '+reviewed update'))
+        native.refresh_overlay(self.root, self.lock, include_upstream=True)
+        self.assertEqual((self.source / 'upstream.cc').read_text(), 'reviewed update\n')
+        self.assertEqual(before, {file: file.stat().st_mtime_ns for file in watched})
+        all_files = [*watched, self.source / 'upstream.cc']
+        unchanged = {file: file.stat().st_mtime_ns for file in all_files}
+        native.refresh_overlay(self.root, self.lock, include_upstream=True)
+        self.assertEqual(unchanged, {file: file.stat().st_mtime_ns for file in all_files})
+        native.verify_source(self.root, self.lock)
+        native.revert(self.root, self.lock)
+        self.assertEqual(self.git('status', '--porcelain'), '')
+
+    def test_explicit_refresh_adds_and_retires_upstream_patch_targets(self):
+        self.add_second_upstream_file()
+        native.apply(self.root, self.lock)
+        self.series.write_text('second.patch\n')
+        with self.assertRaisesRegex(RuntimeError, 'Upstream patch targets changed'):
+            native.refresh_overlay(self.root, self.lock)
+        self.assertEqual((self.source / 'upstream.cc').read_text(), 'adapted\n')
+        self.assertEqual((self.source / 'second.cc').read_text(), 'second original\n')
+        native.refresh_overlay(self.root, self.lock, include_upstream=True)
+        self.assertEqual((self.source / 'upstream.cc').read_text(), 'original\n')
+        self.assertEqual((self.source / 'second.cc').read_text(), 'second adapted\n')
+        manifest = native.verify_source(self.root, self.lock)
+        self.assertNotIn('upstream.cc', manifest['files'])
+        self.assertIn('second.cc', manifest['files'])
+        native.revert(self.root, self.lock)
+        self.assertEqual(self.git('status', '--porcelain'), '')
+
+    def test_explicit_refresh_rejects_late_patch_failure_before_real_writes(self):
+        self.add_second_upstream_file()
+        native.apply(self.root, self.lock)
+        old_manifest = (self.root / native.MANIFEST).read_bytes()
+        self.series.write_text('first.patch\nsecond.patch\n')
+        file = self.patches / 'second.patch'
+        file.write_text(file.read_text().replace('-second original', '-not the source'))
+        with self.assertRaises(subprocess.CalledProcessError):
+            native.refresh_overlay(self.root, self.lock, include_upstream=True)
+        self.assertEqual((self.root / native.MANIFEST).read_bytes(), old_manifest)
+        self.assertEqual((self.source / 'upstream.cc').read_text(), 'adapted\n')
+        self.assertEqual((self.source / 'second.cc').read_text(), 'second original\n')
+        native.verify_source(self.root, self.lock, require_current=False)
+
+    def test_explicit_refresh_recovers_new_changed_and_retired_upstream_versions(self):
+        self.add_second_upstream_file()
+        for destination_name in ('second.cc', 'upstream.cc'):
+            for write_first in (False, True):
+                with self.subTest(destination=destination_name, write_first=write_first):
+                    self.series.write_text('first.patch\n')
+                    native.apply(self.root, self.lock)
+                    self.series.write_text('second.patch\n')
+                    destination = self.source / destination_name
+                    real_write = native.atomic_bytes
+                    def interrupted(file, data):
+                        if file == destination:
+                            if write_first:
+                                real_write(file, data)
+                            raise OSError('fixture interruption')
+                        return real_write(file, data)
+                    with patch.object(native, 'atomic_bytes', side_effect=interrupted):
+                        with self.assertRaisesRegex(OSError, 'fixture interruption'):
+                            native.refresh_overlay(self.root, self.lock, include_upstream=True)
+                    self.assertEqual(json.loads((self.root / native.MANIFEST).read_text())['phase'], 'applying')
+                    native.revert(self.root, self.lock, recover=True)
+                    self.assertEqual(self.git('status', '--porcelain'), '')
+        # Also cover an existing target whose patched bytes change in place.
+        native.apply(self.root, self.lock)
+        file = self.patches / 'second.patch'
+        file.write_text(file.read_text().replace('+second adapted', '+second updated'))
+        destination = self.source / 'second.cc'
+        real_write = native.atomic_bytes
+        def interrupted(file, data):
+            if file == destination:
+                real_write(file, data)
+                raise OSError('fixture interruption')
+            return real_write(file, data)
+        with patch.object(native, 'atomic_bytes', side_effect=interrupted):
+            with self.assertRaises(OSError):
+                native.refresh_overlay(self.root, self.lock, include_upstream=True)
+        native.revert(self.root, self.lock, recover=True)
+        self.assertEqual(self.git('status', '--porcelain'), '')
+
+    def test_explicit_refresh_preserves_owner_edits_and_refuses_unsafe_recovery(self):
+        native.apply(self.root, self.lock)
+        file = self.patches / 'first.patch'
+        file.write_text(file.read_text().replace('+adapted', '+reviewed update'))
+        destination = self.source / 'upstream.cc'
+        destination.write_text('owner edits\n')
+        with self.assertRaisesRegex(RuntimeError, 'Managed native source was edited'):
+            native.refresh_overlay(self.root, self.lock, include_upstream=True)
+        destination.write_text('adapted\n')
+        real_fingerprint = native.fingerprint()
+        calls = 0
+        def race():
+            nonlocal calls
+            calls += 1
+            if calls == 2:
+                destination.write_text('owner edits during preflight\n')
+            return real_fingerprint
+        with patch.object(native, 'fingerprint', side_effect=race):
+            with self.assertRaisesRegex(RuntimeError, 'Native source changed during refresh'):
+                native.refresh_overlay(self.root, self.lock, include_upstream=True)
+        self.assertEqual(destination.read_text(), 'owner edits during preflight\n')
+        with self.assertRaisesRegex(RuntimeError, 'Edited transaction file must be preserved'):
+            native.revert(self.root, self.lock, recover=True)
+        self.assertEqual(destination.read_text(), 'owner edits during preflight\n')
+
+    def test_explicit_patch_refresh_cannot_promote_core_or_compile_only_overlays(self):
+        native.apply_core(self.root, self.lock)
+        with self.assertRaisesRegex(RuntimeError, 'Only a full native overlay'):
+            native.refresh_overlay(self.root, self.lock, include_upstream=True)
+        native.revert(self.root, self.lock)
+        native.apply(self.root, self.lock, objects_only=True)
+        with self.assertRaisesRegex(RuntimeError, 'Only a full native overlay'):
+            native.refresh_overlay(self.root, self.lock, include_upstream=True)
+        native.revert(self.root, self.lock)
+        self.assertEqual(self.git('status', '--porcelain'), '')
+
+    def test_upstream_refresh_cli_opt_in_is_rejected_for_other_commands(self):
+        result = subprocess.run(
+            [sys.executable, str(Path(native.__file__)), 'verify', '--root',
+             str(self.root), '--include-upstream'], capture_output=True, text=True)
+        self.assertEqual(result.returncode, 2)
+        self.assertIn('--include-upstream requires refresh-overlay', result.stderr)
+        self.assertEqual(self.git('status', '--porcelain'), '')
+        self.assertFalse((self.root / native.MANIFEST).exists())
+
     def test_core_unit_overlay_does_not_patch_the_browser_or_require_control_binary(self):
         native.apply_core(self.root, self.lock)
         manifest = native.verify_source(self.root, self.lock)

@@ -5,13 +5,32 @@
 #define FLY_UI_NATIVE_COMMANDS_H_
 #include <string>
 #include <string_view>
+#include "base/time/time.h"
 #include "content/public/browser/keyboard_event_processing_result.h"
 
 class BrowserWindowInterface;
 namespace input {
 struct NativeWebKeyboardEvent;
 }
+namespace content {
+class WebContents;
+}
 namespace fly {
+// Opens an actual about:blank navigation in this browser's own profile.
+// A nonnegative index requests native tab-strip placement, including pin rules.
+bool OpenNativeBlankTab(BrowserWindowInterface* browser, int index = -1);
+
+// Retained-document native freezing votes. A request is not a claim that the
+// policy has frozen the page: Chromium keeps its connected-page/protection rules.
+bool RequestNativeTabSuspension(content::WebContents* contents);
+void ResumeNativeTab(content::WebContents* contents);
+bool NativeTabSuspensionRequested(content::WebContents* contents);
+// The scheduler supplies monotonic time. Protection/visibility changes reset
+// the quiet interval; a disabled timeout withdraws only automatic requests.
+bool MaybeAutoSuspendNativeTab(content::WebContents* contents,
+                               base::TimeDelta timeout,
+                               base::TimeTicks now);
+
 std::string NativeEventStroke(const input::NativeWebKeyboardEvent& event);
 std::u16string NativePageModeLabel(BrowserWindowInterface* browser);
 

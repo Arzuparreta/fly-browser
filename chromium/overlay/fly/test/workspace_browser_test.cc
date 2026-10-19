@@ -29,6 +29,7 @@
 #include "base/timer/timer.h"
 #include "ui/views/focus/focus_manager.h"
 #include "ui/views/widget/widget.h"
+#include "ui/views/window/dialog_delegate.h"
 #include "base/threading/thread_restrictions.h"
 #include "base/task/single_thread_task_runner.h"
 #include "ui/menus/simple_menu_model.h"
@@ -38,12 +39,21 @@
 #include "base/json/json_writer.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/test/run_until.h"
+#include "base/test/scoped_feature_list.h"
+#include "components/performance_manager/public/features.h"
+#include "components/performance_manager/public/performance_manager.h"
+#include "components/performance_manager/public/graph/page_node.h"
+#include "content/public/browser/devtools_agent_host.h"
+#include "content/public/browser/devtools_agent_host_client.h"
+#include "content/public/common/content_features.h"
+#include "chrome/browser/resource_coordinator/tab_lifecycle_unit_external.h"
 #include "base/test/bind.h"
 #include "base/test/test_future.h"
 #include "base/uuid.h"
 #include "base/version_info/version_info.h"
 #include "chrome/browser/browser_process.h"
 #include "chrome/browser/extensions/chrome_test_extension_loader.h"
+#include "chrome/browser/devtools/devtools_window.h"
 #include "chrome/browser/extensions/extension_tab_util.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/profiles/profile_manager.h"
@@ -63,18 +73,22 @@
 #include "content/public/browser/render_frame_host.h"
 #include "content/public/browser/render_widget_host_view.h"
 #include "content/public/browser/web_contents.h"
+#include "content/public/browser/media_session.h"
 #include "content/public/browser/navigation_controller.h"
 #include "content/public/browser/navigation_entry.h"
 #include "content/public/browser/favicon_status.h"
 #include "chrome/browser/ui/tabs/tab_muted_utils.h"
 #include "ui/views/controls/button/image_button.h"
 #include "content/public/test/browser_test.h"
+#include "content/public/test/test_navigation_observer.h"
 #include "content/public/test/browser_test_utils.h"
 #include "extensions/test/test_extension_dir.h"
 #include "net/dns/mock_host_resolver.h"
 #include "net/test/embedded_test_server/embedded_test_server.h"
 #include "components/prefs/pref_service.h"
 #include "ui/aura/window.h"
+#include "ui/aura/client/focus_client.h"
+#include "ui/wm/public/activation_client.h"
 #include "ui/aura/window_tree_host.h"
 #include "ui/wm/core/coordinate_conversion.h"
 #include "ui/base/base_window.h"
@@ -319,6 +333,72 @@ IN_PROC_BROWSER_TEST_F(FlyWorkspaceBrowserTest,
 }
 
 IN_PROC_BROWSER_TEST_F(FlyWorkspaceBrowserTest,
+                       ProductNewTabsAreBlankInPersistentAndPrivateProfiles) {
+  auto* original = browser();
+  ASSERT_TRUE(ui_test_utils::NavigateToURL(
+      original, embedded_test_server()->GetURL("/title1.html")));
+  auto& window = FlyWindowController::Get();
+  const int count = original->GetTabStripModel()->count();
+  ASSERT_TRUE(InvokeNativeCommand(original, "spawn-tab"));
+  ASSERT_EQ(count + 1, original->GetTabStripModel()->count());
+  ASSERT_TRUE(content::WaitForLoadStop(Active(original)));
+  EXPECT_EQ(GURL("about:blank"), Active(original)->GetLastCommittedURL());
+  EXPECT_EQ(original->GetProfile(), Active(original)->GetBrowserContext());
+
+  window.CreateTab();
+  ASSERT_EQ(count + 2, original->GetTabStripModel()->count());
+  ASSERT_TRUE(content::WaitForLoadStop(Active(original)));
+  EXPECT_EQ(GURL("about:blank"), Active(original)->GetLastCommittedURL());
+  ASSERT_TRUE(OpenNativeBlankTab(original, 1));
+  auto* inserted = original->GetTabStripModel()->GetWebContentsAt(1);
+  ASSERT_EQ(inserted, Active(original));
+  ASSERT_TRUE(content::WaitForLoadStop(inserted));
+  EXPECT_EQ(GURL("about:blank"), inserted->GetLastCommittedURL());
+
+  ASSERT_TRUE(window.RunCommand(original, "toggle-private-mode"));
+  ASSERT_TRUE(base::test::RunUntil([&] {
+    return window.selected_browser_for_testing() != original;
+  }));
+  auto* private_browser = window.selected_browser_for_testing();
+  ASSERT_TRUE(private_browser);
+  ASSERT_TRUE(private_browser->GetProfile()->IsOffTheRecord());
+  ASSERT_TRUE(content::WaitForLoadStop(Active(private_browser)));
+  EXPECT_EQ(GURL("about:blank"), Active(private_browser)->GetLastCommittedURL());
+  ASSERT_TRUE(InvokeNativeCommand(private_browser, "spawn-tab"));
+  ASSERT_TRUE(content::WaitForLoadStop(Active(private_browser)));
+  EXPECT_EQ(GURL("about:blank"), Active(private_browser)->GetLastCommittedURL());
+  EXPECT_EQ(private_browser->GetProfile(),
+            Active(private_browser)->GetBrowserContext());
+
+  window.Select(original, true);
+  window.CreateWorkspace();
+  ASSERT_TRUE(base::test::RunUntil([&] {
+    auto* selected = window.selected_browser_for_testing();
+    return selected && selected != original && selected != private_browser &&
+           selected->GetTabStripModel()->count() == 1;
+  }));
+  auto* created = window.selected_browser_for_testing();
+  ASSERT_FALSE(created->GetProfile()->IsOffTheRecord());
+  EXPECT_NE(original->GetProfile(), created->GetProfile());
+  ASSERT_TRUE(content::WaitForLoadStop(Active(created)));
+  EXPECT_EQ(GURL("about:blank"), Active(created)->GetLastCommittedURL());
+
+  // Splitting a one-tab workspace must create the second pane through the
+  // same profile-bound blank navigation, without opening Chromium's NTP.
+  ASSERT_TRUE(ExecuteNativeCommand(created, "toggle-split"));
+  auto* split_model = created->GetTabStripModel();
+  ASSERT_EQ(2, split_model->count());
+  ASSERT_TRUE(split_model->GetSplitForTab(split_model->active_index()));
+  for (int index = 0; index < split_model->count(); ++index) {
+    auto* pane = split_model->GetWebContentsAt(index);
+    ASSERT_TRUE(content::WaitForLoadStop(pane));
+    EXPECT_EQ(GURL("about:blank"), pane->GetLastCommittedURL());
+    EXPECT_EQ(created->GetProfile(), pane->GetBrowserContext());
+    ExpectVisible(pane, true);
+  }
+}
+
+IN_PROC_BROWSER_TEST_F(FlyWorkspaceBrowserTest,
                        PrivateExitHonoursBeforeUnloadCancellation) {
   auto* normal = browser();
   auto& window = FlyWindowController::Get();
@@ -429,6 +509,9 @@ IN_PROC_BROWSER_TEST_F(FlyWorkspaceBrowserTest,
   ASSERT_TRUE(model->GetSplitForTab(model->active_index()));
   ExpectVisible(first, true);
   ExpectVisible(second, true);
+  ASSERT_TRUE(InvokeNativeCommand(browser(), "hibernate-tabs"));
+  EXPECT_FALSE(NativeTabSuspensionRequested(first));
+  EXPECT_FALSE(NativeTabSuspensionRequested(second));
   const auto active_before = model->active_index();
   ASSERT_TRUE(ExecuteNativeCommand(browser(), "switch-split-focus"));
   EXPECT_NE(active_before, model->active_index());
@@ -619,6 +702,232 @@ IN_PROC_BROWSER_TEST_F(FlyWorkspaceBrowserTest,
 }
 
 IN_PROC_BROWSER_TEST_F(FlyWorkspaceBrowserTest,
+                       DevToolsUsesTheSelectedNativeTabAndWorkspace) {
+  auto* first = browser();
+  ASSERT_TRUE(ui_test_utils::NavigateToURL(
+      first, embedded_test_server()->GetURL("/title1.html")));
+  auto* inspected = Active(first);
+  const int tab_id = extensions::ExtensionTabUtil::GetTabId(inspected);
+  ASSERT_TRUE(NativeCommandAvailable(first, "toggle-devtools"));
+  ASSERT_TRUE(InvokeNativeCommand(first, "toggle-devtools"));
+  ASSERT_TRUE(base::test::RunUntil([&] {
+    return DevToolsWindow::GetInTabWebContents(inspected, nullptr) != nullptr;
+  }));
+  auto* frontend = DevToolsWindow::GetInTabWebContents(inspected, nullptr);
+  ASSERT_TRUE(frontend);
+  EXPECT_EQ(first->GetProfile(),
+            Profile::FromBrowserContext(frontend->GetBrowserContext())
+                ->GetOriginalProfile());
+  EXPECT_EQ(inspected, Active(first));
+  EXPECT_EQ(tab_id, extensions::ExtensionTabUtil::GetTabId(inspected));
+  ExpectVisible(inspected, true);
+  ExpectVisible(frontend, true);
+  ASSERT_TRUE(InvokeNativeCommand(first, "toggle-devtools"));
+  ASSERT_TRUE(base::test::RunUntil([&] {
+    return DevToolsWindow::GetInstanceForInspectedWebContents(inspected) == nullptr;
+  }));
+
+  auto* other = SecondWorkspace();
+  ASSERT_TRUE(other);
+  auto* other_tab = Active(other);
+  ASSERT_TRUE(InvokeNativeCommand(other, "toggle-devtools"));
+  ASSERT_TRUE(base::test::RunUntil([&] {
+    return DevToolsWindow::GetInTabWebContents(other_tab, nullptr) != nullptr;
+  }));
+  auto* other_frontend = DevToolsWindow::GetInTabWebContents(other_tab, nullptr);
+  ASSERT_TRUE(other_frontend);
+  EXPECT_EQ(other->GetProfile(),
+            Profile::FromBrowserContext(other_frontend->GetBrowserContext())
+                ->GetOriginalProfile());
+  EXPECT_EQ(nullptr, DevToolsWindow::GetInstanceForInspectedWebContents(inspected));
+  EXPECT_EQ(other, FlyWindowController::Get().selected_browser_for_testing());
+  ExpectVisible(inspected, false);
+  ExpectVisible(other_tab, true);
+  ASSERT_TRUE(InvokeNativeCommand(other, "toggle-devtools"));
+  ASSERT_TRUE(base::test::RunUntil([&] {
+    return DevToolsWindow::GetInstanceForInspectedWebContents(other_tab) == nullptr;
+  }));
+}
+
+IN_PROC_BROWSER_TEST_F(FlyWorkspaceBrowserTest,
+                       GlobalMediaUsesNativeSessionHandlersInHiddenWorkspaces) {
+  auto* playing_browser = browser();
+  ASSERT_TRUE(ui_test_utils::NavigateToURL(
+      playing_browser, embedded_test_server()->GetURL("/title1.html")));
+  auto* playing = Active(playing_browser);
+  ASSERT_TRUE(content::ExecJs(playing, R"(
+    const audio = document.createElement('audio');
+    audio.id = 'fly-media';
+    audio.loop = true;
+    audio.src = '/media/engagement/engagement_valid_audio.webm';
+    document.body.append(audio);
+    navigator.mediaSession.setActionHandler('pause', () => {
+      audio.pause();
+      document.title = 'paused-by-native-session';
+    });
+    navigator.mediaSession.setActionHandler('play', async () => {
+      await audio.play();
+      document.title = 'played-by-native-session';
+    });
+    audio.play();
+  )"));
+  ASSERT_TRUE(base::test::RunUntil([&] {
+    auto* session = content::MediaSession::GetIfExists(playing);
+    if (!session)
+      return false;
+    const auto info = session->GetMediaSessionInfoSync();
+    return info && info->is_controllable &&
+           info->playback_state ==
+               media_session::mojom::MediaPlaybackState::kPlaying;
+  }));
+  auto* other = SecondWorkspace();
+  ASSERT_TRUE(other);
+  auto& window = FlyWindowController::Get();
+  auto* empty_tab = Active(other);
+  EXPECT_FALSE(RequestNativeTabSuspension(playing));
+  auto* empty_session = content::MediaSession::GetIfExists(empty_tab);
+  ExpectVisible(playing, false);
+  content::TitleWatcher paused(playing, u"paused-by-native-session");
+  ASSERT_TRUE(InvokeNativeCommand(other, "toggle-global-media"));
+  EXPECT_EQ(u"paused-by-native-session", paused.WaitAndGetTitle());
+  EXPECT_EQ(true, content::EvalJs(playing,
+                                 "document.getElementById('fly-media').paused"));
+  ASSERT_TRUE(base::test::RunUntil([&] {
+    const auto info = content::MediaSession::GetIfExists(playing)
+                          ->GetMediaSessionInfoSync();
+    return info && info->is_controllable &&
+           info->playback_state ==
+               media_session::mojom::MediaPlaybackState::kPaused;
+  }));
+  content::TitleWatcher resumed(playing, u"played-by-native-session");
+  ASSERT_TRUE(InvokeNativeCommand(other, "toggle-global-media"));
+  EXPECT_EQ(u"played-by-native-session", resumed.WaitAndGetTitle());
+  EXPECT_EQ(false, content::EvalJs(playing,
+                                  "document.getElementById('fly-media').paused"));
+  EXPECT_EQ(other, window.selected_browser_for_testing());
+  EXPECT_EQ(empty_tab, Active(other));
+  EXPECT_EQ(empty_session, content::MediaSession::GetIfExists(empty_tab));
+  ExpectVisible(playing, false);
+  ExpectVisible(empty_tab, true);
+  ASSERT_TRUE(content::ExecJs(playing,
+                              "document.getElementById('fly-media').pause()"));
+}
+
+IN_PROC_BROWSER_TEST_F(FlyWorkspaceBrowserTest,
+                       GlobalMediaFallsBackToNativePlayersWithoutSiteHandlers) {
+  auto* first = browser();
+  ASSERT_TRUE(ui_test_utils::NavigateToURL(
+      first, embedded_test_server()->GetURL("/title1.html")));
+  auto* playing = Active(first);
+  ASSERT_TRUE(content::ExecJs(playing, R"(
+    const audio = document.createElement('audio');
+    audio.id = 'fly-media';
+    audio.loop = true;
+    audio.src = '/media/engagement/engagement_valid_audio.webm';
+    document.body.append(audio);
+    audio.play();
+  )"));
+  ASSERT_TRUE(base::test::RunUntil([&] {
+    auto* session = content::MediaSession::GetIfExists(playing);
+    if (!session)
+      return false;
+    const auto info = session->GetMediaSessionInfoSync();
+    return info && info->is_controllable &&
+           info->playback_state ==
+               media_session::mojom::MediaPlaybackState::kPlaying;
+  }));
+  auto* other = SecondWorkspace();
+  ASSERT_TRUE(other);
+  ASSERT_TRUE(InvokeNativeCommand(other, "toggle-global-media"));
+  EXPECT_EQ(true, content::EvalJs(playing, R"(
+    new Promise(resolve => {
+      const audio = document.getElementById('fly-media');
+      if (audio.paused) resolve(true);
+      else audio.addEventListener('pause', () => resolve(audio.paused),
+                                  {once: true});
+    })
+  )", content::EXECUTE_SCRIPT_NO_USER_GESTURE));
+  ASSERT_TRUE(base::test::RunUntil([&] {
+    const auto info = content::MediaSession::GetIfExists(playing)
+                          ->GetMediaSessionInfoSync();
+    return info && info->is_controllable &&
+           info->playback_state ==
+               media_session::mojom::MediaPlaybackState::kPaused;
+  }));
+  ASSERT_TRUE(InvokeNativeCommand(other, "toggle-global-media"));
+  EXPECT_EQ(true, content::EvalJs(playing, R"(
+    new Promise(resolve => {
+      const audio = document.getElementById('fly-media');
+      if (!audio.paused) resolve(true);
+      else audio.addEventListener('playing', () => resolve(!audio.paused),
+                                  {once: true});
+    })
+  )", content::EXECUTE_SCRIPT_NO_USER_GESTURE));
+  EXPECT_EQ(other, FlyWindowController::Get().selected_browser_for_testing());
+  ExpectVisible(playing, false);
+  ExpectVisible(Active(other), true);
+  ASSERT_TRUE(content::ExecJs(playing,
+                              "document.getElementById('fly-media').pause()"));
+}
+
+IN_PROC_BROWSER_TEST_F(FlyWorkspaceBrowserTest,
+                       GlobalMuteUsesNativeTabsAcrossHiddenAndPrivateWorkspaces) {
+  auto* first = browser();
+  auto& window = FlyWindowController::Get();
+  auto* first_tab = Active(first);
+  ASSERT_TRUE(OpenNativeBlankTab(first));
+  auto* second_tab = Active(first);
+  auto* other = SecondWorkspace();
+  ASSERT_TRUE(other);
+  auto* hidden_tab = Active(other);
+  ASSERT_TRUE(window.RunCommand(other, "toggle-private-mode"));
+  ASSERT_TRUE(base::test::RunUntil([&] {
+    return window.selected_browser_for_testing() != other;
+  }));
+  auto* private_browser = window.selected_browser_for_testing();
+  ASSERT_TRUE(private_browser);
+  ASSERT_TRUE(private_browser->GetProfile()->IsOffTheRecord());
+  auto* private_tab = Active(private_browser);
+  ASSERT_TRUE(private_tab);
+  EXPECT_TRUE(NativeCommandAvailable(private_browser, "toggle-global-audio-mute"));
+
+  // Mixed tab state always converges to muted, including nonaudible pages.
+  SetTabAudioMuted(first_tab, true, TabMutedReason::kAudioIndicator, {});
+  const std::vector<content::WebContents*> tabs = {
+      first_tab, second_tab, hidden_tab, private_tab};
+  const std::vector<int> ids = {
+      extensions::ExtensionTabUtil::GetTabId(first_tab),
+      extensions::ExtensionTabUtil::GetTabId(second_tab),
+      extensions::ExtensionTabUtil::GetTabId(hidden_tab),
+      extensions::ExtensionTabUtil::GetTabId(private_tab)};
+  ASSERT_TRUE(InvokeNativeCommand(private_browser, "toggle-global-audio-mute"));
+  for (auto* tab : tabs) {
+    EXPECT_TRUE(tab->IsAudioMuted());
+    EXPECT_EQ(TabMutedReason::kAudioIndicator, GetTabAudioMutedReason(tab));
+  }
+  EXPECT_EQ(private_browser, window.selected_browser_for_testing());
+  EXPECT_EQ(second_tab, Active(first));
+  EXPECT_EQ(hidden_tab, Active(other));
+  ExpectVisible(second_tab, false);
+  ExpectVisible(hidden_tab, false);
+  ExpectVisible(private_tab, true);
+
+  ASSERT_TRUE(InvokeNativeCommand(private_browser, "toggle-global-audio-mute"));
+  for (size_t index = 0; index < tabs.size(); ++index) {
+    EXPECT_FALSE(tabs[index]->IsAudioMuted());
+    EXPECT_EQ(ids[index], extensions::ExtensionTabUtil::GetTabId(tabs[index]));
+  }
+  // This is an operation on existing tabs, not a persisted global mute policy.
+  ASSERT_TRUE(InvokeNativeCommand(private_browser, "toggle-global-audio-mute"));
+  ASSERT_TRUE(OpenNativeBlankTab(private_browser));
+  EXPECT_FALSE(Active(private_browser)->IsAudioMuted());
+  ASSERT_TRUE(InvokeNativeCommand(private_browser, "toggle-global-audio-mute"));
+  EXPECT_TRUE(Active(private_browser)->IsAudioMuted());
+  EXPECT_EQ(private_browser->GetProfile(),
+            Active(private_browser)->GetBrowserContext());
+}
+
+IN_PROC_BROWSER_TEST_F(FlyWorkspaceBrowserTest,
                        SidebarAndCommandsExposeNativeMuteReasonsToExtensions) {
   extensions::TestExtensionDir directory;
   directory.WriteManifest(
@@ -684,6 +993,19 @@ IN_PROC_BROWSER_TEST_F(FlyWorkspaceBrowserTest,
   EXPECT_EQ(false, info->FindBool("muted"));
   EXPECT_EQ("user", *info->FindString("reason"));
   EXPECT_FALSE(info->contains("extensionId"));
+  ASSERT_TRUE(InvokeNativeCommand(browser(), "toggle-global-audio-mute"));
+  info = read_info();
+  ASSERT_TRUE(info);
+  EXPECT_EQ(true, info->FindBool("muted"));
+  ASSERT_TRUE(info->FindString("reason"));
+  EXPECT_EQ("user", *info->FindString("reason"));
+  EXPECT_FALSE(info->contains("extensionId"));
+  EXPECT_TRUE(other->IsAudioMuted());
+  ASSERT_TRUE(InvokeNativeCommand(browser(), "toggle-global-audio-mute"));
+  info = read_info();
+  ASSERT_TRUE(info);
+  EXPECT_EQ(false, info->FindBool("muted"));
+  EXPECT_FALSE(other->IsAudioMuted());
 }
 
 IN_PROC_BROWSER_TEST_F(FlyWorkspaceBrowserTest,
@@ -1216,6 +1538,372 @@ IN_PROC_BROWSER_TEST_F(FlyExplicitBlankRestoreBrowserTest,
   ExpectSessionFixture(true);
 }
 
+class FlyNativeFreezeBrowserTest : public FlyWorkspaceBrowserTest {
+ public:
+  FlyNativeFreezeBrowserTest() {
+    features_.InitWithFeaturesAndParameters(
+        {{performance_manager::features::kCPUMeasurementInFreezingPolicy,
+          {{"freezing_visible_protection_time", "0s"},
+           {"freezing_audio_protection_time", "0s"}}}},
+        {performance_manager::features::
+             kDiscardFrozenBrowsingInstancesWithGrowingPMF,
+         performance_manager::features::kInfiniteTabsFreezing});
+  }
+
+ private:
+  base::test::ScopedFeatureList features_;
+};
+
+class SuspensionDebuggerClient : public content::DevToolsAgentHostClient {
+ public:
+  explicit SuspensionDebuggerClient(content::WebContents* contents)
+      : host_(content::DevToolsAgentHost::GetOrCreateFor(contents)) {
+    attached_ = host_->AttachClient(this);
+  }
+  ~SuspensionDebuggerClient() override {
+    if (attached_)
+      host_->DetachClient(this);
+  }
+  bool attached() const { return attached_; }
+  void DispatchProtocolMessage(content::DevToolsAgentHost*,
+                               base::span<const uint8_t>) override {}
+  void AgentHostClosed(content::DevToolsAgentHost*) override {
+    attached_ = false;
+  }
+
+ private:
+  scoped_refptr<content::DevToolsAgentHost> host_;
+  bool attached_ = false;
+};
+
+IN_PROC_BROWSER_TEST_F(FlyNativeFreezeBrowserTest,
+                       RetainedFreezeProtectsPagesAndWakeUsesWorkspaceScope) {
+  auto* first = browser();
+  const auto url = embedded_test_server()->GetURL("/title1.html");
+  ASSERT_TRUE(ui_test_utils::NavigateToURL(first, url));
+  auto* background = Active(first);
+  const auto id = TabIdentity::Get(background);
+  ASSERT_TRUE(content::ExecJs(
+      background,
+      "window.unsavedFlyDocument = {text: 'retained', edits: 42};"));
+  ASSERT_TRUE(OpenNativeBlankTab(first));
+  auto* visible = Active(first);
+  ASSERT_TRUE(content::WaitForLoadStop(visible));
+  auto* second = SecondWorkspace();
+  ASSERT_TRUE(second);
+  ASSERT_TRUE(ui_test_utils::NavigateToURL(second, url));
+  auto* other = Active(second);
+  ASSERT_TRUE(content::ExecJs(other, "window.otherWorkspaceDraft = 73;"));
+  auto& window = FlyWindowController::Get();
+  window.Select(first, true);
+  auto frozen = [](content::WebContents* contents) {
+    auto node = performance_manager::PerformanceManager::
+        GetPrimaryPageNodeForWebContents(contents);
+    return node && node->GetLifecycleState() ==
+                       performance_manager::mojom::LifecycleState::kFrozen;
+  };
+  ASSERT_TRUE(NativeCommandAvailable(first, "hibernate-tabs"));
+  ASSERT_TRUE(InvokeNativeCommand(first, "hibernate-tabs"));
+  ASSERT_TRUE(base::test::RunUntil(
+      [&] { return frozen(background) && frozen(other); }));
+  EXPECT_TRUE(NativeTabSuspensionRequested(background));
+  EXPECT_TRUE(NativeTabSuspensionRequested(other));
+  EXPECT_FALSE(NativeTabSuspensionRequested(visible));
+  EXPECT_EQ(visible, Active(first));
+  EXPECT_EQ(content::Visibility::VISIBLE, visible->GetVisibility());
+  EXPECT_EQ(id, TabIdentity::Get(background));
+  EXPECT_FALSE(background->WasDiscarded());
+  // A workspace resume removes only this workspace's votes, with no reload.
+  ASSERT_TRUE(InvokeNativeCommand(first, "wake-all-tabs"));
+  ASSERT_TRUE(base::test::RunUntil([&] { return !frozen(background); }));
+  EXPECT_FALSE(NativeTabSuspensionRequested(background));
+  EXPECT_TRUE(frozen(other));
+  EXPECT_EQ("retained",
+            content::EvalJs(background, "window.unsavedFlyDocument.text",
+                            content::EXECUTE_SCRIPT_NO_USER_GESTURE));
+  EXPECT_EQ(42, content::EvalJs(background, "window.unsavedFlyDocument.edits",
+                                content::EXECUTE_SCRIPT_NO_USER_GESTURE));
+  EXPECT_EQ(false, content::EvalJs(background, "document.wasDiscarded"));
+
+  ASSERT_TRUE(RequestNativeTabSuspension(background));
+  ASSERT_TRUE(base::test::RunUntil([&] { return frozen(background); }));
+  {
+    SuspensionDebuggerClient debugger(background);
+    ASSERT_TRUE(debugger.attached());
+    ASSERT_TRUE(base::test::RunUntil([&] { return !frozen(background); }));
+    EXPECT_FALSE(NativeTabSuspensionRequested(background));
+    EXPECT_FALSE(RequestNativeTabSuspension(background));
+  }
+  ASSERT_TRUE(RequestNativeTabSuspension(background));
+  ASSERT_TRUE(base::test::RunUntil([&] { return frozen(background); }));
+  first->GetTabStripModel()->SetTabPinned(0, true);
+  ASSERT_TRUE(base::test::RunUntil([&] { return !frozen(background); }));
+  EXPECT_FALSE(NativeTabSuspensionRequested(background));
+  EXPECT_FALSE(RequestNativeTabSuspension(background));
+  EXPECT_FALSE(RequestNativeTabSuspension(visible));
+  first->GetTabStripModel()->SetTabPinned(0, false);
+  ASSERT_TRUE(RequestNativeTabSuspension(background));
+  ASSERT_TRUE(base::test::RunUntil([&] { return frozen(background); }));
+  first->GetTabStripModel()->ActivateTabAt(0);
+  ASSERT_TRUE(base::test::RunUntil([&] { return !frozen(background); }));
+  EXPECT_FALSE(NativeTabSuspensionRequested(background));
+  EXPECT_EQ(42, content::EvalJs(background, "window.unsavedFlyDocument.edits"));
+  EXPECT_EQ(id, TabIdentity::Get(background));
+  window.Select(second, true);
+  ASSERT_TRUE(base::test::RunUntil([&] { return !frozen(other); }));
+  EXPECT_FALSE(NativeTabSuspensionRequested(other));
+  EXPECT_EQ(73, content::EvalJs(other, "window.otherWorkspaceDraft"));
+}
+
+IN_PROC_BROWSER_TEST_F(
+    FlyNativeFreezeBrowserTest,
+    AutomaticSuspendUsesQuietDeadlineAndHonorsDisabledChoice) {
+  auto& window = FlyWindowController::Get();
+  ASSERT_TRUE(window.preferences().SetSuspendTimeoutMinutes(0));
+  ASSERT_TRUE(ui_test_utils::NavigateToURL(
+      browser(), embedded_test_server()->GetURL("/title1.html")));
+  auto* background = Active(browser());
+  ASSERT_TRUE(content::ExecJs(background, "window.autoSuspendDraft = 99;"));
+  ASSERT_TRUE(OpenNativeBlankTab(browser()));
+  ASSERT_TRUE(content::WaitForLoadStop(Active(browser())));
+  const auto now = base::TimeTicks::Now();
+  const auto timeout = base::Minutes(5);
+  auto frozen = [&] {
+    auto node = performance_manager::PerformanceManager::
+        GetPrimaryPageNodeForWebContents(background);
+    return node && node->GetLifecycleState() ==
+                       performance_manager::mojom::LifecycleState::kFrozen;
+  };
+  EXPECT_FALSE(MaybeAutoSuspendNativeTab(background, timeout, now));
+  EXPECT_FALSE(
+      MaybeAutoSuspendNativeTab(background, timeout, now + base::Minutes(4)));
+  EXPECT_FALSE(NativeTabSuspensionRequested(background));
+  EXPECT_TRUE(
+      MaybeAutoSuspendNativeTab(background, timeout, now + base::Minutes(6)));
+  ASSERT_TRUE(base::test::RunUntil(frozen));
+  ASSERT_TRUE(window.preferences().SetSuspendTimeoutMinutes(15));
+  ASSERT_TRUE(window.preferences().SetSuspendTimeoutMinutes(0));
+  ASSERT_TRUE(base::test::RunUntil([&] { return !frozen(); }));
+  EXPECT_FALSE(NativeTabSuspensionRequested(background));
+  EXPECT_EQ(99, content::EvalJs(background, "window.autoSuspendDraft"));
+  // Disabling the automatic timeout preserves an explicit manual request.
+  ASSERT_TRUE(RequestNativeTabSuspension(background));
+  ASSERT_TRUE(base::test::RunUntil(frozen));
+  ASSERT_TRUE(window.preferences().SetSuspendTimeoutMinutes(15));
+  ASSERT_TRUE(window.preferences().SetSuspendTimeoutMinutes(0));
+  EXPECT_TRUE(NativeTabSuspensionRequested(background));
+  EXPECT_TRUE(frozen());
+  ResumeNativeTab(background);
+  ASSERT_TRUE(base::test::RunUntil([&] { return !frozen(); }));
+  // Resume restarts the quiet interval instead of immediately refreezing.
+  EXPECT_FALSE(
+      MaybeAutoSuspendNativeTab(background, timeout, now + base::Minutes(9)));
+  EXPECT_FALSE(
+      MaybeAutoSuspendNativeTab(background, timeout, now + base::Minutes(13)));
+  EXPECT_TRUE(
+      MaybeAutoSuspendNativeTab(background, timeout, now + base::Minutes(15)));
+  ASSERT_TRUE(base::test::RunUntil(frozen));
+  auto* model = browser()->GetTabStripModel();
+  model->SetTabPinned(0, true);
+  ASSERT_TRUE(base::test::RunUntil([&] { return !frozen(); }));
+  EXPECT_FALSE(
+      MaybeAutoSuspendNativeTab(background, timeout, now + base::Minutes(20)));
+  model->SetTabPinned(0, false);
+  EXPECT_FALSE(
+      MaybeAutoSuspendNativeTab(background, timeout, now + base::Minutes(21)));
+  EXPECT_FALSE(
+      MaybeAutoSuspendNativeTab(background, timeout, now + base::Minutes(25)));
+  EXPECT_TRUE(
+      MaybeAutoSuspendNativeTab(background, timeout, now + base::Minutes(27)));
+  ASSERT_TRUE(base::test::RunUntil(frozen));
+  model->ActivateTabAt(0);
+  ASSERT_TRUE(base::test::RunUntil([&] { return !frozen(); }));
+  EXPECT_FALSE(NativeTabSuspensionRequested(background));
+  EXPECT_EQ(99, content::EvalJs(background, "window.autoSuspendDraft"));
+  EXPECT_EQ(false, content::EvalJs(background, "document.wasDiscarded"));
+}
+
+IN_PROC_BROWSER_TEST_F(
+    FlyWorkspaceBrowserTest,
+    PerformancePreferencesPreserveKeyboardDraftAndFutureData) {
+  auto& window = FlyWindowController::Get();
+  ASSERT_TRUE(window.preferences().SetSuspendTimeoutMinutes(0));
+  const auto keyboard_before = window.commands().Read();
+  ASSERT_TRUE(InvokeNativeCommand(browser(), "open-keyboard-settings"));
+  auto& editor = window.keyboard_editor();
+  ASSERT_TRUE(editor.active());
+  auto* draft = editor.field_for_testing("spawn-tab", false);
+  ASSERT_TRUE(draft);
+  draft->SetText(u"Ctrl+Alt+Y");
+  editor.ContentsChanged(draft, u"Ctrl+Alt+Y");
+  views::test::ButtonTestApi(editor.record_for_testing("spawn-tab", false))
+      .NotifyDefaultMouseClick();
+  ASSERT_TRUE(editor.recording());
+  editor.ShowPerformance();
+  EXPECT_FALSE(editor.recording());
+  auto* timeout = editor.suspension_timeout_for_testing();
+  ASSERT_TRUE(timeout);
+  ASSERT_TRUE(base::test::RunUntil([&] {
+    return timeout->IsDrawn() && !timeout->GetVisibleBounds().IsEmpty();
+  }));
+  EXPECT_TRUE(timeout->GetText().ends_with(u"Off"));
+  ui::test::EventGenerator input(
+      window.desktop_widget()->GetNativeWindow()->GetRootWindow());
+  input.MoveMouseTo(timeout->GetBoundsInScreen().CenterPoint());
+  input.ClickLeftButton();
+  ASSERT_TRUE(base::test::RunUntil(
+      [&] { return window.preferences().ReadSuspendTimeoutMinutes() == 5; }));
+  timeout->RequestFocus();
+  ASSERT_TRUE(timeout->HasFocus());
+  input.PressKey(ui::VKEY_SPACE, ui::EF_NONE);
+  input.ReleaseKey(ui::VKEY_SPACE, ui::EF_NONE);
+  ASSERT_TRUE(base::test::RunUntil(
+      [&] { return window.preferences().ReadSuspendTimeoutMinutes() == 15; }));
+  EXPECT_EQ(keyboard_before, window.commands().Read());
+  auto* prefs = g_browser_process->local_state();
+  const auto valid = prefs->GetDict(kPreferencesPref).Clone();
+  auto future = valid.Clone();
+  future.Set("schema", 99);
+  prefs->SetDict(kPreferencesPref, future.Clone());
+  EXPECT_FALSE(timeout->GetEnabled());
+  views::test::ButtonTestApi(timeout).NotifyDefaultMouseClick();
+  EXPECT_EQ(future, prefs->GetDict(kPreferencesPref));
+  prefs->SetDict(kPreferencesPref, valid.Clone());
+  EXPECT_TRUE(timeout->GetEnabled());
+  editor.ShowKeyboard();
+  draft = editor.field_for_testing("spawn-tab", false);
+  ASSERT_TRUE(draft);
+  EXPECT_EQ(u"Ctrl+Alt+Y", draft->GetText());
+  EXPECT_EQ(keyboard_before, window.commands().Read());
+}
+
+IN_PROC_BROWSER_TEST_F(FlyNativeFreezeBrowserTest,
+                       GlobalMediaResumeWakesFrozenPausedNativeSession) {
+  auto* first = browser();
+  ASSERT_TRUE(ui_test_utils::NavigateToURL(
+      first, embedded_test_server()->GetURL("/title1.html")));
+  auto* playing = Active(first);
+  ASSERT_TRUE(content::ExecJs(playing, R"js(
+    const audio = document.createElement('audio');
+    audio.id = 'freeze-player';
+    audio.src = '/media/engagement/engagement_valid_audio.webm';
+    audio.loop = true;
+    document.body.appendChild(audio);
+    audio.play();
+  )js"));
+  ASSERT_TRUE(base::test::RunUntil([&] {
+    auto* session = content::MediaSession::GetIfExists(playing);
+    if (!session)
+      return false;
+    const auto info = session->GetMediaSessionInfoSync();
+    return info && info->is_controllable;
+  }));
+  ASSERT_TRUE(InvokeNativeCommand(first, "toggle-global-media"));
+  auto* second = SecondWorkspace();
+  ASSERT_TRUE(second);
+  auto& window = FlyWindowController::Get();
+  ASSERT_TRUE(base::test::RunUntil([&] {
+    const auto info = content::MediaSession::GetIfExists(playing)
+                          ->GetMediaSessionInfoSync();
+    return !playing->IsCurrentlyAudible() && info && info->is_controllable &&
+           info->playback_state == media_session::mojom::MediaPlaybackState::kPaused;
+  }));
+  ASSERT_TRUE(RequestNativeTabSuspension(playing));
+  auto node = performance_manager::PerformanceManager::
+      GetPrimaryPageNodeForWebContents(playing);
+  ASSERT_TRUE(node);
+  ASSERT_TRUE(base::test::RunUntil([&] {
+    return node->GetLifecycleState() ==
+           performance_manager::mojom::LifecycleState::kFrozen;
+  }));
+  ASSERT_TRUE(InvokeNativeCommand(second, "toggle-global-media"));
+  EXPECT_FALSE(NativeTabSuspensionRequested(playing));
+  ASSERT_TRUE(base::test::RunUntil([&] {
+    return node->GetLifecycleState() ==
+           performance_manager::mojom::LifecycleState::kRunning;
+  }));
+  EXPECT_EQ(false, content::EvalJs(playing,
+      "new Promise(resolve => { const audio = document.querySelector('#freeze-player'); "
+      "if (!audio.paused) resolve(audio.paused); "
+      "else audio.addEventListener('playing', () => resolve(audio.paused), {once:true}); })",
+      content::EXECUTE_SCRIPT_NO_USER_GESTURE));
+  EXPECT_EQ(second, window.selected_browser_for_testing());
+  ExpectVisible(playing, false);
+}
+
+class FlyReplacementDiscardBrowserTest : public FlyWorkspaceBrowserTest {
+ public:
+  FlyReplacementDiscardBrowserTest() {
+    features_.InitAndDisableFeature(features::kWebContentsDiscard);
+  }
+ private:
+  base::test::ScopedFeatureList features_;
+};
+class FlyRetainedDiscardBrowserTest : public FlyWorkspaceBrowserTest {
+ public:
+  FlyRetainedDiscardBrowserTest() {
+    features_.InitAndEnableFeature(features::kWebContentsDiscard);
+  }
+ private:
+  base::test::ScopedFeatureList features_;
+};
+
+void ExpectDiscardedTabKeepsFlyIdentity(BrowserWindowInterface* browser,
+                                       const GURL& url, bool replacement) {
+  ASSERT_TRUE(ui_test_utils::NavigateToURL(browser, url));
+  auto* model = browser->GetTabStripModel();
+  auto* original = model->GetActiveWebContents();
+  const std::string id = TabIdentity::Get(original);
+  auto* const profile = original->GetBrowserContext();
+  ASSERT_TRUE(content::ExecJs(original, "document.cookie='discard=retained'"));
+  // Discard a hidden, pinned tab, leaving another tab visible and focused.
+  model->SetTabPinned(0, true);
+  ASSERT_TRUE(OpenNativeBlankTab(browser));
+  ASSERT_EQ(2, model->count());
+  auto* selected = model->GetActiveWebContents();
+  ASSERT_NE(original, selected);
+  auto* lifecycle =
+      resource_coordinator::TabLifecycleUnitExternal::FromWebContents(original);
+  ASSERT_TRUE(lifecycle);
+  ASSERT_TRUE(lifecycle->DiscardTab(
+      ::mojom::LifecycleUnitDiscardReason::EXTERNAL));
+  auto* discarded = model->GetWebContentsAt(0);
+  EXPECT_EQ(replacement, discarded != original);
+  EXPECT_EQ(id, TabIdentity::Get(discarded));
+  EXPECT_EQ(profile, discarded->GetBrowserContext());
+  EXPECT_TRUE(model->IsTabPinned(0));
+  EXPECT_EQ(selected, model->GetActiveWebContents());
+  EXPECT_EQ(content::Visibility::HIDDEN, discarded->GetVisibility());
+  EXPECT_TRUE(discarded->WasDiscarded());
+  // The old contents' destructor must not make the ID available to a second
+  // restored tab. Private metadata remains non-persistable as usual.
+  auto probe = content::WebContents::Create(
+      content::WebContents::CreateParams(profile));
+  TabIdentity::Restore(probe.get(), {{TabIdentity::kExtraDataKey, id}});
+  EXPECT_NE(id, TabIdentity::Get(probe.get()));
+  std::map<std::string, std::string> metadata;
+  TabIdentity::Populate(discarded, &metadata);
+  EXPECT_EQ(id, metadata.at(TabIdentity::kExtraDataKey));
+  content::TestNavigationObserver reload(discarded);
+  model->ActivateTabAt(0);
+  reload.Wait();
+  EXPECT_EQ(discarded, model->GetActiveWebContents());
+  EXPECT_EQ(id, TabIdentity::Get(discarded));
+  EXPECT_EQ(true, content::EvalJs(discarded, "document.wasDiscarded"));
+  EXPECT_EQ("discard=retained", content::EvalJs(discarded, "document.cookie"));
+}
+
+IN_PROC_BROWSER_TEST_F(FlyReplacementDiscardBrowserTest,
+                       NativeReplacementDiscardPreservesFlyIdentity) {
+  ExpectDiscardedTabKeepsFlyIdentity(
+      browser(), embedded_test_server()->GetURL("/title1.html"), true);
+}
+IN_PROC_BROWSER_TEST_F(FlyRetainedDiscardBrowserTest,
+                       NativeRetainedDiscardPreservesFlyIdentity) {
+  ExpectDiscardedTabKeepsFlyIdentity(
+      browser(), embedded_test_server()->GetURL("/title1.html"), false);
+}
+
 IN_PROC_BROWSER_TEST_F(FlyWorkspaceBrowserTest,
                        NativeHintKeysActivateWithoutHidingOrBlurringPage) {
   ASSERT_TRUE(ui_test_utils::NavigateToURL(
@@ -1272,6 +1960,406 @@ IN_PROC_BROWSER_TEST_F(FlyWorkspaceBrowserTest,
   EXPECT_EQ(u"hint activated", title.WaitAndGetTitle());
   EXPECT_FALSE(window.hints().active());
   EXPECT_EQ(0, content::EvalJs(contents, "visibilityEvents"));
+}
+
+IN_PROC_BROWSER_TEST_F(FlyWorkspaceBrowserTest,
+                       WorkspacePointerMenuReordersWithoutChangingProfileIdentity) {
+  auto* first = browser();
+  ASSERT_TRUE(ui_test_utils::NavigateToURL(
+      first, embedded_test_server()->GetURL("/title1.html")));
+  auto* original_page = Active(first);
+  ASSERT_TRUE(content::ExecJs(original_page, "document.cookie='order=first'"));
+  auto* second = SecondWorkspace();
+  ASSERT_TRUE(second);
+  auto& window = FlyWindowController::Get();
+  window.CreateWorkspace();
+  ASSERT_TRUE(base::test::RunUntil([&] {
+    auto* selected = window.selected_browser_for_testing();
+    return selected && selected != first && selected != second;
+  }));
+  auto* third = window.selected_browser_for_testing();
+  WorkspaceService service(*g_browser_process->local_state());
+  const auto before = service.Read();
+  ASSERT_TRUE(before);
+  ASSERT_EQ(3u, before->items.size());
+  const auto third_item = before->items.back();
+  ASSERT_EQ(third->GetProfile()->GetPath().BaseName().AsUTF8Unsafe(),
+            third_item.profile_directory);
+  window.Select(first, true);
+  auto menu = [&](bool expect_down, base::OnceCallback<void(ui::SimpleMenuModel*)> choose) {
+    views::View* control = nullptr;
+    ASSERT_TRUE(base::test::RunUntil([&] {
+      for (const auto& child : window.workspace_buttons_for_testing()->children()) {
+        auto* button = views::AsViewClass<views::MdTextButton>(child.get());
+        if (button && button->GetText() == base::UTF8ToUTF16(third_item.name) &&
+            button->IsDrawn() && !button->GetVisibleBounds().IsEmpty()) {
+          control = button;
+          return true;
+        }
+      }
+      return false;
+    }));
+    bool inspected = false;
+    base::RepeatingTimer inspect_menu;
+    inspect_menu.Start(FROM_HERE, base::Milliseconds(1),
+        base::BindLambdaForTesting([&] {
+          auto* model = window.workspace_context_menu_for_testing(third_item.id);
+          if (!model)
+            return;
+          inspect_menu.Stop();
+          EXPECT_TRUE(model->IsEnabledAt(0));
+          EXPECT_EQ(expect_down, model->IsEnabledAt(1));
+          std::move(choose).Run(model);
+          inspected = true;
+        }));
+    ui::test::EventGenerator mouse(
+        window.desktop_widget()->GetNativeWindow()->GetRootWindow());
+    mouse.MoveMouseTo(control->GetBoundsInScreen().CenterPoint());
+    mouse.ClickRightButton();
+    ASSERT_TRUE(base::test::RunUntil([&] { return inspected; }));
+  };
+  menu(false, base::BindOnce([](ui::SimpleMenuModel* model) {
+    model->ActivatedAt(0);
+  }));
+  ASSERT_TRUE(base::test::RunUntil([&] {
+    const auto current = service.Read();
+    return current && current->items[1].id == third_item.id;
+  }));
+  EXPECT_EQ(first, window.selected_browser_for_testing());
+  EXPECT_EQ(before->items[0], service.Read()->items[0]);
+  EXPECT_EQ(third_item, service.Read()->items[1]);
+  EXPECT_EQ(before->items[1], service.Read()->items[2]);
+  EXPECT_EQ(original_page, Active(first));
+  EXPECT_EQ("order=first", content::EvalJs(original_page, "document.cookie"));
+  ASSERT_TRUE(window.RunCommand(first, "next-workspace"));
+  EXPECT_EQ(third, window.selected_browser_for_testing());
+  window.Select(first, true);
+  menu(true, base::BindOnce([](ui::SimpleMenuModel* model) {
+    model->ActivatedAt(1);
+  }));
+  ASSERT_TRUE(base::test::RunUntil([&] {
+    const auto current = service.Read();
+    return current && current->items == before->items;
+  }));
+
+  // A policy/schema change inside the native menu loop must invalidate its
+  // deferred edit, even though the invoking row has not yet been rebuilt.
+  auto* prefs = g_browser_process->local_state();
+  const auto valid = prefs->GetDict(kWorkspacesPref).Clone();
+  auto future = valid.Clone();
+  future.Set("schema", 99);
+  menu(false, base::BindOnce(
+      [](PrefService* prefs, base::DictValue future,
+         ui::SimpleMenuModel* model) {
+        prefs->SetDict(kWorkspacesPref, std::move(future));
+        model->ActivatedAt(0);
+      }, base::Unretained(prefs), future.Clone()));
+  base::RunLoop().RunUntilIdle();
+  EXPECT_EQ(future, prefs->GetDict(kWorkspacesPref));
+  prefs->SetDict(kWorkspacesPref, valid.Clone());
+  EXPECT_EQ(first, window.selected_browser_for_testing());
+  EXPECT_EQ(original_page, Active(first));
+}
+
+IN_PROC_BROWSER_TEST_F(FlyWorkspaceBrowserTest,
+                       WorkspacePointerRenamePreservesProfileAndRejectsStaleEdits) {
+  auto* first = browser();
+  ASSERT_TRUE(ui_test_utils::NavigateToURL(
+      first, embedded_test_server()->GetURL("/title1.html")));
+  auto* page = Active(first);
+  ASSERT_TRUE(content::ExecJs(page, "document.cookie='rename=first'"));
+  auto* second = SecondWorkspace();
+  ASSERT_TRUE(second);
+  auto& window = FlyWindowController::Get();
+  window.Select(first, true);
+  WorkspaceService service(*g_browser_process->local_state());
+  const auto before = service.Read();
+  ASSERT_TRUE(before);
+  ASSERT_EQ(2u, before->items.size());
+  const auto item = before->items.back();
+  const auto directory = second->GetProfile()->GetPath();
+  const auto tab_id = TabIdentity::Get(Active(second));
+  auto open = [&] {
+    views::View* row = nullptr;
+    ASSERT_TRUE(base::test::RunUntil([&] {
+      for (const auto& child : window.workspace_buttons_for_testing()->children()) {
+        auto* button = views::AsViewClass<views::MdTextButton>(child.get());
+        if (button && button->GetText() ==
+                          base::UTF8ToUTF16(service.Read()->items.back().name)) {
+          row = button;
+          return true;
+        }
+      }
+      return false;
+    }));
+    base::RepeatingTimer choose;
+    choose.Start(FROM_HERE, base::Milliseconds(1),
+        base::BindLambdaForTesting([&] {
+          auto* model = window.workspace_context_menu_for_testing(item.id);
+          if (!model)
+            return;
+          choose.Stop();
+          EXPECT_TRUE(model->IsEnabledAt(3));
+          model->ActivatedAt(3);
+        }));
+    ui::test::EventGenerator mouse(
+        window.desktop_widget()->GetNativeWindow()->GetRootWindow());
+    mouse.MoveMouseTo(row->GetBoundsInScreen().CenterPoint());
+    mouse.ClickRightButton();
+    ASSERT_TRUE(base::test::RunUntil([&] {
+      return window.workspace_rename_dialog_for_testing();
+    }));
+  };
+  open();
+  auto* dialog = window.workspace_rename_dialog_for_testing();
+  ASSERT_TRUE(dialog);
+  auto* field = views::AsViewClass<views::Textfield>(
+      dialog->GetContentsView()->GetViewByID(1));
+  ASSERT_TRUE(field);
+  ASSERT_TRUE(base::test::RunUntil([&] { return field->HasFocus(); }));
+  ExpectVisible(page, true);
+  EXPECT_EQ(first, window.selected_browser_for_testing());
+  auto* delegate = dialog->widget_delegate()->AsDialogDelegate();
+  ASSERT_TRUE(delegate);
+  field->SetText(base::UTF8ToUTF16(before->items.front().name));
+  delegate->AcceptDialog();
+  EXPECT_FALSE(dialog->IsClosed());
+  EXPECT_EQ(before->items, service.Read()->items);
+  auto* error = views::AsViewClass<views::Label>(
+      dialog->GetContentsView()->GetViewByID(2));
+  ASSERT_TRUE(error);
+  EXPECT_FALSE(error->GetText().empty());
+  field->SetText(u"Diseño / 日本語");
+  // Use the dialog's actual Return accelerator to submit the valid name.
+  ui::test::EventGenerator keys(dialog->GetNativeWindow()->GetRootWindow());
+  keys.PressKey(ui::VKEY_RETURN, ui::EF_NONE);
+  ASSERT_TRUE(base::test::RunUntil([&] {
+    return !window.workspace_rename_dialog_for_testing();
+  }));
+  ASSERT_TRUE(service.Read());
+  EXPECT_EQ("Diseño / 日本語", service.Read()->items.back().name);
+  EXPECT_EQ(item.id, service.Read()->items.back().id);
+  EXPECT_EQ(item.profile_directory, service.Read()->items.back().profile_directory);
+  EXPECT_EQ(directory, second->GetProfile()->GetPath());
+  EXPECT_EQ(tab_id, TabIdentity::Get(Active(second)));
+  EXPECT_EQ(first, window.selected_browser_for_testing());
+  EXPECT_EQ("rename=first", content::EvalJs(page, "document.cookie"));
+
+  open();
+  dialog = window.workspace_rename_dialog_for_testing();
+  ASSERT_TRUE(dialog);
+  ui::test::EventGenerator cancel(dialog->GetNativeWindow()->GetRootWindow());
+  cancel.PressKey(ui::VKEY_ESCAPE, ui::EF_NONE);
+  ASSERT_TRUE(base::test::RunUntil([&] {
+    return !window.workspace_rename_dialog_for_testing();
+  }));
+  EXPECT_EQ("Diseño / 日本語", service.Read()->items.back().name);
+
+  open();
+  dialog = window.workspace_rename_dialog_for_testing();
+  ASSERT_TRUE(dialog);
+  auto* prefs = g_browser_process->local_state();
+  const auto valid = prefs->GetDict(kWorkspacesPref).Clone();
+  auto future = valid.Clone();
+  future.Set("schema", 99);
+  prefs->SetDict(kWorkspacesPref, future.Clone());
+  dialog->widget_delegate()->AsDialogDelegate()->AcceptDialog();
+  EXPECT_FALSE(dialog->IsClosed());
+  EXPECT_EQ(future, prefs->GetDict(kWorkspacesPref));
+  prefs->SetDict(kWorkspacesPref, valid.Clone());
+  window.Select(second, true);
+  ASSERT_TRUE(base::test::RunUntil([&] {
+    return !window.workspace_rename_dialog_for_testing();
+  }));
+  EXPECT_EQ(*valid.FindList("items"),
+            *prefs->GetDict(kWorkspacesPref).FindList("items"));
+  EXPECT_EQ(item.id, service.Read()->active_id);
+}
+
+IN_PROC_BROWSER_TEST_F(FlyWorkspaceBrowserTest,
+                       WorkspaceProfileCompletionRejectsRetiredAndFutureCatalogs) {
+  auto* first = browser();
+  auto& window = FlyWindowController::Get();
+  auto* manager = g_browser_process->profile_manager();
+  auto* prefs = g_browser_process->local_state();
+  WorkspaceService service(*prefs);
+  const auto before = service.Read();
+  ASSERT_TRUE(before);
+  ASSERT_EQ(1u, before->items.size());
+  auto has_browser = [](Profile* profile) {
+    bool found = false;
+    GlobalBrowserCollection::GetInstance()->ForEach(
+        [&](BrowserWindowInterface* model) {
+          found |= model->GetProfile() == profile;
+          return true;
+        });
+    return found;
+  };
+  window.CreateWorkspace();
+  const auto created = service.Read();
+  ASSERT_TRUE(created);
+  ASSERT_EQ(2u, created->items.size());
+  const auto retired = created->items.back();
+  const auto retired_path = manager->user_data_dir().AppendASCII(
+      retired.profile_directory);
+  // No browser exists yet: retire only the metadata while profile I/O is
+  // pending, before allowing the already queued completion to run.
+  ASSERT_TRUE(service.Remove(retired.id));
+  base::test::TestFuture<Profile*> retired_ready;
+  manager->CreateProfileAsync(retired_path, retired_ready.GetCallback());
+  auto* retired_profile = retired_ready.Get();
+  ASSERT_TRUE(retired_profile);
+  base::RunLoop().RunUntilIdle();
+  EXPECT_FALSE(has_browser(retired_profile));
+  EXPECT_EQ(first, window.selected_browser_for_testing());
+  ASSERT_TRUE(service.Read());
+  EXPECT_EQ(before->items, service.Read()->items);
+  EXPECT_FALSE(service.Add(retired.name, retired.profile_directory));
+
+  window.CreateWorkspace();
+  const auto pending = service.Read();
+  ASSERT_TRUE(pending);
+  ASSERT_EQ(2u, pending->items.size());
+  const auto pending_path = manager->user_data_dir().AppendASCII(
+      pending->items.back().profile_directory);
+  const auto valid = prefs->GetDict(kWorkspacesPref).Clone();
+  auto future = valid.Clone();
+  future.Set("schema", 99);
+  prefs->SetDict(kWorkspacesPref, future.Clone());
+  base::test::TestFuture<Profile*> future_ready;
+  manager->CreateProfileAsync(pending_path, future_ready.GetCallback());
+  auto* future_profile = future_ready.Get();
+  ASSERT_TRUE(future_profile);
+  base::RunLoop().RunUntilIdle();
+  EXPECT_FALSE(has_browser(future_profile));
+  EXPECT_EQ(first, window.selected_browser_for_testing());
+  EXPECT_EQ(future, prefs->GetDict(kWorkspacesPref));
+  prefs->SetDict(kWorkspacesPref, valid.Clone());
+}
+
+IN_PROC_BROWSER_TEST_F(FlyWorkspaceBrowserTest,
+                       WorkspacePickerUsesNativeKeysAndRejectsStaleChoices) {
+  auto* first = browser();
+  ASSERT_TRUE(ui_test_utils::NavigateToURL(
+      first, embedded_test_server()->GetURL("/title1.html")));
+  auto* original_page = Active(first);
+  auto* second = SecondWorkspace();
+  ASSERT_TRUE(second);
+  auto& window = FlyWindowController::Get();
+  WorkspaceService service(*g_browser_process->local_state());
+  const auto catalog = service.Read();
+  ASSERT_TRUE(catalog);
+  const auto item = std::ranges::find(
+      catalog->items, second->GetProfile()->GetPath().BaseName().AsUTF8Unsafe(),
+      &Workspace::profile_directory);
+  ASSERT_NE(item, catalog->items.end());
+  ASSERT_TRUE(service.Rename(item->id, "Trabajo"));
+  window.Select(first, true);
+  original_page->Focus();
+  ASSERT_TRUE(base::test::RunUntil([&] {
+    return original_page->GetRenderWidgetHostView()->HasFocus() &&
+           content::EvalJs(original_page, "document.hasFocus()",
+                           content::EXECUTE_SCRIPT_NO_USER_GESTURE) == true;
+  }));
+  ui::test::EventGenerator keys(
+      window.desktop_widget()->GetNativeWindow()->GetRootWindow());
+  keys.PressKey(ui::VKEY_W, ui::EF_CONTROL_DOWN | ui::EF_SHIFT_DOWN);
+  auto& picker = window.workspace_picker();
+  ASSERT_TRUE(base::test::RunUntil([&] { return picker.active(); }));
+  ExpectVisible(original_page, true);
+  EXPECT_TRUE(picker.search_for_testing()->HasFocus());
+  auto* root = window.desktop_widget()->GetNativeWindow()->GetRootWindow();
+  auto* activation = wm::GetActivationClient(root);
+  auto* focus = aura::client::GetFocusClient(root);
+  auto* active_window = activation ? activation->GetActiveWindow() : nullptr;
+  auto* focused_window = focus ? focus->GetFocusedWindow() : nullptr;
+  EXPECT_EQ(false, content::EvalJs(original_page, R"(
+    new Promise(resolve => setTimeout(() => resolve(document.hasFocus()), 0))
+  )", content::EXECUTE_SCRIPT_NO_USER_GESTURE))
+      << "active=" << (active_window ? active_window->GetName() : "<none>")
+      << " focused=" << (focused_window ? focused_window->GetName() : "<none>");
+  keys.PressKey(ui::VKEY_ESCAPE, ui::EF_NONE);
+  ASSERT_TRUE(base::test::RunUntil([&] { return !picker.search_for_testing(); }));
+  EXPECT_EQ(true, content::EvalJs(original_page, "document.hasFocus()",
+                                 content::EXECUTE_SCRIPT_NO_USER_GESTURE));
+  keys.PressKey(ui::VKEY_W, ui::EF_CONTROL_DOWN | ui::EF_SHIFT_DOWN);
+  ASSERT_TRUE(base::test::RunUntil([&] { return picker.active(); }));
+  for (auto key : {ui::VKEY_T, ui::VKEY_R, ui::VKEY_A, ui::VKEY_B,
+                   ui::VKEY_A, ui::VKEY_J, ui::VKEY_O})
+    keys.PressKey(key, ui::EF_NONE);
+  ASSERT_TRUE(base::test::RunUntil([&] {
+    return picker.search_for_testing()->GetText() == u"trabajo" &&
+           picker.result_count_for_testing() == 1;
+  }));
+  keys.PressKey(ui::VKEY_RETURN, ui::EF_NONE);
+  ASSERT_TRUE(base::test::RunUntil([&] {
+    return !picker.search_for_testing() &&
+           window.selected_browser_for_testing() == second;
+  }));
+  ExpectVisible(original_page, false);
+  EXPECT_EQ(original_page, Active(first));
+
+  window.Select(first, true);
+  window.ToggleWorkspacePicker();
+  ASSERT_TRUE(picker.active());
+  picker.search_for_testing()->SetText(u"Trabajo");
+  picker.ContentsChanged(picker.search_for_testing(), u"Trabajo");
+  ASSERT_EQ(1u, picker.result_count_for_testing());
+  ui::KeyEvent enter(ui::EventType::kKeyPressed, ui::VKEY_RETURN, ui::EF_NONE);
+  ASSERT_TRUE(picker.HandleOverlayKey(enter));
+  window.Select(second, true);
+  window.Select(first, true);
+  ASSERT_TRUE(base::test::RunUntil([&] { return !picker.search_for_testing(); }));
+  EXPECT_EQ(first, window.selected_browser_for_testing());
+
+  ASSERT_TRUE(window.RunCommand(first, "toggle-private-mode"));
+  ASSERT_TRUE(base::test::RunUntil([&] {
+    return window.selected_browser_for_testing() != first;
+  }));
+  auto* private_browser = window.selected_browser_for_testing();
+  ASSERT_TRUE(private_browser->GetProfile()->IsOffTheRecord());
+  window.Select(second, true);
+  window.ToggleWorkspacePicker();
+  ASSERT_TRUE(picker.active());
+  picker.search_for_testing()->SetText(u"Private");
+  picker.ContentsChanged(picker.search_for_testing(), u"Private");
+  ASSERT_EQ(1u, picker.result_count_for_testing());
+  keys.PressKey(ui::VKEY_RETURN, ui::EF_NONE);
+  ASSERT_TRUE(base::test::RunUntil([&] {
+    return !picker.search_for_testing() &&
+           window.selected_browser_for_testing() == private_browser;
+  }));
+  EXPECT_EQ(catalog->items.size(), service.Read()->items.size());
+}
+
+IN_PROC_BROWSER_TEST_F(FlyWorkspaceBrowserTest,
+                       EmptyDesktopWorkspacePickerCreatesWithoutPlaceholderTabs) {
+  auto& window = FlyWindowController::Get();
+  auto original = browser()->GetWeakPtr();
+  const auto original_directory = browser()->GetProfile()->GetPath();
+  ASSERT_TRUE(ExecuteNativeCommand(browser(), "remove-tab"));
+  ASSERT_TRUE(base::test::RunUntil([&] { return !original; }));
+  ASSERT_EQ(nullptr, window.selected_browser_for_testing());
+  ui::test::EventGenerator keys(
+      window.desktop_widget()->GetNativeWindow()->GetRootWindow());
+  keys.PressKey(ui::VKEY_W, ui::EF_CONTROL_DOWN | ui::EF_SHIFT_DOWN);
+  auto& picker = window.workspace_picker();
+  ASSERT_TRUE(base::test::RunUntil([&] { return picker.active(); }));
+  EXPECT_EQ(nullptr, window.selected_browser_for_testing());
+  picker.search_for_testing()->SetText(u"New workspace");
+  picker.ContentsChanged(picker.search_for_testing(), u"New workspace");
+  ASSERT_EQ(1u, picker.result_count_for_testing());
+  keys.PressKey(ui::VKEY_RETURN, ui::EF_NONE);
+  ASSERT_TRUE(base::test::RunUntil([&] {
+    return !picker.search_for_testing() &&
+           window.selected_browser_for_testing() != nullptr;
+  }));
+  auto* created = window.selected_browser_for_testing();
+  EXPECT_NE(original_directory, created->GetProfile()->GetPath());
+  ASSERT_EQ(1, created->GetTabStripModel()->count());
+  ASSERT_TRUE(content::WaitForLoadStop(Active(created)));
+  EXPECT_EQ(GURL("about:blank"), Active(created)->GetLastCommittedURL());
+  EXPECT_EQ(created->GetProfile(), Active(created)->GetBrowserContext());
 }
 
 IN_PROC_BROWSER_TEST_F(FlyWorkspaceBrowserTest,
@@ -1690,6 +2778,61 @@ IN_PROC_BROWSER_TEST_F(FlyWorkspaceBrowserTest,
 }
 
 IN_PROC_BROWSER_TEST_F(FlyWorkspaceBrowserTest,
+                       NativePointerFocusTypesAndReturnsFromWorkspaceOverlay) {
+  ASSERT_TRUE(ui_test_utils::NavigateToURL(
+      browser(), embedded_test_server()->GetURL("/title1.html")));
+  auto* contents = Active(browser());
+  auto& window = FlyWindowController::Get();
+  ASSERT_TRUE(content::ExecJs(contents, R"js(
+    document.body.innerHTML = '<input id="native-edit" '
+      + 'style="position:fixed;left:40px;top:40px;width:250px;height:24px">';
+  )js"));
+  window.Select(browser(), true);
+  window.clock_for_testing()->RequestFocus();
+  ASSERT_TRUE(base::test::RunUntil([&] {
+    return window.clock_for_testing()->HasFocus();
+  }));
+  ui::test::EventGenerator input(
+      window.desktop_widget()->GetNativeWindow()->GetRootWindow());
+  const auto bounds = contents->GetRenderWidgetHostView()->GetViewBounds();
+  input.MoveMouseTo(bounds.origin() + gfx::Vector2d(70, 52));
+  input.ClickLeftButton();
+  ASSERT_TRUE(base::test::RunUntil([&] {
+    return contents->GetRenderWidgetHostView()->HasFocus() &&
+           content::EvalJs(contents,
+               "document.hasFocus() && document.activeElement.id === 'native-edit'",
+               content::EXECUTE_SCRIPT_NO_USER_GESTURE) == true;
+  })) << "render_view=" << bounds.ToString()
+      << " desktop=" << window.desktop_widget()->GetWindowBoundsInScreen().ToString();
+  input.PressKey(ui::VKEY_A, ui::EF_NONE);
+  ASSERT_TRUE(base::test::RunUntil([&] {
+    return content::EvalJs(contents,
+        "document.querySelector('#native-edit').value",
+        content::EXECUTE_SCRIPT_NO_USER_GESTURE) == "a";
+  }));
+  input.PressKey(ui::VKEY_W, ui::EF_CONTROL_DOWN | ui::EF_SHIFT_DOWN);
+  ASSERT_TRUE(base::test::RunUntil([&] {
+    return window.workspace_picker().active() &&
+           window.workspace_picker().search_for_testing()->HasFocus();
+  }));
+  EXPECT_EQ(false, content::EvalJs(contents, "document.hasFocus()",
+                                  content::EXECUTE_SCRIPT_NO_USER_GESTURE));
+  EXPECT_EQ(false, content::EvalJs(contents, "document.hidden"));
+  input.PressKey(ui::VKEY_ESCAPE, ui::EF_NONE);
+  ASSERT_TRUE(base::test::RunUntil([&] {
+    return !window.workspace_picker().search_for_testing() &&
+           content::EvalJs(contents, "document.hasFocus()",
+                           content::EXECUTE_SCRIPT_NO_USER_GESTURE) == true;
+  }));
+  input.PressKey(ui::VKEY_B, ui::EF_NONE);
+  ASSERT_TRUE(base::test::RunUntil([&] {
+    return content::EvalJs(contents,
+        "document.querySelector('#native-edit').value",
+        content::EXECUTE_SCRIPT_NO_USER_GESTURE) == "ab";
+  }));
+}
+
+IN_PROC_BROWSER_TEST_F(FlyWorkspaceBrowserTest,
                        NativeStatusTracksRealHoverAndPersistentVisibility) {
   ASSERT_TRUE(ui_test_utils::NavigateToURL(
       browser(), embedded_test_server()->GetURL("/title1.html")));
@@ -2100,6 +3243,9 @@ IN_PROC_BROWSER_TEST_F(FlyTabMenuBrowserTest,
   ASSERT_TRUE(ExecuteNativeCommand(browser(), "spawn-tab"));
   Choose(target, u"New tab to the right");
   ASSERT_TRUE(base::test::RunUntil([&] { return model->count() == 3; }));
+  ASSERT_TRUE(content::WaitForLoadStop(model->GetWebContentsAt(1)));
+  EXPECT_EQ(GURL("about:blank"),
+            model->GetWebContentsAt(1)->GetLastCommittedURL());
   EXPECT_EQ(target, model->GetWebContentsAt(0));
   Choose(target, u"Close");
   ASSERT_TRUE(base::test::RunUntil([&] { return model->count() == 2; }));

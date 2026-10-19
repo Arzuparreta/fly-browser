@@ -278,3 +278,15 @@ python3 scripts/chromium/native.py test-objects --root /path/to/fly-chromium --j
 The transaction is tagged `objects` and cannot authorise native configure/build
 or media acceptance. Revert it before building the unmodified control and applying
 the full native overlay. Full build depth still requires the matching control.
+
+
+For an already applied full overlay at the same pinned engine revision,
+`native.py refresh-overlay --root /path/to/engine --include-upstream` also permits
+reviewed upstream patch changes. It replays the complete new stack privately,
+checks all existing managed bytes and original pinned contents, and journals
+both reviewed versions before updating only changed files. Removed patch targets
+return to their original pinned bytes; unchanged headers keep their timestamps.
+The ordinary `refresh-overlay` command continues to reject any upstream change.
+This opt-in does not change the source pin or promote a core/compile-only tree.
+Interrupted transactions use `native.py recover --root /path/to/engine`; unknown
+owner edits remain protected and require preservation before recovery can proceed.
