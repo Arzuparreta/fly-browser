@@ -577,6 +577,8 @@ void FlyWindowController::UpdateSidebarBounds() {
     bounds.Offset(36, 0);
   bounds.set_width(sidebar_auto_collapse_ ? 224 : 260);
   sidebar_host_->SetBoundsRect(bounds);
+  // This overlay is excluded from BoxLayout; update its native clip explicitly.
+  sidebar_host_->DeprecatedLayoutImmediately();
 }
 void FlyWindowController::UpdateSidebarMode() {
   if (!sidebar_content_)
@@ -621,10 +623,13 @@ void FlyWindowController::UpdateSidebarVisibility() {
   // Manually stacking an independent Aura window among Views-owned browser
   // layers can violate WindowReorderer's ordering during tab rebuilds.
   sidebar_host_->SetVisible(expanded);
+  if (expanded)
+    sidebar_host_->DeprecatedLayoutImmediately();
   if (expanded && !sidebar_widget_->IsVisible())
     sidebar_widget_->ShowInactive();
   else if (!expanded && sidebar_widget_->IsVisible())
     sidebar_widget_->Hide();
+  UpdateClock();
 }
 void FlyWindowController::ToggleSidebarAutoCollapse() {
   const auto collapse = preferences_.ReadSidebarAutoCollapse();

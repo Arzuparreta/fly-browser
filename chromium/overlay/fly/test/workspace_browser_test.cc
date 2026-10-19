@@ -3753,7 +3753,17 @@ IN_PROC_BROWSER_TEST_F(FlyWorkspaceBrowserTest,
   ui::test::EventGenerator input(
       window.desktop_widget()->GetNativeWindow()->GetRootWindow());
   const auto bounds = contents->GetRenderWidgetHostView()->GetViewBounds();
-  input.MoveMouseTo(bounds.origin() + gfx::Vector2d(70, 52));
+  const auto click_point = bounds.origin() + gfx::Vector2d(70, 52);
+  auto native_point = click_point;
+  auto* root = window.desktop_widget()->GetNativeWindow()->GetRootWindow();
+  wm::ConvertPointFromScreen(root, &native_point);
+  auto* hit = root->GetEventHandlerForPoint(native_point);
+  EXPECT_TRUE(contents->GetNativeView()->Contains(hit))
+      << "hit=" << (hit ? hit->GetName() : "none") << " sidebar="
+      << window.sidebar_widget_for_testing()
+             ->GetWindowBoundsInScreen()
+             .ToString();
+  input.MoveMouseTo(click_point);
   input.ClickLeftButton();
   ASSERT_TRUE(base::test::RunUntil([&] {
     return contents->GetRenderWidgetHostView()->HasFocus() &&
