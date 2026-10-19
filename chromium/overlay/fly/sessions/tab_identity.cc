@@ -12,6 +12,7 @@
 #include "content/public/browser/browser_context.h"
 #include "content/public/browser/browser_thread.h"
 #include "content/public/browser/navigation_controller.h"
+#include "content/public/browser/navigation_entry.h"
 #include "content/public/browser/web_contents.h"
 
 namespace fly {
@@ -72,8 +73,14 @@ bool TabIdentity::PrepareProfileMove(content::WebContents* source,
   if (!source || !destination || FromWebContents(destination) ||
       source->GetBrowserContext() == destination->GetBrowserContext() ||
       source->GetBrowserContext()->IsOffTheRecord() !=
-          destination->GetBrowserContext()->IsOffTheRecord() ||
-      destination->GetController().GetEntryCount() != 0)
+          destination->GetBrowserContext()->IsOffTheRecord())
+    return false;
+  auto& controller = destination->GetController();
+  // Chromium creates an initial NavigationEntry with every fresh FrameTree.
+  // Check its actual initial-document state, not an empty history count.
+  if (!controller.IsInitialBlankNavigation() || controller.GetPendingEntry() ||
+      !controller.GetLastCommittedEntry() ||
+      !controller.GetLastCommittedEntry()->IsInitialEntry())
     return false;
   Get(source);
   auto* original = FromWebContents(source);
