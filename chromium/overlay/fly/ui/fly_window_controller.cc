@@ -623,8 +623,14 @@ void FlyWindowController::UpdateSidebarVisibility() {
   // Manually stacking an independent Aura window among Views-owned browser
   // layers can violate WindowReorderer's ordering during tab rebuilds.
   sidebar_host_->SetVisible(expanded);
-  if (expanded)
+  if (expanded) {
     sidebar_host_->DeprecatedLayoutImmediately();
+    if (!blocked) {
+      auto* clip = sidebar_host_->GetNativeViewContainer();
+      if (clip && clip->parent())
+        clip->parent()->StackChildAtTop(clip);
+    }
+  }
   if (expanded && !sidebar_widget_->IsVisible())
     sidebar_widget_->ShowInactive();
   else if (!expanded && sidebar_widget_->IsVisible())
@@ -662,6 +668,15 @@ void FlyWindowController::FocusSidebar() {
     tab_sidebar_->FocusActiveTab();
   else
     workspace_picker_button_->RequestFocus();
+}
+bool FlyWindowController::SidebarHasFocus() const {
+  if (!sidebar_content_ || !sidebar_focus_client_ || !sidebar_widget_)
+    return false;
+  const auto* focused = sidebar_focus_client_->GetFocusedWindow();
+  return focused && (sidebar_widget_->GetNativeWindow()->Contains(focused) ||
+                     (focused == desktop_->GetNativeWindow() &&
+                      sidebar_content_->Contains(
+                          desktop_->GetFocusManager()->GetFocusedView())));
 }
 void FlyWindowController::OnDidChangeFocus(views::View*, views::View* now) {
   if (closing_ || !sidebar_content_)
@@ -706,9 +721,20 @@ void FlyWindowController::OnMouseEvent(ui::MouseEvent* event) {
       event->type() == ui::EventType::kMousePressed) {
     sidebar_keyboard_expanded_ = false;
     sidebar_focus_inside_ = false;
-    if (sidebar_content_->Contains(
-            desktop_->GetFocusManager()->GetFocusedView()))
+    if (SidebarHasFocus() ||
+        sidebar_content_->Contains(
+            desktop_->GetFocusManager()->GetFocusedView())) {
       desktop_->GetFocusManager()->ClearFocus();
+      // Desktop and profile BrowserWidget focus managers are distinct. A real
+      // page click crosses that boundary; Chrome toolbar clicks keep their
+      // own native handling.
+      auto* page = selected_
+                       ? selected_->GetTabStripModel()->GetActiveWebContents()
+                       : nullptr;
+      auto* view = page ? page->GetRenderWidgetHostView() : nullptr;
+      if (view && view->GetViewBounds().Contains(point))
+        page->Focus();
+    }
   }
   UpdateSidebarVisibility();
 }
