@@ -1700,6 +1700,11 @@ IN_PROC_BROWSER_TEST_F(FlyWorkspaceBrowserTest,
   ASSERT_TRUE(service.Rename(item->id, "Trabajo"));
   window.Select(first, true);
   original_page->Focus();
+  ASSERT_TRUE(base::test::RunUntil([&] {
+    return original_page->GetRenderWidgetHostView()->HasFocus() &&
+           content::EvalJs(original_page, "document.hasFocus()",
+                           content::EXECUTE_SCRIPT_NO_USER_GESTURE) == true;
+  }));
   ui::test::EventGenerator keys(
       window.desktop_widget()->GetNativeWindow()->GetRootWindow());
   keys.PressKey(ui::VKEY_W, ui::EF_CONTROL_DOWN | ui::EF_SHIFT_DOWN);

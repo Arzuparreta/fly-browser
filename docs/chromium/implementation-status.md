@@ -1556,3 +1556,23 @@ emulation explicitly disabled again after initial frame capture. A native browse
 regression now checks this boundary without CDP and logs the Aura active/focused
 window names on failure. This probe is not an accepted fix; native activation
 ownership must be diagnosed and the full suite rerun before accepting a repair.
+
+
+The unchanged activation implementation passes the complete `ce7f221` native
+pipeline: 53 unit cases, 55 browser declarations (53 main cases and two PRE
+stages), video/MV3 and audio/PCM; the independent summary audit also passes.
+Evidence is `evidence/native-acceptance-audit.json`, with the same commit and
+fingerprint as `native-build.json`. This validates blank navigation, global
+mute/media, native DevTools, workspace selection/ordering and the native focus
+regression described above. It does not establish the remaining product or
+cross-platform package acceptance.
+
+The proposed non-activatable-browser change was not accepted: the native
+regression passes without it, while the external capture mixes direct CDP input
+focus with native desktop input. A pure XTest capture without CDP input reports
+an initially unfocused page, so it cannot prove a focus transition. The original
+captures remain evidence of this harness discrepancy, not an established Aura
+root cause or a product repair. The browser regression now explicitly waits for
+both native render-widget focus and `document.hasFocus()` before opening the
+chooser, preventing an initially unfocused page from making its blur assertion
+pass vacuously. The strengthened case needs its own runtime execution.
