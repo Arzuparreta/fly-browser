@@ -65,11 +65,18 @@ querying the DOM element in each evaluation repairs the fixture without weakenin
 its native pause/resume or no-user-gesture assertions. The complete passing run
 and independent audit are archived at `runtime-1c54c21-before-workspace-picker`.
 
-The sidebar worktree remains frozen at `1c54c21`. Ongoing development is on
-`codex/chromium-native-workspace-picker` in the hints worktree, adding native
-workspace search and empty-desktop selection. Its two new cases are outside the
-passing runtime. PR 115 hosted Linux service validation passes; remaining matrix
-jobs are still running.
+The `83ebf4b` workspace chooser runtime passes all 53 services, both PRE cases
+and all 52 main browser cases, plus sandboxed video/MV3 and PCM fixtures. Actual
+keyboard search, stale-choice cancellation, private selection without catalog
+writes, and workspace creation from the empty desktop pass. The sidebar worktree
+is frozen at this source. Ongoing development is on
+`codex/chromium-native-workspace-order` in the hints worktree, adding native
+workspace context-menu ordering; its extra case has not executed yet.
+
+PR 115 hosted Linux and macOS service validation both pass. Exact downloaded
+summaries match all 53 cases extracted from that Git commit, with clean source
+and the current engine lock verified. Windows services and all latest-head object
+matrix jobs remain in progress.
 
 Before changing frozen source or engine files, inspect user units
 `fly-chromium-native-build.service`, `fly-chromium-native-acceptance.service` and
@@ -77,7 +84,7 @@ Before changing frozen source or engine files, inspect user units
 engine root as `current-build-systemd.log`, `current-acceptance-systemd.log` and
 `current-summary-audit.log`. JSON and per-stage logs are in `evidence/`.
 
-Next: run the workspace chooser and finish the latest-head hosted matrices, repair
+Next: run workspace ordering and finish the latest-head hosted matrices, repair
 any failure, then merge PR 115 only after all its gates pass. Continue native Fly
 UI, remaining commands/preferences/services, migration, all-platform packages,
 update rehearsals and the full acceptance matrix through M6. Electron remains
@@ -1524,3 +1531,17 @@ Browser cases cover the actual shortcut and search keys, hidden-page visibility,
 stale queued choices, private selection without catalog writes and creation from
 the empty desktop. Execution remains pending. Rename/delete/reorder controls,
 tab transfer and the remaining workspace management UX are still outstanding.
+
+
+### Native workspace ordering follow-up
+
+Persistent workspace headings now offer native pointer/keyboard context-menu
+commands to move up or down. Boundaries and non-editable catalogs disable the
+corresponding actions. The menu closes before a non-nestable task re-resolves the
+stable ID and validates the current catalog and policy; row rebuilding cannot
+invalidate its callback. The existing atomic catalog service owns ordering,
+while active profile, open tabs and private windows keep their native identities.
+A three-profile browser case checks actual pointer menus, boundaries, keyboard
+workspace cycling after reordering, preserved cookies/metadata, and rejection of
+a queued move after a future schema arrives inside the menu loop. Runtime
+execution is pending; rename/delete controls and tab transfers remain unfinished.

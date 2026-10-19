@@ -39,6 +39,10 @@ class View;
 class Label;
 }  // namespace views
 
+namespace ui {
+class SimpleMenuModel;
+}
+
 namespace fly {
 class CommandPalette;
 class BookmarkService;
@@ -91,6 +95,7 @@ class FlyWindowController : public views::WidgetDelegate,
   void ToggleWorkspacePicker();
   bool CanShowWorkspacePicker() const { return workspaces_.Read().has_value(); }
   CommandPalette& workspace_picker() { return *workspace_picker_; }
+  ui::SimpleMenuModel* workspace_context_menu_for_testing(std::string_view id) const;
   bool CanTogglePrivate(BrowserWindowInterface* browser) const;
   views::View* workspace_buttons_for_testing() { return workspace_buttons_; }
   bool RunCommand(BrowserWindowInterface* browser, std::string_view action);
@@ -115,6 +120,7 @@ class FlyWindowController : public views::WidgetDelegate,
   bool WorkspaceChoiceAvailable(std::string_view action) const;
   void ChooseWorkspace(content::WebContents* source, std::string action);
   void OnWorkspacesChanged();
+  void ReorderWorkspace(std::string id, int direction);
   void OnPreferencesChanged();
   std::vector<PaletteEntry> BookmarkEntries();
   void OnBookmarksChanged();

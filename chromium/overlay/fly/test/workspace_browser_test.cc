@@ -1581,6 +1581,105 @@ IN_PROC_BROWSER_TEST_F(FlyWorkspaceBrowserTest,
 }
 
 IN_PROC_BROWSER_TEST_F(FlyWorkspaceBrowserTest,
+                       WorkspacePointerMenuReordersWithoutChangingProfileIdentity) {
+  auto* first = browser();
+  ASSERT_TRUE(ui_test_utils::NavigateToURL(
+      first, embedded_test_server()->GetURL("/title1.html")));
+  auto* original_page = Active(first);
+  ASSERT_TRUE(content::ExecJs(original_page, "document.cookie='order=first'"));
+  auto* second = SecondWorkspace();
+  ASSERT_TRUE(second);
+  auto& window = FlyWindowController::Get();
+  window.CreateWorkspace();
+  ASSERT_TRUE(base::test::RunUntil([&] {
+    auto* selected = window.selected_browser_for_testing();
+    return selected && selected != first && selected != second;
+  }));
+  auto* third = window.selected_browser_for_testing();
+  WorkspaceService service(*g_browser_process->local_state());
+  const auto before = service.Read();
+  ASSERT_TRUE(before);
+  ASSERT_EQ(3u, before->items.size());
+  const auto third_item = before->items.back();
+  ASSERT_EQ(third->GetProfile()->GetPath().BaseName().AsUTF8Unsafe(),
+            third_item.profile_directory);
+  window.Select(first, true);
+  auto menu = [&](bool expect_down, base::OnceCallback<void(ui::SimpleMenuModel*)> choose) {
+    views::View* control = nullptr;
+    ASSERT_TRUE(base::test::RunUntil([&] {
+      for (const auto& child : window.workspace_buttons_for_testing()->children()) {
+        auto* button = views::AsViewClass<views::MdTextButton>(child.get());
+        if (button && button->GetText() == base::UTF8ToUTF16(third_item.name) &&
+            button->IsDrawn() && !button->GetVisibleBounds().IsEmpty()) {
+          control = button;
+          return true;
+        }
+      }
+      return false;
+    }));
+    bool inspected = false;
+    base::RepeatingTimer inspect_menu;
+    inspect_menu.Start(FROM_HERE, base::Milliseconds(1),
+        base::BindLambdaForTesting([&] {
+          auto* model = window.workspace_context_menu_for_testing(third_item.id);
+          if (!model)
+            return;
+          inspect_menu.Stop();
+          EXPECT_TRUE(model->IsEnabledAt(0));
+          EXPECT_EQ(expect_down, model->IsEnabledAt(1));
+          std::move(choose).Run(model);
+          inspected = true;
+        }));
+    ui::test::EventGenerator mouse(
+        window.desktop_widget()->GetNativeWindow()->GetRootWindow());
+    mouse.MoveMouseTo(control->GetBoundsInScreen().CenterPoint());
+    mouse.ClickRightButton();
+    ASSERT_TRUE(base::test::RunUntil([&] { return inspected; }));
+  };
+  menu(false, base::BindOnce([](ui::SimpleMenuModel* model) {
+    model->ActivatedAt(0);
+  }));
+  ASSERT_TRUE(base::test::RunUntil([&] {
+    const auto current = service.Read();
+    return current && current->items[1].id == third_item.id;
+  }));
+  EXPECT_EQ(first, window.selected_browser_for_testing());
+  EXPECT_EQ(before->items[0], service.Read()->items[0]);
+  EXPECT_EQ(third_item, service.Read()->items[1]);
+  EXPECT_EQ(before->items[1], service.Read()->items[2]);
+  EXPECT_EQ(original_page, Active(first));
+  EXPECT_EQ("order=first", content::EvalJs(original_page, "document.cookie"));
+  ASSERT_TRUE(window.RunCommand(first, "next-workspace"));
+  EXPECT_EQ(third, window.selected_browser_for_testing());
+  window.Select(first, true);
+  menu(true, base::BindOnce([](ui::SimpleMenuModel* model) {
+    model->ActivatedAt(1);
+  }));
+  ASSERT_TRUE(base::test::RunUntil([&] {
+    const auto current = service.Read();
+    return current && current->items == before->items;
+  }));
+
+  // A policy/schema change inside the native menu loop must invalidate its
+  // deferred edit, even though the invoking row has not yet been rebuilt.
+  auto* prefs = g_browser_process->local_state();
+  const auto valid = prefs->GetDict(kWorkspacesPref).Clone();
+  auto future = valid.Clone();
+  future.Set("schema", 99);
+  menu(false, base::BindOnce(
+      [](PrefService* prefs, base::DictValue future,
+         ui::SimpleMenuModel* model) {
+        prefs->SetDict(kWorkspacesPref, std::move(future));
+        model->ActivatedAt(0);
+      }, base::Unretained(prefs), future.Clone()));
+  base::RunLoop().RunUntilIdle();
+  EXPECT_EQ(future, prefs->GetDict(kWorkspacesPref));
+  prefs->SetDict(kWorkspacesPref, valid.Clone());
+  EXPECT_EQ(first, window.selected_browser_for_testing());
+  EXPECT_EQ(original_page, Active(first));
+}
+
+IN_PROC_BROWSER_TEST_F(FlyWorkspaceBrowserTest,
                        WorkspacePickerUsesNativeKeysAndRejectsStaleChoices) {
   auto* first = browser();
   ASSERT_TRUE(ui_test_utils::NavigateToURL(

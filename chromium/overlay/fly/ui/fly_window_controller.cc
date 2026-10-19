@@ -14,6 +14,7 @@
 #include "fly/ui/tab_sidebar.h"
 
 #include <algorithm>
+#include <cstddef>
 #include <utility>
 #include <vector>
 
@@ -50,6 +51,10 @@
 #include "ui/color/color_id.h"
 #include "ui/native_theme/native_theme.h"
 #include "ui/views/background.h"
+#include "ui/views/context_menu_controller.h"
+#include "ui/views/controls/menu/menu_runner.h"
+#include "ui/menus/simple_menu_model.h"
+#include "ui/base/metadata/metadata_impl_macros.h"
 #include "ui/views/accessibility/view_accessibility.h"
 #include "ui/views/controls/button/md_text_button.h"
 #include "ui/views/controls/label.h"
@@ -61,6 +66,57 @@
 
 namespace fly {
 namespace {
+class WorkspaceMenuButton : public views::MdTextButton,
+                            public views::ContextMenuController,
+                            public ui::SimpleMenuModel::Delegate {
+  METADATA_HEADER(WorkspaceMenuButton, views::MdTextButton)
+ public:
+  WorkspaceMenuButton(PressedCallback select, std::u16string_view name,
+                      std::string id, bool up, bool down,
+                      base::RepeatingCallback<void(int)> move)
+      : views::MdTextButton(std::move(select), name),
+        id_(std::move(id)), up_(up), down_(down), move_(std::move(move)),
+        model_(this) {
+    set_context_menu_controller(this);
+    model_.AddItem(1, u"Move workspace up");
+    model_.AddItem(2, u"Move workspace down");
+    runner_ = std::make_unique<views::MenuRunner>(
+        &model_, views::MenuRunner::CONTEXT_MENU);
+  }
+  const std::string& workspace_id() const { return id_; }
+  ui::SimpleMenuModel* running_model() {
+    return runner_->IsRunning() ? &model_ : nullptr;
+  }
+  bool IsCommandIdEnabled(int command) const override {
+    return command == 1 ? up_ : command == 2 && down_;
+  }
+  void ExecuteCommand(int command, int) override {
+    if (!IsCommandIdEnabled(command))
+      return;
+    auto move = move_;
+    runner_->Cancel();
+    // Reordering rebuilds this button. Complete menu dispatch first and only
+    // then resolve the workspace's current stable identity in the catalog.
+    base::SingleThreadTaskRunner::GetCurrentDefault()->PostNonNestableTask(
+        FROM_HERE, base::BindOnce(std::move(move), command == 1 ? -1 : 1));
+  }
+  void ShowContextMenuForViewImpl(
+      views::View*, const gfx::Point& point,
+      ui::mojom::MenuSourceType source) override {
+    runner_->RunMenuAt(GetWidget(), nullptr, gfx::Rect(point, gfx::Size()),
+                       views::MenuAnchorPosition::kTopLeft, source);
+  }
+ private:
+  const std::string id_;
+  const bool up_;
+  const bool down_;
+  base::RepeatingCallback<void(int)> move_;
+  ui::SimpleMenuModel model_;
+  std::unique_ptr<views::MenuRunner> runner_;
+};
+BEGIN_METADATA(WorkspaceMenuButton)
+END_METADATA
+
 std::unique_ptr<FlyWindowController>& Instance() {
   static base::NoDestructor<std::unique_ptr<FlyWindowController>> instance;
   return *instance;
@@ -485,12 +541,17 @@ void FlyWindowController::RebuildWorkspaceButtons() {
         std::make_unique<views::Label>(u"Workspace data needs recovery"));
     return;
   }
+  const bool editable = workspaces_.CanEdit();
   for (const auto& item : catalog->items) {
     auto* button =
-        workspace_buttons_->AddChildView(std::make_unique<views::MdTextButton>(
+        workspace_buttons_->AddChildView(std::make_unique<WorkspaceMenuButton>(
             base::BindRepeating(&FlyWindowController::OpenWorkspace,
                                 weak_factory_.GetWeakPtr(), item.id),
-            base::UTF8ToUTF16(item.name)));
+            base::UTF8ToUTF16(item.name), item.id,
+            editable && &item != &catalog->items.front(),
+            editable && &item != &catalog->items.back(),
+            base::BindRepeating(&FlyWindowController::ReorderWorkspace,
+                                weak_factory_.GetWeakPtr(), item.id)));
     const bool active =
         selected_ && entries_.at(selected_).workspace_id == item.id;
     button->SetStyle(active ? ui::ButtonStyle::kTonal : ui::ButtonStyle::kText);
@@ -544,6 +605,37 @@ void FlyWindowController::RebuildWorkspaceButtons() {
           label));
     }
   }
+}
+
+ui::SimpleMenuModel* FlyWindowController::workspace_context_menu_for_testing(
+    std::string_view id) const {
+  for (const auto& child : workspace_buttons_->children()) {
+    auto* button = views::AsViewClass<WorkspaceMenuButton>(child.get());
+    if (button && button->workspace_id() == id)
+      return button->running_model();
+  }
+  return nullptr;
+}
+
+void FlyWindowController::ReorderWorkspace(std::string id, int direction) {
+  if (closing_ || !workspaces_.CanEdit() ||
+      (direction != -1 && direction != 1))
+    return;
+  const auto catalog = workspaces_.Read();
+  if (!catalog)
+    return;
+  const auto item = std::ranges::find(catalog->items, id, &Workspace::id);
+  if (item == catalog->items.end())
+    return;
+  const auto index = item - catalog->items.begin();
+  const auto target = index + direction;
+  if (target < 0 || target >= static_cast<std::ptrdiff_t>(catalog->items.size()))
+    return;
+  std::vector<std::string> order;
+  for (const auto& workspace : catalog->items)
+    order.push_back(workspace.id);
+  std::swap(order[index], order[target]);
+  workspaces_.Reorder(order);
 }
 
 std::vector<PaletteEntry> FlyWindowController::WorkspaceEntries() {
