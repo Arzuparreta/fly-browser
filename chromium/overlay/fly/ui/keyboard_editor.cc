@@ -551,8 +551,11 @@ void KeyboardEditor::FinishClose(bool restore_focus) {
   draft_.clear();
   catalog_.clear();
   closing_ = false;
+  // A pointer-opened surface may have saved a sidebar control as the
+  // BrowserWidget focus target. Return to the actual page; its DOM focused
+  // element is retained by Chromium, independently of native chrome focus.
   if (restore_focus && contents && !cancelled_)
-    contents->RestoreFocus();
+    contents->Focus();
 }
 views::Textfield* KeyboardEditor::field_for_testing(std::string_view action,
                                                     bool normal) {

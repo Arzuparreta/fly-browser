@@ -114,8 +114,12 @@ class FlyWorkspaceBrowserTest : public InProcessBrowserTest {
     ASSERT_TRUE(embedded_test_server()->Start());
     // Baseline fixtures exercise the pinned layout explicitly. Sidebar tests
     // opt into the product's default auto-collapse mode below.
-    ASSERT_TRUE(
-        FlyWindowController::Get().preferences().SetSidebarAutoCollapse(false));
+    g_browser_process->local_state()->SetDefaultPrefValue(
+        kPreferencesPref,
+        base::Value(base::DictValue()
+                        .Set("schema", 1)
+                        .Set("values", base::DictValue().Set(
+                                           "sidebar_auto_collapse", false))));
   }
   void TearDownOnMainThread() override {
     if (auto* window = FlyWindowController::GetIfCreated()) {
@@ -743,6 +747,23 @@ IN_PROC_BROWSER_TEST_F(FlySidebarBrowserTest,
   EXPECT_EQ(id, TabIdentity::Get(target));
   MoveToPage();
   auto* button = rail->row_for_testing(target)->children().front().get();
+  auto* select = views::AsViewClass<views::MdTextButton>(button);
+  ASSERT_TRUE(select);
+  ASSERT_TRUE(select->GetImageModel(views::Button::STATE_NORMAL));
+  const auto initial_icon = select->GetImageModel(views::Button::STATE_NORMAL)
+                                ->Rasterize(select->GetColorProvider());
+  EXPECT_EQ(gfx::Size(24, 24), initial_icon.size());
+  SetTabAudioMuted(target, true, TabMutedReason::kAudioIndicator, {});
+  ASSERT_TRUE(base::test::RunUntil([&] {
+    return select->GetTooltipText().find(u", muted") != std::u16string::npos;
+  }));
+  const auto muted_icon = select->GetImageModel(views::Button::STATE_NORMAL)
+                              ->Rasterize(select->GetColorProvider());
+  EXPECT_FALSE(initial_icon.BackedBySameObjectAs(muted_icon));
+  SetTabAudioMuted(target, false, TabMutedReason::kAudioIndicator, {});
+  ASSERT_TRUE(base::test::RunUntil([&] {
+    return select->GetTooltipText().find(u", muted") == std::u16string::npos;
+  }));
   views::test::RunScheduledLayout(button->GetWidget());
   const auto point = button->GetBoundsInScreen().CenterPoint();
   bool inspected = false;

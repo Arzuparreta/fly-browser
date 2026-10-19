@@ -78,6 +78,7 @@
 #include "ui/views/layout/fill_layout.h"
 #include "ui/views/vector_icons.h"
 #include "ui/views/view.h"
+#include "ui/views/view_class_properties.h"
 #include "ui/views/widget/native_widget_aura.h"
 #include "ui/views/window/dialog_delegate.h"
 #include "ui/views/window/vector_icons/vector_icons.h"
@@ -318,6 +319,10 @@ FlyWindowController::FlyWindowController()
   sidebar_widget_->Init(std::move(sidebar_params));
   sidebar_widget_->SetContentsView(std::move(sidebar));
   sidebar_widget_->AddObserver(this);
+  sidebar_host_ = desktop_->GetContentsView()->AddChildView(
+      std::make_unique<views::NativeViewHost>());
+  sidebar_host_->SetProperty(views::kViewIgnoredByLayoutKey, true);
+  sidebar_host_->Attach(sidebar_widget_->GetNativeView());
   hints_ = std::make_unique<HintController>(
       desktop_.get(), base::BindRepeating(
                           [](base::WeakPtr<FlyWindowController> window, bool) {
@@ -434,6 +439,10 @@ FlyWindowController::~FlyWindowController() {
   // Destruction is only posted after all profile-bound BrowserWidgets finish
   // their own beforeunload and destruction paths.
   ClearSidebarViews();
+  if (sidebar_host_) {
+    sidebar_host_->Detach();
+    sidebar_host_ = nullptr;
+  }
   if (sidebar_widget_) {
     sidebar_widget_->RemoveObserver(this);
     sidebar_widget_.reset();
@@ -553,16 +562,15 @@ void FlyWindowController::UpdateSidebarBounds() {
   if (!sidebar_widget_ || !sidebar_widget_->GetNativeWindow() ||
       !desktop_->GetNativeWindow())
     return;
-  auto bounds = desktop_->GetContentsView()->GetBoundsInScreen();
+  auto bounds = desktop_->GetContentsView()->GetLocalBounds();
   if (bounds.IsEmpty())
     return;
-  wm::ConvertRectFromScreen(desktop_->GetNativeWindow(), &bounds);
   // Keep the compact rail's hit targets stable while the details panel opens.
   // Replacing the rail under a hovering pointer can activate another command.
   if (sidebar_auto_collapse_)
     bounds.Offset(36, 0);
   bounds.set_width(sidebar_auto_collapse_ ? 224 : 260);
-  sidebar_widget_->SetBounds(bounds);
+  sidebar_host_->SetBoundsRect(bounds);
 }
 void FlyWindowController::UpdateSidebarMode() {
   if (!sidebar_content_)
@@ -603,16 +611,14 @@ void FlyWindowController::UpdateSidebarVisibility() {
       (!blocked && (sidebar_pointer_inside_ || sidebar_focus_inside_ ||
                     sidebar_keyboard_expanded_ || menu_open));
   compact_rail_->SetVisible(sidebar_auto_collapse_);
-  if (expanded) {
-    if (!sidebar_widget_->IsVisible())
-      sidebar_widget_->ShowInactive();
-    if (!blocked) {
-      auto* native = sidebar_widget_->GetNativeWindow();
-      native->parent()->StackChildAtTop(native);
-    }
-  } else if (sidebar_widget_->IsVisible()) {
+  // Participate in the same Views layer ordering as the embedded browsers.
+  // Manually stacking an independent Aura window among Views-owned browser
+  // layers can violate WindowReorderer's ordering during tab rebuilds.
+  sidebar_host_->SetVisible(expanded);
+  if (expanded && !sidebar_widget_->IsVisible())
+    sidebar_widget_->ShowInactive();
+  else if (!expanded && sidebar_widget_->IsVisible())
     sidebar_widget_->Hide();
-  }
 }
 void FlyWindowController::ToggleSidebarAutoCollapse() {
   const auto collapse = preferences_.ReadSidebarAutoCollapse();

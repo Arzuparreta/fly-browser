@@ -245,6 +245,7 @@ class FlyWindowController : public views::WidgetDelegate,
   std::unique_ptr<views::Widget> sidebar_widget_;
   raw_ptr<views::View> sidebar_content_ = nullptr;
   raw_ptr<views::View> sidebar_slot_ = nullptr;
+  raw_ptr<views::NativeViewHost> sidebar_host_ = nullptr;
   raw_ptr<views::View> compact_rail_ = nullptr;
   raw_ptr<TabSidebar> compact_tab_sidebar_ = nullptr;
   raw_ptr<views::MdTextButton> sidebar_pin_button_ = nullptr;

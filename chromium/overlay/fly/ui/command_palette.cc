@@ -327,8 +327,11 @@ void CommandPalette::FinishClose(bool restore_focus, std::string action) {
   filtered_.clear();
   catalog_.clear();
   closing_ = false;
+  // A pointer-opened surface may have saved a sidebar control as the
+  // BrowserWidget focus target. Return to the actual page; its DOM focused
+  // element is retained by Chromium, independently of native chrome focus.
   if (restore_focus && contents && !cancelled_)
-    contents->RestoreFocus();
+    contents->Focus();
   if (!action.empty() && (contents || source_was_empty) && !cancelled_)
     execute_.Run(contents.get(), std::move(action));
 }

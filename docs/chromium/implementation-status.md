@@ -22,7 +22,7 @@ The complete accepted checkpoint is archived under external
 `evidence/runtime-bbb8a09-before-window-controls`. The earlier failed full run
 is separate in `evidence/runtime-e1aa6dd-removal-pointer-failure`.
 
-Development continues on `codex/chromium-native-sidebar-collapse`. The preceding
+Development continues on `codex/chromium-native-sidebar-indicators`. The preceding
 window-control checkpoint `5d55d9a` passed the complete Linux run: 62 services,
 74 browser declarations including two PRE stages, both media fixtures and the
 independent audit. Evidence is archived in external
@@ -39,6 +39,23 @@ hosted validation remain required for this unpushed follow-up. Earlier failed
 attempts remain preserved. Check the three native validation services before
 changing the frozen worktree. Configure/build through native.py before full
 acceptance so directed rebuild metadata is not mistaken for accepted provenance.
+The first full sidebar run at `fdf867e` exposed a pointer-opened preferences
+focus regression: restoring saved BrowserWidget focus could return to the native
+sidebar instead of the page. The follow-up returns focus directly to the observed
+page in both shared overlay implementations, preserving Chromium's DOM focus.
+The baseline pinned-layout fixture now sets a test default rather than a user
+preference, preserving the existing no-write assertions. Compact native rows
+also retain scale-aware favicon, pin and audio indicators and audio accessibility
+state. The full attempt finished with 65 service passes, 55/78 browser
+passes and both media fixtures passing. Most browser failures share the native
+WindowReorderer ordering check: the independent sidebar was manually stacked
+among Views-owned browser layers. The follow-up hosts the sidebar through a
+NativeViewHost in that same View tree and removes manual Aura stacking. Its
+bounds remain outside layout, preserving the no-reflow hover contract.
+The failed run is archived in external
+`evidence/runtime-fdf867e-sidebar-layer-and-focus-failure`. These fixes require a
+fresh directed and full run; the earlier run is not accepted coverage.
+
 Tests use an extracted official signed Openbox package only on owned displays;
 no package was installed into the owner desktop.
 

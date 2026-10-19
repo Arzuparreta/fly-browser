@@ -45,6 +45,7 @@ class TabSidebar : public views::View,
   explicit TabSidebar(base::RepeatingClosure new_tab, bool compact = false);
   ~TabSidebar() override;
   void SetBrowser(BrowserWindowInterface* browser);
+  void OnThemeChanged() override;
   void FocusActiveTab();
   size_t row_count_for_testing() const;
   views::View* row_for_testing(content::WebContents* contents) const;
@@ -84,6 +85,7 @@ class TabSidebar : public views::View,
     bool favicon_initialized = false;
     bool pinned = false;
     bool muted = false;
+    bool audible = false;
     base::CallbackListSubscription audible_subscription;
   };
   std::map<content::WebContents*, Row> tab_rows_;

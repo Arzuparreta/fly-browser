@@ -29,7 +29,11 @@
 #include "ui/base/metadata/metadata_impl_macros.h"
 #include "ui/base/models/image_model.h"
 #include "ui/color/color_id.h"
+#include "ui/color/color_provider.h"
+#include "ui/gfx/canvas.h"
+#include "ui/gfx/image/canvas_image_source.h"
 #include "ui/gfx/image/image_skia_operations.h"
+#include "ui/gfx/paint_vector_icon.h"
 #include "ui/menus/simple_menu_model.h"
 #include "ui/views/accessibility/view_accessibility.h"
 #include "ui/views/border.h"
@@ -42,6 +46,41 @@
 
 namespace fly {
 namespace {
+// Keep the favicon visible while native pin/audio state changes. The source
+// renders at each requested scale, including fractional desktop scales.
+class CompactTabIcon : public gfx::CanvasImageSource {
+ public:
+  CompactTabIcon(gfx::ImageSkia favicon,
+                 bool pinned,
+                 bool audible,
+                 bool muted,
+                 SkColor color)
+      : CanvasImageSource(gfx::Size(24, 24)),
+        favicon_(std::move(favicon)),
+        pinned_(pinned),
+        audible_(audible),
+        muted_(muted),
+        color_(color) {}
+  void Draw(gfx::Canvas* canvas) override {
+    canvas->DrawImageInt(favicon_, 4, 4);
+    if (pinned_)
+      canvas->DrawImageInt(
+          gfx::CreateVectorIcon(views::kKeepFilledIcon, 8, color_), 0, 0);
+    if (muted_ || audible_)
+      canvas->DrawImageInt(
+          gfx::CreateVectorIcon(muted_ ? vector_icons::kVolumeOffIcon
+                                       : vector_icons::kVolumeUpIcon,
+                                10, color_),
+          14, 14);
+  }
+
+ private:
+  const gfx::ImageSkia favicon_;
+  const bool pinned_;
+  const bool audible_;
+  const bool muted_;
+  const SkColor color_;
+};
 void SetActionIcon(views::ImageButton* button, const gfx::VectorIcon& icon) {
   for (auto state :
        {views::Button::STATE_NORMAL, views::Button::STATE_HOVERED,
@@ -245,6 +284,12 @@ TabSidebar::~TabSidebar() {
   if (model_)
     model_->RemoveObserver(this);
 }
+void TabSidebar::OnThemeChanged() {
+  views::View::OnThemeChanged();
+  for (auto& [contents, row] : tab_rows_)
+    row.favicon_initialized = false;
+  ScheduleRefresh();
+}
 void TabSidebar::SetBrowser(BrowserWindowInterface* browser) {
   if (browser_ == browser)
     return;
@@ -357,28 +402,44 @@ void TabSidebar::Refresh() {
     row.select->SetText(compact_ ? std::u16string() : position + u"  " + title);
     row.select->SetStyle(i == model_->active_index() ? ui::ButtonStyle::kTonal
                                                      : ui::ButtonStyle::kText);
-    row.select->SetTooltipText(title);
+    const auto* audible_helper =
+        RecentlyAudibleHelper::FromWebContents(contents);
+    const bool audible = audible_helper ? audible_helper->WasRecentlyAudible()
+                                        : contents->IsCurrentlyAudible();
+    const bool muted = contents->IsAudioMuted();
+    const auto* audio_status = muted     ? u", muted"
+                               : audible ? u", playing audio"
+                                         : u"";
+    row.select->SetTooltipText(title + (compact_ ? audio_status : u""));
     row.select->GetViewAccessibility().SetName(
         position + u". " + title +
         (i == model_->active_index() ? u", selected" : u"") +
-        (model_->IsTabPinned(i) ? u", pinned" : u""));
+        (model_->IsTabPinned(i) ? u", pinned" : u"") + audio_status);
     auto* navigation = contents->GetController().GetVisibleEntry();
     const gfx::ImageSkia icon =
         navigation && navigation->GetFavicon().valid &&
                 !navigation->GetFavicon().image.IsEmpty()
             ? navigation->GetFavicon().image.AsImageSkia()
             : gfx::ImageSkia();
-    if (!row.favicon_initialized || !icon.BackedBySameObjectAs(row.favicon)) {
+    if (!row.favicon_initialized || !icon.BackedBySameObjectAs(row.favicon) ||
+        (compact_ && (row.pinned != model_->IsTabPinned(i) ||
+                      row.muted != muted || row.audible != audible))) {
       row.favicon = icon;
       row.favicon_initialized = true;
-      row.select->SetImageModel(
-          views::Button::STATE_NORMAL,
-          icon.isNull() ? ui::ImageModel::FromVectorIcon(
-                              vector_icons::kGlobeIcon, ui::kColorIcon, 16)
-                        : ui::ImageModel::FromImageSkia(
-                              gfx::ImageSkiaOperations::CreateResizedImage(
-                                  icon, skia::ImageOperations::RESIZE_BEST,
-                                  gfx::Size(16, 16))));
+      auto image = icon.isNull()
+                       ? ui::ImageModel::FromVectorIcon(
+                             vector_icons::kGlobeIcon, ui::kColorIcon, 16)
+                       : ui::ImageModel::FromImageSkia(
+                             gfx::ImageSkiaOperations::CreateResizedImage(
+                                 icon, skia::ImageOperations::RESIZE_BEST,
+                                 gfx::Size(16, 16)));
+      if (compact_ && GetColorProvider()) {
+        image = ui::ImageModel::FromImageSkia(
+            gfx::CanvasImageSource::MakeImageSkia<CompactTabIcon>(
+                image.Rasterize(GetColorProvider()), model_->IsTabPinned(i),
+                audible, muted, GetColorProvider()->GetColor(ui::kColorIcon)));
+      }
+      row.select->SetImageModel(views::Button::STATE_NORMAL, image);
     }
     if (row.pinned != model_->IsTabPinned(i)) {
       row.pinned = model_->IsTabPinned(i);
@@ -392,11 +453,8 @@ void TabSidebar::Refresh() {
     row.close->GetViewAccessibility().SetName(u"Close " + title);
     row.close->SetTooltipText(u"Close " + title);
     row.close->SetEnabled(!model_->IsTabPinned(i));
-    const auto* audible = RecentlyAudibleHelper::FromWebContents(contents);
-    const bool muted = contents->IsAudioMuted();
-    row.audio->SetVisible(
-        !compact_ && (muted || (audible ? audible->WasRecentlyAudible()
-                                        : contents->IsCurrentlyAudible())));
+    row.audible = audible;
+    row.audio->SetVisible(!compact_ && (muted || audible));
     if (row.muted != muted) {
       row.muted = muted;
       SetActionIcon(row.audio, muted ? vector_icons::kVolumeOffIcon
