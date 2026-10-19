@@ -378,6 +378,8 @@ FlyWindowController::~FlyWindowController() {
   desktop_->RemoveObserver(this);
   // Destruction is only posted after all profile-bound BrowserWidgets finish
   // their own beforeunload and destruction paths.
+  window_control_buttons_.clear();
+  window_controls_ = nullptr;
   workspace_buttons_ = nullptr;
   content_ = nullptr;
   status_ = nullptr;
@@ -459,6 +461,7 @@ void FlyWindowController::UpdateWindowControls() {
       window_controls_->Contains(
           desktop_->GetFocusManager()->GetFocusedView()) &&
       selected_) {
+    desktop_->GetFocusManager()->ClearFocus();
     if (auto* contents = selected_->GetTabStripModel()->GetActiveWebContents())
       contents->Focus();
   }
