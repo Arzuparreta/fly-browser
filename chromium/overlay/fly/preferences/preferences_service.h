@@ -50,6 +50,9 @@ class PreferencesService {
   bool CanEditClock() const;
   bool SetClockVisible(bool visible);
   bool CycleClockFormat();
+  std::optional<bool> ReadSidebarAutoCollapse() const;
+  bool CanEditSidebarAutoCollapse() const;
+  bool SetSidebarAutoCollapse(bool collapse);
   std::optional<bool> ReadWindowControlsVisible() const;
   bool CanEditWindowControls() const;
   bool SetWindowControlsVisible(bool visible);

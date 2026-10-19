@@ -42,7 +42,7 @@ class TabSidebar : public views::View,
   METADATA_HEADER(TabSidebar, views::View)
 
  public:
-  explicit TabSidebar(base::RepeatingClosure new_tab);
+  explicit TabSidebar(base::RepeatingClosure new_tab, bool compact = false);
   ~TabSidebar() override;
   void SetBrowser(BrowserWindowInterface* browser);
   void FocusActiveTab();
@@ -92,6 +92,7 @@ class TabSidebar : public views::View,
   raw_ptr<BrowserWindowInterface> browser_ = nullptr;
   raw_ptr<TabStripModel> model_ = nullptr;
   raw_ptr<views::View> rows_ = nullptr;
+  const bool compact_;
   bool refresh_pending_ = false;
   base::WeakPtrFactory<TabSidebar> weak_factory_{this};
 };

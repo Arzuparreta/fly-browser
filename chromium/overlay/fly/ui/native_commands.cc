@@ -549,6 +549,10 @@ bool NativeCommandAvailable(BrowserWindowInterface* browser,
     auto* window = FlyWindowController::GetIfCreated();
     return window && window->preferences().CanEditTheme();
   }
+  if (action == "toggle-zen-mode" || action == "toggle-sidebar-pin") {
+    auto* window = FlyWindowController::GetIfCreated();
+    return window && window->preferences().CanEditSidebarAutoCollapse();
+  }
   if (action == "toggle-window-controls") {
     auto* window = FlyWindowController::GetIfCreated();
     return window && window->preferences().CanEditWindowControls();

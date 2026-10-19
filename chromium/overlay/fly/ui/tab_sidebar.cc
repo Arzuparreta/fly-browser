@@ -32,6 +32,7 @@
 #include "ui/gfx/image/image_skia_operations.h"
 #include "ui/menus/simple_menu_model.h"
 #include "ui/views/accessibility/view_accessibility.h"
+#include "ui/views/border.h"
 #include "ui/views/controls/button/image_button.h"
 #include "ui/views/controls/button/md_text_button.h"
 #include "ui/views/controls/menu/menu_runner.h"
@@ -219,12 +220,15 @@ class SidebarTabMenu : public ui::SimpleMenuModel::Delegate {
   std::unique_ptr<views::MenuRunner> runner_;
 };
 
-TabSidebar::TabSidebar(base::RepeatingClosure new_tab) {
+TabSidebar::TabSidebar(base::RepeatingClosure new_tab, bool compact)
+    : compact_(compact) {
   auto* layout = SetLayoutManager(std::make_unique<views::BoxLayout>(
       views::BoxLayout::Orientation::kVertical));
-  auto* add = AddChildView(
-      std::make_unique<views::MdTextButton>(std::move(new_tab), u"New tab"));
+  auto* add = AddChildView(std::make_unique<views::MdTextButton>(
+      std::move(new_tab), compact_ ? u"+" : u"New tab"));
   add->GetViewAccessibility().SetName(u"New tab in selected workspace");
+  if (compact_)
+    add->SetMinSize(gfx::Size(32, 32));
   auto* scroll = AddChildView(std::make_unique<views::ScrollView>());
   // A bounded viewport sizes plain BoxLayout contents on both compositor
   // scrolling backends. Unbounded contents otherwise retain zero bounds.
@@ -297,7 +301,12 @@ void TabSidebar::Refresh() {
       };
       auto* select = row->AddChildView(std::make_unique<views::MdTextButton>(
           callback(RowAction::kSelect), u""));
-      select->SetHorizontalAlignment(gfx::ALIGN_LEFT);
+      select->SetHorizontalAlignment(compact_ ? gfx::ALIGN_CENTER
+                                              : gfx::ALIGN_LEFT);
+      if (compact_) {
+        select->SetBorder(views::CreateEmptyBorder(gfx::Insets(4)));
+        select->SetMinSize(gfx::Size(32, 32));
+      }
       layout->SetFlexForView(select, 1);
       auto icon_button = [&](RowAction action, const gfx::VectorIcon& icon,
                              const std::u16string& name) {
@@ -312,6 +321,8 @@ void TabSidebar::Refresh() {
                                 u"Close tab");
       auto* audio = icon_button(RowAction::kMute, vector_icons::kVolumeUpIcon,
                                 u"Mute tab");
+      pin->SetVisible(!compact_);
+      close->SetVisible(!compact_);
       auto* view = rows_->AddChildView(std::move(row));
       auto& data = tab_rows_.try_emplace(contents).first->second;
       data.contents = contents->GetWeakPtr();
@@ -343,7 +354,7 @@ void TabSidebar::Refresh() {
     if (title.empty())
       title = u"New tab";
     const std::u16string position = base::NumberToString16(i + 1);
-    row.select->SetText(position + u"  " + title);
+    row.select->SetText(compact_ ? std::u16string() : position + u"  " + title);
     row.select->SetStyle(i == model_->active_index() ? ui::ButtonStyle::kTonal
                                                      : ui::ButtonStyle::kText);
     row.select->SetTooltipText(title);
@@ -383,8 +394,9 @@ void TabSidebar::Refresh() {
     row.close->SetEnabled(!model_->IsTabPinned(i));
     const auto* audible = RecentlyAudibleHelper::FromWebContents(contents);
     const bool muted = contents->IsAudioMuted();
-    row.audio->SetVisible(muted || (audible ? audible->WasRecentlyAudible()
-                                            : contents->IsCurrentlyAudible()));
+    row.audio->SetVisible(
+        !compact_ && (muted || (audible ? audible->WasRecentlyAudible()
+                                        : contents->IsCurrentlyAudible())));
     if (row.muted != muted) {
       row.muted = muted;
       SetActionIcon(row.audio, muted ? vector_icons::kVolumeOffIcon
