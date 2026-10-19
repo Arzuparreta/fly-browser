@@ -227,11 +227,12 @@ std::optional<GURL> SearchService::ResolveNavigation(
           Expand(found->second.url, Trim(input.substr(separator)), true));
   } else {
     const bool local = lower == "localhost" || lower.starts_with("localhost:");
-    // "host.tld:port" is an address; any other "scheme:..." word (mailto:,
-    // ftp://, javascript:, ...) is not something this surface opens.
-    // IPv6 literals ("[...]") are addresses too.
+    // Addresses: localhost, IPv6 literals ("[...]"), anything with a dot and
+    // "host:port". Any other "scheme:..." word (mailto:, ftp://, javascript:)
+    // is not something this surface opens.
+    bool address = local || input.front() == '[';
     if (const auto colon = input.find(':');
-        !local && input.front() != '[' && colon != std::string::npos &&
+        !address && colon != std::string::npos &&
         input.substr(0, colon).find('.') == std::string::npos) {
       const auto tail = input.substr(colon + 1);
       size_t digits = 0;
@@ -241,8 +242,9 @@ std::optional<GURL> SearchService::ResolveNavigation(
           (digits < tail.size() && tail[digits] != '/' &&
            tail[digits] != '?' && tail[digits] != '#'))
         return std::nullopt;
+      address = colon > 0;
     }
-    if (local || input.find('.') != std::string::npos)
+    if (address || input.find('.') != std::string::npos)
       return CheckedURL(std::string(local ? "http://" : "https://") + input);
     if (input.find(':') != std::string::npos)
       return std::nullopt;
