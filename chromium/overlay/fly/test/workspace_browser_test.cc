@@ -1754,7 +1754,9 @@ IN_PROC_BROWSER_TEST_F(
   ASSERT_TRUE(base::test::RunUntil(
       [&] { return window.preferences().ReadSuspendTimeoutMinutes() == 5; }));
   timeout->RequestFocus();
+  ASSERT_TRUE(timeout->HasFocus());
   input.PressKey(ui::VKEY_SPACE, ui::EF_NONE);
+  input.ReleaseKey(ui::VKEY_SPACE, ui::EF_NONE);
   ASSERT_TRUE(base::test::RunUntil(
       [&] { return window.preferences().ReadSuspendTimeoutMinutes() == 15; }));
   EXPECT_EQ(keyboard_before, window.commands().Read());

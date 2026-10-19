@@ -1725,3 +1725,12 @@ Performance control with real pointer/Space input while checking keyboard drafts
 and future-store refusal. Pinned compile, Electron recorder/editable regression
 and the full native run remain required; no new automatic-suspension acceptance
 is claimed before those results.
+
+
+The first `84aee74` automatic-suspension run passes all 57 service cases. Its
+Performance UI case clicks successfully but then sends a Space key press without
+its release. Chromium's native button controller activates Space on release on
+this host, so the expected second cycle times out. Add the native release event
+and assert button focus, preserving the pointer and keyboard cycle assertions;
+rerun the complete pipeline before accepting the UI. Preserve this failed
+summary rather than treating the syntax/service passes as runtime acceptance.
