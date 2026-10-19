@@ -93,6 +93,7 @@ void CommandPalette::ToggleItems(content::WebContents* contents,
   }
   if (!desktop_ || (!contents && !allow_empty_source))
     return;
+  restore_page_focus_ = ShouldRestoreNativePageFocus(contents);
   Observe(contents);
   empty_source_ = !contents;
   if (contents)
@@ -327,11 +328,12 @@ void CommandPalette::FinishClose(bool restore_focus, std::string action) {
   filtered_.clear();
   catalog_.clear();
   closing_ = false;
-  // A pointer-opened surface may have saved a sidebar control as the
-  // BrowserWidget focus target. Return to the actual page; its DOM focused
-  // element is retained by Chromium, independently of native chrome focus.
-  if (restore_focus && contents && !cancelled_)
-    contents->Focus();
+  if (restore_focus && contents && !cancelled_) {
+    if (restore_page_focus_)
+      contents->Focus();
+    else
+      contents->RestoreFocus();
+  }
   if (!action.empty() && (contents || source_was_empty) && !cancelled_)
     execute_.Run(contents.get(), std::move(action));
 }

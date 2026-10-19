@@ -83,6 +83,7 @@ class FlyWindowController : public views::WidgetDelegate,
   void Select(BrowserWindowInterface* browser, bool focus);
   bool IsSelected(const BrowserWindowInterface* browser) const;
   bool has_selected_browser() const { return selected_ != nullptr; }
+  bool SidebarHasFocus() const { return sidebar_focus_inside_; }
   views::Widget* desktop_widget() const { return desktop_.get(); }
   CommandService& commands() { return commands_; }
   BookmarkService& bookmarks() { return *bookmarks_; }

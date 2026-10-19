@@ -81,6 +81,7 @@ class CommandPalette : public views::TextfieldController,
   bool empty_source_ = false;
   bool closing_ = false;
   bool cancelled_ = false;
+  bool restore_page_focus_ = false;
   bool removable_ = false;
   base::WeakPtrFactory<CommandPalette> weak_factory_{this};
 };

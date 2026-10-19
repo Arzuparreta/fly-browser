@@ -442,6 +442,14 @@ bool MaybeAutoSuspendNativeTab(content::WebContents* contents,
   return TabSuspension::MaybeAuto(contents, timeout, now);
 }
 
+bool ShouldRestoreNativePageFocus(content::WebContents* contents) {
+  if (!contents)
+    return false;
+  auto* view = contents->GetRenderWidgetHostView();
+  auto* window = FlyWindowController::GetIfCreated();
+  return (view && view->HasFocus()) || (window && window->SidebarHasFocus());
+}
+
 std::string NativeEventStroke(const input::NativeWebKeyboardEvent& event) {
   return EventStroke(event);
 }

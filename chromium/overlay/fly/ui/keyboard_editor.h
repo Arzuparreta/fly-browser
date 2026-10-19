@@ -120,6 +120,7 @@ class KeyboardEditor : public views::TextfieldController,
   uint64_t generation_ = 0;
   bool closing_ = false;
   bool cancelled_ = false;
+  bool restore_page_focus_ = false;
   base::WeakPtrFactory<KeyboardEditor> weak_factory_{this};
 };
 }  // namespace fly
