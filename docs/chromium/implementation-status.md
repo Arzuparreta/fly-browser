@@ -5,14 +5,13 @@ Full product, migration and packaged application acceptance remain outstanding.
 
 ## Active execution state
 
-Primary main remains `00d6a2e`. PR
-[126](https://github.com/Arzuparreta/fly-browser/pull/126) is ready for review at
-`bbb8a09`, with one `impact:none` label and passing ordinary checks. Latest-head
-manual service matrix 39265359598 passes all 59 cases on Linux, macOS and
-Windows. Downloaded artifacts are independently audited against the exact clean
-commit and engine lock. Object matrix 39265354608 passes Linux (50 compiler
-outputs); macOS and Windows remain in progress. Wait for every job and audit all
-artifacts before merging. Earlier cancelled matrices are not accepted evidence.
+Primary main is `9089776` after PR
+[126](https://github.com/Arzuparreta/fly-browser/pull/126) was squash-merged.
+All ordinary checks and both latest-head manual matrices passed. The downloaded
+artifacts were audited: 59 services on each platform; 50 compiler outputs on
+Linux/Windows and 39 on macOS. The macOS desktop adapter remains excluded and
+unimplemented. The primary checkout pulled main. The follow-up sidebar work
+has been rebased onto that merged main without conflicts.
 
 The complete `bbb8a09` Linux run passes 59 services, 71 browser declarations
 (69 main plus two PRE stages), H.264/AAC with MV3 and PCM audio. Independent audit
@@ -23,7 +22,8 @@ and summary SHA256
 Evidence is archived externally in
 `evidence/runtime-bbb8a09-before-window-controls`.
 
-Development continues on `codex/chromium-native-sidebar-indicators`. The preceding
+The validated follow-up is on `codex/chromium-native-sidebar-validated`;
+address/search work continues separately. The preceding
 window-control checkpoint `5d55d9a` passes the complete Linux run: 62 services,
 74 browser declarations, both media fixtures and independent audit, archived in
 `evidence/runtime-5d55d9a-before-sidebar-collapse`.

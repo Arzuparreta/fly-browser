@@ -7,7 +7,7 @@ partial or pending until the relevant complete acceptance outcomes pass.
 Accepted Linux evidence through `bbb8a09` is archived in
 `/mnt/storage/fly-chromium/evidence/runtime-bbb8a09-before-window-controls`:
 59 service tests, 71 browser declarations including two PRE stages, both media
-fixtures and independent audit pass. PR 126 hosted validation is still pending.
+fixtures and independent audit pass. PR 126 hosted validation passed on all platforms and merged as `9089776`.
 The window-control checkpoint `5d55d9a` passes 62 services, all 74 browser
 declarations, both media fixtures and independent audit on Linux. The sidebar
 follow-up `9606b31` passes the complete Linux run: 65 services, all 78 browser
