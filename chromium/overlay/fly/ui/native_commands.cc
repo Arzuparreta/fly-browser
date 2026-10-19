@@ -53,6 +53,7 @@ constexpr std::pair<std::string_view, int> kNativeMappings[] = {
     {"zoom-out", IDC_ZOOM_MINUS},
     {"reset-zoom", IDC_ZOOM_NORMAL},
     {"toggle-find", IDC_FIND},
+    {"toggle-devtools", IDC_DEV_TOOLS},
     {"toggle-fullscreen", IDC_FULLSCREEN},
     {"print-page", IDC_PRINT},
     {"toggle-pin-tab", IDC_WINDOW_PIN_TAB},

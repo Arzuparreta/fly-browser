@@ -127,6 +127,7 @@ if (is_linux || is_win) {
       "//chrome/browser",
       "//chrome/browser:browser_process",
       "//chrome/browser/bookmarks",
+      "//chrome/browser/devtools",
       "//chrome/browser/extensions",
       "//chrome/browser/extensions:test_support",
       "//chrome/browser/profiles:profile",

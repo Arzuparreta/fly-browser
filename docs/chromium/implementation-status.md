@@ -50,13 +50,18 @@ service passes do not establish a linked macOS/Windows browser or installable
 package. All 78 Python tooling contracts, retained Electron recorder/editable
 checks, npm tests and documentation build also pass at the integration checkpoint.
 
-Current native runtime validation is frozen at `19bd656` in the sidebar worktree.
-It adds profile-bound product blank-tab navigation, including private startup,
-new workspaces, adjacent tabs and splitting a one-tab workspace. The new 48-case
-browser suite and all acceptance stages must execute before accepting that
-follow-up. Ongoing development is on `codex/chromium-native-media-session` in the
-hints worktree; its global tab-mute and media-session cases are not part of the
-frozen runtime.
+The follow-up `19bd656` passes all 53 service cases, both PRE cases and all 46
+main browser cases, plus sandboxed video/MV3 and PCM fixtures. It adds
+profile-bound product blank-tab navigation, including private startup, new
+workspaces, adjacent tabs and splitting a one-tab workspace. Its independent
+audit and exact evidence are archived at `runtime-19bd656-before-global-media`.
+
+Current native runtime validation is frozen at `bf464eb` in the sidebar worktree.
+It adds global native tab muting and Media Session playback control. Its 51-case
+browser suite and acceptance stages must execute before accepting those features.
+Ongoing development is on `codex/chromium-native-devtools` in the hints worktree;
+its additional DevTools case is outside the frozen runtime. Latest PR 115 hosted
+Linux service validation passes; the remaining matrix jobs are still running.
 
 Before changing frozen source or engine files, inspect user units
 `fly-chromium-native-build.service`, `fly-chromium-native-acceptance.service` and
@@ -64,7 +69,7 @@ Before changing frozen source or engine files, inspect user units
 engine root as `current-build-systemd.log`, `current-acceptance-systemd.log` and
 `current-summary-audit.log`. JSON and per-stage logs are in `evidence/`.
 
-Next: finish the `19bd656` runtime run and the latest-head hosted matrices, repair
+Next: finish the `bf464eb` runtime run and the latest-head hosted matrices, repair
 any failure, then merge PR 115 only after all its gates pass. Continue native Fly
 UI, remaining commands/preferences/services, migration, all-platform packages,
 update rehearsals and the full acceptance matrix through M6. Electron remains
@@ -1477,3 +1482,13 @@ native player fallback, then check pause/resume from another workspace while
 retaining native selection/visibility. Resume assertions run without a synthetic
 user gesture. Their execution is pending; this does not establish real Twitch/Pie
 acceptance.
+
+
+### Native DevTools follow-up
+
+`toggle-devtools` now dispatches Chromium's own command for the selected native
+tab. The existing command controller retains availability/policy checks and the
+native frontend owns docking, target registration and lifecycle. A browser case
+opens and closes the real docked frontend in two isolated workspaces, verifies
+profile ownership and stable inspected tab identity, and checks that both the
+inspected page and docked frontend remain visible. Runtime execution is pending.

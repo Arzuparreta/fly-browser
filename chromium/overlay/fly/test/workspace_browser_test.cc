@@ -44,6 +44,7 @@
 #include "base/version_info/version_info.h"
 #include "chrome/browser/browser_process.h"
 #include "chrome/browser/extensions/chrome_test_extension_loader.h"
+#include "chrome/browser/devtools/devtools_window.h"
 #include "chrome/browser/extensions/extension_tab_util.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/profiles/profile_manager.h"
@@ -683,6 +684,54 @@ IN_PROC_BROWSER_TEST_F(FlyWorkspaceBrowserTest,
   EXPECT_EQ(row, sidebar->row_for_testing(contents));
   EXPECT_EQ(id, TabIdentity::Get(contents));
   EXPECT_EQ(GURL("about:blank"), contents->GetLastCommittedURL());
+}
+
+IN_PROC_BROWSER_TEST_F(FlyWorkspaceBrowserTest,
+                       DevToolsUsesTheSelectedNativeTabAndWorkspace) {
+  auto* first = browser();
+  ASSERT_TRUE(ui_test_utils::NavigateToURL(
+      first, embedded_test_server()->GetURL("/title1.html")));
+  auto* inspected = Active(first);
+  const int tab_id = extensions::ExtensionTabUtil::GetTabId(inspected);
+  ASSERT_TRUE(NativeCommandAvailable(first, "toggle-devtools"));
+  ASSERT_TRUE(InvokeNativeCommand(first, "toggle-devtools"));
+  ASSERT_TRUE(base::test::RunUntil([&] {
+    return DevToolsWindow::GetInTabWebContents(inspected, nullptr) != nullptr;
+  }));
+  auto* frontend = DevToolsWindow::GetInTabWebContents(inspected, nullptr);
+  ASSERT_TRUE(frontend);
+  EXPECT_EQ(first->GetProfile(),
+            Profile::FromBrowserContext(frontend->GetBrowserContext())
+                ->GetOriginalProfile());
+  EXPECT_EQ(inspected, Active(first));
+  EXPECT_EQ(tab_id, extensions::ExtensionTabUtil::GetTabId(inspected));
+  ExpectVisible(inspected, true);
+  ExpectVisible(frontend, true);
+  ASSERT_TRUE(InvokeNativeCommand(first, "toggle-devtools"));
+  ASSERT_TRUE(base::test::RunUntil([&] {
+    return DevToolsWindow::GetInstanceForInspectedWebContents(inspected) == nullptr;
+  }));
+
+  auto* other = SecondWorkspace();
+  ASSERT_TRUE(other);
+  auto* other_tab = Active(other);
+  ASSERT_TRUE(InvokeNativeCommand(other, "toggle-devtools"));
+  ASSERT_TRUE(base::test::RunUntil([&] {
+    return DevToolsWindow::GetInTabWebContents(other_tab, nullptr) != nullptr;
+  }));
+  auto* other_frontend = DevToolsWindow::GetInTabWebContents(other_tab, nullptr);
+  ASSERT_TRUE(other_frontend);
+  EXPECT_EQ(other->GetProfile(),
+            Profile::FromBrowserContext(other_frontend->GetBrowserContext())
+                ->GetOriginalProfile());
+  EXPECT_EQ(nullptr, DevToolsWindow::GetInstanceForInspectedWebContents(inspected));
+  EXPECT_EQ(other, FlyWindowController::Get().selected_browser_for_testing());
+  ExpectVisible(inspected, false);
+  ExpectVisible(other_tab, true);
+  ASSERT_TRUE(InvokeNativeCommand(other, "toggle-devtools"));
+  ASSERT_TRUE(base::test::RunUntil([&] {
+    return DevToolsWindow::GetInstanceForInspectedWebContents(other_tab) == nullptr;
+  }));
 }
 
 IN_PROC_BROWSER_TEST_F(FlyWorkspaceBrowserTest,
