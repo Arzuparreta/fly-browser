@@ -8,8 +8,11 @@ Accepted Linux evidence through `bbb8a09` is archived in
 `/mnt/storage/fly-chromium/evidence/runtime-bbb8a09-before-window-controls`:
 59 service tests, 71 browser declarations including two PRE stages, both media
 fixtures and independent audit pass. PR 126 hosted validation is still pending.
-The separate follow-up window-control branch passes 62 services and three directed
-Xvfb/Openbox browser cases at `ee16406`; full-suite/platform checks remain pending.
+The window-control checkpoint `5d55d9a` passes 62 services, all 74 browser
+declarations, both media fixtures and independent audit on Linux. The sidebar
+follow-up `387e724` passes 65 services and nine directed Xvfb/Openbox cases,
+including four new sidebar cases. Full-suite/platform checks for that follow-up
+remain pending.
 
 Action routes live in `chromium/overlay/fly/ui/native_commands.cc` and
 `ui/fly_window_controller.cc`. Tests are in `test/workspace_browser_test.cc`;
@@ -35,7 +38,7 @@ A native upstream route alone does not establish Fly UX parity.
 | `toggle-palette` | partial | Native search, keyboard customization, cancellation and profile routing tested; remaining actions pending. |
 | `toggle-find` | partial | Native command routed; complete pointer/keyboard find-bar acceptance pending. |
 | `toggle-devtools` | partial | Selected-profile docked native DevTools tested; full platform acceptance remains pending. |
-| `toggle-zen-mode` | pending | No native Fly action implementation yet. |
+| `toggle-zen-mode` | partial | Toggles native automatic expansion/pinning without hover viewport reflow; full product/platform acceptance remains pending. |
 | `add-bookmark` | partial | Shared ordered flat Fly bookmarks tested; complete product/migration acceptance remains pending. |
 | `toggle-bookmarks` | partial | Shared ordered flat Fly bookmarks; private/destination identity and deletion tested. Frequent-site integration remains pending. |
 | `toggle-global-media` | partial | Native sessions plus fallback players tested across hidden workspaces; full platform acceptance remains pending. |
@@ -54,7 +57,7 @@ A native upstream route alone does not establish Fly UX parity.
 | `open-extension-actions` | pending | No native Fly action implementation yet. |
 | `toggle-window-controls` | partial | Three owned Xvfb/Openbox desktop cases and all 62 services pass at ee16406; full-suite/platform acceptance remains pending. |
 | `reset-zoom` | partial | Native profile zoom routed; shared hostname zoom contract remains pending. |
-| `toggle-sidebar-pin` | pending | No native Fly action implementation yet. |
+| `toggle-sidebar-pin` | partial | Native button, command and live settings share persistent pinning; full product/platform acceptance remains pending. |
 | `toggle-split-horizontal` | partial | Native split API routed; both-pane visibility/basic focus tested. All orientations/input paths, layout restore and platform acceptance remain pending. |
 | `cycle-split-orientation` | partial | Native split API routed; both-pane visibility/basic focus tested. All orientations/input paths, layout restore and platform acceptance remain pending. |
 | `close-split-view` | partial | Native split API routed; both-pane visibility/basic focus tested. All orientations/input paths, layout restore and platform acceptance remain pending. |
@@ -123,7 +126,7 @@ declared supported because Chromium has a related global flag or policy.
 | `sync_website_theme` | partial | Native renderer color scheme synchronization tested without replacing page APIs. |
 | `trusted_domains` | pending | Fly setting/import/UI behavior not implemented yet. |
 | `tab_suspend_timeout_minutes` | partial | Off and 5/15/30/60-minute native deadlines tested with retained documents and protected cases. |
-| `sidebar_auto_collapse` | pending | Fly setting/import/UI behavior not implemented yet. |
+| `sidebar_auto_collapse` | partial | Default enabled, native live Appearance control and recovery policy tested; import and full platform acceptance remain pending. |
 | `show_status_bar` | partial | Live native footer and persistent choice tested. |
 | `show_clock` | partial | Live native clock, private context and no per-tick writes tested. |
 | `show_frequent_sites` | pending | Fly setting/import/UI behavior not implemented yet. |

@@ -498,9 +498,11 @@ void FlyWindowController::OnPreferencesChanged() {
   const auto theme = preferences_.ReadTheme();
   if (theme && theme != applied_theme_) {
     applied_theme_ = theme;
-    desktop_->SetColorModeOverride(
-        theme->mode == "dark" ? ui::ColorProviderKey::ColorMode::kDark
-                              : ui::ColorProviderKey::ColorMode::kLight);
+    const auto color_mode = theme->mode == "dark"
+                                ? ui::ColorProviderKey::ColorMode::kDark
+                                : ui::ColorProviderKey::ColorMode::kLight;
+    desktop_->SetColorModeOverride(color_mode);
+    sidebar_widget_->SetColorModeOverride(color_mode);
     // Native WebContents observers recompute actual renderer preferences,
     // including hidden/split/private/extension pages. No web API is replaced.
     ui::NativeTheme::GetInstanceForWeb()->NotifyOnNativeThemeUpdated();

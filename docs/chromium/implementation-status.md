@@ -22,32 +22,28 @@ The complete accepted checkpoint is archived under external
 `evidence/runtime-bbb8a09-before-window-controls`. The earlier failed full run
 is separate in `evidence/runtime-e1aa6dd-removal-pointer-failure`.
 
-Development continues in the hints worktree on
-`codex/chromium-native-window-controls`, containing PR 126 plus native optional
-minimize/maximize/restore/close controls and the corresponding live Appearance
-preference. This branch has not been pushed or accepted. All 62 service cases pass. At
-`ee16406`, all three new browser cases pass together on owned Xvfb/Openbox:
-settings/focus/recovery and cancellation of queued hidden actions, actual shared
-minimize/maximize/restore, and actual close-button/beforeunload cancellation.
-`evidence/native-window-controls-directed-audit.json` independently checks the
-exact three-case set and summary hash. Earlier failed attempts remain preserved.
-The sidebar worktree is frozen at `ee16406` after this directed retest. Check
-`fly-chromium-native-build.service` before changing frozen source. A complete
-74-case run on the real virtual window manager remains required. The old current
-full-build metadata is historical after these directed rebuilds; configure and
-build through native.py to capture fresh provenance before media/full acceptance.
+Development continues on `codex/chromium-native-sidebar-collapse`. The preceding
+window-control checkpoint `5d55d9a` passed the complete Linux run: 62 services,
+74 browser declarations including two PRE stages, both media fixtures and the
+independent audit. Evidence is archived in external
+`evidence/runtime-5d55d9a-before-sidebar-collapse`.
 
-Openbox exposed a pre-existing activation/blank-page focus recursion; `7b52152`
-separates native control activation from page focus restoration. The next tests
-then exposed new control references released after desktop destruction and
-focus retained in hidden controls; `bc769d0` fixes both. Preserve the failed
-attempt directories and GDB log. Tests use an extracted official signed Openbox
-package only on owned displays; no package was installed into the owner desktop.
-Retained Electron recorder/editable regression passes again with disposable data
-in `evidence/native-window-controls-retained-keyboard.log`.
+The follow-up implements automatic sidebar expansion over the page without
+resizing it, a compact native tab rail, persistent pinning, keyboard focus and
+Escape, live Appearance settings, and suspension of the hidden clock timer.
+At `387e724`, all 65 services and nine directed browser cases pass on owned
+Xvfb/Openbox, including all four new sidebar cases and the window controls.
+The separate child widget also receives live theme changes; a browser assertion
+checks its color mode against the desktop. Full 78-case, media and latest-head
+hosted validation remain required for this unpushed follow-up. Earlier failed
+attempts remain preserved. Check the three native validation services before
+changing the frozen worktree. Configure/build through native.py before full
+acceptance so directed rebuild metadata is not mistaken for accepted provenance.
+Tests use an extracted official signed Openbox package only on owned displays;
+no package was installed into the owner desktop.
 
 The [native parity inventory](./native-parity.md) records each of the 82 actions
-and 28 preferences individually. Seventeen actions still have no native route;
+and 28 preferences individually. Fifteen actions still have no native route;
 routed actions also retain explicit UX/platform/recovery gaps. Do not treat the
 inventory or either PR as completed M0–M6 acceptance.
 

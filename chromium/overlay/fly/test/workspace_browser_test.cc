@@ -3855,7 +3855,12 @@ IN_PROC_BROWSER_TEST_F(FlyWorkspaceBrowserTest,
   )js"));
   auto& window = FlyWindowController::Get();
   const auto mode = [&] {
-    return window.desktop_widget()->GetColorProviderKeyForTesting().color_mode;
+    const auto desktop_mode =
+        window.desktop_widget()->GetColorProviderKeyForTesting().color_mode;
+    EXPECT_EQ(desktop_mode, window.sidebar_widget_for_testing()
+                                ->GetColorProviderKeyForTesting()
+                                .color_mode);
+    return desktop_mode;
   };
   const auto dark = [](content::WebContents* contents) {
     return content::EvalJs(contents, "matchMedia('(prefers-color-scheme: dark)').matches").ExtractBool();
