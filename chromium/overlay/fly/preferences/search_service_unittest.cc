@@ -37,6 +37,10 @@ TEST_F(SearchServiceTest, BuiltinsEncodingAndDirectNavigationNeverWrite) {
   EXPECT_FALSE(service_.ResolveNavigation("ftp://files.example.org"));
   EXPECT_EQ(GURL("https://example.com:8443/path"),
             service_.ResolveNavigation("example.com:8443/path"));
+  EXPECT_EQ(GURL("https://[::1]:8080/index.html"),
+            service_.ResolveNavigation("[::1]:8080/index.html"));
+  EXPECT_EQ(GURL("https://intranet:8080/?q=a.b"),
+            service_.ResolveNavigation("intranet:8080?q=a.b"));
 #if BUILDFLAG(IS_WIN)
   EXPECT_EQ(GURL("file:///C:/Fly%20fixture.txt"),
             service_.ResolveNavigation("C:\\Fly fixture.txt"));

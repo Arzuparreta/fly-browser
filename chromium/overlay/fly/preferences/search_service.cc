@@ -229,14 +229,17 @@ std::optional<GURL> SearchService::ResolveNavigation(
     const bool local = lower == "localhost" || lower.starts_with("localhost:");
     // "host.tld:port" is an address; any other "scheme:..." word (mailto:,
     // ftp://, javascript:, ...) is not something this surface opens.
+    // IPv6 literals ("[...]") are addresses too.
     if (const auto colon = input.find(':');
-        !local && colon != std::string::npos &&
+        !local && input.front() != '[' && colon != std::string::npos &&
         input.substr(0, colon).find('.') == std::string::npos) {
       const auto tail = input.substr(colon + 1);
       size_t digits = 0;
       while (digits < tail.size() && base::IsAsciiDigit(tail[digits]))
         ++digits;
-      if (digits == 0 || (digits < tail.size() && tail[digits] != '/'))
+      if (digits == 0 ||
+          (digits < tail.size() && tail[digits] != '/' &&
+           tail[digits] != '?' && tail[digits] != '#'))
         return std::nullopt;
     }
     if (local || input.find('.') != std::string::npos)
