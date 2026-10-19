@@ -2055,6 +2055,11 @@ IN_PROC_BROWSER_TEST_F(FlyTabMenuBrowserTest,
 
 IN_PROC_BROWSER_TEST_F(FlyTabMenuBrowserTest,
                        MenuTracksReordersAndRejectsClosedOrOtherProfileTargets) {
+  // Profile creation posts non-nestable work. Prepare it before MenuRunner's
+  // nested loop; the menu callback still switches the workspace synchronously.
+  auto* other_workspace = SecondWorkspace();
+  ASSERT_TRUE(other_workspace);
+  FlyWindowController::Get().Select(browser(), true);
   auto* model = browser()->GetTabStripModel();
   auto* target = Active(browser());
   ASSERT_TRUE(ExecuteNativeCommand(browser(), "spawn-tab"));
@@ -2079,7 +2084,7 @@ IN_PROC_BROWSER_TEST_F(FlyTabMenuBrowserTest,
   auto lifetime = target->GetWeakPtr();
   Menu(target, base::BindLambdaForTesting([&](ui::SimpleMenuModel* menu) {
     menu->ActivatedAt(Item(menu, u"Close"));
-    ASSERT_TRUE(SecondWorkspace());
+    FlyWindowController::Get().Select(other_workspace, true);
   }));
   // The queued command must not cross a workspace generation boundary.
   base::RunLoop().RunUntilIdle();

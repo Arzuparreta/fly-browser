@@ -47,41 +47,37 @@ also preserves toolbar focus. Hints and both session cases fail; three pointer-m
 cases time out. Both sandboxed media fixtures pass with full runtime provenance.
 The failed summaries are retained; no acceptance gate has been waived.
 
-The eighteen-patch `0198700` follow-up built and ran 47 browser declarations:
-both PRE cases and 40 of 45 main cases pass. Native page/toolbar focus, hints,
-unrelated-frame deletion, focused cross-origin scrolling and cancellation of
-application quit pass. Three pointer cases and explicit-blank restore time out;
-ordinary restore fails. No browser case crashes. The failed intermediate
-`68c8856` run exposed native-window teardown ordering, repaired by guarding native
-handler removal and stopping UI timers before posted controller cleanup.
+The nineteen-patch frozen `919c32e` source completed its full Linux build and
+acceptance pipeline. All 53 native service cases, both PRE cases and 44 of 45
+main browser cases pass. Both ordinary restart and explicit command-line blank
+restore the expected profiles, windows, tab IDs, pinned state and cookies.
+Native focus, hints, unrelated-frame deletion, pointer pin/mute/close/reopen and
+quit cancellation pass. Sandboxed video/MV3 and PCM fixtures also pass with full
+runtime provenance. One menu case times out while its callback calls synchronous
+profile creation inside MenuRunner's nested loop. The prepared fixture correction
+creates the other profile before opening the menu and still switches workspaces
+inside its callback to verify the queued command's generation boundary.
 
-The next source has nineteen patches. A preserved disposable PRE run confirms
-native Session files contain two windows for Default and one for Profile 1, with
-all expected tab mappings and no close commands. Startup instead opens Chromium's
-multi-profile picker; the Fly workspace selector must be the default startup UX.
 Patch 19 changes only the profile-picker preference default under `--fly-native`,
-retaining explicit user values and forced-picker policy. Explicit persistent
-workspace selection updates Chromium's last-used profile through its public API.
-Both ordinary restart and an explicit command-line blank remain asserted.
+retaining explicit user values and forced-picker policy. Persistent workspace
+selection updates Chromium's last-used profile through its public API. The tab
+sidebar uses a bounded ScrollView so both scrolling backends size its plain
+BoxLayout contents. Its test getter exposes only a running MenuRunner. The
+complete nineteen-patch replay and owning GN header checks pass. All 78 Python
+tooling contracts, npm tests and documentation build pass locally. The corrected
+menu fixture requires another complete runtime run before accepting this source.
 
-Pointer diagnostics find rows at zero bounds. Preferred-size scrolling alone
-did not fix the non-layer backend. The next repair bounds the ScrollView height
-so both backends size plain BoxLayout contents; physical clicks must still open
-real menus. The test getter now reports only a running MenuRunner, so a stale
-model from a dismissed menu cannot satisfy a subsequent click. The unrelated
-iframe fixture is positioned outside document flow to isolate frame deletion
-from genuine target movement. Pinned Linux Clang accepts the changed upstream
-profile registration, window controller, sidebar and browser test. Runtime
-confirmation of the nineteen-patch source remains pending. A private full-stack
-preflight and GN checks for Fly, browser UI, profile misc and the focus helper all
-pass against the complete nineteen-patch source.
+Manual CI at `98ecc7c` is now successful on all three systems: 39170219527
+(objects) and 39170220819 (53 official service cases). This validates the repaired
+macOS public header dependency and Windows GN batch launcher. The later runtime
+repairs still require latest-head CI before merging PR 115.
 
 Current source is developed in the hints worktree, then frozen in the sidebar
 worktree before each managed build. Inspect user units
 `fly-chromium-native-build.service`, `fly-chromium-native-acceptance.service` and
 `fly-chromium-native-summary-audit.service` before editing the frozen checkout or
-engine source. The `0198700` browser suite is complete and failed; its media pipeline must finish
-before changing the frozen source. Logs and
+engine source. The `919c32e` pipeline and independent audit are complete and failed on the one
+remaining menu fixture; preserve their evidence before updating frozen source. Logs and
 JSON summaries remain under `/mnt/storage/fly-chromium/evidence`; service output
 is in `current-build-systemd.log`, `current-acceptance-systemd.log` and
 `current-summary-audit.log` under the engine root. No owner profile was accessed.
