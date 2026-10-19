@@ -75,8 +75,13 @@ class EmbeddedBrowserNativeWidget final : public views::NativeWidgetAura,
       window.Select(browser_.get(), false);
   }
   void Activate() override {
-    if (auto* window = FlyWindowController::GetIfCreated(); window && browser_)
-      window->Select(browser_.get(), true);
+    if (auto* window = FlyWindowController::GetIfCreated(); window && browser_) {
+      // FocusManager can request activation while it is focusing the native
+      // location bar. Restoring page focus here re-enters that same operation
+      // before the native control receives focus (notably under Openbox).
+      window->Select(browser_.get(), false);
+      window->desktop_widget()->Activate();
+    }
   }
   void Deactivate() override { Desktop()->Deactivate(); }
   bool IsActive() const override {
