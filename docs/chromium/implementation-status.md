@@ -60,8 +60,12 @@ component extension in `<user data>/fly-user-content` from its fixed worker and 
 `script-storage/` values, and reloads it when the folders change. The worker uses
 Electron's metadata parsing and URL matching, registers `chrome.userScripts`, and
 serves GM values (persisted in extension storage, seeded from script-storage),
-`GM_xmlhttpRequest` (with Electron's `@connect`, grant and local-network checks),
-tabs and notifications. Scripts with no GM grant (or `@inject-into page`) run in
+`GM_xmlhttpRequest` (with Electron's `@connect`, grant and local-network checks;
+redirect hops are checked before they are sent by declarativeNetRequest session
+rules scoped to the worker's own requests), tabs and notifications. The same
+extension adds Electron's "Share..." context submenu (WhatsApp, X, Telegram,
+Reddit, Email through `email_handler`, Copy Markdown Link); copying uses its
+offscreen document. Scripts with no GM grant (or `@inject-into page`) run in
 the page's world like Electron's injection; scripts with GM grants run in the
 isolated user script world, where `unsafeWindow` is that world's window — a
 difference from Electron for scripts that need page globals and GM APIs at once.
@@ -81,21 +85,31 @@ declarativeNetRequest dynamic rules; its stored settings remain.
 
 Import from Electron Fly (`fly/import/legacy_import.{h,cc}`, patch 0026) runs
 once on a fresh native user data directory, after Chromium converts about:flags
-and before any profile loads, from `$XDG_CONFIG_HOME/fly-browser` (or
-`--fly-import-from`). It waits while Electron Fly holds its `SingletonLock`. The
-legacy directory is only read. Each Electron workspace (in the session file's
-order) becomes a native workspace profile — the first one `Default` — with its
+and before any profile loads, from `~/.config/fly-browser` (Electron's own files)
+and `$XDG_CONFIG_HOME/fly-browser` (`Partitions`, `SingletonLock`), or
+`--fly-import-from`. If Electron Fly is running then, Fly starts normally and
+imports on the first start after it closes, next to the native workspaces and
+keeping settings native Fly already stores. An import killed halfway is undone
+and repeated (`fly-legacy-import.partial`). The legacy directories are only read.
+Each Electron workspace (in the session file's order) becomes a native workspace
+profile — in a fresh directory the first one `Default` — with its
 partition's cookies, local/session storage, IndexedDB, service workers, file
 system and databases copied (Electron stores cookies unencrypted, which Chromium
 reads; checked live with a cookie and localStorage set in Electron). Settings,
-search engine and aliases, keyboard changes, bookmarks, hidden frequent sites,
+search engine and aliases, keyboard changes (resolved as `keybinds.js` loads
+them, checked against generated cases), bookmarks, hidden frequent sites,
 user scripts/styles and GM values are written immediately; the bundled blocker
 follows Electron's uBlock removal and per-workspace choices. Tabs (with pins),
 history and site zoom are written to `fly-legacy-import.json` and applied when
 each profile loads; Fly starts in the workspace Electron was showing and shows a
 summary listing hand-installed extensions to reinstall from the Web Store.
 
-Packages remain.
+Linux package: `scripts/chromium/package-linux.py` turns a release build
+(`chromium/gn/release.gnargs`) into `dist/Fly-<version>-native-linux-x64.tar.gz`
+with `install.sh` ("Fly (native)" next to Electron Fly, data in
+`$XDG_CONFIG_HOME/fly-browser-native`). Built and installed into a temporary
+HOME locally; hosted CI cannot build it. Windows and macOS packages, release
+pipeline cutover and owner acceptance remain.
 
 Local validation uses the engine checkout `/mnt/storage/fly-chromium`, output
 `src/out/FlyNative`, `native.py refresh-overlay --include-upstream` followed by
