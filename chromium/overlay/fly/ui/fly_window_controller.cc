@@ -3465,6 +3465,9 @@ void FlyWindowController::UpdateModeLabel() {
                        : mode);
 }
 
+std::u16string FlyWindowController::status_text_for_testing() const {
+  return status_ ? std::u16string(status_->GetText()) : std::u16string();
+}
 void FlyWindowController::ShowStatus(std::u16string text) {
   RecordDiagnostic(
       text.starts_with(u"Update failed") || text.starts_with(u"Could not")

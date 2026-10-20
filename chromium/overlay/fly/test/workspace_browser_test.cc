@@ -3977,7 +3977,7 @@ IN_PROC_BROWSER_TEST_F(FlyWorkspaceBrowserTest,
   ASSERT_EQ(names.size(), 1u);
   EXPECT_EQ(names[0],
             "local-" + base::HexEncodeLower(
-                           crypto::SHA256HashString(folder.value()))
+                           crypto::SHA256HashString(folder.AsUTF8Unsafe()))
                            .substr(0, 24));
   write(folder, "Fly Local Folder", "2");
   extensions.LoadUnpacked(profile, folder);
@@ -3987,6 +3987,25 @@ IN_PROC_BROWSER_TEST_F(FlyWorkspaceBrowserTest,
   }));
   EXPECT_EQ(installed("Fly Local Folder")->id(), id);
   EXPECT_EQ(local_folders(), names);
+  // A copy Chromium rejects leaves the installed one in place.
+  write(folder, "Fly Local Folder", "not-a-version");
+  extensions.LoadUnpacked(profile, folder);
+  ASSERT_TRUE(base::test::RunUntil([&] {
+    return FlyWindowController::Get().status_text_for_testing().starts_with(
+        u"The extension could not be loaded");
+  }));
+  EXPECT_EQ(local_folders(), names);
+  {
+    base::ScopedAllowBlockingForTesting allow_blocking;
+    std::string manifest;
+    ASSERT_TRUE(base::ReadFileToString(FlyExtensions::Folder()
+                                           .AppendASCII(names[0])
+                                           .AppendASCII("manifest.json"),
+                                       &manifest));
+    EXPECT_NE(manifest.find("\"version\":\"2\""), std::string::npos)
+        << manifest;
+  }
+  EXPECT_EQ(installed("Fly Local Folder")->version().GetString(), "2");
   // A ZIP gets its own folder from its path, and reinstalling reuses it.
   const auto zip_source = sources.GetPath().AppendASCII("zip-source");
   const auto zip = sources.GetPath().AppendASCII("package.zip");

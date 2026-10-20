@@ -22,6 +22,9 @@
 #include "extensions/browser/zipfile_installer.h"
 #include <set>
 #include "crypto/sha2.h"
+#include "build/build_config.h"
+#include "extensions/common/mojom/manifest.mojom-shared.h"
+#include "extensions/common/file_util.h"
 #include "base/functional/callback_helpers.h"
 #include "base/base64.h"
 #include "components/crx_file/id_util.h"
@@ -615,13 +618,13 @@ Staged Stage() {
 // The extension id Chromium gives an unpacked extension in `folder` (its
 // manifest key when present, otherwise the folder path), and the key id.
 std::optional<std::string> KeyId(const base::FilePath& root) {
-  std::string json;
-  if (!base::ReadFileToString(root.AppendASCII("manifest.json"), &json))
-    return std::nullopt;
-  const auto manifest = base::JSONReader::ReadDict(json, base::JSON_PARSE_RFC);
+  // Read as Chromium reads manifests and keys, so the id matches the one
+  // the unpacked extension gets.
+  std::string error;
+  const auto manifest = extensions::file_util::LoadManifest(root, &error);
   const auto* key = manifest ? manifest->FindString("key") : nullptr;
   std::string bytes;
-  if (!key || !base::Base64Decode(*key, &bytes))
+  if (!key || !extensions::Extension::ParsePEMKeyBytes(*key, &bytes))
     return std::nullopt;
   return crx_file::id_util::GenerateId(bytes);
 }
@@ -655,10 +658,16 @@ std::pair<base::FilePath, std::u16string> Finish(Staged staged,
     }
   }
   if (destination.empty()) {
-    const auto absolute =
+    // Electron hashes path.resolve(), which does not resolve symlinks.
+#if BUILDFLAG(IS_POSIX)
+    const auto resolved =
         base::MakeAbsoluteFilePathNoResolveSymbolicLinks(source);
-    const auto digest = crypto::SHA256HashString(
-        (absolute ? *absolute : source).value());
+    const auto absolute = resolved ? *resolved : source;
+#else
+    const auto made = base::MakeAbsoluteFilePath(source);
+    const auto absolute = made.empty() ? source : made;
+#endif
+    const auto digest = crypto::SHA256HashString(absolute.AsUTF8Unsafe());
     destination = folder.AppendASCII(
         "local-" + base::HexEncodeLower(digest).substr(0, 24));
   }
@@ -671,6 +680,14 @@ std::pair<base::FilePath, std::u16string> Finish(Staged staged,
         IdIn(destination, staged.unpacked))
       return {{}, u"The new package has a different extension identity."};
   }
+  // Chromium's own validation before anything is replaced, so a package it
+  // rejects leaves the installed copy working (Electron restores it).
+  std::u16string load_error;
+  if (!extensions::file_util::LoadExtension(
+          staged.unpacked, IdIn(destination, staged.unpacked),
+          extensions::mojom::ManifestLocation::kUnpacked,
+          extensions::Extension::FOLLOW_SYMLINKS_ANYWHERE, &load_error))
+    return {{}, u"The extension could not be loaded: " + load_error};
   const auto backup = staged.staging.AppendASCII("previous");
   if (previous && !base::Move(destination, backup))
     return {{}, u"The installed copy could not be replaced."};

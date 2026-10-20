@@ -171,6 +171,7 @@ class FlyWindowController : public views::WidgetDelegate,
   TabSidebar* compact_sidebar_for_testing() { return compact_tab_sidebar_; }
   FlyButton* sidebar_pin_for_testing() { return sidebar_pin_button_; }
   FlyButton* reader_button_for_testing() { return reader_button_; }
+  std::u16string status_text_for_testing() const;
   WelcomeView* welcome_for_testing() { return welcome_; }
   // The rename and new workspace name dialog, while it is open.
   views::DialogDelegate* workspace_name_dialog_for_testing() {
