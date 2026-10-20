@@ -194,7 +194,7 @@ if (is_linux || is_win) {
       "//extensions/browser:test_support",
       "//net:test_support",
       "//testing/gtest",
-      "//third_party/re2",
+      "//crypto",
       "//third_party/zlib/google:zip",
       "//ui/aura",
       "//ui/base",

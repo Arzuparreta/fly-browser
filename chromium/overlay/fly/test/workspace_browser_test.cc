@@ -17,8 +17,9 @@
 #include "fly/ui/fly_theme.h"
 #include "fly/ui/fly_actions.h"
 #include "fly/ui/fly_extensions.h"
+#include "crypto/sha2.h"
+#include "base/strings/string_number_conversions.h"
 #include "base/files/file_enumerator.h"
-#include "third_party/re2/src/re2/re2.h"
 #include "third_party/zlib/google/zip.h"
 #include "fly/ui/user_content.h"
 #include "fly/ui/welcome_view.h"
@@ -3974,7 +3975,10 @@ IN_PROC_BROWSER_TEST_F(FlyWorkspaceBrowserTest,
   const auto id = installed("Fly Local Folder")->id();
   auto names = local_folders();
   ASSERT_EQ(names.size(), 1u);
-  EXPECT_TRUE(RE2::FullMatch(names[0], "local-[0-9a-f]{24}")) << names[0];
+  EXPECT_EQ(names[0],
+            "local-" + base::HexEncodeLower(
+                           crypto::SHA256HashString(folder.value()))
+                           .substr(0, 24));
   write(folder, "Fly Local Folder", "2");
   extensions.LoadUnpacked(profile, folder);
   ASSERT_TRUE(base::test::RunUntil([&] {
@@ -4006,6 +4010,27 @@ IN_PROC_BROWSER_TEST_F(FlyWorkspaceBrowserTest,
     return extension && extension->version().GetString() == "3";
   }));
   EXPECT_EQ(local_folders().size(), 2u);
+  // An extension with a manifest key keeps one folder whatever path it is
+  // installed from, as in Electron.
+  auto write_keyed = [&](const base::FilePath& dir, std::string_view version) {
+    base::ScopedAllowBlockingForTesting allow_blocking;
+    ASSERT_TRUE(base::CreateDirectory(dir));
+    ASSERT_TRUE(base::WriteFile(
+        dir.AppendASCII("manifest.json"),
+        base::StrCat({"{\"name\":\"Fly Keyed\",\"version\":\"", version,
+                      "\",\"manifest_version\":3,\"key\":\"AQIDBA==\"}"})));
+  };
+  write_keyed(sources.GetPath().AppendASCII("keyed-a"), "1");
+  extensions.LoadUnpacked(profile, sources.GetPath().AppendASCII("keyed-a"));
+  ASSERT_TRUE(base::test::RunUntil([&] { return installed("Fly Keyed"); }));
+  ASSERT_EQ(local_folders().size(), 3u);
+  write_keyed(sources.GetPath().AppendASCII("keyed-b"), "2");
+  extensions.LoadUnpacked(profile, sources.GetPath().AppendASCII("keyed-b"));
+  ASSERT_TRUE(base::test::RunUntil([&] {
+    const auto* extension = installed("Fly Keyed");
+    return extension && extension->version().GetString() == "2";
+  }));
+  EXPECT_EQ(local_folders().size(), 3u);
 }
 
 IN_PROC_BROWSER_TEST_F(FlyWorkspaceBrowserTest,
