@@ -22,6 +22,7 @@
 #include "fly/commands/palette_catalog.h"
 #include "fly/preferences/preferences_service.h"
 #include "fly/ui/history_service.h"
+#include "fly/ui/site_zoom.h"
 #include "fly/workspaces/workspace_service.h"
 #include "ui/aura/client/focus_change_observer.h"
 #include "ui/events/event_handler.h"
@@ -163,6 +164,7 @@ class FlyWindowController : public views::WidgetDelegate,
   views::Widget* sidebar_widget_for_testing() { return sidebar_widget_.get(); }
   TabSidebar* compact_sidebar_for_testing() { return compact_tab_sidebar_; }
   FlyButton* sidebar_pin_for_testing() { return sidebar_pin_button_; }
+  FlyButton* reader_button_for_testing() { return reader_button_; }
   FlyButton* new_tab_button_for_testing() { return new_tab_button_; }
 
   // WidgetObserver:
@@ -171,6 +173,9 @@ class FlyWindowController : public views::WidgetDelegate,
   void OnWidgetShowStateChanged(views::Widget* widget) override;
 
  private:
+  void SetReaderActive(content::WebContents* contents, bool active);
+  void UpdateReaderButton();
+  void RefreshReaderState();
   struct Entry {
     raw_ptr<BrowserWindowInterface> browser;
     raw_ptr<views::Widget> widget = nullptr;
@@ -299,6 +304,7 @@ class FlyWindowController : public views::WidgetDelegate,
   std::unique_ptr<SettingsMenu> settings_menu_;
   std::unique_ptr<FlyExtensions> extensions_;
   std::unique_ptr<UserContentService> user_content_;
+  SiteZoom site_zoom_;
   std::unique_ptr<CommandPalette> extensions_picker_;
   bool extension_refresh_pending_ = false;
   // Pending per-profile import state (fly-legacy-import.json), loaded once.
@@ -335,6 +341,10 @@ class FlyWindowController : public views::WidgetDelegate,
   raw_ptr<views::View> compact_rail_ = nullptr;
   raw_ptr<TabSidebar> compact_tab_sidebar_ = nullptr;
   raw_ptr<FlyButton> sidebar_pin_button_ = nullptr;
+  raw_ptr<FlyButton> reader_button_ = nullptr;
+  // The active tab while it shows Electron's reader overlay.
+  base::WeakPtr<content::WebContents> reader_contents_;
+  base::RepeatingTimer reader_poll_;
   raw_ptr<FlyButton> compact_pin_button_ = nullptr;
   raw_ptr<FlyButton> new_tab_button_ = nullptr;
   raw_ptr<FlyButton> compact_workspace_ = nullptr;

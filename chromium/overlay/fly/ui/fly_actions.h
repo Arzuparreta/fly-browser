@@ -54,11 +54,20 @@ class SettingsMenu : public ui::SimpleMenuModel::Delegate {
   std::unique_ptr<views::MenuRunner> runner_;
 };
 
-// Reader view on Chromium's DOM distiller: distils the page in place, or
-// returns to the original article.
-bool IsReaderView(content::WebContents* contents);
+// Electron Fly's reader view: modules/readerDistiller.js (Mozilla
+// Readability with Fly's overlay, toolbar and per-site preferences), run in
+// the page as Electron did. Running it again closes the overlay.
+struct ReaderResult {
+  bool active = false;
+  std::u16string title;
+  std::u16string error;
+};
 void ToggleReaderView(content::WebContents* contents,
-                      base::OnceCallback<void(bool)> done);
+                      base::OnceCallback<void(ReaderResult)> done);
+// Whether the page currently shows the reader overlay (it also closes with
+// Escape and its own close button).
+void QueryReaderView(content::WebContents* contents,
+                     base::OnceCallback<void(bool)> done);
 
 // `scripts`, `styles` or `script-storage` below the user data directory,
 // created on demand.

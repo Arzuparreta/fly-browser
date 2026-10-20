@@ -29,6 +29,7 @@
 #include "components/history/core/browser/history_service.h"
 #include "content/public/browser/host_zoom_map.h"
 #include "content/public/common/url_constants.h"
+#include "fly/ui/site_zoom.h"
 #include "fly/ui/user_content.h"
 #include "ui/gfx/canvas.h"
 #include "ui/gfx/text_utils.h"
@@ -335,7 +336,7 @@ FlyWindowController::FlyWindowController()
   actions->AddChildView(MakeFlyIconButton(
       command("toggle-split"), kSplitSceneIcon,
       u"Toggle split view", 26));
-  actions->AddChildView(MakeFlyIconButton(
+  reader_button_ = actions->AddChildView(MakeFlyIconButton(
       command("toggle-reader-view"), kMenuBookIcon,
       u"Toggle reader view", 26));
   actions->AddChildView(MakeFlyIconButton(
@@ -408,7 +409,12 @@ FlyWindowController::FlyWindowController()
       .clock = base::BindRepeating(&FlyWindowController::CycleClockFormat,
                                    weak_factory_.GetWeakPtr()),
       .contents_changed = base::BindRepeating(
-          &FlyWindowController::ScheduleExtensionRefresh,
+          [](base::WeakPtr<FlyWindowController> window) {
+            if (!window)
+              return;
+            window->ScheduleExtensionRefresh();
+            window->RefreshReaderState();
+          },
           weak_factory_.GetWeakPtr()),
   }));
   status_ = status_bar_->mode_label();
@@ -1217,6 +1223,8 @@ void FlyWindowController::ClearSidebarViews() {
   tab_sidebar_ = nullptr;
   sidebar_content_ = nullptr;
   sidebar_pin_button_ = nullptr;
+  reader_button_ = nullptr;
+  reader_poll_.Stop();
   compact_pin_button_ = nullptr;
   new_tab_button_ = nullptr;
   compact_workspace_ = nullptr;
@@ -1707,6 +1715,7 @@ void FlyWindowController::Prepare(BrowserWindowInterface* browser) {
   if (!browser->GetProfile()->IsOffTheRecord()) {
     extensions_->AddProfile(browser->GetProfile());
     user_content_->AddProfile(browser->GetProfile());
+    site_zoom_.AddProfile(browser->GetProfile());
     QueueLegacyImport(browser);
   }
   ScheduleWorkspaceRefresh();
@@ -3353,14 +3362,32 @@ bool FlyWindowController::RunProductAction(BrowserWindowInterface* browser,
     return true;
   }
   if (action == "toggle-reader-view") {
+    // Messages as Electron Fly's toggleReaderViewOnActiveTab.
     ToggleReaderView(
-        contents, base::BindOnce(
-                      [](base::WeakPtr<FlyWindowController> window, bool ok) {
-                        if (window && !ok)
-                          window->ShowStatus(
-                              u"Reader view is not available for this page.");
-                      },
-                      weak_factory_.GetWeakPtr()));
+        contents,
+        base::BindOnce(
+            [](base::WeakPtr<FlyWindowController> window,
+               base::WeakPtr<content::WebContents> contents,
+               ReaderResult result) {
+              if (!window)
+                return;
+              if (!result.error.empty()) {
+                window->ShowStatus(u"Reader View: " + result.error);
+              } else if (result.active) {
+                window->ShowStatus(
+                    u"Reader view active (Escape to exit)" +
+                    (result.title.empty()
+                         ? std::u16string()
+                         : u": " + result.title.substr(0, 45) + u"..."));
+              } else {
+                window->ShowStatus(u"Reader View Closed");
+              }
+              window->SetReaderActive(contents.get(),
+                                      result.active && result.error.empty());
+            },
+            weak_factory_.GetWeakPtr(),
+            contents ? contents->GetWeakPtr()
+                     : base::WeakPtr<content::WebContents>()));
     return true;
   }
   if (action == "open-scripts-dir" || action == "open-styles-dir" ||
@@ -3726,5 +3753,77 @@ void FlyWindowController::ApplyLegacyImport(
           g_browser_process->profile_manager()->user_data_dir().AppendASCII(
               kLegacyImportFile),
           std::move(json)));
+}
+
+// Electron highlights the reader button while the active tab shows the reader.
+// The overlay can also close from the page (Escape, its close button), so the
+// state is checked again while it is on.
+void FlyWindowController::SetReaderActive(content::WebContents* contents,
+                                          bool active) {
+  if (!contents)
+    return;
+  if (active)
+    reader_contents_ = contents->GetWeakPtr();
+  else if (reader_contents_.get() == contents)
+    reader_contents_ = nullptr;
+  UpdateReaderButton();
+}
+void FlyWindowController::RefreshReaderState() {
+  content::WebContents* active =
+      selected_ ? selected_->GetTabStripModel()->GetActiveWebContents()
+                : nullptr;
+  reader_contents_ = nullptr;
+  UpdateReaderButton();
+  if (!active)
+    return;
+  QueryReaderView(
+      active, base::BindOnce(
+                  [](base::WeakPtr<FlyWindowController> window,
+                     base::WeakPtr<content::WebContents> contents, bool open) {
+                    if (window && contents && open)
+                      window->SetReaderActive(contents.get(), true);
+                  },
+                  weak_factory_.GetWeakPtr(), active->GetWeakPtr()));
+}
+void FlyWindowController::UpdateReaderButton() {
+  content::WebContents* active =
+      selected_ ? selected_->GetTabStripModel()->GetActiveWebContents()
+                : nullptr;
+  // Another tab became active: its own reader state is checked below.
+  if (reader_contents_.get() != active)
+    reader_contents_ = nullptr;
+  const bool on = active && reader_contents_.get() == active;
+  if (reader_button_) {
+    reader_button_->SetSelected(on);
+    reader_button_->SetTooltipText(on ? u"Reader view active"
+                                      : u"Toggle reader view");
+  }
+  if (!on) {
+    reader_poll_.Stop();
+    return;
+  }
+  if (!reader_poll_.IsRunning()) {
+    reader_poll_.Start(
+        FROM_HERE, base::Seconds(1),
+        base::BindRepeating(
+            [](base::WeakPtr<FlyWindowController> window) {
+              if (!window || !window->selected_)
+                return;
+              auto* contents =
+                  window->selected_->GetTabStripModel()->GetActiveWebContents();
+              QueryReaderView(
+                  contents,
+                  base::BindOnce(
+                      [](base::WeakPtr<FlyWindowController> window,
+                         base::WeakPtr<content::WebContents> contents,
+                         bool open) {
+                        if (window && contents && !open)
+                          window->SetReaderActive(contents.get(), false);
+                      },
+                      window, contents ? contents->GetWeakPtr()
+                                       : base::WeakPtr<content::WebContents>()));
+            },
+            weak_factory_.GetWeakPtr()));
+  }
 }
 }  // namespace fly

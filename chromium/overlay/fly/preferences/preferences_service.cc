@@ -511,8 +511,6 @@ void PreferencesService::ApplyStartupSwitches(const PrefService& local_state,
       command_line.AppendSwitchASCII(name, value);
     added.push_back(name);
   };
-  // Fly's reader view uses Chromium's DOM distiller viewer.
-  add("enable-dom-distiller");
   const auto* values = StoredValues(local_state);
   const auto flag = [&](std::string_view key) {
     const auto* value = values ? values->Find(key) : nullptr;

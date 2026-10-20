@@ -27,7 +27,6 @@
 #include "base/threading/thread_restrictions.h"
 #include "chrome/browser/content_settings/host_content_settings_map_factory.h"
 #include "components/content_settings/core/browser/host_content_settings_map.h"
-#include "components/dom_distiller/core/url_utils.h"
 #include "fly/ui/fly_window_controller.h"
 #include "fly/ui/hint_controller.h"
 #include "fly/ui/history_service.h"
@@ -3711,21 +3710,73 @@ IN_PROC_BROWSER_TEST_F(FlyWorkspaceBrowserTest,
   }));
 }
 
+// Electron's siteZoom.js: zoom changes by 0.5 levels per step and one level
+// per hostname is shared by every normal workspace, whatever path changed it.
 IN_PROC_BROWSER_TEST_F(FlyWorkspaceBrowserTest,
-                       NativeReaderViewDistilsArticleAndReturns) {
+                       SiteZoomUsesElectronStepsAndIsSharedByWorkspaces) {
+  auto& window = FlyWindowController::Get();
+  auto* original = browser();
+  const GURL page = embedded_test_server()->GetURL("/title1.html");
+  ASSERT_TRUE(ui_test_utils::NavigateToURL(original, page));
+  const std::string host(page.host());
+  const auto level = [&](BrowserWindowInterface* target) {
+    return content::HostZoomMap::GetDefaultForBrowserContext(
+               target->GetProfile())
+        ->GetZoomLevelForHostAndScheme("http", host);
+  };
+  ASSERT_TRUE(InvokeNativeCommand(original, "zoom-in"));
+  EXPECT_DOUBLE_EQ(0.5, level(original));
+  ASSERT_TRUE(InvokeNativeCommand(original, "zoom-in"));
+  EXPECT_DOUBLE_EQ(1.0, level(original));
+  window.CreateWorkspace();
+  ASSERT_TRUE(base::test::RunUntil([&] {
+    auto* selected = window.selected_browser_for_testing();
+    return selected && selected != original &&
+           selected->GetTabStripModel()->count() == 1;
+  }));
+  auto* second = window.selected_browser_for_testing();
+  // A workspace created later takes the shared levels.
+  EXPECT_DOUBLE_EQ(1.0, level(second));
+  ASSERT_TRUE(ui_test_utils::NavigateToURL(second, page));
+  ASSERT_TRUE(InvokeNativeCommand(second, "zoom-out"));
+  EXPECT_DOUBLE_EQ(0.5, level(second));
+  EXPECT_DOUBLE_EQ(0.5, level(original));
+  ASSERT_TRUE(InvokeNativeCommand(second, "reset-zoom"));
+  EXPECT_DOUBLE_EQ(0.0, level(original));
+}
+
+// Electron Fly's reader (readerDistiller.js) opens over the article with its
+// toolbar, lights the reader button, and closes on the second toggle and on
+// Escape.
+IN_PROC_BROWSER_TEST_F(FlyWorkspaceBrowserTest,
+                       ElectronReaderViewOpensOverTheArticleAndCloses) {
   const GURL article =
       embedded_test_server()->GetURL("/dom_distiller/simple_article.html");
   ASSERT_TRUE(ui_test_utils::NavigateToURL(browser(), article));
   auto* contents = Active(browser());
+  const auto open = [&] {
+    return content::EvalJs(contents,
+                           "!!document.getElementById('fly-reader-overlay')")
+        .ExtractBool();
+  };
   ASSERT_TRUE(InvokeNativeCommand(browser(), "toggle-reader-view"));
-  ASSERT_TRUE(base::test::RunUntil([&] {
-    return dom_distiller::url_utils::IsDistilledPage(
-        contents->GetLastCommittedURL());
-  }));
-  ASSERT_TRUE(content::WaitForLoadStop(contents));
-  ASSERT_TRUE(InvokeNativeCommand(browser(), "toggle-reader-view"));
+  ASSERT_TRUE(base::test::RunUntil(open));
+  EXPECT_EQ(article, contents->GetLastCommittedURL());
+  auto& window = FlyWindowController::Get();
   ASSERT_TRUE(base::test::RunUntil(
-      [&] { return contents->GetLastCommittedURL() == article; }));
+      [&] { return window.reader_button_for_testing()->selected(); }));
+  ASSERT_TRUE(InvokeNativeCommand(browser(), "toggle-reader-view"));
+  ASSERT_TRUE(base::test::RunUntil([&] { return !open(); }));
+  ASSERT_TRUE(base::test::RunUntil(
+      [&] { return !window.reader_button_for_testing()->selected(); }));
+  // Escape inside the reader closes it too; the button follows.
+  ASSERT_TRUE(InvokeNativeCommand(browser(), "toggle-reader-view"));
+  ASSERT_TRUE(base::test::RunUntil(open));
+  content::SimulateKeyPress(contents, ui::DomKey::ESCAPE, ui::DomCode::ESCAPE,
+                            ui::VKEY_ESCAPE, false, false, false, false);
+  ASSERT_TRUE(base::test::RunUntil([&] { return !open(); }));
+  ASSERT_TRUE(base::test::RunUntil(
+      [&] { return !window.reader_button_for_testing()->selected(); }));
 }
 
 IN_PROC_BROWSER_TEST_F(FlyWorkspaceBrowserTest,
@@ -5183,13 +5234,17 @@ IN_PROC_BROWSER_TEST_F(FlyPageScrollBrowserTest,
   window.Select(browser(), true);
   ui::test::EventGenerator keys(
       window.desktop_widget()->GetNativeWindow()->GetRootWindow());
+  // Electron's zoom step (factor 1.095) leaves fractional device pixels, so
+  // offsets may round one pixel either way.
   auto wait_offset = [&](const char* axis, int offset) {
     return base::test::RunUntil([&] {
-      return content::EvalJs(
-                 contents,
-                 content::JsReplace(
-                     "Math.round(document.querySelector('#box')[$1])", axis))
-                 .ExtractInt() == offset;
+      return std::abs(content::EvalJs(
+                          contents,
+                          content::JsReplace(
+                              "Math.round(document.querySelector('#box')[$1])",
+                              axis))
+                          .ExtractInt() -
+                      offset) <= 1;
     });
   };
   keys.PressKey(ui::VKEY_J, ui::EF_NONE);

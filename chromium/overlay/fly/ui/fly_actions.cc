@@ -7,6 +7,7 @@
 #include <utility>
 
 #include "base/files/file_util.h"
+#include "base/no_destructor.h"
 #include "base/json/json_reader.h"
 #include "base/path_service.h"
 #include "base/strings/string_number_conversions.h"
@@ -20,9 +21,6 @@
 #include "base/version_info/version_info.h"
 #include "chrome/browser/browser_process.h"
 #include "chrome/browser/content_settings/host_content_settings_map_factory.h"
-#include "chrome/browser/dom_distiller/dom_distiller_service_factory.h"
-#include "chrome/browser/dom_distiller/tab_utils.h"
-#include "components/dom_distiller/core/distilled_page_prefs.h"
 #include "fly/ui/fly_theme.h"
 #include "chrome/browser/lifetime/application_lifetime.h"
 #include "chrome/browser/platform_util.h"
@@ -30,16 +28,17 @@
 #include "chrome/browser/ui/navigator/browser_navigator.h"
 #include "chrome/browser/ui/navigator/browser_navigator_params.h"
 #include "chrome/browser/ui/browser_window/public/browser_window_interface.h"
+#include "chrome/common/chrome_isolated_world_ids.h"
 #include "chrome/common/chrome_paths.h"
 #include "components/content_settings/core/browser/host_content_settings_map.h"
 #include "components/content_settings/core/common/content_settings.h"
 #include "components/content_settings/core/common/content_settings_types.h"
 #include "components/download/public/common/download_item.h"
-#include "components/dom_distiller/core/url_utils.h"
 #include "components/prefs/pref_service.h"
 #include "components/spellcheck/browser/pref_names.h"
 #include "content/public/browser/download_manager.h"
 #include "content/public/browser/navigation_controller.h"
+#include "content/public/browser/render_frame_host.h"
 #include "content/public/browser/web_contents.h"
 #include "fly/fly_version.h"
 #include "fly/preferences/preferences_service.h"
@@ -283,45 +282,105 @@ void SettingsMenu::ExecuteCommand(int command, int) {
     run_action_.Run(std::move(action));
 }
 
-bool IsReaderView(content::WebContents* contents) {
-  return contents &&
-         dom_distiller::url_utils::IsDistilledPage(
-             contents->GetLastCommittedURL());
+namespace {
+// The reader runs in Chrome's internal isolated world: it shares the page's
+// DOM and storage (its per-site preferences) but not the page's scripts.
+constexpr int32_t kReaderWorld = ISOLATED_WORLD_ID_CHROME_INTERNAL;
+void RunReaderScript(base::WeakPtr<content::WebContents> contents,
+                     std::u16string script,
+                     base::OnceCallback<void(base::Value)> done) {
+  if (!contents || script.empty()) {
+    std::move(done).Run(base::Value());
+    return;
+  }
+  contents->GetPrimaryMainFrame()->ExecuteJavaScriptInIsolatedWorld(
+      script,
+      base::BindOnce([](base::OnceCallback<void(base::Value)> done,
+                        base::Value result) {
+        std::move(done).Run(std::move(result));
+      }, std::move(done)),
+      kReaderWorld);
 }
+void WithReaderScript(base::OnceCallback<void(std::u16string)> done) {
+  static base::NoDestructor<std::u16string> cached;
+  if (!cached->empty()) {
+    std::move(done).Run(*cached);
+    return;
+  }
+  base::ThreadPool::PostTaskAndReplyWithResult(
+      FROM_HERE, {base::MayBlock(), base::TaskPriority::USER_BLOCKING},
+      base::BindOnce([]() {
+        base::FilePath assets;
+        std::string text;
+        if (base::PathService::Get(base::DIR_ASSETS, &assets))
+          base::ReadFileToStringWithMaxSize(
+              assets.AppendASCII("fly_resources")
+                  .AppendASCII("reader")
+                  .AppendASCII("readerDistiller.js"),
+              &text, 4 * 1024 * 1024);
+        return base::UTF8ToUTF16(text);
+      }),
+      base::BindOnce(
+          [](base::OnceCallback<void(std::u16string)> done,
+             std::u16string script) {
+            if (!script.empty())
+              *cached = script;
+            std::move(done).Run(std::move(script));
+          },
+          std::move(done)));
+}
+}  // namespace
+
 void ToggleReaderView(content::WebContents* contents,
-                      base::OnceCallback<void(bool)> done) {
+                      base::OnceCallback<void(ReaderResult)> done) {
+  if (!contents || (!contents->GetLastCommittedURL().SchemeIsHTTPOrHTTPS() &&
+                    !contents->GetLastCommittedURL().SchemeIsFile())) {
+    std::move(done).Run({false, u"", u"This page has no article to read."});
+    return;
+  }
+  WithReaderScript(base::BindOnce(
+      [](base::WeakPtr<content::WebContents> contents,
+         base::OnceCallback<void(ReaderResult)> done, std::u16string script) {
+        if (script.empty()) {
+          std::move(done).Run({false, u"", u"The reader is not installed."});
+          return;
+        }
+        RunReaderScript(
+            contents, std::move(script),
+            base::BindOnce(
+                [](base::OnceCallback<void(ReaderResult)> done,
+                   base::Value value) {
+                  ReaderResult result;
+                  if (const auto* dict = value.GetIfDict()) {
+                    result.active = dict->FindBool("active").value_or(false);
+                    if (const auto* title = dict->FindString("title"))
+                      result.title = base::UTF8ToUTF16(*title);
+                    if (const auto* error = dict->FindString("error"))
+                      result.error = base::UTF8ToUTF16(*error);
+                  } else {
+                    result.error = u"Distillation failed";
+                  }
+                  std::move(done).Run(std::move(result));
+                },
+                std::move(done)));
+      },
+      contents->GetWeakPtr(), std::move(done)));
+}
+
+void QueryReaderView(content::WebContents* contents,
+                     base::OnceCallback<void(bool)> done) {
   if (!contents) {
     std::move(done).Run(false);
     return;
   }
-  if (IsReaderView(contents)) {
-    const GURL original =
-        dom_distiller::url_utils::GetOriginalUrlFromDistillerUrl(
-            contents->GetLastCommittedURL());
-    if (contents->GetController().CanGoBack())
-      contents->GetController().GoBack();
-    else if (original.is_valid())
-      contents->GetController().LoadURL(original, content::Referrer(),
-                                        ui::PAGE_TRANSITION_LINK,
-                                        std::string());
-    std::move(done).Run(true);
-    return;
-  }
-  if (!dom_distiller::url_utils::IsUrlDistillable(
-          contents->GetLastCommittedURL())) {
-    std::move(done).Run(false);
-    return;
-  }
-  // Follow the Fly interface theme unless the reader has chosen one.
-  if (auto* service =
-          dom_distiller::DomDistillerServiceFactory::GetForBrowserContext(
-              contents->GetBrowserContext())) {
-    service->GetDistilledPagePrefs()->SetDefaultTheme(
-        GetFlyColors().dark ? dom_distiller::mojom::Theme::kDark
-                            : dom_distiller::mojom::Theme::kSepia);
-  }
-  ::DistillCurrentPageAndViewIfSuccessful(contents,
-                                                       std::move(done));
+  RunReaderScript(
+      contents->GetWeakPtr(),
+      u"!!document.getElementById('fly-reader-overlay')",
+      base::BindOnce(
+          [](base::OnceCallback<void(bool)> done, base::Value value) {
+            std::move(done).Run(value.is_bool() && value.GetBool());
+          },
+          std::move(done)));
 }
 
 base::FilePath UserContentDirectory(std::string_view name) {
