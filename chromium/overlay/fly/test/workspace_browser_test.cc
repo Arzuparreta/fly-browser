@@ -4005,6 +4005,21 @@ IN_PROC_BROWSER_TEST_F(FlyWorkspaceBrowserTest,
     EXPECT_NE(manifest.find("\"version\":\"2\""), std::string::npos)
         << manifest;
   }
+  // So does a copy whose manifest key Chromium cannot read.
+  {
+    base::ScopedAllowBlockingForTesting allow_blocking;
+    ASSERT_TRUE(base::WriteFile(
+        folder.AppendASCII("manifest.json"),
+        "{\"name\":\"Fly Local Folder\",\"version\":\"3\","
+        "\"manifest_version\":3,\"key\":\"not base64!\"}"));
+  }
+  FlyWindowController::Get().ShowStatus(u"");
+  extensions.LoadUnpacked(profile, folder);
+  ASSERT_TRUE(base::test::RunUntil([&] {
+    return FlyWindowController::Get().status_text_for_testing().starts_with(
+        u"The extension could not be loaded");
+  }));
+  EXPECT_EQ(local_folders(), names);
   EXPECT_EQ(installed("Fly Local Folder")->version().GetString(), "2");
   // A ZIP gets its own folder from its path, and reinstalling reuses it.
   const auto zip_source = sources.GetPath().AppendASCII("zip-source");

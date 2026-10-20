@@ -58,6 +58,7 @@
 #include "extensions/browser/uninstall_reason.h"
 #include "extensions/common/extension.h"
 #include "extensions/common/extension_l10n_util.h"
+#include "extensions/common/manifest.h"
 #include "extensions/common/manifest_handlers/options_page_info.h"
 #include "fly/preferences/preferences_service.h"
 #include "ui/views/bubble/bubble_anchor.h"
@@ -680,13 +681,24 @@ std::pair<base::FilePath, std::u16string> Finish(Staged staged,
         IdIn(destination, staged.unpacked))
       return {{}, u"The new package has a different extension identity."};
   }
-  // Chromium's own validation before anything is replaced, so a package it
-  // rejects leaves the installed copy working (Electron restores it).
+  // The checks UnpackedInstaller::LoadExtension runs, before anything is
+  // replaced, so a copy Chromium rejects leaves the installed one working
+  // (Electron restores it). Declarative net request rules are indexed only
+  // at load.
   std::u16string load_error;
-  if (!extensions::file_util::LoadExtension(
-          staged.unpacked, IdIn(destination, staged.unpacked),
-          extensions::mojom::ManifestLocation::kUnpacked,
-          extensions::Extension::FOLLOW_SYMLINKS_ANYWHERE, &load_error))
+  extensions::file_util::MaybeCleanupMetadataFolder(staged.unpacked);
+  scoped_refptr<const extensions::Extension> checked;
+  if (extensions::file_util::CheckForIllegalFilenames(staged.unpacked,
+                                                      &load_error)) {
+    checked = extensions::file_util::LoadExtension(
+        staged.unpacked, extensions::mojom::ManifestLocation::kUnpacked,
+        extensions::Extension::FOLLOW_SYMLINKS_ANYWHERE |
+            extensions::Extension::REQUIRE_MODERN_MANIFEST_VERSION,
+        &load_error);
+  }
+  if (!checked || !extension_l10n_util::ValidateExtensionLocales(
+                      staged.unpacked, *checked->manifest()->value(),
+                      &load_error))
     return {{}, u"The extension could not be loaded: " + load_error};
   const auto backup = staged.staging.AppendASCII("previous");
   if (previous && !base::Move(destination, backup))
