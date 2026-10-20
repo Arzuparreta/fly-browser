@@ -53,7 +53,16 @@ bool ValidHexColor(std::string_view value) {
                              [](char c) { return base::IsHexDigit(c); });
 }
 bool ValidString(std::string_view key, std::string_view value) {
-  if (value.size() > 64 || !base::IsStringASCII(value))
+  if (!base::IsStringASCII(value))
+    return false;
+  // Webmail compose URLs (Electron's Gmail, Zoho, Outlook choices) are longer
+  // than other settings.
+  if (key == "email_handler") {
+    return value == "system" ||
+           (value.size() <= 2048 && (value.starts_with("https://") ||
+                                     value.starts_with("http://")));
+  }
+  if (value.size() > 64)
     return false;
   if (key == "interface_scale")
     return value == "normal" || value == "large";

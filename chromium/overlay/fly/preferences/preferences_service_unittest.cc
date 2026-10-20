@@ -412,6 +412,14 @@ TEST_F(PreferencesServiceTest, RemainingSettingsUseElectronDefaultsAndValidate) 
   EXPECT_TRUE(service_.SetInt("process_limit", 2));
   EXPECT_TRUE(service_.SetString("interface_scale", "large"));
   EXPECT_TRUE(service_.SetThemeColor(false, "accent", "#00AA11"));
+  // Electron's webmail choices are longer than 64 characters.
+  constexpr char kZoho[] =
+      "https://mail.zoho.eu/zm/comp.do?originalMode=compose&app=6&subject=%s&"
+      "body=%b";
+  EXPECT_TRUE(service_.SetString("email_handler", kZoho));
+  EXPECT_EQ(kZoho, service_.ReadString("email_handler"));
+  EXPECT_FALSE(service_.SetString("email_handler", "javascript:alert(1)"));
+  EXPECT_TRUE(service_.SetString("email_handler", "system"));
   PreferencesService restarted(prefs_);
   EXPECT_EQ(true, restarted.ReadBool("disable_gpu"));
   EXPECT_EQ(2, restarted.ReadInt("process_limit"));

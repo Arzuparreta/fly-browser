@@ -37,15 +37,21 @@ enum class LegacyImportResult {
   kFailed,
 };
 
-// ~/.config/fly-browser (or the --fly-import-from directory).
+// Electron Fly keeps its own files (session, settings, scripts) in
+// ~/.config/fly-browser and Electron's (Partitions, SingletonLock) in
+// $XDG_CONFIG_HOME/fly-browser; both are the --fly-import-from directory when
+// it is given.
 base::FilePath LegacyProfileDirectory();
+base::FilePath LegacyDataDirectory();
 // Electron's keybinds.json as Electron Fly loads it (keybinds.js
 // initialiseCandidate): values earlier versions wrote as defaults are not
 // user choices, and defaults give up the combinations the user's choices use.
 KeyboardValidation ResolveLegacyKeyboard(const base::DictValue& raw);
+// `legacy_data_dir` empty means `legacy_dir`.
 LegacyImportResult RunLegacyImport(PrefService& local_state,
                                    const base::FilePath& user_data_dir,
-                                   const base::FilePath& legacy_dir);
+                                   const base::FilePath& legacy_dir,
+                                   base::FilePath legacy_data_dir = {});
 }  // namespace fly
 
 #endif  // FLY_IMPORT_LEGACY_IMPORT_H_

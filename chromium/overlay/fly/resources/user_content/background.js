@@ -365,10 +365,11 @@ function isHostAllowed(target, page, connects) {
   return false;
 }
 // fetch() follows redirects without showing them, so every hop of a GM
-// request is held to the request's own rules by session rules that apply only
-// to this worker's requests: hops outside the script's @connect hosts, and
-// hops to local network addresses, are blocked before they are sent. Requests
-// with the same rules run together; the others wait for them to finish.
+// request is checked before it is sent by session rules that apply only to
+// this worker's own requests: hops outside the request's @connect hosts, and
+// hops to local network addresses, are blocked. Requests with the same rules
+// run together; others queue in arrival order (a running group takes no new
+// requests while one waits) and give up when their own timeout expires.
 // Local network hosts, one rule each: Chromium limits each compiled regular
 // expression to 2 KB. Canonical URLs have a lower-case host and a path.
 const PRIVATE_URLS = [
@@ -380,7 +381,22 @@ const PRIVATE_URLS = [
 const GUARD_RULES = [1, 2, 3, 4, 5, 6, 7];
 let guardKey = null;
 let guardUsers = 0;
-let guardWaiters = [];
+const guardQueue = [];
+function guardPolicy(page, connects) {
+  const hosts = new Set([page]);
+  let any = false;
+  for (const rule of connects || []) {
+    let pattern = String(rule || '').trim().toLowerCase();
+    if (pattern.includes('://')) { try { pattern = new URL(pattern).hostname.toLowerCase(); } catch (e) {} }
+    if (pattern === '*') any = true;
+    if (pattern.startsWith('*.')) pattern = pattern.slice(2);
+    hosts.add(pattern);
+  }
+  // requestDomains also covers subdomains, as isHostAllowed does; it only
+  // refuses non-ASCII names, which URL hosts never are.
+  return {any, privatePage: isPrivateHost(page),
+      hosts: [...hosts].filter(host => host && host !== 'self' && host !== '*' && /^[\x21-\x7e]+$/.test(host)).sort()};
+}
 function guardRules(policy) {
   const own = {initiatorDomains: [chrome.runtime.id], tabIds: [chrome.tabs.TAB_ID_NONE]};
   const rules = [];
@@ -396,48 +412,63 @@ function guardRules(policy) {
   }
   return rules;
 }
-function guardPolicy(page, connects) {
-  const hosts = new Set([page]);
-  let any = false;
-  for (const rule of connects || []) {
-    let pattern = String(rule || '').trim().toLowerCase();
-    if (pattern.includes('://')) { try { pattern = new URL(pattern).hostname.toLowerCase(); } catch (e) {} }
-    if (pattern === '*') any = true;
-    if (pattern.startsWith('*.')) pattern = pattern.slice(2);
-    hosts.add(pattern);
-  }
-  // requestDomains also covers subdomains, as isHostAllowed does.
-  return {any, privatePage: isPrivateHost(page),
-      hosts: [...hosts].filter(host => /^[a-z0-9.-]+$/.test(host) && (host.includes('.') || host === 'localhost')).sort()};
-}
 // Rule changes run in order, so a release never removes the next rules.
 let guardOps = Promise.resolve();
+let guardReady = Promise.resolve();
 function guardUpdate(change) {
   const op = guardOps.then(() => chrome.declarativeNetRequest.updateSessionRules(change));
   guardOps = op.catch(() => {});
   return op;
 }
-let guardReady = Promise.resolve();
+function guardStart(key, policy) {
+  guardKey = key;
+  guardReady = guardUpdate({removeRuleIds: GUARD_RULES, addRules: guardRules(policy)});
+}
+function guardAcquire(key, policy, signal) {
+  if (!guardUsers && !guardQueue.length) guardStart(key, policy);
+  if (guardKey === key && !guardQueue.length) {
+    guardUsers++;
+    return Promise.resolve();
+  }
+  return new Promise((resolve, reject) => {
+    const entry = {key, policy, resolve, reject};
+    guardQueue.push(entry);
+    signal.addEventListener('abort', () => {
+      const index = guardQueue.indexOf(entry);
+      if (index < 0) return;
+      guardQueue.splice(index, 1);
+      const error = new Error('Request timed out');
+      error.name = 'AbortError';
+      reject(error);
+    }, {once: true});
+  });
+}
+function guardRelease() {
+  if (--guardUsers > 0) return;
+  guardKey = null;
+  if (!guardQueue.length) {
+    guardUpdate({removeRuleIds: GUARD_RULES}).catch(() => {});
+    return;
+  }
+  // The longest waiting request's group runs next, with every queued
+  // request that shares its rules.
+  const next = guardQueue[0];
+  guardStart(next.key, next.policy);
+  for (let i = 0; i < guardQueue.length;) {
+    if (guardQueue[i].key !== next.key) { i++; continue; }
+    const [entry] = guardQueue.splice(i, 1);
+    guardUsers++;
+    entry.resolve();
+  }
+}
 async function guardedFetch(url, init, page, connects) {
   const policy = guardPolicy(page, connects);
-  const key = JSON.stringify(policy);
-  while (guardUsers && guardKey !== key) await new Promise(resolve => guardWaiters.push(resolve));
-  if (!guardUsers) {
-    guardKey = key;
-    guardReady = guardUpdate({removeRuleIds: GUARD_RULES, addRules: guardRules(policy)});
-  }
-  guardUsers++;
+  await guardAcquire(JSON.stringify(policy), policy, init.signal);
   try {
     await guardReady;
     return await fetch(url, init);
   } finally {
-    if (--guardUsers === 0) {
-      guardKey = null;
-      guardUpdate({removeRuleIds: GUARD_RULES}).catch(() => {});
-      const waiters = guardWaiters;
-      guardWaiters = [];
-      waiters.forEach(resolve => resolve());
-    }
+    guardRelease();
   }
 }
 async function handle(message, sender) {
@@ -515,7 +546,8 @@ const SHARE = [
 ];
 function createShareMenu() {
   chrome.contextMenus.removeAll(() => {
-    const contexts = ['page', 'selection', 'link', 'image'];
+    // Electron Fly adds Share to every page context menu.
+    const contexts = ['all'];
     chrome.contextMenus.create({id: 'share', title: 'Share...', contexts});
     for (const [id, title] of SHARE)
       chrome.contextMenus.create({id: 'share:' + id, parentId: 'share', title, contexts});
@@ -529,6 +561,20 @@ chrome.runtime.onStartup.addListener(createShareMenu);
 function openShare(url) {
   chrome.windows.create({url, type: 'popup', width: 720, height: 640});
 }
+// The clipboard is written from the extension's offscreen document: no page
+// script sees or changes the text, and no user activation is needed.
+let offscreenReady = null;
+async function copyText(text) {
+  if (!offscreenReady) {
+    offscreenReady = chrome.offscreen.createDocument({url: 'offscreen.html', reasons: ['CLIPBOARD'],
+        justification: 'Copy shared links and text to the clipboard'})
+        // A document left from an earlier worker is reused.
+        .catch(err => { if (!/single offscreen/i.test(String(err && err.message))) { offscreenReady = null; throw err; } });
+  }
+  await offscreenReady;
+  const result = await chrome.runtime.sendMessage({type: 'fly-copy', text: String(text)});
+  if (!result || !result.ok) throw new Error('The clipboard could not be written');
+}
 chrome.contextMenus.onClicked.addListener((info, tab) => {
   if (!String(info.menuItemId).startsWith('share:')) return;
   const target = info.linkUrl || info.srcUrl || info.pageUrl || (tab && tab.url) || '';
@@ -541,8 +587,11 @@ chrome.contextMenus.onClicked.addListener((info, tab) => {
     const title = (tab && tab.title) || 'Shared link';
     const selected = (info.selectionText || '').trim();
     const subject = encodeURIComponent(selected ? `Snippet from: ${title}` : info.srcUrl ? `Image from: ${title}` : title);
-    const body = encodeURIComponent(selected ? `${selected}\n\nSource: ${info.pageUrl}` :
-        info.srcUrl ? `${info.srcUrl}\n\nPage: ${info.pageUrl}` : target);
+    const page = info.pageUrl || (tab && tab.url) || '';
+    const body = encodeURIComponent(selected ? `${selected}\n\nSource: ${page}` :
+        info.srcUrl ? `${info.srcUrl}\n\nPage: ${page}` : page);
+    // Electron Fly also put a shared snippet on the clipboard.
+    if (selected) copyText(selected).catch(err => console.error('Fly share:', err));
     const handler = CONTENT.emailHandler || 'system';
     if (handler === 'system') {
       chrome.tabs.create({url: `mailto:?subject=${subject}&body=${body}`});
@@ -556,17 +605,6 @@ chrome.contextMenus.onClicked.addListener((info, tab) => {
     }
     return;
   }
-  if (id === 'markdown' && tab && tab.id !== undefined) {
-    const markdown = `[${text || target}](${target})`;
-    chrome.scripting.executeScript({target: {tabId: tab.id}, func: (value) => {
-      const area = document.createElement('textarea');
-      area.value = value;
-      area.style.position = 'fixed';
-      area.style.opacity = '0';
-      document.documentElement.appendChild(area);
-      area.select();
-      document.execCommand('copy');
-      area.remove();
-    }, args: [markdown]}).catch(() => {});
-  }
+  if (id === 'markdown')
+    copyText(`[${text || target}](${target})`).catch(err => console.error('Fly share:', err));
 });

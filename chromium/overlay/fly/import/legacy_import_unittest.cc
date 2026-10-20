@@ -199,6 +199,45 @@ TEST_F(LegacyImportTest, RepeatsAnImportThatWasKilledHalfway) {
   EXPECT_EQ(2u, workspaces.Read()->items.size());
 }
 
+TEST_F(LegacyImportTest, FailedImportLeavesNoMarkerBehind) {
+  Write("session.json", R"({"workspaces": {}})");
+  EXPECT_EQ(LegacyImportResult::kFailed,
+            RunLegacyImport(prefs_, native_.GetPath(), legacy_.GetPath()));
+  EXPECT_FALSE(base::PathExists(
+      native_.GetPath().AppendASCII("fly-legacy-import.partial")));
+  // Folders created in the session that follows are never removed.
+  ASSERT_TRUE(base::CreateDirectory(native_.GetPath().AppendASCII("scripts")));
+  RunLegacyImport(prefs_, native_.GetPath(), legacy_.GetPath());
+  EXPECT_TRUE(base::PathExists(native_.GetPath().AppendASCII("scripts")));
+}
+
+// With XDG_CONFIG_HOME set, Electron keeps Partitions and its SingletonLock
+// in $XDG_CONFIG_HOME/fly-browser and its own files in ~/.config/fly-browser.
+TEST_F(LegacyImportTest, PartitionsAndLockComeFromTheDataDirectory) {
+  WriteFixture();
+  base::ScopedTempDir data;
+  ASSERT_TRUE(data.CreateUniqueTempDir());
+  ASSERT_TRUE(base::Move(legacy_.GetPath().AppendASCII("Partitions"),
+                         data.GetPath().AppendASCII("Partitions")));
+  const auto lock = data.GetPath().AppendASCII("SingletonLock");
+  ASSERT_TRUE(base::CreateSymbolicLink(
+      base::FilePath("host-" +
+                     base::NumberToString(base::Process::Current().Pid())),
+      lock));
+  EXPECT_EQ(LegacyImportResult::kSourceRunning,
+            RunLegacyImport(prefs_, native_.GetPath(), legacy_.GetPath(),
+                            data.GetPath()));
+  ASSERT_TRUE(base::DeleteFile(lock));
+  ASSERT_EQ(LegacyImportResult::kImported,
+            RunLegacyImport(prefs_, native_.GetPath(), legacy_.GetPath(),
+                            data.GetPath()));
+  std::string text;
+  ASSERT_TRUE(base::ReadFileToString(
+      native_.GetPath().AppendASCII("Profile 1").AppendASCII("Cookies"),
+      &text));
+  EXPECT_EQ("work-cookies", text);
+}
+
 TEST_F(LegacyImportTest, KeyboardFilesResolveAsElectronFlyLoadsThem) {
   const auto cases =
       base::JSONReader::Read(kLegacyKeyboardCasesJSON, base::JSON_PARSE_RFC);

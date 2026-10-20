@@ -684,24 +684,32 @@ void KeyboardEditor::ApplyProductTexts() {
   if (!active())
     return;
   const auto language = base::UTF16ToUTF8(spellcheck_->GetText());
-  bool ok = preferences_.SetString(
-      "spellchecker_language",
-      std::string(base::TrimWhitespaceASCII(language, base::TRIM_ALL)));
+  std::vector<std::u16string> refused;
+  if (!preferences_.SetString(
+          "spellchecker_language",
+          std::string(base::TrimWhitespaceASCII(language, base::TRIM_ALL))))
+    refused.push_back(u"the language (up to 64 letters)");
   const auto email = std::string(base::TrimWhitespaceASCII(
       base::UTF16ToUTF8(email_handler_->GetText()), base::TRIM_ALL));
-  ok &= preferences_.SetString("email_handler", email.empty() ? "system" : email);
+  if (!preferences_.SetString("email_handler",
+                              email.empty() ? "system" : email))
+    refused.push_back(u"the email handler (\"system\" or an http(s) URL)");
   const auto theme = preferences_.ReadTheme();
   const bool dark = !theme || theme->mode == "dark";
+  bool colours_ok = true;
   for (auto& [key, field] : color_fields_) {
     const auto value = std::string(base::TrimWhitespaceASCII(
         base::UTF16ToUTF8(field->GetText()), base::TRIM_ALL));
     if (value.empty())
       continue;
-    ok &= preferences_.SetThemeColor(dark, key, value);
+    colours_ok &= preferences_.SetThemeColor(dark, key, value);
   }
+  if (!colours_ok)
+    refused.push_back(u"colours (#rrggbb)");
   appearance_status_->SetText(
-      ok ? u"Language and colours saved."
-         : u"Some values were not saved: colours use #rrggbb.");
+      refused.empty()
+          ? u"Language, email and colours saved."
+          : u"Not saved: " + base::JoinString(refused, u", ") + u".");
   RefreshAppearance();
 }
 void KeyboardEditor::ChangeAppearance(std::string key) {

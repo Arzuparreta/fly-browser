@@ -11,12 +11,14 @@
 #include <vector>
 
 #include "base/command_line.h"
+#include "base/environment.h"
 #include "base/containers/adapters.h"
 #include "base/files/file_enumerator.h"
 #include "base/files/file_util.h"
 #include "base/files/important_file_writer.h"
 #include "base/json/json_reader.h"
 #include "base/json/json_writer.h"
+#include "base/nix/xdg_util.h"
 #include "base/no_destructor.h"
 #include "base/strings/strcat.h"
 #include "base/strings/string_number_conversions.h"
@@ -500,10 +502,28 @@ base::FilePath LegacyProfileDirectory() {
 #endif
 }
 
+base::FilePath LegacyDataDirectory() {
+  const auto* command_line = base::CommandLine::ForCurrentProcess();
+  if (command_line->HasSwitch("fly-import-from"))
+    return command_line->GetSwitchValuePath("fly-import-from");
+#if BUILDFLAG(IS_LINUX)
+  auto env = base::Environment::Create();
+  return base::nix::GetXDGDirectory(env.get(), base::nix::kXdgConfigHomeEnvVar,
+                                    base::nix::kDotConfigDir)
+      .AppendASCII("fly-browser");
+#else
+  return base::FilePath();
+#endif
+}
+
 LegacyImportResult RunLegacyImport(PrefService& local_state,
                                    const base::FilePath& user_data_dir,
-                                   const base::FilePath& legacy) {
-  if (legacy.empty() || user_data_dir.empty() || legacy == user_data_dir)
+                                   const base::FilePath& legacy,
+                                   base::FilePath legacy_data) {
+  if (legacy_data.empty())
+    legacy_data = legacy;
+  if (legacy.empty() || user_data_dir.empty() || legacy == user_data_dir ||
+      legacy_data == user_data_dir)
     return LegacyImportResult::kNotApplicable;
   RemovePartialImport(user_data_dir);
   // Done once: the pending file stays after it has been applied.
@@ -524,7 +544,7 @@ LegacyImportResult RunLegacyImport(PrefService& local_state,
     base::DeleteFile(waiting);
     return LegacyImportResult::kNotApplicable;
   }
-  if (SourceRunning(legacy)) {
+  if (SourceRunning(legacy_data)) {
     base::WriteFile(waiting, "Electron Fly was open; import when it closes.\n");
     return LegacyImportResult::kSourceRunning;
   }
@@ -603,7 +623,7 @@ LegacyImportResult RunLegacyImport(PrefService& local_state,
       std::string folder = partition ? *partition : "";
       if (folder.starts_with("persist:"))
         folder = folder.substr(8);
-      const auto partition_dir = legacy.AppendASCII("Partitions")
+      const auto partition_dir = legacy_data.AppendASCII("Partitions")
                                      .AppendASCII(folder);
       if (!folder.empty() && folder.find('/') == std::string::npos &&
           folder != ".." && base::DirectoryExists(partition_dir)) {
@@ -651,8 +671,14 @@ LegacyImportResult RunLegacyImport(PrefService& local_state,
                    base::DictValue().Set("tabs", std::move(tabs)));
     }
   }
-  if (first_dir.empty())
+  // A failed import keeps what it created (Local State is saved as usual and
+  // may already list it), so the marker must not undo it on the next start.
+  const auto fail = [&] {
+    base::DeleteFile(user_data_dir.AppendASCII(kPartialFile));
     return LegacyImportResult::kFailed;
+  };
+  if (first_dir.empty())
+    return fail();
   if (current_dir.empty())
     current_dir = first_dir;
   // Start in the workspace Electron Fly was showing.
@@ -755,15 +781,18 @@ LegacyImportResult RunLegacyImport(PrefService& local_state,
       pending, base::JSONWriter::OPTIONS_PRETTY_PRINT, &json);
   if (!base::ImportantFileWriter::WriteFileAtomically(
           user_data_dir.AppendASCII(kLegacyImportFile), json))
-    return LegacyImportResult::kFailed;
-  base::DeleteFile(waiting);
+    return fail();
   // The import is complete once Local State holds the new workspaces; until
-  // then the marker makes the next start undo and repeat it.
+  // then the marker makes the next start undo and repeat it (the waiting file
+  // stays with it, so a merge is repeated too).
   local_state.CommitPendingWrite(
       base::OnceClosure(),
       base::BindOnce(
-          [](base::FilePath marker) { base::DeleteFile(marker); },
-          user_data_dir.AppendASCII(kPartialFile)));
+          [](base::FilePath marker, base::FilePath waiting) {
+            base::DeleteFile(waiting);
+            base::DeleteFile(marker);
+          },
+          user_data_dir.AppendASCII(kPartialFile), waiting));
   return LegacyImportResult::kImported;
 }
 }  // namespace fly

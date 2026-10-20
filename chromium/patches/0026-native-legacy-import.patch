@@ -18,7 +18,7 @@
  #include "fly/preferences/preferences_service.h"
  
  #include <vector>
-@@ -203,6 +204,15 @@
+@@ -203,6 +204,16 @@
    about_flags::ConvertFlagsToSwitches(&flags_storage,
                                        base::CommandLine::ForCurrentProcess(),
                                        flags_ui::kAddSentinels);
@@ -28,7 +28,8 @@
 +    base::FilePath user_data_dir;
 +    if (base::PathService::Get(chrome::DIR_USER_DATA, &user_data_dir)) {
 +      fly::RunLegacyImport(*local_state_, user_data_dir,
-+                           fly::LegacyProfileDirectory());
++                           fly::LegacyProfileDirectory(),
++                           fly::LegacyDataDirectory());
 +    }
 +  }
    // Fly product settings that only apply at process start (GPU, background

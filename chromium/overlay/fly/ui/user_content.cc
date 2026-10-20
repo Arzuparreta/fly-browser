@@ -102,10 +102,10 @@ UserContentService::UserContentService(
              base::WeakPtr<UserContentService> self) {
             ui->PostTask(FROM_HERE,
                          base::BindOnce(&UserContentService::Regenerate, self,
-                                        /*announce=*/true));
+                                        Announce::kIfChanged));
           },
           ui, weak_factory_.GetWeakPtr()));
-  Regenerate(false);
+  Regenerate(Announce::kNever);
 }
 UserContentService::~UserContentService() = default;
 
@@ -122,10 +122,16 @@ UserContentService::Generated UserContentService::Generate(
   const auto target = user_data.AppendASCII("fly-user-content");
   std::string manifest_text;
   std::string worker;
+  std::string offscreen_page;
+  std::string offscreen_script;
   if (!base::ReadFileToStringWithMaxSize(source.AppendASCII("manifest.json"),
                                          &manifest_text, 64 * 1024) ||
       !base::ReadFileToStringWithMaxSize(source.AppendASCII("background.js"),
-                                         &worker, 1024 * 1024))
+                                         &worker, 1024 * 1024) ||
+      !base::ReadFileToStringWithMaxSize(source.AppendASCII("offscreen.html"),
+                                         &offscreen_page, 64 * 1024) ||
+      !base::ReadFileToStringWithMaxSize(source.AppendASCII("offscreen.js"),
+                                         &offscreen_script, 64 * 1024))
     return result;
   auto manifest = base::JSONReader::ReadDict(manifest_text,
                                              base::JSON_PARSE_RFC);
@@ -157,7 +163,8 @@ UserContentService::Generated UserContentService::Generate(
   content.Set("legacyStorage", std::move(legacy));
   std::string json;
   base::JSONWriter::Write(content, &json);
-  const auto digest = base::SHA1HashString(json + worker);
+  const auto digest = base::SHA1HashString(json + worker + manifest_text +
+                                           offscreen_page + offscreen_script);
   result.version = base::HexEncode(digest);
   // A new extension version makes Chromium replace the registered service
   // worker; with an unchanged version it would keep running the old files.
@@ -180,6 +187,10 @@ UserContentService::Generated UserContentService::Generate(
       !base::ImportantFileWriter::WriteFileAtomically(
           target.AppendASCII("manifest.json"), manifest_text) ||
       !base::ImportantFileWriter::WriteFileAtomically(
+          target.AppendASCII("offscreen.html"), offscreen_page) ||
+      !base::ImportantFileWriter::WriteFileAtomically(
+          target.AppendASCII("offscreen.js"), offscreen_script) ||
+      !base::ImportantFileWriter::WriteFileAtomically(
           target.AppendASCII("content.js"), data))
     return result;
   result.ok = true;
@@ -187,9 +198,10 @@ UserContentService::Generated UserContentService::Generate(
   result.manifest = std::move(*manifest);
   return result;
 }
-void UserContentService::Regenerate(bool announce) {
+void UserContentService::Regenerate(Announce announce) {
   if (generating_) {
     pending_ = true;
+    pending_announce_ = std::max(pending_announce_, announce);
     return;
   }
   generating_ = true;
@@ -203,21 +215,24 @@ void UserContentService::SetEmailHandler(std::string handler) {
   if (handler == email_handler_)
     return;
   email_handler_ = std::move(handler);
-  Regenerate(false);
+  Regenerate(Announce::kNever);
 }
 void UserContentService::Reload() {
-  Regenerate(true);
+  Regenerate(Announce::kAlways);
 }
-void UserContentService::OnGenerated(bool announce, Generated generated) {
+void UserContentService::OnGenerated(Announce announce, Generated generated) {
   generating_ = false;
   if (pending_) {
     pending_ = false;
-    Regenerate(announce);
+    const auto next = std::max(announce, pending_announce_);
+    pending_announce_ = Announce::kNever;
+    Regenerate(next);
     return;
   }
   if (!generated.ok)
     return;
-  const bool changed = !current_ || current_->version != generated.version;
+  const bool first = !current_;
+  const bool changed = first || current_->version != generated.version;
   scripts_ = generated.scripts;
   styles_ = generated.styles;
   current_ = std::move(generated);
@@ -230,7 +245,10 @@ void UserContentService::OnGenerated(bool announce, Generated generated) {
         Load(profile);
     }
   }
-  if (announce && announce_)
+  // Folder watchers also fire when nothing changed (for example at start).
+  const bool show = announce == Announce::kAlways ||
+                    (announce == Announce::kIfChanged && changed && !first);
+  if (show && announce_)
     announce_.Run(u"User content reloaded: " +
                   base::NumberToString16(scripts_) + u" scripts, " +
                   base::NumberToString16(styles_) + u" styles.");

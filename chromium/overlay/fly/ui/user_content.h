@@ -53,6 +53,8 @@ class UserContentService : public ProfileObserver {
 
  private:
   class Watcher;
+  // When a regeneration reports itself in the footer.
+  enum class Announce { kNever, kIfChanged, kAlways };
   struct Generated {
     bool ok = false;
     base::FilePath directory;
@@ -62,9 +64,9 @@ class UserContentService : public ProfileObserver {
     size_t styles = 0;
   };
   static Generated Generate(std::string email_handler);
-  void OnGenerated(bool announce, Generated generated);
+  void OnGenerated(Announce announce, Generated generated);
   void Load(Profile* profile);
-  void Regenerate(bool announce);
+  void Regenerate(Announce announce);
 
   base::RepeatingCallback<void(std::u16string)> announce_;
   base::SequenceBound<Watcher> watcher_;
@@ -72,6 +74,7 @@ class UserContentService : public ProfileObserver {
   bool generating_ = false;
   std::string email_handler_ = "system";
   bool pending_ = false;
+  Announce pending_announce_ = Announce::kNever;
   size_t scripts_ = 0;
   size_t styles_ = 0;
   std::set<raw_ptr<Profile>> profiles_;

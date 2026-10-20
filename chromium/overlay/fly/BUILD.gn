@@ -235,6 +235,8 @@ copy("user_content_resources") {
   sources = [
     "resources/user_content/background.js",
     "resources/user_content/manifest.json",
+    "resources/user_content/offscreen.html",
+    "resources/user_content/offscreen.js",
   ]
   outputs = [ "$root_out_dir/fly_resources/user_content/{{source_file_part}}" ]
 }

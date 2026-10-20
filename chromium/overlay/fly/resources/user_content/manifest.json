@@ -14,8 +14,9 @@
     "unlimitedStorage",
     "notifications",
     "contextMenus",
-    "scripting",
-    "declarativeNetRequest"
+    "declarativeNetRequest",
+    "offscreen",
+    "clipboardWrite"
   ],
   "host_permissions": [
     "<all_urls>"
