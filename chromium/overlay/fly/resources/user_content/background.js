@@ -130,15 +130,14 @@ function usesPageWorld(meta) {
   return meta.grants.length === 0 || meta.grants.every(g => g === 'none');
 }
 
-function scriptCode(item, meta, id, pageWorld) {
+function scriptCode(item, meta, token, pageWorld) {
   const json = JSON.stringify;
   return `(function() {
 'use strict';
 ${PAGE_HELPERS}
 const __meta = ${json(meta)};
 if (!flyUrlMatches(location.href, __meta)) return;
-const __id = ${json(id)};
-const __bridge = ${pageWorld ? 'null' : `(message) => chrome.runtime.sendMessage(Object.assign({id: __id}, message))`};
+const __bridge = ${pageWorld ? 'null' : `(message) => chrome.runtime.sendMessage(Object.assign({token: ${json(token)}}, message))`};
 const __start = (__initial) => {
   const __store = Object.assign({}, __initial || {});
   const __listeners = new Map();
@@ -175,7 +174,7 @@ const __start = (__initial) => {
       if (typeof details.onloadend === 'function') { try { details.onloadend(e); } catch (x) {} }
     };
     if (!__bridge) { fail(new Error('GM_xmlhttpRequest needs @grant GM_xmlhttpRequest')); return {abort() {}}; }
-    __bridge({type: 'xhr', page: location.href, request: {
+    __bridge({type: 'xhr', request: {
         method: String(details.method || 'GET').toUpperCase(), url: new URL(details.url, location.href).href,
         headers: details.headers || {}, data: details.data == null ? null : String(details.data),
         timeout: Number(details.timeout) || 30000}}).then((res) => {
@@ -283,24 +282,43 @@ style.textContent = css;
 async function register() {
   const stored = await chrome.storage.local.get('registered');
   if (stored.registered === CONTENT.version) return;
-  await chrome.userScripts.configureWorld({messaging: true});
+  await chrome.userScripts.configureWorld({messaging: false});
   const existing = await chrome.userScripts.getScripts();
   if (existing.length) await chrome.userScripts.unregister({ids: existing.map(s => s.id)});
   const registrations = [];
   const metas = {};
+  const used = new Set();
+  // Distinct files can sanitise to the same id; a duplicate would make
+  // chrome.userScripts reject every registration.
+  const unique = (base) => {
+    let id = base, n = 2;
+    while (used.has(id)) id = `${base}-${n++}`;
+    used.add(id);
+    return id;
+  };
   for (const item of CONTENT.scripts) {
     const meta = parseScript(item.text, item.file);
-    const id = scriptId(item.file);
+    const id = unique(scriptId(item.file));
     const pageWorld = usesPageWorld(meta);
-    metas[id] = {connects: meta.connects, grants: meta.grants, name: meta.name};
-    registrations.push({id: 'script:' + id, matches: ['http://*/*', 'https://*/*', 'file:///*'],
-        js: [{code: scriptCode(item, meta, id, pageWorld)}], runAt: runAt(meta.runAt),
-        allFrames: false, world: pageWorld ? 'MAIN' : 'USER_SCRIPT'});
+    const registration = {id: 'script:' + id, matches: ['http://*/*', 'https://*/*', 'file:///*'],
+        runAt: runAt(meta.runAt), allFrames: false, world: pageWorld ? 'MAIN' : 'USER_SCRIPT'};
+    let token = '';
+    if (!pageWorld) {
+      // Each GM script gets its own world and a secret: scripts can neither
+      // read each other nor use each other's values, grants or @connect.
+      token = crypto.randomUUID();
+      metas[token] = {id, connects: meta.connects, grants: meta.grants, name: meta.name};
+      registration.worldId = 'fly-' + id;
+      await chrome.userScripts.configureWorld({worldId: registration.worldId, messaging: true});
+    }
+    registration.js = [{code: scriptCode(item, meta, token, pageWorld)}];
+    registrations.push(registration);
   }
   for (const item of CONTENT.styles) {
     const meta = parseStyle(item.text, item.file);
-    registrations.push({id: 'style:' + scriptId(item.file), matches: ['http://*/*', 'https://*/*', 'file:///*'],
-        js: [{code: styleCode(item, meta)}], runAt: 'document_start', allFrames: false, world: 'USER_SCRIPT'});
+    registrations.push({id: 'style:' + unique(scriptId(item.file)), matches: ['http://*/*', 'https://*/*', 'file:///*'],
+        js: [{code: styleCode(item, meta)}], runAt: 'document_start', allFrames: false, world: 'USER_SCRIPT',
+        worldId: 'fly-styles'});
   }
   if (registrations.length) await chrome.userScripts.register(registrations);
   // Values saved by Electron Fly (script-storage/) seed scripts that have none.
@@ -314,10 +332,19 @@ async function register() {
 
 // ---- GM bridge --------------------------------------------------------------
 function isPrivateHost(host) {
-  const h = host.toLowerCase();
-  if (h === 'localhost' || h.endsWith('.localhost') || h === '[::1]') return true;
+  let h = host.toLowerCase();
+  if (h === 'localhost' || h.endsWith('.localhost')) return true;
+  if (h.startsWith('[')) {
+    h = h.slice(1, -1);
+    if (h === '::' || h === '::1' || h.startsWith('fc') || h.startsWith('fd') || h.startsWith('fe80')) return true;
+    // IPv4-mapped (::ffff:7f00:1 is 127.0.0.1).
+    const mapped = h.match(/^::ffff:([0-9a-f]{1,4}):([0-9a-f]{1,4})$/);
+    if (!mapped) return false;
+    const hi = parseInt(mapped[1], 16), lo = parseInt(mapped[2], 16);
+    h = `${hi >> 8}.${hi & 255}.${lo >> 8}.${lo & 255}`;
+  }
   const m = h.match(/^(\d+)\.(\d+)\.(\d+)\.(\d+)$/);
-  if (!m) return h.startsWith('[fc') || h.startsWith('[fd') || h.startsWith('[fe80');
+  if (!m) return false;
   const [a, b] = [Number(m[1]), Number(m[2])];
   return a === 10 || a === 127 || a === 0 || (a === 169 && b === 254) ||
       (a === 172 && b >= 16 && b <= 31) || (a === 192 && b === 168);
@@ -337,11 +364,11 @@ function isHostAllowed(target, page, connects) {
   }
   return false;
 }
-async function handle(message) {
+async function handle(message, sender) {
   const {metas = {}} = await chrome.storage.local.get('metas');
-  const meta = metas[message.id];
+  const meta = metas[message.token];
   if (!meta) return {error: 'Unknown script'};
-  const key = 'gm:' + message.id;
+  const key = 'gm:' + meta.id;
   if (message.type === 'get') return (await chrome.storage.local.get(key))[key] || {};
   if (message.type === 'set' || message.type === 'delete') {
     const values = (await chrome.storage.local.get(key))[key] || {};
@@ -365,7 +392,8 @@ async function handle(message) {
       return {error: 'Permission denied: userscript does not declare @grant GM_xmlhttpRequest'};
     const request = message.request;
     const target = new URL(request.url);
-    const page = new URL(message.page);
+    // The page is the sending frame, never a value the script supplies.
+    const page = new URL(sender.url);
     if (!['http:', 'https:'].includes(target.protocol)) return {error: 'Only http(s) requests are allowed'};
     if (!isHostAllowed(target.hostname, page.hostname, meta.connects))
       return {error: `Permission denied: ${target.hostname} is not declared in @connect`};
@@ -377,6 +405,11 @@ async function handle(message) {
       const response = await fetch(target.href, {method: request.method, headers: request.headers,
           body: ['GET', 'HEAD'].includes(request.method) ? undefined : request.data, signal: controller.signal,
           credentials: 'omit'});
+      // Redirects must stay within what the script may reach.
+      const final = new URL(response.url || target.href);
+      if (!isHostAllowed(final.hostname, page.hostname, meta.connects) ||
+          (isPrivateHost(final.hostname) && !isPrivateHost(page.hostname)))
+        return {error: `Permission denied: redirected to ${final.hostname}`};
       const text = await response.text();
       let headers = '';
       response.headers.forEach((value, name) => { headers += `${name}: ${value}\r\n`; });
@@ -392,7 +425,7 @@ async function handle(message) {
   return {error: 'Unknown request'};
 }
 chrome.runtime.onUserScriptMessage.addListener((message, sender, respond) => {
-  handle(message).then(respond, (err) => respond({error: String(err && err.message || err)}));
+  handle(message, sender).then(respond, (err) => respond({error: String(err && err.message || err)}));
   return true;
 });
 register().catch((err) => console.error('Fly User Content registration failed', err));

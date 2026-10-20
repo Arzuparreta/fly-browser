@@ -18,6 +18,7 @@
 #include "base/path_service.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/strings/string_util.h"
+#include "base/strings/stringprintf.h"
 #include "base/task/thread_pool.h"
 #include "base/timer/timer.h"
 #include "chrome/browser/extensions/component_loader.h"
@@ -154,7 +155,20 @@ UserContentService::Generated UserContentService::Generate() {
   content.Set("legacyStorage", std::move(legacy));
   std::string json;
   base::JSONWriter::Write(content, &json);
-  result.version = base::HexEncode(base::SHA1HashString(json + worker));
+  const auto digest = base::SHA1HashString(json + worker);
+  result.version = base::HexEncode(digest);
+  // A new extension version makes Chromium replace the registered service
+  // worker; with an unchanged version it would keep running the old files.
+  manifest->Set("version",
+                base::StringPrintf("1.%d.%d.%d",
+                                   (uint8_t(digest[0]) << 8 | uint8_t(digest[1])) % 65535,
+                                   (uint8_t(digest[2]) << 8 | uint8_t(digest[3])) % 65535,
+                                   (uint8_t(digest[4]) << 8 | uint8_t(digest[5])) % 65535));
+  std::string manifest_out;
+  base::JSONWriter::WriteWithOptions(*manifest,
+                                     base::JSONWriter::OPTIONS_PRETTY_PRINT,
+                                     &manifest_out);
+  manifest_text = manifest_out;
   const std::string data = "self.FLY_USER_CONTENT = " + json +
                            ";\nself.FLY_USER_CONTENT.version = \"" +
                            result.version + "\";\n";

@@ -18,6 +18,8 @@
 #include "fly/ui/fly_actions.h"
 #include "fly/ui/fly_extensions.h"
 #include "fly/ui/user_content.h"
+#include "base/files/scoped_temp_dir.h"
+#include "content/public/browser/host_zoom_map.h"
 #include "chrome/common/chrome_paths.h"
 #include "base/files/file_util.h"
 #include "extensions/browser/extension_registry.h"
@@ -3812,6 +3814,57 @@ IN_PROC_BROWSER_TEST_F(FlyWorkspaceBrowserTest,
   ASSERT_TRUE(ui_test_utils::NavigateToURL(browser(), url));
   ASSERT_TRUE(base::test::RunUntil([&] { return !visits().empty(); }));
   EXPECT_EQ(first + 1, std::stoi(visits()));
+}
+
+class FlyLegacyImportBrowserTest : public FlyWorkspaceBrowserTest {
+ public:
+  void SetUpCommandLine(base::CommandLine* command_line) override {
+    FlyWorkspaceBrowserTest::SetUpCommandLine(command_line);
+    base::ScopedAllowBlockingForTesting allow_blocking;
+    ASSERT_TRUE(legacy_.CreateUniqueTempDir());
+    const auto write = [&](std::string_view name, std::string_view text) {
+      const auto path = legacy_.GetPath().AppendASCII(name);
+      ASSERT_TRUE(base::CreateDirectory(path.DirName()));
+      ASSERT_TRUE(base::WriteFile(path, text));
+    };
+    write("session.json", R"({
+      "current_workspace": "Work",
+      "workspaces": {"Home": ["data:text/html,home"],
+                     "Work": ["data:text/html,work-a", "data:text/html,work-b"]},
+      "workspace_partitions": {"Home": "persist:workspace-1", "Work": "persist:work"},
+      "tab_pinned": {"Work": [true, false]}})");
+    write("Partitions/work/Preferences", "{}");
+    write("config.json", R"({"show_clock": false})");
+    write("site-zoom.json", R"({"zoom.example": 2})");
+    command_line->AppendSwitchPath("fly-import-from", legacy_.GetPath());
+  }
+
+ private:
+  base::ScopedTempDir legacy_;
+};
+IN_PROC_BROWSER_TEST_F(FlyLegacyImportBrowserTest,
+                       ElectronWorkspacesTabsAndSettingsArriveOnFirstStart) {
+  WorkspaceService workspaces(*g_browser_process->local_state());
+  const auto catalog = workspaces.Read();
+  ASSERT_TRUE(catalog);
+  ASSERT_EQ(2u, catalog->items.size());
+  EXPECT_EQ("Home", catalog->items[0].name);
+  EXPECT_EQ("Work", catalog->items[1].name);
+  EXPECT_EQ("Profile 1", browser()->GetProfile()->GetPath().BaseName().AsUTF8Unsafe());
+  auto* model = browser()->GetTabStripModel();
+  ASSERT_TRUE(base::test::RunUntil([&] {
+    return model->count() == 2 &&
+           model->GetWebContentsAt(1)->GetVisibleURL() ==
+               GURL("data:text/html,work-b");
+  }));
+  EXPECT_EQ(GURL("data:text/html,work-a"),
+            model->GetWebContentsAt(0)->GetVisibleURL());
+  EXPECT_TRUE(model->IsTabPinned(0));
+  EXPECT_FALSE(model->IsTabPinned(1));
+  EXPECT_EQ(2.0, content::HostZoomMap::GetDefaultForBrowserContext(
+                     browser()->GetProfile())
+                     ->GetZoomLevelForHostAndScheme("https", "zoom.example"));
+  EXPECT_FALSE(FlyWindowController::Get().preferences().ReadClock()->visible);
 }
 
 class FlyHistoryRestoreBrowserTest : public FlyWorkspaceBrowserTest {};

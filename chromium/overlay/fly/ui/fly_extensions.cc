@@ -28,7 +28,9 @@
 #include "extensions/browser/extension_action.h"
 #include "extensions/browser/extension_action_icon_factory.h"
 #include "extensions/browser/extension_action_manager.h"
+#include "extensions/browser/extension_prefs.h"
 #include "extensions/browser/extension_registrar.h"
+#include "base/task/single_thread_task_runner.h"
 #include "extensions/browser/extension_system.h"
 #include "extensions/browser/management_policy.h"
 #include "extensions/browser/uninstall_reason.h"
@@ -211,7 +213,7 @@ void FlyExtensions::ApplyProfile(Profile* profile) {
     for (const auto& id : *section->FindList(directory))
       if (id.is_string() && registry->disabled_extensions().GetByID(
                                 id.GetString()))
-        registrar->EnableExtension(id.GetString());
+        RestoreUserDisable(profile, id.GetString());
     section->Remove(directory);
     changed = true;
   }
@@ -290,13 +292,32 @@ bool FlyExtensions::SetExtensionEnabled(Profile* profile,
                          ->UserMayModifySettings(extension, nullptr))
     return false;
   auto* registrar = extensions::ExtensionRegistrar::Get(profile);
-  if (on)
-    registrar->EnableExtension(id);
-  else
+  if (on) {
+    if (!RestoreUserDisable(profile, id))
+      return false;
+  } else {
     registrar->DisableExtension(
         id, {extensions::disable_reason::DISABLE_USER_ACTION});
+  }
   changed_.Run();
   return true;
+}
+bool FlyExtensions::RestoreUserDisable(Profile* profile,
+                                       const std::string& id) {
+  // Only lift Fly's/the user's own disable. Other reasons (for example an
+  // update asking for more permissions) need Chromium's own prompt, which
+  // chrome://extensions shows; EnableExtension would clear them silently.
+  auto* prefs = extensions::ExtensionPrefs::Get(profile);
+  prefs->RemoveDisableReason(id,
+                             extensions::disable_reason::DISABLE_USER_ACTION);
+  if (prefs->GetDisableReasons(id).empty()) {
+    extensions::ExtensionRegistrar::Get(profile)->EnableExtension(id);
+    return true;
+  }
+  if (announce_)
+    announce_.Run(u"This extension needs your approval in Manage extensions "
+                  u"before it can run again.");
+  return false;
 }
 bool FlyExtensions::Remove(Profile* profile, const std::string& id) {
   if (!profile || !CanEdit())
@@ -462,9 +483,22 @@ void FlyExtensions::OnExtensionLoaded(content::BrowserContext*,
   changed_.Run();
 }
 void FlyExtensions::OnExtensionInstalled(
-    content::BrowserContext*,
+    content::BrowserContext* context,
     const extensions::Extension* extension,
     bool is_update) {
+  // With extensions switched off, a new installation is suspended at once.
+  if (!Enabled()) {
+    for (Profile* profile : profiles_)
+      if (profile == Profile::FromBrowserContext(context))
+        base::SingleThreadTaskRunner::GetCurrentDefault()->PostTask(
+            FROM_HERE,
+            base::BindOnce(
+                [](base::WeakPtr<FlyExtensions> self, Profile* profile) {
+                  if (self && self->profiles_.contains(profile))
+                    self->ApplyProfile(profile);
+                },
+                weak_factory_.GetWeakPtr(), profile));
+  }
   if (is_update || !announce_ || !extension->is_extension() ||
       extension->location() == extensions::mojom::ManifestLocation::kComponent)
     return;

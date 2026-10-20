@@ -147,6 +147,16 @@ declared supported because Chromium has a related global flag or policy.
 | `extensions_unload_grace_seconds` | not applicable | Chromium suspends MV3 service workers itself; nothing to configure. Kept for import. |
 | `extensions_sources` | partial | Store installs come from the Chrome Web Store with Chromium's updater; local packages through `chrome://extensions`. |
 
+## Import from Electron Fly
+
+`fly/import/legacy_import.cc` covers `config.json`, `session.json` (workspaces,
+order, tabs, pins, active workspace), partitions' site data, `bookmarks.json`,
+`history.json`, `keybinds.json` (version 2 and legacy tables), `site-zoom.json`,
+`hidden-sites.json`, `scripts/`, `styles/`, `script-storage/` and the bundled
+blocker choices. Not imported: `quickmarks.json` (retired), Electron's
+`Local Storage` of the interface (recent commands), extensions installed by hand
+(listed for reinstallation), tab scroll positions and session storage records.
+
 ## Completion gates
 
 All-platform native UI, migration, recovery, installable packages, product and

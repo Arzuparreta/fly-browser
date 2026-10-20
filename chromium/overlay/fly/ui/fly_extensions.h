@@ -116,6 +116,7 @@ class FlyExtensions : public extensions::ExtensionRegistryObserver,
   };
   void BundlesRead(std::vector<Bundle> bundles);
   void ApplyProfile(Profile* profile);
+  bool RestoreUserDisable(Profile* profile, const std::string& id);
   bool BundleWanted(Profile* profile, const std::string& id) const;
   base::DictValue ReadState() const;
   bool WriteState(base::DictValue state);

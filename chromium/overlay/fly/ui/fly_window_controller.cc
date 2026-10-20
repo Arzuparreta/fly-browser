@@ -2,6 +2,8 @@
 // Use of this source code is governed by the GPL-3.0-or-later license in the
 // Fly repository.
 #include "fly/ui/fly_window_controller.h"
+
+#include "build/build_config.h"
 #include "base/strings/string_number_conversions.h"
 #include "chrome/browser/ui/navigator/browser_navigator.h"
 #include "chrome/browser/ui/navigator/browser_navigator_params.h"
@@ -12,7 +14,21 @@
 #include "fly/ui/command_palette.h"
 #include "fly/ui/fly_theme.h"
 #include "fly/ui/fly_actions.h"
+#if BUILDFLAG(IS_LINUX)
+#include "chrome/browser/shell_integration_linux.h"
+#endif
 #include "fly/ui/fly_extensions.h"
+#include "fly/import/legacy_import.h"
+#include "base/files/file_util.h"
+#include "chrome/browser/ui/tabs/tab_enums.h"
+#include "base/files/important_file_writer.h"
+#include "base/json/json_reader.h"
+#include "base/json/json_writer.h"
+#include "base/task/thread_pool.h"
+#include "chrome/browser/history/history_service_factory.h"
+#include "components/history/core/browser/history_service.h"
+#include "content/public/browser/host_zoom_map.h"
+#include "content/public/common/url_constants.h"
 #include "fly/ui/user_content.h"
 #include "ui/gfx/canvas.h"
 #include "ui/gfx/text_utils.h"
@@ -401,6 +417,14 @@ FlyWindowController::FlyWindowController()
       views::Widget::InitParams::CLIENT_OWNS_WIDGET);
   params.delegate = this;
   params.name = "FlyDesktopWindow";
+#if BUILDFLAG(IS_LINUX)
+  // Task switchers and the menu entry (StartupWMClass) match on this; the
+  // launcher's --class sets it.
+  params.wm_class_name = shell_integration_linux::GetProgramClassName();
+  params.wm_class_class = shell_integration_linux::GetProgramClassClass();
+  params.wm_role_name = "browser";
+  params.wayland_app_id = params.wm_class_class;
+#endif
   params.bounds = gfx::Rect(80, 80, 1200, 800);
   desktop_->Init(std::move(params));
   sidebar_widget_ = std::make_unique<views::Widget>();
@@ -1679,6 +1703,7 @@ void FlyWindowController::Prepare(BrowserWindowInterface* browser) {
   if (!browser->GetProfile()->IsOffTheRecord()) {
     extensions_->AddProfile(browser->GetProfile());
     user_content_->AddProfile(browser->GetProfile());
+    QueueLegacyImport(browser);
   }
   ScheduleWorkspaceRefresh();
 }
@@ -3541,5 +3566,144 @@ void FlyWindowController::ChooseExtensionAction(content::WebContents*,
     anchor = desktop_->GetContentsView();
   }
   extensions_->RunAction(selected_, id, anchor);
+}
+
+void FlyWindowController::QueueLegacyImport(BrowserWindowInterface* browser) {
+  if (legacy_import_) {
+    base::SingleThreadTaskRunner::GetCurrentDefault()->PostTask(
+        FROM_HERE, base::BindOnce(&FlyWindowController::ApplyLegacyImport,
+                                  weak_factory_.GetWeakPtr(),
+                                  browser->GetWeakPtr(), 0));
+    return;
+  }
+  legacy_import_waiting_.push_back(browser->GetWeakPtr());
+  if (legacy_import_loading_)
+    return;
+  legacy_import_loading_ = true;
+  const auto file = g_browser_process->profile_manager()
+                        ->user_data_dir()
+                        .AppendASCII(kLegacyImportFile);
+  base::ThreadPool::PostTaskAndReplyWithResult(
+      FROM_HERE, {base::MayBlock(), base::TaskPriority::USER_VISIBLE},
+      base::BindOnce(
+          [](base::FilePath file) -> std::optional<base::DictValue> {
+            std::string text;
+            if (!base::ReadFileToStringWithMaxSize(file, &text,
+                                                   64 * 1024 * 1024))
+              return std::nullopt;
+            return base::JSONReader::ReadDict(text, base::JSON_PARSE_RFC);
+          },
+          file),
+      base::BindOnce(
+          [](base::WeakPtr<FlyWindowController> window,
+             std::optional<base::DictValue> state) {
+            if (!window)
+              return;
+            window->legacy_import_ =
+                state ? std::move(*state) : base::DictValue();
+            if (const auto* summary =
+                    window->legacy_import_->FindString("summary");
+                summary && !window->legacy_import_->FindBool("announced"))
+              window->ShowStatus(base::UTF8ToUTF16(*summary));
+            for (auto& browser : window->legacy_import_waiting_)
+              window->ApplyLegacyImport(browser, 0);
+            window->legacy_import_waiting_.clear();
+          },
+          weak_factory_.GetWeakPtr()));
+}
+void FlyWindowController::ApplyLegacyImport(
+    base::WeakPtr<BrowserWindowInterface> browser,
+    int attempts) {
+  if (!browser || closing_ || !legacy_import_)
+    return;
+  auto* profiles = legacy_import_->FindDict("profiles");
+  Profile* profile = browser->GetProfile();
+  const auto directory = profile->GetPath().BaseName().AsUTF8Unsafe();
+  auto* entry = profiles ? profiles->FindDict(directory) : nullptr;
+  if (!entry)
+    return;
+  auto* model = browser->GetTabStripModel();
+  // Startup adds the browser's first tab after its window; wait for it.
+  if (model->empty() && attempts < 20) {
+    base::SingleThreadTaskRunner::GetCurrentDefault()->PostDelayedTask(
+        FROM_HERE,
+        base::BindOnce(&FlyWindowController::ApplyLegacyImport,
+                       weak_factory_.GetWeakPtr(), browser, attempts + 1),
+        base::Milliseconds(100));
+    return;
+  }
+  if (const auto* zoom = entry->FindDict("zoom")) {
+    auto* map = content::HostZoomMap::GetDefaultForBrowserContext(profile);
+    for (const auto [host, level] : *zoom)
+      if (level.is_double() || level.is_int())
+        map->SetZoomLevelForHost(host, level.GetDouble());
+  }
+  if (const auto* history = entry->FindList("history")) {
+    if (auto* service = HistoryServiceFactory::GetForProfile(
+            profile, ServiceAccessType::EXPLICIT_ACCESS)) {
+      for (const auto& item : *history) {
+        const auto* visit = item.GetIfDict();
+        const auto* url = visit ? visit->FindString("url") : nullptr;
+        if (!url || !GURL(*url).SchemeIsHTTPOrHTTPS())
+          continue;
+        const auto stamp = visit->FindDouble("timestamp");
+        service->AddPage(GURL(*url),
+                         stamp ? base::Time::FromMillisecondsSinceUnixEpoch(
+                                     *stamp)
+                               : base::Time::Now(),
+                         history::SOURCE_BROWSED);
+        if (const auto* title = visit->FindString("title"))
+          service->SetPageTitle(GURL(*url), base::UTF8ToUTF16(*title));
+      }
+    }
+  }
+  if (const auto* tabs = entry->FindList("tabs"); tabs && !tabs->empty()) {
+    // A lone blank startup tab gives way to the imported ones.
+    content::WebContents* blank = nullptr;
+    if (model->count() == 1) {
+      const GURL& first = model->GetWebContentsAt(0)->GetVisibleURL();
+      if (first.is_empty() || first.IsAboutBlank() ||
+          first.SchemeIs(content::kChromeUIScheme))
+        blank = model->GetWebContentsAt(0);
+    }
+    for (const auto& item : *tabs) {
+      const auto* tab = item.GetIfDict();
+      const auto* url = tab ? tab->FindString("url") : nullptr;
+      if (!url || !GURL(*url).is_valid())
+        continue;
+      NavigateParams params(browser.get(), GURL(*url),
+                            ui::PAGE_TRANSITION_AUTO_TOPLEVEL);
+      params.disposition = WindowOpenDisposition::NEW_BACKGROUND_TAB;
+      Navigate(&params);
+      if (tab->FindBool("pinned").value_or(false) &&
+          params.navigated_or_inserted_contents) {
+        const int index = model->GetIndexOfWebContents(
+            params.navigated_or_inserted_contents);
+        if (index != TabStripModel::kNoTab)
+          model->SetTabPinned(index, true);
+      }
+    }
+    if (blank && model->count() > 1) {
+      const int index = model->GetIndexOfWebContents(blank);
+      if (index != TabStripModel::kNoTab)
+        model->CloseWebContentsAt(index, TabCloseTypes::CLOSE_NONE);
+    }
+    if (!model->empty())
+      model->ActivateTabAt(0);
+  }
+  profiles->Remove(directory);
+  legacy_import_->Set("announced", true);
+  std::string json;
+  base::JSONWriter::WriteWithOptions(
+      *legacy_import_, base::JSONWriter::OPTIONS_PRETTY_PRINT, &json);
+  base::ThreadPool::PostTask(
+      FROM_HERE, {base::MayBlock(), base::TaskPriority::BEST_EFFORT},
+      base::BindOnce(
+          [](base::FilePath file, std::string json) {
+            base::ImportantFileWriter::WriteFileAtomically(file, json);
+          },
+          g_browser_process->profile_manager()->user_data_dir().AppendASCII(
+              kLegacyImportFile),
+          std::move(json)));
 }
 }  // namespace fly

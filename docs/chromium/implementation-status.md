@@ -67,7 +67,35 @@ isolated user script world, where `unsafeWindow` is that world's window — a
 difference from Electron for scripts that need page globals and GM APIs at once.
 `GM_registerMenuCommand` records commands but has no menu yet.
 
-Import from the Electron profile and packages remain.
+Review follow-ups: the generated extension's version follows its content, so
+Chromium replaces the stored worker after edits made while Fly was closed; each
+GM script runs in its own user-script world with a secret token, the page comes
+from the message sender, redirects and IPv4-mapped IPv6 addresses are checked
+against `@connect` and the local-network rule, duplicate sanitised ids no longer
+reject every registration; re-enabling an extension only lifts the user's own
+disable (other reasons such as new permissions need Chromium's prompt in
+`chrome://extensions`); installs while extensions are switched off are suspended.
+Known limitation: Chromium cannot disable a component, so switching uBlock
+Origin Lite off unloads it and Chromium's uninstall cleanup removes its
+declarativeNetRequest dynamic rules; its stored settings remain.
+
+Import from Electron Fly (`fly/import/legacy_import.{h,cc}`, patch 0026) runs
+once on a fresh native user data directory, after Chromium converts about:flags
+and before any profile loads, from `$XDG_CONFIG_HOME/fly-browser` (or
+`--fly-import-from`). It waits while Electron Fly holds its `SingletonLock`. The
+legacy directory is only read. Each Electron workspace (in the session file's
+order) becomes a native workspace profile — the first one `Default` — with its
+partition's cookies, local/session storage, IndexedDB, service workers, file
+system and databases copied (Electron stores cookies unencrypted, which Chromium
+reads; checked live with a cookie and localStorage set in Electron). Settings,
+search engine and aliases, keyboard changes, bookmarks, hidden frequent sites,
+user scripts/styles and GM values are written immediately; the bundled blocker
+follows Electron's uBlock removal and per-workspace choices. Tabs (with pins),
+history and site zoom are written to `fly-legacy-import.json` and applied when
+each profile loads; Fly starts in the workspace Electron was showing and shows a
+summary listing hand-installed extensions to reinstall from the Web Store.
+
+Packages remain.
 
 Local validation uses the engine checkout `/mnt/storage/fly-chromium`, output
 `src/out/FlyNative`, `native.py refresh-overlay --include-upstream` followed by

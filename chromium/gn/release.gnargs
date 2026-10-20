@@ -1,0 +1,15 @@
+# Native Fly release build, used for packages. Same engine options as the
+# development builds (control.gnargs), linked statically and without DCHECKs,
+# which development builds keep on to catch mistakes early.
+is_debug = false
+is_component_build = false
+dcheck_always_on = false
+symbol_level = 0
+blink_symbol_level = 0
+v8_symbol_level = 0
+use_remoteexec = false
+use_siso = true
+proprietary_codecs = true
+ffmpeg_branding = "Chrome"
+# No profile-guided optimisation data is fetched for this checkout.
+chrome_pgo_phase = 0

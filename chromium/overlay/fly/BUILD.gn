@@ -82,6 +82,21 @@ source_set("bookmarks") {
   ]
 }
 
+source_set("legacy_import") {
+  sources = [
+    "import/legacy_import.cc",
+    "import/legacy_import.h",
+  ]
+  public_deps = [ "//base" ]
+  deps = [
+    ":bookmarks",
+    ":commands",
+    ":preferences",
+    ":workspaces",
+    "//components/prefs",
+  ]
+}
+
 source_set("session_metadata") {
   sources = [
     "sessions/tab_identity.cc",
@@ -104,6 +119,7 @@ test("fly_unittests") {
     "commands/hint_codes_unittest.cc",
     "commands/keyboard_config_unittest.cc",
     "commands/palette_catalog_unittest.cc",
+    "import/legacy_import_unittest.cc",
     "preferences/preferences_service_unittest.cc",
     "preferences/search_service_unittest.cc",
     "workspaces/workspace_service_unittest.cc",
@@ -111,6 +127,7 @@ test("fly_unittests") {
   deps = [
     ":bookmarks",
     ":commands",
+    ":legacy_import",
     ":preferences",
     ":workspaces",
     "//base/test:run_all_unittests",
