@@ -43,9 +43,6 @@ LAUNCHER = '''#!/bin/sh
 # only read once to import it.
 HERE=$(dirname "$(readlink -f "$0")")
 CONFIG="${XDG_CONFIG_HOME:-$HOME/.config}"
-# Chromium keeps crash reports under its default directory (~/.config/chromium)
-# whatever --user-data-dir says; keep them with Fly's data.
-export CHROME_CONFIG_HOME="$CONFIG/fly-browser-native"
 exec "$HERE/fly" --fly-native --class=fly-browser-native \\
   --user-data-dir="$CONFIG/fly-browser-native" "$@"
 '''
