@@ -17,6 +17,7 @@
 #include "fly/ui/fly_theme.h"
 #include "chrome/app/vector_icons/vector_icons.h"
 #include "components/vector_icons/vector_icons.h"
+#include "ui/aura/env.h"
 #include "ui/aura/window.h"
 #include "ui/color/color_id.h"
 #include "ui/events/event.h"
@@ -201,6 +202,8 @@ void CommandPalette::ToggleItems(content::WebContents* contents,
   removable_ = removable;
   closing_ = false;
   cancelled_ = false;
+  pointer_at_open_ = aura::Env::GetInstance()->last_mouse_location();
+  pointer_moved_ = false;
   overlay_ = std::make_unique<views::Widget>();
   views::Widget::InitParams params(
       views::Widget::InitParams::CLIENT_OWNS_WIDGET,
@@ -789,6 +792,13 @@ void CommandPalette::SetCategoryForTesting(std::string category) {
 void CommandPalette::Hover(size_t index) {
   if (!active() || index >= buttons_.size() || static_cast<int>(index) == selected_)
     return;
+  // A row that opens under a resting pointer is not chosen by it: until the
+  // pointer moves, Enter runs the first (or most recent) command.
+  if (!pointer_moved_) {
+    if (aura::Env::GetInstance()->last_mouse_location() == pointer_at_open_)
+      return;
+    pointer_moved_ = true;
+  }
   if (!buttons_[index]->GetEnabled())
     return;
   if (selected_ >= 0)

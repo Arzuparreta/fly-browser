@@ -217,6 +217,7 @@ DiagnosticsHub::~DiagnosticsHub() {
   badge_ = nullptr;
   recording_ = nullptr;
   log_search_ = nullptr;
+  log_list_ = nullptr;
   overlay_.reset();
   if (desktop_)
     desktop_->RemoveObserver(this);
@@ -309,6 +310,7 @@ void DiagnosticsHub::Cancel() {
   badge_ = nullptr;
   recording_ = nullptr;
   log_search_ = nullptr;
+  log_list_ = nullptr;
   auto closing = std::move(overlay_);
   closing->CloseNow();
 }
@@ -328,9 +330,12 @@ void DiagnosticsHub::Refresh() {
     auto* pane = panes_[i].get();
     // The log search field survives refreshes while typing.
     const bool keep_search = i == 2 && log_search_ && log_search_->HasFocus();
-    if (keep_search)
+    if (keep_search) {
+      BuildLogList();
       continue;
+    }
     log_search_ = nullptr;
+    log_list_ = nullptr;
     pane->RemoveAllChildViews();
     if (i == 0)
       BuildSystem(pane);
@@ -611,7 +616,19 @@ void DiagnosticsHub::BuildLogs(views::View* pane) {
                   }
                 },
                 weak_factory_.GetWeakPtr()));
-  auto* list = AddBox(pane, views::BoxLayout::Orientation::kVertical, 4);
+  log_list_ = AddBox(pane, views::BoxLayout::Orientation::kVertical, 4);
+  BuildLogList();
+}
+
+// Only the rows change while filtering: the search field sending the edit
+// stays alive.
+void DiagnosticsHub::BuildLogList() {
+  if (!log_list_)
+    return;
+  auto* list = log_list_.get();
+  list->RemoveAllChildViews();
+  const auto session =
+      delegate_.session ? delegate_.session.Run() : DiagnosticsSession();
   const auto query = base::ToLowerASCII(log_query_);
   int shown = 0;
   for (const auto& event : base::Reversed(session.events)) {
@@ -640,6 +657,10 @@ void DiagnosticsHub::BuildLogs(views::View* pane) {
   }
   if (!shown)
     AddText(list, u"No events match.", 12, FlyLabel::Tone::kDim);
+  DisableSubpixelText(list);
+  list->InvalidateLayout();
+  if (list->parent())
+    list->parent()->InvalidateLayout();
 }
 
 std::string DiagnosticsHub::MarkdownReport() {
@@ -829,19 +850,7 @@ void DiagnosticsHub::ContentsChanged(views::Textfield* sender,
   if (sender != log_search_)
     return;
   log_query_ = contents;
-  // Rebuild the list below the field without replacing the field.
-  if (tabs_ && tabs_->GetSelectedTabIndex() == 2) {
-    auto* pane = panes_[2].get();
-    const auto query = log_query_;
-    log_search_ = nullptr;
-    pane->RemoveAllChildViews();
-    BuildLogs(pane);
-    DisableSubpixelText(pane);
-    pane->InvalidateLayout();
-    if (log_search_)
-      log_search_->RequestFocus();
-    log_query_ = query;
-  }
+  BuildLogList();
 }
 
 bool DiagnosticsHub::HandleOverlayKey(const ui::KeyEvent& event) {

@@ -10,6 +10,7 @@
 #include "base/files/file_util.h"
 #include "base/strings/strcat.h"
 #include "base/files/important_file_writer.h"
+#include "base/process/kill.h"
 #include "crypto/secure_hash.h"
 #include "base/files/scoped_temp_dir.h"
 #include "base/files/file.h"
@@ -500,10 +501,13 @@ void OpenTerminalWithCommand(const std::string& text) {
         }
         base::LaunchOptions options;
         options.new_process_group = true;
-        base::LaunchProcess(
+        auto process = base::LaunchProcess(
             {terminal.empty() ? std::string("xdg-terminal-exec")
                               : terminal.value()},
             options);
+        // The terminal outlives Fly's interest in it; reap it when it exits.
+        if (process.IsValid())
+          base::EnsureProcessGetsReaped(std::move(process));
       }));
 }
 
@@ -767,7 +771,8 @@ void InstallNativeUpdate(const UpdateCheckResult& update,
                       }
                       base::ThreadPool::PostTaskAndReplyWithResult(
                           FROM_HERE,
-                          {base::MayBlock(), base::TaskPriority::USER_VISIBLE,
+                          {base::MayBlock(), base::WithBaseSyncPrimitives(),
+                           base::TaskPriority::USER_VISIBLE,
                            base::TaskShutdownBehavior::BLOCK_SHUTDOWN},
                           base::BindOnce(
                               [](base::FilePath file, std::string checksum) {
@@ -862,6 +867,40 @@ DesktopIntegrationStatus ReadStatusBlocking() {
   status.is_default = status.default_browser == kDesktopId;
   return status;
 }
+// Electron's desktopIntegration.js execArgument + entryString: plain when
+// safe, otherwise double-quoted with \ " ` $ escaped; then the desktop-entry
+// string escapes and %% for a literal %.
+std::string DesktopExecArgument(const std::string& value) {
+  std::string argument;
+  const bool plain =
+      !value.empty() && std::ranges::all_of(value, [](char c) {
+        return base::IsAsciiAlphaNumeric(c) ||
+               std::string_view("_/.+,:@=-").find(c) != std::string_view::npos;
+      });
+  if (plain) {
+    argument = value;
+  } else {
+    argument = "\"";
+    for (const char c : value) {
+      if (c == '\\' || c == '"' || c == '`' || c == '$')
+        argument += '\\';
+      argument += c;
+    }
+    argument += '"';
+  }
+  std::string entry;
+  for (const char c : argument) {
+    switch (c) {
+      case '\\': entry += "\\\\"; break;
+      case '\n': entry += "\\n"; break;
+      case '\r': entry += "\\r"; break;
+      case '\t': entry += "\\t"; break;
+      case '%': entry += "%%"; break;
+      default: entry += c;
+    }
+  }
+  return entry;
+}
 std::u16string AddEntryBlocking() {
   const auto launcher = Launcher();
   if (!base::PathExists(launcher))
@@ -884,7 +923,7 @@ std::u16string AddEntryBlocking() {
       {"[Desktop Entry]\nName=Fly (native)\nGenericName=Web Browser\n"
        "Comment=Fly on the Chromium engine\nKeywords=browser;web;internet;\n"
        "Exec=",
-       launcher.value(),
+       DesktopExecArgument(launcher.value()),
        " %U\nIcon=fly-browser-native\nTerminal=false\nType=Application\n"
        "Categories=Network;WebBrowser;\n"
        "MimeType=text/html;text/xml;application/xhtml+xml;"

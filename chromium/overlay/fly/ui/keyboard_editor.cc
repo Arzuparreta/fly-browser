@@ -121,6 +121,9 @@ KeyboardEditor::KeyboardEditor(views::Widget* desktop,
 }
 KeyboardEditor::~KeyboardEditor() {
   weak_factory_.InvalidateWeakPtrs();
+  // An open file chooser must not call back into a destroyed editor.
+  if (file_dialog_)
+    file_dialog_->ListenerDestroyed();
   preferences_registrar_.RemoveAll();
   recording_timer_.Stop();
   Observe(nullptr);

@@ -128,6 +128,7 @@ class DiagnosticsHub : public views::TabbedPaneListener,
   void BuildProcesses(views::View* pane);
   void BuildLogs(views::View* pane);
   void BuildReport(views::View* pane);
+  void BuildLogList();
   std::string ReportJson();
 
   raw_ptr<views::Widget> desktop_;
@@ -138,6 +139,7 @@ class DiagnosticsHub : public views::TabbedPaneListener,
   raw_ptr<views::Label> badge_ = nullptr;
   raw_ptr<views::Checkbox> recording_ = nullptr;
   raw_ptr<views::Textfield> log_search_ = nullptr;
+  raw_ptr<views::View> log_list_ = nullptr;
   std::string log_filter_ = "all";
   std::u16string log_query_;
   base::SequenceBound<Sampler> sampler_;

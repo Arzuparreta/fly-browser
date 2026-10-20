@@ -9,6 +9,7 @@
 #include "base/functional/callback.h"
 #include "ui/gfx/geometry/insets.h"
 #include "base/memory/raw_ptr.h"
+#include "ui/gfx/geometry/point.h"
 #include "base/memory/weak_ptr.h"
 #include "content/public/browser/web_contents_observer.h"
 #include "fly/commands/palette_catalog.h"
@@ -85,6 +86,9 @@ class CommandPalette : public views::TextfieldController,
   bool HandleOverlayKey(const ui::KeyEvent& event);
   bool active() const { return overlay_ && !closing_; }
   views::Textfield* search_for_testing() { return search_; }
+  views::MdTextButton* row_for_testing(size_t index) {
+    return index < buttons_.size() ? buttons_[index].get() : nullptr;
+  }
   size_t result_count_for_testing() const { return filtered_.size(); }
   views::MdTextButton* remove_for_testing(size_t index) {
     return index < remove_buttons_.size() ? remove_buttons_[index].get() : nullptr;
@@ -124,6 +128,8 @@ class CommandPalette : public views::TextfieldController,
   std::vector<PaletteEntry> filtered_;
   QueryProvider query_provider_;
   int selected_ = -1;
+  gfx::Point pointer_at_open_;
+  bool pointer_moved_ = false;
   bool empty_source_ = false;
   bool closing_ = false;
   bool cancelled_ = false;

@@ -17,6 +17,9 @@
 #include "fly/ui/fly_theme.h"
 #include "fly/ui/fly_actions.h"
 #include "fly/ui/fly_extensions.h"
+#include "base/files/file_enumerator.h"
+#include "third_party/re2/src/re2/re2.h"
+#include "third_party/zlib/google/zip.h"
 #include "fly/ui/user_content.h"
 #include "fly/ui/welcome_view.h"
 #include "base/files/scoped_temp_dir.h"
@@ -3927,6 +3930,85 @@ IN_PROC_BROWSER_TEST_F(FlyWorkspaceBrowserTest,
 }
 
 IN_PROC_BROWSER_TEST_F(FlyWorkspaceBrowserTest,
+                       LocalExtensionsLandInElectronFoldersAndReplace) {
+  auto& extensions = FlyWindowController::Get().extensions();
+  auto* profile = browser()->GetProfile();
+  // Outlives `sources`, whose destructor deletes files.
+  base::ScopedAllowBlockingForTesting allow_temp_dir;
+  base::ScopedTempDir sources;
+  auto write = [&](const base::FilePath& dir, std::string_view name,
+                   std::string_view version) {
+    base::ScopedAllowBlockingForTesting allow_blocking;
+    ASSERT_TRUE(base::CreateDirectory(dir));
+    ASSERT_TRUE(base::WriteFile(
+        dir.AppendASCII("manifest.json"),
+        base::StrCat({"{\"name\":\"", name, "\",\"version\":\"", version,
+                      "\",\"manifest_version\":3}"})));
+  };
+  auto installed = [&](std::string_view name) -> const extensions::Extension* {
+    for (const auto& extension :
+         extensions::ExtensionRegistry::Get(profile)->enabled_extensions()) {
+      if (extension->name() == name)
+        return extension.get();
+    }
+    return nullptr;
+  };
+  auto local_folders = [&] {
+    base::ScopedAllowBlockingForTesting allow_blocking;
+    std::vector<std::string> names;
+    base::FileEnumerator folders(FlyExtensions::Folder(), false,
+                                 base::FileEnumerator::DIRECTORIES);
+    for (auto path = folders.Next(); !path.empty(); path = folders.Next())
+      names.push_back(path.BaseName().AsUTF8Unsafe());
+    return names;
+  };
+  {
+    base::ScopedAllowBlockingForTesting allow_blocking;
+    ASSERT_TRUE(sources.CreateUniqueTempDir());
+  }
+  // A folder goes to local-<24 hex>; loading it again replaces that copy.
+  const auto folder = sources.GetPath().AppendASCII("my-extension");
+  write(folder, "Fly Local Folder", "1");
+  extensions.LoadUnpacked(profile, folder);
+  ASSERT_TRUE(base::test::RunUntil([&] { return installed("Fly Local Folder"); }));
+  const auto id = installed("Fly Local Folder")->id();
+  auto names = local_folders();
+  ASSERT_EQ(names.size(), 1u);
+  EXPECT_TRUE(RE2::FullMatch(names[0], "local-[0-9a-f]{24}")) << names[0];
+  write(folder, "Fly Local Folder", "2");
+  extensions.LoadUnpacked(profile, folder);
+  ASSERT_TRUE(base::test::RunUntil([&] {
+    const auto* extension = installed("Fly Local Folder");
+    return extension && extension->version().GetString() == "2";
+  }));
+  EXPECT_EQ(installed("Fly Local Folder")->id(), id);
+  EXPECT_EQ(local_folders(), names);
+  // A ZIP gets its own folder from its path, and reinstalling reuses it.
+  const auto zip_source = sources.GetPath().AppendASCII("zip-source");
+  const auto zip = sources.GetPath().AppendASCII("package.zip");
+  write(zip_source, "Fly Local Zip", "1");
+  {
+    base::ScopedAllowBlockingForTesting allow_blocking;
+    ASSERT_TRUE(zip::Zip(zip_source, zip, false));
+  }
+  extensions.InstallPackage(profile, Active(browser()), zip);
+  ASSERT_TRUE(base::test::RunUntil([&] { return installed("Fly Local Zip"); }));
+  ASSERT_EQ(local_folders().size(), 2u);
+  write(zip_source, "Fly Local Zip", "3");
+  {
+    base::ScopedAllowBlockingForTesting allow_blocking;
+    ASSERT_TRUE(base::DeleteFile(zip));
+    ASSERT_TRUE(zip::Zip(zip_source, zip, false));
+  }
+  extensions.InstallPackage(profile, Active(browser()), zip);
+  ASSERT_TRUE(base::test::RunUntil([&] {
+    const auto* extension = installed("Fly Local Zip");
+    return extension && extension->version().GetString() == "3";
+  }));
+  EXPECT_EQ(local_folders().size(), 2u);
+}
+
+IN_PROC_BROWSER_TEST_F(FlyWorkspaceBrowserTest,
                        UserScriptsAndStylesRunWithPersistentGmValues) {
   base::FilePath user_data;
   ASSERT_TRUE(base::PathService::Get(chrome::DIR_USER_DATA, &user_data));
@@ -4777,6 +4859,20 @@ IN_PROC_BROWSER_TEST_F(FlyWorkspaceBrowserTest,
   ASSERT_TRUE(base::test::RunUntil([&] { return palette.active(); }));
   EXPECT_TRUE(palette.count_for_testing().ends_with(u" commands"));
   EXPECT_EQ(u"New Blank Tab", palette.inspector_title_for_testing());
+  // A row that opens under the resting pointer is not selected by it; once
+  // the pointer moves, hovering selects like Electron's mouseenter.
+  auto* row = palette.row_for_testing(3);
+  ASSERT_TRUE(row);
+  const auto row_centre = row->GetBoundsInScreen().CenterPoint();
+  ui::MouseEvent resting(ui::EventType::kMouseEntered, gfx::Point(),
+                         gfx::Point(), base::TimeTicks::Now(), ui::EF_NONE,
+                         ui::EF_NONE);
+  row->OnMouseEntered(resting);
+  EXPECT_EQ(u"New Blank Tab", palette.inspector_title_for_testing());
+  ui::test::EventGenerator pointer(
+      window.desktop_widget()->GetNativeWindow()->GetRootWindow());
+  pointer.MoveMouseTo(row_centre);
+  EXPECT_NE(u"New Blank Tab", palette.inspector_title_for_testing());
   palette.SetCategoryForTesting("Split View");
   EXPECT_EQ(u"6 commands", palette.count_for_testing());
   palette.SetCategoryForTesting("All");

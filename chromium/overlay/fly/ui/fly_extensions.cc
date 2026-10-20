@@ -21,6 +21,7 @@
 #include "extensions/browser/unpacked_installer.h"
 #include "extensions/browser/zipfile_installer.h"
 #include <set>
+#include "crypto/sha2.h"
 #include "base/files/file_enumerator.h"
 #include "base/files/file_util.h"
 #include "base/json/json_reader.h"
@@ -589,6 +590,32 @@ void LoadUnpackedNow(base::WeakPtr<Profile> profile,
 }
 }  // namespace
 
+namespace {
+// Electron's extensionStore.js: a local source lands in
+// local-<first 24 hex of sha256(absolute path)>, so reinstalling the same
+// file or folder replaces it (and keeps its unpacked extension id) while two
+// sources with the same name stay apart.
+base::FilePath LocalTarget(const base::FilePath& source) {
+  const auto absolute = base::MakeAbsoluteFilePath(source);
+  const auto digest = crypto::SHA256HashString(
+      (absolute.empty() ? source : absolute).value());
+  return FlyExtensions::Folder().AppendASCII(
+      "local-" + base::HexEncodeLower(digest).substr(0, 24));
+}
+// Copies `source` beside `target` and swaps it in only once complete.
+bool ReplaceWithCopy(const base::FilePath& source,
+                     const base::FilePath& target) {
+  if (!base::CreateDirectory(target.DirName()))
+    return false;
+  const auto staging = target.AddExtensionASCII("new");
+  base::DeletePathRecursively(staging);
+  if (!base::CopyDirectory(source, staging, true))
+    return false;
+  base::DeletePathRecursively(target);
+  return base::Move(staging, target);
+}
+}  // namespace
+
 void FlyExtensions::InstallPackage(Profile* profile,
                                    content::WebContents* contents,
                                    const base::FilePath& file) {
@@ -610,56 +637,105 @@ void FlyExtensions::InstallPackage(Profile* profile,
       announce_.Run(u"Choose a .zip or .crx extension package.");
     return;
   }
-  auto installer = extensions::ZipFileInstaller::Create(
-      extensions::GetExtensionFileTaskRunner(),
+  // Unpacks next to the target, then swaps it in as a folder install does.
+  extensions::GetExtensionFileTaskRunner()->PostTaskAndReplyWithResult(
+      FROM_HERE,
+      base::BindOnce(
+          [](base::FilePath file) {
+            const auto target = LocalTarget(file);
+            const auto unzip = target.AddExtensionASCII("zip");
+            base::DeletePathRecursively(unzip);
+            // LoadFromZipFileInDir unpacks into an existing folder only.
+            base::CreateDirectory(unzip);
+            return std::make_pair(target, unzip);
+          },
+          file),
       base::BindOnce(
           [](base::WeakPtr<Profile> profile,
              base::RepeatingCallback<void(std::u16string)> announce,
-             const base::FilePath&, const base::FilePath& unzip_dir,
-             const std::string& error) {
-            if (!error.empty()) {
-              if (announce)
-                announce.Run(u"The package could not be unpacked: " +
-                             base::UTF8ToUTF16(error));
-              return;
-            }
-            LoadUnpackedNow(profile, announce, unzip_dir);
+             base::FilePath file,
+             std::pair<base::FilePath, base::FilePath> dirs) {
+            auto installer = extensions::ZipFileInstaller::Create(
+                extensions::GetExtensionFileTaskRunner(),
+                base::BindOnce(
+                    [](base::WeakPtr<Profile> profile,
+                       base::RepeatingCallback<void(std::u16string)> announce,
+                       base::FilePath target, const base::FilePath&,
+                       const base::FilePath& unzip_dir,
+                       const std::string& error) {
+                      if (!error.empty()) {
+                        if (announce)
+                          announce.Run(u"The package could not be unpacked: " +
+                                       base::UTF8ToUTF16(error));
+                        return;
+                      }
+                      extensions::GetExtensionFileTaskRunner()
+                          ->PostTaskAndReplyWithResult(
+                              FROM_HERE,
+                              base::BindOnce(
+                                  [](base::FilePath unzip,
+                                     base::FilePath target) {
+                                    const bool ok =
+                                        ReplaceWithCopy(unzip, target);
+                                    base::DeletePathRecursively(unzip);
+                                    return ok ? target : base::FilePath();
+                                  },
+                                  unzip_dir, target),
+                              base::BindOnce(
+                                  [](base::WeakPtr<Profile> profile,
+                                     base::RepeatingCallback<void(
+                                         std::u16string)> announce,
+                                     base::FilePath target) {
+                                    if (target.empty()) {
+                                      if (announce)
+                                        announce.Run(
+                                            u"The package could not be "
+                                            u"copied into the extensions "
+                                            u"folder.");
+                                      return;
+                                    }
+                                    LoadUnpackedNow(profile, announce,
+                                                    target);
+                                  },
+                                  profile, announce));
+                    },
+                    profile, announce, dirs.first));
+            installer->LoadFromZipFileInDir(file, dirs.second);
           },
-          profile->GetWeakPtr(), announce_));
-  installer->InstallZipFileToUnpackedExtensionsDir(file, Folder());
+          profile->GetWeakPtr(), announce_, file));
 }
 
 void FlyExtensions::LoadUnpacked(Profile* profile,
                                  const base::FilePath& folder) {
   if (!profile || profile->IsOffTheRecord() || folder.empty())
     return;
-  // Electron copies the folder; a newer copy replaces an older one.
   extensions::GetExtensionFileTaskRunner()->PostTaskAndReplyWithResult(
       FROM_HERE,
       base::BindOnce(
-          [](base::FilePath source, base::FilePath root) {
-            const auto target = root.Append(source.BaseName());
+          [](base::FilePath source) -> std::pair<base::FilePath, std::u16string> {
+            if (!base::PathExists(source.AppendASCII("manifest.json")))
+              return {base::FilePath(),
+                      u"That folder is not an extension (no manifest.json)."};
+            const auto target = LocalTarget(source);
             if (source == target)
-              return target;
-            if (!base::CreateDirectory(root) ||
-                !base::PathExists(source.AppendASCII("manifest.json")))
-              return base::FilePath();
-            base::DeletePathRecursively(target);
-            return base::CopyDirectory(source, root, true) ? target
-                                                           : base::FilePath();
+              return {target, u""};
+            if (!ReplaceWithCopy(source, target))
+              return {base::FilePath(),
+                      u"The folder could not be copied into the extensions "
+                      u"folder."};
+            return {target, u""};
           },
-          folder, Folder()),
+          folder),
       base::BindOnce(
           [](base::WeakPtr<Profile> profile,
              base::RepeatingCallback<void(std::u16string)> announce,
-             base::FilePath copied) {
-            if (copied.empty()) {
+             std::pair<base::FilePath, std::u16string> result) {
+            if (result.first.empty()) {
               if (announce)
-                announce.Run(
-                    u"That folder is not an extension (no manifest.json).");
+                announce.Run(result.second);
               return;
             }
-            LoadUnpackedNow(profile, announce, copied);
+            LoadUnpackedNow(profile, announce, result.first);
           },
           profile->GetWeakPtr(), announce_));
 }
