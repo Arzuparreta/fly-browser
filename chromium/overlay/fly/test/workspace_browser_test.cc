@@ -4020,6 +4020,17 @@ IN_PROC_BROWSER_TEST_F(FlyWorkspaceBrowserTest,
         u"The extension could not be loaded");
   }));
   EXPECT_EQ(local_folders(), names);
+  {
+    base::ScopedAllowBlockingForTesting allow_blocking;
+    std::string manifest;
+    ASSERT_TRUE(base::ReadFileToString(FlyExtensions::Folder()
+                                           .AppendASCII(names[0])
+                                           .AppendASCII("manifest.json"),
+                                       &manifest));
+    EXPECT_NE(manifest.find("\"version\":\"2\""), std::string::npos)
+        << manifest;
+    EXPECT_EQ(manifest.find("not base64!"), std::string::npos) << manifest;
+  }
   EXPECT_EQ(installed("Fly Local Folder")->version().GetString(), "2");
   // A ZIP gets its own folder from its path, and reinstalling reuses it.
   const auto zip_source = sources.GetPath().AppendASCII("zip-source");
