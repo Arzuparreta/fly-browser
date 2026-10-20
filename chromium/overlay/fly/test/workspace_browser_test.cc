@@ -17,7 +17,12 @@
 #include "fly/ui/fly_theme.h"
 #include "fly/ui/fly_actions.h"
 #include "fly/ui/fly_extensions.h"
+#include "crypto/sha2.h"
+#include "base/strings/string_number_conversions.h"
+#include "base/files/file_enumerator.h"
+#include "third_party/zlib/google/zip.h"
 #include "fly/ui/user_content.h"
+#include "fly/ui/welcome_view.h"
 #include "base/files/scoped_temp_dir.h"
 #include "content/public/browser/host_zoom_map.h"
 #include "chrome/common/chrome_paths.h"
@@ -27,7 +32,6 @@
 #include "base/threading/thread_restrictions.h"
 #include "chrome/browser/content_settings/host_content_settings_map_factory.h"
 #include "components/content_settings/core/browser/host_content_settings_map.h"
-#include "components/dom_distiller/core/url_utils.h"
 #include "fly/ui/fly_window_controller.h"
 #include "fly/ui/hint_controller.h"
 #include "fly/ui/history_service.h"
@@ -134,6 +138,11 @@ class FlyWorkspaceBrowserTest : public InProcessBrowserTest {
  public:
   void SetUpCommandLine(base::CommandLine* command_line) override {
     command_line->AppendSwitch("fly-native");
+    // Never import the Electron Fly profile of the machine running the tests
+    // (~/.config/fly-browser); import cases pass their own directory.
+    command_line->AppendSwitchPath(
+        "fly-import-from",
+        base::FilePath(FILE_PATH_LITERAL("/nonexistent-fly-import-source")));
   }
   void SetUpOnMainThread() override {
     ASSERT_TRUE(embedded_test_server()->Start());
@@ -1615,7 +1624,15 @@ IN_PROC_BROWSER_TEST_F(FlyWorkspaceBrowserTest,
   ASSERT_TRUE(second);
   auto& window = FlyWindowController::Get();
   ASSERT_TRUE(window.IsSelected(second));
+  auto second_lifetime = second->GetWeakPtr();
   second->GetWindow()->Close();
+  // Electron keeps the emptied workspace on screen with its welcome view; the
+  // sidebar no longer observes the closed window.
+  ASSERT_TRUE(base::test::RunUntil([&] { return !second_lifetime; }));
+  EXPECT_EQ(nullptr, window.selected_browser_for_testing());
+  EXPECT_TRUE(window.welcome_for_testing()->GetVisible());
+  EXPECT_EQ(0u, window.tab_sidebar_for_testing()->row_count_for_testing());
+  window.Select(first, true);
   ASSERT_TRUE(base::test::RunUntil([&] {
     return window.IsSelected(first) &&
            window.tab_sidebar_for_testing()->row_for_testing(Active(first));
@@ -3373,6 +3390,10 @@ IN_PROC_BROWSER_TEST_F(FlyWorkspaceBrowserTest,
   picker.ContentsChanged(picker.search_for_testing(), u"New workspace");
   ASSERT_EQ(1u, picker.result_count_for_testing());
   keys.PressKey(ui::VKEY_RETURN, ui::EF_NONE);
+  // Electron asks for the name first.
+  ASSERT_TRUE(base::test::RunUntil(
+      [&] { return window.workspace_name_dialog_for_testing() != nullptr; }));
+  window.workspace_name_dialog_for_testing()->AcceptDialog();
   ASSERT_TRUE(base::test::RunUntil([&] {
     return !picker.search_for_testing() &&
            window.selected_browser_for_testing() != nullptr;
@@ -3700,32 +3721,167 @@ IN_PROC_BROWSER_TEST_F(FlyWorkspaceBrowserTest,
   picker.Cancel(true);
   ASSERT_TRUE(
       base::test::RunUntil([&] { return !picker.search_for_testing(); }));
+  // Electron's Diagnostics & Health Hub: system, processes, log and report.
   ASSERT_TRUE(InvokeNativeCommand(browser(), "open-diagnostics"));
-  auto* dialog = window.diagnostics_dialog_for_testing();
-  ASSERT_TRUE(dialog);
-  EXPECT_TRUE(dialog->IsVisible());
+  auto* hub = window.diagnostics_hub_for_testing();
+  ASSERT_TRUE(hub && hub->active());
+  ASSERT_TRUE(base::test::RunUntil(
+      [&] { return hub->has_snapshot_for_testing(); }));
+  EXPECT_NE(std::u16string::npos,
+            hub->tab_text_for_testing().find(u"Chromium Engine"));
+  hub->SelectTabForTesting(1);
+  EXPECT_NE(std::u16string::npos, hub->tab_text_for_testing().find(u"Renderer"));
+  hub->SelectTabForTesting(2);
+  EXPECT_NE(std::u16string::npos,
+            hub->tab_text_for_testing().find(u"CURRENTLY DISABLED"));
+  const auto report = hub->MarkdownReport();
+  EXPECT_NE(std::string::npos, report.find("### Fly Browser Diagnostic Report"));
   ASSERT_TRUE(InvokeNativeCommand(browser(), "open-diagnostics"));
-  ASSERT_TRUE(base::test::RunUntil([&] {
-    auto* current = window.diagnostics_dialog_for_testing();
-    return !current || current->IsClosed();
-  }));
+  EXPECT_FALSE(hub->active());
 }
 
+// Electron's dashboard: each workspace with its tabs (pinned marked) and
+// rename/delete buttons; choosing a tab opens its workspace on that tab.
 IN_PROC_BROWSER_TEST_F(FlyWorkspaceBrowserTest,
-                       NativeReaderViewDistilsArticleAndReturns) {
+                       DashboardListsWorkspaceTabsAndOpensThem) {
+  auto& window = FlyWindowController::Get();
+  auto* original = browser();
+  ASSERT_TRUE(ui_test_utils::NavigateToURL(
+      original, embedded_test_server()->GetURL("/title1.html")));
+  ASSERT_TRUE(ui_test_utils::NavigateToURLWithDisposition(
+      original, embedded_test_server()->GetURL("/title2.html"),
+      WindowOpenDisposition::NEW_FOREGROUND_TAB,
+      ui_test_utils::BROWSER_TEST_WAIT_FOR_LOAD_STOP));
+  original->GetTabStripModel()->SetTabPinned(1, true);
+  window.CreateWorkspace("Second");
+  ASSERT_TRUE(base::test::RunUntil([&] {
+    auto* selected = window.selected_browser_for_testing();
+    return selected && selected != original &&
+           selected->GetTabStripModel()->count() == 1;
+  }));
+  const auto entries = window.dashboard_entries_for_testing();
+  std::vector<std::string> titles;
+  std::string pinned_action;
+  for (const auto& entry : entries) {
+    titles.push_back(entry.title);
+    if (entry.title.find("\xF0\x9F\x93\x8C") != std::string::npos)
+      pinned_action = entry.action;
+  }
+  ASSERT_GE(titles.size(), 5u);
+  EXPECT_FALSE(titles[0].starts_with("- "));
+  // Pinned tabs come first in the strip.
+  EXPECT_EQ("- Title Of Awesomeness \xF0\x9F\x93\x8C", titles[1]);
+  EXPECT_TRUE(titles[2].starts_with("- ") &&
+              titles[2].find("title1.html") != std::string::npos)
+      << titles[2];
+  EXPECT_EQ("Second (Active)", titles[3]);
+  EXPECT_EQ(entries[1].action, pinned_action);
+  EXPECT_EQ(2u, entries[0].row_actions.size());
+  EXPECT_EQ(1, entries[2].indent);
+  window.choose_workspace_for_testing(entries[2].action);
+  ASSERT_TRUE(base::test::RunUntil(
+      [&] { return window.selected_browser_for_testing() == original; }));
+  EXPECT_EQ(1, original->GetTabStripModel()->active_index());
+}
+
+// Electron keeps a workspace whose last tab closed and shows its empty view;
+// the view's New Tab card reopens that workspace.
+IN_PROC_BROWSER_TEST_F(FlyWorkspaceBrowserTest,
+                       LastTabClosedShowsTheWorkspaceWelcomeView) {
+  auto& window = FlyWindowController::Get();
+  auto* original = browser();
+  window.CreateWorkspace("Empty soon");
+  ASSERT_TRUE(base::test::RunUntil([&] {
+    auto* selected = window.selected_browser_for_testing();
+    return selected && selected != original &&
+           selected->GetTabStripModel()->count() == 1;
+  }));
+  auto second = window.selected_browser_for_testing()->GetWeakPtr();
+  auto* second_profile = second->GetProfile();
+  ASSERT_TRUE(ExecuteNativeCommand(second.get(), "remove-tab"));
+  ASSERT_TRUE(base::test::RunUntil([&] { return !second; }));
+  EXPECT_EQ(nullptr, window.selected_browser_for_testing());
+  auto* welcome = window.welcome_for_testing();
+  ASSERT_TRUE(welcome);
+  EXPECT_TRUE(welcome->GetVisible());
+  EXPECT_EQ(u"Empty soon", welcome->workspace_for_testing());
+  auto* new_tab = static_cast<views::Button*>(welcome->card_for_testing(0));
+  ASSERT_TRUE(new_tab);
+  views::test::ButtonTestApi(new_tab).NotifyDefaultMouseClick();
+  ASSERT_TRUE(base::test::RunUntil([&] {
+    auto* selected = window.selected_browser_for_testing();
+    return selected && selected->GetProfile() == second_profile;
+  }));
+  EXPECT_FALSE(welcome->GetVisible());
+}
+
+// Electron's siteZoom.js: zoom changes by 0.5 levels per step and one level
+// per hostname is shared by every normal workspace, whatever path changed it.
+IN_PROC_BROWSER_TEST_F(FlyWorkspaceBrowserTest,
+                       SiteZoomUsesElectronStepsAndIsSharedByWorkspaces) {
+  auto& window = FlyWindowController::Get();
+  auto* original = browser();
+  const GURL page = embedded_test_server()->GetURL("/title1.html");
+  ASSERT_TRUE(ui_test_utils::NavigateToURL(original, page));
+  const std::string host(page.host());
+  const auto level = [&](BrowserWindowInterface* target) {
+    return content::HostZoomMap::GetDefaultForBrowserContext(
+               target->GetProfile())
+        ->GetZoomLevelForHostAndScheme("http", host);
+  };
+  ASSERT_TRUE(InvokeNativeCommand(original, "zoom-in"));
+  EXPECT_DOUBLE_EQ(0.5, level(original));
+  ASSERT_TRUE(InvokeNativeCommand(original, "zoom-in"));
+  EXPECT_DOUBLE_EQ(1.0, level(original));
+  window.CreateWorkspace();
+  ASSERT_TRUE(base::test::RunUntil([&] {
+    auto* selected = window.selected_browser_for_testing();
+    return selected && selected != original &&
+           selected->GetTabStripModel()->count() == 1;
+  }));
+  auto* second = window.selected_browser_for_testing();
+  // A workspace created later takes the shared levels.
+  EXPECT_DOUBLE_EQ(1.0, level(second));
+  ASSERT_TRUE(ui_test_utils::NavigateToURL(second, page));
+  ASSERT_TRUE(InvokeNativeCommand(second, "zoom-out"));
+  EXPECT_DOUBLE_EQ(0.5, level(second));
+  EXPECT_DOUBLE_EQ(0.5, level(original));
+  ASSERT_TRUE(InvokeNativeCommand(second, "reset-zoom"));
+  EXPECT_DOUBLE_EQ(0.0, level(original));
+}
+
+// Electron Fly's reader (readerDistiller.js) opens over the article with its
+// toolbar, lights the reader button, and closes on the second toggle and on
+// Escape.
+IN_PROC_BROWSER_TEST_F(FlyWorkspaceBrowserTest,
+                       ElectronReaderViewOpensOverTheArticleAndCloses) {
   const GURL article =
       embedded_test_server()->GetURL("/dom_distiller/simple_article.html");
   ASSERT_TRUE(ui_test_utils::NavigateToURL(browser(), article));
   auto* contents = Active(browser());
+  const auto open = [&] {
+    return content::EvalJs(contents,
+                           "!!document.getElementById('fly-reader-overlay')")
+        .ExtractBool();
+  };
   ASSERT_TRUE(InvokeNativeCommand(browser(), "toggle-reader-view"));
-  ASSERT_TRUE(base::test::RunUntil([&] {
-    return dom_distiller::url_utils::IsDistilledPage(
-        contents->GetLastCommittedURL());
-  }));
-  ASSERT_TRUE(content::WaitForLoadStop(contents));
-  ASSERT_TRUE(InvokeNativeCommand(browser(), "toggle-reader-view"));
+  ASSERT_TRUE(base::test::RunUntil(open));
+  EXPECT_EQ(article, contents->GetLastCommittedURL());
+  auto& window = FlyWindowController::Get();
   ASSERT_TRUE(base::test::RunUntil(
-      [&] { return contents->GetLastCommittedURL() == article; }));
+      [&] { return window.reader_button_for_testing()->selected(); }));
+  ASSERT_TRUE(InvokeNativeCommand(browser(), "toggle-reader-view"));
+  ASSERT_TRUE(base::test::RunUntil([&] { return !open(); }));
+  ASSERT_TRUE(base::test::RunUntil(
+      [&] { return !window.reader_button_for_testing()->selected(); }));
+  // Escape inside the reader closes it too; the button follows.
+  ASSERT_TRUE(InvokeNativeCommand(browser(), "toggle-reader-view"));
+  ASSERT_TRUE(base::test::RunUntil(open));
+  content::SimulateKeyPress(contents, ui::DomKey::ESCAPE, ui::DomCode::ESCAPE,
+                            ui::VKEY_ESCAPE, false, false, false, false);
+  ASSERT_TRUE(base::test::RunUntil([&] { return !open(); }));
+  ASSERT_TRUE(base::test::RunUntil(
+      [&] { return !window.reader_button_for_testing()->selected(); }));
 }
 
 IN_PROC_BROWSER_TEST_F(FlyWorkspaceBrowserTest,
@@ -3772,6 +3928,154 @@ IN_PROC_BROWSER_TEST_F(FlyWorkspaceBrowserTest,
                                    [&](const FlyExtensionInfo& info) {
                                      return info.id == kId;
                                    }));
+}
+
+IN_PROC_BROWSER_TEST_F(FlyWorkspaceBrowserTest,
+                       LocalExtensionsLandInElectronFoldersAndReplace) {
+  auto& extensions = FlyWindowController::Get().extensions();
+  auto* profile = browser()->GetProfile();
+  // Outlives `sources`, whose destructor deletes files.
+  base::ScopedAllowBlockingForTesting allow_temp_dir;
+  base::ScopedTempDir sources;
+  auto write = [&](const base::FilePath& dir, std::string_view name,
+                   std::string_view version) {
+    base::ScopedAllowBlockingForTesting allow_blocking;
+    ASSERT_TRUE(base::CreateDirectory(dir));
+    ASSERT_TRUE(base::WriteFile(
+        dir.AppendASCII("manifest.json"),
+        base::StrCat({"{\"name\":\"", name, "\",\"version\":\"", version,
+                      "\",\"manifest_version\":3}"})));
+  };
+  auto installed = [&](std::string_view name) -> const extensions::Extension* {
+    for (const auto& extension :
+         extensions::ExtensionRegistry::Get(profile)->enabled_extensions()) {
+      if (extension->name() == name)
+        return extension.get();
+    }
+    return nullptr;
+  };
+  auto local_folders = [&] {
+    base::ScopedAllowBlockingForTesting allow_blocking;
+    std::vector<std::string> names;
+    base::FileEnumerator folders(FlyExtensions::Folder(), false,
+                                 base::FileEnumerator::DIRECTORIES);
+    for (auto path = folders.Next(); !path.empty(); path = folders.Next())
+      names.push_back(path.BaseName().AsUTF8Unsafe());
+    return names;
+  };
+  {
+    base::ScopedAllowBlockingForTesting allow_blocking;
+    ASSERT_TRUE(sources.CreateUniqueTempDir());
+  }
+  // A folder goes to local-<24 hex>; loading it again replaces that copy.
+  const auto folder = sources.GetPath().AppendASCII("my-extension");
+  write(folder, "Fly Local Folder", "1");
+  extensions.LoadUnpacked(profile, folder);
+  ASSERT_TRUE(base::test::RunUntil([&] { return installed("Fly Local Folder"); }));
+  const auto id = installed("Fly Local Folder")->id();
+  auto names = local_folders();
+  ASSERT_EQ(names.size(), 1u);
+  EXPECT_EQ(names[0],
+            "local-" + base::HexEncodeLower(
+                           crypto::SHA256HashString(folder.AsUTF8Unsafe()))
+                           .substr(0, 24));
+  write(folder, "Fly Local Folder", "2");
+  extensions.LoadUnpacked(profile, folder);
+  ASSERT_TRUE(base::test::RunUntil([&] {
+    const auto* extension = installed("Fly Local Folder");
+    return extension && extension->version().GetString() == "2";
+  }));
+  EXPECT_EQ(installed("Fly Local Folder")->id(), id);
+  EXPECT_EQ(local_folders(), names);
+  // A copy Chromium rejects leaves the installed one in place.
+  write(folder, "Fly Local Folder", "not-a-version");
+  extensions.LoadUnpacked(profile, folder);
+  ASSERT_TRUE(base::test::RunUntil([&] {
+    return FlyWindowController::Get().status_text_for_testing().starts_with(
+        u"The extension could not be loaded");
+  }));
+  EXPECT_EQ(local_folders(), names);
+  {
+    base::ScopedAllowBlockingForTesting allow_blocking;
+    std::string manifest;
+    ASSERT_TRUE(base::ReadFileToString(FlyExtensions::Folder()
+                                           .AppendASCII(names[0])
+                                           .AppendASCII("manifest.json"),
+                                       &manifest));
+    EXPECT_NE(manifest.find("\"version\":\"2\""), std::string::npos)
+        << manifest;
+  }
+  // So does a copy whose manifest key Chromium cannot read.
+  {
+    base::ScopedAllowBlockingForTesting allow_blocking;
+    ASSERT_TRUE(base::WriteFile(
+        folder.AppendASCII("manifest.json"),
+        "{\"name\":\"Fly Local Folder\",\"version\":\"3\","
+        "\"manifest_version\":3,\"key\":\"not base64!\"}"));
+  }
+  FlyWindowController::Get().ShowStatus(u"");
+  extensions.LoadUnpacked(profile, folder);
+  ASSERT_TRUE(base::test::RunUntil([&] {
+    return FlyWindowController::Get().status_text_for_testing().starts_with(
+        u"The extension could not be loaded");
+  }));
+  EXPECT_EQ(local_folders(), names);
+  {
+    base::ScopedAllowBlockingForTesting allow_blocking;
+    std::string manifest;
+    ASSERT_TRUE(base::ReadFileToString(FlyExtensions::Folder()
+                                           .AppendASCII(names[0])
+                                           .AppendASCII("manifest.json"),
+                                       &manifest));
+    EXPECT_NE(manifest.find("\"version\":\"2\""), std::string::npos)
+        << manifest;
+    EXPECT_EQ(manifest.find("not base64!"), std::string::npos) << manifest;
+  }
+  EXPECT_EQ(installed("Fly Local Folder")->version().GetString(), "2");
+  // A ZIP gets its own folder from its path, and reinstalling reuses it.
+  const auto zip_source = sources.GetPath().AppendASCII("zip-source");
+  const auto zip = sources.GetPath().AppendASCII("package.zip");
+  write(zip_source, "Fly Local Zip", "1");
+  {
+    base::ScopedAllowBlockingForTesting allow_blocking;
+    ASSERT_TRUE(zip::Zip(zip_source, zip, false));
+  }
+  extensions.InstallPackage(profile, Active(browser()), zip);
+  ASSERT_TRUE(base::test::RunUntil([&] { return installed("Fly Local Zip"); }));
+  ASSERT_EQ(local_folders().size(), 2u);
+  write(zip_source, "Fly Local Zip", "3");
+  {
+    base::ScopedAllowBlockingForTesting allow_blocking;
+    ASSERT_TRUE(base::DeleteFile(zip));
+    ASSERT_TRUE(zip::Zip(zip_source, zip, false));
+  }
+  extensions.InstallPackage(profile, Active(browser()), zip);
+  ASSERT_TRUE(base::test::RunUntil([&] {
+    const auto* extension = installed("Fly Local Zip");
+    return extension && extension->version().GetString() == "3";
+  }));
+  EXPECT_EQ(local_folders().size(), 2u);
+  // An extension with a manifest key keeps one folder whatever path it is
+  // installed from, as in Electron.
+  auto write_keyed = [&](const base::FilePath& dir, std::string_view version) {
+    base::ScopedAllowBlockingForTesting allow_blocking;
+    ASSERT_TRUE(base::CreateDirectory(dir));
+    ASSERT_TRUE(base::WriteFile(
+        dir.AppendASCII("manifest.json"),
+        base::StrCat({"{\"name\":\"Fly Keyed\",\"version\":\"", version,
+                      "\",\"manifest_version\":3,\"key\":\"AQIDBA==\"}"})));
+  };
+  write_keyed(sources.GetPath().AppendASCII("keyed-a"), "1");
+  extensions.LoadUnpacked(profile, sources.GetPath().AppendASCII("keyed-a"));
+  ASSERT_TRUE(base::test::RunUntil([&] { return installed("Fly Keyed"); }));
+  ASSERT_EQ(local_folders().size(), 3u);
+  write_keyed(sources.GetPath().AppendASCII("keyed-b"), "2");
+  extensions.LoadUnpacked(profile, sources.GetPath().AppendASCII("keyed-b"));
+  ASSERT_TRUE(base::test::RunUntil([&] {
+    const auto* extension = installed("Fly Keyed");
+    return extension && extension->version().GetString() == "2";
+  }));
+  EXPECT_EQ(local_folders().size(), 3u);
 }
 
 IN_PROC_BROWSER_TEST_F(FlyWorkspaceBrowserTest,
@@ -4432,6 +4736,8 @@ IN_PROC_BROWSER_TEST_F(FlyWorkspaceBrowserTest,
   ASSERT_TRUE(window.RunCommand(browser(), "toggle-help"));
   auto& editor = window.keyboard_editor();
   ASSERT_TRUE(editor.active());
+  // Preferences opens on General, as Electron's.
+  editor.ShowKeyboard();
   ui::test::EventGenerator keys(
       window.desktop_widget()->GetNativeWindow()->GetRootWindow());
   for (auto key : {ui::VKEY_S, ui::VKEY_P, ui::VKEY_A, ui::VKEY_W, ui::VKEY_N})
@@ -4581,6 +4887,85 @@ IN_PROC_BROWSER_TEST_F(FlyWorkspaceBrowserTest,
   EXPECT_EQ(before, window.commands().Read());
 }
 
+// Electron's Preferences: General first, the settings search filters every
+// section and jumps to the one with matches.
+IN_PROC_BROWSER_TEST_F(FlyWorkspaceBrowserTest,
+                       PreferencesFollowElectronSectionsAndSearch) {
+  auto& window = FlyWindowController::Get();
+  ASSERT_TRUE(InvokeNativeCommand(browser(), "toggle-help"));
+  auto& editor = window.keyboard_editor();
+  ASSERT_TRUE(base::test::RunUntil([&] { return editor.active(); }));
+  EXPECT_EQ(KeyboardEditor::kGeneralPane, editor.selected_pane_for_testing());
+  auto* search = editor.settings_search_for_testing();
+  ASSERT_TRUE(search);
+  search->SetText(u"cookies");
+  editor.ContentsChanged(search, u"cookies");
+  EXPECT_EQ(KeyboardEditor::kPrivacyPane, editor.selected_pane_for_testing());
+  EXPECT_TRUE(editor.setting_visible_for_testing(u"Clear site cookies"));
+  EXPECT_FALSE(editor.setting_visible_for_testing(u"Interface scale"));
+  search->SetText(u"");
+  editor.ContentsChanged(search, u"");
+  EXPECT_TRUE(editor.setting_visible_for_testing(u"Interface scale"));
+  // The section shown last comes back next time.
+  editor.ShowPerformance();
+  editor.Cancel();
+  ASSERT_TRUE(base::test::RunUntil([&] { return !editor.active(); }));
+  ASSERT_TRUE(InvokeNativeCommand(browser(), "toggle-help"));
+  ASSERT_TRUE(base::test::RunUntil([&] { return editor.active(); }));
+  EXPECT_EQ(KeyboardEditor::kPerformancePane,
+            editor.selected_pane_for_testing());
+}
+
+// Electron's Command Centre: count, category chips, inspector card,
+// recently used commands and the terminal fallback.
+IN_PROC_BROWSER_TEST_F(FlyWorkspaceBrowserTest,
+                       CommandCentreFiltersInspectsAndRemembersCommands) {
+  ASSERT_TRUE(ui_test_utils::NavigateToURL(
+      browser(), embedded_test_server()->GetURL("/title1.html")));
+  auto& window = FlyWindowController::Get();
+  window.Select(browser(), true);
+  auto& palette = window.palette();
+  ASSERT_TRUE(InvokeNativeCommand(browser(), "toggle-palette"));
+  ASSERT_TRUE(base::test::RunUntil([&] { return palette.active(); }));
+  EXPECT_TRUE(palette.count_for_testing().ends_with(u" commands"));
+  EXPECT_EQ(u"New Blank Tab", palette.inspector_title_for_testing());
+  // A row that opens under the resting pointer is not selected by it; once
+  // the pointer moves, hovering selects like Electron's mouseenter.
+  auto* row = palette.row_for_testing(3);
+  ASSERT_TRUE(row);
+  const auto row_centre = row->GetBoundsInScreen().CenterPoint();
+  ui::MouseEvent resting(ui::EventType::kMouseEntered, gfx::Point(),
+                         gfx::Point(), base::TimeTicks::Now(), ui::EF_NONE,
+                         ui::EF_NONE);
+  row->OnMouseEntered(resting);
+  EXPECT_EQ(u"New Blank Tab", palette.inspector_title_for_testing());
+  ui::test::EventGenerator pointer(
+      window.desktop_widget()->GetNativeWindow()->GetRootWindow());
+  pointer.MoveMouseTo(row_centre);
+  EXPECT_NE(u"New Blank Tab", palette.inspector_title_for_testing());
+  palette.SetCategoryForTesting("Split View");
+  EXPECT_EQ(u"6 commands", palette.count_for_testing());
+  palette.SetCategoryForTesting("All");
+  palette.search_for_testing()->SetText(u"zz-no-command");
+  palette.ContentsChanged(palette.search_for_testing(), u"zz-no-command");
+  EXPECT_EQ(u"1 match", palette.count_for_testing());
+  EXPECT_EQ("terminal:zz-no-command", palette.selected_action_for_testing());
+  EXPECT_EQ(u"Terminal Oversight", palette.inspector_title_for_testing());
+  palette.search_for_testing()->SetText(u"reader");
+  palette.ContentsChanged(palette.search_for_testing(), u"reader");
+  ASSERT_EQ("toggle-reader-view", palette.selected_action_for_testing());
+  ui::test::EventGenerator keys(
+      window.desktop_widget()->GetNativeWindow()->GetRootWindow());
+  keys.PressKey(ui::VKEY_RETURN, ui::EF_NONE);
+  ASSERT_TRUE(base::test::RunUntil([&] { return !palette.active(); }));
+  EXPECT_EQ(std::vector<std::string>{"toggle-reader-view"},
+            window.preferences().ReadRecentCommands());
+  ASSERT_TRUE(InvokeNativeCommand(browser(), "toggle-palette"));
+  ASSERT_TRUE(base::test::RunUntil([&] { return palette.active(); }));
+  // Recently used commands come first.
+  EXPECT_EQ("toggle-reader-view", palette.selected_action_for_testing());
+}
+
 IN_PROC_BROWSER_TEST_F(FlyWorkspaceBrowserTest,
                        NativePaletteSearchExecutesInItsProfileAfterDismissal) {
   auto* contents = Active(browser());
@@ -4595,11 +4980,12 @@ IN_PROC_BROWSER_TEST_F(FlyWorkspaceBrowserTest,
       window.desktop_widget()->GetNativeWindow()->GetRootWindow());
   keys.PressKey(ui::VKEY_P, ui::EF_CONTROL_DOWN);
   ASSERT_TRUE(base::test::RunUntil([&] { return window.palette().active(); }));
-  for (auto key : {ui::VKEY_D, ui::VKEY_U, ui::VKEY_P, ui::VKEY_L, ui::VKEY_I,
-                   ui::VKEY_C, ui::VKEY_A, ui::VKEY_T, ui::VKEY_E})
+  // Electron's Command Centre lists New Blank Tab (not Duplicate Tab).
+  for (auto key : {ui::VKEY_N, ui::VKEY_E, ui::VKEY_W, ui::VKEY_SPACE,
+                   ui::VKEY_B, ui::VKEY_L, ui::VKEY_A, ui::VKEY_N, ui::VKEY_K})
     keys.PressKey(key, ui::EF_NONE);
   ASSERT_TRUE(base::test::RunUntil([&] {
-    return window.palette().search_for_testing()->GetText() == u"duplicate" &&
+    return window.palette().search_for_testing()->GetText() == u"new blank" &&
            window.palette().result_count_for_testing() == 1;
   }));
   EXPECT_EQ("", content::EvalJs(contents,
@@ -5183,13 +5569,17 @@ IN_PROC_BROWSER_TEST_F(FlyPageScrollBrowserTest,
   window.Select(browser(), true);
   ui::test::EventGenerator keys(
       window.desktop_widget()->GetNativeWindow()->GetRootWindow());
+  // Electron's zoom step (factor 1.095) leaves fractional device pixels, so
+  // offsets may round one pixel either way.
   auto wait_offset = [&](const char* axis, int offset) {
     return base::test::RunUntil([&] {
-      return content::EvalJs(
-                 contents,
-                 content::JsReplace(
-                     "Math.round(document.querySelector('#box')[$1])", axis))
-                 .ExtractInt() == offset;
+      return std::abs(content::EvalJs(
+                          contents,
+                          content::JsReplace(
+                              "Math.round(document.querySelector('#box')[$1])",
+                              axis))
+                          .ExtractInt() -
+                      offset) <= 1;
     });
   };
   keys.PressKey(ui::VKEY_J, ui::EF_NONE);

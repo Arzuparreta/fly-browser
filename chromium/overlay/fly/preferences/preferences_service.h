@@ -20,6 +20,7 @@ class CommandLine;
 }
 namespace fly {
 inline constexpr char kPreferencesPref[] = "fly.preferences";
+inline constexpr char kRecentCommandsPref[] = "fly.recent_commands";
 struct ClockPreferences {
   bool visible = true;
   std::string format = "datetime";
@@ -95,10 +96,18 @@ class PreferencesService {
                                             std::string_view key) const;
   bool SetThemeColor(bool dark, std::string_view key, const std::string& hex);
   bool ResetThemeColors();
+  // Electron's sidebar_opacity and overlay_opacity (40-100, default 100),
+  // stored with the colours of each theme.
+  int ReadThemeOpacity(bool dark, std::string_view key) const;
+  bool SetThemeOpacity(bool dark, std::string_view key, int percent);
   // Native extension state ("native_extensions"): bundled removals and
   // per-workspace switches, extensions suspended by the global switch.
   std::optional<base::DictValue> ReadNativeExtensions() const;
   bool SetNativeExtensions(base::DictValue state);
+  // Command Centre's recently used commands (Electron keeps four), newest
+  // first, in their own Local State entry.
+  std::vector<std::string> ReadRecentCommands() const;
+  void RecordRecentCommand(std::string_view action);
   // Applies settings that only take effect at process start (GPU, background
   // throttling, renderer process limit). Called before child processes start.
   static void ApplyStartupSwitches(const PrefService& local_state,

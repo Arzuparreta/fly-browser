@@ -194,6 +194,8 @@ if (is_linux || is_win) {
       "//extensions/browser:test_support",
       "//net:test_support",
       "//testing/gtest",
+      "//crypto",
+      "//third_party/zlib/google:zip",
       "//ui/aura",
       "//ui/base",
       "//ui/events:test_support",
@@ -231,7 +233,28 @@ copy("fonts") {
 
 # The Fly User Content extension's fixed files; native Fly copies them into
 # <user data>/fly-user-content together with the generated content.js.
-copy("user_content_resources") {
+# Files the native browser reads at run time from <out>/fly_resources.
+group("user_content_resources") {
+  deps = [
+    ":identity_resources",
+    ":reader_resources",
+    ":user_content_worker",
+  ]
+}
+
+# Electron Fly's reader, copied by scripts/chromium/sync-resources.js.
+copy("reader_resources") {
+  sources = [ "resources/reader/readerDistiller.js" ]
+  outputs = [ "$root_out_dir/fly_resources/reader/{{source_file_part}}" ]
+}
+
+# The product logo of the empty workspace view.
+copy("identity_resources") {
+  sources = [ "resources/identity/icon-128.png" ]
+  outputs = [ "$root_out_dir/fly_resources/identity/{{source_file_part}}" ]
+}
+
+copy("user_content_worker") {
   sources = [
     "resources/user_content/background.js",
     "resources/user_content/manifest.json",

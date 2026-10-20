@@ -29,7 +29,10 @@
 #include "components/history/core/browser/history_service.h"
 #include "content/public/browser/host_zoom_map.h"
 #include "content/public/common/url_constants.h"
+#include "fly/ui/diagnostics_hub.h"
+#include "fly/ui/site_zoom.h"
 #include "fly/ui/user_content.h"
+#include "fly/ui/welcome_view.h"
 #include "ui/gfx/canvas.h"
 #include "ui/gfx/text_utils.h"
 #include "cc/paint/paint_flags.h"
@@ -38,7 +41,10 @@
 #include "skia/ext/image_operations.h"
 #include "base/version.h"
 #include "base/strings/stringprintf.h"
+#include "base/base_paths.h"
 #include "base/command_line.h"
+#include "base/path_service.h"
+#include "ui/gfx/image/image.h"
 #include "base/containers/adapters.h"
 #include "fly/fly_version.h"
 #include "chrome/app/vector_icons/vector_icons.h"
@@ -71,7 +77,10 @@
 #include "chrome/browser/browser_process.h"
 #include "chrome/browser/lifetime/application_lifetime.h"
 #include "chrome/browser/lifetime/application_lifetime_desktop.h"
+#include "chrome/browser/platform_util.h"
 #include "chrome/browser/profiles/profile.h"
+#include "chrome/browser/profiles/keep_alive/profile_keep_alive_types.h"
+#include "chrome/browser/profiles/keep_alive/scoped_profile_keep_alive.h"
 #include "chrome/browser/profiles/profile_attributes_storage.h"
 #include "chrome/browser/profiles/profile_manager.h"
 #include "chrome/browser/profiles/profiles_state.h"
@@ -106,6 +115,7 @@
 #include "ui/views/background.h"
 #include "ui/views/border.h"
 #include "ui/views/context_menu_controller.h"
+#include "ui/views/controls/button/checkbox.h"
 #include "ui/views/controls/button/image_button.h"
 #include "ui/views/controls/button/md_text_button.h"
 #include "ui/views/controls/label.h"
@@ -254,7 +264,7 @@ FlyWindowController::FlyWindowController()
   };
   auto sidebar = std::make_unique<views::View>();
   sidebar_content_ = sidebar.get();
-  sidebar->SetBackground(FlyBackground(FlyRole::kSidebar));
+  sidebar->SetBackground(FlyBackground(FlyRole::kSidebarSurface));
   sidebar->SetBorder(FlyEdgeBorder(FlyRole::kBorder, gfx::Insets::TLBR(0, 0, 0, 1),
                                    gfx::Insets::TLBR(8, 8, 8, 8)));
   auto* sidebar_layout =
@@ -262,7 +272,7 @@ FlyWindowController::FlyWindowController()
           views::BoxLayout::Orientation::kVertical, gfx::Insets(), 6));
   sidebar_layout->set_cross_axis_alignment(
       views::BoxLayout::CrossAxisAlignment::kStretch);
-  sidebar->SetPreferredSize(gfx::Size(260, 0));
+  sidebar->SetPreferredSize(gfx::Size(FlyScaled(260), 0));
   window_controls_ = sidebar->AddChildView(std::make_unique<views::View>());
   window_controls_->SetLayoutManager(std::make_unique<views::BoxLayout>(
       views::BoxLayout::Orientation::kHorizontal, gfx::Insets(), 4))
@@ -335,7 +345,7 @@ FlyWindowController::FlyWindowController()
   actions->AddChildView(MakeFlyIconButton(
       command("toggle-split"), kSplitSceneIcon,
       u"Toggle split view", 26));
-  actions->AddChildView(MakeFlyIconButton(
+  reader_button_ = actions->AddChildView(MakeFlyIconButton(
       command("toggle-reader-view"), kMenuBookIcon,
       u"Toggle reader view", 26));
   actions->AddChildView(MakeFlyIconButton(
@@ -362,10 +372,10 @@ FlyWindowController::FlyWindowController()
       vector_icons::kSettingsIcon, u"Preferences", 26));
   preferences_button_->SetEnabled(false);
   sidebar_slot_ = root->AddChildView(std::make_unique<views::View>());
-  sidebar_slot_->SetPreferredSize(gfx::Size(260, 0));
+  sidebar_slot_->SetPreferredSize(gfx::Size(FlyScaled(260), 0));
   sidebar_slot_->SetLayoutManager(std::make_unique<views::FillLayout>());
   compact_rail_ = sidebar_slot_->AddChildView(std::make_unique<views::View>());
-  compact_rail_->SetBackground(FlyBackground(FlyRole::kSidebar));
+  compact_rail_->SetBackground(FlyBackground(FlyRole::kSidebarSurface));
   compact_rail_->SetBorder(FlyEdgeBorder(FlyRole::kBorder,
                                          gfx::Insets::TLBR(0, 0, 0, 1),
                                          gfx::Insets::VH(6, 2)));
@@ -400,6 +410,32 @@ FlyWindowController::FlyWindowController()
   content_ = column->AddChildView(std::make_unique<views::View>());
   content_->SetLayoutManager(std::make_unique<views::FillLayout>());
   column_layout->SetFlexForView(content_, 1);
+  // Below the workspace hosts: shown while the workspace has no tabs.
+  welcome_ = content_->AddChildView(std::make_unique<WelcomeView>());
+  welcome_->SetVisible(false);
+  base::ThreadPool::PostTaskAndReplyWithResult(
+      FROM_HERE, {base::MayBlock(), base::TaskPriority::USER_VISIBLE},
+      base::BindOnce([]() {
+        base::FilePath assets;
+        std::string bytes;
+        if (base::PathService::Get(base::DIR_ASSETS, &assets))
+          base::ReadFileToStringWithMaxSize(
+              assets.AppendASCII("fly_resources")
+                  .AppendASCII("identity")
+                  .AppendASCII("icon-128.png"),
+              &bytes, 1024 * 1024);
+        return bytes;
+      }),
+      base::BindOnce(
+          [](base::WeakPtr<FlyWindowController> window, std::string bytes) {
+            if (!window || !window->welcome_ || bytes.empty())
+              return;
+            const auto image = gfx::Image::CreateFrom1xPNGBytes(
+                base::as_byte_span(bytes));
+            if (!image.IsEmpty())
+              window->welcome_->SetLogo(image.AsImageSkia());
+          },
+          weak_factory_.GetWeakPtr()));
   status_bar_ = column->AddChildView(std::make_unique<StatusBar>(StatusBar::Actions{
       .zoom = command("reset-zoom"),
       .notifications = command("toggle-notifications"),
@@ -408,7 +444,12 @@ FlyWindowController::FlyWindowController()
       .clock = base::BindRepeating(&FlyWindowController::CycleClockFormat,
                                    weak_factory_.GetWeakPtr()),
       .contents_changed = base::BindRepeating(
-          &FlyWindowController::ScheduleExtensionRefresh,
+          [](base::WeakPtr<FlyWindowController> window) {
+            if (!window)
+              return;
+            window->ScheduleExtensionRefresh();
+            window->RefreshReaderState();
+          },
           weak_factory_.GetWeakPtr()),
   }));
   status_ = status_bar_->mode_label();
@@ -468,15 +509,27 @@ FlyWindowController::FlyWindowController()
             return action == "trigger-hints" || action == "focus-sidebar" ||
                    action == "new-workspace" || action == "next-workspace" ||
                    action == "previous-workspace" ||
+                   action.starts_with("extension:") ||
+                   action.starts_with("extension-options:") ||
+                   action.starts_with("extensions-") ||
                    NativeCommandAvailable(window->selected_, action);
           },
           weak_factory_.GetWeakPtr()),
       base::BindRepeating(
           [](base::WeakPtr<FlyWindowController> window,
              content::WebContents* source, std::string action) {
-            if (window && window->selected_ &&
-                window->selected_->GetTabStripModel()->GetActiveWebContents() ==
+            if (!window || !window->selected_ ||
+                window->selected_->GetTabStripModel()->GetActiveWebContents() !=
                     source)
+              return;
+            if (action.starts_with("terminal:")) {
+              OpenTerminalWithCommand(action.substr(9));
+              return;
+            }
+            window->preferences_.RecordRecentCommand(action);
+            if (action.starts_with("extension"))
+              window->ChooseExtensionAction(source, std::move(action));
+            else
               InvokeNativeCommand(window->selected_, std::move(action));
           },
           weak_factory_.GetWeakPtr()));
@@ -624,8 +677,6 @@ FlyWindowController::FlyWindowController()
   downloads_picker_->SetStyle(
       {Layout::kCentre, u"Downloads",
        u"Enter opens, pauses or resumes. Remove cancels or clears.", 640});
-  palette_->SetStyle({Layout::kCentre, u"Command Centre",
-                      u"Actions, feature guide & keyboard shortcuts"});
   address_picker_->SetStyle({.layout = Layout::kTop, .width = 640});
   history_picker_->SetStyle({.layout = Layout::kTop, .width = 600});
   auto page_insets = base::BindRepeating(
@@ -642,6 +693,12 @@ FlyWindowController::FlyWindowController()
       weak_factory_.GetWeakPtr());
   bookmark_picker_->SetStyle(
       {Layout::kPage, u"Bookmarks Manager", u"", 720, page_insets});
+  palette_->SetStyle({.layout = Layout::kPage,
+                      .title = u"Command Centre",
+                      .subtitle = u"Actions, feature guide & keyboard shortcuts",
+                      .width = 1220,
+                      .page_insets = page_insets,
+                      .command_centre = true});
   workspace_picker_->SetStyle(
       {Layout::kPage, u"Workspace Dashboard", u"", 720, page_insets});
   tab_move_picker_->SetStyle(
@@ -649,6 +706,39 @@ FlyWindowController::FlyWindowController()
   keyboard_editor_ =
       std::make_unique<KeyboardEditor>(desktop_.get(), commands_,
                                        *g_browser_process->local_state());
+  keyboard_editor_->SetActionRunner(base::BindRepeating(
+      &FlyWindowController::RunPreferencesAction, weak_factory_.GetWeakPtr()));
+  diagnostics_hub_ = std::make_unique<DiagnosticsHub>(
+      desktop_.get(),
+      DiagnosticsHub::Delegate{
+          .session = base::BindRepeating(
+              [](base::WeakPtr<FlyWindowController> window) {
+                return window ? window->CurrentDiagnostics()
+                              : DiagnosticsSession();
+              },
+              weak_factory_.GetWeakPtr()),
+          .set_recording = base::BindRepeating(
+              [](base::WeakPtr<FlyWindowController> window, bool on) {
+                if (!window)
+                  return;
+                window->preferences_.SetBool("enable_diagnostics", on);
+                if (!on)
+                  window->diagnostics_events_.clear();
+              },
+              weak_factory_.GetWeakPtr()),
+          .clear_events = base::BindRepeating(
+              [](base::WeakPtr<FlyWindowController> window) {
+                if (window)
+                  window->diagnostics_events_.clear();
+              },
+              weak_factory_.GetWeakPtr()),
+          .open_url = base::BindRepeating(
+              [](base::WeakPtr<FlyWindowController> window, GURL url) {
+                if (window)
+                  window->OpenInNewTab(url);
+              },
+              weak_factory_.GetWeakPtr()),
+          .page_insets = page_insets});
   keyboard_editor_->SetExtensions(
       extensions_.get(),
       base::BindRepeating(
@@ -698,8 +788,7 @@ FlyWindowController::~FlyWindowController() {
     keyboard_editor_->SetExtensions(nullptr, {});
   extensions_.reset();
   user_content_.reset();
-  diagnostics_widget_.reset();
-  diagnostics_delegate_.reset();
+  diagnostics_hub_.reset();
   workspace_close_.reset();
   remove_widget_.reset();
   remove_delegate_.reset();
@@ -710,6 +799,8 @@ FlyWindowController::~FlyWindowController() {
   preferences_registrar_.RemoveAll();
   rename_widget_.reset();
   rename_delegate_.reset();
+  offer_widget_.reset();
+  offer_delegate_.reset();
   keyboard_editor_.reset();
   workspace_picker_.reset();
   history_clear_widget_.reset();
@@ -740,6 +831,8 @@ FlyWindowController::~FlyWindowController() {
   sidebar_slot_ = nullptr;
   compact_rail_ = nullptr;
   compact_tab_sidebar_ = nullptr;
+  welcome_ = nullptr;
+  welcome_keep_alive_.reset();
   content_ = nullptr;
   status_ = nullptr;
   status_bar_ = nullptr;
@@ -1217,6 +1310,8 @@ void FlyWindowController::ClearSidebarViews() {
   tab_sidebar_ = nullptr;
   sidebar_content_ = nullptr;
   sidebar_pin_button_ = nullptr;
+  reader_button_ = nullptr;
+  reader_poll_.Stop();
   compact_pin_button_ = nullptr;
   new_tab_button_ = nullptr;
   compact_workspace_ = nullptr;
@@ -1255,8 +1350,8 @@ void FlyWindowController::UpdateSidebarBounds() {
   // Keep the compact rail's hit targets stable while the details panel opens.
   // Replacing the rail under a hovering pointer can activate another command.
   if (sidebar_auto_collapse_)
-    bounds.Offset(36, 0);
-  bounds.set_width(sidebar_auto_collapse_ ? 224 : 260);
+    bounds.Offset(FlyScaled(36), 0);
+  bounds.set_width(FlyScaled(sidebar_auto_collapse_ ? 224 : 260));
   sidebar_host_->SetBoundsRect(bounds);
   // This overlay is excluded from BoxLayout; update its native clip explicitly.
   sidebar_host_->DeprecatedLayoutImmediately();
@@ -1267,7 +1362,8 @@ void FlyWindowController::UpdateSidebarMode() {
   const bool collapse = preferences_.ReadSidebarAutoCollapse().value_or(false);
   const bool changed = collapse != sidebar_auto_collapse_;
   sidebar_auto_collapse_ = collapse;
-  sidebar_slot_->SetPreferredSize(gfx::Size(collapse ? 36 : 260, 0));
+  sidebar_slot_->SetPreferredSize(
+      gfx::Size(FlyScaled(collapse ? 36 : 260), 0));
   for (auto* pin : {sidebar_pin_button_.get(), compact_pin_button_.get()}) {
     if (!pin)
       continue;
@@ -1411,7 +1507,7 @@ void FlyWindowController::OnMouseEvent(ui::MouseEvent* event) {
   wm::ConvertPointToScreen(desktop_->GetNativeWindow()->GetRootWindow(),
                            &point);
   auto bounds = desktop_->GetContentsView()->GetBoundsInScreen();
-  bounds.set_width(sidebar_expanded_for_testing() ? 260 : 36);
+  bounds.set_width(FlyScaled(sidebar_expanded_for_testing() ? 260 : 36));
   const bool was_inside = sidebar_pointer_inside_;
   sidebar_pointer_inside_ = bounds.Contains(point);
   const bool pressed = event->type() == ui::EventType::kMousePressed;
@@ -1557,6 +1653,8 @@ void FlyWindowController::ApplyFlyPalette() {
   custom("bg_main", colors.bg_main);
   custom("bg_sidebar", colors.bg_sidebar);
   custom("text", colors.text);
+  colors.sidebar_opacity = preferences_.ReadThemeOpacity(dark, "sidebar_opacity");
+  colors.overlay_opacity = preferences_.ReadThemeOpacity(dark, "overlay_opacity");
   const float scale =
       preferences_.ReadString("interface_scale").value_or("normal") == "large"
           ? 1.25f
@@ -1570,6 +1668,15 @@ void FlyWindowController::ApplyFlyPalette() {
       widget->ThemeChanged();
       widget->GetRootView()->SchedulePaint();
     }
+  }
+  if (scale_changed) {
+    // Widths follow the scale like Electron's zoomed interface.
+    if (auto* sidebar = sidebar_content_.get())
+      sidebar->SetPreferredSize(gfx::Size(FlyScaled(260), 0));
+    UpdateSidebarMode();
+    UpdateSidebarBounds();
+    if (desktop_ && desktop_->GetRootView())
+      desktop_->GetRootView()->InvalidateLayout();
   }
 }
 void FlyWindowController::UpdateWorkspaceHeader() {
@@ -1707,6 +1814,7 @@ void FlyWindowController::Prepare(BrowserWindowInterface* browser) {
   if (!browser->GetProfile()->IsOffTheRecord()) {
     extensions_->AddProfile(browser->GetProfile());
     user_content_->AddProfile(browser->GetProfile());
+    site_zoom_.AddProfile(browser->GetProfile());
     QueueLegacyImport(browser);
   }
   ScheduleWorkspaceRefresh();
@@ -1783,6 +1891,7 @@ void FlyWindowController::Select(BrowserWindowInterface* browser, bool focus) {
                              return;
                            window->MaybeShowWhatsNew();
                            window->CheckUpdates(false);
+                           window->MaybeOfferDesktopIntegration();
                          },
                          weak_factory_.GetWeakPtr()));
     }
@@ -1793,6 +1902,21 @@ void FlyWindowController::Select(BrowserWindowInterface* browser, bool focus) {
       last_windows_[next.workspace_id] = browser->GetWeakPtr();
     }
     next.widget->OnNativeWidgetActivationChanged(desktop_->IsActive());
+    welcome_keep_alive_.reset();
+    UpdateWelcome();
+    if (!pending_empty_action_.empty()) {
+      // The empty workspace view's Bookmarks or Command Centre, once the
+      // workspace's new tab exists.
+      base::SingleThreadTaskRunner::GetCurrentDefault()->PostTask(
+          FROM_HERE,
+          base::BindOnce(
+              [](base::WeakPtr<BrowserWindowInterface> browser,
+                 std::string action) {
+                if (browser)
+                  InvokeNativeCommand(browser.get(), action);
+              },
+              browser->GetWeakPtr(), std::exchange(pending_empty_action_, "")));
+    }
   }
   ScheduleWorkspaceRefresh();
   UpdateModeLabel();
@@ -2170,15 +2294,114 @@ void FlyWindowController::RenameWorkspace(std::string id) {
   field->SelectAll(false);
 }
 
+void FlyWindowController::PromptNewWorkspace() {
+  if (closing_ || creating_profile_ || !workspaces_.CanEdit())
+    return;
+  hints_->Cancel();
+  palette_->Cancel();
+  address_picker_->Cancel();
+  workspace_picker_->Cancel();
+  tab_move_picker_->Cancel();
+  bookmark_picker_->Cancel();
+  CancelHistory();
+  keyboard_editor_->Cancel();
+  rename_widget_.reset();
+  rename_delegate_ = std::make_unique<views::DialogDelegate>();
+  rename_delegate_->SetOwnershipOfNewWidget(
+      views::Widget::InitParams::CLIENT_OWNS_WIDGET);
+  rename_delegate_->SetModalType(ui::mojom::ModalType::kWindow);
+  rename_delegate_->SetTitle(u"New workspace");
+  rename_delegate_->SetButtonLabel(ui::mojom::DialogButton::kOk, u"Create");
+  auto body = std::make_unique<views::View>();
+  body->SetLayoutManager(std::make_unique<views::BoxLayout>(
+      views::BoxLayout::Orientation::kVertical, gfx::Insets(16), 8));
+  body->SetPreferredSize(gfx::Size(400, 110));
+  auto* field = body->AddChildView(std::make_unique<views::Textfield>());
+  field->SetText(base::UTF8ToUTF16(NextWorkspaceName()));
+  field->GetViewAccessibility().SetName(u"Workspace name");
+  auto* error = body->AddChildView(std::make_unique<views::Label>());
+  error->SetMultiLine(true);
+  rename_delegate_->SetInitiallyFocusedView(field);
+  rename_delegate_->SetContentsView(std::move(body));
+  rename_delegate_->SetAcceptCallbackWithClose(base::BindRepeating(
+      [](base::WeakPtr<FlyWindowController> window, views::Textfield* field,
+         views::Label* error) {
+        if (!window || window->closing_)
+          return true;
+        const auto name = std::string(base::TrimWhitespaceASCII(
+            base::UTF16ToUTF8(field->GetText()), base::TRIM_ALL));
+        const auto catalog = window->workspaces_.Read();
+        if (name.empty() || !catalog ||
+            std::ranges::any_of(catalog->items, [&](const Workspace& item) {
+              return item.name == name;
+            })) {
+          error->SetText(u"Use a unique, non-empty workspace name.");
+          return false;
+        }
+        window->CreateWorkspace(name);
+        return true;
+      },
+      weak_factory_.GetWeakPtr(), field, error));
+  rename_widget_.reset(views::DialogDelegate::CreateDialogWidget(
+      rename_delegate_.get(), desktop_->GetNativeWindow(),
+      desktop_->GetNativeView()));
+  rename_widget_->Show();
+  field->SelectAll(false);
+}
+
+// Electron's workspace dashboard: every workspace with its tabs (pinned ones
+// marked), rename and delete on each workspace, and a move on each tab.
 std::vector<PaletteEntry> FlyWindowController::WorkspaceEntries() {
   private_choices_.clear();
+  tab_choices_.clear();
   std::vector<PaletteEntry> result;
   const auto catalog = workspaces_.Read();
   if (!catalog)
     return result;
+  const std::string active =
+      selected_ && entries_.contains(selected_)
+          ? entries_.at(selected_).workspace_id
+          : std::string();
+  const bool editable = workspaces_.CanEdit();
   for (const auto& item : catalog->items) {
     const auto action = "workspace/" + item.id;
-    result.push_back({action, action, item.name, "Workspace", {}, {}});
+    PaletteEntry row{action, action,
+                     item.name + (item.id == active ? " (Active)" : ""),
+                     item.profile_directory, {}, {}};
+    if (editable) {
+      row.row_actions.emplace_back("rename/" + item.id, "Rename");
+      if (catalog->items.size() > 1)
+        row.row_actions.emplace_back("delete/" + item.id, "Delete");
+    }
+    result.push_back(std::move(row));
+    std::vector<std::pair<BrowserWindowInterface*, const Entry*>> windows;
+    for (const auto& [browser, entry] : entries_)
+      if (!entry.browser_closed && entry.workspace_id == item.id)
+        windows.emplace_back(browser, &entry);
+    std::ranges::sort(windows, {}, [](const auto& window) {
+      return window.second->order;
+    });
+    size_t number = 0;
+    for (const auto& [browser, entry] : windows) {
+      auto* model = browser->GetTabStripModel();
+      for (int index = 0; index < model->count(); ++index) {
+        auto* contents = model->GetWebContentsAt(index);
+        const auto key = item.id + "/" + base::NumberToString(number++);
+        tab_choices_.emplace(key, TabChoice{browser->GetWeakPtr(),
+                                            contents->GetWeakPtr()});
+        const auto title = contents->GetTitle().empty()
+                               ? contents->GetVisibleURL().spec()
+                               : base::UTF16ToUTF8(contents->GetTitle());
+        PaletteEntry tab{"tab/" + key, "tab/" + key,
+                         "- " + title +
+                             (model->IsTabPinned(index) ? " \xF0\x9F\x93\x8C"
+                                                        : ""),
+                         "", {}, {}};
+        tab.indent = 1;
+        tab.row_actions.emplace_back("move/" + key, "Move");
+        result.push_back(std::move(tab));
+      }
+    }
   }
   for (const auto& [browser, entry] : entries_) {
     if (entry.browser_closed || !browser->GetProfile()->IsOffTheRecord())
@@ -2209,6 +2432,29 @@ bool FlyWindowController::WorkspaceChoiceAvailable(std::string_view action) cons
   if (action.starts_with("workspace/"))
     return std::ranges::find(catalog->items, action.substr(10), &Workspace::id) !=
            catalog->items.end();
+  if (action.starts_with("rename/"))
+    return workspaces_.CanEdit() &&
+           std::ranges::find(catalog->items, action.substr(7),
+                             &Workspace::id) != catalog->items.end();
+  if (action.starts_with("delete/")) {
+    const auto item =
+        std::ranges::find(catalog->items, action.substr(7), &Workspace::id);
+    return item != catalog->items.end() && !workspace_close_ &&
+           CanRemoveWorkspace(item->id,
+                              g_browser_process->profile_manager()
+                                  ->user_data_dir()
+                                  .AppendASCII(item->profile_directory));
+  }
+  if (action.starts_with("tab/") || action.starts_with("move/")) {
+    const auto choice = tab_choices_.find(
+        std::string(action.substr(action.find('/') + 1)));
+    if (choice == tab_choices_.end() || !choice->second.browser ||
+        !choice->second.contents)
+      return false;
+    return !action.starts_with("move/") ||
+           TabMoveTransaction::CanMoveUrl(
+               choice->second.contents->GetLastCommittedURL());
+  }
   const auto found = private_choices_.find(std::string(action));
   return found != private_choices_.end() && found->second &&
          !found->second->IsDeleteScheduled();
@@ -2221,9 +2467,28 @@ void FlyWindowController::ChooseWorkspace(content::WebContents* source,
                  : source != nullptr))
     return;
   if (action == "create")
-    CreateWorkspace();
+    PromptNewWorkspace();
   else if (action.starts_with("workspace/"))
     OpenWorkspace(action.substr(10));
+  else if (action.starts_with("rename/"))
+    RenameWorkspace(action.substr(7));
+  else if (action.starts_with("delete/"))
+    RemoveWorkspace(action.substr(7));
+  else if (action.starts_with("tab/") || action.starts_with("move/")) {
+    const auto choice = tab_choices_.find(action.substr(action.find('/') + 1));
+    if (choice == tab_choices_.end() || !choice->second.browser ||
+        !choice->second.contents)
+      return;
+    auto* browser = choice->second.browser.get();
+    auto* contents = choice->second.contents.get();
+    const int index = browser->GetTabStripModel()->GetIndexOfWebContents(contents);
+    if (index == TabStripModel::kNoTab)
+      return;
+    Select(browser, true);
+    browser->GetTabStripModel()->ActivateTabAt(index);
+    if (action.starts_with("move/"))
+      ShowTabMovePicker(browser, contents);
+  }
   else if (const auto choice = private_choices_.find(action);
            choice != private_choices_.end() && choice->second)
     Select(choice->second.get(), true);
@@ -2428,6 +2693,7 @@ void FlyWindowController::FinishTabMove(
 
 void FlyWindowController::OnWorkspacesChanged() {
   ScheduleWorkspaceRefresh();
+  UpdateWelcome();
   if (tab_move_picker_->active()) {
     if (CanMoveTab(move_source_browser_.get(), move_source_.get()))
       tab_move_picker_->UpdateItems(TabMoveEntries(), false);
@@ -2496,7 +2762,20 @@ void FlyWindowController::CreateTab() {
     OpenWorkspace(catalog->active_id);
 }
 
-void FlyWindowController::CreateWorkspace() {
+std::string FlyWindowController::NextWorkspaceName() const {
+  const auto catalog = workspaces_.Read();
+  std::string name;
+  size_t number = catalog ? catalog->items.size() + 1 : 1;
+  do {
+    name = "Workspace " + base::NumberToString(number++);
+  } while (catalog &&
+           std::ranges::any_of(catalog->items, [&](const Workspace& item) {
+             return item.name == name;
+           }));
+  return name;
+}
+
+void FlyWindowController::CreateWorkspace(std::string name) {
   if (closing_ || creating_profile_ || !workspaces_.CanEdit()) {
     return;
   }
@@ -2508,13 +2787,8 @@ void FlyWindowController::CreateWorkspace() {
   const auto path = manager->GenerateNextProfileDirectoryPath();
   // Reserve a unique directory before asynchronous creation. A failed load
   // retains the entry for retry; it must not silently attach another Profile.
-  std::string name;
-  size_t number = catalog->items.size() + 1;
-  do {
-    name = "Workspace " + base::NumberToString(number++);
-  } while (std::ranges::any_of(catalog->items, [&](const Workspace& item) {
-    return item.name == name;
-  }));
+  if (name.empty())
+    name = NextWorkspaceName();
   const auto added = workspaces_.Add(name, path.BaseName().AsUTF8Unsafe());
   if (!added) {
     return;
@@ -2615,15 +2889,22 @@ void FlyWindowController::OnBrowserDidClose(BrowserWindowInterface* browser) {
         }
         return false;
       };
-      if (!choose(true)) {
-        if (private_return && entries_.contains(private_return.get()) &&
-            !entries_.at(private_return.get()).browser_closed)
-          Select(private_return.get(), true);
-        else
-          choose(false);
-      }
+      // Electron keeps the workspace whose last tab closed and shows its
+      // empty workspace view; leaving private mode returns to the window it
+      // came from.
+      if (!choose(true) && private_return &&
+          entries_.contains(private_return.get()) &&
+          !entries_.at(private_return.get()).browser_closed)
+        Select(private_return.get(), true);
+      // The empty view keeps its workspace profile loaded, so reopening it
+      // reuses the profile instead of racing its destruction.
+      if (!selected_ && !workspace_close_ &&
+          !closed_profile->IsOffTheRecord())
+        welcome_keep_alive_ = ScopedProfileKeepAlive::TryAcquire(
+            closed_profile, ProfileKeepAliveOrigin::kChromeViewsDelegate);
     }
     UpdateModeLabel();
+    UpdateWelcome();
   }
   if (closed_profile->IsOffTheRecord() &&
       std::ranges::none_of(entries_, [&](const auto& pair) {
@@ -2915,8 +3196,15 @@ bool FlyWindowController::RunCommand(BrowserWindowInterface* browser,
     CancelHistory();
     hints_->Cancel();
     keyboard_editor_->Cancel();
-    palette_->Toggle(browser->GetTabStripModel()->GetActiveWebContents(),
-                     commands_.Read().value_or(DefaultKeyboardConfig()));
+    palette_->SetRecent(preferences_.ReadRecentCommands());
+    const auto config = commands_.Read().value_or(DefaultKeyboardConfig());
+    auto items = CommandCentreCatalog(config);
+    for (auto& entry : ExtensionCommandEntries(browser))
+      items.push_back(std::move(entry));
+    palette_->ToggleItems(
+        browser->GetTabStripModel()->GetActiveWebContents(), std::move(items),
+        config.shortcuts.at("toggle-palette"),
+        u"Search commands, shortcuts, or type shell utility...", false);
     return true;
   }
   if (action == "toggle-private-mode") {
@@ -2961,8 +3249,10 @@ bool FlyWindowController::RunCommand(BrowserWindowInterface* browser,
     tab_move_picker_->Cancel();
     bookmark_picker_->Cancel();
     CancelHistory();
+    keyboard_editor_->SetPrivateMode(browser->GetProfile()->IsOffTheRecord());
     if (action == "toggle-help" || !keyboard_editor_->active())
       keyboard_editor_->Toggle(browser->GetTabStripModel()->GetActiveWebContents());
+    RefreshDesktopIntegration();
     if (action == "open-keyboard-settings")
       keyboard_editor_->ShowKeyboard();
     return true;
@@ -2972,7 +3262,7 @@ bool FlyWindowController::RunCommand(BrowserWindowInterface* browser,
     return true;
   }
   if (action == "new-workspace") {
-    CreateWorkspace();
+    PromptNewWorkspace();
     return true;
   }
   if (action == "focus-sidebar") {
@@ -3007,6 +3297,13 @@ void FlyWindowController::OnKeyEvent(ui::KeyEvent* event) {
       (remove_widget_ && !remove_widget_->IsClosed()) ||
       (history_clear_widget_ && !history_clear_widget_->IsClosed()))
     return;
+  if (diagnostics_hub_ && diagnostics_hub_->active()) {
+    if (diagnostics_hub_->HandleOverlayKey(*event)) {
+      event->SetHandled();
+      event->StopPropagation();
+    }
+    return;
+  }
   if (address_picker_->active()) {
     if (address_picker_->HandleOverlayKey(*event)) {
       event->SetHandled();
@@ -3095,9 +3392,11 @@ void FlyWindowController::OnKeyEvent(ui::KeyEvent* event) {
       } else if (key.action == "toggle-dashboard") {
         ToggleWorkspacePicker();
       } else if (key.action == "new-workspace") {
-        CreateWorkspace();
-      } else if (key.action == "spawn-tab") {
-        CreateTab();
+        PromptNewWorkspace();
+      } else if (key.action == "spawn-tab" ||
+                 key.action == "toggle-bookmarks" ||
+                 key.action == "toggle-palette") {
+        RunFromEmptyWorkspace(key.action);
       } else if ((key.action == "next-workspace" ||
                   key.action == "previous-workspace") &&
                  catalog && !catalog->items.empty()) {
@@ -3166,17 +3465,15 @@ void FlyWindowController::UpdateModeLabel() {
                        : mode);
 }
 
+std::u16string FlyWindowController::status_text_for_testing() const {
+  return status_ ? std::u16string(status_->GetText()) : std::u16string();
+}
 void FlyWindowController::ShowStatus(std::u16string text) {
-  if (preferences_.ReadBool("enable_diagnostics").value_or(false)) {
-    base::Time::Exploded now;
-    base::Time::Now().LocalExplode(&now);
-    diagnostics_events_.push_back(
-        base::UTF8ToUTF16(base::StringPrintf("%02d:%02d:%02d ", now.hour,
-                                             now.minute, now.second)) +
-        text);
-    if (diagnostics_events_.size() > 100)
-      diagnostics_events_.erase(diagnostics_events_.begin());
-  }
+  RecordDiagnostic(
+      text.starts_with(u"Update failed") || text.starts_with(u"Could not")
+          ? "warn"
+          : "info",
+      "status", text);
   if (status_)
     status_->SetText(std::move(text));
 }
@@ -3224,47 +3521,49 @@ void FlyWindowController::ToggleDownloads(BrowserWindowInterface* browser) {
       true);
 }
 void FlyWindowController::ShowDiagnostics() {
-  if (closing_)
+  if (closing_ || !diagnostics_hub_)
     return;
-  if (diagnostics_widget_ && !diagnostics_widget_->IsClosed()) {
-    diagnostics_widget_->Close();
-    return;
+  hints_->Cancel();
+  palette_->Cancel();
+  keyboard_editor_->Cancel();
+  diagnostics_hub_->Toggle();
+}
+DiagnosticsSession FlyWindowController::CurrentDiagnostics() {
+  DiagnosticsSession session;
+  if (const auto catalog = workspaces_.Read()) {
+    session.workspaces = catalog->items.size();
+    for (const auto& item : catalog->items)
+      if (item.id == catalog->active_id)
+        session.active_workspace = base::UTF8ToUTF16(item.name);
   }
-  diagnostics_widget_.reset();
-  size_t workspaces = 0;
-  if (const auto catalog = workspaces_.Read())
-    workspaces = catalog->items.size();
-  const auto report = DiagnosticsReport(workspaces, diagnostics_events_);
-  diagnostics_delegate_ = std::make_unique<views::DialogDelegate>();
-  auto* delegate = diagnostics_delegate_.get();
-  delegate->SetOwnershipOfNewWidget(
-      views::Widget::InitParams::CLIENT_OWNS_WIDGET);
-  delegate->SetModalType(ui::mojom::ModalType::kWindow);
-  delegate->SetTitle(u"Fly diagnostics");
-  delegate->SetButtonLabel(ui::mojom::DialogButton::kOk, u"Copy report");
-  delegate->SetButtonLabel(ui::mojom::DialogButton::kCancel, u"Close");
-  delegate->SetExtraView(std::make_unique<FlyButton>(
-      base::BindRepeating(
-          [](base::WeakPtr<FlyWindowController> window) {
-            if (window && window->selected_)
-              chrome::OpenTaskManager(window->selected_);
-          },
-          weak_factory_.GetWeakPtr()),
-      u"Task Manager"));
-  auto* label = delegate->SetContentsView(std::make_unique<views::Label>(report));
-  label->SetMultiLine(true);
-  label->SetHorizontalAlignment(gfx::ALIGN_LEFT);
-  label->SetSelectable(true);
-  label->SetBorder(views::CreateEmptyBorder(gfx::Insets(16)));
-  delegate->SetAcceptCallback(base::BindOnce(
-      [](std::u16string report) {
-        ui::ScopedClipboardWriter(ui::ClipboardBuffer::kCopyPaste)
-            .WriteText(report);
-      },
-      report));
-  diagnostics_widget_.reset(views::DialogDelegate::CreateDialogWidget(
-      delegate, desktop_->GetNativeWindow(), desktop_->GetNativeView()));
-  diagnostics_widget_->Show();
+  for (const auto& [browser, entry] : entries_) {
+    if (entry.browser_closed)
+      continue;
+    auto* model = browser->GetTabStripModel();
+    for (int i = 0; i < model->count(); ++i) {
+      auto* contents = model->GetWebContentsAt(i);
+      ++session.tabs;
+      if (NativeTabSuspensionRequested(contents))
+        ++session.suspended;
+      else if (!contents->WasDiscarded())
+        ++session.loaded;
+    }
+  }
+  session.recording =
+      preferences_.ReadBool("enable_diagnostics").value_or(false);
+  session.events = diagnostics_events_;
+  return session;
+}
+void FlyWindowController::RecordDiagnostic(std::string level,
+                                           std::string category,
+                                           std::u16string message) {
+  if (!preferences_.ReadBool("enable_diagnostics").value_or(false))
+    return;
+  diagnostics_events_.push_back(
+      {base::Time::Now(), std::move(level), std::move(category),
+       std::move(message)});
+  if (diagnostics_events_.size() > 500)
+    diagnostics_events_.erase(diagnostics_events_.begin());
 }
 void FlyWindowController::CheckUpdates(bool manual) {
   if (manual)
@@ -3275,16 +3574,30 @@ void FlyWindowController::CheckUpdates(bool manual) {
         if (!window || window->closing_)
           return;
         if (!result.ok) {
+          window->keyboard_editor_->SetUpdateStatus(
+              u"Could not check for updates.", "");
           if (manual)
             window->ShowStatus(u"Could not check for updates.");
           return;
         }
+        window->update_ = result;
         if (!result.newer) {
+          window->keyboard_editor_->SetUpdateStatus(
+              u"Fly " + base::UTF8ToUTF16(std::string_view(kFlyVersion)) +
+                  u" is the latest version.",
+              "");
           if (manual)
             window->ShowStatus(u"Fly " + base::UTF8ToUTF16(std::string_view(kFlyVersion)) +
                                u" is the latest version.");
           return;
         }
+        window->keyboard_editor_->SetUpdateStatus(
+            u"Fly " + base::UTF8ToUTF16(result.latest) +
+                (result.package.is_valid()
+                     ? u" is available. Install it here; Fly restarts with "
+                       u"your tabs."
+                     : u" is available as a download."),
+            result.latest);
         window->ShowStatus(u"Fly " + base::UTF8ToUTF16(result.latest) +
                            u" is available. Check for Updates opens it.");
         if (manual && window->selected_) {
@@ -3353,14 +3666,32 @@ bool FlyWindowController::RunProductAction(BrowserWindowInterface* browser,
     return true;
   }
   if (action == "toggle-reader-view") {
+    // Messages as Electron Fly's toggleReaderViewOnActiveTab.
     ToggleReaderView(
-        contents, base::BindOnce(
-                      [](base::WeakPtr<FlyWindowController> window, bool ok) {
-                        if (window && !ok)
-                          window->ShowStatus(
-                              u"Reader view is not available for this page.");
-                      },
-                      weak_factory_.GetWeakPtr()));
+        contents,
+        base::BindOnce(
+            [](base::WeakPtr<FlyWindowController> window,
+               base::WeakPtr<content::WebContents> contents,
+               ReaderResult result) {
+              if (!window)
+                return;
+              if (!result.error.empty()) {
+                window->ShowStatus(u"Reader View: " + result.error);
+              } else if (result.active) {
+                window->ShowStatus(
+                    u"Reader view active (Escape to exit)" +
+                    (result.title.empty()
+                         ? std::u16string()
+                         : u": " + result.title.substr(0, 45) + u"..."));
+              } else {
+                window->ShowStatus(u"Reader View Closed");
+              }
+              window->SetReaderActive(contents.get(),
+                                      result.active && result.error.empty());
+            },
+            weak_factory_.GetWeakPtr(),
+            contents ? contents->GetWeakPtr()
+                     : base::WeakPtr<content::WebContents>()));
     return true;
   }
   if (action == "open-scripts-dir" || action == "open-styles-dir" ||
@@ -3548,9 +3879,20 @@ void FlyWindowController::ChooseExtensionAction(content::WebContents*,
                                                 std::string action) {
   if (closing_ || !selected_)
     return;
-  if (action == "extensions-settings") {
+  if (action == "extensions-settings" || action == "extensions-open-settings") {
     InvokeNativeCommand(selected_, "toggle-help");
     keyboard_editor_->ShowExtensions();
+    return;
+  }
+  if (action.starts_with("extension-options:")) {
+    extensions_->OpenOptions(
+        selected_, action.substr(std::string_view("extension-options:").size()));
+    return;
+  }
+  if (action == "extensions-reload") {
+    ShowStatus(base::UTF8ToUTF16(
+        "Extensions reloaded." +
+        std::string(extensions_->ReloadUnpacked() ? "" : " None to reload.")));
     return;
   }
   if (action == "extensions-page" || action == "extensions-store") {
@@ -3726,5 +4068,418 @@ void FlyWindowController::ApplyLegacyImport(
           g_browser_process->profile_manager()->user_data_dir().AppendASCII(
               kLegacyImportFile),
           std::move(json)));
+}
+
+// Electron highlights the reader button while the active tab shows the reader.
+// The overlay can also close from the page (Escape, its close button), so the
+// state is checked again while it is on.
+void FlyWindowController::SetReaderActive(content::WebContents* contents,
+                                          bool active) {
+  if (!contents)
+    return;
+  if (active)
+    reader_contents_ = contents->GetWeakPtr();
+  else if (reader_contents_.get() == contents)
+    reader_contents_ = nullptr;
+  UpdateReaderButton();
+}
+void FlyWindowController::RefreshReaderState() {
+  content::WebContents* active =
+      selected_ ? selected_->GetTabStripModel()->GetActiveWebContents()
+                : nullptr;
+  reader_contents_ = nullptr;
+  UpdateReaderButton();
+  if (!active)
+    return;
+  QueryReaderView(
+      active, base::BindOnce(
+                  [](base::WeakPtr<FlyWindowController> window,
+                     base::WeakPtr<content::WebContents> contents, bool open) {
+                    if (window && contents && open)
+                      window->SetReaderActive(contents.get(), true);
+                  },
+                  weak_factory_.GetWeakPtr(), active->GetWeakPtr()));
+}
+void FlyWindowController::UpdateReaderButton() {
+  content::WebContents* active =
+      selected_ ? selected_->GetTabStripModel()->GetActiveWebContents()
+                : nullptr;
+  // Another tab became active: its own reader state is checked below.
+  if (reader_contents_.get() != active)
+    reader_contents_ = nullptr;
+  const bool on = active && reader_contents_.get() == active;
+  if (reader_button_) {
+    reader_button_->SetSelected(on);
+    reader_button_->SetTooltipText(on ? u"Reader view active"
+                                      : u"Toggle reader view");
+  }
+  if (!on) {
+    reader_poll_.Stop();
+    return;
+  }
+  if (!reader_poll_.IsRunning()) {
+    reader_poll_.Start(
+        FROM_HERE, base::Seconds(1),
+        base::BindRepeating(
+            [](base::WeakPtr<FlyWindowController> window) {
+              if (!window || !window->selected_)
+                return;
+              auto* contents =
+                  window->selected_->GetTabStripModel()->GetActiveWebContents();
+              QueryReaderView(
+                  contents,
+                  base::BindOnce(
+                      [](base::WeakPtr<FlyWindowController> window,
+                         base::WeakPtr<content::WebContents> contents,
+                         bool open) {
+                        if (window && contents && !open)
+                          window->SetReaderActive(contents.get(), false);
+                      },
+                      window, contents ? contents->GetWeakPtr()
+                                       : base::WeakPtr<content::WebContents>()));
+            },
+            weak_factory_.GetWeakPtr()));
+  }
+}
+
+void FlyWindowController::UpdateWelcome() {
+  if (!welcome_)
+    return;
+  const bool show = !selected_ && !closing_;
+  welcome_->SetVisible(show);
+  if (!show)
+    return;
+  const auto catalog = workspaces_.Read();
+  std::u16string name = u"Workspace";
+  if (catalog)
+    for (const auto& item : catalog->items)
+      if (item.id == catalog->active_id)
+        name = base::UTF8ToUTF16(item.name);
+  const auto config = commands_.Read().value_or(DefaultKeyboardConfig());
+  // Electron writes bindings as "Ctrl + T".
+  const auto keys = [&](const char* action) {
+    const auto found = config.shortcuts.find(action);
+    if (found == config.shortcuts.end() || found->second.empty())
+      return std::u16string();
+    std::u16string text = base::UTF8ToUTF16(found->second.front());
+    base::ReplaceSubstringsAfterOffset(&text, 0, u"+", u" + ");
+    return text;
+  };
+  const auto run = [&](const char* action) {
+    return base::BindRepeating(&FlyWindowController::RunFromEmptyWorkspace,
+                               weak_factory_.GetWeakPtr(), std::string(action));
+  };
+  welcome_->Update(
+      name, {{keys("spawn-tab"), u"Open New Tab", run("spawn-tab")},
+             {keys("toggle-bookmarks"), u"Open Bookmarks",
+              run("toggle-bookmarks")},
+             {keys("toggle-palette"), u"Command Centre", run("toggle-palette")},
+             {keys("toggle-dashboard"), u"Workspace Dashboard",
+              run("toggle-dashboard")}});
+}
+
+// Actions of the empty workspace view. The dashboard needs no page; the others
+// open the workspace with a new tab first.
+void FlyWindowController::RunFromEmptyWorkspace(std::string action) {
+  if (closing_)
+    return;
+  if (selected_) {
+    InvokeNativeCommand(selected_, action);
+    return;
+  }
+  if (action == "toggle-dashboard") {
+    ToggleWorkspacePicker();
+    return;
+  }
+  if (action != "spawn-tab")
+    pending_empty_action_ = action;
+  CreateTab();
+}
+
+void FlyWindowController::choose_workspace_for_testing(std::string action) {
+  ChooseWorkspace(
+      selected_ ? selected_->GetTabStripModel()->GetActiveWebContents()
+                : nullptr,
+      std::move(action));
+}
+
+// Electron's getExtensionPaletteCommands.
+std::vector<PaletteEntry> FlyWindowController::ExtensionCommandEntries(
+    BrowserWindowInterface* browser) {
+  std::vector<PaletteEntry> entries;
+  const auto add = [&](std::string action, std::string title, std::string desc,
+                       std::string details, std::string tip,
+                       std::vector<std::string> keywords) {
+    PaletteEntry entry{action, action, std::move(title), "Extensions", {}, {}};
+    entry.desc = std::move(desc);
+    entry.details = std::move(details);
+    entry.tip = std::move(tip);
+    entry.keywords = std::move(keywords);
+    entries.push_back(std::move(entry));
+  };
+  add("extensions-open-settings", "Extension Settings",
+      "Enable Chrome extensions per workspace and see what they cost",
+      "Opens the Extensions section in Preferences. uBlock Origin Lite runs in "
+      "every workspace unless switched off there; each workspace keeps its own "
+      "extensions.",
+      "Install from Chrome Web Store, a ZIP or CRX package, or an unpacked "
+      "folder.",
+      {"extensions", "addons", "chrome", "plugins", "settings"});
+  if (!extensions_->Enabled() || !browser)
+    return entries;
+  add("extensions-reload", "Reload Extensions",
+      "Re-read extension code from disk in every workspace using it",
+      "Reloads unpacked extensions in every workspace. Pages that already ran "
+      "the old content scripts need a reload.",
+      "Use this after replacing an extension folder with a newer version.",
+      {"extensions", "reload", "refresh", "update"});
+  auto* profile = browser->GetProfile();
+  for (const auto* extension : extensions_->ActionExtensions(profile))
+    add("extension:" + extension->id(), extension->name() + ": Open Popup",
+        "Open the extension popup for the active tab",
+        extension->name() + " " + extension->VersionString(),
+        "Press Esc or click outside the popup to close it.",
+        {"extension", "popup", base::ToLowerASCII(extension->name())});
+  for (const auto& info : extensions_->List(profile)) {
+    if (!info.enabled || !info.has_options)
+      continue;
+    const auto name = base::UTF16ToUTF8(info.name);
+    add("extension-options:" + info.id, name + ": Options",
+        "Open the extension options page in a new tab",
+        "Options are stored per workspace, like everything else the extension "
+        "saves.",
+        "The options tab stays open like any other tab.",
+        {"extension", "options", "settings", base::ToLowerASCII(name)});
+  }
+  return entries;
+}
+
+// Buttons of Preferences that act on the browser.
+void FlyWindowController::RunPreferencesAction(std::string action) {
+  if (closing_ || !selected_)
+    return;
+  auto* browser = selected_.get();
+  auto* contents = browser->GetTabStripModel()->GetActiveWebContents();
+  auto status = base::BindOnce(
+      [](base::WeakPtr<FlyWindowController> window, std::u16string text) {
+        if (window)
+          window->ShowStatus(std::move(text));
+      },
+      weak_factory_.GetWeakPtr());
+  if (action == "toggle-private-mode") {
+    keyboard_editor_->Cancel();
+    TogglePrivate(browser);
+  } else if (action == "clear-site-cookies") {
+    ClearSiteCookies(browser->GetProfile(),
+                     contents ? contents->GetLastCommittedURL() : GURL(),
+                     std::move(status));
+  } else if (action == "clear-cache") {
+    ClearWorkspaceCache(browser->GetProfile(), std::move(status));
+  } else if (action == "open-diagnostics" || action == "show-whats-new") {
+    keyboard_editor_->Cancel();
+    InvokeNativeCommand(browser, action);
+  } else if (action == "check-for-updates") {
+    keyboard_editor_->SetUpdateStatus(u"Checking for updates…", "");
+    CheckUpdates(false);
+  } else if (action == "install-update") {
+    InstallUpdate();
+  } else if (action == "restart") {
+    chrome::AttemptRestart();
+  } else if (action == "desktop-entry" || action == "desktop-default") {
+    ChangeDesktopIntegration(action == "desktop-default");
+  } else if (action == "extensions-open-dir") {
+    base::ThreadPool::PostTaskAndReplyWithResult(
+        FROM_HERE, {base::MayBlock(), base::TaskPriority::USER_VISIBLE},
+        base::BindOnce([]() {
+          const auto dir = FlyExtensions::Folder();
+          return base::CreateDirectory(dir) ? dir : base::FilePath();
+        }),
+        base::BindOnce(
+            [](base::WeakPtr<Profile> profile, base::FilePath dir) {
+              if (profile && !dir.empty())
+                platform_util::OpenItem(profile.get(), dir,
+                                        platform_util::OPEN_FOLDER, {});
+            },
+            browser->GetProfile()->GetWeakPtr()));
+  }
+}
+
+void FlyWindowController::InstallUpdate() {
+  if (update_installing_ || closing_)
+    return;
+  if (!update_.newer) {
+    keyboard_editor_->SetUpdateStatus(u"Check for updates first.", "");
+    return;
+  }
+  if (!update_.package.is_valid()) {
+    // No native package in this release: open its page, as Electron's
+    // "Download release".
+    keyboard_editor_->Cancel();
+    OpenInNewTab(update_.page);
+    return;
+  }
+  update_installing_ = true;
+  keyboard_editor_->SetUpdateStatus(
+      u"Downloading Fly " + base::UTF8ToUTF16(update_.latest) + u"…", "");
+  InstallNativeUpdate(
+      update_,
+      base::BindOnce(
+          [](base::WeakPtr<FlyWindowController> window, std::u16string error) {
+            if (!window)
+              return;
+            window->update_installing_ = false;
+            if (!error.empty()) {
+              window->RecordDiagnostic("error", "update", error);
+              window->keyboard_editor_->SetUpdateStatus(
+                  u"Update failed: " + error, window->update_.latest);
+              window->ShowStatus(u"Update failed: " + error);
+              return;
+            }
+            window->keyboard_editor_->SetUpdateStatus(
+                u"Fly " + base::UTF8ToUTF16(window->update_.latest) +
+                    u" is installed. Restarting…",
+                "");
+            chrome::AttemptRestart();
+          },
+          weak_factory_.GetWeakPtr()));
+}
+
+namespace {
+// Electron's Preferences → About → Desktop integration texts.
+void ShowDesktopIntegration(KeyboardEditor& editor,
+                            const DesktopIntegrationStatus& status,
+                            std::u16string error) {
+  std::u16string entry;
+  std::u16string action;
+  if (!status.entry.empty() && status.ours) {
+    entry = u"Listed in Rofi and your desktop menu.";
+    action = u"Remove from menu";
+  } else if (!status.entry.empty()) {
+    entry = u"Listed by the entry your installation provides (" +
+            status.entry.LossyDisplayName() + u").";
+  } else if (status.supported) {
+    entry = u"Not listed yet. Fly can add an entry for this installation to "
+            u"Rofi and your desktop menu.";
+    action = u"Add to menu";
+  } else {
+    entry = u"No menu entry found. The package's install.sh adds one.";
+  }
+  if (!error.empty())
+    entry = error + u". " + entry;
+  const bool can_make_default =
+      status.default_browser.has_value() &&
+      (!status.entry.empty() || status.supported);
+  std::u16string browser;
+  if (!status.default_browser)
+    browser = u"Install xdg-utils to let Fly read and change the default "
+              u"browser.";
+  else if (status.is_default)
+    browser = u"Fly opens links from other applications.";
+  else if (!status.default_browser->empty())
+    browser = u"Links from other applications open in " +
+              base::UTF8ToUTF16(std::string(base::RemoveSuffix(
+                                    *status.default_browser, ".desktop")
+                                    .value_or(*status.default_browser))) +
+              u".";
+  else
+    browser = u"No default browser is set.";
+  if (!status.is_default && can_make_default && status.entry.empty())
+    browser += u" Making Fly the default also adds it to the menu.";
+  editor.SetDesktopIntegration(entry, action, browser,
+                               !status.is_default && can_make_default);
+}
+}  // namespace
+
+void FlyWindowController::RefreshDesktopIntegration() {
+  ReadDesktopIntegration(base::BindOnce(
+      [](base::WeakPtr<FlyWindowController> window,
+         DesktopIntegrationStatus status) {
+        if (window && window->keyboard_editor_)
+          ShowDesktopIntegration(*window->keyboard_editor_, status, u"");
+      },
+      weak_factory_.GetWeakPtr()));
+}
+
+void FlyWindowController::ChangeDesktopIntegration(bool make_default) {
+  ReadDesktopIntegration(base::BindOnce(
+      [](base::WeakPtr<FlyWindowController> window, bool make_default,
+         DesktopIntegrationStatus status) {
+        if (!window)
+          return;
+        fly::ChangeDesktopIntegration(
+            make_default ? DesktopIntegrationChange::kMakeDefault
+            : status.ours ? DesktopIntegrationChange::kRemoveEntry
+                          : DesktopIntegrationChange::kAddEntry,
+            base::BindOnce(
+                [](base::WeakPtr<FlyWindowController> window,
+                   std::u16string error, DesktopIntegrationStatus status) {
+                  if (window && window->keyboard_editor_)
+                    ShowDesktopIntegration(*window->keyboard_editor_, status,
+                                           error);
+                },
+                window));
+      },
+      weak_factory_.GetWeakPtr(), make_default));
+}
+
+// Electron's offerDesktopIntegration: once, on the first start of a package
+// that no menu entry lists yet.
+void FlyWindowController::MaybeOfferDesktopIntegration() {
+  if (closing_ || !preferences_.CanEdit() ||
+      preferences_.ReadBool("desktop_integration_offered").value_or(false))
+    return;
+  ReadDesktopIntegration(base::BindOnce(
+      [](base::WeakPtr<FlyWindowController> window,
+         DesktopIntegrationStatus status) {
+        if (!window || window->closing_ || !status.supported ||
+            !status.entry.empty())
+          return;
+        window->preferences_.SetBool("desktop_integration_offered", true);
+        auto delegate = std::make_unique<views::DialogDelegate>();
+        delegate->SetOwnershipOfNewWidget(
+            views::Widget::InitParams::CLIENT_OWNS_WIDGET);
+        delegate->SetModalType(ui::mojom::ModalType::kWindow);
+        delegate->SetTitle(u"Add Fly to your applications");
+        delegate->SetButtonLabel(ui::mojom::DialogButton::kOk, u"Add to menu");
+        delegate->SetButtonLabel(ui::mojom::DialogButton::kCancel, u"Not now");
+        auto body = std::make_unique<views::View>();
+        body->SetLayoutManager(std::make_unique<views::BoxLayout>(
+            views::BoxLayout::Orientation::kVertical, gfx::Insets(16), 10));
+        auto* message = body->AddChildView(std::make_unique<views::Label>(
+            u"Add Fly to your applications menu?\n\nFly is running from its "
+            u"package folder, so Rofi and your desktop menu do not list it "
+            u"yet. Fly can add an entry that starts this installation.\n\nYou "
+            u"can change this later in Preferences → About."));
+        message->SetMultiLine(true);
+        message->SetMaximumWidth(420);
+        message->SetHorizontalAlignment(gfx::ALIGN_LEFT);
+        auto* make_default = body->AddChildView(std::make_unique<views::Checkbox>(
+            u"Also make Fly the default browser"));
+        delegate->SetContentsView(std::move(body));
+        delegate->SetAcceptCallback(base::BindOnce(
+            [](base::WeakPtr<FlyWindowController> window,
+               views::Checkbox* make_default) {
+              if (!window)
+                return;
+              fly::ChangeDesktopIntegration(
+                  make_default->GetChecked()
+                      ? DesktopIntegrationChange::kMakeDefault
+                      : DesktopIntegrationChange::kAddEntry,
+                  base::BindOnce(
+                      [](base::WeakPtr<FlyWindowController> window,
+                         std::u16string error, DesktopIntegrationStatus) {
+                        if (window && !error.empty())
+                          window->ShowStatus(error);
+                      },
+                      window));
+            },
+            window, make_default));
+        window->offer_widget_.reset(views::DialogDelegate::CreateDialogWidget(
+            delegate.get(), window->desktop_->GetNativeWindow(),
+            window->desktop_->GetNativeView()));
+        window->offer_delegate_ = std::move(delegate);
+        window->offer_widget_->Show();
+      },
+      weak_factory_.GetWeakPtr()));
 }
 }  // namespace fly

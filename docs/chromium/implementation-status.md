@@ -104,6 +104,18 @@ history and site zoom are written to `fly-legacy-import.json` and applied when
 each profile loads; Fly starts in the workspace Electron was showing and shows a
 summary listing hand-installed extensions to reinstall from the Web Store.
 
+Remaining Electron surfaces (this pull request): Electron's reader script,
+hostname zoom shared across workspaces with its 0.5-level steps (patch 0028),
+the Workspace Dashboard tree with tabs and Rename/Delete/Move, the empty
+workspace view (closing a workspace's last tab stays on it), the Command
+Centre (definitions generated from `COMMAND_DEFINITIONS`, chips, inspector,
+recents, extension commands, terminal fallback), Preferences with Electron's
+sections and search, in-place updates of the native package, desktop
+integration, interface scale for sizes, sidebar/overlay opacity, and the
+Diagnostics & Health Hub (patch 0029 adds the new UI sources). Electron files
+the native build runs unchanged are copied by
+`scripts/chromium/sync-resources.js` (checked by `npm test`).
+
 Linux package: `scripts/chromium/package-linux.py` turns a release build
 (`chromium/gn/release.gnargs`) into `dist/Fly-<version>-native-linux-x64.tar.gz`
 with `install.sh` ("Fly (native)" next to Electron Fly, data in

@@ -6,6 +6,28 @@
 #include <algorithm>
 #include <utility>
 
+#include "base/process/process_metrics.h"
+#include "base/strings/string_number_conversions.h"
+#include "base/strings/string_util.h"
+#include "chrome/browser/extensions/extension_install_prompt.h"
+#include "chrome/common/chrome_paths.h"
+#include "chrome/common/pref_names.h"
+#include "components/prefs/pref_service.h"
+#include "content/public/browser/render_frame_host.h"
+#include "content/public/browser/render_process_host.h"
+#include "extensions/browser/crx_installer.h"
+#include "extensions/browser/extension_file_task_runner.h"
+#include "extensions/browser/process_manager.h"
+#include "extensions/browser/unpacked_installer.h"
+#include "extensions/browser/zipfile_installer.h"
+#include <set>
+#include "crypto/sha2.h"
+#include "build/build_config.h"
+#include "extensions/common/mojom/manifest.mojom-shared.h"
+#include "extensions/common/file_util.h"
+#include "base/functional/callback_helpers.h"
+#include "base/base64.h"
+#include "components/crx_file/id_util.h"
 #include "base/files/file_enumerator.h"
 #include "base/files/file_util.h"
 #include "base/json/json_reader.h"
@@ -35,6 +57,8 @@
 #include "extensions/browser/management_policy.h"
 #include "extensions/browser/uninstall_reason.h"
 #include "extensions/common/extension.h"
+#include "extensions/common/extension_l10n_util.h"
+#include "extensions/common/manifest.h"
 #include "extensions/common/manifest_handlers/options_page_info.h"
 #include "fly/preferences/preferences_service.h"
 #include "ui/views/bubble/bubble_anchor.h"
@@ -60,6 +84,11 @@ ReadBundles() {
     auto manifest = base::JSONReader::ReadDict(text, base::JSON_PARSE_RFC);
     if (!manifest || !manifest->FindString("key"))
       continue;
+    // Component loading skips Chromium's localisation of __MSG_ names.
+    std::string error;
+    extension_l10n_util::LocalizeExtension(
+        path, &*manifest,
+        extension_l10n_util::GzippedMessagesPermission::kDisallow, &error);
     result.emplace_back(path.BaseName().AsUTF8Unsafe(),
                         std::make_pair(path, std::move(*manifest)));
   }
@@ -514,5 +543,336 @@ void FlyExtensions::OnExtensionActionUpdated(extensions::ExtensionAction*,
                                              content::WebContents*,
                                              content::BrowserContext*) {
   changed_.Run();
+}
+
+bool FlyExtensions::ReloadUnpacked() {
+  bool any = false;
+  for (Profile* profile : profiles_) {
+    std::vector<std::string> ids;
+    for (const auto& extension :
+         extensions::ExtensionRegistry::Get(profile)->enabled_extensions())
+      if (extensions::Manifest::IsUnpackedLocation(extension->location()))
+        ids.push_back(extension->id());
+    for (const auto& id : ids) {
+      extensions::ExtensionRegistrar::Get(profile)->ReloadExtension(id);
+      any = true;
+    }
+  }
+  return any;
+}
+
+// static
+base::FilePath FlyExtensions::Folder() {
+  base::FilePath dir;
+  if (!base::PathService::Get(chrome::DIR_USER_DATA, &dir))
+    return base::FilePath();
+  return dir.AppendASCII("extensions");
+}
+
+namespace {
+// Unpacked extensions need developer mode on the profile, as when loaded
+// from chrome://extensions; otherwise Chromium disables them at start.
+void LoadUnpackedNow(base::WeakPtr<Profile> profile,
+                     base::RepeatingCallback<void(std::u16string)> announce,
+                     const base::FilePath& path) {
+  if (!profile || path.empty())
+    return;
+  profile->GetPrefs()->SetBoolean(prefs::kExtensionsUIDeveloperMode, true);
+  auto installer = extensions::UnpackedInstaller::Create(profile.get());
+  installer->set_be_noisy_on_failure(true);
+  installer->set_completion_callback(base::BindOnce(
+      [](base::RepeatingCallback<void(std::u16string)> announce,
+         const extensions::Extension* extension, const base::FilePath&,
+         const std::u16string& error) {
+        if (!announce)
+          return;
+        announce.Run(extension ? u"Loaded " +
+                                     base::UTF8ToUTF16(extension->name()) +
+                                     u" in this workspace."
+                               : u"The extension could not be loaded: " +
+                                     error);
+      },
+      announce));
+  installer->Load(path);
+}
+}  // namespace
+
+namespace {
+// A local install in progress: a unique staging folder inside the
+// extensions folder (Electron's .install-*), with the copy in `unpacked`.
+struct Staged {
+  base::FilePath staging;
+  base::FilePath unpacked;
+  std::u16string error;
+};
+Staged Stage() {
+  Staged staged;
+  const auto folder = FlyExtensions::Folder();
+  if (!base::CreateDirectory(folder) ||
+      !base::CreateTemporaryDirInDir(folder, ".install-", &staged.staging)) {
+    staged.error = u"The extensions folder is not writable.";
+    return staged;
+  }
+  staged.unpacked = staged.staging.AppendASCII("unpacked");
+  return staged;
+}
+// The extension id Chromium gives an unpacked extension in `folder` (its
+// manifest key when present, otherwise the folder path), and the key id.
+std::optional<std::string> KeyId(const base::FilePath& root) {
+  // Read as Chromium reads manifests and keys, so the id matches the one
+  // the unpacked extension gets.
+  std::string error;
+  const auto manifest = extensions::file_util::LoadManifest(root, &error);
+  const auto* key = manifest ? manifest->FindString("key") : nullptr;
+  std::string bytes;
+  if (!key || !extensions::Extension::ParsePEMKeyBytes(*key, &bytes))
+    return std::nullopt;
+  return crx_file::id_util::GenerateId(bytes);
+}
+std::string IdIn(const base::FilePath& folder, const base::FilePath& root) {
+  return KeyId(root).value_or(crx_file::id_util::GenerateIdForPath(folder));
+}
+// Electron's extensionStore.js install step: the destination is the folder
+// of an installed extension with the same manifest key, otherwise
+// local-<first 24 hex of sha256(absolute source path)>, so reinstalling the
+// same source replaces it and keeps its id. A different id is refused; the
+// old folder is set aside and restored if the swap fails.
+std::pair<base::FilePath, std::u16string> Finish(Staged staged,
+                                                 base::FilePath source) {
+  base::ScopedClosureRunner cleanup(base::BindOnce(
+      [](base::FilePath staging) { base::DeletePathRecursively(staging); },
+      staged.staging));
+  if (!base::PathExists(staged.unpacked.AppendASCII("manifest.json")))
+    return {{}, u"That is not an extension (no manifest.json)."};
+  const auto folder = FlyExtensions::Folder();
+  base::FilePath destination;
+  if (const auto key_id = KeyId(staged.unpacked)) {
+    base::FileEnumerator installed(folder, false,
+                                   base::FileEnumerator::DIRECTORIES);
+    for (auto path = installed.Next(); !path.empty();
+         path = installed.Next()) {
+      if (!path.BaseName().value().starts_with(".") &&
+          KeyId(path) == key_id) {
+        destination = path;
+        break;
+      }
+    }
+  }
+  if (destination.empty()) {
+    // Electron hashes path.resolve(), which does not resolve symlinks.
+#if BUILDFLAG(IS_POSIX)
+    const auto resolved =
+        base::MakeAbsoluteFilePathNoResolveSymbolicLinks(source);
+    const auto absolute = resolved ? *resolved : source;
+#else
+    const auto made = base::MakeAbsoluteFilePath(source);
+    const auto absolute = made.empty() ? source : made;
+#endif
+    const auto digest = crypto::SHA256HashString(absolute.AsUTF8Unsafe());
+    destination = folder.AppendASCII(
+        "local-" + base::HexEncodeLower(digest).substr(0, 24));
+  }
+  const bool previous = base::PathExists(destination);
+  if (previous) {
+    if (!base::PathExists(destination.AppendASCII("manifest.json")))
+      return {{}, u"An invalid extension already occupies this location. "
+                  u"Remove it first."};
+    if (IdIn(destination, destination) !=
+        IdIn(destination, staged.unpacked))
+      return {{}, u"The new package has a different extension identity."};
+  }
+  // The checks UnpackedInstaller::LoadExtension runs, before anything is
+  // replaced, so a copy Chromium rejects leaves the installed one working
+  // (Electron restores it). Declarative net request rules are indexed only
+  // at load.
+  std::u16string load_error;
+  extensions::file_util::MaybeCleanupMetadataFolder(staged.unpacked);
+  scoped_refptr<const extensions::Extension> checked;
+  if (extensions::file_util::CheckForIllegalFilenames(staged.unpacked,
+                                                      &load_error)) {
+    checked = extensions::file_util::LoadExtension(
+        staged.unpacked, extensions::mojom::ManifestLocation::kUnpacked,
+        extensions::Extension::FOLLOW_SYMLINKS_ANYWHERE |
+            extensions::Extension::REQUIRE_MODERN_MANIFEST_VERSION,
+        &load_error);
+  }
+  if (!checked || !extension_l10n_util::ValidateExtensionLocales(
+                      staged.unpacked, *checked->manifest()->value(),
+                      &load_error))
+    return {{}, u"The extension could not be loaded: " + load_error};
+  const auto backup = staged.staging.AppendASCII("previous");
+  if (previous && !base::Move(destination, backup))
+    return {{}, u"The installed copy could not be replaced."};
+  if (!base::Move(staged.unpacked, destination)) {
+    if (previous)
+      base::Move(backup, destination);
+    return {{}, u"The extension could not be moved into the extensions "
+                u"folder."};
+  }
+  return {destination, u""};
+}
+void FinishAndLoad(base::WeakPtr<Profile> profile,
+                   base::RepeatingCallback<void(std::u16string)> announce,
+                   Staged staged,
+                   base::FilePath source) {
+  extensions::GetExtensionFileTaskRunner()->PostTaskAndReplyWithResult(
+      FROM_HERE, base::BindOnce(&Finish, std::move(staged), std::move(source)),
+      base::BindOnce(
+          [](base::WeakPtr<Profile> profile,
+             base::RepeatingCallback<void(std::u16string)> announce,
+             std::pair<base::FilePath, std::u16string> result) {
+            if (result.first.empty()) {
+              if (announce)
+                announce.Run(result.second);
+              return;
+            }
+            LoadUnpackedNow(profile, announce, result.first);
+          },
+          profile, announce));
+}
+}  // namespace
+
+void FlyExtensions::InstallPackage(Profile* profile,
+                                   content::WebContents* contents,
+                                   const base::FilePath& file) {
+  if (!profile || profile->IsOffTheRecord())
+    return;
+  const auto extension = base::ToLowerASCII(file.Extension());
+  if (extension == ".crx") {
+    auto installer = extensions::CrxInstaller::Create(
+        profile,
+        contents ? std::make_unique<ExtensionInstallPrompt>(contents, nullptr)
+                 : nullptr);
+    installer->set_off_store_install_allow_reason(
+        extensions::CrxInstaller::OffStoreInstallAllowedFromSettingsPage);
+    installer->InstallCrx(file);
+    return;
+  }
+  if (extension != ".zip") {
+    if (announce_)
+      announce_.Run(u"Choose a .zip or .crx extension package.");
+    return;
+  }
+  extensions::GetExtensionFileTaskRunner()->PostTaskAndReplyWithResult(
+      FROM_HERE, base::BindOnce([] {
+        auto staged = Stage();
+        // LoadFromZipFileInDir unpacks into an existing folder only.
+        if (staged.error.empty() && !base::CreateDirectory(staged.unpacked))
+          staged.error = u"The extensions folder is not writable.";
+        return staged;
+      }),
+      base::BindOnce(
+          [](base::WeakPtr<Profile> profile,
+             base::RepeatingCallback<void(std::u16string)> announce,
+             base::FilePath file, Staged staged) {
+            if (!staged.error.empty()) {
+              extensions::GetExtensionFileTaskRunner()->PostTask(
+                  FROM_HERE, base::GetDeletePathRecursivelyCallback(
+                                 staged.staging));
+              if (announce)
+                announce.Run(staged.error);
+              return;
+            }
+            const auto unpacked = staged.unpacked;
+            auto installer = extensions::ZipFileInstaller::Create(
+                extensions::GetExtensionFileTaskRunner(),
+                base::BindOnce(
+                    [](base::WeakPtr<Profile> profile,
+                       base::RepeatingCallback<void(std::u16string)> announce,
+                       Staged staged, base::FilePath file,
+                       const base::FilePath&, const base::FilePath&,
+                       const std::string& error) {
+                      if (!error.empty()) {
+                        extensions::GetExtensionFileTaskRunner()->PostTask(
+                            FROM_HERE, base::GetDeletePathRecursivelyCallback(
+                                           staged.staging));
+                        if (announce)
+                          announce.Run(u"The package could not be unpacked: " +
+                                       base::UTF8ToUTF16(error));
+                        return;
+                      }
+                      FinishAndLoad(profile, announce, std::move(staged),
+                                    std::move(file));
+                    },
+                    profile, announce, std::move(staged), file));
+            installer->LoadFromZipFileInDir(file, unpacked);
+          },
+          profile->GetWeakPtr(), announce_, file));
+}
+
+void FlyExtensions::LoadUnpacked(Profile* profile,
+                                 const base::FilePath& folder) {
+  if (!profile || profile->IsOffTheRecord() || folder.empty())
+    return;
+  extensions::GetExtensionFileTaskRunner()->PostTaskAndReplyWithResult(
+      FROM_HERE,
+      base::BindOnce(
+          [](base::FilePath source) {
+            if (!base::PathExists(source.AppendASCII("manifest.json"))) {
+              Staged staged;
+              staged.error =
+                  u"That folder is not an extension (no manifest.json).";
+              return staged;
+            }
+            auto staged = Stage();
+            if (staged.error.empty() &&
+                !base::CopyDirectory(source, staged.unpacked, true)) {
+              base::DeletePathRecursively(staged.staging);
+              staged.error =
+                  u"The folder could not be copied into the extensions "
+                  u"folder.";
+            }
+            return staged;
+          },
+          folder),
+      base::BindOnce(
+          [](base::WeakPtr<Profile> profile,
+             base::RepeatingCallback<void(std::u16string)> announce,
+             base::FilePath source, Staged staged) {
+            if (!staged.error.empty()) {
+              if (announce)
+                announce.Run(staged.error);
+              return;
+            }
+            FinishAndLoad(profile, announce, std::move(staged),
+                          std::move(source));
+          },
+          profile->GetWeakPtr(), announce_, folder));
+}
+
+std::u16string FlyExtensions::Usage(Profile* profile) const {
+  if (!profile)
+    return u"";
+  auto* processes = extensions::ProcessManager::Get(profile);
+  std::u16string text;
+  for (const auto& extension :
+       extensions::ExtensionRegistry::Get(profile)->enabled_extensions()) {
+    if (extension->location() == extensions::mojom::ManifestLocation::kComponent &&
+        !IsBundled(extension->id()))
+      continue;
+    std::set<content::ChildProcessId> ids;
+    for (auto* frame : processes->GetRenderFrameHostsForExtension(extension->id()))
+      ids.insert(frame->GetProcess()->GetID());
+    for (const auto& worker :
+         processes->GetServiceWorkersForExtension(extension->id()))
+      ids.insert(worker.render_process_id);
+    uint64_t bytes = 0;
+    for (const auto& id : ids) {
+      auto* host = content::RenderProcessHost::FromID(id);
+      if (!host || !host->GetProcess().IsValid())
+        continue;
+      const auto metrics = base::ProcessMetrics::CreateProcessMetrics(
+          host->GetProcess().Handle());
+      if (const auto info = metrics->GetMemoryInfo(); info.has_value())
+        bytes += info->resident_set_bytes;
+    }
+    text += base::UTF8ToUTF16(extension->name()) + u": " +
+            (ids.empty() ? std::u16string(u"idle")
+                         : base::NumberToString16(bytes / (1024 * 1024)) +
+                               u" MB in " + base::NumberToString16(ids.size()) +
+                               (ids.size() == 1 ? u" process" : u" processes")) +
+            u"\n";
+  }
+  return text.empty() ? u"No extensions are running in this workspace." : text;
 }
 }  // namespace fly

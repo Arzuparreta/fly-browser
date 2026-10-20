@@ -21,7 +21,10 @@
 #include "fly/commands/command_service.h"
 #include "fly/commands/palette_catalog.h"
 #include "fly/preferences/preferences_service.h"
+#include "fly/ui/diagnostics_hub.h"
+#include "fly/ui/fly_actions.h"
 #include "fly/ui/history_service.h"
+#include "fly/ui/site_zoom.h"
 #include "fly/workspaces/workspace_service.h"
 #include "ui/aura/client/focus_change_observer.h"
 #include "ui/events/event_handler.h"
@@ -53,7 +56,9 @@ namespace ui {
 class SimpleMenuModel;
 }
 
+class ScopedProfileKeepAlive;
 namespace fly {
+class WelcomeView;
 class CommandPalette;
 class BookmarkService;
 class SettingsMenu;
@@ -117,7 +122,9 @@ class FlyWindowController : public views::WidgetDelegate,
   StatusBar* status_bar_for_testing() { return status_bar_; }
   TabSidebar* tab_sidebar_for_testing() { return tab_sidebar_; }
   void CreateTab();
-  void CreateWorkspace();
+  // An empty name takes the next "Workspace N".
+  void CreateWorkspace(std::string name = {});
+  std::string NextWorkspaceName() const;
   void ToggleWorkspacePicker();
   bool CanShowWorkspacePicker() const { return workspaces_.Read().has_value(); }
   CommandPalette& workspace_picker() { return *workspace_picker_; }
@@ -141,8 +148,8 @@ class FlyWindowController : public views::WidgetDelegate,
   UserContentService& user_content() { return *user_content_; }
   CommandPalette& extensions_picker() { return *extensions_picker_; }
   views::View* extension_actions_for_testing() const;
-  views::Widget* diagnostics_dialog_for_testing() const {
-    return diagnostics_widget_.get();
+  DiagnosticsHub* diagnostics_hub_for_testing() const {
+    return diagnostics_hub_.get();
   }
   // Fly status line (footer mode badge), also kept in the in-memory
   // diagnostics log while recording is enabled.
@@ -163,6 +170,17 @@ class FlyWindowController : public views::WidgetDelegate,
   views::Widget* sidebar_widget_for_testing() { return sidebar_widget_.get(); }
   TabSidebar* compact_sidebar_for_testing() { return compact_tab_sidebar_; }
   FlyButton* sidebar_pin_for_testing() { return sidebar_pin_button_; }
+  FlyButton* reader_button_for_testing() { return reader_button_; }
+  std::u16string status_text_for_testing() const;
+  WelcomeView* welcome_for_testing() { return welcome_; }
+  // The rename and new workspace name dialog, while it is open.
+  views::DialogDelegate* workspace_name_dialog_for_testing() {
+    return rename_widget_ ? rename_delegate_.get() : nullptr;
+  }
+  std::vector<PaletteEntry> dashboard_entries_for_testing() {
+    return WorkspaceEntries();
+  }
+  void choose_workspace_for_testing(std::string action);
   FlyButton* new_tab_button_for_testing() { return new_tab_button_; }
 
   // WidgetObserver:
@@ -171,6 +189,25 @@ class FlyWindowController : public views::WidgetDelegate,
   void OnWidgetShowStateChanged(views::Widget* widget) override;
 
  private:
+  void SetReaderActive(content::WebContents* contents, bool active);
+  void UpdateReaderButton();
+  void UpdateWelcome();
+  void RunPreferencesAction(std::string action);
+  // Electron's in-place update: downloads the native package of the newer
+  // release, checks its SHA-256, replaces this installation and restarts.
+  void InstallUpdate();
+  // Electron's desktop integration (menu entry and default browser).
+  void RefreshDesktopIntegration();
+  void ChangeDesktopIntegration(bool make_default);
+  void MaybeOfferDesktopIntegration();
+  std::unique_ptr<views::DialogDelegate> offer_delegate_;
+  std::unique_ptr<views::Widget> offer_widget_;
+  UpdateCheckResult update_;
+  bool update_installing_ = false;
+  std::vector<PaletteEntry> ExtensionCommandEntries(
+      BrowserWindowInterface* browser);
+  void RunFromEmptyWorkspace(std::string action);
+  void RefreshReaderState();
   struct Entry {
     raw_ptr<BrowserWindowInterface> browser;
     raw_ptr<views::Widget> widget = nullptr;
@@ -181,6 +218,14 @@ class FlyWindowController : public views::WidgetDelegate,
     base::CallbackListSubscription closed_subscription;
   };
   std::vector<PaletteEntry> WorkspaceEntries();
+  // Tabs listed by the workspace dashboard, by "<workspace id>/<n>".
+  struct TabChoice {
+    base::WeakPtr<BrowserWindowInterface> browser;
+    base::WeakPtr<content::WebContents> contents;
+  };
+  std::map<std::string, TabChoice> tab_choices_;
+  // Electron asks for the new workspace's name first.
+  void PromptNewWorkspace();
   bool WorkspaceChoiceAvailable(std::string_view action) const;
   void ChooseWorkspace(content::WebContents* source, std::string action);
   void OnWorkspacesChanged();
@@ -299,6 +344,7 @@ class FlyWindowController : public views::WidgetDelegate,
   std::unique_ptr<SettingsMenu> settings_menu_;
   std::unique_ptr<FlyExtensions> extensions_;
   std::unique_ptr<UserContentService> user_content_;
+  SiteZoom site_zoom_;
   std::unique_ptr<CommandPalette> extensions_picker_;
   bool extension_refresh_pending_ = false;
   // Pending per-profile import state (fly-legacy-import.json), loaded once.
@@ -306,9 +352,12 @@ class FlyWindowController : public views::WidgetDelegate,
   bool legacy_import_loading_ = false;
   scoped_refptr<base::SequencedTaskRunner> legacy_import_writer_;
   std::vector<base::WeakPtr<BrowserWindowInterface>> legacy_import_waiting_;
-  std::unique_ptr<views::DialogDelegate> diagnostics_delegate_;
-  std::unique_ptr<views::Widget> diagnostics_widget_;
-  std::vector<std::u16string> diagnostics_events_;
+  std::unique_ptr<DiagnosticsHub> diagnostics_hub_;
+  std::vector<DiagnosticEvent> diagnostics_events_;
+  DiagnosticsSession CurrentDiagnostics();
+  void RecordDiagnostic(std::string level,
+                        std::string category,
+                        std::u16string message);
   std::optional<std::string> applied_profile_preferences_;
   bool whats_new_checked_ = false;
   bool update_checked_ = false;
@@ -335,6 +384,10 @@ class FlyWindowController : public views::WidgetDelegate,
   raw_ptr<views::View> compact_rail_ = nullptr;
   raw_ptr<TabSidebar> compact_tab_sidebar_ = nullptr;
   raw_ptr<FlyButton> sidebar_pin_button_ = nullptr;
+  raw_ptr<FlyButton> reader_button_ = nullptr;
+  // The active tab while it shows Electron's reader overlay.
+  base::WeakPtr<content::WebContents> reader_contents_;
+  base::RepeatingTimer reader_poll_;
   raw_ptr<FlyButton> compact_pin_button_ = nullptr;
   raw_ptr<FlyButton> new_tab_button_ = nullptr;
   raw_ptr<FlyButton> compact_workspace_ = nullptr;
@@ -350,6 +403,10 @@ class FlyWindowController : public views::WidgetDelegate,
   std::map<std::string, raw_ptr<views::ImageButton>> window_control_buttons_;
   raw_ptr<views::View> workspace_buttons_ = nullptr;
   raw_ptr<views::View> content_ = nullptr;
+  raw_ptr<WelcomeView> welcome_ = nullptr;
+  std::unique_ptr<ScopedProfileKeepAlive> welcome_keep_alive_;
+  // Run on the workspace's new tab once it opens from the empty view.
+  std::string pending_empty_action_;
   raw_ptr<views::Label> status_ = nullptr;
   raw_ptr<StatusBar> status_bar_ = nullptr;
   raw_ptr<FlyButton> clock_ = nullptr;

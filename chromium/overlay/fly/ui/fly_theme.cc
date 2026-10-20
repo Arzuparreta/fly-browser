@@ -15,6 +15,7 @@
 #include "ui/base/models/image_model.h"
 #include "ui/gfx/canvas.h"
 #include "ui/gfx/color_utils.h"
+#include "ui/views/view_utils.h"
 #include "ui/gfx/paint_vector_icon.h"
 #include "ui/views/background.h"
 #include "ui/views/border.h"
@@ -166,7 +167,9 @@ bool SetFlyColors(const FlyColors& colors) {
       current.bg_sidebar != colors.bg_sidebar || current.text != colors.text ||
       current.border != colors.border || current.selected != colors.selected ||
       current.panel != colors.panel || current.cell != colors.cell ||
-      current.dim != colors.dim || current.link != colors.link;
+      current.dim != colors.dim || current.link != colors.link ||
+      current.sidebar_opacity != colors.sidebar_opacity ||
+      current.overlay_opacity != colors.overlay_opacity;
   current = colors;
   return changed;
 }
@@ -187,7 +190,23 @@ SkColor FlyRoleColor(FlyRole role) {
       return colors.border;
     case FlyRole::kAccent:
       return colors.accent;
+    case FlyRole::kSidebarSurface:
+      return color_utils::AlphaBlend(colors.bg_sidebar, colors.bg_main,
+                                     colors.sidebar_opacity / 100.f);
+    case FlyRole::kOverlayMain:
+      return SkColorSetA(colors.bg_main, colors.overlay_opacity * 255 / 100);
+    case FlyRole::kOverlaySidebar:
+      return SkColorSetA(colors.bg_sidebar,
+                         colors.overlay_opacity * 255 / 100);
   }
+}
+void DisableSubpixelText(views::View* root) {
+  if (!root)
+    return;
+  if (auto* label = views::AsViewClass<views::Label>(root))
+    label->SetSubpixelRenderingEnabled(false);
+  for (views::View* child : root->children())
+    DisableSubpixelText(child);
 }
 namespace {
 float g_interface_scale = 1.0f;
@@ -197,6 +216,9 @@ void SetFlyInterfaceScale(float scale) {
 }
 float GetFlyInterfaceScale() {
   return g_interface_scale;
+}
+int FlyScaled(int pixels) {
+  return static_cast<int>(pixels * g_interface_scale + 0.5f);
 }
 gfx::FontList FlyFont(FlyFace face, int size, gfx::Font::Weight weight) {
   size = static_cast<int>(size * g_interface_scale + 0.5f);
@@ -277,8 +299,15 @@ void FlyButton::SetFlyFont(FlyFace face, int size, gfx::Font::Weight weight) {
   label()->SetFontList(FlyFont(face_, size_, weight_));
   PreferredSizeChanged();
 }
+void FlyButton::SetScaledSize(int size) {
+  scaled_size_ = size;
+  SetPreferredSize(gfx::Size(FlyScaled(size), FlyScaled(size)));
+  SetMinSize(gfx::Size(FlyScaled(size), FlyScaled(size)));
+}
 void FlyButton::OnThemeChanged() {
   views::MdTextButton::OnThemeChanged();
+  if (scaled_size_)
+    SetScaledSize(scaled_size_);
   label()->SetFontList(FlyFont(face_, size_, weight_));
   if (GetText().empty() && GetCustomPadding())
     SetBorder(views::CreateEmptyBorder(*GetCustomPadding()));
@@ -319,13 +348,16 @@ void FlyButton::UpdateColors() {
     const SkColor rest =
         ShowsSelected() ? text : (accent_text_ ? colors.accent : colors.dim);
     views::LabelButton::SetImageModel(
-        STATE_NORMAL, ui::ImageModel::FromVectorIcon(*icon_, rest, icon_size_));
+        STATE_NORMAL,
+        ui::ImageModel::FromVectorIcon(*icon_, rest, FlyScaled(icon_size_)));
     for (auto state : {STATE_HOVERED, STATE_PRESSED})
       views::LabelButton::SetImageModel(
-          state, ui::ImageModel::FromVectorIcon(*icon_, text, icon_size_));
+          state,
+          ui::ImageModel::FromVectorIcon(*icon_, text, FlyScaled(icon_size_)));
     views::LabelButton::SetImageModel(
         STATE_DISABLED,
-        ui::ImageModel::FromVectorIcon(*icon_, colors.border, icon_size_));
+        ui::ImageModel::FromVectorIcon(*icon_, colors.border,
+                                       FlyScaled(icon_size_)));
   }
   SetBackground(nullptr);
   SchedulePaint();
@@ -362,8 +394,7 @@ std::unique_ptr<FlyButton> MakeFlyIconButton(
   button->SetVectorIcon(icon, 14);
   button->SetCustomPadding(gfx::Insets());
   button->SetHorizontalAlignment(gfx::ALIGN_CENTER);
-  button->SetPreferredSize(gfx::Size(size, size));
-  button->SetMinSize(gfx::Size(size, size));
+  button->SetScaledSize(size);
   button->SetTooltipText(accessible_name);
   button->GetViewAccessibility().SetName(accessible_name);
   return button;

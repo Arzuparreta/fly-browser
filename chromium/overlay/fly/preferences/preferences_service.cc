@@ -117,6 +117,24 @@ ClockText FormatClock(base::Time time, std::string_view format) {
 }
 void PreferencesService::RegisterLocalStatePrefs(PrefRegistrySimple* registry) {
   registry->RegisterDictionaryPref(kPreferencesPref);
+  registry->RegisterListPref(kRecentCommandsPref);
+}
+std::vector<std::string> PreferencesService::ReadRecentCommands() const {
+  std::vector<std::string> result;
+  for (const auto& value : local_state_->GetList(kRecentCommandsPref))
+    if (value.is_string() && result.size() < 4)
+      result.push_back(value.GetString());
+  return result;
+}
+void PreferencesService::RecordRecentCommand(std::string_view action) {
+  if (action.empty() || action.size() > 128)
+    return;
+  base::ListValue list;
+  list.Append(std::string(action));
+  for (const auto& id : ReadRecentCommands())
+    if (id != action && list.size() < 4)
+      list.Append(id);
+  local_state_->SetList(kRecentCommandsPref, std::move(list));
 }
 PreferencesService::PreferencesService(PrefService& local_state)
     : local_state_(local_state) {}
@@ -463,6 +481,31 @@ bool PreferencesService::SetThemeColor(bool dark,
   local_state_->SetDict(kPreferencesPref, std::move(stored));
   return true;
 }
+int PreferencesService::ReadThemeOpacity(bool dark,
+                                         std::string_view key) const {
+  const auto* values = ValidStore() ? StoredValues(*local_state_) : nullptr;
+  const auto* palette =
+      values ? values->FindDictByDottedPath(
+                   std::string("theme_colors.") + (dark ? "dark" : "light"))
+             : nullptr;
+  const auto value = palette ? palette->FindInt(key) : std::nullopt;
+  return std::clamp(value.value_or(100), 40, 100);
+}
+bool PreferencesService::SetThemeOpacity(bool dark,
+                                         std::string_view key,
+                                         int percent) {
+  if (!CanEdit() || (key != "sidebar_opacity" && key != "overlay_opacity") ||
+      percent < 40 || percent > 100)
+    return false;
+  auto stored = local_state_->GetDict(kPreferencesPref).Clone();
+  stored.Set("schema", 1);
+  stored.EnsureDict("values")
+      ->EnsureDict("theme_colors")
+      ->EnsureDict(dark ? "dark" : "light")
+      ->Set(key, percent);
+  local_state_->SetDict(kPreferencesPref, std::move(stored));
+  return true;
+}
 bool PreferencesService::ResetThemeColors() {
   if (!CanEdit())
     return false;
@@ -511,8 +554,6 @@ void PreferencesService::ApplyStartupSwitches(const PrefService& local_state,
       command_line.AppendSwitchASCII(name, value);
     added.push_back(name);
   };
-  // Fly's reader view uses Chromium's DOM distiller viewer.
-  add("enable-dom-distiller");
   const auto* values = StoredValues(local_state);
   const auto flag = [&](std::string_view key) {
     const auto* value = values ? values->Find(key) : nullptr;

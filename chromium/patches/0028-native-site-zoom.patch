@@ -1,0 +1,39 @@
+--- a/chrome/browser/ui/browser_commands.cc
++++ b/chrome/browser/ui/browser_commands.cc
+@@ -4,6 +4,8 @@
+ 
+ #include "chrome/browser/ui/browser_commands.h"
+ 
++#include "fly/ui/site_zoom.h"
++
+ #include <algorithm>
+ #include <memory>
+ #include <numeric>
+@@ -2615,6 +2617,16 @@
+ }
+ 
+ void Zoom(BrowserWindowInterface* browser, content::PageZoom zoom) {
++  // Fly: Electron's zoom steps (0.5 levels), shared per hostname by
++  // fly::SiteZoom across workspaces; also reached by Ctrl+wheel.
++  if (base::CommandLine::ForCurrentProcess()->HasSwitch("fly-native")) {
++    fly::SiteZoom::Change(
++        browser->GetTabStripModel()->GetActiveWebContents(),
++        zoom == content::PAGE_ZOOM_IN    ? "zoom-in"
++        : zoom == content::PAGE_ZOOM_OUT ? "zoom-out"
++                                         : "reset-zoom");
++    return;
++  }
+   zoom::PageZoom::Zoom(browser->GetTabStripModel()->GetActiveWebContents(),
+                        zoom);
+ }
+--- a/chrome/browser/ui/BUILD.gn
++++ b/chrome/browser/ui/BUILD.gn
+@@ -802,6 +802,8 @@
+       "//fly/ui/fly_extensions.h",
+       "//fly/ui/user_content.cc",
+       "//fly/ui/user_content.h",
++      "//fly/ui/site_zoom.cc",
++      "//fly/ui/site_zoom.h",
+       "//fly/ui/fly_theme.cc",
+       "//fly/ui/fly_theme.h",
+       "//fly/ui/fly_window_controller.cc",

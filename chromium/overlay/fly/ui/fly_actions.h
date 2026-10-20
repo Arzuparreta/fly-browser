@@ -54,11 +54,35 @@ class SettingsMenu : public ui::SimpleMenuModel::Delegate {
   std::unique_ptr<views::MenuRunner> runner_;
 };
 
-// Reader view on Chromium's DOM distiller: distils the page in place, or
-// returns to the original article.
-bool IsReaderView(content::WebContents* contents);
+// Electron Fly's reader view: modules/readerDistiller.js (Mozilla
+// Readability with Fly's overlay, toolbar and per-site preferences), run in
+// the page as Electron did. Running it again closes the overlay.
+struct ReaderResult {
+  bool active = false;
+  std::u16string title;
+  std::u16string error;
+};
 void ToggleReaderView(content::WebContents* contents,
-                      base::OnceCallback<void(bool)> done);
+                      base::OnceCallback<void(ReaderResult)> done);
+// Whether the page currently shows the reader overlay (it also closes with
+// Escape and its own close button).
+void QueryReaderView(content::WebContents* contents,
+                     base::OnceCallback<void(bool)> done);
+
+// Electron's Privacy buttons: the cookies of `url`'s site, or the cache,
+// cache storage and service workers of the workspace profile. `done` gets the
+// message Electron showed.
+void ClearSiteCookies(Profile* profile,
+                      const GURL& url,
+                      base::OnceCallback<void(std::u16string)> done);
+void ClearWorkspaceCache(Profile* profile,
+                         base::OnceCallback<void(std::u16string)> done);
+
+// Electron's air-gapped terminal fallback: copies the text (prefixed with
+// "oversight" for scripts, URLs and sudo/curl/wget) to the clipboard and opens
+// the first terminal found (kitty, alacritty, foot, st, xterm, or
+// xdg-terminal-exec); nothing runs until the user pastes it.
+void OpenTerminalWithCommand(const std::string& text);
 
 // `scripts`, `styles` or `script-storage` below the user data directory,
 // created on demand.
@@ -75,9 +99,39 @@ struct UpdateCheckResult {
   bool newer = false;
   std::string latest;
   GURL page;
+  // The release's native Linux package and its .sha256 file, when published.
+  GURL package;
+  GURL checksum;
 };
 // Queries the latest published Fly release (GitHub, no credentials).
 void CheckForUpdates(base::OnceCallback<void(UpdateCheckResult)> done);
+
+// Electron's appImageUpdate: downloads `update.package`, checks it against
+// `update.checksum`, unpacks it and replaces this installation (the directory
+// of the running executable) in one rename. `done` gets an empty string on
+// success, otherwise the reason. The caller restarts.
+void InstallNativeUpdate(const UpdateCheckResult& update,
+                         base::OnceCallback<void(std::u16string)> done);
+
+// Electron's desktopIntegration.js for the native package: the applications
+// menu entry (fly-browser-native.desktop, starting the package's launcher)
+// and the default browser.
+struct DesktopIntegrationStatus {
+  // Only a package (with its launcher next to the executable) can add itself.
+  bool supported = false;
+  base::FilePath entry;
+  bool ours = false;
+  // nullopt when xdg-utils is missing; empty when no default is set.
+  std::optional<std::string> default_browser;
+  bool is_default = false;
+};
+void ReadDesktopIntegration(
+    base::OnceCallback<void(DesktopIntegrationStatus)> done);
+enum class DesktopIntegrationChange { kAddEntry, kRemoveEntry, kMakeDefault };
+// `done` gets an error ("" on success) and the new status.
+void ChangeDesktopIntegration(
+    DesktopIntegrationChange change,
+    base::OnceCallback<void(std::u16string, DesktopIntegrationStatus)> done);
 
 // Local What's New page shipped next to the executable, or the online release
 // list when it is missing. `from` is the previously run version.

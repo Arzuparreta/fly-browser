@@ -40,6 +40,9 @@ struct FlyColors {
   SkColor dim;
   SkColor link;
   SkColor warning;
+  // Electron's sidebar_opacity and overlay_opacity (40-100).
+  int sidebar_opacity = 100;
+  int overlay_opacity = 100;
 };
 FlyColors DefaultFlyColors(bool dark);
 const FlyColors& GetFlyColors();
@@ -50,9 +53,11 @@ enum class FlyFace { kSans, kMono, kDisplay };
 gfx::FontList FlyFont(FlyFace face,
                       int size,
                       gfx::Font::Weight weight = gfx::Font::Weight::NORMAL);
-// Electron's "large" interface scale (1.25) applies to every Fly font.
+// Electron's "large" interface scale (1.25) zooms Fly's whole interface:
+// fonts, and every size given through FlyScaled().
 void SetFlyInterfaceScale(float scale);
 float GetFlyInterfaceScale();
+int FlyScaled(int pixels);
 // Makes the bundled product fonts (out/<dir>/fly_fonts) available to native UI.
 void RegisterFlyFonts();
 
@@ -64,8 +69,17 @@ enum class FlyRole {
   kSelected,
   kBorder,
   kAccent,
+  // The sidebar over the canvas at the sidebar opacity
+  // (color-mix(bg_sidebar, transparent) over bg_main in Electron).
+  kSidebarSurface,
+  // Overlay surfaces at the overlay opacity: the page shows through.
+  kOverlayMain,
+  kOverlaySidebar,
 };
 SkColor FlyRoleColor(FlyRole role);
+// Overlay backgrounds may be translucent; labels drawn on them must not use
+// subpixel text. Applies to every label below `root`.
+void DisableSubpixelText(views::View* root);
 // Paints the current palette colour at paint time, so palette changes only
 // require a repaint.
 std::unique_ptr<views::Background> FlyBackground(FlyRole role,
@@ -94,6 +108,8 @@ class FlyButton : public views::MdTextButton {
   void SetSelected(bool selected);
   bool selected() const { return selected_; }
   void SetVectorIcon(const gfx::VectorIcon& icon, int size = 14);
+  // A fixed square size that follows the interface scale.
+  void SetScaledSize(int size);
   void SetAccentText(bool accent);
   void SetOutlined(bool outlined);
   void SetFlyFont(FlyFace face, int size,
@@ -114,6 +130,7 @@ class FlyButton : public views::MdTextButton {
   bool ShowsSelected() const;
   raw_ptr<const gfx::VectorIcon> icon_ = nullptr;
   int icon_size_ = 14;
+  int scaled_size_ = 0;
   FlyFace face_;
   int size_;
   gfx::Font::Weight weight_ = gfx::Font::Weight::NORMAL;
