@@ -29,6 +29,7 @@
 #include "components/history/core/browser/history_service.h"
 #include "content/public/browser/host_zoom_map.h"
 #include "content/public/common/url_constants.h"
+#include "fly/ui/diagnostics_hub.h"
 #include "fly/ui/site_zoom.h"
 #include "fly/ui/user_content.h"
 #include "fly/ui/welcome_view.h"
@@ -707,6 +708,37 @@ FlyWindowController::FlyWindowController()
                                        *g_browser_process->local_state());
   keyboard_editor_->SetActionRunner(base::BindRepeating(
       &FlyWindowController::RunPreferencesAction, weak_factory_.GetWeakPtr()));
+  diagnostics_hub_ = std::make_unique<DiagnosticsHub>(
+      desktop_.get(),
+      DiagnosticsHub::Delegate{
+          .session = base::BindRepeating(
+              [](base::WeakPtr<FlyWindowController> window) {
+                return window ? window->CurrentDiagnostics()
+                              : DiagnosticsSession();
+              },
+              weak_factory_.GetWeakPtr()),
+          .set_recording = base::BindRepeating(
+              [](base::WeakPtr<FlyWindowController> window, bool on) {
+                if (!window)
+                  return;
+                window->preferences_.SetBool("enable_diagnostics", on);
+                if (!on)
+                  window->diagnostics_events_.clear();
+              },
+              weak_factory_.GetWeakPtr()),
+          .clear_events = base::BindRepeating(
+              [](base::WeakPtr<FlyWindowController> window) {
+                if (window)
+                  window->diagnostics_events_.clear();
+              },
+              weak_factory_.GetWeakPtr()),
+          .open_url = base::BindRepeating(
+              [](base::WeakPtr<FlyWindowController> window, GURL url) {
+                if (window)
+                  window->OpenInNewTab(url);
+              },
+              weak_factory_.GetWeakPtr()),
+          .page_insets = page_insets});
   keyboard_editor_->SetExtensions(
       extensions_.get(),
       base::BindRepeating(
@@ -756,8 +788,7 @@ FlyWindowController::~FlyWindowController() {
     keyboard_editor_->SetExtensions(nullptr, {});
   extensions_.reset();
   user_content_.reset();
-  diagnostics_widget_.reset();
-  diagnostics_delegate_.reset();
+  diagnostics_hub_.reset();
   workspace_close_.reset();
   remove_widget_.reset();
   remove_delegate_.reset();
@@ -3266,6 +3297,13 @@ void FlyWindowController::OnKeyEvent(ui::KeyEvent* event) {
       (remove_widget_ && !remove_widget_->IsClosed()) ||
       (history_clear_widget_ && !history_clear_widget_->IsClosed()))
     return;
+  if (diagnostics_hub_ && diagnostics_hub_->active()) {
+    if (diagnostics_hub_->HandleOverlayKey(*event)) {
+      event->SetHandled();
+      event->StopPropagation();
+    }
+    return;
+  }
   if (address_picker_->active()) {
     if (address_picker_->HandleOverlayKey(*event)) {
       event->SetHandled();
@@ -3428,16 +3466,11 @@ void FlyWindowController::UpdateModeLabel() {
 }
 
 void FlyWindowController::ShowStatus(std::u16string text) {
-  if (preferences_.ReadBool("enable_diagnostics").value_or(false)) {
-    base::Time::Exploded now;
-    base::Time::Now().LocalExplode(&now);
-    diagnostics_events_.push_back(
-        base::UTF8ToUTF16(base::StringPrintf("%02d:%02d:%02d ", now.hour,
-                                             now.minute, now.second)) +
-        text);
-    if (diagnostics_events_.size() > 100)
-      diagnostics_events_.erase(diagnostics_events_.begin());
-  }
+  RecordDiagnostic(
+      text.starts_with(u"Update failed") || text.starts_with(u"Could not")
+          ? "warn"
+          : "info",
+      "status", text);
   if (status_)
     status_->SetText(std::move(text));
 }
@@ -3485,47 +3518,49 @@ void FlyWindowController::ToggleDownloads(BrowserWindowInterface* browser) {
       true);
 }
 void FlyWindowController::ShowDiagnostics() {
-  if (closing_)
+  if (closing_ || !diagnostics_hub_)
     return;
-  if (diagnostics_widget_ && !diagnostics_widget_->IsClosed()) {
-    diagnostics_widget_->Close();
-    return;
+  hints_->Cancel();
+  palette_->Cancel();
+  keyboard_editor_->Cancel();
+  diagnostics_hub_->Toggle();
+}
+DiagnosticsSession FlyWindowController::CurrentDiagnostics() {
+  DiagnosticsSession session;
+  if (const auto catalog = workspaces_.Read()) {
+    session.workspaces = catalog->items.size();
+    for (const auto& item : catalog->items)
+      if (item.id == catalog->active_id)
+        session.active_workspace = base::UTF8ToUTF16(item.name);
   }
-  diagnostics_widget_.reset();
-  size_t workspaces = 0;
-  if (const auto catalog = workspaces_.Read())
-    workspaces = catalog->items.size();
-  const auto report = DiagnosticsReport(workspaces, diagnostics_events_);
-  diagnostics_delegate_ = std::make_unique<views::DialogDelegate>();
-  auto* delegate = diagnostics_delegate_.get();
-  delegate->SetOwnershipOfNewWidget(
-      views::Widget::InitParams::CLIENT_OWNS_WIDGET);
-  delegate->SetModalType(ui::mojom::ModalType::kWindow);
-  delegate->SetTitle(u"Fly diagnostics");
-  delegate->SetButtonLabel(ui::mojom::DialogButton::kOk, u"Copy report");
-  delegate->SetButtonLabel(ui::mojom::DialogButton::kCancel, u"Close");
-  delegate->SetExtraView(std::make_unique<FlyButton>(
-      base::BindRepeating(
-          [](base::WeakPtr<FlyWindowController> window) {
-            if (window && window->selected_)
-              chrome::OpenTaskManager(window->selected_);
-          },
-          weak_factory_.GetWeakPtr()),
-      u"Task Manager"));
-  auto* label = delegate->SetContentsView(std::make_unique<views::Label>(report));
-  label->SetMultiLine(true);
-  label->SetHorizontalAlignment(gfx::ALIGN_LEFT);
-  label->SetSelectable(true);
-  label->SetBorder(views::CreateEmptyBorder(gfx::Insets(16)));
-  delegate->SetAcceptCallback(base::BindOnce(
-      [](std::u16string report) {
-        ui::ScopedClipboardWriter(ui::ClipboardBuffer::kCopyPaste)
-            .WriteText(report);
-      },
-      report));
-  diagnostics_widget_.reset(views::DialogDelegate::CreateDialogWidget(
-      delegate, desktop_->GetNativeWindow(), desktop_->GetNativeView()));
-  diagnostics_widget_->Show();
+  for (const auto& [browser, entry] : entries_) {
+    if (entry.browser_closed)
+      continue;
+    auto* model = browser->GetTabStripModel();
+    for (int i = 0; i < model->count(); ++i) {
+      auto* contents = model->GetWebContentsAt(i);
+      ++session.tabs;
+      if (NativeTabSuspensionRequested(contents))
+        ++session.suspended;
+      else if (!contents->WasDiscarded())
+        ++session.loaded;
+    }
+  }
+  session.recording =
+      preferences_.ReadBool("enable_diagnostics").value_or(false);
+  session.events = diagnostics_events_;
+  return session;
+}
+void FlyWindowController::RecordDiagnostic(std::string level,
+                                           std::string category,
+                                           std::u16string message) {
+  if (!preferences_.ReadBool("enable_diagnostics").value_or(false))
+    return;
+  diagnostics_events_.push_back(
+      {base::Time::Now(), std::move(level), std::move(category),
+       std::move(message)});
+  if (diagnostics_events_.size() > 500)
+    diagnostics_events_.erase(diagnostics_events_.begin());
 }
 void FlyWindowController::CheckUpdates(bool manual) {
   if (manual)
@@ -4291,6 +4326,7 @@ void FlyWindowController::InstallUpdate() {
               return;
             window->update_installing_ = false;
             if (!error.empty()) {
+              window->RecordDiagnostic("error", "update", error);
               window->keyboard_editor_->SetUpdateStatus(
                   u"Update failed: " + error, window->update_.latest);
               window->ShowStatus(u"Update failed: " + error);

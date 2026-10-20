@@ -3717,15 +3717,23 @@ IN_PROC_BROWSER_TEST_F(FlyWorkspaceBrowserTest,
   picker.Cancel(true);
   ASSERT_TRUE(
       base::test::RunUntil([&] { return !picker.search_for_testing(); }));
+  // Electron's Diagnostics & Health Hub: system, processes, log and report.
   ASSERT_TRUE(InvokeNativeCommand(browser(), "open-diagnostics"));
-  auto* dialog = window.diagnostics_dialog_for_testing();
-  ASSERT_TRUE(dialog);
-  EXPECT_TRUE(dialog->IsVisible());
+  auto* hub = window.diagnostics_hub_for_testing();
+  ASSERT_TRUE(hub && hub->active());
+  ASSERT_TRUE(base::test::RunUntil(
+      [&] { return hub->has_snapshot_for_testing(); }));
+  EXPECT_NE(std::u16string::npos,
+            hub->tab_text_for_testing().find(u"Chromium Engine"));
+  hub->SelectTabForTesting(1);
+  EXPECT_NE(std::u16string::npos, hub->tab_text_for_testing().find(u"Renderer"));
+  hub->SelectTabForTesting(2);
+  EXPECT_NE(std::u16string::npos,
+            hub->tab_text_for_testing().find(u"CURRENTLY DISABLED"));
+  const auto report = hub->MarkdownReport();
+  EXPECT_NE(std::string::npos, report.find("### Fly Browser Diagnostic Report"));
   ASSERT_TRUE(InvokeNativeCommand(browser(), "open-diagnostics"));
-  ASSERT_TRUE(base::test::RunUntil([&] {
-    auto* current = window.diagnostics_dialog_for_testing();
-    return !current || current->IsClosed();
-  }));
+  EXPECT_FALSE(hub->active());
 }
 
 // Electron's dashboard: each workspace with its tabs (pinned marked) and

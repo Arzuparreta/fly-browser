@@ -21,6 +21,7 @@
 #include "fly/commands/command_service.h"
 #include "fly/commands/palette_catalog.h"
 #include "fly/preferences/preferences_service.h"
+#include "fly/ui/diagnostics_hub.h"
 #include "fly/ui/fly_actions.h"
 #include "fly/ui/history_service.h"
 #include "fly/ui/site_zoom.h"
@@ -147,8 +148,8 @@ class FlyWindowController : public views::WidgetDelegate,
   UserContentService& user_content() { return *user_content_; }
   CommandPalette& extensions_picker() { return *extensions_picker_; }
   views::View* extension_actions_for_testing() const;
-  views::Widget* diagnostics_dialog_for_testing() const {
-    return diagnostics_widget_.get();
+  DiagnosticsHub* diagnostics_hub_for_testing() const {
+    return diagnostics_hub_.get();
   }
   // Fly status line (footer mode badge), also kept in the in-memory
   // diagnostics log while recording is enabled.
@@ -350,9 +351,12 @@ class FlyWindowController : public views::WidgetDelegate,
   bool legacy_import_loading_ = false;
   scoped_refptr<base::SequencedTaskRunner> legacy_import_writer_;
   std::vector<base::WeakPtr<BrowserWindowInterface>> legacy_import_waiting_;
-  std::unique_ptr<views::DialogDelegate> diagnostics_delegate_;
-  std::unique_ptr<views::Widget> diagnostics_widget_;
-  std::vector<std::u16string> diagnostics_events_;
+  std::unique_ptr<DiagnosticsHub> diagnostics_hub_;
+  std::vector<DiagnosticEvent> diagnostics_events_;
+  DiagnosticsSession CurrentDiagnostics();
+  void RecordDiagnostic(std::string level,
+                        std::string category,
+                        std::u16string message);
   std::optional<std::string> applied_profile_preferences_;
   bool whats_new_checked_ = false;
   bool update_checked_ = false;
