@@ -351,7 +351,10 @@ void ApplyProfilePreferences(Profile* profile,
                              const PreferencesService& preferences) {
   if (!profile)
     return;
-  if (const auto notifications = preferences.ReadBool("web_notifications")) {
+  // Only settings chosen in Fly are written: otherwise Chromium's own
+  // per-profile choices (chrome://settings) stay as they are.
+  if (const auto notifications = preferences.ReadBool("web_notifications");
+      notifications && preferences.HasStoredValue("web_notifications")) {
     if (auto* map = HostContentSettingsMapFactory::GetForProfile(profile)) {
       map->SetDefaultContentSetting(
           ContentSettingsType::NOTIFICATIONS,
@@ -360,7 +363,8 @@ void ApplyProfilePreferences(Profile* profile,
   }
   if (profile->IsOffTheRecord())
     return;
-  if (const auto language = preferences.ReadString("spellchecker_language")) {
+  if (const auto language = preferences.ReadString("spellchecker_language");
+      language && preferences.HasStoredValue("spellchecker_language")) {
     auto* prefs = profile->GetPrefs();
     const bool enabled = !language->empty() && *language != "disabled" &&
                          *language != "none";

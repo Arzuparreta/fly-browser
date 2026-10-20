@@ -12,6 +12,14 @@
 #include "fly/ui/command_palette.h"
 #include "fly/ui/fly_theme.h"
 #include "fly/ui/fly_actions.h"
+#include "fly/ui/fly_extensions.h"
+#include "fly/ui/user_content.h"
+#include "ui/gfx/canvas.h"
+#include "ui/gfx/text_utils.h"
+#include "cc/paint/paint_flags.h"
+#include "extensions/common/extension.h"
+#include "ui/gfx/image/image_skia_operations.h"
+#include "skia/ext/image_operations.h"
 #include "base/version.h"
 #include "base/strings/stringprintf.h"
 #include "base/command_line.h"
@@ -382,6 +390,9 @@ FlyWindowController::FlyWindowController()
                                        weak_factory_.GetWeakPtr()),
       .clock = base::BindRepeating(&FlyWindowController::CycleClockFormat,
                                    weak_factory_.GetWeakPtr()),
+      .contents_changed = base::BindRepeating(
+          &FlyWindowController::ScheduleExtensionRefresh,
+          weak_factory_.GetWeakPtr()),
   }));
   status_ = status_bar_->mode_label();
   layout->SetFlexForView(column, 1);
@@ -546,6 +557,26 @@ FlyWindowController::FlyWindowController()
                   DownloadEntries(window->WorkspaceProfiles()), true);
           },
           weak_factory_.GetWeakPtr()));
+  extensions_ = std::make_unique<FlyExtensions>(
+      preferences_,
+      base::BindRepeating(&FlyWindowController::ScheduleExtensionRefresh,
+                          weak_factory_.GetWeakPtr()),
+      base::BindRepeating(&FlyWindowController::ShowStatus,
+                          weak_factory_.GetWeakPtr()));
+  user_content_ = std::make_unique<UserContentService>(base::BindRepeating(
+      &FlyWindowController::ShowStatus, weak_factory_.GetWeakPtr()));
+  extensions_picker_ = std::make_unique<CommandPalette>(
+      desktop_.get(),
+      base::BindRepeating(
+          [](base::WeakPtr<FlyWindowController> window,
+             std::string_view action) {
+            return window && !window->closing_ &&
+                   (action.starts_with("extension:") ||
+                    action.starts_with("extensions-"));
+          },
+          weak_factory_.GetWeakPtr()),
+      base::BindRepeating(&FlyWindowController::ChooseExtensionAction,
+                          weak_factory_.GetWeakPtr()));
   settings_menu_ = std::make_unique<SettingsMenu>(
       preferences_,
       base::BindRepeating(
@@ -562,6 +593,9 @@ FlyWindowController::FlyWindowController()
           },
           weak_factory_.GetWeakPtr()));
   using Layout = PaletteStyle::Layout;
+  extensions_picker_->SetStyle(
+      {Layout::kCentre, u"Extensions", u"Actions of this workspace's extensions",
+       560});
   downloads_picker_->SetStyle(
       {Layout::kCentre, u"Downloads",
        u"Enter opens, pauses or resumes. Remove cancels or clears.", 640});
@@ -590,6 +624,14 @@ FlyWindowController::FlyWindowController()
   keyboard_editor_ =
       std::make_unique<KeyboardEditor>(desktop_.get(), commands_,
                                        *g_browser_process->local_state());
+  keyboard_editor_->SetExtensions(
+      extensions_.get(),
+      base::BindRepeating(
+          [](base::WeakPtr<FlyWindowController> window)
+              -> BrowserWindowInterface* {
+            return window ? window->selected_.get() : nullptr;
+          },
+          weak_factory_.GetWeakPtr()));
   desktop_->AddObserver(this);
   desktop_->GetFocusManager()->AddFocusChangeListener(this);
   observing_sidebar_focus_ = true;
@@ -623,9 +665,14 @@ FlyWindowController::~FlyWindowController() {
   tab_move_.reset();
   tab_move_picker_.reset();
   downloads_picker_.reset();
+  extensions_picker_.reset();
   if (settings_menu_)
     settings_menu_->Cancel();
   settings_menu_.reset();
+  if (keyboard_editor_)
+    keyboard_editor_->SetExtensions(nullptr, {});
+  extensions_.reset();
+  user_content_.reset();
   diagnostics_widget_.reset();
   diagnostics_delegate_.reset();
   workspace_close_.reset();
@@ -1164,6 +1211,7 @@ bool FlyWindowController::SidebarOverlayBlocked() const {
          (workspace_picker_ && workspace_picker_->active()) ||
          (tab_move_picker_ && tab_move_picker_->active()) ||
          (downloads_picker_ && downloads_picker_->active()) ||
+         (extensions_picker_ && extensions_picker_->active()) ||
          (bookmark_picker_ && bookmark_picker_->active()) ||
          (history_picker_ && history_picker_->active()) ||
          (keyboard_editor_ && keyboard_editor_->active()) ||
@@ -1628,6 +1676,10 @@ void FlyWindowController::Prepare(BrowserWindowInterface* browser) {
       browser->RegisterBrowserDidClose(base::BindRepeating(
           &FlyWindowController::OnBrowserDidClose, weak_factory_.GetWeakPtr()));
   ApplyProfilePreferences(browser->GetProfile(), preferences_);
+  if (!browser->GetProfile()->IsOffTheRecord()) {
+    extensions_->AddProfile(browser->GetProfile());
+    user_content_->AddProfile(browser->GetProfile());
+  }
   ScheduleWorkspaceRefresh();
 }
 
@@ -1668,6 +1720,7 @@ void FlyWindowController::Select(BrowserWindowInterface* browser, bool focus) {
     tab_move_picker_->Cancel();
     bookmark_picker_->Cancel();
     downloads_picker_->Cancel();
+    extensions_picker_->Cancel();
     settings_menu_->Cancel();
     CancelHistory();
     keyboard_editor_->Cancel();
@@ -1686,6 +1739,7 @@ void FlyWindowController::Select(BrowserWindowInterface* browser, bool focus) {
     }
     status_bar_->SetBrowser(browser, std::move(workspace_name));
     UpdateWorkspaceHeader();
+    ScheduleExtensionRefresh();
     // Browser tests run without network access to the release feed and
     // assert that starting writes no product preference.
     if (!update_checked_ &&
@@ -3180,7 +3234,7 @@ void FlyWindowController::ShowDiagnostics() {
       },
       report));
   diagnostics_widget_.reset(views::DialogDelegate::CreateDialogWidget(
-      delegate, desktop_->GetNativeWindow(), nullptr));
+      delegate, desktop_->GetNativeWindow(), desktop_->GetNativeView()));
   diagnostics_widget_->Show();
 }
 void FlyWindowController::CheckUpdates(bool manual) {
@@ -3251,6 +3305,14 @@ bool FlyWindowController::RunProductAction(BrowserWindowInterface* browser,
     auto point = desktop_->GetContentsView()->GetBoundsInScreen().origin();
     point.Offset(14, 14);
     settings_menu_->Show(desktop_.get(), point);
+    return true;
+  }
+  if (action == "reload-user-content") {
+    user_content_->Reload();
+    return true;
+  }
+  if (action == "open-extension-actions") {
+    ToggleExtensionActions(browser);
     return true;
   }
   if (action == "open-task-manager") {
@@ -3326,5 +3388,158 @@ bool FlyWindowController::RunProductAction(BrowserWindowInterface* browser,
     return true;
   }
   return false;
+}
+
+namespace {
+// Footer extension action: icon with the action's badge text.
+class ExtensionActionButton : public FlyButton {
+  METADATA_HEADER(ExtensionActionButton, FlyButton)
+
+ public:
+  ExtensionActionButton(PressedCallback callback,
+                        std::string id,
+                        const gfx::Image& icon,
+                        std::u16string title,
+                        std::string badge)
+      : FlyButton(std::move(callback), u""), id_(std::move(id)),
+        badge_(std::move(badge)) {
+    SetCustomPadding(gfx::Insets());
+    SetPreferredSize(gfx::Size(20, 18));
+    SetHorizontalAlignment(gfx::ALIGN_CENTER);
+    if (!icon.IsEmpty())
+      views::LabelButton::SetImageModel(
+          STATE_NORMAL,
+          ui::ImageModel::FromImageSkia(
+              gfx::ImageSkiaOperations::CreateResizedImage(
+                  icon.AsImageSkia(), skia::ImageOperations::RESIZE_BEST,
+                  gfx::Size(14, 14))));
+    SetTooltipText(title);
+    GetViewAccessibility().SetName(title);
+  }
+  const std::string& id() const { return id_; }
+  void PaintButtonContents(gfx::Canvas* canvas) override {
+    FlyButton::PaintButtonContents(canvas);
+    if (badge_.empty())
+      return;
+    const auto text = base::UTF8ToUTF16(badge_.substr(0, 4));
+    const auto font = FlyFont(FlyFace::kMono, 7, gfx::Font::Weight::BOLD);
+    const int width = std::min(this->width(), gfx::GetStringWidth(text, font) + 4);
+    const gfx::Rect box(this->width() - width, height() - 9, width, 9);
+    cc::PaintFlags flags;
+    flags.setAntiAlias(true);
+    flags.setColor(GetFlyColors().accent);
+    canvas->DrawRoundRect(gfx::RectF(box), 2, flags);
+    canvas->DrawStringRectWithFlags(text, font, SK_ColorWHITE, box,
+                                    gfx::Canvas::TEXT_ALIGN_CENTER);
+  }
+
+ private:
+  const std::string id_;
+  const std::string badge_;
+};
+BEGIN_METADATA(ExtensionActionButton)
+END_METADATA
+}  // namespace
+
+views::View* FlyWindowController::extension_actions_for_testing() const {
+  return status_bar_ ? status_bar_->extensions_container() : nullptr;
+}
+void FlyWindowController::ScheduleExtensionRefresh() {
+  if (extension_refresh_pending_ || closing_)
+    return;
+  extension_refresh_pending_ = true;
+  base::SingleThreadTaskRunner::GetCurrentDefault()->PostTask(
+      FROM_HERE, base::BindOnce(
+                     [](base::WeakPtr<FlyWindowController> window) {
+                       if (window) {
+                         window->extension_refresh_pending_ = false;
+                         window->RefreshExtensionActions();
+                       }
+                     },
+                     weak_factory_.GetWeakPtr()));
+}
+void FlyWindowController::RefreshExtensionActions() {
+  if (closing_ || !status_bar_ || !extensions_)
+    return;
+  auto* container = status_bar_->extensions_container();
+  // Buttons may be the target of the click that led here: rebuild only after
+  // the input has been dispatched (this runs from a posted task).
+  container->RemoveAllChildViews();
+  if (!selected_)
+    return;
+  auto* contents = selected_->GetTabStripModel()->GetActiveWebContents();
+  for (const auto* extension :
+       extensions_->ActionExtensions(selected_->GetProfile())) {
+    const std::string id = extension->id();
+    container->AddChildView(std::make_unique<ExtensionActionButton>(
+        base::BindRepeating(
+            [](base::WeakPtr<FlyWindowController> window, std::string id) {
+              if (!window || !window->selected_ || window->closing_)
+                return;
+              for (const auto& child :
+                   window->status_bar_->extensions_container()->children()) {
+                auto* button =
+                    views::AsViewClass<ExtensionActionButton>(child.get());
+                if (button && button->id() == id) {
+                  window->extensions_->RunAction(window->selected_, id,
+                                                 button);
+                  return;
+                }
+              }
+            },
+            weak_factory_.GetWeakPtr(), id),
+        id, extensions_->ActionIcon(contents, *extension),
+        extensions_->ActionTitle(contents, *extension),
+        extensions_->ActionBadge(contents, *extension)));
+  }
+  container->InvalidateLayout();
+  status_bar_->InvalidateLayout();
+}
+void FlyWindowController::ToggleExtensionActions(
+    BrowserWindowInterface* browser) {
+  if (closing_)
+    return;
+  hints_->Cancel();
+  palette_->Cancel();
+  address_picker_->Cancel();
+  workspace_picker_->Cancel();
+  tab_move_picker_->Cancel();
+  bookmark_picker_->Cancel();
+  downloads_picker_->Cancel();
+  CancelHistory();
+  keyboard_editor_->Cancel();
+  const auto config = commands_.Read().value_or(DefaultKeyboardConfig());
+  extensions_picker_->ToggleItems(
+      browser->GetTabStripModel()->GetActiveWebContents(),
+      extensions_->ActionEntries(browser->GetProfile()),
+      config.shortcuts.at("open-extension-actions"), u"Search extensions",
+      false, true);
+}
+void FlyWindowController::ChooseExtensionAction(content::WebContents*,
+                                                std::string action) {
+  if (closing_ || !selected_)
+    return;
+  if (action == "extensions-settings") {
+    InvokeNativeCommand(selected_, "toggle-help");
+    keyboard_editor_->ShowExtensions();
+    return;
+  }
+  if (action == "extensions-page" || action == "extensions-store") {
+    OpenInNewTab(GURL(action == "extensions-page"
+                          ? "chrome://extensions/"
+                          : "https://chromewebstore.google.com/"));
+    return;
+  }
+  const std::string id = action.substr(std::string_view("extension:").size());
+  views::View* anchor = status_bar_;
+  if (status_bar_ && status_bar_->GetVisible()) {
+    for (const auto& child : status_bar_->extensions_container()->children())
+      if (auto* button = views::AsViewClass<ExtensionActionButton>(child.get());
+          button && button->id() == id)
+        anchor = button;
+  } else {
+    anchor = desktop_->GetContentsView();
+  }
+  extensions_->RunAction(selected_, id, anchor);
 }
 }  // namespace fly

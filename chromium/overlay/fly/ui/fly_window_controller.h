@@ -56,6 +56,8 @@ namespace fly {
 class CommandPalette;
 class BookmarkService;
 class SettingsMenu;
+class FlyExtensions;
+class UserContentService;
 class FlyButton;
 class FlyLabel;
 class StatusBar;
@@ -134,6 +136,10 @@ class FlyWindowController : public views::WidgetDelegate,
   CommandPalette& tab_move_picker() { return *tab_move_picker_; }
   CommandPalette& downloads_picker() { return *downloads_picker_; }
   SettingsMenu& settings_menu() { return *settings_menu_; }
+  FlyExtensions& extensions() { return *extensions_; }
+  UserContentService& user_content() { return *user_content_; }
+  CommandPalette& extensions_picker() { return *extensions_picker_; }
+  views::View* extension_actions_for_testing() const;
   views::Widget* diagnostics_dialog_for_testing() const {
     return diagnostics_widget_.get();
   }
@@ -237,6 +243,10 @@ class FlyWindowController : public views::WidgetDelegate,
   void MaybeShowWhatsNew();
   void OpenInNewTab(GURL url);
   void ApplyProfilePreferencesEverywhere();
+  void ScheduleExtensionRefresh();
+  void RefreshExtensionActions();
+  void ToggleExtensionActions(BrowserWindowInterface* browser);
+  void ChooseExtensionAction(content::WebContents* source, std::string action);
   void RemoveBookmark(content::WebContents* source, std::string url);
   void UpdateClock();
   void UpdateWorkspaceHeader();
@@ -283,6 +293,10 @@ class FlyWindowController : public views::WidgetDelegate,
   std::unique_ptr<CommandPalette> tab_move_picker_;
   std::unique_ptr<CommandPalette> downloads_picker_;
   std::unique_ptr<SettingsMenu> settings_menu_;
+  std::unique_ptr<FlyExtensions> extensions_;
+  std::unique_ptr<UserContentService> user_content_;
+  std::unique_ptr<CommandPalette> extensions_picker_;
+  bool extension_refresh_pending_ = false;
   std::unique_ptr<views::DialogDelegate> diagnostics_delegate_;
   std::unique_ptr<views::Widget> diagnostics_widget_;
   std::vector<std::u16string> diagnostics_events_;

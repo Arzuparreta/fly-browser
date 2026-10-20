@@ -57,7 +57,7 @@ A native upstream route alone does not establish Fly UX parity.
 | `swap-split-panes` | partial | Native split API routed; both-pane visibility/basic focus tested. All orientations/input paths, layout restore and platform acceptance remain pending. |
 | `toggle-reader-view` | partial | Chromium DOM distiller in place, following the Fly theme; toggling returns to the article. Electron's own reader styles are not reproduced. |
 | `toggle-pin-tab` | partial | Native pinned state and close protection tested; complete input-path acceptance remains pending. |
-| `open-extension-actions` | pending | No native Fly action implementation yet. |
+| `open-extension-actions` | partial | Picker of the workspace's extension actions (popups anchored to their footer buttons), extension settings, `chrome://extensions` and the Chrome Web Store. |
 | `toggle-window-controls` | partial | Three owned Xvfb/Openbox desktop cases and all 62 services pass at ee16406; full-suite/platform acceptance remains pending. |
 | `reset-zoom` | partial | Native profile zoom routed; shared hostname zoom contract remains pending. |
 | `toggle-sidebar-pin` | partial | Native button, command and live settings share persistent pinning; full product/platform acceptance remains pending. |
@@ -66,10 +66,10 @@ A native upstream route alone does not establish Fly UX parity.
 | `close-split-view` | partial | Native split API routed; both-pane visibility/basic focus tested. All orientations/input paths, layout restore and platform acceptance remain pending. |
 | `hibernate-tabs` | partial | Native retained freeze/resume and protected cases tested; remaining lifecycle/platform acceptance pending. |
 | `wake-all-tabs` | partial | Native workspace-scoped resume tested; remaining lifecycle/platform acceptance pending. |
-| `open-scripts-dir` | partial | Opens `<user data>/scripts`; script injection lands with the user content block. |
-| `open-styles-dir` | partial | Opens `<user data>/styles`; style injection lands with the user content block. |
+| `open-scripts-dir` | partial | Opens `<user data>/scripts`; files there run through Fly User Content. |
+| `open-styles-dir` | partial | Opens `<user data>/styles`; files there run through Fly User Content. |
 | `open-script-storage-dir` | partial | Opens `<user data>/script-storage`. |
-| `reload-user-content` | pending | No native Fly action implementation yet. |
+| `reload-user-content` | partial | Rereads scripts/styles and reloads Fly User Content in every workspace; folder edits also reload automatically. |
 | `test-google-signin` | partial | Opens Google sign-in in a fresh off-the-record profile. |
 | `toggle-theme` | partial | Native light/dark and website synchronization tested; custom palette remains pending. |
 | `check-for-updates` | partial | Checks the latest GitHub release at start and on demand; a newer release is announced and opened on demand. No in-place install yet. |
@@ -140,12 +140,12 @@ declared supported because Chromium has a related global flag or policy.
 | `custom_search_aliases` | partial | Twelve built-ins, custom override/edit/removal and native settings; recovery/policy/encoding service cases pass. UI, import and platform acceptance remain incomplete. |
 | `last_seen_version` | partial | Written on the first start of a version; an upgrade opens What's New. |
 | `desktop_integration_offered` | pending | Fly setting/import/UI behavior not implemented yet. |
-| `extensions_enabled` | pending | Fly setting/import/UI behavior not implemented yet. |
-| `extensions_by_workspace` | pending | Fly setting/import/UI behavior not implemented yet. |
-| `extensions_bundled` | pending | Fly setting/import/UI behavior not implemented yet. |
-| `extensions_disabled` | pending | Fly setting/import/UI behavior not implemented yet. |
-| `extensions_unload_grace_seconds` | pending | Fly setting/import/UI behavior not implemented yet. |
-| `extensions_sources` | pending | Fly setting/import/UI behavior not implemented yet. |
+| `extensions_enabled` | partial | Global switch (Preferences → Extensions): off unloads bundled extensions and suspends the user's own, restoring exactly those. |
+| `extensions_by_workspace` | partial | Each workspace is a Chromium profile, so installed extensions are per workspace natively; the bundled blocker can be switched off per workspace. Electron selections still need import. |
+| `extensions_bundled` | partial | uBlock Origin Lite (MV3, pinned in `chromium/bundled-extensions.json`) replaces the MV2 uBlock Origin Chromium no longer runs; loaded as a Fly component with its Web Store identity. Removal is remembered. |
+| `extensions_disabled` | partial | Disabling uses Chromium's own per-profile state; bundled switches are stored by Fly. Import from Electron pending. |
+| `extensions_unload_grace_seconds` | not applicable | Chromium suspends MV3 service workers itself; nothing to configure. Kept for import. |
+| `extensions_sources` | partial | Store installs come from the Chrome Web Store with Chromium's updater; local packages through `chrome://extensions`. |
 
 ## Completion gates
 

@@ -3,6 +3,11 @@
 // Fly repository.
 #include "fly/ui/keyboard_editor.h"
 #include "fly/ui/fly_theme.h"
+#include "fly/ui/fly_extensions.h"
+#include "chrome/browser/profiles/profile.h"
+#include "chrome/browser/ui/browser_window/public/browser_window_interface.h"
+#include "chrome/browser/ui/navigator/browser_navigator.h"
+#include "chrome/browser/ui/navigator/browser_navigator_params.h"
 
 #include <limits>
 
@@ -293,6 +298,7 @@ void KeyboardEditor::Toggle(content::WebContents* contents) {
       u"Close"));
   root->AddChildView(std::move(panel));
   BuildSearchSection();
+  BuildExtensionsSection();
   overlay_->SetContentsView(std::move(root));
   RefreshAppearance();
   Refresh();
@@ -405,6 +411,154 @@ void KeyboardEditor::ShowAppearance(bool return_to_page) {
   sections_->SelectTabAt(0, false);
   appearance_.at("theme")->RequestFocus();
 }
+void KeyboardEditor::SetExtensions(
+    FlyExtensions* extensions,
+    base::RepeatingCallback<BrowserWindowInterface*()> browser) {
+  extensions_ = extensions;
+  extensions_browser_ = std::move(browser);
+}
+void KeyboardEditor::ShowExtensions() {
+  if (!active() || !extensions_list_)
+    return;
+  StopRecording();
+  sections_->SelectTabAt(4, false);
+  extensions_enabled_->RequestFocus();
+}
+void KeyboardEditor::BuildExtensionsSection() {
+  if (!extensions_)
+    return;
+  auto* scroll =
+      sections_->AddTab(u"Extensions", std::make_unique<views::ScrollView>());
+  scroll->SetHorizontalScrollBarMode(
+      views::ScrollView::ScrollBarMode::kDisabled);
+  scroll->ClipHeightTo(0, std::numeric_limits<int>::max());
+  auto* panel = scroll->SetContents(std::make_unique<views::View>());
+  panel->SetLayoutManager(std::make_unique<views::BoxLayout>(
+      views::BoxLayout::Orientation::kVertical, gfx::Insets(12), 8));
+  extensions_enabled_ = panel->AddChildView(std::make_unique<views::Checkbox>(
+      u"Enable Chrome extensions",
+      base::BindRepeating(
+          [](base::WeakPtr<KeyboardEditor> editor) {
+            if (!editor || !editor->active())
+              return;
+            editor->extensions_->SetEnabled(
+                editor->extensions_enabled_->GetChecked());
+            editor->RefreshExtensions();
+          },
+          weak_factory_.GetWeakPtr())));
+  panel->AddChildView(std::make_unique<views::Label>(
+      u"Extensions belong to the current workspace. Included uBlock Origin "
+      u"Lite runs in every workspace unless switched off here; Remove takes "
+      u"it out of all workspaces."))->SetMultiLine(true);
+  extensions_list_ = panel->AddChildView(std::make_unique<views::View>());
+  extensions_list_->SetLayoutManager(std::make_unique<views::BoxLayout>(
+      views::BoxLayout::Orientation::kVertical, gfx::Insets(), 6));
+  auto* buttons = panel->AddChildView(std::make_unique<views::View>());
+  buttons->SetLayoutManager(std::make_unique<views::BoxLayout>(
+      views::BoxLayout::Orientation::kHorizontal, gfx::Insets(), 8));
+  for (const auto& [label, url] :
+       {std::pair{u"Browse Chrome Web Store", "https://chromewebstore.google.com/"},
+        std::pair{u"Manage in chrome://extensions", "chrome://extensions/"}}) {
+    buttons->AddChildView(std::make_unique<FlyButton>(
+        base::BindRepeating(
+            [](base::WeakPtr<KeyboardEditor> editor, std::string url) {
+              if (!editor || !editor->active() || !editor->extensions_browser_)
+                return;
+              auto* browser = editor->extensions_browser_.Run();
+              editor->Cancel(true);
+              if (!browser)
+                return;
+              NavigateParams params(browser, GURL(url),
+                                    ui::PAGE_TRANSITION_AUTO_TOPLEVEL);
+              params.disposition = WindowOpenDisposition::NEW_FOREGROUND_TAB;
+              Navigate(&params);
+            },
+            weak_factory_.GetWeakPtr(), std::string(url)),
+        label));
+  }
+  RefreshExtensions();
+}
+void KeyboardEditor::RefreshExtensions() {
+  if (!extensions_list_ || !extensions_)
+    return;
+  auto* browser = extensions_browser_ ? extensions_browser_.Run() : nullptr;
+  Profile* profile = browser ? browser->GetProfile() : nullptr;
+  extensions_enabled_->SetChecked(extensions_->Enabled());
+  extensions_enabled_->SetEnabled(extensions_->CanEdit());
+  // Rows are rebuilt detached and attached once (see Refresh()).
+  auto rows = std::make_unique<views::View>();
+  rows->SetLayoutManager(std::make_unique<views::BoxLayout>(
+      views::BoxLayout::Orientation::kVertical, gfx::Insets(), 6));
+  if (!profile || profile->IsOffTheRecord()) {
+    rows->AddChildView(std::make_unique<views::Label>(
+        u"Private workspaces run no extensions."));
+  }
+  const auto list = profile && !profile->IsOffTheRecord()
+                        ? extensions_->List(profile)
+                        : std::vector<FlyExtensionInfo>();
+  if (profile && !profile->IsOffTheRecord() && list.empty())
+    rows->AddChildView(
+        std::make_unique<views::Label>(u"No extensions in this workspace."));
+  for (const auto& info : list) {
+    auto* row = rows->AddChildView(std::make_unique<views::View>());
+    auto* layout = row->SetLayoutManager(std::make_unique<views::BoxLayout>(
+        views::BoxLayout::Orientation::kHorizontal, gfx::Insets(), 8));
+    layout->set_cross_axis_alignment(
+        views::BoxLayout::CrossAxisAlignment::kCenter);
+    auto* enabled = row->AddChildView(std::make_unique<views::Checkbox>(
+        info.name + u"  " + base::UTF8ToUTF16(info.version) +
+        (info.bundled ? u"  (included)" : u"")));
+    enabled->SetChecked(info.enabled);
+    enabled->SetEnabled(info.removable && extensions_->Enabled());
+    enabled->SetCallback(base::BindRepeating(
+        [](base::WeakPtr<KeyboardEditor> editor, std::string id,
+           views::Checkbox* box) {
+          if (!editor || !editor->active() || !editor->extensions_browser_)
+            return;
+          auto* browser = editor->extensions_browser_.Run();
+          if (browser)
+            editor->extensions_->SetExtensionEnabled(browser->GetProfile(), id,
+                                                     box->GetChecked());
+          base::SingleThreadTaskRunner::GetCurrentDefault()->PostTask(
+              FROM_HERE, base::BindOnce(&KeyboardEditor::RefreshExtensions,
+                                        editor));
+        },
+        weak_factory_.GetWeakPtr(), info.id, enabled));
+    layout->SetFlexForView(enabled, 1);
+    if (info.has_options) {
+      row->AddChildView(std::make_unique<FlyButton>(
+          base::BindRepeating(
+              [](base::WeakPtr<KeyboardEditor> editor, std::string id) {
+                if (!editor || !editor->active() || !editor->extensions_browser_)
+                  return;
+                auto* browser = editor->extensions_browser_.Run();
+                editor->Cancel(true);
+                editor->extensions_->OpenOptions(browser, id);
+              },
+              weak_factory_.GetWeakPtr(), info.id),
+          u"Options"));
+    }
+    auto* remove = row->AddChildView(std::make_unique<FlyButton>(
+        base::BindRepeating(
+            [](base::WeakPtr<KeyboardEditor> editor, std::string id) {
+              if (!editor || !editor->active() || !editor->extensions_browser_)
+                return;
+              if (auto* browser = editor->extensions_browser_.Run())
+                editor->extensions_->Remove(browser->GetProfile(), id);
+              base::SingleThreadTaskRunner::GetCurrentDefault()->PostTask(
+                  FROM_HERE, base::BindOnce(&KeyboardEditor::RefreshExtensions,
+                                            editor));
+            },
+            weak_factory_.GetWeakPtr(), info.id),
+        u"Remove"));
+    remove->SetEnabled(info.removable);
+  }
+  auto* parent = extensions_list_->parent();
+  const size_t index = parent->GetIndexOf(extensions_list_).value();
+  auto old = parent->RemoveChildViewT(extensions_list_.get());
+  extensions_list_ = parent->AddChildViewAt(std::move(rows), index);
+  parent->InvalidateLayout();
+}
 void KeyboardEditor::ShowPerformance() {
   if (!active())
     return;
@@ -426,6 +580,8 @@ void KeyboardEditor::ClearAppearance() {
   search_settings_status_ = nullptr;
   alias_list_ = nullptr;
   appearance_.clear();
+  extensions_list_ = nullptr;
+  extensions_enabled_ = nullptr;
   color_fields_.clear();
   spellcheck_ = nullptr;
   process_limit_ = nullptr;

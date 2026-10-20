@@ -33,7 +33,9 @@ class MdTextButton;
 class Checkbox;
 class TabbedPane;
 }  // namespace views
+class BrowserWindowInterface;
 namespace fly {
+class FlyExtensions;
 // Browser-owned editor. Drafts and recording stay in memory until the shared
 // command service validates one complete transaction. The modal surface routes
 // recorder keys before page/browser commands, without changing page visibility.
@@ -49,6 +51,10 @@ class KeyboardEditor : public views::TextfieldController,
   void Cancel(bool restore_focus = false);
   // Pointer settings buttons return to the page when the surface closes.
   void ShowAppearance(bool return_to_page = false);
+  void ShowExtensions();
+  // Extension management for the selected workspace (Extensions tab).
+  void SetExtensions(FlyExtensions* extensions,
+                     base::RepeatingCallback<BrowserWindowInterface*()> browser);
   void ShowPerformance();
   void ShowSearch();
   views::Textfield* search_setting_for_testing(std::string_view key);
@@ -128,6 +134,12 @@ class KeyboardEditor : public views::TextfieldController,
   raw_ptr<views::View> rows_ = nullptr;
   raw_ptr<views::ScrollView> rows_scroll_ = nullptr;
   bool show_all_rows_ = false;
+  void BuildExtensionsSection();
+  void RefreshExtensions();
+  raw_ptr<FlyExtensions> extensions_ = nullptr;
+  base::RepeatingCallback<BrowserWindowInterface*()> extensions_browser_;
+  raw_ptr<views::View> extensions_list_ = nullptr;
+  raw_ptr<views::Checkbox> extensions_enabled_ = nullptr;
   raw_ptr<views::Textfield> spellcheck_ = nullptr;
   raw_ptr<views::MdTextButton> process_limit_ = nullptr;
   std::map<std::string, raw_ptr<views::Textfield>> color_fields_;

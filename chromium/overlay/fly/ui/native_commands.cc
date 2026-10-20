@@ -587,7 +587,8 @@ bool NativeCommandAvailable(BrowserWindowInterface* browser,
       "test-google-signin",     "check-for-updates",
       "show-whats-new",         "open-diagnostics",
       "toggle-diagnostics-recording", "toggle-notifications",
-      "open-task-manager"};
+      "open-task-manager",      "reload-user-content",
+      "open-extension-actions"};
   if (std::ranges::find(kProductActions, action) !=
       std::end(kProductActions))
     return FlyWindowController::GetIfCreated() != nullptr;

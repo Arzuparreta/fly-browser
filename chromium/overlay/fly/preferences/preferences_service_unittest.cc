@@ -425,6 +425,15 @@ TEST_F(PreferencesServiceTest, RemainingSettingsUseElectronDefaultsAndValidate) 
   EXPECT_TRUE(command_line.HasSwitch("disable-gpu"));
   EXPECT_FALSE(command_line.HasSwitch("disable-background-timer-throttling"));
   EXPECT_EQ("2", command_line.GetSwitchValueASCII("renderer-process-limit"));
+  // A relaunch copies the switches; changed settings must replace them, while
+  // switches the user passed themselves stay.
+  command_line.AppendSwitch("user-choice");
+  EXPECT_TRUE(service_.SetBool("disable_gpu", false));
+  EXPECT_TRUE(service_.SetInt("process_limit", 5));
+  PreferencesService::ApplyStartupSwitches(prefs_, command_line);
+  EXPECT_FALSE(command_line.HasSwitch("disable-gpu"));
+  EXPECT_EQ("5", command_line.GetSwitchValueASCII("renderer-process-limit"));
+  EXPECT_TRUE(command_line.HasSwitch("user-choice"));
 }
 TEST_F(PreferencesServiceTest, MalformedRemainingSettingsRequireRecovery) {
   prefs_.SetDict(kPreferencesPref,

@@ -11,6 +11,7 @@
 #include "base/memory/raw_ref.h"
 #include "base/sequence_checker.h"
 #include "base/time/time.h"
+#include "base/values.h"
 
 class PrefRegistrySimple;
 class PrefService;
@@ -86,12 +87,18 @@ class PreferencesService {
   std::optional<std::string> ReadString(std::string_view key) const;
   bool SetString(std::string_view key, const std::string& value);
   bool CanEdit() const;
+  // True when `key` is explicitly stored (not just its default).
+  bool HasStoredValue(std::string_view key) const;
   // theme_colors.{dark,light}.{accent,bg_main,bg_sidebar,text}: "#rrggbb".
   // Missing entries use the product defaults (empty result).
   std::optional<std::string> ReadThemeColor(bool dark,
                                             std::string_view key) const;
   bool SetThemeColor(bool dark, std::string_view key, const std::string& hex);
   bool ResetThemeColors();
+  // Native extension state ("native_extensions"): bundled removals and
+  // per-workspace switches, extensions suspended by the global switch.
+  std::optional<base::DictValue> ReadNativeExtensions() const;
+  bool SetNativeExtensions(base::DictValue state);
   // Applies settings that only take effect at process start (GPU, background
   // throttling, renderer process limit). Called before child processes start.
   static void ApplyStartupSwitches(const PrefService& local_state,

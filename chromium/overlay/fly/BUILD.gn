@@ -209,3 +209,13 @@ copy("fonts") {
   ]
   outputs = [ "$root_out_dir/fly_fonts/{{source_file_part}}" ]
 }
+
+# The Fly User Content extension's fixed files; native Fly copies them into
+# <user data>/fly-user-content together with the generated content.js.
+copy("user_content_resources") {
+  sources = [
+    "resources/user_content/background.js",
+    "resources/user_content/manifest.json",
+  ]
+  outputs = [ "$root_out_dir/fly_resources/user_content/{{source_file_part}}" ]
+}

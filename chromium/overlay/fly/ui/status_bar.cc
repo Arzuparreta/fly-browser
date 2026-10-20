@@ -175,7 +175,8 @@ class StatusBar::TargetObserver : public content::WebContentsObserver {
   raw_ptr<StatusBar> owner_;
 };
 StatusBar::StatusBar(Actions actions)
-    : target_observer_(std::make_unique<TargetObserver>(this)) {
+    : contents_changed_(std::move(actions.contents_changed)),
+      target_observer_(std::make_unique<TargetObserver>(this)) {
   auto* layout = SetLayoutManager(std::make_unique<views::BoxLayout>(
       views::BoxLayout::Orientation::kHorizontal, gfx::Insets::VH(2, 10), 8));
   layout->set_cross_axis_alignment(
@@ -307,6 +308,8 @@ void StatusBar::SelectContents() {
             selected ? zoom::ZoomController::FromWebContents(selected)
                      : nullptr)
       zoom_observation_.Observe(zoom);
+    if (contents_changed_)
+      contents_changed_.Run();
   }
   Update();
 }
@@ -420,6 +423,8 @@ void StatusBar::OnTabStripModelDestroyed(TabStripModel*) {
 void StatusBar::DidFinishNavigation(content::NavigationHandle* navigation) {
   if (navigation->HasCommitted() && navigation->IsInPrimaryMainFrame()) {
     ClearTarget();
+    if (contents_changed_ && !navigation->IsSameDocument())
+      contents_changed_.Run();
   }
 }
 void StatusBar::DidChangeVisibleSecurityState() {

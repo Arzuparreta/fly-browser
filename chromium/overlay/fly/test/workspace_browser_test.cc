@@ -16,6 +16,13 @@
 #include "fly/ui/command_palette.h"
 #include "fly/ui/fly_theme.h"
 #include "fly/ui/fly_actions.h"
+#include "fly/ui/fly_extensions.h"
+#include "fly/ui/user_content.h"
+#include "chrome/common/chrome_paths.h"
+#include "base/files/file_util.h"
+#include "extensions/browser/extension_registry.h"
+#include "base/path_service.h"
+#include "base/threading/thread_restrictions.h"
 #include "chrome/browser/content_settings/host_content_settings_map_factory.h"
 #include "components/content_settings/core/browser/host_content_settings_map.h"
 #include "components/dom_distiller/core/url_utils.h"
@@ -3713,6 +3720,98 @@ IN_PROC_BROWSER_TEST_F(FlyWorkspaceBrowserTest,
   ASSERT_TRUE(InvokeNativeCommand(browser(), "toggle-reader-view"));
   ASSERT_TRUE(base::test::RunUntil(
       [&] { return contents->GetLastCommittedURL() == article; }));
+}
+
+IN_PROC_BROWSER_TEST_F(FlyWorkspaceBrowserTest,
+                       BundledBlockerFollowsWorkspaceRemovalAndGlobalSwitch) {
+  constexpr char kId[] = "ddkjiahejlhfcafbddmgiahcphecmpfh";
+  base::FilePath assets;
+  ASSERT_TRUE(base::PathService::Get(base::DIR_ASSETS, &assets));
+  {
+    base::ScopedAllowBlockingForTesting allow_blocking;
+    if (!base::PathExists(assets.AppendASCII("fly_extensions").AppendASCII(kId)))
+      GTEST_SKIP() << "bundled extensions are not staged in this build";
+  }
+  auto& window = FlyWindowController::Get();
+  auto& extensions = window.extensions();
+  auto loaded = [&](BrowserWindowInterface* browser) {
+    return extensions::ExtensionRegistry::Get(browser->GetProfile())
+               ->enabled_extensions()
+               .GetByID(kId) != nullptr;
+  };
+  ASSERT_TRUE(base::test::RunUntil([&] { return loaded(browser()); }));
+  auto* second = SecondWorkspace();
+  ASSERT_TRUE(second);
+  ASSERT_TRUE(base::test::RunUntil([&] { return loaded(second); }));
+  ASSERT_TRUE(base::test::RunUntil([&] {
+    return window.extension_actions_for_testing()->children().size() == 1u;
+  }));
+  // Switching it off in one workspace leaves the other.
+  ASSERT_TRUE(extensions.SetExtensionEnabled(second->GetProfile(), kId, false));
+  EXPECT_FALSE(loaded(second));
+  EXPECT_TRUE(loaded(browser()));
+  ASSERT_TRUE(extensions.SetExtensionEnabled(second->GetProfile(), kId, true));
+  EXPECT_TRUE(loaded(second));
+  // The global switch unloads it everywhere and restores it.
+  ASSERT_TRUE(extensions.SetEnabled(false));
+  EXPECT_FALSE(loaded(browser()));
+  EXPECT_FALSE(loaded(second));
+  ASSERT_TRUE(extensions.SetEnabled(true));
+  EXPECT_TRUE(loaded(browser()));
+  // Removal applies to every workspace and is listed no more.
+  ASSERT_TRUE(extensions.Remove(browser()->GetProfile(), kId));
+  EXPECT_FALSE(loaded(browser()));
+  EXPECT_FALSE(loaded(second));
+  EXPECT_TRUE(std::ranges::none_of(extensions.List(second->GetProfile()),
+                                   [&](const FlyExtensionInfo& info) {
+                                     return info.id == kId;
+                                   }));
+}
+
+IN_PROC_BROWSER_TEST_F(FlyWorkspaceBrowserTest,
+                       UserScriptsAndStylesRunWithPersistentGmValues) {
+  base::FilePath user_data;
+  ASSERT_TRUE(base::PathService::Get(chrome::DIR_USER_DATA, &user_data));
+  {
+    base::ScopedAllowBlockingForTesting allow_blocking;
+    ASSERT_TRUE(base::CreateDirectory(user_data.AppendASCII("scripts")));
+    ASSERT_TRUE(base::CreateDirectory(user_data.AppendASCII("styles")));
+    ASSERT_TRUE(base::WriteFile(
+        user_data.AppendASCII("scripts").AppendASCII("count.user.js"),
+        "// ==UserScript==\n// @name Counter\n// @match http://*/*\n"
+        "// @grant GM_getValue\n// @grant GM_setValue\n// ==/UserScript==\n"
+        "GM_setValue('visits', GM_getValue('visits', 0) + 1);\n"
+        "document.documentElement.dataset.flyVisits = GM_getValue('visits');\n"));
+    ASSERT_TRUE(base::WriteFile(
+        user_data.AppendASCII("styles").AppendASCII("color.user.css"),
+        "/* ==UserStyle==\n@name Colour\n==/UserStyle== */\n"
+        "@-moz-document domain(\"127.0.0.1\") {\n"
+        "body { color: rgb(1, 2, 3) !important; }\n}\n"));
+  }
+  auto& window = FlyWindowController::Get();
+  window.user_content().Reload();
+  ASSERT_TRUE(base::test::RunUntil(
+      [&] { return window.user_content().script_count() == 1u; }));
+  const auto url = embedded_test_server()->GetURL("/title1.html");
+  auto visits = [&] {
+    return content::EvalJs(Active(browser()),
+                           "document.documentElement.dataset.flyVisits || ''")
+        .ExtractString();
+  };
+  // Registration is asynchronous in the extension worker; reload until the
+  // first injection appears.
+  ASSERT_TRUE(base::test::RunUntil([&] {
+    if (!ui_test_utils::NavigateToURL(browser(), url))
+      return false;
+    return !visits().empty();
+  }));
+  const int first = std::stoi(visits());
+  EXPECT_EQ("rgb(1, 2, 3)",
+            content::EvalJs(Active(browser()),
+                            "getComputedStyle(document.body).color"));
+  ASSERT_TRUE(ui_test_utils::NavigateToURL(browser(), url));
+  ASSERT_TRUE(base::test::RunUntil([&] { return !visits().empty(); }));
+  EXPECT_EQ(first + 1, std::stoi(visits()));
 }
 
 class FlyHistoryRestoreBrowserTest : public FlyWorkspaceBrowserTest {};

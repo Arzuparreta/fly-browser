@@ -37,8 +37,37 @@ remaining Electron settings with their defaults, and
 `chrome_feature_list_creator.cc`) applies GPU, background throttling, renderer
 process limit and the DOM distiller switch before any child process starts.
 `fly/fly_version.h` carries the product version, written by
-`scripts/version-sync.js`. Extensions, user scripts/styles, import and packages
-remain.
+`scripts/version-sync.js`.
+
+Extensions (`fly/ui/fly_extensions.{h,cc}`, patch 0025): uBlock Origin Lite is
+pinned in `chromium/bundled-extensions.json` (GitHub release archive, SHA-256 and
+the Web Store public key, so its identity is the store's
+`ddkjiahejlhfcafbddmgiahcphecmpfh`); `scripts/chromium/bundled-extensions.py`
+unpacks it into `<out>/fly_extensions`. Chromium 155 disables unpacked extensions
+outside developer mode, so Fly loads bundled extensions as components (allowlisted
+by id) in every normal workspace unless removed or switched off there. Unlike
+Electron, the blocker also runs in private workspaces (component extensions are
+allowed in off-the-record profiles). Store installs work through Chromium's own
+install prompt; the post-install dialog that points at the hidden toolbar is
+replaced by a Fly footer message, and extension dialogs without a visible toolbar
+use the modal fallback. Footer buttons show each action's icon and badge and open
+its popup above the footer. Live check: a doubleclick tracking pixel is blocked;
+Google ad and analytics scripts load as uBlock's neutered surrogates.
+User scripts and styles (`fly/ui/user_content.{h,cc}` with
+`fly/resources/user_content/`): native Fly generates the "Fly User Content"
+component extension in `<user data>/fly-user-content` from its fixed worker and a
+`content.js` holding the `scripts/*.user.js`, `styles/*.user.css` files and legacy
+`script-storage/` values, and reloads it when the folders change. The worker uses
+Electron's metadata parsing and URL matching, registers `chrome.userScripts`, and
+serves GM values (persisted in extension storage, seeded from script-storage),
+`GM_xmlhttpRequest` (with Electron's `@connect`, grant and local-network checks),
+tabs and notifications. Scripts with no GM grant (or `@inject-into page`) run in
+the page's world like Electron's injection; scripts with GM grants run in the
+isolated user script world, where `unsafeWindow` is that world's window — a
+difference from Electron for scripts that need page globals and GM APIs at once.
+`GM_registerMenuCommand` records commands but has no menu yet.
+
+Import from the Electron profile and packages remain.
 
 Local validation uses the engine checkout `/mnt/storage/fly-chromium`, output
 `src/out/FlyNative`, `native.py refresh-overlay --include-upstream` followed by

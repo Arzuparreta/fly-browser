@@ -1,0 +1,86 @@
+--- a/chrome/browser/ui/BUILD.gn
++++ b/chrome/browser/ui/BUILD.gn
+@@ -798,6 +798,10 @@
+       "//fly/ui/workspace_close_transaction.h",
+       "//fly/ui/fly_actions.cc",
+       "//fly/ui/fly_actions.h",
++      "//fly/ui/fly_extensions.cc",
++      "//fly/ui/fly_extensions.h",
++      "//fly/ui/user_content.cc",
++      "//fly/ui/user_content.h",
+       "//fly/ui/fly_theme.cc",
+       "//fly/ui/fly_theme.h",
+       "//fly/ui/fly_window_controller.cc",
+--- a/chrome/browser/extensions/component_extensions_allowlist/allowlist.cc
++++ b/chrome/browser/extensions/component_extensions_allowlist/allowlist.cc
+@@ -69,6 +69,13 @@
+   if (kAllowed.contains(extension_id)) {
+     return true;
+   }
++  // Extensions bundled with Fly (chromium/bundled-extensions.json), loaded as
++  // Fly-managed components: uBlock Origin Lite, and Fly User Content
++  // (fly/ui/user_content.h).
++  if (extension_id == "ddkjiahejlhfcafbddmgiahcphecmpfh" ||
++      extension_id == "ipdcgicjjgglkiekhaoniobgomajoeof") {
++    return true;
++  }
+ 
+ #if BUILDFLAG(IS_CHROMEOS)
+   if (extension_id == extension_misc::kODFSExtensionId) {
+--- a/chrome/browser/ui/extensions/extension_dialog_utils_views.cc
++++ b/chrome/browser/ui/extensions/extension_dialog_utils_views.cc
+@@ -52,7 +52,12 @@
+                 std::unique_ptr<ui::DialogModel> dialog_model) {
+   ExtensionsContainerViews* const container =
+       parent ? GetExtensionsContainerViews(parent) : nullptr;
+-  if (container && container->IsVisible()) {
++  // A window without a visible toolbar (Fly's embedded workspaces) has no
++  // on-screen anchor; use the modal fallback.
++  BrowserView* const browser_view =
++      parent ? BrowserView::GetBrowserViewForNativeWindow(parent) : nullptr;
++  if (container && container->IsVisible() &&
++      (!browser_view || browser_view->IsToolbarVisible())) {
+     ShowDialog(container, extension_ids, std::move(dialog_model));
+   } else {
+     // If the container is not available, show a modal dialog.
+@@ -85,6 +90,11 @@
+ 
+ void ShowDialog(BrowserWindowInterface* browser,
+                 std::unique_ptr<ui::DialogModel> dialog_model) {
++  if (!BrowserView::GetBrowserViewForBrowser(browser)->IsToolbarVisible()) {
++    ShowModalDialog(browser->GetWindow()->GetNativeWindow(),
++                    std::move(dialog_model));
++    return;
++  }
+   ToolbarButtonProvider* toolbar_button_provider =
+       BrowserView::GetBrowserViewForBrowser(browser)->toolbar_button_provider();
+   CHECK(toolbar_button_provider);
+--- a/chrome/browser/ui/extensions/extension_post_install_dialog.cc
++++ b/chrome/browser/ui/extensions/extension_post_install_dialog.cc
+@@ -39,6 +39,8 @@
+ 
+ #if !BUILDFLAG(IS_CHROMEOS) && !BUILDFLAG(IS_ANDROID)
+ #include "chrome/browser/ui/views/extensions/extension_post_install_dialog_view_utils.h"
++#include "chrome/browser/ui/browser_window/public/global_browser_collection.h"
++#include "chrome/browser/ui/views/frame/browser_view.h"
+ #endif
+ 
+ namespace extensions {
+@@ -148,5 +150,17 @@
+   if (!native_window) {
+     return;
+   }
++#if BUILDFLAG(IS_LINUX) || BUILDFLAG(IS_WIN)
++  // Fly's embedded workspaces hide the toolbar this dialog points at; Fly
++  // announces the installation and shows the new action in its footer. The
++  // top-level window is Fly's desktop, so find the tab's own browser.
++  if (auto* browser =
++          GlobalBrowserCollection::GetInstance()->FindBrowserWithTab(
++              web_contents);
++      browser &&
++      !BrowserView::GetBrowserViewForBrowser(browser)->IsToolbarVisible()) {
++    return;
++  }
++#endif
+ 
+   auto* weak_delegate = delegate.get();

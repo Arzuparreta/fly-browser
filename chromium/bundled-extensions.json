@@ -1,0 +1,15 @@
+{
+  "schema": 1,
+  "note": "Extensions shipped with native Fly. scripts/chromium/bundled-extensions.py downloads, verifies and unpacks them; the key keeps the Chrome Web Store identity.",
+  "extensions": [
+    {
+      "id": "ddkjiahejlhfcafbddmgiahcphecmpfh",
+      "name": "uBlock Origin Lite",
+      "version": "2026.1018.2229",
+      "url": "https://github.com/uBlockOrigin/uBOL-home/releases/download/2026.1018.2229/uBOLite_2026.1018.2229.chromium.zip",
+      "sha256": "c48dfa2f925ed31fdbd478d6b504432152ac995ab1e0fc96c3a008a0307dbbe2",
+      "license": "GPL-3.0",
+      "key": "MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEAqJE6DLdtfHXfeaGDSKdUuCvvb3pYEpH7jsuYMdExgIqmKRux2dknlJAnYkamBMcirGBfwCFjqE++TAkCs8AcrYLOGRRMt8oa7DXuFWzgtQpkwigI1+dnIuYLzERLQx/O02/p//fHdDQfxWKvySnN+VHdINOHsUD6OcoC5I7CXIBSrateRpRGpFxxR6F4nWvK3aq2j3L6A/qRg+pr0QVqL8p1TOJG+vSh234YHnsO9Dsys+VNbT0k0n8enCm/VsOCMjihgHpmftd1bSfSr8s1IwBuFdaLVQKghyDn1PvhFNBkuAXu+J/z0/o5Nio+/bIz406ECI9Qtkr9kqVboFDtzwIDAQAB"
+    }
+  ]
+}

@@ -44,7 +44,7 @@
 @@ -1120,6 +1122,11 @@
      deps += [ "//fly:workspaces", "//fly:commands", "//fly:preferences", "//fly:bookmarks", "//chrome/browser/ui/navigator", "//chrome/browser/ssl", "//components/url_formatter", "//components/vector_icons", "//ui/accessibility", "//ui/wm" ]
      deps += [ "//components/history/core/common" ]
-     data_deps = [ "//fly:fonts" ]
+     data_deps = [ "//fly:fonts", "//fly:user_content_resources" ]
 +    deps += [
 +      "//chrome/browser/dom_distiller",
 +      "//components/dom_distiller/core",

@@ -43,6 +43,8 @@ class StatusBar : public views::View,
     base::RepeatingClosure notifications;
     base::RepeatingClosure workspace;
     base::RepeatingClosure clock;
+    // The shown page changed (tab switch, navigation commit).
+    base::RepeatingClosure contents_changed;
   };
   explicit StatusBar(Actions actions = {});
   ~StatusBar() override;
@@ -89,6 +91,7 @@ class StatusBar : public views::View,
   raw_ptr<StatusBadge> workspace_;
   raw_ptr<StatusBadge> clock_;
   raw_ptr<FlyLabel> clock_time_;
+  base::RepeatingClosure contents_changed_;
   bool private_ = false;
   GURL target_;
   std::unique_ptr<TargetObserver> target_observer_;

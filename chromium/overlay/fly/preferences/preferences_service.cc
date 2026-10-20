@@ -10,6 +10,7 @@
 #include "base/command_line.h"
 #include "base/containers/fixed_flat_map.h"
 #include "base/strings/string_number_conversions.h"
+#include "base/strings/string_split.h"
 #include "base/strings/string_util.h"
 #include "base/strings/stringprintf.h"
 #include "base/strings/utf_string_conversions.h"
@@ -30,6 +31,7 @@ constexpr auto kBoolDefaults = base::MakeFixedFlatMap<std::string_view, bool>({
     {"desktop_integration_offered", false},
     {"disable_gpu", false},
     {"enable_diagnostics", false},
+    {"extensions_enabled", true},
     {"web_notifications", true},
 });
 constexpr auto kStringDefaults =
@@ -146,6 +148,9 @@ bool PreferencesService::ValidStore() const {
     return false;
   if (const auto* colors = values->Find("theme_colors");
       colors && !ValidThemeColors(*colors))
+    return false;
+  if (const auto* native = values->Find("native_extensions");
+      native && !native->is_dict())
     return false;
   if (const auto* timeout = values->Find("tab_suspend_timeout_minutes");
       timeout &&
@@ -458,11 +463,47 @@ bool PreferencesService::ResetThemeColors() {
   local_state_->SetDict(kPreferencesPref, std::move(stored));
   return true;
 }
+std::optional<base::DictValue> PreferencesService::ReadNativeExtensions()
+    const {
+  if (!ValidStore())
+    return std::nullopt;
+  const auto* values = StoredValues(*local_state_);
+  const auto* state = values ? values->FindDict("native_extensions") : nullptr;
+  return state ? state->Clone() : base::DictValue();
+}
+bool PreferencesService::SetNativeExtensions(base::DictValue state) {
+  if (!CanEdit())
+    return false;
+  auto stored = local_state_->GetDict(kPreferencesPref).Clone();
+  stored.Set("schema", 1);
+  stored.EnsureDict("values")->Set("native_extensions", std::move(state));
+  local_state_->SetDict(kPreferencesPref, std::move(stored));
+  return true;
+}
 // static
 void PreferencesService::ApplyStartupSwitches(const PrefService& local_state,
                                               base::CommandLine& command_line) {
+  // A restart from Fly copies this process's switches. Drop the ones Fly
+  // added last time (named by the marker) so changed settings take effect;
+  // switches the user passed are never in the marker.
+  constexpr char kMarker[] = "fly-startup-switches";
+  for (const auto& name :
+       base::SplitString(command_line.GetSwitchValueASCII(kMarker), ",",
+                         base::TRIM_WHITESPACE, base::SPLIT_WANT_NONEMPTY))
+    command_line.RemoveSwitch(name);
+  command_line.RemoveSwitch(kMarker);
+  std::vector<std::string> added;
+  const auto add = [&](const char* name, std::string value = std::string()) {
+    if (command_line.HasSwitch(name))
+      return;
+    if (value.empty())
+      command_line.AppendSwitch(name);
+    else
+      command_line.AppendSwitchASCII(name, value);
+    added.push_back(name);
+  };
   // Fly's reader view uses Chromium's DOM distiller viewer.
-  command_line.AppendSwitch("enable-dom-distiller");
+  add("enable-dom-distiller");
   const auto* values = StoredValues(local_state);
   const auto flag = [&](std::string_view key) {
     const auto* value = values ? values->Find(key) : nullptr;
@@ -470,19 +511,23 @@ void PreferencesService::ApplyStartupSwitches(const PrefService& local_state,
                                      : kBoolDefaults.at(key);
   };
   if (flag("disable_gpu")) {
-    command_line.AppendSwitch("disable-gpu");
-    command_line.AppendSwitch("disable-gpu-compositing");
+    add("disable-gpu");
+    add("disable-gpu-compositing");
   }
   if (!flag("background_throttling")) {
-    command_line.AppendSwitch("disable-background-timer-throttling");
-    command_line.AppendSwitch("disable-renderer-backgrounding");
+    add("disable-background-timer-throttling");
+    add("disable-renderer-backgrounding");
   }
   int limit = kDefaultProcessLimit;
   if (const auto* value = values ? values->Find("process_limit") : nullptr;
       value && value->is_int() && ValidProcessLimit(value->GetInt()))
     limit = value->GetInt();
-  if (!command_line.HasSwitch("renderer-process-limit"))
-    command_line.AppendSwitchASCII("renderer-process-limit",
-                                   base::NumberToString(limit));
+  add("renderer-process-limit", base::NumberToString(limit));
+  if (!added.empty())
+    command_line.AppendSwitchASCII(kMarker, base::JoinString(added, ","));
+}
+bool PreferencesService::HasStoredValue(std::string_view key) const {
+  const auto* values = ValidStore() ? StoredValues(*local_state_) : nullptr;
+  return values && values->Find(key);
 }
 }  // namespace fly
