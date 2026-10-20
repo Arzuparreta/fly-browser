@@ -3796,25 +3796,30 @@ IN_PROC_BROWSER_TEST_F(FlyWorkspaceBrowserTest,
   }
   auto& window = FlyWindowController::Get();
   window.user_content().Reload();
-  ASSERT_TRUE(base::test::RunUntil(
-      [&] { return window.user_content().script_count() == 1u; }));
+  // A generation that started before both files existed can finish first.
+  ASSERT_TRUE(base::test::RunUntil([&] {
+    return window.user_content().script_count() == 1u &&
+           window.user_content().style_count() == 1u;
+  }));
   const auto url = embedded_test_server()->GetURL("/title1.html");
   auto visits = [&] {
     return content::EvalJs(Active(browser()),
                            "document.documentElement.dataset.flyVisits || ''")
         .ExtractString();
   };
-  // Registration is asynchronous in the extension worker; reload until the
-  // first injection appears.
+  auto color = [&] {
+    return content::EvalJs(Active(browser()),
+                           "getComputedStyle(document.body).color")
+        .ExtractString();
+  };
+  // Registration is asynchronous in the extension worker; reload until both
+  // injections appear.
   ASSERT_TRUE(base::test::RunUntil([&] {
     if (!ui_test_utils::NavigateToURL(browser(), url))
       return false;
-    return !visits().empty();
+    return !visits().empty() && color() == "rgb(1, 2, 3)";
   }));
   const int first = std::stoi(visits());
-  EXPECT_EQ("rgb(1, 2, 3)",
-            content::EvalJs(Active(browser()),
-                            "getComputedStyle(document.body).color"));
   ASSERT_TRUE(ui_test_utils::NavigateToURL(browser(), url));
   ASSERT_TRUE(base::test::RunUntil([&] { return !visits().empty(); }));
   EXPECT_EQ(first + 1, std::stoi(visits()));

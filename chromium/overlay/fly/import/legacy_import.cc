@@ -675,6 +675,9 @@ LegacyImportResult RunLegacyImport(PrefService& local_state,
   // may already list it), so the marker must not undo it on the next start.
   const auto fail = [&] {
     base::DeleteFile(user_data_dir.AppendASCII(kPartialFile));
+    // Workspaces already added stay; waiting longer would add them again.
+    if (!directory_of.empty())
+      base::DeleteFile(waiting);
     return LegacyImportResult::kFailed;
   };
   if (first_dir.empty())
