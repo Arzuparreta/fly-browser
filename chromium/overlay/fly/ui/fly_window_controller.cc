@@ -31,6 +31,7 @@
 #include "content/public/common/url_constants.h"
 #include "fly/ui/site_zoom.h"
 #include "fly/ui/user_content.h"
+#include "fly/ui/welcome_view.h"
 #include "ui/gfx/canvas.h"
 #include "ui/gfx/text_utils.h"
 #include "cc/paint/paint_flags.h"
@@ -39,7 +40,10 @@
 #include "skia/ext/image_operations.h"
 #include "base/version.h"
 #include "base/strings/stringprintf.h"
+#include "base/base_paths.h"
 #include "base/command_line.h"
+#include "base/path_service.h"
+#include "ui/gfx/image/image.h"
 #include "base/containers/adapters.h"
 #include "fly/fly_version.h"
 #include "chrome/app/vector_icons/vector_icons.h"
@@ -73,6 +77,8 @@
 #include "chrome/browser/lifetime/application_lifetime.h"
 #include "chrome/browser/lifetime/application_lifetime_desktop.h"
 #include "chrome/browser/profiles/profile.h"
+#include "chrome/browser/profiles/keep_alive/profile_keep_alive_types.h"
+#include "chrome/browser/profiles/keep_alive/scoped_profile_keep_alive.h"
 #include "chrome/browser/profiles/profile_attributes_storage.h"
 #include "chrome/browser/profiles/profile_manager.h"
 #include "chrome/browser/profiles/profiles_state.h"
@@ -401,6 +407,32 @@ FlyWindowController::FlyWindowController()
   content_ = column->AddChildView(std::make_unique<views::View>());
   content_->SetLayoutManager(std::make_unique<views::FillLayout>());
   column_layout->SetFlexForView(content_, 1);
+  // Below the workspace hosts: shown while the workspace has no tabs.
+  welcome_ = content_->AddChildView(std::make_unique<WelcomeView>());
+  welcome_->SetVisible(false);
+  base::ThreadPool::PostTaskAndReplyWithResult(
+      FROM_HERE, {base::MayBlock(), base::TaskPriority::USER_VISIBLE},
+      base::BindOnce([]() {
+        base::FilePath assets;
+        std::string bytes;
+        if (base::PathService::Get(base::DIR_ASSETS, &assets))
+          base::ReadFileToStringWithMaxSize(
+              assets.AppendASCII("fly_resources")
+                  .AppendASCII("identity")
+                  .AppendASCII("icon-128.png"),
+              &bytes, 1024 * 1024);
+        return bytes;
+      }),
+      base::BindOnce(
+          [](base::WeakPtr<FlyWindowController> window, std::string bytes) {
+            if (!window || !window->welcome_ || bytes.empty())
+              return;
+            const auto image = gfx::Image::CreateFrom1xPNGBytes(
+                base::as_byte_span(bytes));
+            if (!image.IsEmpty())
+              window->welcome_->SetLogo(image.AsImageSkia());
+          },
+          weak_factory_.GetWeakPtr()));
   status_bar_ = column->AddChildView(std::make_unique<StatusBar>(StatusBar::Actions{
       .zoom = command("reset-zoom"),
       .notifications = command("toggle-notifications"),
@@ -474,15 +506,27 @@ FlyWindowController::FlyWindowController()
             return action == "trigger-hints" || action == "focus-sidebar" ||
                    action == "new-workspace" || action == "next-workspace" ||
                    action == "previous-workspace" ||
+                   action.starts_with("extension:") ||
+                   action.starts_with("extension-options:") ||
+                   action.starts_with("extensions-") ||
                    NativeCommandAvailable(window->selected_, action);
           },
           weak_factory_.GetWeakPtr()),
       base::BindRepeating(
           [](base::WeakPtr<FlyWindowController> window,
              content::WebContents* source, std::string action) {
-            if (window && window->selected_ &&
-                window->selected_->GetTabStripModel()->GetActiveWebContents() ==
+            if (!window || !window->selected_ ||
+                window->selected_->GetTabStripModel()->GetActiveWebContents() !=
                     source)
+              return;
+            if (action.starts_with("terminal:")) {
+              OpenTerminalWithCommand(action.substr(9));
+              return;
+            }
+            window->preferences_.RecordRecentCommand(action);
+            if (action.starts_with("extension"))
+              window->ChooseExtensionAction(source, std::move(action));
+            else
               InvokeNativeCommand(window->selected_, std::move(action));
           },
           weak_factory_.GetWeakPtr()));
@@ -630,8 +674,6 @@ FlyWindowController::FlyWindowController()
   downloads_picker_->SetStyle(
       {Layout::kCentre, u"Downloads",
        u"Enter opens, pauses or resumes. Remove cancels or clears.", 640});
-  palette_->SetStyle({Layout::kCentre, u"Command Centre",
-                      u"Actions, feature guide & keyboard shortcuts"});
   address_picker_->SetStyle({.layout = Layout::kTop, .width = 640});
   history_picker_->SetStyle({.layout = Layout::kTop, .width = 600});
   auto page_insets = base::BindRepeating(
@@ -648,6 +690,12 @@ FlyWindowController::FlyWindowController()
       weak_factory_.GetWeakPtr());
   bookmark_picker_->SetStyle(
       {Layout::kPage, u"Bookmarks Manager", u"", 720, page_insets});
+  palette_->SetStyle({.layout = Layout::kPage,
+                      .title = u"Command Centre",
+                      .subtitle = u"Actions, feature guide & keyboard shortcuts",
+                      .width = 1220,
+                      .page_insets = page_insets,
+                      .command_centre = true});
   workspace_picker_->SetStyle(
       {Layout::kPage, u"Workspace Dashboard", u"", 720, page_insets});
   tab_move_picker_->SetStyle(
@@ -746,6 +794,8 @@ FlyWindowController::~FlyWindowController() {
   sidebar_slot_ = nullptr;
   compact_rail_ = nullptr;
   compact_tab_sidebar_ = nullptr;
+  welcome_ = nullptr;
+  welcome_keep_alive_.reset();
   content_ = nullptr;
   status_ = nullptr;
   status_bar_ = nullptr;
@@ -1802,6 +1852,21 @@ void FlyWindowController::Select(BrowserWindowInterface* browser, bool focus) {
       last_windows_[next.workspace_id] = browser->GetWeakPtr();
     }
     next.widget->OnNativeWidgetActivationChanged(desktop_->IsActive());
+    welcome_keep_alive_.reset();
+    UpdateWelcome();
+    if (!pending_empty_action_.empty()) {
+      // The empty workspace view's Bookmarks or Command Centre, once the
+      // workspace's new tab exists.
+      base::SingleThreadTaskRunner::GetCurrentDefault()->PostTask(
+          FROM_HERE,
+          base::BindOnce(
+              [](base::WeakPtr<BrowserWindowInterface> browser,
+                 std::string action) {
+                if (browser)
+                  InvokeNativeCommand(browser.get(), action);
+              },
+              browser->GetWeakPtr(), std::exchange(pending_empty_action_, "")));
+    }
   }
   ScheduleWorkspaceRefresh();
   UpdateModeLabel();
@@ -2179,15 +2244,114 @@ void FlyWindowController::RenameWorkspace(std::string id) {
   field->SelectAll(false);
 }
 
+void FlyWindowController::PromptNewWorkspace() {
+  if (closing_ || creating_profile_ || !workspaces_.CanEdit())
+    return;
+  hints_->Cancel();
+  palette_->Cancel();
+  address_picker_->Cancel();
+  workspace_picker_->Cancel();
+  tab_move_picker_->Cancel();
+  bookmark_picker_->Cancel();
+  CancelHistory();
+  keyboard_editor_->Cancel();
+  rename_widget_.reset();
+  rename_delegate_ = std::make_unique<views::DialogDelegate>();
+  rename_delegate_->SetOwnershipOfNewWidget(
+      views::Widget::InitParams::CLIENT_OWNS_WIDGET);
+  rename_delegate_->SetModalType(ui::mojom::ModalType::kWindow);
+  rename_delegate_->SetTitle(u"New workspace");
+  rename_delegate_->SetButtonLabel(ui::mojom::DialogButton::kOk, u"Create");
+  auto body = std::make_unique<views::View>();
+  body->SetLayoutManager(std::make_unique<views::BoxLayout>(
+      views::BoxLayout::Orientation::kVertical, gfx::Insets(16), 8));
+  body->SetPreferredSize(gfx::Size(400, 110));
+  auto* field = body->AddChildView(std::make_unique<views::Textfield>());
+  field->SetText(base::UTF8ToUTF16(NextWorkspaceName()));
+  field->GetViewAccessibility().SetName(u"Workspace name");
+  auto* error = body->AddChildView(std::make_unique<views::Label>());
+  error->SetMultiLine(true);
+  rename_delegate_->SetInitiallyFocusedView(field);
+  rename_delegate_->SetContentsView(std::move(body));
+  rename_delegate_->SetAcceptCallbackWithClose(base::BindRepeating(
+      [](base::WeakPtr<FlyWindowController> window, views::Textfield* field,
+         views::Label* error) {
+        if (!window || window->closing_)
+          return true;
+        const auto name = std::string(base::TrimWhitespaceASCII(
+            base::UTF16ToUTF8(field->GetText()), base::TRIM_ALL));
+        const auto catalog = window->workspaces_.Read();
+        if (name.empty() || !catalog ||
+            std::ranges::any_of(catalog->items, [&](const Workspace& item) {
+              return item.name == name;
+            })) {
+          error->SetText(u"Use a unique, non-empty workspace name.");
+          return false;
+        }
+        window->CreateWorkspace(name);
+        return true;
+      },
+      weak_factory_.GetWeakPtr(), field, error));
+  rename_widget_.reset(views::DialogDelegate::CreateDialogWidget(
+      rename_delegate_.get(), desktop_->GetNativeWindow(),
+      desktop_->GetNativeView()));
+  rename_widget_->Show();
+  field->SelectAll(false);
+}
+
+// Electron's workspace dashboard: every workspace with its tabs (pinned ones
+// marked), rename and delete on each workspace, and a move on each tab.
 std::vector<PaletteEntry> FlyWindowController::WorkspaceEntries() {
   private_choices_.clear();
+  tab_choices_.clear();
   std::vector<PaletteEntry> result;
   const auto catalog = workspaces_.Read();
   if (!catalog)
     return result;
+  const std::string active =
+      selected_ && entries_.contains(selected_)
+          ? entries_.at(selected_).workspace_id
+          : std::string();
+  const bool editable = workspaces_.CanEdit();
   for (const auto& item : catalog->items) {
     const auto action = "workspace/" + item.id;
-    result.push_back({action, action, item.name, "Workspace", {}, {}});
+    PaletteEntry row{action, action,
+                     item.name + (item.id == active ? " (Active)" : ""),
+                     item.profile_directory, {}, {}};
+    if (editable) {
+      row.row_actions.emplace_back("rename/" + item.id, "Rename");
+      if (catalog->items.size() > 1)
+        row.row_actions.emplace_back("delete/" + item.id, "Delete");
+    }
+    result.push_back(std::move(row));
+    std::vector<std::pair<BrowserWindowInterface*, const Entry*>> windows;
+    for (const auto& [browser, entry] : entries_)
+      if (!entry.browser_closed && entry.workspace_id == item.id)
+        windows.emplace_back(browser, &entry);
+    std::ranges::sort(windows, {}, [](const auto& window) {
+      return window.second->order;
+    });
+    size_t number = 0;
+    for (const auto& [browser, entry] : windows) {
+      auto* model = browser->GetTabStripModel();
+      for (int index = 0; index < model->count(); ++index) {
+        auto* contents = model->GetWebContentsAt(index);
+        const auto key = item.id + "/" + base::NumberToString(number++);
+        tab_choices_.emplace(key, TabChoice{browser->GetWeakPtr(),
+                                            contents->GetWeakPtr()});
+        const auto title = contents->GetTitle().empty()
+                               ? contents->GetVisibleURL().spec()
+                               : base::UTF16ToUTF8(contents->GetTitle());
+        PaletteEntry tab{"tab/" + key, "tab/" + key,
+                         "- " + title +
+                             (model->IsTabPinned(index) ? " \xF0\x9F\x93\x8C"
+                                                        : ""),
+                         "", {}, {}};
+        tab.indent = 1;
+        tab.row_actions.emplace_back("move/" + key, "Move");
+        result.push_back(std::move(tab));
+      }
+    }
   }
   for (const auto& [browser, entry] : entries_) {
     if (entry.browser_closed || !browser->GetProfile()->IsOffTheRecord())
@@ -2218,6 +2382,29 @@ bool FlyWindowController::WorkspaceChoiceAvailable(std::string_view action) cons
   if (action.starts_with("workspace/"))
     return std::ranges::find(catalog->items, action.substr(10), &Workspace::id) !=
            catalog->items.end();
+  if (action.starts_with("rename/"))
+    return workspaces_.CanEdit() &&
+           std::ranges::find(catalog->items, action.substr(7),
+                             &Workspace::id) != catalog->items.end();
+  if (action.starts_with("delete/")) {
+    const auto item =
+        std::ranges::find(catalog->items, action.substr(7), &Workspace::id);
+    return item != catalog->items.end() && !workspace_close_ &&
+           CanRemoveWorkspace(item->id,
+                              g_browser_process->profile_manager()
+                                  ->user_data_dir()
+                                  .AppendASCII(item->profile_directory));
+  }
+  if (action.starts_with("tab/") || action.starts_with("move/")) {
+    const auto choice = tab_choices_.find(
+        std::string(action.substr(action.find('/') + 1)));
+    if (choice == tab_choices_.end() || !choice->second.browser ||
+        !choice->second.contents)
+      return false;
+    return !action.starts_with("move/") ||
+           TabMoveTransaction::CanMoveUrl(
+               choice->second.contents->GetLastCommittedURL());
+  }
   const auto found = private_choices_.find(std::string(action));
   return found != private_choices_.end() && found->second &&
          !found->second->IsDeleteScheduled();
@@ -2230,9 +2417,28 @@ void FlyWindowController::ChooseWorkspace(content::WebContents* source,
                  : source != nullptr))
     return;
   if (action == "create")
-    CreateWorkspace();
+    PromptNewWorkspace();
   else if (action.starts_with("workspace/"))
     OpenWorkspace(action.substr(10));
+  else if (action.starts_with("rename/"))
+    RenameWorkspace(action.substr(7));
+  else if (action.starts_with("delete/"))
+    RemoveWorkspace(action.substr(7));
+  else if (action.starts_with("tab/") || action.starts_with("move/")) {
+    const auto choice = tab_choices_.find(action.substr(action.find('/') + 1));
+    if (choice == tab_choices_.end() || !choice->second.browser ||
+        !choice->second.contents)
+      return;
+    auto* browser = choice->second.browser.get();
+    auto* contents = choice->second.contents.get();
+    const int index = browser->GetTabStripModel()->GetIndexOfWebContents(contents);
+    if (index == TabStripModel::kNoTab)
+      return;
+    Select(browser, true);
+    browser->GetTabStripModel()->ActivateTabAt(index);
+    if (action.starts_with("move/"))
+      ShowTabMovePicker(browser, contents);
+  }
   else if (const auto choice = private_choices_.find(action);
            choice != private_choices_.end() && choice->second)
     Select(choice->second.get(), true);
@@ -2437,6 +2643,7 @@ void FlyWindowController::FinishTabMove(
 
 void FlyWindowController::OnWorkspacesChanged() {
   ScheduleWorkspaceRefresh();
+  UpdateWelcome();
   if (tab_move_picker_->active()) {
     if (CanMoveTab(move_source_browser_.get(), move_source_.get()))
       tab_move_picker_->UpdateItems(TabMoveEntries(), false);
@@ -2505,7 +2712,20 @@ void FlyWindowController::CreateTab() {
     OpenWorkspace(catalog->active_id);
 }
 
-void FlyWindowController::CreateWorkspace() {
+std::string FlyWindowController::NextWorkspaceName() const {
+  const auto catalog = workspaces_.Read();
+  std::string name;
+  size_t number = catalog ? catalog->items.size() + 1 : 1;
+  do {
+    name = "Workspace " + base::NumberToString(number++);
+  } while (catalog &&
+           std::ranges::any_of(catalog->items, [&](const Workspace& item) {
+             return item.name == name;
+           }));
+  return name;
+}
+
+void FlyWindowController::CreateWorkspace(std::string name) {
   if (closing_ || creating_profile_ || !workspaces_.CanEdit()) {
     return;
   }
@@ -2517,13 +2737,8 @@ void FlyWindowController::CreateWorkspace() {
   const auto path = manager->GenerateNextProfileDirectoryPath();
   // Reserve a unique directory before asynchronous creation. A failed load
   // retains the entry for retry; it must not silently attach another Profile.
-  std::string name;
-  size_t number = catalog->items.size() + 1;
-  do {
-    name = "Workspace " + base::NumberToString(number++);
-  } while (std::ranges::any_of(catalog->items, [&](const Workspace& item) {
-    return item.name == name;
-  }));
+  if (name.empty())
+    name = NextWorkspaceName();
   const auto added = workspaces_.Add(name, path.BaseName().AsUTF8Unsafe());
   if (!added) {
     return;
@@ -2624,15 +2839,22 @@ void FlyWindowController::OnBrowserDidClose(BrowserWindowInterface* browser) {
         }
         return false;
       };
-      if (!choose(true)) {
-        if (private_return && entries_.contains(private_return.get()) &&
-            !entries_.at(private_return.get()).browser_closed)
-          Select(private_return.get(), true);
-        else
-          choose(false);
-      }
+      // Electron keeps the workspace whose last tab closed and shows its
+      // empty workspace view; leaving private mode returns to the window it
+      // came from.
+      if (!choose(true) && private_return &&
+          entries_.contains(private_return.get()) &&
+          !entries_.at(private_return.get()).browser_closed)
+        Select(private_return.get(), true);
+      // The empty view keeps its workspace profile loaded, so reopening it
+      // reuses the profile instead of racing its destruction.
+      if (!selected_ && !workspace_close_ &&
+          !closed_profile->IsOffTheRecord())
+        welcome_keep_alive_ = ScopedProfileKeepAlive::TryAcquire(
+            closed_profile, ProfileKeepAliveOrigin::kChromeViewsDelegate);
     }
     UpdateModeLabel();
+    UpdateWelcome();
   }
   if (closed_profile->IsOffTheRecord() &&
       std::ranges::none_of(entries_, [&](const auto& pair) {
@@ -2924,8 +3146,15 @@ bool FlyWindowController::RunCommand(BrowserWindowInterface* browser,
     CancelHistory();
     hints_->Cancel();
     keyboard_editor_->Cancel();
-    palette_->Toggle(browser->GetTabStripModel()->GetActiveWebContents(),
-                     commands_.Read().value_or(DefaultKeyboardConfig()));
+    palette_->SetRecent(preferences_.ReadRecentCommands());
+    const auto config = commands_.Read().value_or(DefaultKeyboardConfig());
+    auto items = CommandCentreCatalog(config);
+    for (auto& entry : ExtensionCommandEntries(browser))
+      items.push_back(std::move(entry));
+    palette_->ToggleItems(
+        browser->GetTabStripModel()->GetActiveWebContents(), std::move(items),
+        config.shortcuts.at("toggle-palette"),
+        u"Search commands, shortcuts, or type shell utility...", false);
     return true;
   }
   if (action == "toggle-private-mode") {
@@ -2981,7 +3210,7 @@ bool FlyWindowController::RunCommand(BrowserWindowInterface* browser,
     return true;
   }
   if (action == "new-workspace") {
-    CreateWorkspace();
+    PromptNewWorkspace();
     return true;
   }
   if (action == "focus-sidebar") {
@@ -3104,9 +3333,11 @@ void FlyWindowController::OnKeyEvent(ui::KeyEvent* event) {
       } else if (key.action == "toggle-dashboard") {
         ToggleWorkspacePicker();
       } else if (key.action == "new-workspace") {
-        CreateWorkspace();
-      } else if (key.action == "spawn-tab") {
-        CreateTab();
+        PromptNewWorkspace();
+      } else if (key.action == "spawn-tab" ||
+                 key.action == "toggle-bookmarks" ||
+                 key.action == "toggle-palette") {
+        RunFromEmptyWorkspace(key.action);
       } else if ((key.action == "next-workspace" ||
                   key.action == "previous-workspace") &&
                  catalog && !catalog->items.empty()) {
@@ -3575,9 +3806,20 @@ void FlyWindowController::ChooseExtensionAction(content::WebContents*,
                                                 std::string action) {
   if (closing_ || !selected_)
     return;
-  if (action == "extensions-settings") {
+  if (action == "extensions-settings" || action == "extensions-open-settings") {
     InvokeNativeCommand(selected_, "toggle-help");
     keyboard_editor_->ShowExtensions();
+    return;
+  }
+  if (action.starts_with("extension-options:")) {
+    extensions_->OpenOptions(
+        selected_, action.substr(std::string_view("extension-options:").size()));
+    return;
+  }
+  if (action == "extensions-reload") {
+    ShowStatus(base::UTF8ToUTF16(
+        "Extensions reloaded." +
+        std::string(extensions_->ReloadUnpacked() ? "" : " None to reload.")));
     return;
   }
   if (action == "extensions-page" || action == "extensions-store") {
@@ -3825,5 +4067,117 @@ void FlyWindowController::UpdateReaderButton() {
             },
             weak_factory_.GetWeakPtr()));
   }
+}
+
+void FlyWindowController::UpdateWelcome() {
+  if (!welcome_)
+    return;
+  const bool show = !selected_ && !closing_;
+  welcome_->SetVisible(show);
+  if (!show)
+    return;
+  const auto catalog = workspaces_.Read();
+  std::u16string name = u"Workspace";
+  if (catalog)
+    for (const auto& item : catalog->items)
+      if (item.id == catalog->active_id)
+        name = base::UTF8ToUTF16(item.name);
+  const auto config = commands_.Read().value_or(DefaultKeyboardConfig());
+  // Electron writes bindings as "Ctrl + T".
+  const auto keys = [&](const char* action) {
+    const auto found = config.shortcuts.find(action);
+    if (found == config.shortcuts.end() || found->second.empty())
+      return std::u16string();
+    std::u16string text = base::UTF8ToUTF16(found->second.front());
+    base::ReplaceSubstringsAfterOffset(&text, 0, u"+", u" + ");
+    return text;
+  };
+  const auto run = [&](const char* action) {
+    return base::BindRepeating(&FlyWindowController::RunFromEmptyWorkspace,
+                               weak_factory_.GetWeakPtr(), std::string(action));
+  };
+  welcome_->Update(
+      name, {{keys("spawn-tab"), u"Open New Tab", run("spawn-tab")},
+             {keys("toggle-bookmarks"), u"Open Bookmarks",
+              run("toggle-bookmarks")},
+             {keys("toggle-palette"), u"Command Centre", run("toggle-palette")},
+             {keys("toggle-dashboard"), u"Workspace Dashboard",
+              run("toggle-dashboard")}});
+}
+
+// Actions of the empty workspace view. The dashboard needs no page; the others
+// open the workspace with a new tab first.
+void FlyWindowController::RunFromEmptyWorkspace(std::string action) {
+  if (closing_)
+    return;
+  if (selected_) {
+    InvokeNativeCommand(selected_, action);
+    return;
+  }
+  if (action == "toggle-dashboard") {
+    ToggleWorkspacePicker();
+    return;
+  }
+  if (action != "spawn-tab")
+    pending_empty_action_ = action;
+  CreateTab();
+}
+
+void FlyWindowController::choose_workspace_for_testing(std::string action) {
+  ChooseWorkspace(
+      selected_ ? selected_->GetTabStripModel()->GetActiveWebContents()
+                : nullptr,
+      std::move(action));
+}
+
+// Electron's getExtensionPaletteCommands.
+std::vector<PaletteEntry> FlyWindowController::ExtensionCommandEntries(
+    BrowserWindowInterface* browser) {
+  std::vector<PaletteEntry> entries;
+  const auto add = [&](std::string action, std::string title, std::string desc,
+                       std::string details, std::string tip,
+                       std::vector<std::string> keywords) {
+    PaletteEntry entry{action, action, std::move(title), "Extensions", {}, {}};
+    entry.desc = std::move(desc);
+    entry.details = std::move(details);
+    entry.tip = std::move(tip);
+    entry.keywords = std::move(keywords);
+    entries.push_back(std::move(entry));
+  };
+  add("extensions-open-settings", "Extension Settings",
+      "Enable Chrome extensions per workspace and see what they cost",
+      "Opens the Extensions section in Preferences. uBlock Origin Lite runs in "
+      "every workspace unless switched off there; each workspace keeps its own "
+      "extensions.",
+      "Install from Chrome Web Store, a ZIP or CRX package, or an unpacked "
+      "folder.",
+      {"extensions", "addons", "chrome", "plugins", "settings"});
+  if (!extensions_->Enabled() || !browser)
+    return entries;
+  add("extensions-reload", "Reload Extensions",
+      "Re-read extension code from disk in every workspace using it",
+      "Reloads unpacked extensions in every workspace. Pages that already ran "
+      "the old content scripts need a reload.",
+      "Use this after replacing an extension folder with a newer version.",
+      {"extensions", "reload", "refresh", "update"});
+  auto* profile = browser->GetProfile();
+  for (const auto* extension : extensions_->ActionExtensions(profile))
+    add("extension:" + extension->id(), extension->name() + ": Open Popup",
+        "Open the extension popup for the active tab",
+        extension->name() + " " + extension->VersionString(),
+        "Press Esc or click outside the popup to close it.",
+        {"extension", "popup", base::ToLowerASCII(extension->name())});
+  for (const auto& info : extensions_->List(profile)) {
+    if (!info.enabled || !info.has_options)
+      continue;
+    const auto name = base::UTF16ToUTF8(info.name);
+    add("extension-options:" + info.id, name + ": Options",
+        "Open the extension options page in a new tab",
+        "Options are stored per workspace, like everything else the extension "
+        "saves.",
+        "The options tab stays open like any other tab.",
+        {"extension", "options", "settings", base::ToLowerASCII(name)});
+  }
+  return entries;
 }
 }  // namespace fly

@@ -69,6 +69,12 @@ void ToggleReaderView(content::WebContents* contents,
 void QueryReaderView(content::WebContents* contents,
                      base::OnceCallback<void(bool)> done);
 
+// Electron's air-gapped terminal fallback: copies the text (prefixed with
+// "oversight" for scripts, URLs and sudo/curl/wget) to the clipboard and opens
+// the first terminal found (kitty, alacritty, foot, st, xterm, or
+// xdg-terminal-exec); nothing runs until the user pastes it.
+void OpenTerminalWithCommand(const std::string& text);
+
 // `scripts`, `styles` or `script-storage` below the user data directory,
 // created on demand.
 base::FilePath UserContentDirectory(std::string_view name);

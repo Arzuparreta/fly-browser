@@ -6,7 +6,9 @@
 #include <algorithm>
 #include <utility>
 
+#include "base/environment.h"
 #include "base/files/file_util.h"
+#include "base/process/launch.h"
 #include "base/no_destructor.h"
 #include "base/json/json_reader.h"
 #include "base/path_service.h"
@@ -49,6 +51,7 @@
 #include "services/network/public/cpp/resource_request.h"
 #include "services/network/public/cpp/shared_url_loader_factory.h"
 #include "services/network/public/cpp/simple_url_loader.h"
+#include "ui/base/clipboard/scoped_clipboard_writer.h"
 #include "ui/base/mojom/menu_source_type.mojom.h"
 #include "ui/views/controls/menu/menu_runner.h"
 #include "ui/views/widget/widget.h"
@@ -381,6 +384,50 @@ void QueryReaderView(content::WebContents* contents,
             std::move(done).Run(value.is_bool() && value.GetBool());
           },
           std::move(done)));
+}
+
+void OpenTerminalWithCommand(const std::string& text) {
+  if (base::TrimWhitespaceASCII(text, base::TRIM_ALL).empty())
+    return;
+  const auto lower = base::ToLowerASCII(text);
+  bool script = false;
+  for (const char* extension :
+       {".sh", ".bash", ".zsh", ".fish", ".py", ".rb", ".pl", ".php", ".lua",
+        ".c", ".cpp", ".cc", ".h", ".hpp", ".rs", ".go", ".js", ".ts"})
+    script |= lower.ends_with(extension);
+  const bool guarded = script || lower.starts_with("http://") ||
+                       lower.starts_with("https://") ||
+                       lower.starts_with("sudo ") ||
+                       lower.starts_with("curl ") || lower.starts_with("wget ");
+  {
+    ui::ScopedClipboardWriter writer(ui::ClipboardBuffer::kCopyPaste);
+    writer.WriteText(base::UTF8ToUTF16(guarded ? "oversight " + text : text));
+  }
+  base::ThreadPool::PostTask(
+      FROM_HERE, {base::MayBlock(), base::TaskPriority::USER_VISIBLE},
+      base::BindOnce([]() {
+        auto env = base::Environment::Create();
+        const auto path = env->GetVar("PATH").value_or("/usr/bin:/bin");
+        base::FilePath terminal;
+        for (const char* name : {"kitty", "alacritty", "foot", "st", "xterm"}) {
+          for (const auto& dir : base::SplitString(
+                   path, ":", base::TRIM_WHITESPACE, base::SPLIT_WANT_NONEMPTY)) {
+            const auto candidate = base::FilePath(dir).AppendASCII(name);
+            if (base::IsPathExecutable(candidate)) {
+              terminal = candidate;
+              break;
+            }
+          }
+          if (!terminal.empty())
+            break;
+        }
+        base::LaunchOptions options;
+        options.new_process_group = true;
+        base::LaunchProcess(
+            {terminal.empty() ? std::string("xdg-terminal-exec")
+                              : terminal.value()},
+            options);
+      }));
 }
 
 base::FilePath UserContentDirectory(std::string_view name) {

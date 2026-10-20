@@ -117,6 +117,24 @@ ClockText FormatClock(base::Time time, std::string_view format) {
 }
 void PreferencesService::RegisterLocalStatePrefs(PrefRegistrySimple* registry) {
   registry->RegisterDictionaryPref(kPreferencesPref);
+  registry->RegisterListPref(kRecentCommandsPref);
+}
+std::vector<std::string> PreferencesService::ReadRecentCommands() const {
+  std::vector<std::string> result;
+  for (const auto& value : local_state_->GetList(kRecentCommandsPref))
+    if (value.is_string() && result.size() < 4)
+      result.push_back(value.GetString());
+  return result;
+}
+void PreferencesService::RecordRecentCommand(std::string_view action) {
+  if (action.empty() || action.size() > 128)
+    return;
+  base::ListValue list;
+  list.Append(std::string(action));
+  for (const auto& id : ReadRecentCommands())
+    if (id != action && list.size() < 4)
+      list.Append(id);
+  local_state_->SetList(kRecentCommandsPref, std::move(list));
 }
 PreferencesService::PreferencesService(PrefService& local_state)
     : local_state_(local_state) {}

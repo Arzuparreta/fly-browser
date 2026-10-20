@@ -6,6 +6,7 @@ const path = require('node:path');
 const root = path.resolve(__dirname, '../..');
 const COPIES = [
     ['modules/readerDistiller.js', 'chromium/overlay/fly/resources/reader/readerDistiller.js'],
+    ['assets/identity/icon-128.png', 'chromium/overlay/fly/resources/identity/icon-128.png'],
 ];
 let stale = false;
 for (const [from, to] of COPIES) {

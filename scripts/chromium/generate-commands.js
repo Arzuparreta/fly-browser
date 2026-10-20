@@ -75,6 +75,15 @@ const legacyKeyboardCases = legacyFiles.map(({name, input}) => {
     const result = keybinds.resolveKeybinds(structuredClone(input));
     return {name, input, ok: result.ok, ...(result.ok ? {output: result.config} : {})};
 });
+// Command Centre texts (modules/overlays/commandPalette.js COMMAND_DEFINITIONS);
+// actions are functions there and are not evaluated here.
+const paletteSource = fs.readFileSync(path.join(root, 'modules/overlays/commandPalette.js'), 'utf8')
+    .match(/export const COMMAND_DEFINITIONS = (\[[\s\S]*?\n\]);/);
+assert(paletteSource, 'Command Centre definitions must remain discoverable');
+const commandDefinitions = vm.runInNewContext('(' + paletteSource[1] + ')', Object.create(null), {timeout: 1000})
+    .map(({id, title, desc, details, tip, category, actionId, keywords}) =>
+        ({id, title, desc, details, tip, category, actionId: actionId || id, keywords: keywords || []}));
+assert(commandDefinitions.every(item => keybinds.ACTION_METADATA[item.actionId]));
 const hinter = fs.readFileSync(path.join(root, 'hinter.js'), 'utf8');
 const charsetSource = hinter.match(/const charset = (\[[^;]+\]);/);
 const generatorSource = hinter.match(/function generateHintCodes\(count, alphabet\) \{[\s\S]*?return \{ codes, codeLength: len \};\s*\}/);
@@ -107,6 +116,7 @@ inline constexpr std::string_view kStoredKeyboardDefaultsJSON = ${literal(stored
 inline constexpr std::string_view kLegacyKeyboardCasesJSON = ${literal(legacyKeyboardCases)};
 inline constexpr std::string_view kWebsiteThemeCasesJSON = ${literal(websiteThemeCases)};
 inline constexpr std::string_view kPaletteEntriesJSON = ${literal(paletteEntries)};
+inline constexpr std::string_view kCommandDefinitionsJSON = ${literal(commandDefinitions)};
 inline constexpr std::string_view kHintAlphabet = ${JSON.stringify(hintAlphabet)};
 inline constexpr std::string_view kHintCasesJSON = ${literal(hintCases)};
 }  // namespace fly

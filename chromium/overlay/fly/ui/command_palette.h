@@ -16,6 +16,7 @@
 #include "ui/views/widget/widget_observer.h"
 
 namespace views {
+class Label;
 class Widget;
 class MdTextButton;
 }  // namespace views
@@ -35,6 +36,9 @@ struct PaletteStyle {
   // kPage only: area of the desktop contents left uncovered (sidebar rail,
   // footer), queried when the surface opens.
   base::RepeatingCallback<gfx::Insets()> page_insets;
+  // Electron's Command Centre: category chips, grouped list, match count,
+  // inspector card, recently used commands and the terminal fallback.
+  bool command_centre = false;
 };
 // A native modal child surface of the existing desktop Aura host. Commands
 // execute after the surface is destroyed; no callback retains a row or tab
@@ -69,6 +73,14 @@ class CommandPalette : public views::TextfieldController,
                    std::u16string placeholder,
                    std::u16string initial);
   void RefreshQuery();
+  // Command Centre: the last commands run from it, newest first.
+  void SetRecent(std::vector<std::string> ids) { recent_ = std::move(ids); }
+  void SetCategoryForTesting(std::string category);
+  std::u16string inspector_title_for_testing() const;
+  std::u16string count_for_testing() const;
+  std::string selected_action_for_testing() const {
+    return selected_ >= 0 ? filtered_[selected_].action : std::string();
+  }
   void Cancel(bool restore_focus = false);
   bool HandleOverlayKey(const ui::KeyEvent& event);
   bool active() const { return overlay_ && !closing_; }
@@ -93,6 +105,10 @@ class CommandPalette : public views::TextfieldController,
   void Remove(std::string action);
   void RemoveAfterEvent(std::string action);
   void FinishClose(bool restore_focus, std::string action);
+  void BuildCommandCentre(views::View* panel, int max_height);
+  void UpdateInspector();
+  void SetCategory(std::string category);
+  void Hover(size_t index);
   PaletteStyle style_;
   raw_ptr<views::Widget> desktop_;
   base::RepeatingCallback<bool(std::string_view)> available_;
@@ -113,6 +129,13 @@ class CommandPalette : public views::TextfieldController,
   bool cancelled_ = false;
   bool restore_page_focus_ = false;
   bool removable_ = false;
+  // Command Centre.
+  raw_ptr<views::Label> count_ = nullptr;
+  raw_ptr<views::View> inspector_ = nullptr;
+  std::vector<raw_ptr<views::MdTextButton>> chips_;
+  std::string category_ = "All";
+  std::vector<std::string> recent_;
+  std::vector<std::string> groups_;
   base::WeakPtrFactory<CommandPalette> weak_factory_{this};
 };
 }  // namespace fly

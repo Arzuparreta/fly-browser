@@ -54,7 +54,9 @@ namespace ui {
 class SimpleMenuModel;
 }
 
+class ScopedProfileKeepAlive;
 namespace fly {
+class WelcomeView;
 class CommandPalette;
 class BookmarkService;
 class SettingsMenu;
@@ -118,7 +120,9 @@ class FlyWindowController : public views::WidgetDelegate,
   StatusBar* status_bar_for_testing() { return status_bar_; }
   TabSidebar* tab_sidebar_for_testing() { return tab_sidebar_; }
   void CreateTab();
-  void CreateWorkspace();
+  // An empty name takes the next "Workspace N".
+  void CreateWorkspace(std::string name = {});
+  std::string NextWorkspaceName() const;
   void ToggleWorkspacePicker();
   bool CanShowWorkspacePicker() const { return workspaces_.Read().has_value(); }
   CommandPalette& workspace_picker() { return *workspace_picker_; }
@@ -165,6 +169,15 @@ class FlyWindowController : public views::WidgetDelegate,
   TabSidebar* compact_sidebar_for_testing() { return compact_tab_sidebar_; }
   FlyButton* sidebar_pin_for_testing() { return sidebar_pin_button_; }
   FlyButton* reader_button_for_testing() { return reader_button_; }
+  WelcomeView* welcome_for_testing() { return welcome_; }
+  // The rename and new workspace name dialog, while it is open.
+  views::DialogDelegate* workspace_name_dialog_for_testing() {
+    return rename_widget_ ? rename_delegate_.get() : nullptr;
+  }
+  std::vector<PaletteEntry> dashboard_entries_for_testing() {
+    return WorkspaceEntries();
+  }
+  void choose_workspace_for_testing(std::string action);
   FlyButton* new_tab_button_for_testing() { return new_tab_button_; }
 
   // WidgetObserver:
@@ -175,6 +188,10 @@ class FlyWindowController : public views::WidgetDelegate,
  private:
   void SetReaderActive(content::WebContents* contents, bool active);
   void UpdateReaderButton();
+  void UpdateWelcome();
+  std::vector<PaletteEntry> ExtensionCommandEntries(
+      BrowserWindowInterface* browser);
+  void RunFromEmptyWorkspace(std::string action);
   void RefreshReaderState();
   struct Entry {
     raw_ptr<BrowserWindowInterface> browser;
@@ -186,6 +203,14 @@ class FlyWindowController : public views::WidgetDelegate,
     base::CallbackListSubscription closed_subscription;
   };
   std::vector<PaletteEntry> WorkspaceEntries();
+  // Tabs listed by the workspace dashboard, by "<workspace id>/<n>".
+  struct TabChoice {
+    base::WeakPtr<BrowserWindowInterface> browser;
+    base::WeakPtr<content::WebContents> contents;
+  };
+  std::map<std::string, TabChoice> tab_choices_;
+  // Electron asks for the new workspace's name first.
+  void PromptNewWorkspace();
   bool WorkspaceChoiceAvailable(std::string_view action) const;
   void ChooseWorkspace(content::WebContents* source, std::string action);
   void OnWorkspacesChanged();
@@ -360,6 +385,10 @@ class FlyWindowController : public views::WidgetDelegate,
   std::map<std::string, raw_ptr<views::ImageButton>> window_control_buttons_;
   raw_ptr<views::View> workspace_buttons_ = nullptr;
   raw_ptr<views::View> content_ = nullptr;
+  raw_ptr<WelcomeView> welcome_ = nullptr;
+  std::unique_ptr<ScopedProfileKeepAlive> welcome_keep_alive_;
+  // Run on the workspace's new tab once it opens from the empty view.
+  std::string pending_empty_action_;
   raw_ptr<views::Label> status_ = nullptr;
   raw_ptr<StatusBar> status_bar_ = nullptr;
   raw_ptr<FlyButton> clock_ = nullptr;

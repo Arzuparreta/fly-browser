@@ -18,6 +18,7 @@
 #include "fly/ui/fly_actions.h"
 #include "fly/ui/fly_extensions.h"
 #include "fly/ui/user_content.h"
+#include "fly/ui/welcome_view.h"
 #include "base/files/scoped_temp_dir.h"
 #include "content/public/browser/host_zoom_map.h"
 #include "chrome/common/chrome_paths.h"
@@ -133,6 +134,11 @@ class FlyWorkspaceBrowserTest : public InProcessBrowserTest {
  public:
   void SetUpCommandLine(base::CommandLine* command_line) override {
     command_line->AppendSwitch("fly-native");
+    // Never import the Electron Fly profile of the machine running the tests
+    // (~/.config/fly-browser); import cases pass their own directory.
+    command_line->AppendSwitchPath(
+        "fly-import-from",
+        base::FilePath(FILE_PATH_LITERAL("/nonexistent-fly-import-source")));
   }
   void SetUpOnMainThread() override {
     ASSERT_TRUE(embedded_test_server()->Start());
@@ -1614,7 +1620,15 @@ IN_PROC_BROWSER_TEST_F(FlyWorkspaceBrowserTest,
   ASSERT_TRUE(second);
   auto& window = FlyWindowController::Get();
   ASSERT_TRUE(window.IsSelected(second));
+  auto second_lifetime = second->GetWeakPtr();
   second->GetWindow()->Close();
+  // Electron keeps the emptied workspace on screen with its welcome view; the
+  // sidebar no longer observes the closed window.
+  ASSERT_TRUE(base::test::RunUntil([&] { return !second_lifetime; }));
+  EXPECT_EQ(nullptr, window.selected_browser_for_testing());
+  EXPECT_TRUE(window.welcome_for_testing()->GetVisible());
+  EXPECT_EQ(0u, window.tab_sidebar_for_testing()->row_count_for_testing());
+  window.Select(first, true);
   ASSERT_TRUE(base::test::RunUntil([&] {
     return window.IsSelected(first) &&
            window.tab_sidebar_for_testing()->row_for_testing(Active(first));
@@ -3372,6 +3386,10 @@ IN_PROC_BROWSER_TEST_F(FlyWorkspaceBrowserTest,
   picker.ContentsChanged(picker.search_for_testing(), u"New workspace");
   ASSERT_EQ(1u, picker.result_count_for_testing());
   keys.PressKey(ui::VKEY_RETURN, ui::EF_NONE);
+  // Electron asks for the name first.
+  ASSERT_TRUE(base::test::RunUntil(
+      [&] { return window.workspace_name_dialog_for_testing() != nullptr; }));
+  window.workspace_name_dialog_for_testing()->AcceptDialog();
   ASSERT_TRUE(base::test::RunUntil([&] {
     return !picker.search_for_testing() &&
            window.selected_browser_for_testing() != nullptr;
@@ -3708,6 +3726,81 @@ IN_PROC_BROWSER_TEST_F(FlyWorkspaceBrowserTest,
     auto* current = window.diagnostics_dialog_for_testing();
     return !current || current->IsClosed();
   }));
+}
+
+// Electron's dashboard: each workspace with its tabs (pinned marked) and
+// rename/delete buttons; choosing a tab opens its workspace on that tab.
+IN_PROC_BROWSER_TEST_F(FlyWorkspaceBrowserTest,
+                       DashboardListsWorkspaceTabsAndOpensThem) {
+  auto& window = FlyWindowController::Get();
+  auto* original = browser();
+  ASSERT_TRUE(ui_test_utils::NavigateToURL(
+      original, embedded_test_server()->GetURL("/title1.html")));
+  ASSERT_TRUE(ui_test_utils::NavigateToURLWithDisposition(
+      original, embedded_test_server()->GetURL("/title2.html"),
+      WindowOpenDisposition::NEW_FOREGROUND_TAB,
+      ui_test_utils::BROWSER_TEST_WAIT_FOR_LOAD_STOP));
+  original->GetTabStripModel()->SetTabPinned(1, true);
+  window.CreateWorkspace("Second");
+  ASSERT_TRUE(base::test::RunUntil([&] {
+    auto* selected = window.selected_browser_for_testing();
+    return selected && selected != original &&
+           selected->GetTabStripModel()->count() == 1;
+  }));
+  const auto entries = window.dashboard_entries_for_testing();
+  std::vector<std::string> titles;
+  std::string pinned_action;
+  for (const auto& entry : entries) {
+    titles.push_back(entry.title);
+    if (entry.title.find("\xF0\x9F\x93\x8C") != std::string::npos)
+      pinned_action = entry.action;
+  }
+  ASSERT_GE(titles.size(), 5u);
+  EXPECT_FALSE(titles[0].starts_with("- "));
+  // Pinned tabs come first in the strip.
+  EXPECT_EQ("- Title Of Awesomeness \xF0\x9F\x93\x8C", titles[1]);
+  EXPECT_TRUE(titles[2].starts_with("- ") &&
+              titles[2].find("title1.html") != std::string::npos)
+      << titles[2];
+  EXPECT_EQ("Second (Active)", titles[3]);
+  EXPECT_EQ(entries[1].action, pinned_action);
+  EXPECT_EQ(2u, entries[0].row_actions.size());
+  EXPECT_EQ(1, entries[2].indent);
+  window.choose_workspace_for_testing(entries[2].action);
+  ASSERT_TRUE(base::test::RunUntil(
+      [&] { return window.selected_browser_for_testing() == original; }));
+  EXPECT_EQ(1, original->GetTabStripModel()->active_index());
+}
+
+// Electron keeps a workspace whose last tab closed and shows its empty view;
+// the view's New Tab card reopens that workspace.
+IN_PROC_BROWSER_TEST_F(FlyWorkspaceBrowserTest,
+                       LastTabClosedShowsTheWorkspaceWelcomeView) {
+  auto& window = FlyWindowController::Get();
+  auto* original = browser();
+  window.CreateWorkspace("Empty soon");
+  ASSERT_TRUE(base::test::RunUntil([&] {
+    auto* selected = window.selected_browser_for_testing();
+    return selected && selected != original &&
+           selected->GetTabStripModel()->count() == 1;
+  }));
+  auto second = window.selected_browser_for_testing()->GetWeakPtr();
+  auto* second_profile = second->GetProfile();
+  ASSERT_TRUE(ExecuteNativeCommand(second.get(), "remove-tab"));
+  ASSERT_TRUE(base::test::RunUntil([&] { return !second; }));
+  EXPECT_EQ(nullptr, window.selected_browser_for_testing());
+  auto* welcome = window.welcome_for_testing();
+  ASSERT_TRUE(welcome);
+  EXPECT_TRUE(welcome->GetVisible());
+  EXPECT_EQ(u"Empty soon", welcome->workspace_for_testing());
+  auto* new_tab = static_cast<views::Button*>(welcome->card_for_testing(0));
+  ASSERT_TRUE(new_tab);
+  views::test::ButtonTestApi(new_tab).NotifyDefaultMouseClick();
+  ASSERT_TRUE(base::test::RunUntil([&] {
+    auto* selected = window.selected_browser_for_testing();
+    return selected && selected->GetProfile() == second_profile;
+  }));
+  EXPECT_FALSE(welcome->GetVisible());
 }
 
 // Electron's siteZoom.js: zoom changes by 0.5 levels per step and one level
@@ -4632,6 +4725,42 @@ IN_PROC_BROWSER_TEST_F(FlyWorkspaceBrowserTest,
   EXPECT_EQ(before, window.commands().Read());
 }
 
+// Electron's Command Centre: count, category chips, inspector card,
+// recently used commands and the terminal fallback.
+IN_PROC_BROWSER_TEST_F(FlyWorkspaceBrowserTest,
+                       CommandCentreFiltersInspectsAndRemembersCommands) {
+  ASSERT_TRUE(ui_test_utils::NavigateToURL(
+      browser(), embedded_test_server()->GetURL("/title1.html")));
+  auto& window = FlyWindowController::Get();
+  window.Select(browser(), true);
+  auto& palette = window.palette();
+  ASSERT_TRUE(InvokeNativeCommand(browser(), "toggle-palette"));
+  ASSERT_TRUE(base::test::RunUntil([&] { return palette.active(); }));
+  EXPECT_TRUE(palette.count_for_testing().ends_with(u" commands"));
+  EXPECT_EQ(u"New Blank Tab", palette.inspector_title_for_testing());
+  palette.SetCategoryForTesting("Split View");
+  EXPECT_EQ(u"6 commands", palette.count_for_testing());
+  palette.SetCategoryForTesting("All");
+  palette.search_for_testing()->SetText(u"zz-no-command");
+  palette.ContentsChanged(palette.search_for_testing(), u"zz-no-command");
+  EXPECT_EQ(u"1 match", palette.count_for_testing());
+  EXPECT_EQ("terminal:zz-no-command", palette.selected_action_for_testing());
+  EXPECT_EQ(u"Terminal Oversight", palette.inspector_title_for_testing());
+  palette.search_for_testing()->SetText(u"reader");
+  palette.ContentsChanged(palette.search_for_testing(), u"reader");
+  ASSERT_EQ("toggle-reader-view", palette.selected_action_for_testing());
+  ui::test::EventGenerator keys(
+      window.desktop_widget()->GetNativeWindow()->GetRootWindow());
+  keys.PressKey(ui::VKEY_RETURN, ui::EF_NONE);
+  ASSERT_TRUE(base::test::RunUntil([&] { return !palette.active(); }));
+  EXPECT_EQ(std::vector<std::string>{"toggle-reader-view"},
+            window.preferences().ReadRecentCommands());
+  ASSERT_TRUE(InvokeNativeCommand(browser(), "toggle-palette"));
+  ASSERT_TRUE(base::test::RunUntil([&] { return palette.active(); }));
+  // Recently used commands come first.
+  EXPECT_EQ("toggle-reader-view", palette.selected_action_for_testing());
+}
+
 IN_PROC_BROWSER_TEST_F(FlyWorkspaceBrowserTest,
                        NativePaletteSearchExecutesInItsProfileAfterDismissal) {
   auto* contents = Active(browser());
@@ -4646,11 +4775,12 @@ IN_PROC_BROWSER_TEST_F(FlyWorkspaceBrowserTest,
       window.desktop_widget()->GetNativeWindow()->GetRootWindow());
   keys.PressKey(ui::VKEY_P, ui::EF_CONTROL_DOWN);
   ASSERT_TRUE(base::test::RunUntil([&] { return window.palette().active(); }));
-  for (auto key : {ui::VKEY_D, ui::VKEY_U, ui::VKEY_P, ui::VKEY_L, ui::VKEY_I,
-                   ui::VKEY_C, ui::VKEY_A, ui::VKEY_T, ui::VKEY_E})
+  // Electron's Command Centre lists New Blank Tab (not Duplicate Tab).
+  for (auto key : {ui::VKEY_N, ui::VKEY_E, ui::VKEY_W, ui::VKEY_SPACE,
+                   ui::VKEY_B, ui::VKEY_L, ui::VKEY_A, ui::VKEY_N, ui::VKEY_K})
     keys.PressKey(key, ui::EF_NONE);
   ASSERT_TRUE(base::test::RunUntil([&] {
-    return window.palette().search_for_testing()->GetText() == u"duplicate" &&
+    return window.palette().search_for_testing()->GetText() == u"new blank" &&
            window.palette().result_count_for_testing() == 1;
   }));
   EXPECT_EQ("", content::EvalJs(contents,

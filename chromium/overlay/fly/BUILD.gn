@@ -234,6 +234,7 @@ copy("fonts") {
 # Files the native browser reads at run time from <out>/fly_resources.
 group("user_content_resources") {
   deps = [
+    ":identity_resources",
     ":reader_resources",
     ":user_content_worker",
   ]
@@ -243,6 +244,12 @@ group("user_content_resources") {
 copy("reader_resources") {
   sources = [ "resources/reader/readerDistiller.js" ]
   outputs = [ "$root_out_dir/fly_resources/reader/{{source_file_part}}" ]
+}
+
+# The product logo of the empty workspace view.
+copy("identity_resources") {
+  sources = [ "resources/identity/icon-128.png" ]
+  outputs = [ "$root_out_dir/fly_resources/identity/{{source_file_part}}" ]
 }
 
 copy("user_content_worker") {

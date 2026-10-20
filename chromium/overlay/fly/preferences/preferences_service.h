@@ -20,6 +20,7 @@ class CommandLine;
 }
 namespace fly {
 inline constexpr char kPreferencesPref[] = "fly.preferences";
+inline constexpr char kRecentCommandsPref[] = "fly.recent_commands";
 struct ClockPreferences {
   bool visible = true;
   std::string format = "datetime";
@@ -99,6 +100,10 @@ class PreferencesService {
   // per-workspace switches, extensions suspended by the global switch.
   std::optional<base::DictValue> ReadNativeExtensions() const;
   bool SetNativeExtensions(base::DictValue state);
+  // Command Centre's recently used commands (Electron keeps four), newest
+  // first, in their own Local State entry.
+  std::vector<std::string> ReadRecentCommands() const;
+  void RecordRecentCommand(std::string_view action);
   // Applies settings that only take effect at process start (GPU, background
   // throttling, renderer process limit). Called before child processes start.
   static void ApplyStartupSwitches(const PrefService& local_state,

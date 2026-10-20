@@ -89,6 +89,8 @@ class FlyExtensions : public extensions::ExtensionRegistryObserver,
                  views::View* anchor);
 
   bool IsBundled(const std::string& id) const;
+  // Reloads every unpacked extension in every workspace; false when none.
+  bool ReloadUnpacked();
 
   // ExtensionRegistryObserver:
   void OnExtensionLoaded(content::BrowserContext* context,

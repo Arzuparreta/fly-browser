@@ -515,4 +515,20 @@ void FlyExtensions::OnExtensionActionUpdated(extensions::ExtensionAction*,
                                              content::BrowserContext*) {
   changed_.Run();
 }
+
+bool FlyExtensions::ReloadUnpacked() {
+  bool any = false;
+  for (Profile* profile : profiles_) {
+    std::vector<std::string> ids;
+    for (const auto& extension :
+         extensions::ExtensionRegistry::Get(profile)->enabled_extensions())
+      if (extensions::Manifest::IsUnpackedLocation(extension->location()))
+        ids.push_back(extension->id());
+    for (const auto& id : ids) {
+      extensions::ExtensionRegistrar::Get(profile)->ReloadExtension(id);
+      any = true;
+    }
+  }
+  return any;
+}
 }  // namespace fly
