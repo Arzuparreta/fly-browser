@@ -98,6 +98,13 @@ constexpr auto kCalculatorExamples = std::to_array<std::pair<std::u16string_view
                              {u"15% of 200", u"30"},
                              {u"2^10", u"1024"},
                              {u"sqrt(144)", u"12"}});
+// Labels in Preferences follow the Fly palette.
+std::unique_ptr<FlyLabel> MakeEditorLabel(std::u16string text = u"") {
+  auto label =
+      std::make_unique<FlyLabel>(std::move(text), FlyFace::kSans, 12);
+  label->SetHorizontalAlignment(gfx::ALIGN_LEFT);
+  return label;
+}
 }  // namespace
 KeyboardEditor::KeyboardEditor(views::Widget* desktop,
                                CommandService& commands,
@@ -502,12 +509,12 @@ void KeyboardEditor::BuildGeneralPane() {
   alias_info->SetLayoutManager(std::make_unique<views::BoxLayout>(
       views::BoxLayout::Orientation::kVertical, gfx::Insets(), 4));
   search_settings_status_ =
-      alias_info->AddChildView(std::make_unique<views::Label>());
+      alias_info->AddChildView(MakeEditorLabel());
   search_settings_status_->SetMultiLine(true);
   search_settings_status_->SetHorizontalAlignment(gfx::ALIGN_LEFT);
   search_settings_status_->GetViewAccessibility().SetLiveRegionContainer(
       views::ViewAccessibility::LiveRegionStatus::kPolite);
-  alias_list_ = alias_info->AddChildView(std::make_unique<views::Label>());
+  alias_list_ = alias_info->AddChildView(MakeEditorLabel());
   alias_list_->SetMultiLine(true);
   alias_list_->SetHorizontalAlignment(gfx::ALIGN_LEFT);
   AddItem(aliases, u"Your aliases", u"", std::move(alias_info), true);
@@ -660,7 +667,7 @@ void KeyboardEditor::BuildAppearancePane() {
   AddItem(interface, u"Window controls",
           u"Show minimise, maximise and close buttons in the sidebar.",
           checkbox("show_window_controls", u"Window controls"));
-  auto status = std::make_unique<views::Label>();
+  auto status = MakeEditorLabel();
   status->SetMultiLine(true);
   status->SetHorizontalAlignment(gfx::ALIGN_LEFT);
   appearance_status_ = status.get();
@@ -705,7 +712,7 @@ void KeyboardEditor::BuildKeyboardPane(bool readable) {
               editor->Refresh();
           },
           weak_factory_.GetWeakPtr())));
-  filters->AddChildView(std::make_unique<views::Label>(u"Numbered tabs"));
+  filters->AddChildView(MakeEditorLabel(u"Numbered tabs"));
   tabs_ = filters->AddChildView(std::make_unique<views::Textfield>());
   tabs_->SetText(tab_modifiers_);
   tabs_->SetPreferredSize(gfx::Size(110, 28));
@@ -721,7 +728,7 @@ void KeyboardEditor::BuildKeyboardPane(bool readable) {
   rows_->SetLayoutManager(std::make_unique<views::BoxLayout>(
       views::BoxLayout::Orientation::kVertical, gfx::Insets(), 10));
   keyboard_layout->SetFlexForView(scroll, 1);
-  status_ = keyboard->AddChildView(std::make_unique<views::Label>(u""));
+  status_ = keyboard->AddChildView(MakeEditorLabel(u""));
   status_->SetMultiLine(true);
   status_->SetHorizontalAlignment(gfx::ALIGN_LEFT);
   status_->GetViewAccessibility().SetLiveRegionContainer(
@@ -860,7 +867,7 @@ void KeyboardEditor::BuildPerformancePane() {
                                   weak_factory_.GetWeakPtr(),
                                   std::string("restart")),
               u"Save & restart engine"));
-  auto status = std::make_unique<views::Label>();
+  auto status = MakeEditorLabel();
   status->SetMultiLine(true);
   status->SetHorizontalAlignment(gfx::ALIGN_LEFT);
   suspension_status_ = status.get();
@@ -911,12 +918,14 @@ void KeyboardEditor::BuildAboutPane() {
                           std::string("install-update")),
       u"Install update"));
   update_action_->SetVisible(!update_available_.empty());
+  if (!update_available_.empty())
+    update_action_->SetText(u"Install " + base::UTF8ToUTF16(update_available_));
   AddItem(about,
           base::UTF8ToUTF16(std::string("Fly v") + kFlyVersion),
           u"Engine Chromium " +
               base::UTF8ToUTF16(std::string(version_info::GetVersionNumber())),
           std::move(version));
-  auto status = std::make_unique<views::Label>(update_status_);
+  auto status = std::make_unique<FlyLabel>(update_status_, FlyFace::kSans, 12);
   status->SetMultiLine(true);
   status->SetHorizontalAlignment(gfx::ALIGN_LEFT);
   update_label_ = status.get();
@@ -926,7 +935,7 @@ void KeyboardEditor::BuildAboutPane() {
   entry->SetLayoutManager(std::make_unique<views::BoxLayout>(
       views::BoxLayout::Orientation::kHorizontal, gfx::Insets(), 8));
   desktop_entry_label_ = entry->AddChildView(
-      std::make_unique<views::Label>(desktop_entry_status_));
+      std::make_unique<FlyLabel>(desktop_entry_status_, FlyFace::kSans, 12));
   desktop_entry_label_->SetMultiLine(true);
   desktop_entry_label_->SetMaximumWidth(520);
   desktop_entry_label_->SetHorizontalAlignment(gfx::ALIGN_LEFT);
@@ -941,7 +950,7 @@ void KeyboardEditor::BuildAboutPane() {
   browser->SetLayoutManager(std::make_unique<views::BoxLayout>(
       views::BoxLayout::Orientation::kHorizontal, gfx::Insets(), 8));
   default_browser_label_ = browser->AddChildView(
-      std::make_unique<views::Label>(default_browser_status_));
+      std::make_unique<FlyLabel>(default_browser_status_, FlyFace::kSans, 12));
   default_browser_label_->SetMultiLine(true);
   default_browser_label_->SetMaximumWidth(520);
   default_browser_label_->SetHorizontalAlignment(gfx::ALIGN_LEFT);
@@ -1195,7 +1204,7 @@ void KeyboardEditor::ShowExtensions() {
 void KeyboardEditor::BuildExtensionsSection() {
   auto* pane = AddPane(u"Extensions");
   if (!extensions_) {
-    pane->AddChildView(std::make_unique<views::Label>(
+    pane->AddChildView(MakeEditorLabel(
         u"Extensions are not available."));
     return;
   }
@@ -1282,7 +1291,7 @@ void KeyboardEditor::BuildExtensionsSection() {
                                             "extensions-reload"));
   usage_buttons->AddChildView(action_button(u"Open extensions folder",
                                             "extensions-open-dir"));
-  extensions_usage_ = usage_box->AddChildView(std::make_unique<views::Label>(
+  extensions_usage_ = usage_box->AddChildView(MakeEditorLabel(
       u"Refresh to see the memory each extension uses in this workspace."));
   extensions_usage_->SetMultiLine(true);
   extensions_usage_->SetHorizontalAlignment(gfx::ALIGN_LEFT);
@@ -1307,7 +1316,7 @@ void KeyboardEditor::RefreshExtensions() {
   rows->SetLayoutManager(std::make_unique<views::BoxLayout>(
       views::BoxLayout::Orientation::kVertical, gfx::Insets(), 6));
   if (!profile || profile->IsOffTheRecord()) {
-    rows->AddChildView(std::make_unique<views::Label>(
+    rows->AddChildView(MakeEditorLabel(
         u"Private workspaces run no extensions."));
   }
   const auto list = profile && !profile->IsOffTheRecord()
@@ -1315,7 +1324,7 @@ void KeyboardEditor::RefreshExtensions() {
                         : std::vector<FlyExtensionInfo>();
   if (profile && !profile->IsOffTheRecord() && list.empty())
     rows->AddChildView(
-        std::make_unique<views::Label>(u"No extensions in this workspace."));
+        MakeEditorLabel(u"No extensions in this workspace."));
   for (const auto& info : list) {
     auto* row = rows->AddChildView(std::make_unique<views::View>());
     auto* layout = row->SetLayoutManager(std::make_unique<views::BoxLayout>(
@@ -1642,14 +1651,14 @@ void KeyboardEditor::Refresh() {
     row->SetLayoutManager(std::make_unique<views::BoxLayout>(
         views::BoxLayout::Orientation::kVertical));
     row->AddChildView(
-        std::make_unique<views::Label>(base::UTF8ToUTF16(entry.title)));
+        MakeEditorLabel(base::UTF8ToUTF16(entry.title)));
     for (const auto normal : {false, true}) {
       const Key key{entry.action, normal};
       auto* scope = row->AddChildView(std::make_unique<views::View>());
       auto* layout = scope->SetLayoutManager(std::make_unique<views::BoxLayout>(
           views::BoxLayout::Orientation::kHorizontal, gfx::Insets(), 4));
       auto* label = scope->AddChildView(
-          std::make_unique<views::Label>(normal ? u"NORMAL" : u"Global"));
+          MakeEditorLabel(normal ? u"NORMAL" : u"Global"));
       label->SetPreferredSize(gfx::Size(70, 24));
       auto* field = scope->AddChildView(std::make_unique<views::Textarea>());
       field->SetPreferredSize(gfx::Size(320, 52));
