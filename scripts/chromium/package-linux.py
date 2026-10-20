@@ -43,6 +43,9 @@ LAUNCHER = '''#!/bin/sh
 # only read once to import it.
 HERE=$(dirname "$(readlink -f "$0")")
 CONFIG="${XDG_CONFIG_HOME:-$HOME/.config}"
+# Chromium keeps crash reports under its default directory (~/.config/chromium)
+# whatever --user-data-dir says; keep them with Fly's data.
+export CHROME_CONFIG_HOME="$CONFIG/fly-browser-native"
 exec "$HERE/fly" --fly-native --class=fly-browser-native \\
   --user-data-dir="$CONFIG/fly-browser-native" "$@"
 '''
@@ -138,6 +141,13 @@ def main():
                 shutil.copy2(build / file, app / ('fly' if file == 'chrome' else file))
         if (build / 'chrome_sandbox').is_file():
             shutil.copy2(build / 'chrome_sandbox', app / 'chrome-sandbox')
+        # Release builds keep the symbol table (about a third of the browser
+        # binary); packages do not need it.
+        strip = shutil.which('strip')
+        if strip:
+            for binary in ('fly', 'chrome_crashpad_handler', 'chrome-sandbox'):
+                if (app / binary).is_file():
+                    subprocess.run([strip, str(app / binary)], check=True)
         for directory in RUNTIME_DIRS:
             if (build / directory).is_dir():
                 shutil.copytree(build / directory, app / directory, symlinks=False)
