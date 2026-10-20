@@ -2,6 +2,14 @@
 // Use of this source code is governed by the GPL-3.0-or-later license in the
 // Fly repository.
 #include "fly/ui/keyboard_editor.h"
+#include "fly/ui/fly_theme.h"
+#include "fly/ui/fly_extensions.h"
+#include "chrome/browser/profiles/profile.h"
+#include "chrome/browser/ui/browser_window/public/browser_window_interface.h"
+#include "chrome/browser/ui/navigator/browser_navigator.h"
+#include "chrome/browser/ui/navigator/browser_navigator_params.h"
+
+#include <limits>
 
 #include <algorithm>
 #include <set>
@@ -54,6 +62,7 @@ KeyboardEditor::~KeyboardEditor() {
   search_ = nullptr;
   tabs_ = nullptr;
   rows_ = nullptr;
+  rows_scroll_ = nullptr;
   status_ = nullptr;
   save_ = nullptr;
   ClearAppearance();
@@ -87,6 +96,7 @@ void KeyboardEditor::Toggle(content::WebContents* contents) {
           base::UTF8ToUTF16(base::JoinString(bindings, "\n"));
   tab_modifiers_ = base::UTF8ToUTF16(original_.tabs);
   closing_ = cancelled_ = false;
+  show_all_rows_ = false;
   overlay_ = std::make_unique<views::Widget>();
   views::Widget::InitParams params(
       views::Widget::InitParams::CLIENT_OWNS_WIDGET,
@@ -112,10 +122,11 @@ void KeyboardEditor::Toggle(content::WebContents* contents) {
   auto* layout = panel->SetLayoutManager(std::make_unique<views::BoxLayout>(
       views::BoxLayout::Orientation::kVertical, gfx::Insets(12), 8));
   panel->SetPreferredSize(gfx::Size(900, std::max(160, bounds.height() - 32)));
-  panel->SetBackground(
-      views::CreateSolidBackground(ui::kColorDialogBackground));
-  panel->AddChildView(
-      std::make_unique<views::Label>(u"Preferences"));
+  panel->SetBackground(FlyBackground(FlyRole::kSidebar, 4));
+  panel->SetBorder(FlyBorder(FlyRole::kBorder, 1, 4));
+  auto* heading = panel->AddChildView(std::make_unique<FlyLabel>(
+      u"Preferences", FlyFace::kSans, 15, gfx::Font::Weight::SEMIBOLD));
+  heading->SetHorizontalAlignment(gfx::ALIGN_LEFT);
   sections_ = panel->AddChildView(std::make_unique<views::TabbedPane>());
   sections_->SetListener(this);
   layout->SetFlexForView(sections_, 1);
@@ -140,7 +151,57 @@ void KeyboardEditor::Toggle(content::WebContents* contents) {
                                    weak_factory_.GetWeakPtr(), std::string(key))));
     appearance_[key]->SetMultiLine(true);
   }
-  clock_format_ = appearance->AddChildView(std::make_unique<views::MdTextButton>(
+  for (const auto& [key, label] :
+       {std::pair{"interface_scale", u"Large interface (125%)"},
+        std::pair{"web_notifications", u"Allow websites to ask to show notifications"}}) {
+    appearance_[key] = appearance->AddChildView(std::make_unique<views::Checkbox>(
+        label, base::BindRepeating(&KeyboardEditor::ChangeAppearance,
+                                   weak_factory_.GetWeakPtr(), std::string(key))));
+  }
+  appearance->AddChildView(std::make_unique<views::Label>(
+      u"Spellchecker language (for example en-GB; \"disabled\" turns it off)"));
+  spellcheck_ = appearance->AddChildView(std::make_unique<views::Textfield>());
+  spellcheck_->GetViewAccessibility().SetName(u"Spellchecker language");
+  appearance->AddChildView(std::make_unique<views::Label>(
+      u"Email for Share: \"system\", or a compose URL with %s (subject) and "
+      u"%b (body)"));
+  email_handler_ = appearance->AddChildView(std::make_unique<views::Textfield>());
+  email_handler_->GetViewAccessibility().SetName(u"Email handler");
+  appearance->AddChildView(std::make_unique<views::Label>(
+      u"Interface colours for the current theme (#rrggbb, empty uses the default)"));
+  for (const auto& [key, label] :
+       {std::pair{"accent", u"Accent"}, std::pair{"bg_main", u"Main background"},
+        std::pair{"bg_sidebar", u"Sidebar background"},
+        std::pair{"text", u"Text"}}) {
+    auto* row = appearance->AddChildView(std::make_unique<views::View>());
+    auto* row_layout = row->SetLayoutManager(std::make_unique<views::BoxLayout>(
+        views::BoxLayout::Orientation::kHorizontal, gfx::Insets(), 8));
+    auto* name = row->AddChildView(std::make_unique<views::Label>(label));
+    name->SetPreferredSize(gfx::Size(160, 24));
+    name->SetHorizontalAlignment(gfx::ALIGN_LEFT);
+    auto* field = row->AddChildView(std::make_unique<views::Textfield>());
+    field->GetViewAccessibility().SetName(std::u16string(label) + u" colour");
+    row_layout->SetFlexForView(field, 1);
+    color_fields_[key] = field;
+  }
+  auto* apply_row = appearance->AddChildView(std::make_unique<views::View>());
+  apply_row->SetLayoutManager(std::make_unique<views::BoxLayout>(
+      views::BoxLayout::Orientation::kHorizontal, gfx::Insets(), 8));
+  apply_row->AddChildView(std::make_unique<FlyButton>(
+      base::BindRepeating(&KeyboardEditor::ApplyProductTexts,
+                          weak_factory_.GetWeakPtr()),
+      u"Apply language, email and colours"));
+  apply_row->AddChildView(std::make_unique<FlyButton>(
+      base::BindRepeating(
+          [](base::WeakPtr<KeyboardEditor> editor) {
+            if (editor && editor->active()) {
+              editor->preferences_.ResetThemeColors();
+              editor->RefreshAppearance();
+            }
+          },
+          weak_factory_.GetWeakPtr()),
+      u"Default colours"));
+  clock_format_ = appearance->AddChildView(std::make_unique<FlyButton>(
       base::BindRepeating(&KeyboardEditor::CycleClockFormat,
                           weak_factory_.GetWeakPtr()), u"Clock format"));
   clock_format_->SetTooltipText(u"Click to change the clock format");
@@ -151,13 +212,36 @@ void KeyboardEditor::Toggle(content::WebContents* contents) {
   performance->SetLayoutManager(std::make_unique<views::BoxLayout>(
       views::BoxLayout::Orientation::kVertical, gfx::Insets(12), 12));
   suspension_timeout_ =
-      performance->AddChildView(std::make_unique<views::MdTextButton>(
+      performance->AddChildView(std::make_unique<FlyButton>(
           base::BindRepeating(&KeyboardEditor::CycleSuspendTimeout,
                               weak_factory_.GetWeakPtr()),
           u"Suspend background pages"));
   suspension_timeout_->SetTooltipText(
       u"Click to change the delay. Eligible pages pause without unloading. "
       u"Visible, pinned and busy pages keep running.");
+  for (const auto& [key, label] :
+       {std::pair{"disable_gpu",
+                  u"Disable GPU hardware acceleration (after restart)"},
+        std::pair{"background_throttling",
+                  u"Throttle timers in background pages (after restart)"},
+        std::pair{"enable_diagnostics",
+                  u"Record diagnostics events in memory"}}) {
+    appearance_[key] = performance->AddChildView(std::make_unique<views::Checkbox>(
+        label, base::BindRepeating(&KeyboardEditor::ChangeAppearance,
+                                   weak_factory_.GetWeakPtr(), std::string(key))));
+  }
+  process_limit_ = performance->AddChildView(std::make_unique<FlyButton>(
+      base::BindRepeating(
+          [](base::WeakPtr<KeyboardEditor> editor) {
+            if (!editor || !editor->active())
+              return;
+            const int limit =
+                editor->preferences_.ReadInt("process_limit").value_or(4);
+            editor->preferences_.SetInt("process_limit", limit % 5 + 1);
+            editor->RefreshAppearance();
+          },
+          weak_factory_.GetWeakPtr()),
+      u"Renderer process limit"));
   suspension_status_ =
       performance->AddChildView(std::make_unique<views::Label>());
   suspension_status_->SetMultiLine(true);
@@ -185,6 +269,9 @@ void KeyboardEditor::Toggle(content::WebContents* contents) {
   auto* scroll = keyboard->AddChildView(std::make_unique<views::ScrollView>());
   scroll->SetHorizontalScrollBarMode(
       views::ScrollView::ScrollBarMode::kDisabled);
+  rows_scroll_ = scroll;
+  // A bounded viewport gives the BoxLayout contents real bounds.
+  scroll->ClipHeightTo(0, std::numeric_limits<int>::max());
   rows_ = scroll->SetContents(std::make_unique<views::View>());
   rows_->SetLayoutManager(std::make_unique<views::BoxLayout>(
       views::BoxLayout::Orientation::kVertical, gfx::Insets(), 10));
@@ -196,25 +283,27 @@ void KeyboardEditor::Toggle(content::WebContents* contents) {
   auto* buttons = keyboard->AddChildView(std::make_unique<views::View>());
   buttons->SetLayoutManager(std::make_unique<views::BoxLayout>(
       views::BoxLayout::Orientation::kHorizontal, gfx::Insets(), 8));
-  buttons->AddChildView(std::make_unique<views::MdTextButton>(
+  buttons->AddChildView(std::make_unique<FlyButton>(
       base::BindRepeating(&KeyboardEditor::ResetAll,
                           weak_factory_.GetWeakPtr()),
       u"Restore defaults"));
-  save_ = buttons->AddChildView(std::make_unique<views::MdTextButton>(
+  save_ = buttons->AddChildView(std::make_unique<FlyButton>(
       base::BindRepeating(&KeyboardEditor::Save, weak_factory_.GetWeakPtr()),
       u"Apply"));
   save_->SetStyle(ui::ButtonStyle::kProminent);
+  static_cast<FlyButton*>(save_.get())->SetAccentText(true);
   save_->SetEnabled(commands_->CanEdit());
   if (!current)
     status_->SetText(
         u"Existing keyboard settings need recovery. They have been preserved.");
   else if (!commands_->CanEdit())
     status_->SetText(u"Keyboard settings are managed.");
-  panel->AddChildView(std::make_unique<views::MdTextButton>(
+  panel->AddChildView(std::make_unique<FlyButton>(
       base::BindRepeating(&KeyboardEditor::Cancel, weak_factory_.GetWeakPtr(), true),
       u"Close"));
   root->AddChildView(std::move(panel));
   BuildSearchSection();
+  BuildExtensionsSection();
   overlay_->SetContentsView(std::move(root));
   RefreshAppearance();
   Refresh();
@@ -242,16 +331,16 @@ void KeyboardEditor::BuildSearchSection() {
     if (std::string_view(key) == "engine" && settings)
       field->SetText(base::UTF8ToUTF16(settings->engine));
     if (std::string_view(key) == "engine")
-      search_save_ = panel->AddChildView(std::make_unique<views::MdTextButton>(
+      search_save_ = panel->AddChildView(std::make_unique<FlyButton>(
           base::BindRepeating(&KeyboardEditor::SaveSearchSetting,
                               weak_factory_.GetWeakPtr(), "engine"),
           u"Save search engine"));
   }
-  alias_save_ = panel->AddChildView(std::make_unique<views::MdTextButton>(
+  alias_save_ = panel->AddChildView(std::make_unique<FlyButton>(
       base::BindRepeating(&KeyboardEditor::SaveSearchSetting,
                           weak_factory_.GetWeakPtr(), "alias"),
       u"Add or update alias"));
-  alias_remove_ = panel->AddChildView(std::make_unique<views::MdTextButton>(
+  alias_remove_ = panel->AddChildView(std::make_unique<FlyButton>(
       base::BindRepeating(&KeyboardEditor::SaveSearchSetting,
                           weak_factory_.GetWeakPtr(), "remove"),
       u"Remove custom alias by key"));
@@ -327,6 +416,154 @@ void KeyboardEditor::ShowAppearance(bool return_to_page) {
   sections_->SelectTabAt(0, false);
   appearance_.at("theme")->RequestFocus();
 }
+void KeyboardEditor::SetExtensions(
+    FlyExtensions* extensions,
+    base::RepeatingCallback<BrowserWindowInterface*()> browser) {
+  extensions_ = extensions;
+  extensions_browser_ = std::move(browser);
+}
+void KeyboardEditor::ShowExtensions() {
+  if (!active() || !extensions_list_)
+    return;
+  StopRecording();
+  sections_->SelectTabAt(4, false);
+  extensions_enabled_->RequestFocus();
+}
+void KeyboardEditor::BuildExtensionsSection() {
+  if (!extensions_)
+    return;
+  auto* scroll =
+      sections_->AddTab(u"Extensions", std::make_unique<views::ScrollView>());
+  scroll->SetHorizontalScrollBarMode(
+      views::ScrollView::ScrollBarMode::kDisabled);
+  scroll->ClipHeightTo(0, std::numeric_limits<int>::max());
+  auto* panel = scroll->SetContents(std::make_unique<views::View>());
+  panel->SetLayoutManager(std::make_unique<views::BoxLayout>(
+      views::BoxLayout::Orientation::kVertical, gfx::Insets(12), 8));
+  extensions_enabled_ = panel->AddChildView(std::make_unique<views::Checkbox>(
+      u"Enable Chrome extensions",
+      base::BindRepeating(
+          [](base::WeakPtr<KeyboardEditor> editor) {
+            if (!editor || !editor->active())
+              return;
+            editor->extensions_->SetEnabled(
+                editor->extensions_enabled_->GetChecked());
+            editor->RefreshExtensions();
+          },
+          weak_factory_.GetWeakPtr())));
+  panel->AddChildView(std::make_unique<views::Label>(
+      u"Extensions belong to the current workspace. Included uBlock Origin "
+      u"Lite runs in every workspace unless switched off here; Remove takes "
+      u"it out of all workspaces."))->SetMultiLine(true);
+  extensions_list_ = panel->AddChildView(std::make_unique<views::View>());
+  extensions_list_->SetLayoutManager(std::make_unique<views::BoxLayout>(
+      views::BoxLayout::Orientation::kVertical, gfx::Insets(), 6));
+  auto* buttons = panel->AddChildView(std::make_unique<views::View>());
+  buttons->SetLayoutManager(std::make_unique<views::BoxLayout>(
+      views::BoxLayout::Orientation::kHorizontal, gfx::Insets(), 8));
+  for (const auto& [label, url] :
+       {std::pair{u"Browse Chrome Web Store", "https://chromewebstore.google.com/"},
+        std::pair{u"Manage in chrome://extensions", "chrome://extensions/"}}) {
+    buttons->AddChildView(std::make_unique<FlyButton>(
+        base::BindRepeating(
+            [](base::WeakPtr<KeyboardEditor> editor, std::string url) {
+              if (!editor || !editor->active() || !editor->extensions_browser_)
+                return;
+              auto* browser = editor->extensions_browser_.Run();
+              editor->Cancel(true);
+              if (!browser)
+                return;
+              NavigateParams params(browser, GURL(url),
+                                    ui::PAGE_TRANSITION_AUTO_TOPLEVEL);
+              params.disposition = WindowOpenDisposition::NEW_FOREGROUND_TAB;
+              Navigate(&params);
+            },
+            weak_factory_.GetWeakPtr(), std::string(url)),
+        label));
+  }
+  RefreshExtensions();
+}
+void KeyboardEditor::RefreshExtensions() {
+  if (!extensions_list_ || !extensions_)
+    return;
+  auto* browser = extensions_browser_ ? extensions_browser_.Run() : nullptr;
+  Profile* profile = browser ? browser->GetProfile() : nullptr;
+  extensions_enabled_->SetChecked(extensions_->Enabled());
+  extensions_enabled_->SetEnabled(extensions_->CanEdit());
+  // Rows are rebuilt detached and attached once (see Refresh()).
+  auto rows = std::make_unique<views::View>();
+  rows->SetLayoutManager(std::make_unique<views::BoxLayout>(
+      views::BoxLayout::Orientation::kVertical, gfx::Insets(), 6));
+  if (!profile || profile->IsOffTheRecord()) {
+    rows->AddChildView(std::make_unique<views::Label>(
+        u"Private workspaces run no extensions."));
+  }
+  const auto list = profile && !profile->IsOffTheRecord()
+                        ? extensions_->List(profile)
+                        : std::vector<FlyExtensionInfo>();
+  if (profile && !profile->IsOffTheRecord() && list.empty())
+    rows->AddChildView(
+        std::make_unique<views::Label>(u"No extensions in this workspace."));
+  for (const auto& info : list) {
+    auto* row = rows->AddChildView(std::make_unique<views::View>());
+    auto* layout = row->SetLayoutManager(std::make_unique<views::BoxLayout>(
+        views::BoxLayout::Orientation::kHorizontal, gfx::Insets(), 8));
+    layout->set_cross_axis_alignment(
+        views::BoxLayout::CrossAxisAlignment::kCenter);
+    auto* enabled = row->AddChildView(std::make_unique<views::Checkbox>(
+        info.name + u"  " + base::UTF8ToUTF16(info.version) +
+        (info.bundled ? u"  (included)" : u"")));
+    enabled->SetChecked(info.enabled);
+    enabled->SetEnabled(info.removable && extensions_->Enabled());
+    enabled->SetCallback(base::BindRepeating(
+        [](base::WeakPtr<KeyboardEditor> editor, std::string id,
+           views::Checkbox* box) {
+          if (!editor || !editor->active() || !editor->extensions_browser_)
+            return;
+          auto* browser = editor->extensions_browser_.Run();
+          if (browser)
+            editor->extensions_->SetExtensionEnabled(browser->GetProfile(), id,
+                                                     box->GetChecked());
+          base::SingleThreadTaskRunner::GetCurrentDefault()->PostTask(
+              FROM_HERE, base::BindOnce(&KeyboardEditor::RefreshExtensions,
+                                        editor));
+        },
+        weak_factory_.GetWeakPtr(), info.id, enabled));
+    layout->SetFlexForView(enabled, 1);
+    if (info.has_options) {
+      row->AddChildView(std::make_unique<FlyButton>(
+          base::BindRepeating(
+              [](base::WeakPtr<KeyboardEditor> editor, std::string id) {
+                if (!editor || !editor->active() || !editor->extensions_browser_)
+                  return;
+                auto* browser = editor->extensions_browser_.Run();
+                editor->Cancel(true);
+                editor->extensions_->OpenOptions(browser, id);
+              },
+              weak_factory_.GetWeakPtr(), info.id),
+          u"Options"));
+    }
+    auto* remove = row->AddChildView(std::make_unique<FlyButton>(
+        base::BindRepeating(
+            [](base::WeakPtr<KeyboardEditor> editor, std::string id) {
+              if (!editor || !editor->active() || !editor->extensions_browser_)
+                return;
+              if (auto* browser = editor->extensions_browser_.Run())
+                editor->extensions_->Remove(browser->GetProfile(), id);
+              base::SingleThreadTaskRunner::GetCurrentDefault()->PostTask(
+                  FROM_HERE, base::BindOnce(&KeyboardEditor::RefreshExtensions,
+                                            editor));
+            },
+            weak_factory_.GetWeakPtr(), info.id),
+        u"Remove"));
+    remove->SetEnabled(info.removable);
+  }
+  auto* parent = extensions_list_->parent();
+  const size_t index = parent->GetIndexOf(extensions_list_).value();
+  auto old = parent->RemoveChildViewT(extensions_list_.get());
+  extensions_list_ = parent->AddChildViewAt(std::move(rows), index);
+  parent->InvalidateLayout();
+}
 void KeyboardEditor::ShowPerformance() {
   if (!active())
     return;
@@ -348,6 +585,12 @@ void KeyboardEditor::ClearAppearance() {
   search_settings_status_ = nullptr;
   alias_list_ = nullptr;
   appearance_.clear();
+  extensions_list_ = nullptr;
+  extensions_enabled_ = nullptr;
+  color_fields_.clear();
+  spellcheck_ = nullptr;
+  email_handler_ = nullptr;
+  process_limit_ = nullptr;
   clock_format_ = nullptr;
   suspension_timeout_ = nullptr;
   suspension_status_ = nullptr;
@@ -397,6 +640,34 @@ void KeyboardEditor::RefreshAppearance() {
       preferences_.CanEditWindowControls());
   set("sidebar_auto_collapse", collapse.value_or(true),
       preferences_.CanEditSidebarAutoCollapse());
+  const bool editable = preferences_.CanEdit();
+  set("interface_scale",
+      preferences_.ReadString("interface_scale").value_or("normal") == "large",
+      editable);
+  for (const char* key : {"web_notifications", "disable_gpu",
+                          "background_throttling", "enable_diagnostics"})
+    set(key, preferences_.ReadBool(key).value_or(false), editable);
+  process_limit_->SetEnabled(editable);
+  process_limit_->SetText(
+      u"Renderer process limit: " +
+      base::NumberToString16(preferences_.ReadInt("process_limit").value_or(4)) +
+      u" (after restart)");
+  if (!spellcheck_->HasFocus())
+    spellcheck_->SetText(base::UTF8ToUTF16(
+        preferences_.ReadString("spellchecker_language").value_or("")));
+  spellcheck_->SetEnabled(editable);
+  if (!email_handler_->HasFocus())
+    email_handler_->SetText(base::UTF8ToUTF16(
+        preferences_.ReadString("email_handler").value_or("system")));
+  email_handler_->SetEnabled(editable);
+  const bool dark = theme && theme->mode == "dark";
+  for (auto& [key, field] : color_fields_) {
+    if (!field->HasFocus())
+      field->SetText(base::UTF8ToUTF16(
+          preferences_.ReadThemeColor(dark, key).value_or("")));
+    field->SetPlaceholderText(dark ? u"dark default" : u"light default");
+    field->SetEnabled(editable);
+  }
   clock_format_->SetEnabled(preferences_.CanEditClock());
   clock_format_->SetText(!clock ? u"Clock format unavailable"
       : clock->format == "datetime" ? u"Clock: date and time"
@@ -408,6 +679,38 @@ void KeyboardEditor::RefreshAppearance() {
       : !preferences_.CanEditTheme()
           ? u"Appearance settings are managed."
           : u"Appearance changes are saved immediately.");
+}
+void KeyboardEditor::ApplyProductTexts() {
+  if (!active())
+    return;
+  const auto language = base::UTF16ToUTF8(spellcheck_->GetText());
+  std::vector<std::u16string> refused;
+  if (!preferences_.SetString(
+          "spellchecker_language",
+          std::string(base::TrimWhitespaceASCII(language, base::TRIM_ALL))))
+    refused.push_back(u"the language (up to 64 letters)");
+  const auto email = std::string(base::TrimWhitespaceASCII(
+      base::UTF16ToUTF8(email_handler_->GetText()), base::TRIM_ALL));
+  if (!preferences_.SetString("email_handler",
+                              email.empty() ? "system" : email))
+    refused.push_back(u"the email handler (\"system\" or an http(s) URL)");
+  const auto theme = preferences_.ReadTheme();
+  const bool dark = !theme || theme->mode == "dark";
+  bool colours_ok = true;
+  for (auto& [key, field] : color_fields_) {
+    const auto value = std::string(base::TrimWhitespaceASCII(
+        base::UTF16ToUTF8(field->GetText()), base::TRIM_ALL));
+    if (value.empty())
+      continue;
+    colours_ok &= preferences_.SetThemeColor(dark, key, value);
+  }
+  if (!colours_ok)
+    refused.push_back(u"colours (#rrggbb)");
+  appearance_status_->SetText(
+      refused.empty()
+          ? u"Language, email and colours saved."
+          : u"Not saved: " + base::JoinString(refused, u", ") + u".");
+  RefreshAppearance();
 }
 void KeyboardEditor::ChangeAppearance(std::string key) {
   if (!active())
@@ -432,6 +735,10 @@ void KeyboardEditor::ChangeAppearance(std::string key) {
     preferences_.SetWindowControlsVisible(checked);
   } else if (key == "sidebar_auto_collapse") {
     preferences_.SetSidebarAutoCollapse(checked);
+  } else if (key == "interface_scale") {
+    preferences_.SetString("interface_scale", checked ? "large" : "normal");
+  } else {
+    preferences_.SetBool(key, checked);
   }
   RefreshAppearance();
 }
@@ -446,9 +753,23 @@ void KeyboardEditor::CycleSuspendTimeout() {
 void KeyboardEditor::Refresh() {
   StopRecording();
   fields_.clear();
-  rows_->RemoveAllChildViews();
-  for (const auto& entry : FilterPalette(catalog_, search_->GetText())) {
-    auto* row = rows_->AddChildView(std::make_unique<views::View>());
+  // Build the rows detached and attach them once: adding layered views one by
+  // one to a live widget reorders every layer each time (seconds for the full
+  // catalogue).
+  auto rows = std::make_unique<views::View>();
+  rows->SetLayoutManager(std::make_unique<views::BoxLayout>(
+      views::BoxLayout::Orientation::kVertical, gfx::Insets(), 10));
+  // Each action carries two editors and six buttons. Building the whole
+  // catalogue costs about a second, so the list starts with the first actions;
+  // searching or "Show all" reaches the rest.
+  constexpr size_t kInitialRows = 25;
+  const auto matches = FilterPalette(catalog_, search_->GetText());
+  const bool limited = !show_all_rows_ && search_->GetText().empty() &&
+                       matches.size() > kInitialRows;
+  for (const auto& entry : matches) {
+    if (limited && rows->children().size() == kInitialRows)
+      break;
+    auto* row = rows->AddChildView(std::make_unique<views::View>());
     row->SetLayoutManager(std::make_unique<views::BoxLayout>(
         views::BoxLayout::Orientation::kVertical));
     row->AddChildView(
@@ -469,21 +790,38 @@ void KeyboardEditor::Refresh() {
           base::UTF8ToUTF16(entry.title) +
           (normal ? u", NORMAL bindings" : u", global bindings"));
       layout->SetFlexForView(field, 1);
-      auto* record = scope->AddChildView(std::make_unique<views::MdTextButton>(
+      auto* record = scope->AddChildView(std::make_unique<FlyButton>(
           base::BindRepeating(&KeyboardEditor::StartRecording,
                               weak_factory_.GetWeakPtr(), key),
           u"Add key"));
-      scope->AddChildView(std::make_unique<views::MdTextButton>(
+      scope->AddChildView(std::make_unique<FlyButton>(
           base::BindRepeating(&KeyboardEditor::WriteField,
                               weak_factory_.GetWeakPtr(), key, u""),
           u"Clear"));
-      scope->AddChildView(std::make_unique<views::MdTextButton>(
+      scope->AddChildView(std::make_unique<FlyButton>(
           base::BindRepeating(&KeyboardEditor::ResetField,
                               weak_factory_.GetWeakPtr(), key),
           u"Default"));
       fields_.emplace(key, Field{field, record});
     }
   }
+  if (limited) {
+    auto* more = rows->AddChildView(std::make_unique<FlyButton>(
+        base::BindRepeating(
+            [](base::WeakPtr<KeyboardEditor> editor) {
+              if (!editor || !editor->active())
+                return;
+              editor->show_all_rows_ = true;
+              editor->Refresh();
+            },
+            weak_factory_.GetWeakPtr()),
+        u"Show all " + base::NumberToString16(matches.size()) +
+            u" actions"));
+    more->SetStyle(ui::ButtonStyle::kText);
+  }
+  rows_ = nullptr;
+  rows_ = rows_scroll_->SetContents(std::move(rows));
+  rows_scroll_->InvalidateLayout();
 }
 void KeyboardEditor::ContentsChanged(views::Textfield* sender,
                                      const std::u16string& text) {
@@ -655,6 +993,7 @@ void KeyboardEditor::FinishClose(bool restore_focus) {
   search_ = nullptr;
   tabs_ = nullptr;
   rows_ = nullptr;
+  rows_scroll_ = nullptr;
   status_ = nullptr;
   save_ = nullptr;
   ClearAppearance();
@@ -669,13 +1008,23 @@ void KeyboardEditor::FinishClose(bool restore_focus) {
       contents->RestoreFocus();
   }
 }
+void KeyboardEditor::EnsureRowForTesting(std::string_view action,
+                                         bool normal) {
+  if (active() && !fields_.contains({std::string(action), normal}) &&
+      !show_all_rows_) {
+    show_all_rows_ = true;
+    Refresh();
+  }
+}
 views::Textfield* KeyboardEditor::field_for_testing(std::string_view action,
                                                     bool normal) {
+  EnsureRowForTesting(action, normal);
   auto it = fields_.find({std::string(action), normal});
   return it == fields_.end() ? nullptr : it->second.input.get();
 }
 views::MdTextButton* KeyboardEditor::record_for_testing(std::string_view action,
                                                         bool normal) {
+  EnsureRowForTesting(action, normal);
   auto it = fields_.find({std::string(action), normal});
   return it == fields_.end() ? nullptr : it->second.record.get();
 }

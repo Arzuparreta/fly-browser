@@ -14,6 +14,7 @@
 #include "base/callback_list.h"
 #include "base/memory/raw_ptr.h"
 #include "base/memory/weak_ptr.h"
+#include "base/task/sequenced_task_runner.h"
 #include "base/timer/timer.h"
 #include "components/prefs/pref_change_registrar.h"
 #include "fly/bookmarks/frequent_sites_service.h"
@@ -55,6 +56,11 @@ class SimpleMenuModel;
 namespace fly {
 class CommandPalette;
 class BookmarkService;
+class SettingsMenu;
+class FlyExtensions;
+class UserContentService;
+class FlyButton;
+class FlyLabel;
 class StatusBar;
 class KeyboardEditor;
 class TabSidebar;
@@ -95,9 +101,9 @@ class FlyWindowController : public views::WidgetDelegate,
   bool CanShowHistory() const { return workspaces_.Read().has_value(); }
   views::Widget* history_clear_dialog_for_testing() const;
   PreferencesService& preferences() { return preferences_; }
-  views::MdTextButton* clock_for_testing() { return clock_; }
-  views::MdTextButton* preferences_button_for_testing() { return preferences_button_; }
-  views::MdTextButton* bookmarks_button_for_testing() { return bookmarks_button_; }
+  FlyButton* clock_for_testing() { return clock_; }
+  FlyButton* preferences_button_for_testing() { return preferences_button_; }
+  FlyButton* bookmarks_button_for_testing() { return bookmarks_button_; }
   BrowserWindowInterface* selected_browser_for_testing() { return selected_; }
   CommandPalette& palette() { return *palette_; }
   views::View* window_controls_for_testing() { return window_controls_; }
@@ -129,6 +135,18 @@ class FlyWindowController : public views::WidgetDelegate,
   bool ShowTabMovePicker(BrowserWindowInterface* browser,
                          content::WebContents* contents);
   CommandPalette& tab_move_picker() { return *tab_move_picker_; }
+  CommandPalette& downloads_picker() { return *downloads_picker_; }
+  SettingsMenu& settings_menu() { return *settings_menu_; }
+  FlyExtensions& extensions() { return *extensions_; }
+  UserContentService& user_content() { return *user_content_; }
+  CommandPalette& extensions_picker() { return *extensions_picker_; }
+  views::View* extension_actions_for_testing() const;
+  views::Widget* diagnostics_dialog_for_testing() const {
+    return diagnostics_widget_.get();
+  }
+  // Fly status line (footer mode badge), also kept in the in-memory
+  // diagnostics log while recording is enabled.
+  void ShowStatus(std::u16string text);
   bool tab_move_pending_for_testing() const { return bool(tab_move_); }
 
   void OnKeyEvent(ui::KeyEvent* event) override;
@@ -144,7 +162,8 @@ class FlyWindowController : public views::WidgetDelegate,
   }
   views::Widget* sidebar_widget_for_testing() { return sidebar_widget_.get(); }
   TabSidebar* compact_sidebar_for_testing() { return compact_tab_sidebar_; }
-  views::MdTextButton* sidebar_pin_for_testing() { return sidebar_pin_button_; }
+  FlyButton* sidebar_pin_for_testing() { return sidebar_pin_button_; }
+  FlyButton* new_tab_button_for_testing() { return new_tab_button_; }
 
   // WidgetObserver:
   void OnWidgetDestroying(views::Widget* widget) override;
@@ -216,8 +235,26 @@ class FlyWindowController : public views::WidgetDelegate,
   void ConfirmHistoryClear(content::WebContents* source);
 
   void ToggleAddress(BrowserWindowInterface* browser);
+  bool RunProductAction(BrowserWindowInterface* browser,
+                        std::string_view action);
+  void ToggleDownloads(BrowserWindowInterface* browser);
+  std::vector<Profile*> WorkspaceProfiles() const;
+  void ShowDiagnostics();
+  void CheckUpdates(bool manual);
+  void MaybeShowWhatsNew();
+  void OpenInNewTab(GURL url);
+  void QueueLegacyImport(BrowserWindowInterface* browser);
+  void ApplyLegacyImport(base::WeakPtr<BrowserWindowInterface> browser,
+                         int attempts);
+  void ApplyProfilePreferencesEverywhere();
+  void ScheduleExtensionRefresh();
+  void RefreshExtensionActions();
+  void ToggleExtensionActions(BrowserWindowInterface* browser);
+  void ChooseExtensionAction(content::WebContents* source, std::string action);
   void RemoveBookmark(content::WebContents* source, std::string url);
   void UpdateClock();
+  void UpdateWorkspaceHeader();
+  void ApplyFlyPalette();
   void CycleClockFormat();
   void OnWidgetVisibilityChanged(views::Widget*, bool visible) override;
   void ScheduleWorkspaceRefresh();
@@ -249,7 +286,7 @@ class FlyWindowController : public views::WidgetDelegate,
   std::optional<ThemePreferences> applied_theme_;
   std::optional<bool> applied_frequent_visibility_;
   PrefChangeRegistrar preferences_registrar_;
-  base::RepeatingTimer clock_timer_;
+  base::OneShotTimer clock_timer_;
   base::RepeatingTimer suspension_timer_;
   std::unique_ptr<HintController> hints_;
   std::unique_ptr<CommandPalette> palette_;
@@ -258,6 +295,23 @@ class FlyWindowController : public views::WidgetDelegate,
   std::unique_ptr<CommandPalette> history_picker_;
   std::unique_ptr<CommandPalette> workspace_picker_;
   std::unique_ptr<CommandPalette> tab_move_picker_;
+  std::unique_ptr<CommandPalette> downloads_picker_;
+  std::unique_ptr<SettingsMenu> settings_menu_;
+  std::unique_ptr<FlyExtensions> extensions_;
+  std::unique_ptr<UserContentService> user_content_;
+  std::unique_ptr<CommandPalette> extensions_picker_;
+  bool extension_refresh_pending_ = false;
+  // Pending per-profile import state (fly-legacy-import.json), loaded once.
+  std::optional<base::DictValue> legacy_import_;
+  bool legacy_import_loading_ = false;
+  scoped_refptr<base::SequencedTaskRunner> legacy_import_writer_;
+  std::vector<base::WeakPtr<BrowserWindowInterface>> legacy_import_waiting_;
+  std::unique_ptr<views::DialogDelegate> diagnostics_delegate_;
+  std::unique_ptr<views::Widget> diagnostics_widget_;
+  std::vector<std::u16string> diagnostics_events_;
+  std::optional<std::string> applied_profile_preferences_;
+  bool whats_new_checked_ = false;
+  bool update_checked_ = false;
   base::WeakPtr<BrowserWindowInterface> move_source_browser_;
   base::WeakPtr<content::WebContents> move_source_;
   std::unique_ptr<TabMoveTransaction> tab_move_;
@@ -280,8 +334,12 @@ class FlyWindowController : public views::WidgetDelegate,
   raw_ptr<views::NativeViewHost> sidebar_host_ = nullptr;
   raw_ptr<views::View> compact_rail_ = nullptr;
   raw_ptr<TabSidebar> compact_tab_sidebar_ = nullptr;
-  raw_ptr<views::MdTextButton> sidebar_pin_button_ = nullptr;
-  raw_ptr<views::MdTextButton> workspace_picker_button_ = nullptr;
+  raw_ptr<FlyButton> sidebar_pin_button_ = nullptr;
+  raw_ptr<FlyButton> compact_pin_button_ = nullptr;
+  raw_ptr<FlyButton> new_tab_button_ = nullptr;
+  raw_ptr<FlyButton> compact_workspace_ = nullptr;
+  raw_ptr<FlyLabel> workspace_badge_ = nullptr;
+  raw_ptr<FlyButton> workspace_picker_button_ = nullptr;
   raw_ptr<aura::client::FocusClient> sidebar_focus_client_ = nullptr;
   bool observing_sidebar_focus_ = false;
   bool sidebar_auto_collapse_ = true;
@@ -294,9 +352,9 @@ class FlyWindowController : public views::WidgetDelegate,
   raw_ptr<views::View> content_ = nullptr;
   raw_ptr<views::Label> status_ = nullptr;
   raw_ptr<StatusBar> status_bar_ = nullptr;
-  raw_ptr<views::MdTextButton> clock_ = nullptr;
-  raw_ptr<views::MdTextButton> preferences_button_ = nullptr;
-  raw_ptr<views::MdTextButton> bookmarks_button_ = nullptr;
+  raw_ptr<FlyButton> clock_ = nullptr;
+  raw_ptr<FlyButton> preferences_button_ = nullptr;
+  raw_ptr<FlyButton> bookmarks_button_ = nullptr;
   raw_ptr<TabSidebar> tab_sidebar_ = nullptr;
   std::map<BrowserWindowInterface*, Entry> entries_;
   raw_ptr<BrowserWindowInterface> selected_ = nullptr;

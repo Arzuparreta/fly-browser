@@ -5,23 +5,118 @@ Full product, migration and packaged application acceptance remain outstanding.
 
 ## Active execution state
 
-PR [127](https://github.com/Arzuparreta/fly-browser/pull/127) (window controls,
-sidebar expansion and indicators) is merged as `31bad18`, including a review
-follow-up: a repeated `focus-sidebar` after row activation now moves keyboard
-focus, the restore icon persists on hover and pointer motion only re-lays out the
-sidebar when it crosses its edge.
+PRs [127](https://github.com/Arzuparreta/fly-browser/pull/127) (window controls,
+sidebar expansion and indicators) and
+[128](https://github.com/Arzuparreta/fly-browser/pull/128) (address/search,
+shared history, frequent sites) are merged.
 
-The next pull request carries the address/search, history and frequent-site blocks
-described below. The frequent-site browser case failed only because the fixture
-server answers the opened origin with an error page; it now checks the committed
-origin, the destination profile and the retained cookie on a normal page.
+The shell-look block gives native Fly the Electron interface instead of
+Chromium's: the embedded profile windows no longer show Chromium's toolbar
+(`BrowserView::IsToolbarVisible`, patch 0023), so the sign-in button and
+omnibox are gone and Fly's floating address surface is the only address UI.
+`fly/ui/fly_theme.{h,cc}` carries the product palette (dark and light defaults
+from `main.js`), the bundled IBM Plex Sans/Mono and Doto fonts (TTF copies of
+`assets/fonts`, registered with the browser's fontconfig at start) and the
+shared `FlyButton`/`FlyLabel`/background/border helpers. The sidebar,
+compact rail, footer, pickers (Command Centre, address, history, Bookmarks
+Manager, Workspace Dashboard) and Preferences use them. The footer follows the
+Electron layout (mode badge, hovered link, zoom, notifications, connection,
+workspace and clock badges); the clock wakes at the next visible change rather
+than every second. Preferences builds the first 25 keyboard actions at open
+(the whole catalogue took about a second) with a "Show all" control.
+
+The same pull request adds the remaining Fly actions that the hidden toolbar or
+the earlier native work did not cover (`fly/ui/fly_actions.{h,cc}`, patch 0024):
+the Fly settings menu, downloads picker, reader view on Chromium's DOM distiller,
+user content folders, Google sign-in test in a fresh off-the-record profile,
+update check (GitHub releases, at start and on demand), What's New after an
+upgrade, diagnostics dialog and in-memory recording, web notification default and
+focus of the sidebar navigation controls. `PreferencesService` validates the
+remaining Electron settings with their defaults, and
+`ApplyStartupSwitches` (called after Chromium converts about:flags in
+`chrome_feature_list_creator.cc`) applies GPU, background throttling, renderer
+process limit and the DOM distiller switch before any child process starts.
+`fly/fly_version.h` carries the product version, written by
+`scripts/version-sync.js`.
+
+Extensions (`fly/ui/fly_extensions.{h,cc}`, patch 0025): uBlock Origin Lite is
+pinned in `chromium/bundled-extensions.json` (GitHub release archive, SHA-256 and
+the Web Store public key, so its identity is the store's
+`ddkjiahejlhfcafbddmgiahcphecmpfh`); `scripts/chromium/bundled-extensions.py`
+unpacks it into `<out>/fly_extensions`. Chromium 155 disables unpacked extensions
+outside developer mode, so Fly loads bundled extensions as components (allowlisted
+by id) in every normal workspace unless removed or switched off there. Unlike
+Electron, the blocker also runs in private workspaces (component extensions are
+allowed in off-the-record profiles). Store installs work through Chromium's own
+install prompt; the post-install dialog that points at the hidden toolbar is
+replaced by a Fly footer message, and extension dialogs without a visible toolbar
+use the modal fallback. Footer buttons show each action's icon and badge and open
+its popup above the footer. Live check: a doubleclick tracking pixel is blocked;
+Google ad and analytics scripts load as uBlock's neutered surrogates.
+User scripts and styles (`fly/ui/user_content.{h,cc}` with
+`fly/resources/user_content/`): native Fly generates the "Fly User Content"
+component extension in `<user data>/fly-user-content` from its fixed worker and a
+`content.js` holding the `scripts/*.user.js`, `styles/*.user.css` files and legacy
+`script-storage/` values, and reloads it when the folders change. The worker uses
+Electron's metadata parsing and URL matching, registers `chrome.userScripts`, and
+serves GM values (persisted in extension storage, seeded from script-storage),
+`GM_xmlhttpRequest` (with Electron's `@connect`, grant and local-network checks;
+redirect hops are checked before they are sent by declarativeNetRequest session
+rules scoped to the worker's own requests), tabs and notifications. The same
+extension adds Electron's "Share..." context submenu (WhatsApp, X, Telegram,
+Reddit, Email through `email_handler`, Copy Markdown Link); copying uses its
+offscreen document. Scripts with no GM grant (or `@inject-into page`) run in
+the page's world like Electron's injection; scripts with GM grants run in the
+isolated user script world, where `unsafeWindow` is that world's window — a
+difference from Electron for scripts that need page globals and GM APIs at once.
+`GM_registerMenuCommand` records commands but has no menu yet.
+
+Review follow-ups: the generated extension's version follows its content, so
+Chromium replaces the stored worker after edits made while Fly was closed; each
+GM script runs in its own user-script world with a secret token, the page comes
+from the message sender, redirects and IPv4-mapped IPv6 addresses are checked
+against `@connect` and the local-network rule, duplicate sanitised ids no longer
+reject every registration; re-enabling an extension only lifts the user's own
+disable (other reasons such as new permissions need Chromium's prompt in
+`chrome://extensions`); installs while extensions are switched off are suspended.
+Known limitation: Chromium cannot disable a component, so switching uBlock
+Origin Lite off unloads it and Chromium's uninstall cleanup removes its
+declarativeNetRequest dynamic rules; its stored settings remain.
+
+Import from Electron Fly (`fly/import/legacy_import.{h,cc}`, patch 0026) runs
+once on a fresh native user data directory, after Chromium converts about:flags
+and before any profile loads, from `~/.config/fly-browser` (Electron's own files)
+and `$XDG_CONFIG_HOME/fly-browser` (`Partitions`, `SingletonLock`), or
+`--fly-import-from`. If Electron Fly is running then, Fly starts normally and
+imports on the first start after it closes, next to the native workspaces and
+keeping settings native Fly already stores. An import killed halfway is undone
+and repeated (`fly-legacy-import.partial`). The legacy directories are only read.
+Each Electron workspace (in the session file's order) becomes a native workspace
+profile — in a fresh directory the first one `Default` — with its
+partition's cookies, local/session storage, IndexedDB, service workers, file
+system and databases copied (Electron stores cookies unencrypted, which Chromium
+reads; checked live with a cookie and localStorage set in Electron). Settings,
+search engine and aliases, keyboard changes (resolved as `keybinds.js` loads
+them, checked against generated cases), bookmarks, hidden frequent sites,
+user scripts/styles and GM values are written immediately; the bundled blocker
+follows Electron's uBlock removal and per-workspace choices. Tabs (with pins),
+history and site zoom are written to `fly-legacy-import.json` and applied when
+each profile loads; Fly starts in the workspace Electron was showing and shows a
+summary listing hand-installed extensions to reinstall from the Web Store.
+
+Linux package: `scripts/chromium/package-linux.py` turns a release build
+(`chromium/gn/release.gnargs`) into `dist/Fly-<version>-native-linux-x64.tar.gz`
+with `install.sh` ("Fly (native)" next to Electron Fly, data in
+`$XDG_CONFIG_HOME/fly-browser-native`). Built and installed into a temporary
+HOME locally; hosted CI cannot build it. Windows and macOS packages, release
+pipeline cutover and owner acceptance remain.
 
 Local validation uses the engine checkout `/mnt/storage/fly-chromium`, output
-`src/out/FlyNative`, `native.py refresh-overlay` followed by an incremental
-`autoninja` of `chrome fly_unittests fly_browser_tests`. Browser cases run
-serially (`--test-launcher-jobs=1`) on an owned Xvfb/Openbox display: parallel
-jobs share one display and steal window activation, which produces focus
-failures unrelated to the code under test.
+`src/out/FlyNative`, `native.py refresh-overlay --include-upstream` followed by
+an incremental `autoninja` of `chrome fly_unittests fly_browser_tests`. Browser
+cases run serially (`--test-launcher-jobs=1`) on an owned Xvfb/Openbox display:
+parallel jobs share one display and steal window activation, which produces
+focus failures unrelated to the code under test.
 
 ## Historical checkpoint notes
 

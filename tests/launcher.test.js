@@ -32,12 +32,14 @@ try {
     // A Fly running from this checkout must not have node_modules reinstalled under it.
     const real = fs.realpathSync(temporary);
     fs.mkdirSync(path.join(real, 'node_modules/electron/dist'), {recursive:true});
-    fs.symlinkSync(fs.realpathSync(spawnSync('sh', ['-c', 'command -v sleep'], {encoding:'utf8'}).stdout.trim()), path.join(real, 'node_modules/electron/dist/electron'));
+    // Node stands in for Electron: unlike multi-call coreutils (sleep on
+    // Ubuntu 26.04), it does not depend on the name it is started under.
+    fs.symlinkSync(process.execPath, path.join(real, 'node_modules/electron/dist/electron'));
     fs.mkdirSync(path.join(real, 'bin'));
     fs.writeFileSync(path.join(real, 'bin/npm'), '#!/bin/sh\necho npm-ran\nexit 0\n', {mode:0o755});
     const past = new Date(Date.now()-10000);
     fs.utimesSync(path.join(real, 'node_modules/.package-lock.json'), past, past);
-    const running = spawn(path.join(real, 'node_modules/electron/dist/electron'), ['30'], {stdio:'ignore'});
+    const running = spawn(path.join(real, 'node_modules/electron/dist/electron'), ['-e', 'setTimeout(() => {}, 30000)'], {stdio:'ignore'});
     try {
         const env = {...display, PATH:`${path.join(real, 'bin')}:${process.env.PATH}`};
         const blocked = spawnSync('bash', [path.join(real, 'launch.sh')], {encoding:'utf8', env});

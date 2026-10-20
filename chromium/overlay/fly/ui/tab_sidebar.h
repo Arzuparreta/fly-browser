@@ -24,6 +24,7 @@ class WebContents;
 namespace views {
 class MdTextButton;
 class ImageButton;
+class Button;
 }  // namespace views
 namespace ui {
 class SimpleMenuModel;
@@ -31,6 +32,7 @@ class SimpleMenuModel;
 
 namespace fly {
 class SidebarTabMenu;
+class FlyTabButton;
 // A projection of the selected profile's upstream tab model. Rows hold weak
 // WebContents identities, never a cached tab index or an extension's session
 // ID. Every native tab is projected, including about:blank; URL and title are
@@ -49,7 +51,7 @@ class TabSidebar : public views::View,
   void FocusActiveTab();
   size_t row_count_for_testing() const;
   views::View* row_for_testing(content::WebContents* contents) const;
-  views::ImageButton* audio_for_testing(content::WebContents* contents) const;
+  views::Button* audio_for_testing(content::WebContents* contents) const;
   ui::SimpleMenuModel* context_menu_for_testing() const;
   void CloseContextMenu();
 
@@ -77,10 +79,10 @@ class TabSidebar : public views::View,
   struct Row {
     base::WeakPtr<content::WebContents> contents;
     raw_ptr<views::View> view;
-    raw_ptr<views::MdTextButton> select;
-    raw_ptr<views::ImageButton> pin;
-    raw_ptr<views::ImageButton> close;
-    raw_ptr<views::ImageButton> audio;
+    raw_ptr<FlyTabButton> select;
+    raw_ptr<views::Button> pin;
+    raw_ptr<views::Button> close;
+    raw_ptr<views::Button> audio;
     gfx::ImageSkia favicon;
     bool favicon_initialized = false;
     bool pinned = false;
@@ -94,6 +96,7 @@ class TabSidebar : public views::View,
   raw_ptr<BrowserWindowInterface> browser_ = nullptr;
   raw_ptr<TabStripModel> model_ = nullptr;
   raw_ptr<views::View> rows_ = nullptr;
+  base::RepeatingClosure new_tab_;
   const bool compact_;
   bool refresh_pending_ = false;
   base::WeakPtrFactory<TabSidebar> weak_factory_{this};

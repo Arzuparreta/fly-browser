@@ -26,14 +26,14 @@ A native upstream route alone does not establish Fly UX parity.
 
 | Action | Status | Implementation and remaining acceptance |
 | --- | --- | --- |
-| `toggle-menu-bar` | partial | Native Chromium app menu opens; the complete Fly settings menu remains pending. |
+| `toggle-menu-bar` | partial | Fly settings menu (startup settings, tab suspension, sidebar options, user content folders, downloads, task manager, diagnostics, What's New, updates, preferences, restart); Chromium's app menu is no longer used. |
 | `spawn-tab` | partial | Product blank tabs and native profile/session identity tested; complete all-input-path acceptance remains pending. |
 | `toggle-address` | partial | Floating native address/search, aliases, bangs, workspace lookup, bookmarks and calculator pass the complete ab4b496 Linux suite. History suggestions, platform path handling and import require further acceptance. |
 | `toggle-dashboard` | partial | Native searchable workspace/private/empty desktop picker tested; full dashboard product layout remains pending. |
 | `reload-active-tab` | partial | Native command route exists; dedicated full keyboard, mouse and palette acceptance remains pending. |
 | `remove-tab` | partial | Pinned protection, beforeunload, close/reopen and native menu tested; complete all-input-path acceptance remains pending. |
 | `focus-sidebar` | partial | Native panel focus and Escape back to editable page tested; complete accessibility, all-input-path and platform acceptance remains pending. |
-| `focus-nav-buttons` | partial | Native toolbar focus; final Fly navigation control layout remains pending. |
+| `focus-nav-buttons` | partial | Expands the sidebar and focuses its new tab/back/forward controls (the Chromium toolbar is hidden). |
 | `focus-webview` | partial | Native command route exists; dedicated full keyboard, mouse and palette acceptance remains pending. |
 | `trigger-hints` | partial | Native hint input/activation and visibility tested; complete document/platform coverage remains pending. |
 | `toggle-help` | partial | Native preferences/keyboard editor implemented; not the complete product help surface. |
@@ -48,16 +48,16 @@ A native upstream route alone does not establish Fly UX parity.
 | `toggle-tab-audio-mute` | partial | Native mute and extension reason reporting tested; full platform acceptance remains pending. |
 | `toggle-global-audio-mute` | partial | Native mute reasons and hidden/private tabs tested; full platform acceptance remains pending. |
 | `toggle-history` | partial | Shared projection of authorized native profile histories, selector, destination navigation and confirmed clearing implemented; new runtime cases, frequent sites, import and platform acceptance remain pending. |
-| `toggle-downloads` | pending | No native Fly action implementation yet. |
+| `toggle-downloads` | partial | Downloads picker across workspace profiles: open, pause/resume, cancel/clear and the full `chrome://downloads` page. |
 | `toggle-status-bar` | partial | Native hover, security/private context and persistence tested; full platform acceptance remains pending. |
 | `toggle-clock` | partial | Native live settings and no tick writes tested on Linux; full platform acceptance remains pending. |
 | `cycle-clock-format` | partial | Native formatting/settings persistence tested; full platform acceptance remains pending. |
 | `toggle-split` | partial | Native split API routed; both-pane visibility/basic focus tested. All orientations/input paths, layout restore and platform acceptance remain pending. |
 | `switch-split-focus` | partial | Native split API routed; both-pane visibility/basic focus tested. All orientations/input paths, layout restore and platform acceptance remain pending. |
 | `swap-split-panes` | partial | Native split API routed; both-pane visibility/basic focus tested. All orientations/input paths, layout restore and platform acceptance remain pending. |
-| `toggle-reader-view` | pending | No native Fly action implementation yet. |
+| `toggle-reader-view` | partial | Chromium DOM distiller in place, following the Fly theme; toggling returns to the article. Electron's own reader styles are not reproduced. |
 | `toggle-pin-tab` | partial | Native pinned state and close protection tested; complete input-path acceptance remains pending. |
-| `open-extension-actions` | pending | No native Fly action implementation yet. |
+| `open-extension-actions` | partial | Picker of the workspace's extension actions (popups anchored to their footer buttons), extension settings, `chrome://extensions` and the Chrome Web Store. |
 | `toggle-window-controls` | partial | Three owned Xvfb/Openbox desktop cases and all 62 services pass at ee16406; full-suite/platform acceptance remains pending. |
 | `reset-zoom` | partial | Native profile zoom routed; shared hostname zoom contract remains pending. |
 | `toggle-sidebar-pin` | partial | Native button, command and live settings share persistent pinning; full product/platform acceptance remains pending. |
@@ -66,15 +66,15 @@ A native upstream route alone does not establish Fly UX parity.
 | `close-split-view` | partial | Native split API routed; both-pane visibility/basic focus tested. All orientations/input paths, layout restore and platform acceptance remain pending. |
 | `hibernate-tabs` | partial | Native retained freeze/resume and protected cases tested; remaining lifecycle/platform acceptance pending. |
 | `wake-all-tabs` | partial | Native workspace-scoped resume tested; remaining lifecycle/platform acceptance pending. |
-| `open-scripts-dir` | pending | No native Fly action implementation yet. |
-| `open-styles-dir` | pending | No native Fly action implementation yet. |
-| `open-script-storage-dir` | pending | No native Fly action implementation yet. |
-| `reload-user-content` | pending | No native Fly action implementation yet. |
-| `test-google-signin` | pending | No native Fly action implementation yet. |
+| `open-scripts-dir` | partial | Opens `<user data>/scripts`; files there run through Fly User Content. |
+| `open-styles-dir` | partial | Opens `<user data>/styles`; files there run through Fly User Content. |
+| `open-script-storage-dir` | partial | Opens `<user data>/script-storage`. |
+| `reload-user-content` | partial | Rereads scripts/styles and reloads Fly User Content in every workspace; folder edits also reload automatically. |
+| `test-google-signin` | partial | Opens Google sign-in in a fresh off-the-record profile. |
 | `toggle-theme` | partial | Native light/dark and website synchronization tested; custom palette remains pending. |
-| `check-for-updates` | pending | No native Fly action implementation yet. |
-| `open-diagnostics` | pending | No native Fly action implementation yet. |
-| `toggle-diagnostics-recording` | pending | No native Fly action implementation yet. |
+| `check-for-updates` | partial | Checks the latest GitHub release at start and on demand; a newer release is announced and opened on demand. No in-place install yet. |
+| `open-diagnostics` | partial | Diagnostics dialog: versions, platform, workspaces and recorded events (home paths redacted), copy report, Task Manager. |
+| `toggle-diagnostics-recording` | partial | Toggles in-memory recording of Fly status events (`enable_diagnostics`). |
 | `go-back` | partial | Native command route exists; dedicated full keyboard, mouse and palette acceptance remains pending. |
 | `go-forward` | partial | Native command route exists; dedicated full keyboard, mouse and palette acceptance remains pending. |
 | `next-tab` | partial | Native command route exists; dedicated full keyboard, mouse and palette acceptance remains pending. |
@@ -98,8 +98,8 @@ A native upstream route alone does not establish Fly UX parity.
 | `half-page-up` | partial | Native focused-page scrolling, editable suppression and cross-origin frame routing tested; full platform acceptance remains pending. |
 | `page-top` | partial | Native focused-page scrolling, editable suppression and cross-origin frame routing tested; full platform acceptance remains pending. |
 | `page-bottom` | partial | Native focused-page scrolling, editable suppression and cross-origin frame routing tested; full platform acceptance remains pending. |
-| `show-whats-new` | pending | No native Fly action implementation yet. |
-| `toggle-native-menu-visibility` | pending | No native Fly action implementation yet. |
+| `show-whats-new` | partial | Opens the packaged What's New page (or the release list when absent); after an upgrade it opens with `?from=`. |
+| `toggle-native-menu-visibility` | partial | Native Fly has no menu bar; the action opens the Fly settings menu. |
 | `move-tab-to-workspace` | partial | Five Linux browser cases pass at bbb8a09; crash recovery and all-platform UI acceptance remain pending. |
 | `open-keyboard-settings` | partial | Native recorder/drafts/conflict/cancellation tested; IME/AltGr/platform acceptance remains pending. |
 | `reopen-closed-tab` | partial | Native historical restore and Fly identity tested; browser crash recovery remains pending. |
@@ -107,7 +107,7 @@ A native upstream route alone does not establish Fly UX parity.
 | `move-tab-right` | partial | Native command route exists; dedicated full keyboard, mouse and palette acceptance remains pending. |
 | `toggle-fullscreen` | partial | Native command routed; full desktop/page fullscreen and restore acceptance pending. |
 | `print-page` | partial | Native command routed; print/PDF dialog acceptance pending. |
-| `toggle-notifications` | pending | No native Fly action implementation yet. |
+| `toggle-notifications` | partial | Sets the notification permission default (ask/block) in every workspace profile; footer bell follows it. |
 
 ## Preferences
 
@@ -118,34 +118,44 @@ declared supported because Chromium has a related global flag or policy.
 
 | Preference | Status | Implementation and remaining acceptance |
 | --- | --- | --- |
-| `disable_gpu` | pending | Fly setting/import/UI behavior not implemented yet. |
-| `background_throttling` | pending | Fly setting/import/UI behavior not implemented yet. |
-| `process_limit` | pending | Fly setting/import/UI behavior not implemented yet. |
-| `email_handler` | pending | Fly setting/import/UI behavior not implemented yet. |
+| `disable_gpu` | partial | Settings menu and Performance tab; applied at the next start (`--disable-gpu`). |
+| `background_throttling` | partial | Settings menu and Performance tab; off adds `--disable-background-timer-throttling` at the next start. |
+| `process_limit` | partial | 1–8 (default 4), settings menu and Performance tab; `--renderer-process-limit` at the next start. Site isolation still takes precedence. |
+| `email_handler` | pending | Stored and validated; Electron uses it for its page share menu, which native Fly does not have yet. |
 | `search_engine` | partial | Typed app-level service and native Search preference tab; directed validation underway. Import and full acceptance remain pending. |
-| `spellchecker_language` | pending | Fly setting/import/UI behavior not implemented yet. |
+| `spellchecker_language` | partial | Appearance tab; applied to every workspace profile's Chromium spellcheck dictionaries. |
 | `theme` | partial | Native light/dark, existing hidden/private pages tested; custom colors remain pending. |
-| `interface_scale` | pending | Fly setting/import/UI behavior not implemented yet. |
+| `interface_scale` | partial | Appearance tab; "large" scales every Fly font by 1.25. Widths do not scale. |
 | `sync_website_theme` | partial | Native renderer color scheme synchronization tested without replacing page APIs. |
-| `trusted_domains` | pending | Fly setting/import/UI behavior not implemented yet. |
+| `trusted_domains` | not applicable | Electron needed it for its Google sign-in workarounds; native Chromium is accepted directly. Kept for import. |
 | `tab_suspend_timeout_minutes` | partial | Off and 5/15/30/60-minute native deadlines tested with retained documents and protected cases. |
 | `sidebar_auto_collapse` | partial | Default enabled, native live Appearance control and recovery policy tested; import and full platform acceptance remain pending. |
 | `show_status_bar` | partial | Live native footer and persistent choice tested. |
 | `show_clock` | partial | Live native clock, private context and no per-tick writes tested. |
 | `show_frequent_sites` | partial | Typed native choice and live Appearance control, derived ranking, bookmark exclusions and explicit hiding implemented; new runtime cases and import/platform acceptance remain pending. |
 | `clock_format` | partial | Three existing formats and native preference changes tested. |
-| `theme_colors` | pending | Fly setting/import/UI behavior not implemented yet. |
-| `enable_diagnostics` | pending | Fly setting/import/UI behavior not implemented yet. |
+| `theme_colors` | partial | Appearance tab: accent, main, sidebar and text colour per theme; reset to defaults. |
+| `enable_diagnostics` | partial | Performance tab and action; events stay in memory. |
 | `show_window_controls` | partial | Follow-up native preference, preservation/policy cases and real desktop controls tested; full-suite/platform acceptance pending. |
 | `custom_search_aliases` | partial | Twelve built-ins, custom override/edit/removal and native settings; recovery/policy/encoding service cases pass. UI, import and platform acceptance remain incomplete. |
-| `last_seen_version` | pending | Fly setting/import/UI behavior not implemented yet. |
+| `last_seen_version` | partial | Written on the first start of a version; an upgrade opens What's New. |
 | `desktop_integration_offered` | pending | Fly setting/import/UI behavior not implemented yet. |
-| `extensions_enabled` | pending | Fly setting/import/UI behavior not implemented yet. |
-| `extensions_by_workspace` | pending | Fly setting/import/UI behavior not implemented yet. |
-| `extensions_bundled` | pending | Fly setting/import/UI behavior not implemented yet. |
-| `extensions_disabled` | pending | Fly setting/import/UI behavior not implemented yet. |
-| `extensions_unload_grace_seconds` | pending | Fly setting/import/UI behavior not implemented yet. |
-| `extensions_sources` | pending | Fly setting/import/UI behavior not implemented yet. |
+| `extensions_enabled` | partial | Global switch (Preferences → Extensions): off unloads bundled extensions and suspends the user's own, restoring exactly those. |
+| `extensions_by_workspace` | partial | Each workspace is a Chromium profile, so installed extensions are per workspace natively; the bundled blocker can be switched off per workspace. Electron selections still need import. |
+| `extensions_bundled` | partial | uBlock Origin Lite (MV3, pinned in `chromium/bundled-extensions.json`) replaces the MV2 uBlock Origin Chromium no longer runs; loaded as a Fly component with its Web Store identity. Removal is remembered. |
+| `extensions_disabled` | partial | Disabling uses Chromium's own per-profile state; bundled switches are stored by Fly. Import from Electron pending. |
+| `extensions_unload_grace_seconds` | not applicable | Chromium suspends MV3 service workers itself; nothing to configure. Kept for import. |
+| `extensions_sources` | partial | Store installs come from the Chrome Web Store with Chromium's updater; local packages through `chrome://extensions`. |
+
+## Import from Electron Fly
+
+`fly/import/legacy_import.cc` covers `config.json`, `session.json` (workspaces,
+order, tabs, pins, active workspace), partitions' site data, `bookmarks.json`,
+`history.json`, `keybinds.json` (version 2 and legacy tables), `site-zoom.json`,
+`hidden-sites.json`, `scripts/`, `styles/`, `script-storage/` and the bundled
+blocker choices. Not imported: `quickmarks.json` (retired), Electron's
+`Local Storage` of the interface (recent commands), extensions installed by hand
+(listed for reinstallation), tab scroll positions and session storage records.
 
 ## Completion gates
 

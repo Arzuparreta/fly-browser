@@ -11,9 +11,13 @@
 #include "base/memory/raw_ref.h"
 #include "base/sequence_checker.h"
 #include "base/time/time.h"
+#include "base/values.h"
 
 class PrefRegistrySimple;
 class PrefService;
+namespace base {
+class CommandLine;
+}
 namespace fly {
 inline constexpr char kPreferencesPref[] = "fly.preferences";
 struct ClockPreferences {
@@ -70,6 +74,35 @@ class PreferencesService {
   bool CanEditSuspendTimeout() const;
   bool SetSuspendTimeoutMinutes(int minutes);
   bool CycleSuspendTimeout();
+
+  // Remaining product settings, validated per key with the Electron defaults:
+  // bools disable_gpu, background_throttling, enable_diagnostics,
+  // web_notifications, desktop_integration_offered; int process_limit (1-8);
+  // strings spellchecker_language, interface_scale (normal|large),
+  // email_handler, last_seen_version.
+  std::optional<bool> ReadBool(std::string_view key) const;
+  bool SetBool(std::string_view key, bool value);
+  std::optional<int> ReadInt(std::string_view key) const;
+  bool SetInt(std::string_view key, int value);
+  std::optional<std::string> ReadString(std::string_view key) const;
+  bool SetString(std::string_view key, const std::string& value);
+  bool CanEdit() const;
+  // True when `key` is explicitly stored (not just its default).
+  bool HasStoredValue(std::string_view key) const;
+  // theme_colors.{dark,light}.{accent,bg_main,bg_sidebar,text}: "#rrggbb".
+  // Missing entries use the product defaults (empty result).
+  std::optional<std::string> ReadThemeColor(bool dark,
+                                            std::string_view key) const;
+  bool SetThemeColor(bool dark, std::string_view key, const std::string& hex);
+  bool ResetThemeColors();
+  // Native extension state ("native_extensions"): bundled removals and
+  // per-workspace switches, extensions suspended by the global switch.
+  std::optional<base::DictValue> ReadNativeExtensions() const;
+  bool SetNativeExtensions(base::DictValue state);
+  // Applies settings that only take effect at process start (GPU, background
+  // throttling, renderer process limit). Called before child processes start.
+  static void ApplyStartupSwitches(const PrefService& local_state,
+                                   base::CommandLine& command_line);
 
  private:
   bool ValidStore() const;

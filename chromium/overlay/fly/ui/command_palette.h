@@ -7,6 +7,7 @@
 #include <memory>
 #include <vector>
 #include "base/functional/callback.h"
+#include "ui/gfx/geometry/insets.h"
 #include "base/memory/raw_ptr.h"
 #include "base/memory/weak_ptr.h"
 #include "content/public/browser/web_contents_observer.h"
@@ -19,6 +20,22 @@ class Widget;
 class MdTextButton;
 }  // namespace views
 namespace fly {
+// Presentation of a picker, matching the Electron surfaces it replaces.
+struct PaletteStyle {
+  enum class Layout {
+    kCentre,  // Modal card over a dimmed page (Command Centre).
+    kTop,     // Floating card under the window top, page left visible
+              // (address bar, history).
+    kPage,    // Full content-area manager (bookmarks, workspace dashboard).
+  };
+  Layout layout = Layout::kCentre;
+  std::u16string title;
+  std::u16string subtitle;
+  int width = 720;
+  // kPage only: area of the desktop contents left uncovered (sidebar rail,
+  // footer), queried when the surface opens.
+  base::RepeatingCallback<gfx::Insets()> page_insets;
+};
 // A native modal child surface of the existing desktop Aura host. Commands
 // execute after the surface is destroyed; no callback retains a row or tab
 // index.
@@ -33,6 +50,7 @@ class CommandPalette : public views::TextfieldController,
                  base::RepeatingCallback<void(content::WebContents*,
                                               std::string)> remove = {});
   ~CommandPalette() override;
+  void SetStyle(PaletteStyle style) { style_ = std::move(style); }
   void Toggle(content::WebContents* contents, const KeyboardConfig& config);
   // Only app-scoped choices may explicitly allow an initially empty source.
   // Destruction of an observed page always cancels its queued action.
@@ -75,6 +93,7 @@ class CommandPalette : public views::TextfieldController,
   void Remove(std::string action);
   void RemoveAfterEvent(std::string action);
   void FinishClose(bool restore_focus, std::string action);
+  PaletteStyle style_;
   raw_ptr<views::Widget> desktop_;
   base::RepeatingCallback<bool(std::string_view)> available_;
   base::RepeatingCallback<void(content::WebContents*, std::string)> execute_;

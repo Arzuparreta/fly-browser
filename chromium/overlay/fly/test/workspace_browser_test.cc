@@ -14,6 +14,20 @@
 #include "fly/preferences/search_service.h"
 #include "fly/sessions/tab_identity.h"
 #include "fly/ui/command_palette.h"
+#include "fly/ui/fly_theme.h"
+#include "fly/ui/fly_actions.h"
+#include "fly/ui/fly_extensions.h"
+#include "fly/ui/user_content.h"
+#include "base/files/scoped_temp_dir.h"
+#include "content/public/browser/host_zoom_map.h"
+#include "chrome/common/chrome_paths.h"
+#include "base/files/file_util.h"
+#include "extensions/browser/extension_registry.h"
+#include "base/path_service.h"
+#include "base/threading/thread_restrictions.h"
+#include "chrome/browser/content_settings/host_content_settings_map_factory.h"
+#include "components/content_settings/core/browser/host_content_settings_map.h"
+#include "components/dom_distiller/core/url_utils.h"
 #include "fly/ui/fly_window_controller.h"
 #include "fly/ui/hint_controller.h"
 #include "fly/ui/history_service.h"
@@ -36,6 +50,9 @@
 #include "base/json/json_reader.h"
 #include "base/json/json_writer.h"
 #include "base/run_loop.h"
+#include "base/synchronization/lock.h"
+#include "base/thread_annotations.h"
+#include "base/strings/strcat.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/task/single_thread_task_runner.h"
 #include "base/test/bind.h"
@@ -92,6 +109,7 @@
 #include "extensions/test/test_extension_dir.h"
 #include "net/dns/mock_host_resolver.h"
 #include "net/test/embedded_test_server/embedded_test_server.h"
+#include "net/test/embedded_test_server/http_request.h"
 #include "ui/aura/client/focus_client.h"
 #include "ui/aura/window.h"
 #include "ui/aura/window_tree_host.h"
@@ -562,6 +580,9 @@ class FlySidebarBrowserTest : public FlyWorkspaceBrowserTest {
     FlyWorkspaceBrowserTest::SetUpOnMainThread();
     ASSERT_TRUE(
         FlyWindowController::Get().preferences().SetSidebarAutoCollapse(true));
+    // The footer clock ticks independently; these cases observe the sidebar's.
+    ASSERT_TRUE(
+        FlyWindowController::Get().preferences().SetStatusBarVisible(false));
   }
 
  protected:
@@ -3384,9 +3405,8 @@ IN_PROC_BROWSER_TEST_F(FlyWorkspaceBrowserTest,
   auto reopened_lifetime = reopened->GetWeakPtr();
   ASSERT_TRUE(ExecuteNativeCommand(reopened, "remove-tab"));
   ASSERT_TRUE(base::test::RunUntil([&] { return !reopened_lifetime; }));
-  auto* new_tab = static_cast<views::Button*>(
-      window.tab_sidebar_for_testing()->children().front());
-  views::test::ButtonTestApi(new_tab).NotifyDefaultMouseClick();
+  views::test::ButtonTestApi(window.new_tab_button_for_testing())
+      .NotifyDefaultMouseClick();
   ASSERT_TRUE(base::test::RunUntil(
       [&] { return window.selected_browser_for_testing() != nullptr; }));
   EXPECT_EQ(1,
@@ -3629,6 +3649,322 @@ IN_PROC_BROWSER_TEST_F(FlyWorkspaceBrowserTest,
   const auto sites = restarted.Read({{url.spec(), base::Time::Now()}});
   ASSERT_TRUE(sites);
   EXPECT_TRUE(sites->empty());
+}
+
+IN_PROC_BROWSER_TEST_F(FlyWorkspaceBrowserTest,
+                       NativeSettingsMenuEditsStartupAndSidebarSettings) {
+  auto& window = FlyWindowController::Get();
+  ASSERT_TRUE(InvokeNativeCommand(browser(), "toggle-menu-bar"));
+  auto* menu = window.settings_menu().model_for_testing();
+  ASSERT_TRUE(menu);
+  EXPECT_GT(menu->GetItemCount(), 15u);
+  EXPECT_FALSE(window.settings_menu().IsCommandIdChecked(1));
+  window.settings_menu().ExecuteCommand(1, 0);
+  EXPECT_EQ(true, window.preferences().ReadBool("disable_gpu"));
+  window.settings_menu().ExecuteCommand(102, 0);
+  EXPECT_EQ(2, window.preferences().ReadInt("process_limit"));
+  EXPECT_TRUE(window.settings_menu().IsCommandIdChecked(102));
+  window.settings_menu().ExecuteCommand(230, 0);
+  EXPECT_EQ(30, window.preferences().ReadSuspendTimeoutMinutes());
+  window.settings_menu().Cancel();
+}
+
+IN_PROC_BROWSER_TEST_F(FlyWorkspaceBrowserTest,
+                       NativeNotificationsToggleChangesEveryWorkspaceDefault) {
+  auto* second = SecondWorkspace();
+  ASSERT_TRUE(second);
+  auto setting = [](BrowserWindowInterface* window) {
+    return HostContentSettingsMapFactory::GetForProfile(window->GetProfile())
+        ->GetDefaultContentSetting(ContentSettingsType::NOTIFICATIONS);
+  };
+  EXPECT_EQ(CONTENT_SETTING_ASK, setting(browser()));
+  ASSERT_TRUE(InvokeNativeCommand(browser(), "toggle-notifications"));
+  EXPECT_EQ(false, FlyWindowController::Get().preferences().ReadBool(
+                       "web_notifications"));
+  EXPECT_EQ(CONTENT_SETTING_BLOCK, setting(browser()));
+  EXPECT_EQ(CONTENT_SETTING_BLOCK, setting(second));
+  ASSERT_TRUE(InvokeNativeCommand(second, "toggle-notifications"));
+  EXPECT_EQ(CONTENT_SETTING_ASK, setting(browser()));
+  EXPECT_EQ(CONTENT_SETTING_ASK, setting(second));
+}
+
+IN_PROC_BROWSER_TEST_F(FlyWorkspaceBrowserTest,
+                       NativeDownloadsAndDiagnosticsSurfacesOpenAndClose) {
+  ASSERT_TRUE(ui_test_utils::NavigateToURL(
+      browser(), embedded_test_server()->GetURL("/title1.html")));
+  auto& window = FlyWindowController::Get();
+  ASSERT_TRUE(InvokeNativeCommand(browser(), "toggle-downloads"));
+  auto& picker = window.downloads_picker();
+  ASSERT_TRUE(base::test::RunUntil([&] { return picker.active(); }));
+  EXPECT_EQ(1u, picker.result_count_for_testing());
+  picker.Cancel(true);
+  ASSERT_TRUE(
+      base::test::RunUntil([&] { return !picker.search_for_testing(); }));
+  ASSERT_TRUE(InvokeNativeCommand(browser(), "open-diagnostics"));
+  auto* dialog = window.diagnostics_dialog_for_testing();
+  ASSERT_TRUE(dialog);
+  EXPECT_TRUE(dialog->IsVisible());
+  ASSERT_TRUE(InvokeNativeCommand(browser(), "open-diagnostics"));
+  ASSERT_TRUE(base::test::RunUntil([&] {
+    auto* current = window.diagnostics_dialog_for_testing();
+    return !current || current->IsClosed();
+  }));
+}
+
+IN_PROC_BROWSER_TEST_F(FlyWorkspaceBrowserTest,
+                       NativeReaderViewDistilsArticleAndReturns) {
+  const GURL article =
+      embedded_test_server()->GetURL("/dom_distiller/simple_article.html");
+  ASSERT_TRUE(ui_test_utils::NavigateToURL(browser(), article));
+  auto* contents = Active(browser());
+  ASSERT_TRUE(InvokeNativeCommand(browser(), "toggle-reader-view"));
+  ASSERT_TRUE(base::test::RunUntil([&] {
+    return dom_distiller::url_utils::IsDistilledPage(
+        contents->GetLastCommittedURL());
+  }));
+  ASSERT_TRUE(content::WaitForLoadStop(contents));
+  ASSERT_TRUE(InvokeNativeCommand(browser(), "toggle-reader-view"));
+  ASSERT_TRUE(base::test::RunUntil(
+      [&] { return contents->GetLastCommittedURL() == article; }));
+}
+
+IN_PROC_BROWSER_TEST_F(FlyWorkspaceBrowserTest,
+                       BundledBlockerFollowsWorkspaceRemovalAndGlobalSwitch) {
+  constexpr char kId[] = "ddkjiahejlhfcafbddmgiahcphecmpfh";
+  base::FilePath assets;
+  ASSERT_TRUE(base::PathService::Get(base::DIR_ASSETS, &assets));
+  {
+    base::ScopedAllowBlockingForTesting allow_blocking;
+    if (!base::PathExists(assets.AppendASCII("fly_extensions").AppendASCII(kId)))
+      GTEST_SKIP() << "bundled extensions are not staged in this build";
+  }
+  auto& window = FlyWindowController::Get();
+  auto& extensions = window.extensions();
+  auto loaded = [&](BrowserWindowInterface* browser) {
+    return extensions::ExtensionRegistry::Get(browser->GetProfile())
+               ->enabled_extensions()
+               .GetByID(kId) != nullptr;
+  };
+  ASSERT_TRUE(base::test::RunUntil([&] { return loaded(browser()); }));
+  auto* second = SecondWorkspace();
+  ASSERT_TRUE(second);
+  ASSERT_TRUE(base::test::RunUntil([&] { return loaded(second); }));
+  ASSERT_TRUE(base::test::RunUntil([&] {
+    return window.extension_actions_for_testing()->children().size() == 1u;
+  }));
+  // Switching it off in one workspace leaves the other.
+  ASSERT_TRUE(extensions.SetExtensionEnabled(second->GetProfile(), kId, false));
+  EXPECT_FALSE(loaded(second));
+  EXPECT_TRUE(loaded(browser()));
+  ASSERT_TRUE(extensions.SetExtensionEnabled(second->GetProfile(), kId, true));
+  EXPECT_TRUE(loaded(second));
+  // The global switch unloads it everywhere and restores it.
+  ASSERT_TRUE(extensions.SetEnabled(false));
+  EXPECT_FALSE(loaded(browser()));
+  EXPECT_FALSE(loaded(second));
+  ASSERT_TRUE(extensions.SetEnabled(true));
+  EXPECT_TRUE(loaded(browser()));
+  // Removal applies to every workspace and is listed no more.
+  ASSERT_TRUE(extensions.Remove(browser()->GetProfile(), kId));
+  EXPECT_FALSE(loaded(browser()));
+  EXPECT_FALSE(loaded(second));
+  EXPECT_TRUE(std::ranges::none_of(extensions.List(second->GetProfile()),
+                                   [&](const FlyExtensionInfo& info) {
+                                     return info.id == kId;
+                                   }));
+}
+
+IN_PROC_BROWSER_TEST_F(FlyWorkspaceBrowserTest,
+                       UserScriptsAndStylesRunWithPersistentGmValues) {
+  base::FilePath user_data;
+  ASSERT_TRUE(base::PathService::Get(chrome::DIR_USER_DATA, &user_data));
+  {
+    base::ScopedAllowBlockingForTesting allow_blocking;
+    ASSERT_TRUE(base::CreateDirectory(user_data.AppendASCII("scripts")));
+    ASSERT_TRUE(base::CreateDirectory(user_data.AppendASCII("styles")));
+    ASSERT_TRUE(base::WriteFile(
+        user_data.AppendASCII("scripts").AppendASCII("count.user.js"),
+        "// ==UserScript==\n// @name Counter\n// @match http://*/*\n"
+        "// @grant GM_getValue\n// @grant GM_setValue\n// ==/UserScript==\n"
+        "GM_setValue('visits', GM_getValue('visits', 0) + 1);\n"
+        "document.documentElement.dataset.flyVisits = GM_getValue('visits');\n"));
+    ASSERT_TRUE(base::WriteFile(
+        user_data.AppendASCII("styles").AppendASCII("color.user.css"),
+        "/* ==UserStyle==\n@name Colour\n==/UserStyle== */\n"
+        "@-moz-document domain(\"127.0.0.1\") {\n"
+        "body { color: rgb(1, 2, 3) !important; }\n}\n"));
+  }
+  auto& window = FlyWindowController::Get();
+  window.user_content().Reload();
+  // A generation that started before both files existed can finish first.
+  ASSERT_TRUE(base::test::RunUntil([&] {
+    return window.user_content().script_count() == 1u &&
+           window.user_content().style_count() == 1u;
+  }));
+  const auto url = embedded_test_server()->GetURL("/title1.html");
+  auto visits = [&] {
+    return content::EvalJs(Active(browser()),
+                           "document.documentElement.dataset.flyVisits || ''")
+        .ExtractString();
+  };
+  auto color = [&] {
+    return content::EvalJs(Active(browser()),
+                           "getComputedStyle(document.body).color")
+        .ExtractString();
+  };
+  // Registration is asynchronous in the extension worker; reload until both
+  // injections appear.
+  ASSERT_TRUE(base::test::RunUntil([&] {
+    if (!ui_test_utils::NavigateToURL(browser(), url))
+      return false;
+    return !visits().empty() && color() == "rgb(1, 2, 3)";
+  }));
+  const int first = std::stoi(visits());
+  ASSERT_TRUE(ui_test_utils::NavigateToURL(browser(), url));
+  ASSERT_TRUE(base::test::RunUntil([&] { return !visits().empty(); }));
+  EXPECT_EQ(first + 1, std::stoi(visits()));
+}
+
+class FlyGmRequestBrowserTest : public FlyWorkspaceBrowserTest {
+ public:
+  void SetUpOnMainThread() override {
+    embedded_test_server()->RegisterRequestMonitor(base::BindRepeating(
+        &FlyGmRequestBrowserTest::Monitor, base::Unretained(this)));
+    FlyWorkspaceBrowserTest::SetUpOnMainThread();
+    host_resolver()->AddRule("*", "127.0.0.1");
+  }
+
+ protected:
+  bool Requested(std::string_view url) {
+    base::AutoLock lock(lock_);
+    return std::ranges::find(urls_, url) != urls_.end();
+  }
+
+ private:
+  void Monitor(const net::test_server::HttpRequest& request) {
+    base::AutoLock lock(lock_);
+    urls_.push_back(request.relative_url);
+  }
+  base::Lock lock_;
+  std::vector<std::string> urls_ GUARDED_BY(lock_);
+};
+
+// Every redirect hop of GM_xmlhttpRequest is held to the script's @connect
+// hosts and kept off local network addresses before it is sent, as Electron
+// Fly checked each hop.
+IN_PROC_BROWSER_TEST_F(FlyGmRequestBrowserTest, RedirectHopsAreCheckedBeforeSending) {
+  base::FilePath user_data;
+  ASSERT_TRUE(base::PathService::Get(chrome::DIR_USER_DATA, &user_data));
+  const auto script = [](std::string_view name, std::string_view connect,
+                         std::string_view body) {
+    return base::StrCat(
+        {"// ==UserScript==\n// @name ", name,
+         "\n// @match http://*/*\n// @grant GM_xmlhttpRequest\n// @connect ",
+         connect,
+         "\n// ==/UserScript==\n"
+         "if (location.hostname === 'page.test') {\n"
+         "  const base = 'http://allowed.test:' + location.port;\n"
+         "  const send = (key, url) => GM_xmlhttpRequest({url,\n"
+         "    onload: r => document.documentElement.dataset[key] = 'load ' + r.status,\n"
+         "    onerror: e => document.documentElement.dataset[key] = 'error ' + e.error});\n",
+         body, "}\n"});
+  };
+  {
+    base::ScopedAllowBlockingForTesting allow_blocking;
+    const auto scripts = user_data.AppendASCII("scripts");
+    ASSERT_TRUE(base::CreateDirectory(scripts));
+    ASSERT_TRUE(base::WriteFile(
+        scripts.AppendASCII("connect.user.js"),
+        script("Connect", "allowed.test",
+               "  send('direct', base + '/echo?direct');\n"
+               "  send('hop', base + '/server-redirect?http://other.test:' + "
+               "location.port + '/echo?hop');\n")));
+    ASSERT_TRUE(base::WriteFile(
+        scripts.AppendASCII("open.user.js"),
+        script("Open", "*",
+               "  send('open', base + '/server-redirect?http://open.test:' + "
+               "location.port + '/echo?open');\n"
+               "  send('local', base + '/server-redirect?http://127.0.0.1:' + "
+               "location.port + '/echo?local');\n")));
+  }
+  auto& window = FlyWindowController::Get();
+  window.user_content().Reload();
+  ASSERT_TRUE(base::test::RunUntil(
+      [&] { return window.user_content().script_count() == 2u; }));
+  const auto url = embedded_test_server()->GetURL("page.test", "/title1.html");
+  const auto result = [&](std::string_view key) {
+    return content::EvalJs(Active(browser()),
+                           base::StrCat({"document.documentElement.dataset.",
+                                         key, " || ''"}))
+        .ExtractString();
+  };
+  ASSERT_TRUE(base::test::RunUntil([&] {
+    if (result("direct").empty() &&
+        !ui_test_utils::NavigateToURL(browser(), url)) {
+      return false;
+    }
+    return !result("direct").empty() && !result("hop").empty() &&
+           !result("open").empty() && !result("local").empty();
+  }));
+  EXPECT_EQ("load 200", result("direct"));
+  EXPECT_EQ("load 200", result("open"));
+  EXPECT_TRUE(result("hop").starts_with("error")) << result("hop");
+  EXPECT_TRUE(result("local").starts_with("error")) << result("local");
+  EXPECT_TRUE(Requested("/echo?direct"));
+  EXPECT_TRUE(Requested("/echo?open"));
+  EXPECT_FALSE(Requested("/echo?hop"));
+  EXPECT_FALSE(Requested("/echo?local"));
+}
+
+class FlyLegacyImportBrowserTest : public FlyWorkspaceBrowserTest {
+ public:
+  void SetUpCommandLine(base::CommandLine* command_line) override {
+    FlyWorkspaceBrowserTest::SetUpCommandLine(command_line);
+    base::ScopedAllowBlockingForTesting allow_blocking;
+    ASSERT_TRUE(legacy_.CreateUniqueTempDir());
+    const auto write = [&](std::string_view name, std::string_view text) {
+      const auto path = legacy_.GetPath().AppendASCII(name);
+      ASSERT_TRUE(base::CreateDirectory(path.DirName()));
+      ASSERT_TRUE(base::WriteFile(path, text));
+    };
+    write("session.json", R"({
+      "current_workspace": "Work",
+      "workspaces": {"Home": ["data:text/html,home"],
+                     "Work": ["data:text/html,work-a", "data:text/html,work-b"]},
+      "workspace_partitions": {"Home": "persist:workspace-1", "Work": "persist:work"},
+      "tab_pinned": {"Work": [true, false]}})");
+    write("Partitions/work/Preferences", "{}");
+    write("config.json", R"({"show_clock": false})");
+    write("site-zoom.json", R"({"zoom.example": 2})");
+    command_line->AppendSwitchPath("fly-import-from", legacy_.GetPath());
+  }
+
+ private:
+  base::ScopedTempDir legacy_;
+};
+IN_PROC_BROWSER_TEST_F(FlyLegacyImportBrowserTest,
+                       ElectronWorkspacesTabsAndSettingsArriveOnFirstStart) {
+  WorkspaceService workspaces(*g_browser_process->local_state());
+  const auto catalog = workspaces.Read();
+  ASSERT_TRUE(catalog);
+  ASSERT_EQ(2u, catalog->items.size());
+  EXPECT_EQ("Home", catalog->items[0].name);
+  EXPECT_EQ("Work", catalog->items[1].name);
+  EXPECT_EQ("Profile 1", browser()->GetProfile()->GetPath().BaseName().AsUTF8Unsafe());
+  auto* model = browser()->GetTabStripModel();
+  ASSERT_TRUE(base::test::RunUntil([&] {
+    return model->count() == 2 &&
+           model->GetWebContentsAt(1)->GetVisibleURL() ==
+               GURL("data:text/html,work-b");
+  }));
+  EXPECT_EQ(GURL("data:text/html,work-a"),
+            model->GetWebContentsAt(0)->GetVisibleURL());
+  EXPECT_TRUE(model->IsTabPinned(0));
+  EXPECT_FALSE(model->IsTabPinned(1));
+  EXPECT_EQ(2.0, content::HostZoomMap::GetDefaultForBrowserContext(
+                     browser()->GetProfile())
+                     ->GetZoomLevelForHostAndScheme("https", "zoom.example"));
+  EXPECT_FALSE(FlyWindowController::Get().preferences().ReadClock()->visible);
 }
 
 class FlyHistoryRestoreBrowserTest : public FlyWorkspaceBrowserTest {};
@@ -4307,22 +4643,6 @@ IN_PROC_BROWSER_TEST_F(FlyWorkspaceBrowserTest,
                            "document.querySelector('#editable').value")
                .ExtractString() == "j";
   }));
-  // Preserve upstream toolbar-focus restoration independently of Fly address
-  // UI.
-  ASSERT_TRUE(ExecuteNativeCommand(browser(), "toggle-address"));
-  auto* widget = views::Widget::GetWidgetForNativeView(
-      browser()->GetWindow()->GetNativeWindow());
-  ASSERT_TRUE(widget);
-  auto* toolbar_focus = widget->GetFocusManager()->GetFocusedView();
-  ASSERT_TRUE(toolbar_focus);
-  ASSERT_FALSE(contents->GetRenderWidgetHostView()->HasFocus());
-  keys.PressKey(ui::VKEY_P, ui::EF_ALT_DOWN);
-  ASSERT_TRUE(base::test::RunUntil([&] { return window.palette().active(); }));
-  keys.PressKey(ui::VKEY_P, ui::EF_ALT_DOWN);
-  ASSERT_TRUE(base::test::RunUntil(
-      [&] { return window.palette().search_for_testing() == nullptr; }));
-  EXPECT_EQ(toolbar_focus, widget->GetFocusManager()->GetFocusedView());
-  EXPECT_FALSE(contents->GetRenderWidgetHostView()->HasFocus());
   keys.PressKey(ui::VKEY_P, ui::EF_ALT_DOWN);
   ASSERT_TRUE(base::test::RunUntil([&] { return window.palette().active(); }));
   ASSERT_TRUE(SecondWorkspace());
@@ -4415,11 +4735,11 @@ IN_PROC_BROWSER_TEST_F(FlyWorkspaceBrowserTest,
   pointer.MoveMouseTo(bounds.origin() + gfx::Vector2d(40, 35));
   ASSERT_TRUE(base::test::RunUntil([&] {
     const auto& text = status->location_for_testing()->GetText();
-    return text.starts_with(u"Link: ") && text.find(u"example.invalid/fixture") != std::u16string::npos;
+    return text.find(u"example.invalid/fixture") != std::u16string::npos;
   }));
   pointer.MoveMouseTo(window.workspace_buttons_for_testing()->GetBoundsInScreen().CenterPoint());
   ASSERT_TRUE(base::test::RunUntil([&] {
-    return !status->location_for_testing()->GetText().starts_with(u"Link: ");
+    return status->location_for_testing()->GetText().empty();
   }));
   ASSERT_TRUE(InvokeNativeCommand(browser(), "toggle-status-bar"));
   EXPECT_FALSE(status->GetVisible());
@@ -4447,25 +4767,30 @@ IN_PROC_BROWSER_TEST_F(FlyWorkspaceBrowserTest,
   auto* status = window.status_bar_for_testing();
   ASSERT_EQ(security_state::SECURE, chrome_security_state::GetSecurityLevel(contents));
   ASSERT_TRUE(base::test::RunUntil([&] {
-    return status->security_for_testing()->GetText() == u"Page secure";
+    return status->security_for_testing()->GetText() == u"HTTPS" &&
+           status->security_for_testing()->GetTooltipText().starts_with(
+               u"Page secure");
   }));
   {
     chrome_security_state::ScopedMaliciousContentStatusForTesting verdict(
         security_state::MALICIOUS_CONTENT_STATUS_MALWARE);
     status->DidChangeVisibleSecurityState();
-    EXPECT_EQ(u"Page security warning", status->security_for_testing()->GetText());
+    EXPECT_TRUE(status->security_for_testing()->GetTooltipText().starts_with(
+        u"Page security warning"));
   }
   status->DidChangeVisibleSecurityState();
-  EXPECT_EQ(u"Page secure", status->security_for_testing()->GetText());
+  EXPECT_TRUE(status->security_for_testing()->GetTooltipText().starts_with(
+      u"Page secure"));
   ASSERT_TRUE(ui_test_utils::NavigateToURL(browser(), GURL("about:blank")));
-  EXPECT_TRUE(status->security_for_testing()->GetText().empty());
+  EXPECT_EQ(u"BLANK", status->security_for_testing()->GetText());
   ASSERT_TRUE(window.RunCommand(browser(), "toggle-private-mode"));
   ASSERT_TRUE(base::test::RunUntil([&] {
     auto* selected = window.selected_browser_for_testing();
     return selected && selected->GetProfile()->IsOffTheRecord();
   }));
-  EXPECT_EQ(u"Private", status->workspace_for_testing()->GetText());
-  EXPECT_TRUE(status->security_for_testing()->GetText().empty());
+  EXPECT_EQ(u"PRIVATE PROFILE", status->workspace_for_testing()->GetText());
+  EXPECT_FALSE(status->security_for_testing()->GetTooltipText().starts_with(
+      u"Page secure"));
 }
 
 IN_PROC_BROWSER_TEST_F(FlyWorkspaceBrowserTest,

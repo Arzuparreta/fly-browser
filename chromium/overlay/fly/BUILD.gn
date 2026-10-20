@@ -82,6 +82,23 @@ source_set("bookmarks") {
   ]
 }
 
+source_set("legacy_import") {
+  sources = [
+    "import/legacy_import.cc",
+    "import/legacy_import.h",
+  ]
+  public_deps = [
+    ":commands",
+    "//base",
+  ]
+  deps = [
+    ":bookmarks",
+    ":preferences",
+    ":workspaces",
+    "//components/prefs",
+  ]
+}
+
 source_set("session_metadata") {
   sources = [
     "sessions/tab_identity.cc",
@@ -104,6 +121,7 @@ test("fly_unittests") {
     "commands/hint_codes_unittest.cc",
     "commands/keyboard_config_unittest.cc",
     "commands/palette_catalog_unittest.cc",
+    "import/legacy_import_unittest.cc",
     "preferences/preferences_service_unittest.cc",
     "preferences/search_service_unittest.cc",
     "workspaces/workspace_service_unittest.cc",
@@ -111,6 +129,7 @@ test("fly_unittests") {
   deps = [
     ":bookmarks",
     ":commands",
+    ":legacy_import",
     ":preferences",
     ":workspaces",
     "//base/test:run_all_unittests",
@@ -164,6 +183,8 @@ if (is_linux || is_win) {
       "//chrome/test/base:in_process_browser_test",
       "//chrome/test/base:ui_test_utils",
       "//components/javascript_dialogs",
+      "//components/content_settings/core/browser",
+      "//components/dom_distiller/core",
       "//components/performance_manager",
       "//components/password_manager/core/common",
       "//components/signin/public/base",
@@ -188,6 +209,34 @@ if (is_linux || is_win) {
       "//chrome/test/data/title1.html",
       "//chrome/test/data/favicon/page_with_favicon.html",
       "//chrome/test/data/favicon/icon.png",
+      "//chrome/test/data/dom_distiller/simple_article.html",
     ]
   }
+}
+
+# Product fonts used by the native interface (IBM Plex and Doto, SIL OFL 1.1).
+# RegisterFlyFonts() adds this directory to the browser's fontconfig.
+copy("fonts") {
+  sources = [
+    "resources/fonts/Doto.ttf",
+    "resources/fonts/IBMPlexMono-Medium.ttf",
+    "resources/fonts/IBMPlexMono-Regular.ttf",
+    "resources/fonts/IBMPlexSans.ttf",
+    "resources/fonts/doto-OFL.txt",
+    "resources/fonts/ibmplexmono-OFL.txt",
+    "resources/fonts/ibmplexsans-OFL.txt",
+  ]
+  outputs = [ "$root_out_dir/fly_fonts/{{source_file_part}}" ]
+}
+
+# The Fly User Content extension's fixed files; native Fly copies them into
+# <user data>/fly-user-content together with the generated content.js.
+copy("user_content_resources") {
+  sources = [
+    "resources/user_content/background.js",
+    "resources/user_content/manifest.json",
+    "resources/user_content/offscreen.html",
+    "resources/user_content/offscreen.js",
+  ]
+  outputs = [ "$root_out_dir/fly_resources/user_content/{{source_file_part}}" ]
 }

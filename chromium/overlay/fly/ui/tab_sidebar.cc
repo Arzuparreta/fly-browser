@@ -4,6 +4,7 @@
 #include "fly/ui/tab_sidebar.h"
 #include "fly/ui/fly_window_controller.h"
 #include "fly/ui/native_commands.h"
+#include "fly/ui/fly_theme.h"
 
 #include <limits>
 #include <set>
@@ -81,18 +82,65 @@ class CompactTabIcon : public gfx::CanvasImageSource {
   const bool muted_;
   const SkColor color_;
 };
-void SetActionIcon(views::ImageButton* button, const gfx::VectorIcon& icon) {
-  for (auto state :
-       {views::Button::STATE_NORMAL, views::Button::STATE_HOVERED,
-        views::Button::STATE_PRESSED, views::Button::STATE_DISABLED})
-    button->SetImageModel(state, ui::ImageModel::FromVectorIcon(
-                                     icon,
-                                     state == views::Button::STATE_DISABLED
-                                         ? ui::kColorIconDisabled
-                                         : ui::kColorIcon,
-                                     16));
+void SetActionIcon(views::Button* button, const gfx::VectorIcon& icon) {
+  static_cast<FlyButton*>(button)->SetVectorIcon(icon, 12);
 }
 }  // namespace
+// Two-line tab row: title above a monospace domain in the link colour, the
+// layout of the Electron sidebar rows.
+class FlyTabButton : public FlyButton {
+  METADATA_HEADER(FlyTabButton, FlyButton)
+
+ public:
+  FlyTabButton(PressedCallback callback, bool compact)
+      : FlyButton(std::move(callback), u"", FlyFace::kSans, 12),
+        compact_(compact) {
+    SetCustomPadding(compact_ ? gfx::Insets(4) : gfx::Insets::VH(4, 6));
+    SetImageLabelSpacing(8);
+    if (!compact_) {
+      domain_ = AddChildView(std::make_unique<FlyLabel>(
+          u"", FlyFace::kMono, 10, gfx::Font::Weight::NORMAL,
+          FlyLabel::Tone::kLink));
+      domain_->SetHorizontalAlignment(gfx::ALIGN_LEFT);
+      domain_->SetElideBehavior(gfx::ELIDE_TAIL);
+      domain_->SetCanProcessEventsWithinSubtree(false);
+    }
+  }
+  void SetDomain(const std::u16string& domain) {
+    if (domain_ && domain_->GetText() != domain) {
+      domain_->SetText(domain);
+      domain_->SetVisible(!domain.empty());
+      InvalidateLayout();
+    }
+  }
+  gfx::Size CalculatePreferredSize(
+      const views::SizeBounds& available) const override {
+    if (compact_)
+      return gfx::Size(32, 32);
+    auto size = FlyButton::CalculatePreferredSize(available);
+    size.set_height(domain_ && domain_->GetVisible() ? 38 : 30);
+    return size;
+  }
+  void Layout(PassKey) override {
+    LayoutSuperclass<FlyButton>(this);
+    if (!domain_ || !domain_->GetVisible())
+      return;
+    auto title = label()->bounds();
+    const int line = 16;
+    const int top = (height() - line - 13 - 3) / 2;
+    title.set_y(top);
+    title.set_height(line);
+    title.set_width(std::max(0, width() - title.x() - 4));
+    label()->SetBoundsRect(title);
+    domain_->SetBounds(title.x(), top + line + 3, title.width(), 13);
+  }
+
+ private:
+  const bool compact_;
+  raw_ptr<FlyLabel> domain_ = nullptr;
+};
+BEGIN_METADATA(FlyTabButton)
+END_METADATA
 // Product tab actions use native models and unload/restore services. This menu
 // deliberately distinguishes tab muting from Chromium's site-wide mute command.
 class SidebarTabMenu : public ui::SimpleMenuModel::Delegate {
@@ -263,11 +311,8 @@ TabSidebar::TabSidebar(base::RepeatingClosure new_tab, bool compact)
     : compact_(compact) {
   auto* layout = SetLayoutManager(std::make_unique<views::BoxLayout>(
       views::BoxLayout::Orientation::kVertical));
-  auto* add = AddChildView(std::make_unique<views::MdTextButton>(
-      std::move(new_tab), compact_ ? u"+" : u"New tab"));
-  add->GetViewAccessibility().SetName(u"New tab in selected workspace");
-  if (compact_)
-    add->SetMinSize(gfx::Size(32, 32));
+  // The expanded header and the compact rail own their new-tab controls.
+  new_tab_ = std::move(new_tab);
   auto* scroll = AddChildView(std::make_unique<views::ScrollView>());
   // A bounded viewport sizes plain BoxLayout contents on both compositor
   // scrolling backends. Unbounded contents otherwise retain zero bounds.
@@ -276,7 +321,9 @@ TabSidebar::TabSidebar(base::RepeatingClosure new_tab, bool compact)
       views::ScrollView::ScrollBarMode::kDisabled);
   rows_ = scroll->SetContents(std::make_unique<views::View>());
   rows_->SetLayoutManager(std::make_unique<views::BoxLayout>(
-      views::BoxLayout::Orientation::kVertical, gfx::Insets(), 4));
+      views::BoxLayout::Orientation::kVertical, gfx::Insets(), compact_ ? 4 : 2));
+  scroll->SetBackgroundColor(std::nullopt);
+  scroll->SetDrawOverflowIndicator(false);
   layout->SetFlexForView(scroll, 1);
 }
 TabSidebar::~TabSidebar() {
@@ -344,23 +391,21 @@ void TabSidebar::Refresh() {
                                    weak_factory_.GetWeakPtr(),
                                    contents->GetWeakPtr(), action);
       };
-      auto* select = row->AddChildView(std::make_unique<views::MdTextButton>(
-          callback(RowAction::kSelect), u""));
+      auto* select = row->AddChildView(std::make_unique<FlyTabButton>(
+          callback(RowAction::kSelect), compact_));
       select->SetHorizontalAlignment(compact_ ? gfx::ALIGN_CENTER
                                               : gfx::ALIGN_LEFT);
-      if (compact_) {
-        select->SetBorder(views::CreateEmptyBorder(gfx::Insets(4)));
-        select->SetMinSize(gfx::Size(32, 32));
-      }
       layout->SetFlexForView(select, 1);
+      layout->set_cross_axis_alignment(
+          views::BoxLayout::CrossAxisAlignment::kCenter);
       auto icon_button = [&](RowAction action, const gfx::VectorIcon& icon,
                              const std::u16string& name) {
-        auto* button = row->AddChildView(views::ImageButton::CreateIconButton(
-            callback(action), icon, name,
-            views::ImageButton::MaterialIconStyle::kSmall, gfx::Insets(4)));
-        button->SetPreferredSize(gfx::Size(24, 24));
-        return button;
+        auto button =
+            MakeFlyIconButton(callback(action), icon, name, compact_ ? 0 : 22);
+        button->SetVectorIcon(icon, 12);
+        return row->AddChildView(std::move(button));
       };
+      // Child order (select, pin, close, audio) is part of the row contract.
       auto* pin = icon_button(RowAction::kPin, views::kKeepIcon, u"Pin tab");
       auto* close = icon_button(RowAction::kClose, vector_icons::kCloseIcon,
                                 u"Close tab");
@@ -399,9 +444,16 @@ void TabSidebar::Refresh() {
     if (title.empty())
       title = u"New tab";
     const std::u16string position = base::NumberToString16(i + 1);
-    row.select->SetText(compact_ ? std::u16string() : position + u"  " + title);
-    row.select->SetStyle(i == model_->active_index() ? ui::ButtonStyle::kTonal
-                                                     : ui::ButtonStyle::kText);
+    row.select->SetText(compact_ ? std::u16string() : title);
+    if (!compact_) {
+      const GURL& url = contents->GetVisibleURL();
+      row.select->SetDomain(url.SchemeIsHTTPOrHTTPS() && url.has_host()
+                                ? base::UTF8ToUTF16(url.host())
+                                : base::UTF8ToUTF16(url.scheme() == "chrome"
+                                                        ? std::string("fly")
+                                                        : url.spec()));
+    }
+    row.select->SetSelected(i == model_->active_index());
     const auto* audible_helper =
         RecentlyAudibleHelper::FromWebContents(contents);
     const bool audible = audible_helper ? audible_helper->WasRecentlyAudible()
@@ -428,7 +480,7 @@ void TabSidebar::Refresh() {
       row.favicon_initialized = true;
       auto image = icon.isNull()
                        ? ui::ImageModel::FromVectorIcon(
-                             vector_icons::kGlobeIcon, ui::kColorIcon, 16)
+                             vector_icons::kGlobeIcon, GetFlyColors().dim, 16)
                        : ui::ImageModel::FromImageSkia(
                              gfx::ImageSkiaOperations::CreateResizedImage(
                                  icon, skia::ImageOperations::RESIZE_BEST,
@@ -437,7 +489,7 @@ void TabSidebar::Refresh() {
         image = ui::ImageModel::FromImageSkia(
             gfx::CanvasImageSource::MakeImageSkia<CompactTabIcon>(
                 image.Rasterize(GetColorProvider()), model_->IsTabPinned(i),
-                audible, muted, GetColorProvider()->GetColor(ui::kColorIcon)));
+                audible, muted, GetFlyColors().text));
       }
       row.select->SetImageModel(views::Button::STATE_NORMAL, image);
     }
@@ -453,6 +505,10 @@ void TabSidebar::Refresh() {
     row.close->GetViewAccessibility().SetName(u"Close " + title);
     row.close->SetTooltipText(u"Close " + title);
     row.close->SetEnabled(!model_->IsTabPinned(i));
+    // Electron shows the close control on the active row; pinned rows keep
+    // their pin indicator instead.
+    row.close->SetVisible(!compact_ && !model_->IsTabPinned(i));
+    row.pin->SetVisible(!compact_ && model_->IsTabPinned(i));
     row.audible = audible;
     row.audio->SetVisible(!compact_ && (muted || audible));
     if (row.muted != muted) {
@@ -542,7 +598,7 @@ views::View* TabSidebar::row_for_testing(content::WebContents* contents) const {
   auto it = tab_rows_.find(contents);
   return it == tab_rows_.end() ? nullptr : it->second.view.get();
 }
-views::ImageButton* TabSidebar::audio_for_testing(
+views::Button* TabSidebar::audio_for_testing(
     content::WebContents* contents) const {
   auto it = tab_rows_.find(contents);
   return it == tab_rows_.end() ? nullptr : it->second.audio.get();

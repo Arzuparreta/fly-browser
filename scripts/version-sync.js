@@ -29,7 +29,8 @@ const SEMVER = /^(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)(?:-((?:0|[1-9]\d*|\d*[
 // a replacement never reformats the file.
 const TARGETS = [
     {file: 'package-lock.json', json: true},
-    {file: 'modules/userScriptShim.js', pattern: /^(        version: ')([^']+)(')$/m}
+    {file: 'modules/userScriptShim.js', pattern: /^(        version: ')([^']+)(')$/m},
+    {file: 'chromium/overlay/fly/fly_version.h', pattern: /^(inline constexpr char kFlyVersion\[\] = ")([^"]+)(";)$/m}
 ];
 
 function fail(message) {
