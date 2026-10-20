@@ -4576,6 +4576,8 @@ IN_PROC_BROWSER_TEST_F(FlyWorkspaceBrowserTest,
   ASSERT_TRUE(window.RunCommand(browser(), "toggle-help"));
   auto& editor = window.keyboard_editor();
   ASSERT_TRUE(editor.active());
+  // Preferences opens on General, as Electron's.
+  editor.ShowKeyboard();
   ui::test::EventGenerator keys(
       window.desktop_widget()->GetNativeWindow()->GetRootWindow());
   for (auto key : {ui::VKEY_S, ui::VKEY_P, ui::VKEY_A, ui::VKEY_W, ui::VKEY_N})
@@ -4723,6 +4725,35 @@ IN_PROC_BROWSER_TEST_F(FlyWorkspaceBrowserTest,
   ASSERT_TRUE(window.RunCommand(second, "toggle-help"));
   EXPECT_EQ(u"J", editor.field_for_testing("scroll-down", true)->GetText());
   EXPECT_EQ(before, window.commands().Read());
+}
+
+// Electron's Preferences: General first, the settings search filters every
+// section and jumps to the one with matches.
+IN_PROC_BROWSER_TEST_F(FlyWorkspaceBrowserTest,
+                       PreferencesFollowElectronSectionsAndSearch) {
+  auto& window = FlyWindowController::Get();
+  ASSERT_TRUE(InvokeNativeCommand(browser(), "toggle-help"));
+  auto& editor = window.keyboard_editor();
+  ASSERT_TRUE(base::test::RunUntil([&] { return editor.active(); }));
+  EXPECT_EQ(KeyboardEditor::kGeneralPane, editor.selected_pane_for_testing());
+  auto* search = editor.settings_search_for_testing();
+  ASSERT_TRUE(search);
+  search->SetText(u"cookies");
+  editor.ContentsChanged(search, u"cookies");
+  EXPECT_EQ(KeyboardEditor::kPrivacyPane, editor.selected_pane_for_testing());
+  EXPECT_TRUE(editor.setting_visible_for_testing(u"Clear site cookies"));
+  EXPECT_FALSE(editor.setting_visible_for_testing(u"Interface scale"));
+  search->SetText(u"");
+  editor.ContentsChanged(search, u"");
+  EXPECT_TRUE(editor.setting_visible_for_testing(u"Interface scale"));
+  // The section shown last comes back next time.
+  editor.ShowPerformance();
+  editor.Cancel();
+  ASSERT_TRUE(base::test::RunUntil([&] { return !editor.active(); }));
+  ASSERT_TRUE(InvokeNativeCommand(browser(), "toggle-help"));
+  ASSERT_TRUE(base::test::RunUntil([&] { return editor.active(); }));
+  EXPECT_EQ(KeyboardEditor::kPerformancePane,
+            editor.selected_pane_for_testing());
 }
 
 // Electron's Command Centre: count, category chips, inspector card,

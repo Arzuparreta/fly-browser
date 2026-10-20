@@ -8,6 +8,16 @@
 
 #include "base/environment.h"
 #include "base/files/file_util.h"
+#include "base/strings/strcat.h"
+#include "base/files/important_file_writer.h"
+#include "crypto/secure_hash.h"
+#include "base/files/scoped_temp_dir.h"
+#include "base/files/file.h"
+#include "base/command_line.h"
+#include "net/base/registry_controlled_domains/registry_controlled_domain.h"
+#include "content/public/browser/browsing_data_remover.h"
+#include "content/public/browser/browsing_data_filter_builder.h"
+#include "base/scoped_observation.h"
 #include "base/process/launch.h"
 #include "base/no_destructor.h"
 #include "base/json/json_reader.h"
@@ -386,6 +396,73 @@ void QueryReaderView(content::WebContents* contents,
           std::move(done)));
 }
 
+namespace {
+// Owns itself until the remover reports completion.
+class RemovalWaiter : public content::BrowsingDataRemover::Observer {
+ public:
+  RemovalWaiter(content::BrowsingDataRemover* remover,
+                base::OnceCallback<void(std::u16string)> done,
+                std::u16string message)
+      : done_(std::move(done)), message_(std::move(message)) {
+    observation_.Observe(remover);
+  }
+  void OnBrowsingDataRemoverDone(uint64_t failed_data_types) override {
+    observation_.Reset();
+    std::move(done_).Run(failed_data_types ? u"Some data could not be cleared."
+                                           : message_);
+    delete this;
+  }
+
+ private:
+  base::OnceCallback<void(std::u16string)> done_;
+  std::u16string message_;
+  base::ScopedObservation<content::BrowsingDataRemover,
+                          content::BrowsingDataRemover::Observer>
+      observation_{this};
+};
+}  // namespace
+
+void ClearSiteCookies(Profile* profile,
+                      const GURL& url,
+                      base::OnceCallback<void(std::u16string)> done) {
+  if (!profile || !url.SchemeIsHTTPOrHTTPS() || url.host().empty()) {
+    std::move(done).Run(u"Open a website to clear its cookies.");
+    return;
+  }
+  auto* remover = profile->GetBrowsingDataRemover();
+  auto filter = content::BrowsingDataFilterBuilder::Create(
+      content::BrowsingDataFilterBuilder::Mode::kDelete);
+  auto domain = net::registry_controlled_domains::GetDomainAndRegistry(
+      url, net::registry_controlled_domains::INCLUDE_PRIVATE_REGISTRIES);
+  filter->AddRegisterableDomain(domain.empty() ? std::string(url.host())
+                                               : domain);
+  auto* waiter = new RemovalWaiter(
+      remover, std::move(done),
+      u"Cookies cleared for " + base::UTF8ToUTF16(url.host()));
+  remover->RemoveWithFilterAndReply(
+      base::Time(), base::Time::Max(),
+      content::BrowsingDataRemover::DATA_TYPE_COOKIES,
+      content::BrowsingDataRemover::ORIGIN_TYPE_UNPROTECTED_WEB,
+      std::move(filter), waiter);
+}
+
+void ClearWorkspaceCache(Profile* profile,
+                         base::OnceCallback<void(std::u16string)> done) {
+  if (!profile) {
+    std::move(done).Run(u"No workspace is open.");
+    return;
+  }
+  auto* remover = profile->GetBrowsingDataRemover();
+  auto* waiter = new RemovalWaiter(remover, std::move(done),
+                                   u"Cache and storage cleared successfully.");
+  remover->RemoveAndReply(
+      base::Time(), base::Time::Max(),
+      content::BrowsingDataRemover::DATA_TYPE_CACHE |
+          content::BrowsingDataRemover::DATA_TYPE_CACHE_STORAGE |
+          content::BrowsingDataRemover::DATA_TYPE_SERVICE_WORKERS,
+      content::BrowsingDataRemover::ORIGIN_TYPE_UNPROTECTED_WEB, waiter);
+}
+
 void OpenTerminalWithCommand(const std::string& text) {
   if (base::TrimWhitespaceASCII(text, base::TRIM_ALL).empty())
     return;
@@ -486,7 +563,11 @@ void ApplyProfilePreferences(Profile* profile,
 
 void CheckForUpdates(base::OnceCallback<void(UpdateCheckResult)> done) {
   auto request = std::make_unique<network::ResourceRequest>();
-  request->url = GURL(kLatestRelease);
+  // Tests point the check at a local feed.
+  const auto* command_line = base::CommandLine::ForCurrentProcess();
+  request->url = command_line->HasSwitch("fly-update-feed")
+                     ? GURL(command_line->GetSwitchValueASCII("fly-update-feed"))
+                     : GURL(kLatestRelease);
   request->credentials_mode = network::mojom::CredentialsMode::kOmit;
   request->headers.SetHeader("Accept", "application/vnd.github+json");
   const net::NetworkTrafficAnnotationTag annotation =
@@ -531,12 +612,362 @@ void CheckForUpdates(base::OnceCallback<void(UpdateCheckResult)> done) {
                 if (const auto* page = json->FindString("html_url");
                     page && GURL(*page).SchemeIs(url::kHttpsScheme))
                   result.page = GURL(*page);
+                const auto package =
+                    "Fly-" + latest + "-native-linux-x64.tar.gz";
+                if (const auto* assets = json->FindList("assets")) {
+                  for (const auto& asset : *assets) {
+                    const auto* item = asset.GetIfDict();
+                    const auto* name = item ? item->FindString("name") : nullptr;
+                    const auto* link =
+                        item ? item->FindString("browser_download_url")
+                             : nullptr;
+                    if (!name || !link)
+                      continue;
+                    const GURL url(*link);
+                    if (!url.SchemeIs(url::kHttpsScheme) &&
+                        !(base::CommandLine::ForCurrentProcess()->HasSwitch(
+                              "fly-update-feed") &&
+                          url.SchemeIs(url::kHttpScheme)))
+                      continue;
+                    if (*name == package)
+                      result.package = url;
+                    else if (*name == package + ".sha256")
+                      result.checksum = url;
+                  }
+                }
+                if (!result.package.is_valid() || !result.checksum.is_valid())
+                  result.package = result.checksum = GURL();
               }
             }
             std::move(done).Run(std::move(result));
           },
           std::move(loader), std::move(done)),
       256 * 1024);
+}
+
+namespace {
+const net::NetworkTrafficAnnotationTag kUpdateDownload =
+    net::DefineNetworkTrafficAnnotation("fly_update_download", R"(
+      semantics {
+        sender: "Fly update"
+        description: "Downloads the native Fly package of a newer release."
+        trigger: "Install update in Preferences, after the user chooses it."
+        data: "None."
+        destination: OTHER
+      }
+      policy {
+        cookies_allowed: NO
+        setting: "Not configurable."
+        policy_exception_justification: "User-initiated product update."
+      })");
+
+// Runs on a blocking sequence: checks the package, unpacks it and swaps it in
+// for the running installation. Returns an error, or "" on success.
+std::u16string ReplaceInstallation(base::FilePath package,
+                                   std::string checksum_file) {
+  const auto parts = base::SplitString(checksum_file, " \t\r\n",
+                                       base::TRIM_WHITESPACE,
+                                       base::SPLIT_WANT_NONEMPTY);
+  if (parts.empty() || parts[0].size() != 64)
+    return u"The release's checksum file is not readable.";
+  base::File file(package, base::File::FLAG_OPEN | base::File::FLAG_READ);
+  if (!file.IsValid())
+    return u"The downloaded package cannot be read.";
+  auto hash = crypto::SecureHash::Create(crypto::SecureHash::Algorithm::SHA256);
+  std::vector<uint8_t> buffer(1 << 20);
+  while (true) {
+    const auto read = file.ReadAtCurrentPos(buffer);
+    if (!read.has_value())
+      return u"The downloaded package cannot be read.";
+    if (*read == 0)
+      break;
+    hash->Update(base::span(buffer).first(*read));
+  }
+  std::array<uint8_t, 32> digest;
+  hash->Finish(digest);
+  if (base::ToLowerASCII(base::HexEncode(digest)) !=
+      base::ToLowerASCII(parts[0]))
+    return u"The downloaded package does not match its checksum.";
+  base::FilePath exe;
+  if (!base::PathService::Get(base::DIR_EXE, &exe))
+    return u"This installation's folder is unknown.";
+  if (!base::PathIsWritable(exe) || !base::PathIsWritable(exe.DirName()))
+    return u"This installation is not writable; download the release and run "
+           u"its install.sh.";
+  base::ScopedTempDir unpacked;
+  if (!unpacked.CreateUniqueTempDirUnderPath(exe.DirName()))
+    return u"No space to unpack the update next to this installation.";
+  base::LaunchOptions options;
+  int exit_code = -1;
+  auto tar = base::LaunchProcess(
+      {"tar", "-xzf", package.value(), "-C", unpacked.GetPath().value()},
+      options);
+  if (!tar.IsValid() || !tar.WaitForExit(&exit_code) || exit_code != 0)
+    return u"The package could not be unpacked.";
+  const auto app =
+      unpacked.GetPath().AppendASCII("fly-browser-native").AppendASCII("app");
+  if (!base::PathExists(app.AppendASCII("fly")))
+    return u"The package does not contain native Fly.";
+  // One rename each way, as install.sh: the running browser keeps its open
+  // files and restarts into the new copy.
+  const auto old = exe.AddExtensionASCII("old");
+  base::DeletePathRecursively(old);
+  if (!base::Move(exe, old))
+    return u"This installation could not be replaced.";
+  if (!base::Move(app, exe)) {
+    base::Move(old, exe);
+    return u"This installation could not be replaced.";
+  }
+  base::DeletePathRecursively(old);
+  return u"";
+}
+}  // namespace
+
+void InstallNativeUpdate(const UpdateCheckResult& update,
+                         base::OnceCallback<void(std::u16string)> done) {
+  if (!update.package.is_valid() || !update.checksum.is_valid()) {
+    std::move(done).Run(u"This release has no native package to install.");
+    return;
+  }
+  auto checksum_request = std::make_unique<network::ResourceRequest>();
+  checksum_request->url = update.checksum;
+  checksum_request->credentials_mode = network::mojom::CredentialsMode::kOmit;
+  auto checksum_loader = network::SimpleURLLoader::Create(
+      std::move(checksum_request), kUpdateDownload);
+  auto* checksum_raw = checksum_loader.get();
+  checksum_raw->DownloadToString(
+      g_browser_process->shared_url_loader_factory().get(),
+      base::BindOnce(
+          [](std::unique_ptr<network::SimpleURLLoader>, GURL package,
+             base::OnceCallback<void(std::u16string)> done,
+             std::optional<std::string> checksum) {
+            if (!checksum) {
+              std::move(done).Run(u"The release's checksum could not be "
+                                  u"downloaded.");
+              return;
+            }
+            auto request = std::make_unique<network::ResourceRequest>();
+            request->url = package;
+            request->credentials_mode =
+                network::mojom::CredentialsMode::kOmit;
+            auto loader = network::SimpleURLLoader::Create(std::move(request),
+                                                           kUpdateDownload);
+            auto* raw = loader.get();
+            raw->DownloadToTempFile(
+                g_browser_process->shared_url_loader_factory().get(),
+                base::BindOnce(
+                    [](std::unique_ptr<network::SimpleURLLoader>,
+                       std::string checksum,
+                       base::OnceCallback<void(std::u16string)> done,
+                       base::FilePath file) {
+                      if (file.empty()) {
+                        std::move(done).Run(
+                            u"The update could not be downloaded.");
+                        return;
+                      }
+                      base::ThreadPool::PostTaskAndReplyWithResult(
+                          FROM_HERE,
+                          {base::MayBlock(), base::TaskPriority::USER_VISIBLE,
+                           base::TaskShutdownBehavior::BLOCK_SHUTDOWN},
+                          base::BindOnce(
+                              [](base::FilePath file, std::string checksum) {
+                                auto result =
+                                    ReplaceInstallation(file, checksum);
+                                base::DeleteFile(file);
+                                return result;
+                              },
+                              file, std::move(checksum)),
+                          std::move(done));
+                    },
+                    std::move(loader), std::move(*checksum), std::move(done)),
+                512 * 1024 * 1024);
+          },
+          std::move(checksum_loader), update.package, std::move(done)),
+      4096);
+}
+
+namespace {
+constexpr char kDesktopId[] = "fly-browser-native.desktop";
+constexpr char kDesktopMarker[] = "X-Fly-Native=true";
+constexpr int kIconSizes[] = {48, 128, 256};
+
+struct ToolResult {
+  bool ok = false;
+  bool missing = false;
+  std::string output;
+};
+ToolResult RunTool(std::vector<std::string> argv) {
+  ToolResult result;
+  int exit_code = -1;
+  std::string output;
+  if (!base::GetAppOutputWithExitCode(base::CommandLine(argv), &output,
+                                      &exit_code)) {
+    result.missing = true;
+    return result;
+  }
+  result.ok = exit_code == 0;
+  result.output = std::string(base::TrimWhitespaceASCII(output, base::TRIM_ALL));
+  return result;
+}
+base::FilePath DataHome() {
+  auto env = base::Environment::Create();
+  const auto value = env->GetVar("XDG_DATA_HOME");
+  if (value && !value->empty() && base::FilePath(*value).IsAbsolute())
+    return base::FilePath(*value);
+  return base::GetHomeDir().AppendASCII(".local").AppendASCII("share");
+}
+base::FilePath Launcher() {
+  base::FilePath exe;
+  if (!base::PathService::Get(base::DIR_EXE, &exe))
+    return base::FilePath();
+  return exe.AppendASCII("fly-browser-native");
+}
+base::FilePath UserEntry() {
+  return DataHome().AppendASCII("applications").AppendASCII(kDesktopId);
+}
+base::FilePath FindEntry() {
+  std::vector<base::FilePath> dirs = {DataHome()};
+  auto env = base::Environment::Create();
+  for (const auto& dir : base::SplitString(
+           env->GetVar("XDG_DATA_DIRS").value_or("/usr/local/share:/usr/share"),
+           ":", base::TRIM_WHITESPACE, base::SPLIT_WANT_NONEMPTY))
+    dirs.emplace_back(dir);
+  for (const auto& dir : dirs) {
+    const auto entry = dir.AppendASCII("applications").AppendASCII(kDesktopId);
+    if (base::PathExists(entry))
+      return entry;
+  }
+  return base::FilePath();
+}
+DesktopIntegrationStatus ReadStatusBlocking() {
+  DesktopIntegrationStatus status;
+  status.supported = base::PathExists(Launcher());
+  status.entry = FindEntry();
+  std::string content;
+  status.ours = !status.entry.empty() &&
+                base::ReadFileToStringWithMaxSize(status.entry, &content,
+                                                  64 * 1024) &&
+                content.find(kDesktopMarker) != std::string::npos;
+  auto settings = RunTool({"xdg-settings", "get", "default-web-browser"});
+  if (settings.ok && !settings.output.empty()) {
+    status.default_browser = settings.output;
+  } else {
+    auto mime = RunTool({"xdg-mime", "query", "default",
+                         "x-scheme-handler/https"});
+    if (mime.ok)
+      status.default_browser = mime.output;
+    else if (!(settings.missing && mime.missing))
+      status.default_browser = std::string();
+  }
+  status.is_default = status.default_browser == kDesktopId;
+  return status;
+}
+std::u16string AddEntryBlocking() {
+  const auto launcher = Launcher();
+  if (!base::PathExists(launcher))
+    return u"Only the installed package can add its menu entry";
+  base::FilePath exe = launcher.DirName();
+  for (const int size : kIconSizes) {
+    const auto source = exe.AppendASCII("icons").AppendASCII(
+        "fly-logo" + base::NumberToString(size) + ".png");
+    const auto target = DataHome()
+                            .AppendASCII("icons")
+                            .AppendASCII("hicolor")
+                            .AppendASCII(base::NumberToString(size) + "x" +
+                                         base::NumberToString(size))
+                            .AppendASCII("apps")
+                            .AppendASCII("fly-browser-native.png");
+    if (base::PathExists(source) && base::CreateDirectory(target.DirName()))
+      base::CopyFile(source, target);
+  }
+  const std::string content = base::StrCat(
+      {"[Desktop Entry]\nName=Fly (native)\nGenericName=Web Browser\n"
+       "Comment=Fly on the Chromium engine\nKeywords=browser;web;internet;\n"
+       "Exec=",
+       launcher.value(),
+       " %U\nIcon=fly-browser-native\nTerminal=false\nType=Application\n"
+       "Categories=Network;WebBrowser;\n"
+       "MimeType=text/html;text/xml;application/xhtml+xml;"
+       "x-scheme-handler/http;x-scheme-handler/https;\n"
+       "StartupWMClass=fly-browser-native\n",
+       kDesktopMarker, "\n"});
+  const auto entry = UserEntry();
+  if (!base::CreateDirectory(entry.DirName()) ||
+      !base::ImportantFileWriter::WriteFileAtomically(entry, content))
+    return u"The menu entry could not be written";
+  RunTool({"update-desktop-database", "-q", entry.DirName().value()});
+  return u"";
+}
+}  // namespace
+
+void ReadDesktopIntegration(
+    base::OnceCallback<void(DesktopIntegrationStatus)> done) {
+  base::ThreadPool::PostTaskAndReplyWithResult(
+      FROM_HERE, {base::MayBlock(), base::TaskPriority::USER_VISIBLE},
+      base::BindOnce(&ReadStatusBlocking), std::move(done));
+}
+
+void ChangeDesktopIntegration(
+    DesktopIntegrationChange change,
+    base::OnceCallback<void(std::u16string, DesktopIntegrationStatus)> done) {
+  base::ThreadPool::PostTaskAndReplyWithResult(
+      FROM_HERE, {base::MayBlock(), base::TaskPriority::USER_VISIBLE},
+      base::BindOnce(
+          [](DesktopIntegrationChange change) {
+            std::u16string error;
+            if (change == DesktopIntegrationChange::kAddEntry) {
+              error = AddEntryBlocking();
+            } else if (change == DesktopIntegrationChange::kRemoveEntry) {
+              std::string content;
+              const auto entry = UserEntry();
+              if (!base::ReadFileToStringWithMaxSize(entry, &content,
+                                                     64 * 1024) ||
+                  content.find(kDesktopMarker) == std::string::npos) {
+                error = u"The menu entry was not added by Fly, so Fly leaves "
+                        u"it alone";
+              } else {
+                base::DeleteFile(entry);
+                for (const int size : kIconSizes)
+                  base::DeleteFile(DataHome()
+                                       .AppendASCII("icons")
+                                       .AppendASCII("hicolor")
+                                       .AppendASCII(
+                                           base::NumberToString(size) + "x" +
+                                           base::NumberToString(size))
+                                       .AppendASCII("apps")
+                                       .AppendASCII("fly-browser-native.png"));
+                RunTool({"update-desktop-database", "-q",
+                         entry.DirName().value()});
+              }
+            } else {
+              if (FindEntry().empty())
+                error = AddEntryBlocking();
+              if (error.empty() &&
+                  !RunTool({"xdg-settings", "set", "default-web-browser",
+                            kDesktopId})
+                       .ok) {
+                // Without a desktop environment xdg-settings refuses; write
+                // the MIME defaults it would have written.
+                auto mime = RunTool({"xdg-mime", "default", kDesktopId,
+                                     "x-scheme-handler/http",
+                                     "x-scheme-handler/https", "text/html",
+                                     "application/xhtml+xml"});
+                if (!mime.ok)
+                  error = mime.missing ? u"xdg-utils is not installed"
+                                       : u"The desktop refused the change";
+              }
+            }
+            return std::make_pair(error, ReadStatusBlocking());
+          },
+          change),
+      base::BindOnce(
+          [](base::OnceCallback<void(std::u16string,
+                                     DesktopIntegrationStatus)> done,
+             std::pair<std::u16string, DesktopIntegrationStatus> result) {
+            std::move(done).Run(std::move(result.first),
+                                std::move(result.second));
+          },
+          std::move(done)));
 }
 
 GURL WhatsNewURL(std::string_view from) {

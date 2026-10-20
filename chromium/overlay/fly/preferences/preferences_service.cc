@@ -481,6 +481,31 @@ bool PreferencesService::SetThemeColor(bool dark,
   local_state_->SetDict(kPreferencesPref, std::move(stored));
   return true;
 }
+int PreferencesService::ReadThemeOpacity(bool dark,
+                                         std::string_view key) const {
+  const auto* values = ValidStore() ? StoredValues(*local_state_) : nullptr;
+  const auto* palette =
+      values ? values->FindDictByDottedPath(
+                   std::string("theme_colors.") + (dark ? "dark" : "light"))
+             : nullptr;
+  const auto value = palette ? palette->FindInt(key) : std::nullopt;
+  return std::clamp(value.value_or(100), 40, 100);
+}
+bool PreferencesService::SetThemeOpacity(bool dark,
+                                         std::string_view key,
+                                         int percent) {
+  if (!CanEdit() || (key != "sidebar_opacity" && key != "overlay_opacity") ||
+      percent < 40 || percent > 100)
+    return false;
+  auto stored = local_state_->GetDict(kPreferencesPref).Clone();
+  stored.Set("schema", 1);
+  stored.EnsureDict("values")
+      ->EnsureDict("theme_colors")
+      ->EnsureDict(dark ? "dark" : "light")
+      ->Set(key, percent);
+  local_state_->SetDict(kPreferencesPref, std::move(stored));
+  return true;
+}
 bool PreferencesService::ResetThemeColors() {
   if (!CanEdit())
     return false;

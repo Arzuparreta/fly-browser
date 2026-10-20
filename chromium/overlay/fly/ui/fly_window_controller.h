@@ -21,6 +21,7 @@
 #include "fly/commands/command_service.h"
 #include "fly/commands/palette_catalog.h"
 #include "fly/preferences/preferences_service.h"
+#include "fly/ui/fly_actions.h"
 #include "fly/ui/history_service.h"
 #include "fly/ui/site_zoom.h"
 #include "fly/workspaces/workspace_service.h"
@@ -189,6 +190,18 @@ class FlyWindowController : public views::WidgetDelegate,
   void SetReaderActive(content::WebContents* contents, bool active);
   void UpdateReaderButton();
   void UpdateWelcome();
+  void RunPreferencesAction(std::string action);
+  // Electron's in-place update: downloads the native package of the newer
+  // release, checks its SHA-256, replaces this installation and restarts.
+  void InstallUpdate();
+  // Electron's desktop integration (menu entry and default browser).
+  void RefreshDesktopIntegration();
+  void ChangeDesktopIntegration(bool make_default);
+  void MaybeOfferDesktopIntegration();
+  std::unique_ptr<views::DialogDelegate> offer_delegate_;
+  std::unique_ptr<views::Widget> offer_widget_;
+  UpdateCheckResult update_;
+  bool update_installing_ = false;
   std::vector<PaletteEntry> ExtensionCommandEntries(
       BrowserWindowInterface* browser);
   void RunFromEmptyWorkspace(std::string action);

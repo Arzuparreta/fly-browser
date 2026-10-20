@@ -116,9 +116,9 @@ class FlyTabButton : public FlyButton {
   gfx::Size CalculatePreferredSize(
       const views::SizeBounds& available) const override {
     if (compact_)
-      return gfx::Size(32, 32);
+      return gfx::Size(FlyScaled(32), FlyScaled(32));
     auto size = FlyButton::CalculatePreferredSize(available);
-    size.set_height(domain_ && domain_->GetVisible() ? 38 : 30);
+    size.set_height(FlyScaled(domain_ && domain_->GetVisible() ? 38 : 30));
     return size;
   }
   void Layout(PassKey) override {

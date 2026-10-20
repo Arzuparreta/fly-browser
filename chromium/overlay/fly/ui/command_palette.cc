@@ -227,10 +227,10 @@ void CommandPalette::ToggleItems(content::WebContents* contents,
           : SkColorSetA(colors.dark ? SK_ColorBLACK : colors.text,
                         page ? 0 : 150)));
   const int width = page ? std::max(200, std::min(style_.command_centre
-                                                       ? style_.width
+                                                       ? FlyScaled(style_.width)
                                                        : bounds.width(),
                                                    bounds.width() - 32))
-                         : std::min(style_.width, bounds.width() - 16);
+                         : std::min(FlyScaled(style_.width), bounds.width() - 16);
   const int margin = std::max(8, (bounds.width() - width) / 2);
   const int vertical = page ? 16 : top ? 14 : 36;
   root->SetLayoutManager(std::make_unique<views::BoxLayout>(
@@ -250,8 +250,8 @@ void CommandPalette::ToggleItems(content::WebContents* contents,
   if (!top)
     panel->SetPreferredSize(gfx::Size(
         width, page ? max_height : std::max(80, std::min(640, max_height))));
-  panel->SetBackground(FlyBackground(page ? FlyRole::kMain : FlyRole::kSidebar,
-                                     4));
+  panel->SetBackground(FlyBackground(
+      page ? FlyRole::kOverlayMain : FlyRole::kOverlaySidebar, 4));
   panel->SetBorder(FlyBorder(FlyRole::kBorder, 1, 4));
   if (!style_.title.empty()) {
     auto* header = panel->AddChildView(std::make_unique<views::View>());
@@ -286,6 +286,7 @@ void CommandPalette::ToggleItems(content::WebContents* contents,
     search_->SetPlaceholderText(placeholder);
     search_->GetViewAccessibility().SetName(placeholder);
     root->AddChildView(std::move(panel));
+    DisableSubpixelText(root.get());
     overlay_->SetContentsView(std::move(root));
     Refresh();
     overlay_->ShowInactive();
@@ -304,7 +305,8 @@ void CommandPalette::ToggleItems(content::WebContents* contents,
   search_->RemoveHoverEffect();
   auto* scroll = panel->AddChildView(std::make_unique<views::ScrollView>());
   scroll->ClipHeightTo(0, page ? max_height : top ? 380 : 520);
-  scroll->SetBackgroundColor(page ? colors.bg_main : colors.bg_sidebar);
+  scroll->SetBackgroundColor(FlyRoleColor(page ? FlyRole::kOverlayMain
+                                               : FlyRole::kOverlaySidebar));
   scroll->SetDrawOverflowIndicator(false);
   results_ = scroll->SetContents(std::make_unique<views::View>());
   results_->SetLayoutManager(std::make_unique<views::BoxLayout>(
@@ -317,6 +319,7 @@ void CommandPalette::ToggleItems(content::WebContents* contents,
     hint->SetHorizontalAlignment(gfx::ALIGN_LEFT);
   }
   root->AddChildView(std::move(panel));
+  DisableSubpixelText(root.get());
   overlay_->SetContentsView(std::move(root));
   Refresh();
   overlay_->ShowInactive();
@@ -445,6 +448,7 @@ void CommandPalette::Refresh() {
           gfx::Font::Weight::NORMAL, FlyLabel::Tone::kDim));
       empty->SetBorder(views::CreateEmptyBorder(gfx::Insets(24)));
     }
+    DisableSubpixelText(results_);
     Select(1);
     UpdateInspector();
     return;
@@ -515,6 +519,7 @@ void CommandPalette::Refresh() {
         FlyFace::kSans, 12, gfx::Font::Weight::NORMAL, FlyLabel::Tone::kDim));
     empty->SetBorder(views::CreateEmptyBorder(gfx::Insets(24)));
   }
+  DisableSubpixelText(results_);
   Select(1);
 }
 void CommandPalette::Select(int direction) {
@@ -727,7 +732,7 @@ void CommandPalette::BuildCommandCentre(views::View* panel, int max_height) {
       ->SetFlexForView(body, 1);
   auto* scroll = body->AddChildView(std::make_unique<views::ScrollView>());
   scroll->ClipHeightTo(0, max_height);
-  scroll->SetBackgroundColor(colors.bg_sidebar);
+  scroll->SetBackgroundColor(FlyRoleColor(FlyRole::kOverlaySidebar));
   scroll->SetBorder(FlyBorder(FlyRole::kBorder, 1, 8));
   scroll->SetDrawOverflowIndicator(false);
   results_ = scroll->SetContents(std::make_unique<views::View>());
@@ -735,7 +740,7 @@ void CommandPalette::BuildCommandCentre(views::View* panel, int max_height) {
       views::BoxLayout::Orientation::kVertical, gfx::Insets(6), 2));
   body_layout->SetFlexForView(scroll, 125);
   inspector_ = body->AddChildView(std::make_unique<views::View>());
-  inspector_->SetBackground(FlyBackground(FlyRole::kSidebar, 8));
+  inspector_->SetBackground(FlyBackground(FlyRole::kOverlaySidebar, 8));
   inspector_->SetBorder(FlyBorder(FlyRole::kBorder, 1, 8, gfx::Insets(22)));
   auto* inspector_layout =
       inspector_->SetLayoutManager(std::make_unique<views::BoxLayout>(
@@ -861,6 +866,7 @@ void CommandPalette::UpdateInspector() {
                           entry.action),
       u"Execute Action", FlyFace::kSans, 12));
   execute->SetSelected(true);
+  DisableSubpixelText(inspector_);
   inspector_->InvalidateLayout();
 }
 

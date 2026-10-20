@@ -76,6 +76,7 @@
 #include "chrome/browser/browser_process.h"
 #include "chrome/browser/lifetime/application_lifetime.h"
 #include "chrome/browser/lifetime/application_lifetime_desktop.h"
+#include "chrome/browser/platform_util.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/profiles/keep_alive/profile_keep_alive_types.h"
 #include "chrome/browser/profiles/keep_alive/scoped_profile_keep_alive.h"
@@ -113,6 +114,7 @@
 #include "ui/views/background.h"
 #include "ui/views/border.h"
 #include "ui/views/context_menu_controller.h"
+#include "ui/views/controls/button/checkbox.h"
 #include "ui/views/controls/button/image_button.h"
 #include "ui/views/controls/button/md_text_button.h"
 #include "ui/views/controls/label.h"
@@ -261,7 +263,7 @@ FlyWindowController::FlyWindowController()
   };
   auto sidebar = std::make_unique<views::View>();
   sidebar_content_ = sidebar.get();
-  sidebar->SetBackground(FlyBackground(FlyRole::kSidebar));
+  sidebar->SetBackground(FlyBackground(FlyRole::kSidebarSurface));
   sidebar->SetBorder(FlyEdgeBorder(FlyRole::kBorder, gfx::Insets::TLBR(0, 0, 0, 1),
                                    gfx::Insets::TLBR(8, 8, 8, 8)));
   auto* sidebar_layout =
@@ -269,7 +271,7 @@ FlyWindowController::FlyWindowController()
           views::BoxLayout::Orientation::kVertical, gfx::Insets(), 6));
   sidebar_layout->set_cross_axis_alignment(
       views::BoxLayout::CrossAxisAlignment::kStretch);
-  sidebar->SetPreferredSize(gfx::Size(260, 0));
+  sidebar->SetPreferredSize(gfx::Size(FlyScaled(260), 0));
   window_controls_ = sidebar->AddChildView(std::make_unique<views::View>());
   window_controls_->SetLayoutManager(std::make_unique<views::BoxLayout>(
       views::BoxLayout::Orientation::kHorizontal, gfx::Insets(), 4))
@@ -369,10 +371,10 @@ FlyWindowController::FlyWindowController()
       vector_icons::kSettingsIcon, u"Preferences", 26));
   preferences_button_->SetEnabled(false);
   sidebar_slot_ = root->AddChildView(std::make_unique<views::View>());
-  sidebar_slot_->SetPreferredSize(gfx::Size(260, 0));
+  sidebar_slot_->SetPreferredSize(gfx::Size(FlyScaled(260), 0));
   sidebar_slot_->SetLayoutManager(std::make_unique<views::FillLayout>());
   compact_rail_ = sidebar_slot_->AddChildView(std::make_unique<views::View>());
-  compact_rail_->SetBackground(FlyBackground(FlyRole::kSidebar));
+  compact_rail_->SetBackground(FlyBackground(FlyRole::kSidebarSurface));
   compact_rail_->SetBorder(FlyEdgeBorder(FlyRole::kBorder,
                                          gfx::Insets::TLBR(0, 0, 0, 1),
                                          gfx::Insets::VH(6, 2)));
@@ -703,6 +705,8 @@ FlyWindowController::FlyWindowController()
   keyboard_editor_ =
       std::make_unique<KeyboardEditor>(desktop_.get(), commands_,
                                        *g_browser_process->local_state());
+  keyboard_editor_->SetActionRunner(base::BindRepeating(
+      &FlyWindowController::RunPreferencesAction, weak_factory_.GetWeakPtr()));
   keyboard_editor_->SetExtensions(
       extensions_.get(),
       base::BindRepeating(
@@ -764,6 +768,8 @@ FlyWindowController::~FlyWindowController() {
   preferences_registrar_.RemoveAll();
   rename_widget_.reset();
   rename_delegate_.reset();
+  offer_widget_.reset();
+  offer_delegate_.reset();
   keyboard_editor_.reset();
   workspace_picker_.reset();
   history_clear_widget_.reset();
@@ -1313,8 +1319,8 @@ void FlyWindowController::UpdateSidebarBounds() {
   // Keep the compact rail's hit targets stable while the details panel opens.
   // Replacing the rail under a hovering pointer can activate another command.
   if (sidebar_auto_collapse_)
-    bounds.Offset(36, 0);
-  bounds.set_width(sidebar_auto_collapse_ ? 224 : 260);
+    bounds.Offset(FlyScaled(36), 0);
+  bounds.set_width(FlyScaled(sidebar_auto_collapse_ ? 224 : 260));
   sidebar_host_->SetBoundsRect(bounds);
   // This overlay is excluded from BoxLayout; update its native clip explicitly.
   sidebar_host_->DeprecatedLayoutImmediately();
@@ -1325,7 +1331,8 @@ void FlyWindowController::UpdateSidebarMode() {
   const bool collapse = preferences_.ReadSidebarAutoCollapse().value_or(false);
   const bool changed = collapse != sidebar_auto_collapse_;
   sidebar_auto_collapse_ = collapse;
-  sidebar_slot_->SetPreferredSize(gfx::Size(collapse ? 36 : 260, 0));
+  sidebar_slot_->SetPreferredSize(
+      gfx::Size(FlyScaled(collapse ? 36 : 260), 0));
   for (auto* pin : {sidebar_pin_button_.get(), compact_pin_button_.get()}) {
     if (!pin)
       continue;
@@ -1469,7 +1476,7 @@ void FlyWindowController::OnMouseEvent(ui::MouseEvent* event) {
   wm::ConvertPointToScreen(desktop_->GetNativeWindow()->GetRootWindow(),
                            &point);
   auto bounds = desktop_->GetContentsView()->GetBoundsInScreen();
-  bounds.set_width(sidebar_expanded_for_testing() ? 260 : 36);
+  bounds.set_width(FlyScaled(sidebar_expanded_for_testing() ? 260 : 36));
   const bool was_inside = sidebar_pointer_inside_;
   sidebar_pointer_inside_ = bounds.Contains(point);
   const bool pressed = event->type() == ui::EventType::kMousePressed;
@@ -1615,6 +1622,8 @@ void FlyWindowController::ApplyFlyPalette() {
   custom("bg_main", colors.bg_main);
   custom("bg_sidebar", colors.bg_sidebar);
   custom("text", colors.text);
+  colors.sidebar_opacity = preferences_.ReadThemeOpacity(dark, "sidebar_opacity");
+  colors.overlay_opacity = preferences_.ReadThemeOpacity(dark, "overlay_opacity");
   const float scale =
       preferences_.ReadString("interface_scale").value_or("normal") == "large"
           ? 1.25f
@@ -1628,6 +1637,15 @@ void FlyWindowController::ApplyFlyPalette() {
       widget->ThemeChanged();
       widget->GetRootView()->SchedulePaint();
     }
+  }
+  if (scale_changed) {
+    // Widths follow the scale like Electron's zoomed interface.
+    if (auto* sidebar = sidebar_content_.get())
+      sidebar->SetPreferredSize(gfx::Size(FlyScaled(260), 0));
+    UpdateSidebarMode();
+    UpdateSidebarBounds();
+    if (desktop_ && desktop_->GetRootView())
+      desktop_->GetRootView()->InvalidateLayout();
   }
 }
 void FlyWindowController::UpdateWorkspaceHeader() {
@@ -1842,6 +1860,7 @@ void FlyWindowController::Select(BrowserWindowInterface* browser, bool focus) {
                              return;
                            window->MaybeShowWhatsNew();
                            window->CheckUpdates(false);
+                           window->MaybeOfferDesktopIntegration();
                          },
                          weak_factory_.GetWeakPtr()));
     }
@@ -3199,8 +3218,10 @@ bool FlyWindowController::RunCommand(BrowserWindowInterface* browser,
     tab_move_picker_->Cancel();
     bookmark_picker_->Cancel();
     CancelHistory();
+    keyboard_editor_->SetPrivateMode(browser->GetProfile()->IsOffTheRecord());
     if (action == "toggle-help" || !keyboard_editor_->active())
       keyboard_editor_->Toggle(browser->GetTabStripModel()->GetActiveWebContents());
+    RefreshDesktopIntegration();
     if (action == "open-keyboard-settings")
       keyboard_editor_->ShowKeyboard();
     return true;
@@ -3515,16 +3536,30 @@ void FlyWindowController::CheckUpdates(bool manual) {
         if (!window || window->closing_)
           return;
         if (!result.ok) {
+          window->keyboard_editor_->SetUpdateStatus(
+              u"Could not check for updates.", "");
           if (manual)
             window->ShowStatus(u"Could not check for updates.");
           return;
         }
+        window->update_ = result;
         if (!result.newer) {
+          window->keyboard_editor_->SetUpdateStatus(
+              u"Fly " + base::UTF8ToUTF16(std::string_view(kFlyVersion)) +
+                  u" is the latest version.",
+              "");
           if (manual)
             window->ShowStatus(u"Fly " + base::UTF8ToUTF16(std::string_view(kFlyVersion)) +
                                u" is the latest version.");
           return;
         }
+        window->keyboard_editor_->SetUpdateStatus(
+            u"Fly " + base::UTF8ToUTF16(result.latest) +
+                (result.package.is_valid()
+                     ? u" is available. Install it here; Fly restarts with "
+                       u"your tabs."
+                     : u" is available as a download."),
+            result.latest);
         window->ShowStatus(u"Fly " + base::UTF8ToUTF16(result.latest) +
                            u" is available. Check for Updates opens it.");
         if (manual && window->selected_) {
@@ -4179,5 +4214,233 @@ std::vector<PaletteEntry> FlyWindowController::ExtensionCommandEntries(
         {"extension", "options", "settings", base::ToLowerASCII(name)});
   }
   return entries;
+}
+
+// Buttons of Preferences that act on the browser.
+void FlyWindowController::RunPreferencesAction(std::string action) {
+  if (closing_ || !selected_)
+    return;
+  auto* browser = selected_.get();
+  auto* contents = browser->GetTabStripModel()->GetActiveWebContents();
+  auto status = base::BindOnce(
+      [](base::WeakPtr<FlyWindowController> window, std::u16string text) {
+        if (window)
+          window->ShowStatus(std::move(text));
+      },
+      weak_factory_.GetWeakPtr());
+  if (action == "toggle-private-mode") {
+    keyboard_editor_->Cancel();
+    TogglePrivate(browser);
+  } else if (action == "clear-site-cookies") {
+    ClearSiteCookies(browser->GetProfile(),
+                     contents ? contents->GetLastCommittedURL() : GURL(),
+                     std::move(status));
+  } else if (action == "clear-cache") {
+    ClearWorkspaceCache(browser->GetProfile(), std::move(status));
+  } else if (action == "open-diagnostics" || action == "show-whats-new") {
+    keyboard_editor_->Cancel();
+    InvokeNativeCommand(browser, action);
+  } else if (action == "check-for-updates") {
+    keyboard_editor_->SetUpdateStatus(u"Checking for updates…", "");
+    CheckUpdates(false);
+  } else if (action == "install-update") {
+    InstallUpdate();
+  } else if (action == "restart") {
+    chrome::AttemptRestart();
+  } else if (action == "desktop-entry" || action == "desktop-default") {
+    ChangeDesktopIntegration(action == "desktop-default");
+  } else if (action == "extensions-open-dir") {
+    base::ThreadPool::PostTaskAndReplyWithResult(
+        FROM_HERE, {base::MayBlock(), base::TaskPriority::USER_VISIBLE},
+        base::BindOnce([]() {
+          const auto dir = FlyExtensions::Folder();
+          return base::CreateDirectory(dir) ? dir : base::FilePath();
+        }),
+        base::BindOnce(
+            [](base::WeakPtr<Profile> profile, base::FilePath dir) {
+              if (profile && !dir.empty())
+                platform_util::OpenItem(profile.get(), dir,
+                                        platform_util::OPEN_FOLDER, {});
+            },
+            browser->GetProfile()->GetWeakPtr()));
+  }
+}
+
+void FlyWindowController::InstallUpdate() {
+  if (update_installing_ || closing_)
+    return;
+  if (!update_.newer) {
+    keyboard_editor_->SetUpdateStatus(u"Check for updates first.", "");
+    return;
+  }
+  if (!update_.package.is_valid()) {
+    // No native package in this release: open its page, as Electron's
+    // "Download release".
+    keyboard_editor_->Cancel();
+    OpenInNewTab(update_.page);
+    return;
+  }
+  update_installing_ = true;
+  keyboard_editor_->SetUpdateStatus(
+      u"Downloading Fly " + base::UTF8ToUTF16(update_.latest) + u"…", "");
+  InstallNativeUpdate(
+      update_,
+      base::BindOnce(
+          [](base::WeakPtr<FlyWindowController> window, std::u16string error) {
+            if (!window)
+              return;
+            window->update_installing_ = false;
+            if (!error.empty()) {
+              window->keyboard_editor_->SetUpdateStatus(
+                  u"Update failed: " + error, window->update_.latest);
+              window->ShowStatus(u"Update failed: " + error);
+              return;
+            }
+            window->keyboard_editor_->SetUpdateStatus(
+                u"Fly " + base::UTF8ToUTF16(window->update_.latest) +
+                    u" is installed. Restarting…",
+                "");
+            chrome::AttemptRestart();
+          },
+          weak_factory_.GetWeakPtr()));
+}
+
+namespace {
+// Electron's Preferences → About → Desktop integration texts.
+void ShowDesktopIntegration(KeyboardEditor& editor,
+                            const DesktopIntegrationStatus& status,
+                            std::u16string error) {
+  std::u16string entry;
+  std::u16string action;
+  if (!status.entry.empty() && status.ours) {
+    entry = u"Listed in Rofi and your desktop menu.";
+    action = u"Remove from menu";
+  } else if (!status.entry.empty()) {
+    entry = u"Listed by the entry your installation provides (" +
+            status.entry.LossyDisplayName() + u").";
+  } else if (status.supported) {
+    entry = u"Not listed yet. Fly can add an entry for this installation to "
+            u"Rofi and your desktop menu.";
+    action = u"Add to menu";
+  } else {
+    entry = u"No menu entry found. The package's install.sh adds one.";
+  }
+  if (!error.empty())
+    entry = error + u". " + entry;
+  const bool can_make_default =
+      status.default_browser.has_value() &&
+      (!status.entry.empty() || status.supported);
+  std::u16string browser;
+  if (!status.default_browser)
+    browser = u"Install xdg-utils to let Fly read and change the default "
+              u"browser.";
+  else if (status.is_default)
+    browser = u"Fly opens links from other applications.";
+  else if (!status.default_browser->empty())
+    browser = u"Links from other applications open in " +
+              base::UTF8ToUTF16(std::string(base::RemoveSuffix(
+                                    *status.default_browser, ".desktop")
+                                    .value_or(*status.default_browser))) +
+              u".";
+  else
+    browser = u"No default browser is set.";
+  if (!status.is_default && can_make_default && status.entry.empty())
+    browser += u" Making Fly the default also adds it to the menu.";
+  editor.SetDesktopIntegration(entry, action, browser,
+                               !status.is_default && can_make_default);
+}
+}  // namespace
+
+void FlyWindowController::RefreshDesktopIntegration() {
+  ReadDesktopIntegration(base::BindOnce(
+      [](base::WeakPtr<FlyWindowController> window,
+         DesktopIntegrationStatus status) {
+        if (window && window->keyboard_editor_)
+          ShowDesktopIntegration(*window->keyboard_editor_, status, u"");
+      },
+      weak_factory_.GetWeakPtr()));
+}
+
+void FlyWindowController::ChangeDesktopIntegration(bool make_default) {
+  ReadDesktopIntegration(base::BindOnce(
+      [](base::WeakPtr<FlyWindowController> window, bool make_default,
+         DesktopIntegrationStatus status) {
+        if (!window)
+          return;
+        fly::ChangeDesktopIntegration(
+            make_default ? DesktopIntegrationChange::kMakeDefault
+            : status.ours ? DesktopIntegrationChange::kRemoveEntry
+                          : DesktopIntegrationChange::kAddEntry,
+            base::BindOnce(
+                [](base::WeakPtr<FlyWindowController> window,
+                   std::u16string error, DesktopIntegrationStatus status) {
+                  if (window && window->keyboard_editor_)
+                    ShowDesktopIntegration(*window->keyboard_editor_, status,
+                                           error);
+                },
+                window));
+      },
+      weak_factory_.GetWeakPtr(), make_default));
+}
+
+// Electron's offerDesktopIntegration: once, on the first start of a package
+// that no menu entry lists yet.
+void FlyWindowController::MaybeOfferDesktopIntegration() {
+  if (closing_ || !preferences_.CanEdit() ||
+      preferences_.ReadBool("desktop_integration_offered").value_or(false))
+    return;
+  ReadDesktopIntegration(base::BindOnce(
+      [](base::WeakPtr<FlyWindowController> window,
+         DesktopIntegrationStatus status) {
+        if (!window || window->closing_ || !status.supported ||
+            !status.entry.empty())
+          return;
+        window->preferences_.SetBool("desktop_integration_offered", true);
+        auto delegate = std::make_unique<views::DialogDelegate>();
+        delegate->SetOwnershipOfNewWidget(
+            views::Widget::InitParams::CLIENT_OWNS_WIDGET);
+        delegate->SetModalType(ui::mojom::ModalType::kWindow);
+        delegate->SetTitle(u"Add Fly to your applications");
+        delegate->SetButtonLabel(ui::mojom::DialogButton::kOk, u"Add to menu");
+        delegate->SetButtonLabel(ui::mojom::DialogButton::kCancel, u"Not now");
+        auto body = std::make_unique<views::View>();
+        body->SetLayoutManager(std::make_unique<views::BoxLayout>(
+            views::BoxLayout::Orientation::kVertical, gfx::Insets(16), 10));
+        auto* message = body->AddChildView(std::make_unique<views::Label>(
+            u"Add Fly to your applications menu?\n\nFly is running from its "
+            u"package folder, so Rofi and your desktop menu do not list it "
+            u"yet. Fly can add an entry that starts this installation.\n\nYou "
+            u"can change this later in Preferences → About."));
+        message->SetMultiLine(true);
+        message->SetMaximumWidth(420);
+        message->SetHorizontalAlignment(gfx::ALIGN_LEFT);
+        auto* make_default = body->AddChildView(std::make_unique<views::Checkbox>(
+            u"Also make Fly the default browser"));
+        delegate->SetContentsView(std::move(body));
+        delegate->SetAcceptCallback(base::BindOnce(
+            [](base::WeakPtr<FlyWindowController> window,
+               views::Checkbox* make_default) {
+              if (!window)
+                return;
+              fly::ChangeDesktopIntegration(
+                  make_default->GetChecked()
+                      ? DesktopIntegrationChange::kMakeDefault
+                      : DesktopIntegrationChange::kAddEntry,
+                  base::BindOnce(
+                      [](base::WeakPtr<FlyWindowController> window,
+                         std::u16string error, DesktopIntegrationStatus) {
+                        if (window && !error.empty())
+                          window->ShowStatus(error);
+                      },
+                      window));
+            },
+            window, make_default));
+        window->offer_widget_.reset(views::DialogDelegate::CreateDialogWidget(
+            delegate.get(), window->desktop_->GetNativeWindow(),
+            window->desktop_->GetNativeView()));
+        window->offer_delegate_ = std::move(delegate);
+        window->offer_widget_->Show();
+      },
+      weak_factory_.GetWeakPtr()));
 }
 }  // namespace fly

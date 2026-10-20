@@ -234,6 +234,12 @@ void ImportSettings(const base::DictValue& config,
         if (value && base::ToLowerASCII(*value) != fallback)
           prefs.SetThemeColor(mode == "dark", key, *value);
       }
+      for (const char* key : {"sidebar_opacity", "overlay_opacity"}) {
+        const auto value = palette ? palette->FindInt(key) : std::nullopt;
+        if (value && *value != 100)
+          prefs.SetThemeOpacity(mode == "dark", key,
+                                std::clamp(*value, 40, 100));
+      }
     }
   }
   SearchService search(local_state);

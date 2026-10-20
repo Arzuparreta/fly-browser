@@ -96,6 +96,10 @@ class PreferencesService {
                                             std::string_view key) const;
   bool SetThemeColor(bool dark, std::string_view key, const std::string& hex);
   bool ResetThemeColors();
+  // Electron's sidebar_opacity and overlay_opacity (40-100, default 100),
+  // stored with the colours of each theme.
+  int ReadThemeOpacity(bool dark, std::string_view key) const;
+  bool SetThemeOpacity(bool dark, std::string_view key, int percent);
   // Native extension state ("native_extensions"): bundled removals and
   // per-workspace switches, extensions suspended by the global switch.
   std::optional<base::DictValue> ReadNativeExtensions() const;
