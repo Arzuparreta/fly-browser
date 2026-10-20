@@ -110,7 +110,8 @@ UserContentService::UserContentService(
 UserContentService::~UserContentService() = default;
 
 // static
-UserContentService::Generated UserContentService::Generate() {
+UserContentService::Generated UserContentService::Generate(
+    std::string email_handler) {
   Generated result;
   const auto user_data = UserData();
   base::FilePath assets;
@@ -150,6 +151,7 @@ UserContentService::Generated UserContentService::Generate() {
   result.styles = styles.size();
   base::DictValue content;
   content.Set("flyVersion", kFlyVersion);
+  content.Set("emailHandler", std::move(email_handler));
   content.Set("scripts", std::move(scripts));
   content.Set("styles", std::move(styles));
   content.Set("legacyStorage", std::move(legacy));
@@ -193,9 +195,15 @@ void UserContentService::Regenerate(bool announce) {
   generating_ = true;
   base::ThreadPool::PostTaskAndReplyWithResult(
       FROM_HERE, {base::MayBlock(), base::TaskPriority::USER_VISIBLE},
-      base::BindOnce(&UserContentService::Generate),
+      base::BindOnce(&UserContentService::Generate, email_handler_),
       base::BindOnce(&UserContentService::OnGenerated,
                      weak_factory_.GetWeakPtr(), announce));
+}
+void UserContentService::SetEmailHandler(std::string handler) {
+  if (handler == email_handler_)
+    return;
+  email_handler_ = std::move(handler);
+  Regenerate(false);
 }
 void UserContentService::Reload() {
   Regenerate(true);

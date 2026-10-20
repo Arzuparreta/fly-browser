@@ -11,6 +11,7 @@
 #include "components/prefs/pref_registry_simple.h"
 #include "components/prefs/testing_pref_service.h"
 #include "fly/bookmarks/bookmark_service.h"
+#include "fly/commands/generated_contract.h"
 #include "fly/commands/command_service.h"
 #include "fly/preferences/preferences_service.h"
 #include "fly/workspaces/workspace_service.h"
@@ -50,8 +51,10 @@ class LegacyImportTest : public testing::Test {
     Write("config.json", R"({"theme": "light", "process_limit": 2,
       "show_clock": false, "custom_search_aliases": {"wk": "https://w.example/?q=%s"},
       "extensions_disabled": ["ublock-origin"], "future_setting": 1})");
+    // Electron stores bookmarks newest first.
     Write("bookmarks.json",
-          R"([{"title": "Fly", "url": "https://fly.example/", "timestamp": 1700000000000}])");
+          R"([{"title": "Fly", "url": "https://fly.example/", "timestamp": 1700000000000},
+              {"title": "Old", "url": "https://old.example/", "timestamp": 1600000000000}])");
     Write("keybinds.json",
           R"({"version": 2, "changesOnly": true, "shortcuts": {"spawn-tab": ["Ctrl+Y"]}, "normal": {}})");
     Write("site-zoom.json", R"({"example.com": 1.5})");
@@ -98,7 +101,11 @@ TEST_F(LegacyImportTest, ImportsWorkspacesSiteDataSettingsAndPendingState) {
   const auto extensions = preferences.ReadNativeExtensions();
   ASSERT_TRUE(extensions && extensions->FindList("removed"));
   BookmarkService bookmarks(prefs_);
-  EXPECT_TRUE(bookmarks.Contains("https://fly.example/"));
+  const auto saved = bookmarks.Read();
+  ASSERT_TRUE(saved);
+  ASSERT_EQ(2u, saved->size());
+  EXPECT_EQ("https://fly.example/", (*saved)[0].url);
+  EXPECT_EQ("https://old.example/", (*saved)[1].url);
   CommandService commands(prefs_);
   ASSERT_TRUE(commands.Read());
   EXPECT_EQ(std::vector<std::string>{"Ctrl+Y"},
@@ -124,16 +131,87 @@ TEST_F(LegacyImportTest, ImportsWorkspacesSiteDataSettingsAndPendingState) {
             RunLegacyImport(prefs_, native_.GetPath(), legacy_.GetPath()));
 }
 
-TEST_F(LegacyImportTest, WaitsWhileElectronFlyIsRunning) {
+TEST_F(LegacyImportTest, WaitsForElectronFlyToCloseThenAddsItsWorkspaces) {
   WriteFixture();
+  const auto lock = legacy_.GetPath().AppendASCII("SingletonLock");
   ASSERT_TRUE(base::CreateSymbolicLink(
       base::FilePath("host-" +
                      base::NumberToString(base::Process::Current().Pid())),
-      legacy_.GetPath().AppendASCII("SingletonLock")));
+      lock));
   EXPECT_EQ(LegacyImportResult::kSourceRunning,
             RunLegacyImport(prefs_, native_.GetPath(), legacy_.GetPath()));
   WorkspaceService workspaces(prefs_);
   EXPECT_TRUE(workspaces.Read()->items.empty());
+  EXPECT_TRUE(base::PathExists(
+      native_.GetPath().AppendASCII(kLegacyImportWaitingFile)));
+  // Native Fly starts anyway: its first workspace and a setting of its own.
+  ASSERT_TRUE(base::CreateDirectory(native_.GetPath().AppendASCII("Default")));
+  ASSERT_TRUE(workspaces.Add("Work", "Default"));
+  PreferencesService preferences(prefs_);
+  ASSERT_TRUE(preferences.SetClockVisible(true));
+  EXPECT_EQ(LegacyImportResult::kSourceRunning,
+            RunLegacyImport(prefs_, native_.GetPath(), legacy_.GetPath()));
+  // The next start after Electron Fly closed imports next to it.
+  ASSERT_TRUE(base::DeleteFile(lock));
+  ASSERT_EQ(LegacyImportResult::kImported,
+            RunLegacyImport(prefs_, native_.GetPath(), legacy_.GetPath()));
+  const auto catalog = workspaces.Read();
+  ASSERT_EQ(3u, catalog->items.size());
+  EXPECT_EQ("Default", catalog->items[0].profile_directory);
+  EXPECT_EQ("Zuhause", catalog->items[1].name);
+  EXPECT_EQ("Profile 1", catalog->items[1].profile_directory);
+  EXPECT_EQ("Work (Electron)", catalog->items[2].name);
+  EXPECT_EQ("Profile 2", catalog->items[2].profile_directory);
+  EXPECT_EQ(catalog->items[2].id, catalog->active_id);
+  EXPECT_EQ("Profile 2", prefs_.GetString("profile.last_used"));
+  EXPECT_EQ(3, prefs_.GetInteger("profile.profiles_created"));
+  std::string text;
+  ASSERT_TRUE(base::ReadFileToString(
+      native_.GetPath().AppendASCII("Profile 2").AppendASCII("Cookies"),
+      &text));
+  EXPECT_EQ("work-cookies", text);
+  // Native choices win; settings native Fly never stored come from Electron.
+  EXPECT_TRUE(preferences.ReadClock()->visible);
+  EXPECT_EQ(2, preferences.ReadInt("process_limit"));
+  EXPECT_FALSE(base::PathExists(
+      native_.GetPath().AppendASCII(kLegacyImportWaitingFile)));
+  EXPECT_EQ(LegacyImportResult::kNotApplicable,
+            RunLegacyImport(prefs_, native_.GetPath(), legacy_.GetPath()));
+}
+
+TEST_F(LegacyImportTest, RepeatsAnImportThatWasKilledHalfway) {
+  WriteFixture();
+  // A killed import left a partial copy and its marker; Local State was never
+  // written, so the catalog is still empty.
+  const auto stale = native_.GetPath().AppendASCII("Default");
+  ASSERT_TRUE(base::CreateDirectory(stale.AppendASCII("IndexedDB")));
+  ASSERT_TRUE(base::WriteFile(stale.AppendASCII("half-copied"), "x"));
+  ASSERT_TRUE(base::WriteFile(
+      native_.GetPath().AppendASCII("fly-legacy-import.partial"),
+      "fly-legacy-import.json\nDefault\n"));
+  ASSERT_EQ(LegacyImportResult::kImported,
+            RunLegacyImport(prefs_, native_.GetPath(), legacy_.GetPath()));
+  EXPECT_FALSE(base::PathExists(stale.AppendASCII("half-copied")));
+  std::string text;
+  ASSERT_TRUE(base::ReadFileToString(stale.AppendASCII("Cookies"), &text));
+  EXPECT_EQ("home-cookies", text);
+  WorkspaceService workspaces(prefs_);
+  EXPECT_EQ(2u, workspaces.Read()->items.size());
+}
+
+TEST_F(LegacyImportTest, KeyboardFilesResolveAsElectronFlyLoadsThem) {
+  const auto cases =
+      base::JSONReader::Read(kLegacyKeyboardCasesJSON, base::JSON_PARSE_RFC);
+  ASSERT_TRUE(cases && cases->is_list());
+  for (const auto& value : cases->GetList()) {
+    const auto& row = value.GetDict();
+    SCOPED_TRACE(*row.FindString("name"));
+    const auto resolved = ResolveLegacyKeyboard(*row.FindDict("input"));
+    ASSERT_EQ(*row.FindBool("ok"), resolved.config.has_value())
+        << resolved.error;
+    if (resolved.config)
+      EXPECT_EQ(*row.FindDict("output"), resolved.config->ToValue());
+  }
 }
 
 TEST_F(LegacyImportTest, LeavesUsedNativeDirectoriesAlone) {

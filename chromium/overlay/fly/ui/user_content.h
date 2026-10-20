@@ -42,6 +42,9 @@ class UserContentService : public ProfileObserver {
   void AddProfile(Profile* profile);
   // Rereads the folders now (reload-user-content).
   void Reload();
+  // Electron's email_handler for the Share menu ("system" or a compose URL
+  // with %s/%b); regenerates the extension when it changes.
+  void SetEmailHandler(std::string handler);
   size_t script_count() const { return scripts_; }
   size_t style_count() const { return styles_; }
 
@@ -58,7 +61,7 @@ class UserContentService : public ProfileObserver {
     size_t scripts = 0;
     size_t styles = 0;
   };
-  static Generated Generate();
+  static Generated Generate(std::string email_handler);
   void OnGenerated(bool announce, Generated generated);
   void Load(Profile* profile);
   void Regenerate(bool announce);
@@ -67,6 +70,7 @@ class UserContentService : public ProfileObserver {
   base::SequenceBound<Watcher> watcher_;
   std::optional<Generated> current_;
   bool generating_ = false;
+  std::string email_handler_ = "system";
   bool pending_ = false;
   size_t scripts_ = 0;
   size_t styles_ = 0;

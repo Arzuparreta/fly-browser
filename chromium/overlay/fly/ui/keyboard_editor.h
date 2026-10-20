@@ -141,6 +141,7 @@ class KeyboardEditor : public views::TextfieldController,
   raw_ptr<views::View> extensions_list_ = nullptr;
   raw_ptr<views::Checkbox> extensions_enabled_ = nullptr;
   raw_ptr<views::Textfield> spellcheck_ = nullptr;
+  raw_ptr<views::Textfield> email_handler_ = nullptr;
   raw_ptr<views::MdTextButton> process_limit_ = nullptr;
   std::map<std::string, raw_ptr<views::Textfield>> color_fields_;
   raw_ptr<views::Label> status_ = nullptr;

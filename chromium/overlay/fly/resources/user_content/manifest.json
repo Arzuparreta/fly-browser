@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "Fly User Content",
-  "description": "Runs the user scripts and styles from Fly's scripts and styles folders.",
+  "description": "Runs Fly's user scripts and styles and adds the Share menu to pages.",
   "version": "1",
   "key": "MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEA2H376vciP+PzOplS/+9cKQk5+QElUq9nvUMbBEcdUdP6MxIiuu0fqh6a6onEADMrO71GwaMIcSrdYPDQir6bFwHum2n1c/vTrr2ZSPmrlwR9LkIvpcxcAX2P4+/vy264zbMvY7EbJQamXmCymm7J35lclyNZLCv1opTBanRWZu6efbkc+287SmMXbPreoSLkcVYZl4HEUoyjE8TPt7wd870BLRSBJPMeQFIRQTwFlkN2GCIXIHY4d7+N/mA5SwKyMbH6ZUik3+XYTTIjy/i6LKHhusTBmmbcq/yC1oW9p2cRAjmriTg5hh9x4Ce/I9rr1nu4qyeaq4yLcfc5DophuQIDAQAB",
   "minimum_chrome_version": "138",
@@ -12,7 +12,10 @@
     "userScripts",
     "storage",
     "unlimitedStorage",
-    "notifications"
+    "notifications",
+    "contextMenus",
+    "scripting",
+    "declarativeNetRequest"
   ],
   "host_permissions": [
     "<all_urls>"

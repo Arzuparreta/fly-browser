@@ -293,3 +293,26 @@ owner edits remain protected and require preservation before recovery can procee
 
 The optional [live Twitch/Pie desktop regression](./live-media.md) records real
 public-player behavior separately from deterministic local media fixtures.
+
+### Release build and Linux package
+
+Development outputs (`FlyNative`) are component builds with DCHECKs on. Packages
+come from a separate static build without DCHECKs:
+
+```sh
+cd /path/to/engine/src
+mkdir -p out/FlyRelease && cp /path/to/fly/chromium/gn/release.gnargs out/FlyRelease/args.gn
+gn gen out/FlyRelease
+autoninja -C out/FlyRelease chrome chrome_sandbox
+python3 /path/to/fly/scripts/chromium/package-linux.py --root /path/to/engine
+```
+
+The package is `dist/Fly-<version>-native-linux-x64.tar.gz` (with `.sha256`). It
+contains `install.sh`, which installs "Fly (native)" for the current user in
+`$XDG_DATA_HOME/fly-browser-native` with a menu entry and
+`~/.local/bin/fly-browser-native`, next to an Electron installation
+(`install.sh --remove` uninstalls and keeps data). Native data lives in
+`$XDG_CONFIG_HOME/fly-browser-native`, outside Electron Fly's `~/.config/fly-browser`.
+On its first start native Fly imports the Electron profile; if Electron Fly is
+open then, the import runs on the first start after it closes. A full static build does not fit the
+hosted CI runners, so packages are built on a local machine.

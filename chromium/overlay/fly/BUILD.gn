@@ -87,10 +87,12 @@ source_set("legacy_import") {
     "import/legacy_import.cc",
     "import/legacy_import.h",
   ]
-  public_deps = [ "//base" ]
+  public_deps = [
+    ":commands",
+    "//base",
+  ]
   deps = [
     ":bookmarks",
-    ":commands",
     ":preferences",
     ":workspaces",
     "//components/prefs",

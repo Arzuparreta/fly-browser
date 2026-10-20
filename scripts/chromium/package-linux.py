@@ -9,8 +9,8 @@ fly-browser-native/ directory: the browser and its runtime files, Fly's fonts,
 What's New page, user content worker and bundled extensions, a launcher and an
 install.sh that installs it for the current user as "Fly (native)" next to an
 existing Electron Fly. Native Fly keeps its data in
-$XDG_CONFIG_HOME/fly-browser/native; the Electron profile in
-$XDG_CONFIG_HOME/fly-browser is only read, once, to import it.
+$XDG_CONFIG_HOME/fly-browser-native; the Electron profile in
+~/.config/fly-browser is only read, once, to import it.
 """
 import argparse
 import hashlib
@@ -44,7 +44,7 @@ LAUNCHER = '''#!/bin/sh
 HERE=$(dirname "$(readlink -f "$0")")
 CONFIG="${XDG_CONFIG_HOME:-$HOME/.config}"
 exec "$HERE/fly" --fly-native --class=fly-browser-native \\
-  --user-data-dir="$CONFIG/fly-browser/native" "$@"
+  --user-data-dir="$CONFIG/fly-browser-native" "$@"
 '''
 
 INSTALL = '''#!/bin/sh
@@ -63,7 +63,7 @@ if [ "${1:-}" = "--remove" ]; then
   for size in 48 128 256; do
     rm -f "$ICONS/${size}x${size}/apps/fly-browser-native.png"
   done
-  echo "Removed native Fly. Your data in ${XDG_CONFIG_HOME:-$HOME/.config}/fly-browser/native is kept."
+  echo "Removed native Fly. Your data in ${XDG_CONFIG_HOME:-$HOME/.config}/fly-browser-native is kept."
   exit 0
 fi
 STAGE="$TARGET.new"
@@ -83,7 +83,7 @@ sed "s|@EXEC@|$TARGET/fly-browser-native|" "$TARGET/fly-browser-native.desktop" 
 command -v update-desktop-database >/dev/null 2>&1 && update-desktop-database "$APPS" || true
 echo "Installed native Fly in $TARGET."
 echo "Start it from your applications menu (Fly (native)) or with: fly-browser-native"
-echo "Close Electron Fly before the first start so your workspaces can be imported."
+echo "Close Electron Fly before the first start so your workspaces are imported then."
 '''
 
 DESKTOP = '''[Desktop Entry]

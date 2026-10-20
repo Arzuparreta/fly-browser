@@ -14,6 +14,7 @@
 #include "base/callback_list.h"
 #include "base/memory/raw_ptr.h"
 #include "base/memory/weak_ptr.h"
+#include "base/task/sequenced_task_runner.h"
 #include "base/timer/timer.h"
 #include "components/prefs/pref_change_registrar.h"
 #include "fly/bookmarks/frequent_sites_service.h"
@@ -303,6 +304,7 @@ class FlyWindowController : public views::WidgetDelegate,
   // Pending per-profile import state (fly-legacy-import.json), loaded once.
   std::optional<base::DictValue> legacy_import_;
   bool legacy_import_loading_ = false;
+  scoped_refptr<base::SequencedTaskRunner> legacy_import_writer_;
   std::vector<base::WeakPtr<BrowserWindowInterface>> legacy_import_waiting_;
   std::unique_ptr<views::DialogDelegate> diagnostics_delegate_;
   std::unique_ptr<views::Widget> diagnostics_widget_;

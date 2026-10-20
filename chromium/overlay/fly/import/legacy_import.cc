@@ -11,13 +11,14 @@
 #include <vector>
 
 #include "base/command_line.h"
-#include "base/environment.h"
+#include "base/containers/adapters.h"
 #include "base/files/file_enumerator.h"
 #include "base/files/file_util.h"
 #include "base/files/important_file_writer.h"
 #include "base/json/json_reader.h"
 #include "base/json/json_writer.h"
-#include "base/nix/xdg_util.h"
+#include "base/no_destructor.h"
+#include "base/strings/strcat.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/strings/string_split.h"
 #include "base/strings/string_util.h"
@@ -28,6 +29,7 @@
 #include "fly/bookmarks/bookmark_service.h"
 #include "fly/bookmarks/frequent_sites_service.h"
 #include "fly/commands/command_service.h"
+#include "fly/commands/generated_contract.h"
 #include "fly/commands/keyboard_config.h"
 #include "fly/preferences/preferences_service.h"
 #include "fly/preferences/search_service.h"
@@ -113,6 +115,28 @@ bool SourceRunning(const base::FilePath& legacy) {
   return false;
 #endif
 }
+constexpr char kPartialFile[] = "fly-legacy-import.partial";
+// An import killed before it finished (for example while copying a large
+// IndexedDB) left the files it lists; remove them so the import runs again.
+void RemovePartialImport(const base::FilePath& user_data_dir) {
+  const auto marker = user_data_dir.AppendASCII(kPartialFile);
+  std::string text;
+  if (!base::ReadFileToStringWithMaxSize(marker, &text, 64 * 1024))
+    return;
+  for (const auto& name : base::SplitString(text, "\n", base::TRIM_WHITESPACE,
+                                            base::SPLIT_WANT_NONEMPTY)) {
+    unsigned number = 0;
+    const bool profile =
+        name == "Default" ||
+        (name.starts_with("Profile ") &&
+         base::StringToUint(std::string_view(name).substr(8), &number));
+    const bool owned = profile || name == "scripts" || name == "styles" ||
+                       name == "script-storage" || name == kLegacyImportFile;
+    if (owned)
+      base::DeletePathRecursively(user_data_dir.AppendASCII(name));
+  }
+  base::DeleteFile(marker);
+}
 bool CopySiteData(const base::FilePath& partition,
                   const base::FilePath& profile) {
   if (!base::CreateDirectory(profile))
@@ -142,42 +166,50 @@ void CopyFolder(const base::FilePath& from, const base::FilePath& to) {
   }
 }
 
+// `merge`: native Fly was already used; settings it stores keep their value.
 void ImportSettings(const base::DictValue& config,
                     PrefService& local_state,
+                    bool merge,
                     std::vector<std::string>& report) {
   PreferencesService prefs(local_state);
+  const auto importable = [&](std::string_view key) {
+    return !merge || !prefs.HasStoredValue(key);
+  };
   for (const char* key : {"disable_gpu", "background_throttling",
                           "enable_diagnostics", "desktop_integration_offered",
                           "extensions_enabled"})
-    if (const auto value = config.FindBool(key))
+    if (const auto value = config.FindBool(key); value && importable(key))
       prefs.SetBool(key, *value);
-  if (const auto limit = config.FindInt("process_limit"))
+  if (const auto limit = config.FindInt("process_limit");
+      limit && importable("process_limit"))
     prefs.SetInt("process_limit", std::clamp(*limit, 1, 8));
   for (const char* key : {"spellchecker_language", "interface_scale",
                           "email_handler", "last_seen_version"})
-    if (const auto* value = config.FindString(key))
+    if (const auto* value = config.FindString(key); value && importable(key))
       prefs.SetString(key, *value);
   if (const auto* theme = config.FindString("theme");
-      theme && *theme == "light")
+      theme && *theme == "light" && importable("theme"))
     prefs.ToggleTheme();
-  if (const auto sync = config.FindBool("sync_website_theme"))
+  if (const auto sync = config.FindBool("sync_website_theme");
+      sync && importable("sync_website_theme"))
     prefs.SetWebsiteThemeSync(*sync);
   auto minutes = config.FindInt("tab_suspend_timeout_minutes");
   if (!minutes)
     minutes = config.FindInt("tab_sleep_timeout_minutes");
-  if (minutes)
+  if (minutes && importable("tab_suspend_timeout_minutes"))
     prefs.SetSuspendTimeoutMinutes(*minutes);
-  if (const auto value = config.FindBool("sidebar_auto_collapse"))
+  if (const auto value = config.FindBool("sidebar_auto_collapse"); value && importable("sidebar_auto_collapse"))
     prefs.SetSidebarAutoCollapse(*value);
-  if (const auto value = config.FindBool("show_status_bar"))
+  if (const auto value = config.FindBool("show_status_bar"); value && importable("show_status_bar"))
     prefs.SetStatusBarVisible(*value);
-  if (const auto value = config.FindBool("show_clock"))
+  if (const auto value = config.FindBool("show_clock"); value && importable("show_clock"))
     prefs.SetClockVisible(*value);
-  if (const auto value = config.FindBool("show_frequent_sites"))
+  if (const auto value = config.FindBool("show_frequent_sites"); value && importable("show_frequent_sites"))
     prefs.SetFrequentSitesVisible(*value);
-  if (const auto value = config.FindBool("show_window_controls"))
+  if (const auto value = config.FindBool("show_window_controls"); value && importable("show_window_controls"))
     prefs.SetWindowControlsVisible(*value);
-  if (const auto* format = config.FindString("clock_format")) {
+  if (const auto* format = config.FindString("clock_format");
+      format && importable("clock_format")) {
     for (int i = 0; i < 3 && prefs.ReadClock() &&
                     prefs.ReadClock()->format != *format;
          ++i)
@@ -191,7 +223,8 @@ void ImportSettings(const base::DictValue& config,
       {"light",
        {{"accent", "#e0261c"}, {"bg_main", "#ece6d8"},
         {"bg_sidebar", "#e3dccb"}, {"text", "#1a1814"}}}};
-  if (const auto* colors = config.FindDict("theme_colors")) {
+  if (const auto* colors = config.FindDict("theme_colors");
+      colors && importable("theme_colors")) {
     for (const auto& [mode, keys] : defaults) {
       const auto* palette = colors->FindDict(mode);
       for (const auto& [key, fallback] : keys) {
@@ -204,15 +237,201 @@ void ImportSettings(const base::DictValue& config,
   SearchService search(local_state);
   if (const auto* engine = config.FindString("search_engine");
       engine && *engine != "https://duckduckgo.com/?q=%s" &&
+      importable("search_engine") &&
       !search.SetEngine(*engine))
     report.push_back("Search engine not imported (unsupported template).");
-  if (const auto* aliases = config.FindDict("custom_search_aliases")) {
+  if (const auto* aliases = config.FindDict("custom_search_aliases");
+      aliases && importable("custom_search_aliases")) {
     for (const auto [key, value] : *aliases)
       if (value.is_string() && !search.SetAlias(key, key, value.GetString()))
         report.push_back("Search alias \"" + key + "\" not imported.");
   }
 }
 
+// keybinds.js helpers: a value is a combination or a list of them.
+std::vector<const base::Value*> ListOf(const base::Value& value) {
+  std::vector<const base::Value*> values;
+  if (value.is_none() || (value.is_string() && value.GetString().empty()))
+    return values;
+  if (const auto* list = value.GetIfList()) {
+    for (const auto& item : *list)
+      values.push_back(&item);
+  } else {
+    values.push_back(&value);
+  }
+  return values;
+}
+std::string Sequence(std::string_view value) {
+  std::vector<std::string> strokes;
+  for (const auto& part : base::SplitString(value, base::kWhitespaceASCII,
+                                            base::TRIM_WHITESPACE,
+                                            base::SPLIT_WANT_NONEMPTY))
+    strokes.push_back(NormalizeStroke(part));
+  if (strokes.empty())
+    strokes.push_back(std::string());
+  return base::JoinString(strokes, " ");
+}
+std::set<std::string> CombosOf(const base::DictValue& table) {
+  std::set<std::string> combos;
+  for (const auto [id, value] : table)
+    for (const auto* item : ListOf(value))
+      if (item->is_string())
+        combos.insert(Sequence(item->GetString()));
+  return combos;
+}
+std::set<std::string> TabChords(const base::Value* tabs) {
+  std::set<std::string> chords;
+  if (tabs && tabs->is_string() && !tabs->GetString().empty())
+    for (int i = 1; i <= 9; ++i)
+      chords.insert(
+          NormalizeStroke(tabs->GetString() + "+" + base::NumberToString(i)));
+  return chords;
+}
+const base::DictValue& StoredDefaults() {
+  static const base::NoDestructor<base::DictValue> stored([] {
+    auto parsed = base::JSONReader::ReadDict(kStoredKeyboardDefaultsJSON,
+                                             base::JSON_PARSE_RFC);
+    CHECK(parsed);
+    return std::move(*parsed);
+  }());
+  return *stored;
+}
+// True when an earlier Electron version wrote this value without the user
+// choosing it (keybinds.js storedDefault).
+bool StoredDefault(std::string_view scope,
+                   const std::string& id,
+                   const base::Value& value,
+                   bool legacy) {
+  std::set<std::string> combos;
+  for (const auto* item : ListOf(value)) {
+    if (!item->is_string())
+      return false;
+    const auto combo = Sequence(item->GetString());
+    for (const auto& stroke : base::SplitString(
+             combo, " ", base::KEEP_WHITESPACE, base::SPLIT_WANT_ALL))
+      if (stroke.empty())
+        return false;
+    combos.insert(combo);
+  }
+  const std::vector<std::string> key(combos.begin(), combos.end());
+  std::vector<const base::ListValue*> candidates;
+  const auto add = [&](const base::DictValue* table) {
+    const auto* entries = table ? table->FindList(id) : nullptr;
+    if (entries)
+      for (const auto& entry : *entries)
+        if (entry.is_list())
+          candidates.push_back(&entry.GetList());
+  };
+  const auto* legacy_table = StoredDefaults().FindDict("legacy");
+  if (legacy) {
+    add(legacy_table);
+  } else {
+    add(StoredDefaults().FindDictByDottedPath(base::StrCat({"saved.", scope})));
+    if (scope == "shortcuts")
+      add(legacy_table);
+  }
+  return std::ranges::any_of(candidates, [&](const base::ListValue* entry) {
+    if (entry->size() != key.size())
+      return false;
+    for (size_t i = 0; i < key.size(); ++i)
+      if (!(*entry)[i].is_string() || (*entry)[i].GetString() != key[i])
+        return false;
+    return true;
+  });
+}
+}  // namespace
+
+// keybinds.js initialiseCandidate and withDefaults: the user's choices win;
+// defaults only give up the combinations that would collide with them.
+KeyboardValidation ResolveLegacyKeyboard(const base::DictValue& raw) {
+  const auto* version = raw.Find("version");
+  if (version && !(version->is_int() && version->GetInt() == 2))
+    return {std::nullopt, "Unsupported keyboard configuration version."};
+  const bool legacy = !version;
+  const base::DictValue empty;
+  const base::DictValue* shortcuts = legacy ? &raw : raw.FindDict("shortcuts");
+  const base::DictValue* normal = legacy ? &empty : raw.FindDict("normal");
+  if (!shortcuts || !normal)
+    return {std::nullopt, "Invalid binding tables."};
+  const bool recorded = legacy || raw.FindBool("changesOnly") != true;
+  const auto chosen = [&](const base::DictValue& table, std::string_view scope) {
+    base::DictValue result;
+    for (const auto [id, value] : table)
+      if (IsKnownAction(id) &&
+          !(recorded && StoredDefault(scope, id, value, legacy)))
+        result.Set(id, value.Clone());
+    return result;
+  };
+  auto own_shortcuts = chosen(*shortcuts, "shortcuts");
+  auto own_normal = chosen(*normal, "normal");
+  const base::Value* own_tabs = legacy ? nullptr : raw.Find("tabs");
+
+  const auto defaults = DefaultKeyboardConfig();
+  auto taken = CombosOf(own_shortcuts);
+  for (const auto& chord : TabChords(own_tabs))
+    taken.insert(chord);
+  std::set<std::string> page_strokes;
+  for (const auto& combo : CombosOf(own_normal))
+    for (const auto& stroke : base::SplitString(
+             combo, " ", base::KEEP_WHITESPACE, base::SPLIT_WANT_ALL))
+      page_strokes.insert(stroke);
+  base::Value tabs;
+  if (own_tabs) {
+    tabs = own_tabs->Clone();
+  } else {
+    const base::Value default_tabs(defaults.tabs);
+    const auto chords = TabChords(&default_tabs);
+    tabs = std::ranges::any_of(chords,
+                               [&](const std::string& chord) {
+                                 return taken.contains(chord) ||
+                                        page_strokes.contains(chord);
+                               })
+               ? base::Value("")
+               : default_tabs.Clone();
+  }
+  base::DictValue all_shortcuts = own_shortcuts.Clone();
+  for (const auto& [id, combos] : defaults.shortcuts) {
+    if (all_shortcuts.contains(id))
+      continue;
+    base::ListValue kept;
+    for (const auto& combo : combos)
+      if (!taken.contains(Sequence(combo)) &&
+          !page_strokes.contains(Sequence(combo)))
+        kept.Append(combo);
+    all_shortcuts.Set(id, std::move(kept));
+  }
+  auto globals = CombosOf(all_shortcuts);
+  for (const auto& chord : TabChords(&tabs))
+    globals.insert(chord);
+  const auto pages = CombosOf(own_normal);
+  const auto collides = [&](const std::string& combo) {
+    for (const auto& stroke : base::SplitString(
+             combo, " ", base::KEEP_WHITESPACE, base::SPLIT_WANT_ALL))
+      if (globals.contains(stroke))
+        return true;
+    return std::ranges::any_of(pages, [&](const std::string& other) {
+      return other == combo || other.starts_with(combo + " ") ||
+             combo.starts_with(other + " ");
+    });
+  };
+  base::DictValue all_normal = own_normal.Clone();
+  for (const auto& [id, combos] : defaults.normal) {
+    if (all_normal.contains(id))
+      continue;
+    base::ListValue kept;
+    for (const auto& combo : combos)
+      if (!collides(Sequence(combo)))
+        kept.Append(combo);
+    all_normal.Set(id, std::move(kept));
+  }
+  return ValidateKeyboardConfig(base::DictValue()
+                                    .Set("version", 2)
+                                    .Set("shortcuts", std::move(all_shortcuts))
+                                    .Set("normal", std::move(all_normal))
+                                    .Set("tabs", std::move(tabs)));
+}
+
+namespace {
 void ImportKeyboard(const base::FilePath& file,
                     PrefService& local_state,
                     std::vector<std::string>& report) {
@@ -223,50 +442,13 @@ void ImportKeyboard(const base::FilePath& file,
     report.push_back("Keyboard settings not imported (unreadable file).");
     return;
   }
-  const auto& raw = stored->GetDict();
-  const bool legacy = !raw.contains("version");
-  const base::DictValue* shortcuts =
-      legacy ? &raw : raw.FindDict("shortcuts");
-  const base::DictValue* normal = legacy ? nullptr : raw.FindDict("normal");
-  auto merged = DefaultKeyboardConfig().ToValue();
-  std::set<std::string> taken;
-  const auto apply = [&](const base::DictValue* table, const char* scope) {
-    if (!table)
-      return;
-    auto* target = merged.EnsureDict(scope);
-    for (const auto [action, value] : *table) {
-      if (!IsKnownAction(action))
-        continue;
-      target->Set(action, value.Clone());
-      if (const auto* list = value.GetIfList())
-        for (const auto& combo : *list)
-          if (combo.is_string())
-            taken.insert(combo.GetString());
-      if (value.is_string())
-        taken.insert(value.GetString());
-    }
-  };
-  apply(shortcuts, "shortcuts");
-  apply(normal, "normal");
-  if (const auto* tabs = raw.FindString("tabs"))
-    merged.Set("tabs", *tabs);
-  // Defaults give up the combinations the user's own choices now use.
-  for (const char* scope : {"shortcuts", "normal"}) {
-    const base::DictValue* chosen = std::string_view(scope) == "shortcuts"
-                                        ? shortcuts
-                                        : normal;
-    auto* table = merged.FindDict(scope);
-    for (auto [action, value] : *table) {
-      if (chosen && chosen->contains(action))
-        continue;
-      if (auto* list = value.GetIfList())
-        list->EraseIf([&](const base::Value& combo) {
-          return combo.is_string() && taken.contains(combo.GetString());
-        });
-    }
+  const auto resolved = ResolveLegacyKeyboard(stored->GetDict());
+  if (!resolved.config) {
+    report.push_back("Keyboard settings not imported: " + resolved.error);
+    return;
   }
   CommandService commands(local_state);
-  const auto result = commands.Save(merged);
+  const auto result = commands.Save(resolved.config->ToValue());
   if (!result.config)
     report.push_back("Keyboard settings not imported: " + result.error);
 }
@@ -278,7 +460,9 @@ void ImportBookmarks(const base::FilePath& legacy,
   size_t count = 0;
   if (auto list = ReadJson(legacy.AppendASCII("bookmarks.json"));
       list && list->is_list()) {
-    for (const auto& item : list->GetList()) {
+    // Electron lists the newest first and Add() puts each one first, so add
+    // the oldest first.
+    for (const auto& item : base::Reversed(list->GetList())) {
       const auto* dict = item.GetIfDict();
       const auto* url = dict ? dict->FindString("url") : nullptr;
       if (!url)
@@ -308,10 +492,9 @@ base::FilePath LegacyProfileDirectory() {
   if (command_line->HasSwitch("fly-import-from"))
     return command_line->GetSwitchValuePath("fly-import-from");
 #if BUILDFLAG(IS_LINUX)
-  auto env = base::Environment::Create();
-  return base::nix::GetXDGDirectory(env.get(), base::nix::kXdgConfigHomeEnvVar,
-                                    base::nix::kDotConfigDir)
-      .AppendASCII("fly-browser");
+  // Electron Fly's CONFIG_DIR is always ~/.config/fly-browser (main.js), even
+  // when XDG_CONFIG_HOME points elsewhere.
+  return base::GetHomeDir().AppendASCII(".config").AppendASCII("fly-browser");
 #else
   return base::FilePath();
 #endif
@@ -320,19 +503,33 @@ base::FilePath LegacyProfileDirectory() {
 LegacyImportResult RunLegacyImport(PrefService& local_state,
                                    const base::FilePath& user_data_dir,
                                    const base::FilePath& legacy) {
-  if (legacy.empty() || user_data_dir.empty() || legacy == user_data_dir ||
-      !base::PathExists(legacy.AppendASCII("session.json")))
+  if (legacy.empty() || user_data_dir.empty() || legacy == user_data_dir)
     return LegacyImportResult::kNotApplicable;
-  PreferencesService prefs(local_state);
-  // Only a fresh native directory: never mix into existing native workspaces.
+  RemovePartialImport(user_data_dir);
+  // Done once: the pending file stays after it has been applied.
+  if (base::PathExists(user_data_dir.AppendASCII(kLegacyImportFile)))
+    return LegacyImportResult::kNotApplicable;
+  const auto waiting = user_data_dir.AppendASCII(kLegacyImportWaitingFile);
   WorkspaceService workspaces(local_state);
   const auto catalog = workspaces.Read();
-  if (!catalog || !catalog->items.empty() ||
-      base::PathExists(user_data_dir.AppendASCII("Default")) ||
-      base::PathExists(user_data_dir.AppendASCII(kLegacyImportFile)))
+  if (!catalog)
     return LegacyImportResult::kNotApplicable;
-  if (SourceRunning(legacy))
+  const bool fresh = catalog->items.empty() &&
+                     !base::PathExists(user_data_dir.AppendASCII("Default"));
+  // A native directory used before is only imported into when the import
+  // waited for Electron Fly to close.
+  if (!fresh && !base::PathExists(waiting))
+    return LegacyImportResult::kNotApplicable;
+  if (!base::PathExists(legacy.AppendASCII("session.json"))) {
+    base::DeleteFile(waiting);
+    return LegacyImportResult::kNotApplicable;
+  }
+  if (SourceRunning(legacy)) {
+    base::WriteFile(waiting, "Electron Fly was open; import when it closes.\n");
     return LegacyImportResult::kSourceRunning;
+  }
+  const bool merge = !fresh;
+  PreferencesService prefs(local_state);
 
   std::vector<std::string> report;
   std::string session_text;
@@ -356,6 +553,36 @@ LegacyImportResult RunLegacyImport(PrefService& local_state,
   size_t index = 0;
   size_t tabs_total = 0;
   std::map<std::string, std::string> directory_of;
+  // Directories this import creates; a killed import removes them on the
+  // next start and runs again (RemovePartialImport).
+  std::set<std::string> used_directories;
+  for (const auto& item : catalog->items)
+    used_directories.insert(base::ToLowerASCII(item.profile_directory));
+  int next_profile =
+      merge ? std::max(1, local_state.GetInteger("profile.profiles_created"))
+            : 1;
+  const auto allocate = [&]() -> std::string {
+    if (!merge && index == 0)
+      return "Default";
+    for (;; ++next_profile) {
+      const auto name = "Profile " + base::NumberToString(next_profile);
+      if (!used_directories.contains(base::ToLowerASCII(name)) &&
+          !base::PathExists(user_data_dir.AppendASCII(name))) {
+        ++next_profile;
+        return name;
+      }
+    }
+  };
+  std::vector<std::string> created;
+  const auto mark = [&](const std::string& name) {
+    created.push_back(name);
+    base::WriteFile(user_data_dir.AppendASCII(kPartialFile),
+                    base::JoinString(created, "\n") + "\n");
+  };
+  mark(kLegacyImportFile);
+  for (const char* folder : {"scripts", "styles", "script-storage"})
+    if (!base::PathExists(user_data_dir.AppendASCII(folder)))
+      mark(folder);
   if (order) {
     auto names = OrderedKeys(session_text, "workspaces");
     if (names.size() != order->size()) {
@@ -368,9 +595,9 @@ LegacyImportResult RunLegacyImport(PrefService& local_state,
       if (!found)
         continue;
       const auto& urls = *found;
-      const std::string directory =
-          index == 0 ? "Default" : "Profile " + base::NumberToString(index);
+      const std::string directory = allocate();
       ++index;
+      mark(directory);
       const auto* partition =
           partitions ? partitions->FindString(name) : nullptr;
       std::string folder = partition ? *partition : "";
@@ -385,7 +612,16 @@ LegacyImportResult RunLegacyImport(PrefService& local_state,
       } else {
         base::CreateDirectory(user_data_dir.AppendASCII(directory));
       }
-      const auto added = workspaces.Add(name, directory);
+      // Names already used by native workspaces get a suffix.
+      std::string workspace_name = name;
+      auto added = workspaces.Add(workspace_name, directory);
+      for (int copy = 1; !added && merge && copy < 10; ++copy) {
+        workspace_name = name + (copy == 1 ? " (Electron)"
+                                           : " (Electron " +
+                                                 base::NumberToString(copy) +
+                                                 ")");
+        added = workspaces.Add(workspace_name, directory);
+      }
       if (!added) {
         report.push_back("Workspace \"" + name + "\" could not be added.");
         continue;
@@ -421,8 +657,9 @@ LegacyImportResult RunLegacyImport(PrefService& local_state,
     current_dir = first_dir;
   // Start in the workspace Electron Fly was showing.
   local_state.SetString("profile.last_used", current_dir);
-  local_state.SetInteger("profile.profiles_created",
-                         static_cast<int>(index) + 1);
+  local_state.SetInteger(
+      "profile.profiles_created",
+      merge ? next_profile : static_cast<int>(index) + 1);
   report.insert(report.begin(), base::NumberToString(index) +
                                     " workspaces with " +
                                     base::NumberToString(tabs_total) + " tabs");
@@ -444,7 +681,7 @@ LegacyImportResult RunLegacyImport(PrefService& local_state,
 
   if (auto config = ReadJson(legacy.AppendASCII("config.json"));
       config && config->is_dict()) {
-    ImportSettings(config->GetDict(), local_state, report);
+    ImportSettings(config->GetDict(), local_state, merge, report);
     // The included Electron blocker (uBlock Origin) becomes uBlock Origin
     // Lite; keep the user's removal or per-workspace choices.
     const auto& cfg = config->GetDict();
@@ -473,12 +710,14 @@ LegacyImportResult RunLegacyImport(PrefService& local_state,
       if (!off.empty())
         extensions.Set("workspace_off", std::move(off));
     }
-    if (!extensions.empty())
+    if (!extensions.empty() &&
+        (!merge || !prefs.HasStoredValue("native_extensions")))
       prefs.SetNativeExtensions(std::move(extensions));
   } else {
     report.push_back("Settings file not found; defaults kept.");
   }
-  ImportKeyboard(legacy.AppendASCII("keybinds.json"), local_state, report);
+  if (!merge || local_state.FindPreference(kKeyboardPref)->IsDefaultValue())
+    ImportKeyboard(legacy.AppendASCII("keybinds.json"), local_state, report);
   ImportBookmarks(legacy, local_state, report);
   for (const char* folder : {"scripts", "styles", "script-storage"})
     CopyFolder(legacy.AppendASCII(folder), user_data_dir.AppendASCII(folder));
@@ -517,7 +756,14 @@ LegacyImportResult RunLegacyImport(PrefService& local_state,
   if (!base::ImportantFileWriter::WriteFileAtomically(
           user_data_dir.AppendASCII(kLegacyImportFile), json))
     return LegacyImportResult::kFailed;
-  local_state.CommitPendingWrite();
+  base::DeleteFile(waiting);
+  // The import is complete once Local State holds the new workspaces; until
+  // then the marker makes the next start undo and repeat it.
+  local_state.CommitPendingWrite(
+      base::OnceClosure(),
+      base::BindOnce(
+          [](base::FilePath marker) { base::DeleteFile(marker); },
+          user_data_dir.AppendASCII(kPartialFile)));
   return LegacyImportResult::kImported;
 }
 }  // namespace fly

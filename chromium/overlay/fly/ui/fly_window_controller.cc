@@ -39,6 +39,7 @@
 #include "base/version.h"
 #include "base/strings/stringprintf.h"
 #include "base/command_line.h"
+#include "base/containers/adapters.h"
 #include "fly/fly_version.h"
 #include "chrome/app/vector_icons/vector_icons.h"
 #include "components/omnibox/browser/vector_icons.h"
@@ -1191,6 +1192,9 @@ void FlyWindowController::OnPreferencesChanged() {
   }
   ApplyFlyPalette();
   ApplyProfilePreferencesEverywhere();
+  if (user_content_)
+    user_content_->SetEmailHandler(
+        preferences_.ReadString("email_handler").value_or("system"));
   UpdateClock();
   UpdateSidebarMode();
   UpdateWindowControls();
@@ -3589,8 +3593,16 @@ void FlyWindowController::QueueLegacyImport(BrowserWindowInterface* browser) {
           [](base::FilePath file) -> std::optional<base::DictValue> {
             std::string text;
             if (!base::ReadFileToStringWithMaxSize(file, &text,
-                                                   64 * 1024 * 1024))
+                                                   64 * 1024 * 1024)) {
+              if (base::PathExists(
+                      file.DirName().AppendASCII(kLegacyImportWaitingFile)))
+                return base::DictValue().Set(
+                    "summary",
+                    "Electron Fly was open, so its workspaces were not "
+                    "imported. Close Electron Fly and restart Fly to import "
+                    "them.");
               return std::nullopt;
+            }
             return base::JSONReader::ReadDict(text, base::JSON_PARSE_RFC);
           },
           file),
@@ -3641,7 +3653,9 @@ void FlyWindowController::ApplyLegacyImport(
   if (const auto* history = entry->FindList("history")) {
     if (auto* service = HistoryServiceFactory::GetForProfile(
             profile, ServiceAccessType::EXPLICIT_ACCESS)) {
-      for (const auto& item : *history) {
+      // Electron lists the newest visit first; adding the oldest first leaves
+      // each page with its newest title.
+      for (const auto& item : base::Reversed(*history)) {
         const auto* visit = item.GetIfDict();
         const auto* url = visit ? visit->FindString("url") : nullptr;
         if (!url || !GURL(*url).SchemeIsHTTPOrHTTPS())
@@ -3696,8 +3710,15 @@ void FlyWindowController::ApplyLegacyImport(
   std::string json;
   base::JSONWriter::WriteWithOptions(
       *legacy_import_, base::JSONWriter::OPTIONS_PRETTY_PRINT, &json);
-  base::ThreadPool::PostTask(
-      FROM_HERE, {base::MayBlock(), base::TaskPriority::BEST_EFFORT},
+  // One sequence keeps the snapshots in order, and shutdown waits for the
+  // last one, so applied tabs and history are never added twice.
+  if (!legacy_import_writer_) {
+    legacy_import_writer_ = base::ThreadPool::CreateSequencedTaskRunner(
+        {base::MayBlock(), base::TaskPriority::USER_VISIBLE,
+         base::TaskShutdownBehavior::BLOCK_SHUTDOWN});
+  }
+  legacy_import_writer_->PostTask(
+      FROM_HERE,
       base::BindOnce(
           [](base::FilePath file, std::string json) {
             base::ImportantFileWriter::WriteFileAtomically(file, json);

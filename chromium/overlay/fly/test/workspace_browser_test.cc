@@ -50,6 +50,9 @@
 #include "base/json/json_reader.h"
 #include "base/json/json_writer.h"
 #include "base/run_loop.h"
+#include "base/synchronization/lock.h"
+#include "base/thread_annotations.h"
+#include "base/strings/strcat.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/task/single_thread_task_runner.h"
 #include "base/test/bind.h"
@@ -106,6 +109,7 @@
 #include "extensions/test/test_extension_dir.h"
 #include "net/dns/mock_host_resolver.h"
 #include "net/test/embedded_test_server/embedded_test_server.h"
+#include "net/test/embedded_test_server/http_request.h"
 #include "ui/aura/client/focus_client.h"
 #include "ui/aura/window.h"
 #include "ui/aura/window_tree_host.h"
@@ -3814,6 +3818,97 @@ IN_PROC_BROWSER_TEST_F(FlyWorkspaceBrowserTest,
   ASSERT_TRUE(ui_test_utils::NavigateToURL(browser(), url));
   ASSERT_TRUE(base::test::RunUntil([&] { return !visits().empty(); }));
   EXPECT_EQ(first + 1, std::stoi(visits()));
+}
+
+class FlyGmRequestBrowserTest : public FlyWorkspaceBrowserTest {
+ public:
+  void SetUpOnMainThread() override {
+    embedded_test_server()->RegisterRequestMonitor(base::BindRepeating(
+        &FlyGmRequestBrowserTest::Monitor, base::Unretained(this)));
+    FlyWorkspaceBrowserTest::SetUpOnMainThread();
+    host_resolver()->AddRule("*", "127.0.0.1");
+  }
+
+ protected:
+  bool Requested(std::string_view url) {
+    base::AutoLock lock(lock_);
+    return std::ranges::find(urls_, url) != urls_.end();
+  }
+
+ private:
+  void Monitor(const net::test_server::HttpRequest& request) {
+    base::AutoLock lock(lock_);
+    urls_.push_back(request.relative_url);
+  }
+  base::Lock lock_;
+  std::vector<std::string> urls_ GUARDED_BY(lock_);
+};
+
+// Every redirect hop of GM_xmlhttpRequest is held to the script's @connect
+// hosts and kept off local network addresses before it is sent, as Electron
+// Fly checked each hop.
+IN_PROC_BROWSER_TEST_F(FlyGmRequestBrowserTest, RedirectHopsAreCheckedBeforeSending) {
+  base::FilePath user_data;
+  ASSERT_TRUE(base::PathService::Get(chrome::DIR_USER_DATA, &user_data));
+  const auto script = [](std::string_view name, std::string_view connect,
+                         std::string_view body) {
+    return base::StrCat(
+        {"// ==UserScript==\n// @name ", name,
+         "\n// @match http://*/*\n// @grant GM_xmlhttpRequest\n// @connect ",
+         connect,
+         "\n// ==/UserScript==\n"
+         "if (location.hostname === 'page.test') {\n"
+         "  const base = 'http://allowed.test:' + location.port;\n"
+         "  const send = (key, url) => GM_xmlhttpRequest({url,\n"
+         "    onload: r => document.documentElement.dataset[key] = 'load ' + r.status,\n"
+         "    onerror: e => document.documentElement.dataset[key] = 'error ' + e.error});\n",
+         body, "}\n"});
+  };
+  {
+    base::ScopedAllowBlockingForTesting allow_blocking;
+    const auto scripts = user_data.AppendASCII("scripts");
+    ASSERT_TRUE(base::CreateDirectory(scripts));
+    ASSERT_TRUE(base::WriteFile(
+        scripts.AppendASCII("connect.user.js"),
+        script("Connect", "allowed.test",
+               "  send('direct', base + '/echo?direct');\n"
+               "  send('hop', base + '/server-redirect?http://other.test:' + "
+               "location.port + '/echo?hop');\n")));
+    ASSERT_TRUE(base::WriteFile(
+        scripts.AppendASCII("open.user.js"),
+        script("Open", "*",
+               "  send('open', base + '/server-redirect?http://open.test:' + "
+               "location.port + '/echo?open');\n"
+               "  send('local', base + '/server-redirect?http://127.0.0.1:' + "
+               "location.port + '/echo?local');\n")));
+  }
+  auto& window = FlyWindowController::Get();
+  window.user_content().Reload();
+  ASSERT_TRUE(base::test::RunUntil(
+      [&] { return window.user_content().script_count() == 2u; }));
+  const auto url = embedded_test_server()->GetURL("page.test", "/title1.html");
+  const auto result = [&](std::string_view key) {
+    return content::EvalJs(Active(browser()),
+                           base::StrCat({"document.documentElement.dataset.",
+                                         key, " || ''"}))
+        .ExtractString();
+  };
+  ASSERT_TRUE(base::test::RunUntil([&] {
+    if (result("direct").empty() &&
+        !ui_test_utils::NavigateToURL(browser(), url)) {
+      return false;
+    }
+    return !result("direct").empty() && !result("hop").empty() &&
+           !result("open").empty() && !result("local").empty();
+  }));
+  EXPECT_EQ("load 200", result("direct"));
+  EXPECT_EQ("load 200", result("open"));
+  EXPECT_TRUE(result("hop").starts_with("error")) << result("hop");
+  EXPECT_TRUE(result("local").starts_with("error")) << result("local");
+  EXPECT_TRUE(Requested("/echo?direct"));
+  EXPECT_TRUE(Requested("/echo?open"));
+  EXPECT_FALSE(Requested("/echo?hop"));
+  EXPECT_FALSE(Requested("/echo?local"));
 }
 
 class FlyLegacyImportBrowserTest : public FlyWorkspaceBrowserTest {

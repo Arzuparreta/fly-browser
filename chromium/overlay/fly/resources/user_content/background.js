@@ -168,7 +168,7 @@ const __start = (__initial) => {
     const fail = (err) => {
       if (aborted) return;
       const e = {status: 0, statusText: 'Error', readyState: 4, responseText: '', response: null,
-                 context: details.context, error: (err && err.message) || String(err || 'Request failed')};
+                 context: details.context, error: (err && (err.message || err.error)) || String(err || 'Request failed')};
       if (err && err.isTimeout && typeof details.ontimeout === 'function') { try { details.ontimeout(e); } catch (x) {} }
       else if (typeof details.onerror === 'function') { try { details.onerror(e); } catch (x) {} }
       if (typeof details.onloadend === 'function') { try { details.onloadend(e); } catch (x) {} }
@@ -364,6 +364,82 @@ function isHostAllowed(target, page, connects) {
   }
   return false;
 }
+// fetch() follows redirects without showing them, so every hop of a GM
+// request is held to the request's own rules by session rules that apply only
+// to this worker's requests: hops outside the script's @connect hosts, and
+// hops to local network addresses, are blocked before they are sent. Requests
+// with the same rules run together; the others wait for them to finish.
+// Local network hosts, one rule each: Chromium limits each compiled regular
+// expression to 2 KB. Canonical URLs have a lower-case host and a path.
+const PRIVATE_URLS = [
+  '^https?://([^/]*@)?(10|127|0)\\.[0-9]+\\.[0-9]+\\.[0-9]+(:[0-9]+)?/',
+  '^https?://([^/]*@)?(169\\.254|192\\.168)\\.[0-9]+\\.[0-9]+(:[0-9]+)?/',
+  '^https?://([^/]*@)?172\\.(1[6-9]|2[0-9]|3[01])\\.[0-9]+\\.[0-9]+(:[0-9]+)?/',
+  '^https?://([^/]*@)?\\[(::1?|f[cd][0-9a-f]*:[^/]*|fe80:[^/]*|::ffff:[^/]*)\\]',
+];
+const GUARD_RULES = [1, 2, 3, 4, 5, 6, 7];
+let guardKey = null;
+let guardUsers = 0;
+let guardWaiters = [];
+function guardRules(policy) {
+  const own = {initiatorDomains: [chrome.runtime.id], tabIds: [chrome.tabs.TAB_ID_NONE]};
+  const rules = [];
+  if (!policy.any) {
+    rules.push({id: 1, priority: 1, action: {type: 'block'}, condition: own});
+    if (policy.hosts.length)
+      rules.push({id: 2, priority: 2, action: {type: 'allow'}, condition: {...own, requestDomains: policy.hosts}});
+  }
+  if (!policy.privatePage) {
+    rules.push({id: 3, priority: 3, action: {type: 'block'}, condition: {...own, requestDomains: ['localhost']}});
+    PRIVATE_URLS.forEach((regexFilter, index) => rules.push({id: 4 + index, priority: 3, action: {type: 'block'},
+        condition: {...own, regexFilter, isUrlFilterCaseSensitive: true}}));
+  }
+  return rules;
+}
+function guardPolicy(page, connects) {
+  const hosts = new Set([page]);
+  let any = false;
+  for (const rule of connects || []) {
+    let pattern = String(rule || '').trim().toLowerCase();
+    if (pattern.includes('://')) { try { pattern = new URL(pattern).hostname.toLowerCase(); } catch (e) {} }
+    if (pattern === '*') any = true;
+    if (pattern.startsWith('*.')) pattern = pattern.slice(2);
+    hosts.add(pattern);
+  }
+  // requestDomains also covers subdomains, as isHostAllowed does.
+  return {any, privatePage: isPrivateHost(page),
+      hosts: [...hosts].filter(host => /^[a-z0-9.-]+$/.test(host) && (host.includes('.') || host === 'localhost')).sort()};
+}
+// Rule changes run in order, so a release never removes the next rules.
+let guardOps = Promise.resolve();
+function guardUpdate(change) {
+  const op = guardOps.then(() => chrome.declarativeNetRequest.updateSessionRules(change));
+  guardOps = op.catch(() => {});
+  return op;
+}
+let guardReady = Promise.resolve();
+async function guardedFetch(url, init, page, connects) {
+  const policy = guardPolicy(page, connects);
+  const key = JSON.stringify(policy);
+  while (guardUsers && guardKey !== key) await new Promise(resolve => guardWaiters.push(resolve));
+  if (!guardUsers) {
+    guardKey = key;
+    guardReady = guardUpdate({removeRuleIds: GUARD_RULES, addRules: guardRules(policy)});
+  }
+  guardUsers++;
+  try {
+    await guardReady;
+    return await fetch(url, init);
+  } finally {
+    if (--guardUsers === 0) {
+      guardKey = null;
+      guardUpdate({removeRuleIds: GUARD_RULES}).catch(() => {});
+      const waiters = guardWaiters;
+      guardWaiters = [];
+      waiters.forEach(resolve => resolve());
+    }
+  }
+}
 async function handle(message, sender) {
   const {metas = {}} = await chrome.storage.local.get('metas');
   const meta = metas[message.token];
@@ -402,10 +478,10 @@ async function handle(message, sender) {
     const controller = new AbortController();
     const timer = setTimeout(() => controller.abort(), Math.min(request.timeout || 30000, 120000));
     try {
-      const response = await fetch(target.href, {method: request.method, headers: request.headers,
+      const response = await guardedFetch(target.href, {method: request.method, headers: request.headers,
           body: ['GET', 'HEAD'].includes(request.method) ? undefined : request.data, signal: controller.signal,
-          credentials: 'omit'});
-      // Redirects must stay within what the script may reach.
+          credentials: 'omit'}, page.hostname.toLowerCase(), meta.connects);
+      // The guard blocks hops before they are sent; this rechecks the result.
       const final = new URL(response.url || target.href);
       if (!isHostAllowed(final.hostname, page.hostname, meta.connects) ||
           (isPrivateHost(final.hostname) && !isPrivateHost(page.hostname)))
@@ -429,3 +505,68 @@ chrome.runtime.onUserScriptMessage.addListener((message, sender, respond) => {
   return true;
 });
 register().catch((err) => console.error('Fly User Content registration failed', err));
+
+// ---- Share menu (Electron Fly's page context menu "Share...") --------------
+const SHARE = [
+  ['whatsapp', 'Share to WhatsApp', (u, t) => `https://web.whatsapp.com/send?text=${t}%20${u}`],
+  ['x', 'Share to X (Twitter)', (u, t) => `https://twitter.com/intent/tweet?text=${t}&url=${u}`],
+  ['telegram', 'Share to Telegram', (u, t) => `https://t.me/share/url?url=${u}&text=${t}`],
+  ['reddit', 'Share to Reddit', (u, t) => `https://www.reddit.com/submit?url=${u}&title=${t}`],
+];
+function createShareMenu() {
+  chrome.contextMenus.removeAll(() => {
+    const contexts = ['page', 'selection', 'link', 'image'];
+    chrome.contextMenus.create({id: 'share', title: 'Share...', contexts});
+    for (const [id, title] of SHARE)
+      chrome.contextMenus.create({id: 'share:' + id, parentId: 'share', title, contexts});
+    chrome.contextMenus.create({id: 'share:email', parentId: 'share', title: 'Share via Email', contexts});
+    chrome.contextMenus.create({id: 'share:sep', parentId: 'share', type: 'separator', contexts});
+    chrome.contextMenus.create({id: 'share:markdown', parentId: 'share', title: 'Copy Markdown Link', contexts});
+  });
+}
+chrome.runtime.onInstalled.addListener(createShareMenu);
+chrome.runtime.onStartup.addListener(createShareMenu);
+function openShare(url) {
+  chrome.windows.create({url, type: 'popup', width: 720, height: 640});
+}
+chrome.contextMenus.onClicked.addListener((info, tab) => {
+  if (!String(info.menuItemId).startsWith('share:')) return;
+  const target = info.linkUrl || info.srcUrl || info.pageUrl || (tab && tab.url) || '';
+  const text = (info.selectionText || '').trim() || (tab && tab.title) || '';
+  const u = encodeURIComponent(target), t = encodeURIComponent(text);
+  const id = String(info.menuItemId).slice(6);
+  const share = SHARE.find(([key]) => key === id);
+  if (share) { openShare(share[2](u, t)); return; }
+  if (id === 'email') {
+    const title = (tab && tab.title) || 'Shared link';
+    const selected = (info.selectionText || '').trim();
+    const subject = encodeURIComponent(selected ? `Snippet from: ${title}` : info.srcUrl ? `Image from: ${title}` : title);
+    const body = encodeURIComponent(selected ? `${selected}\n\nSource: ${info.pageUrl}` :
+        info.srcUrl ? `${info.srcUrl}\n\nPage: ${info.pageUrl}` : target);
+    const handler = CONTENT.emailHandler || 'system';
+    if (handler === 'system') {
+      chrome.tabs.create({url: `mailto:?subject=${subject}&body=${body}`});
+    } else {
+      let compose = '';
+      try {
+        const url = new URL(handler.replace('%s', subject).replace('%b', body));
+        if (url.protocol === 'https:' || url.protocol === 'http:') compose = url.href;
+      } catch (e) {}
+      openShare(compose || `https://mail.google.com/mail/?view=cm&fs=1&su=${subject}&body=${body}`);
+    }
+    return;
+  }
+  if (id === 'markdown' && tab && tab.id !== undefined) {
+    const markdown = `[${text || target}](${target})`;
+    chrome.scripting.executeScript({target: {tabId: tab.id}, func: (value) => {
+      const area = document.createElement('textarea');
+      area.value = value;
+      area.style.position = 'fixed';
+      area.style.opacity = '0';
+      document.documentElement.appendChild(area);
+      area.select();
+      document.execCommand('copy');
+      area.remove();
+    }, args: [markdown]}).catch(() => {});
+  }
+});

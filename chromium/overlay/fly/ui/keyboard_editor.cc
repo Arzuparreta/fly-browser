@@ -163,6 +163,11 @@ void KeyboardEditor::Toggle(content::WebContents* contents) {
   spellcheck_ = appearance->AddChildView(std::make_unique<views::Textfield>());
   spellcheck_->GetViewAccessibility().SetName(u"Spellchecker language");
   appearance->AddChildView(std::make_unique<views::Label>(
+      u"Email for Share: \"system\", or a compose URL with %s (subject) and "
+      u"%b (body)"));
+  email_handler_ = appearance->AddChildView(std::make_unique<views::Textfield>());
+  email_handler_->GetViewAccessibility().SetName(u"Email handler");
+  appearance->AddChildView(std::make_unique<views::Label>(
       u"Interface colours for the current theme (#rrggbb, empty uses the default)"));
   for (const auto& [key, label] :
        {std::pair{"accent", u"Accent"}, std::pair{"bg_main", u"Main background"},
@@ -185,7 +190,7 @@ void KeyboardEditor::Toggle(content::WebContents* contents) {
   apply_row->AddChildView(std::make_unique<FlyButton>(
       base::BindRepeating(&KeyboardEditor::ApplyProductTexts,
                           weak_factory_.GetWeakPtr()),
-      u"Apply language and colours"));
+      u"Apply language, email and colours"));
   apply_row->AddChildView(std::make_unique<FlyButton>(
       base::BindRepeating(
           [](base::WeakPtr<KeyboardEditor> editor) {
@@ -584,6 +589,7 @@ void KeyboardEditor::ClearAppearance() {
   extensions_enabled_ = nullptr;
   color_fields_.clear();
   spellcheck_ = nullptr;
+  email_handler_ = nullptr;
   process_limit_ = nullptr;
   clock_format_ = nullptr;
   suspension_timeout_ = nullptr;
@@ -650,6 +656,10 @@ void KeyboardEditor::RefreshAppearance() {
     spellcheck_->SetText(base::UTF8ToUTF16(
         preferences_.ReadString("spellchecker_language").value_or("")));
   spellcheck_->SetEnabled(editable);
+  if (!email_handler_->HasFocus())
+    email_handler_->SetText(base::UTF8ToUTF16(
+        preferences_.ReadString("email_handler").value_or("system")));
+  email_handler_->SetEnabled(editable);
   const bool dark = theme && theme->mode == "dark";
   for (auto& [key, field] : color_fields_) {
     if (!field->HasFocus())
@@ -677,6 +687,9 @@ void KeyboardEditor::ApplyProductTexts() {
   bool ok = preferences_.SetString(
       "spellchecker_language",
       std::string(base::TrimWhitespaceASCII(language, base::TRIM_ALL)));
+  const auto email = std::string(base::TrimWhitespaceASCII(
+      base::UTF16ToUTF8(email_handler_->GetText()), base::TRIM_ALL));
+  ok &= preferences_.SetString("email_handler", email.empty() ? "system" : email);
   const auto theme = preferences_.ReadTheme();
   const bool dark = !theme || theme->mode == "dark";
   for (auto& [key, field] : color_fields_) {
