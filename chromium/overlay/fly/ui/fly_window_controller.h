@@ -21,6 +21,7 @@
 #include "fly/commands/command_service.h"
 #include "fly/commands/palette_catalog.h"
 #include "fly/preferences/preferences_service.h"
+#include "fly/ui/sidebar_panel.h"
 #include "fly/ui/diagnostics_hub.h"
 #include "fly/ui/fly_actions.h"
 #include "fly/ui/history_service.h"
@@ -37,6 +38,9 @@ class BrowserWindowInterface;
 class Profile;
 class ScopedKeepAlive;
 class GURL;
+namespace aura {
+class WindowTargeter;
+}
 namespace aura::client {
 class FocusClient;
 }
@@ -69,6 +73,9 @@ class FlyLabel;
 class StatusBar;
 class KeyboardEditor;
 class TabSidebar;
+class SidebarPanel;
+class SidebarRoot;
+class SidebarClock;
 class HintController;
 class KeyboardRouter;
 class WorkspaceCloseTransaction;
@@ -108,7 +115,6 @@ class FlyWindowController : public views::WidgetDelegate,
   PreferencesService& preferences() { return preferences_; }
   FlyButton* clock_for_testing() { return clock_; }
   FlyButton* preferences_button_for_testing() { return preferences_button_; }
-  FlyButton* bookmarks_button_for_testing() { return bookmarks_button_; }
   BrowserWindowInterface* selected_browser_for_testing() { return selected_; }
   CommandPalette& palette() { return *palette_; }
   views::View* window_controls_for_testing() { return window_controls_; }
@@ -121,6 +127,7 @@ class FlyWindowController : public views::WidgetDelegate,
                        const GURL& url);
   StatusBar* status_bar_for_testing() { return status_bar_; }
   TabSidebar* tab_sidebar_for_testing() { return tab_sidebar_; }
+  SidebarRoot* sidebar_root_for_testing() { return sidebar_root_; }
   void CreateTab();
   // An empty name takes the next "Workspace N".
   void CreateWorkspace(std::string name = {});
@@ -168,7 +175,6 @@ class FlyWindowController : public views::WidgetDelegate,
     return clock_timer_.IsRunning();
   }
   views::Widget* sidebar_widget_for_testing() { return sidebar_widget_.get(); }
-  TabSidebar* compact_sidebar_for_testing() { return compact_tab_sidebar_; }
   FlyButton* sidebar_pin_for_testing() { return sidebar_pin_button_; }
   FlyButton* reader_button_for_testing() { return reader_button_; }
   std::u16string status_text_for_testing() const;
@@ -257,6 +263,9 @@ class FlyWindowController : public views::WidgetDelegate,
   void UpdateSidebarMode();
   void UpdateSidebarVisibility();
   void UpdateSidebarBounds();
+  void UpdateSidebarHitArea();
+  void ApplySidebarMotion(bool animate);
+  void LoadSidebarArtwork();
   void StopSidebarFocusObservation();
   void ToggleSidebarAutoCollapse();
   void ReturnFocusFromSidebar();
@@ -381,17 +390,23 @@ class FlyWindowController : public views::WidgetDelegate,
   raw_ptr<views::View> sidebar_content_ = nullptr;
   raw_ptr<views::View> sidebar_slot_ = nullptr;
   raw_ptr<views::NativeViewHost> sidebar_host_ = nullptr;
-  raw_ptr<views::View> compact_rail_ = nullptr;
-  raw_ptr<TabSidebar> compact_tab_sidebar_ = nullptr;
+  raw_ptr<SidebarPanel> sidebar_panel_ = nullptr;
+  raw_ptr<SidebarRoot> sidebar_root_ = nullptr;
+  // Limits the sidebar host's hit area to the visible panel.
+  raw_ptr<aura::WindowTargeter> sidebar_targeter_ = nullptr;
+  bool sidebar_expanded_ = false;
+  // The first state and mode changes apply without motion.
+  bool sidebar_motion_ready_ = false;
+  bool sidebar_motion_applied_ = false;
+  float sidebar_motion_scale_ = 0;
   raw_ptr<FlyButton> sidebar_pin_button_ = nullptr;
   raw_ptr<FlyButton> reader_button_ = nullptr;
   // The active tab while it shows Electron's reader overlay.
   base::WeakPtr<content::WebContents> reader_contents_;
   base::RepeatingTimer reader_poll_;
-  raw_ptr<FlyButton> compact_pin_button_ = nullptr;
   raw_ptr<FlyButton> new_tab_button_ = nullptr;
-  raw_ptr<FlyButton> compact_workspace_ = nullptr;
   raw_ptr<FlyLabel> workspace_badge_ = nullptr;
+  raw_ptr<FlyLabel> workspace_label_ = nullptr;
   raw_ptr<FlyButton> workspace_picker_button_ = nullptr;
   raw_ptr<aura::client::FocusClient> sidebar_focus_client_ = nullptr;
   bool observing_sidebar_focus_ = false;
@@ -409,9 +424,8 @@ class FlyWindowController : public views::WidgetDelegate,
   std::string pending_empty_action_;
   raw_ptr<views::Label> status_ = nullptr;
   raw_ptr<StatusBar> status_bar_ = nullptr;
-  raw_ptr<FlyButton> clock_ = nullptr;
+  raw_ptr<SidebarClock> clock_ = nullptr;
   raw_ptr<FlyButton> preferences_button_ = nullptr;
-  raw_ptr<FlyButton> bookmarks_button_ = nullptr;
   raw_ptr<TabSidebar> tab_sidebar_ = nullptr;
   std::map<BrowserWindowInterface*, Entry> entries_;
   raw_ptr<BrowserWindowInterface> selected_ = nullptr;

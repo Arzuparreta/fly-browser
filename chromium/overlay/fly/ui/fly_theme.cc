@@ -15,6 +15,10 @@
 #include "ui/base/models/image_model.h"
 #include "ui/gfx/canvas.h"
 #include "ui/gfx/color_utils.h"
+#include "ui/gfx/geometry/rounded_corners_f.h"
+#include "ui/gfx/geometry/skia_conversions.h"
+#include "third_party/skia/include/core/SkPath.h"
+#include "third_party/skia/include/core/SkRRect.h"
 #include "ui/views/view_utils.h"
 #include "ui/gfx/paint_vector_icon.h"
 #include "ui/views/background.h"
@@ -292,6 +296,22 @@ void FlyButton::SetOutlined(bool outlined) {
   outlined_ = outlined;
   SchedulePaint();
 }
+void FlyButton::SetIconTone(IconTone tone) {
+  icon_tone_ = tone;
+  UpdateColors();
+}
+void FlyButton::SetPillHalf(PillHalf half) {
+  pill_half_ = half;
+  SchedulePaint();
+}
+void FlyButton::SetHoverFill(bool hover_fill) {
+  hover_fill_ = hover_fill;
+  SchedulePaint();
+}
+void FlyButton::SetRestingFill(SkColor color) {
+  resting_fill_ = color;
+  SchedulePaint();
+}
 void FlyButton::SetFlyFont(FlyFace face, int size, gfx::Font::Weight weight) {
   face_ = face;
   size_ = size;
@@ -345,8 +365,12 @@ void FlyButton::UpdateColors() {
     SetTextColor(state, text);
   SetTextColor(STATE_DISABLED, colors.dim);
   if (icon_) {
-    const SkColor rest =
+    SkColor rest =
         ShowsSelected() ? text : (accent_text_ ? colors.accent : colors.dim);
+    if (icon_tone_ == IconTone::kText && !ShowsSelected())
+      rest = text;
+    if (icon_tone_ == IconTone::kAccent)
+      rest = colors.accent;
     views::LabelButton::SetImageModel(
         STATE_NORMAL,
         ui::ImageModel::FromVectorIcon(*icon_, rest, FlyScaled(icon_size_)));
@@ -367,19 +391,39 @@ void FlyButton::OnPaintBackground(gfx::Canvas* canvas) {
   const bool hot = GetVisualState() == STATE_HOVERED ||
                    GetVisualState() == STATE_PRESSED;
   const bool selected = ShowsSelected();
+  const auto shape = [&](gfx::RectF bounds) {
+    auto radii = GetCornerRadii();
+    const float round = bounds.height() / 2;
+    if (pill_half_ == PillHalf::kLeft)
+      radii = gfx::RoundedCornersF(round, 0, 0, round);
+    else if (pill_half_ == PillHalf::kRight)
+      radii = gfx::RoundedCornersF(0, round, round, 0);
+    SkVector corners[4] = {{radii.upper_left(), radii.upper_left()},
+                           {radii.upper_right(), radii.upper_right()},
+                           {radii.lower_right(), radii.lower_right()},
+                           {radii.lower_left(), radii.lower_left()}};
+    SkRRect rrect;
+    rrect.setRectRadii(gfx::RectFToSkRect(bounds), corners);
+    return SkPath::RRect(rrect);
+  };
   gfx::RectF bounds(GetLocalBounds());
   cc::PaintFlags flags;
   flags.setAntiAlias(true);
-  if (selected || hot) {
-    flags.setColor(colors.selected);
-    canvas->DrawRoundRect(bounds, 2, flags);
+  if (selected || hot || resting_fill_) {
+    flags.setColor(selected || !hot ? (selected ? colors.selected
+                                                : *resting_fill_)
+                   : hover_fill_ ? SkColorSetA(colors.text, 18)
+                                 : colors.selected);
+    canvas->DrawPath(shape(bounds), flags);
   }
   if (selected || outlined_ || HasFocus()) {
     flags.setStyle(cc::PaintFlags::kStroke_Style);
     flags.setStrokeWidth(1);
-    flags.setColor(selected || HasFocus() ? colors.accent : colors.border);
+    flags.setColor(selected || HasFocus() || (outlined_ && hot)
+                       ? colors.accent
+                       : colors.border);
     bounds.Inset(0.5f);
-    canvas->DrawRoundRect(bounds, 2, flags);
+    canvas->DrawPath(shape(bounds), flags);
   }
 }
 BEGIN_METADATA(FlyButton)

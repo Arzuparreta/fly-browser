@@ -6,7 +6,9 @@
 #include "fly/ui/native_commands.h"
 #include "fly/ui/fly_theme.h"
 
+#include <algorithm>
 #include <limits>
+#include <optional>
 #include <set>
 #include <utility>
 
@@ -21,126 +23,519 @@
 #include "chrome/browser/ui/tabs/tab_enums.h"
 #include "chrome/browser/ui/tabs/tab_muted_utils.h"
 #include "chrome/browser/ui/tabs/tab_strip_model.h"
+#include "components/tabs/public/split_tab_data.h"
 #include "components/vector_icons/vector_icons.h"
 #include "content/public/browser/favicon_status.h"
 #include "content/public/browser/navigation_controller.h"
 #include "content/public/browser/navigation_entry.h"
 #include "content/public/browser/web_contents.h"
+#include "cc/paint/path_effect.h"
 #include "skia/ext/image_operations.h"
 #include "ui/base/metadata/metadata_impl_macros.h"
 #include "ui/base/models/image_model.h"
-#include "ui/color/color_id.h"
 #include "ui/color/color_provider.h"
+#include "ui/compositor/layer.h"
 #include "ui/gfx/canvas.h"
+#include "ui/gfx/color_utils.h"
+#include "ui/gfx/font_list.h"
 #include "ui/gfx/image/canvas_image_source.h"
 #include "ui/gfx/image/image_skia_operations.h"
 #include "ui/gfx/paint_vector_icon.h"
+#include "ui/gfx/text_constants.h"
 #include "ui/menus/simple_menu_model.h"
 #include "ui/views/accessibility/view_accessibility.h"
-#include "ui/views/border.h"
-#include "ui/views/controls/button/image_button.h"
-#include "ui/views/controls/button/md_text_button.h"
+#include "ui/views/controls/button/button.h"
+#include "ui/views/controls/image_view.h"
 #include "ui/views/controls/menu/menu_runner.h"
 #include "ui/views/controls/scroll_view.h"
-#include "ui/views/layout/box_layout.h"
 #include "ui/views/vector_icons.h"
+#include "url/url_constants.h"
 
 namespace fly {
 namespace {
-// Keep the favicon visible while native pin/audio state changes. The source
-// renders at each requested scale, including fractional desktop scales.
-class CompactTabIcon : public gfx::CanvasImageSource {
+// Electron's row colours (style.css #TabList).
+constexpr SkColor kHoverFill = SkColorSetARGB(115, 54, 74, 133);
+constexpr SkColor kFocusFill = SkColorSetARGB(41, 122, 162, 247);
+constexpr SkColor kPinnedFill = SkColorSetARGB(20, 224, 175, 104);
+constexpr SkColor kPinnedBorder = SkColorSetARGB(64, 224, 175, 104);
+constexpr SkColor kPinnedSelectedFill = SkColorSetARGB(51, 122, 162, 247);
+
+int S(int pixels) {
+  return FlyScaled(pixels);
+}
+// color-mix(in srgb, a amount%, b).
+SkColor Mix(SkColor a, float amount, SkColor b) {
+  return color_utils::AlphaBlend(a, b, amount);
+}
+SkColor WithAlpha(SkColor color, float alpha) {
+  return SkColorSetA(color, static_cast<U8CPU>(alpha * 255));
+}
+
+// What a row shows; the surfaces and marks layers paint from it.
+struct RowState {
+  bool selected = false;
+  bool pinned = false;
+  bool audible = false;
+  bool muted = false;
+  int split_pane = 0;  // 1 or 2 inside a split view.
+  bool HasSurface() const { return selected || pinned || split_pane; }
+};
+
+// Electron's tab text: titles longer than 24 characters are cut there.
+std::u16string RowTitle(std::u16string title) {
+  return title.size() > 24 ? title.substr(0, 24) + u"..." : title;
+}
+// .tab-domain: "fly / new tab" for new tabs, else the host or "local page".
+std::u16string RowDomain(const GURL& url) {
+  if (url.is_empty() || url.IsAboutBlank() ||
+      (url.SchemeIs("chrome") &&
+       (url.host() == "newtab" || url.host() == "new-tab-page")))
+    return u"fly / new tab";
+  return url.has_host() ? base::UTF8ToUTF16(url.host()) : u"local page";
+}
+
+// The favicon in its 18px wrapper, and the split pane badge on the wrapper's
+// upper right corner (.split-tab-badge). The image is 26px with the wrapper
+// at (4, 4), so the badge fits inside it.
+class RowIcon : public gfx::CanvasImageSource {
  public:
-  CompactTabIcon(gfx::ImageSkia favicon,
-                 bool pinned,
-                 bool audible,
-                 bool muted,
-                 SkColor color)
-      : CanvasImageSource(gfx::Size(24, 24)),
+  RowIcon(gfx::ImageSkia favicon, int split_pane)
+      : CanvasImageSource(gfx::Size(26, 26)),
         favicon_(std::move(favicon)),
-        pinned_(pinned),
-        audible_(audible),
-        muted_(muted),
-        color_(color) {}
+        split_pane_(split_pane) {}
   void Draw(gfx::Canvas* canvas) override {
-    canvas->DrawImageInt(favicon_, 4, 4);
-    if (pinned_)
-      canvas->DrawImageInt(
-          gfx::CreateVectorIcon(views::kKeepFilledIcon, 8, color_), 0, 0);
-    if (muted_ || audible_)
-      canvas->DrawImageInt(
-          gfx::CreateVectorIcon(muted_ ? vector_icons::kVolumeOffIcon
-                                       : vector_icons::kVolumeUpIcon,
-                                10, color_),
-          14, 14);
+    canvas->DrawImageInt(favicon_, 4 + (18 - favicon_.width()) / 2,
+                         4 + (18 - favicon_.height()) / 2);
+    if (!split_pane_)
+      return;
+    const auto& colors = GetFlyColors();
+    const gfx::PointF centre(26 - 6.5f, 6.5f);
+    cc::PaintFlags flags;
+    flags.setAntiAlias(true);
+    flags.setColor(SkColorSetARGB(153, 0, 0, 0));
+    canvas->DrawCircle(centre, 7.5f, flags);
+    flags.setColor(split_pane_ == 1 ? colors.accent : colors.text);
+    canvas->DrawCircle(centre, 6.5f, flags);
+    canvas->DrawStringRectWithFlags(
+        split_pane_ == 1 ? u"1" : u"2",
+        FlyFont(FlyFace::kSans, 8, gfx::Font::Weight::BOLD),
+        SkColorSetRGB(0x12, 0x12, 0x12), gfx::Rect(13, 0, 13, 13),
+        gfx::Canvas::TEXT_ALIGN_CENTER);
   }
 
  private:
   const gfx::ImageSkia favicon_;
-  const bool pinned_;
-  const bool audible_;
-  const bool muted_;
-  const SkColor color_;
+  const int split_pane_;
 };
-void SetActionIcon(views::Button* button, const gfx::VectorIcon& icon) {
-  static_cast<FlyButton*>(button)->SetVectorIcon(icon, 12);
-}
+
+// The badges at a row's right end: pin (.tab-pin-badge), audio
+// (.tab-media-badge) and close (.tab-close-btn).
+class RowBadge : public views::Button {
+  METADATA_HEADER(RowBadge, views::Button)
+
+ public:
+  enum class Kind { kPin, kMedia, kClose };
+  RowBadge(PressedCallback callback, Kind kind)
+      : views::Button(std::move(callback)), kind_(kind) {
+    SetFocusBehavior(FocusBehavior::NEVER);
+    SetInstallFocusRingOnFocus(false);
+  }
+  void SetMuted(bool muted) {
+    if (muted_ == muted)
+      return;
+    muted_ = muted;
+    SchedulePaint();
+  }
+  gfx::Size CalculatePreferredSize(
+      const views::SizeBounds&) const override {
+    return kind_ == Kind::kClose ? gfx::Size(S(20), S(20))
+                                 : gfx::Size(S(18), S(14));
+  }
+  void StateChanged(ButtonState) override { SchedulePaint(); }
+  void PaintButtonContents(gfx::Canvas* canvas) override {
+    const auto& colors = GetFlyColors();
+    const bool hot = GetState() == STATE_HOVERED || GetState() == STATE_PRESSED;
+    if (hot) {
+      cc::PaintFlags flags;
+      flags.setAntiAlias(true);
+      flags.setColor(kind_ == Kind::kPin     ? SkColorSetARGB(38, 224, 175, 104)
+                     : kind_ == Kind::kClose ? SkColorSetARGB(46, 247, 118, 142)
+                     : muted_                ? SkColorSetARGB(38, 247, 118, 142)
+                                             : SkColorSetARGB(38, 122, 162, 247));
+      canvas->DrawRoundRect(gfx::RectF(GetLocalBounds()), S(4), flags);
+    }
+    SkColor color;
+    const gfx::VectorIcon* icon;
+    int size = S(10);
+    switch (kind_) {
+      case Kind::kPin:
+        color = colors.warning;
+        icon = &views::kKeepFilledIcon;
+        break;
+      case Kind::kMedia:
+        color = colors.accent;
+        icon = muted_ ? &vector_icons::kVolumeOffIcon
+                      : &vector_icons::kVolumeUpIcon;
+        break;
+      case Kind::kClose:
+        color = hot ? colors.text : colors.dim;
+        icon = &vector_icons::kCloseIcon;
+        size = S(12);
+        break;
+    }
+    // The pin and audio badges rest at 85% opacity.
+    if (kind_ != Kind::kClose && !hot)
+      color = WithAlpha(color, 0.85f);
+    const auto image = gfx::CreateVectorIcon(*icon, size, color);
+    canvas->DrawImageInt(image, (width() - size) / 2, (height() - size) / 2);
+  }
+
+ private:
+  const Kind kind_;
+  bool muted_ = false;
+};
+BEGIN_METADATA(RowBadge)
+END_METADATA
 }  // namespace
-// Two-line tab row: title above a monospace domain in the link colour, the
-// layout of the Electron sidebar rows.
+
+// The row's clickable body: favicon, then the title above a monospace domain
+// in the link colour. Its surfaces are painted by the list's layers.
 class FlyTabButton : public FlyButton {
   METADATA_HEADER(FlyTabButton, FlyButton)
 
  public:
-  FlyTabButton(PressedCallback callback, bool compact)
-      : FlyButton(std::move(callback), u"", FlyFace::kSans, 12),
-        compact_(compact) {
-    SetCustomPadding(compact_ ? gfx::Insets(4) : gfx::Insets::VH(4, 6));
-    SetImageLabelSpacing(8);
-    if (!compact_) {
-      domain_ = AddChildView(std::make_unique<FlyLabel>(
-          u"", FlyFace::kMono, 10, gfx::Font::Weight::NORMAL,
-          FlyLabel::Tone::kLink));
-      domain_->SetHorizontalAlignment(gfx::ALIGN_LEFT);
-      domain_->SetElideBehavior(gfx::ELIDE_TAIL);
-      domain_->SetCanProcessEventsWithinSubtree(false);
-    }
+  explicit FlyTabButton(PressedCallback callback)
+      : FlyButton(std::move(callback), u"", FlyFace::kSans, 13) {
+    SetCustomPadding(gfx::Insets());
+    SetImageLabelSpacing(0);
+    SetHorizontalAlignment(gfx::ALIGN_LEFT);
+    label()->SetElideBehavior(gfx::ELIDE_TAIL);
+    // The rows live on a transparent layer.
+    label()->SetSubpixelRenderingEnabled(false);
+    domain_ = AddChildView(std::make_unique<FlyLabel>(
+        u"", FlyFace::kMono, 10, gfx::Font::Weight::NORMAL,
+        FlyLabel::Tone::kLink));
+    domain_->SetHorizontalAlignment(gfx::ALIGN_LEFT);
+    domain_->SetElideBehavior(gfx::ELIDE_TAIL);
+    domain_->SetCanProcessEventsWithinSubtree(false);
+    domain_->SetSubpixelRenderingEnabled(false);
   }
   void SetDomain(const std::u16string& domain) {
-    if (domain_ && domain_->GetText() != domain) {
-      domain_->SetText(domain);
-      domain_->SetVisible(!domain.empty());
-      InvalidateLayout();
-    }
+    if (domain_->GetText() == domain)
+      return;
+    domain_->SetText(domain);
+    domain_->SetVisible(!domain.empty());
+    InvalidateLayout();
+  }
+  // The text stops before the row's badges.
+  void SetTextRight(int right) {
+    if (text_right_ == right)
+      return;
+    text_right_ = right;
+    InvalidateLayout();
   }
   gfx::Size CalculatePreferredSize(
-      const views::SizeBounds& available) const override {
-    if (compact_)
-      return gfx::Size(FlyScaled(32), FlyScaled(32));
-    auto size = FlyButton::CalculatePreferredSize(available);
-    size.set_height(FlyScaled(domain_ && domain_->GetVisible() ? 38 : 30));
-    return size;
+      const views::SizeBounds&) const override {
+    return gfx::Size(S(245), S(40));
   }
   void Layout(PassKey) override {
     LayoutSuperclass<FlyButton>(this);
-    if (!domain_ || !domain_->GetVisible())
+    // .tab-favicon-wrapper: 5px from the row's left edge, 18px square, so
+    // the favicon's centre is the rail's centre line. The icon image adds
+    // 4px around the wrapper for the split badge.
+    image_container_view()->SetBounds(S(5) - 4, (height() - S(18)) / 2 - 4,
+                                      S(18) + 8, S(18) + 8);
+    // The text starts past the rail's edge: 5 + 18 + 2 + 8.
+    const int left = S(33);
+    const int right = std::max(left, text_right_ ? text_right_ : width());
+    const int line = S(16);
+    if (!domain_->GetVisible()) {
+      label()->SetBounds(left, (height() - line) / 2, right - left, line);
       return;
-    auto title = label()->bounds();
-    const int line = 16;
-    const int top = (height() - line - 13 - 3) / 2;
-    title.set_y(top);
-    title.set_height(line);
-    title.set_width(std::max(0, width() - title.x() - 4));
-    label()->SetBoundsRect(title);
-    domain_->SetBounds(title.x(), top + line + 3, title.width(), 13);
+    }
+    const int domain = S(13);
+    const int top = (height() - line - S(3) - domain) / 2;
+    label()->SetBounds(left, top, right - left, line);
+    domain_->SetBounds(left, top + line + S(3), right - left, domain);
   }
+  // Hover, focus and selection belong to the row and the list's surfaces.
+  void OnPaintBackground(gfx::Canvas*) override {}
 
  private:
-  const bool compact_;
   raw_ptr<FlyLabel> domain_ = nullptr;
+  int text_right_ = 0;
 };
 BEGIN_METADATA(FlyTabButton)
 END_METADATA
+
+// One #TabList li. Child order (select, pin, close, audio) is part of the
+// row contract.
+class TabRowView : public views::View {
+  METADATA_HEADER(TabRowView, views::View)
+
+ public:
+  explicit TabRowView(TabSidebar* list) : list_(list) {
+    SetNotifyEnterExitOnChild(true);
+  }
+  void SetParts(FlyTabButton* select,
+                RowBadge* pin,
+                RowBadge* close,
+                RowBadge* audio) {
+    select_ = select;
+    pin_ = pin;
+    close_ = close;
+    audio_ = audio;
+  }
+  FlyTabButton* select() { return select_; }
+  views::Button* pin() { return pin_; }
+  views::Button* close() { return close_; }
+  views::Button* audio() { return audio_; }
+  RowBadge* audio_badge() { return audio_; }
+  const RowState& state() const { return state_; }
+  void SetState(const RowState& state) {
+    state_ = state;
+    pin_->SetVisible(state.pinned);
+    audio_->SetVisible(state.audible || state.muted);
+    audio_->SetMuted(state.muted);
+    // Pinned tabs cannot be closed from the row.
+    close_->SetEnabled(!state.pinned);
+    UpdateClose();
+    InvalidateLayout();
+    SchedulePaint();
+  }
+  void UpdateClose() {
+    // .tab-close-btn keeps its space and shows on the hovered or selected
+    // row; pinned rows have none.
+    close_->SetVisible(!state_.pinned &&
+                       (state_.selected || (hovered_ && !list_->rail())));
+  }
+  void OnMouseEntered(const ui::MouseEvent&) override {
+    hovered_ = true;
+    UpdateClose();
+    SchedulePaint();
+  }
+  void OnMouseExited(const ui::MouseEvent&) override {
+    hovered_ = false;
+    UpdateClose();
+    SchedulePaint();
+  }
+  void Layout(PassKey) override {
+    select_->SetBoundsRect(GetLocalBounds());
+    // Right to left: 8px padding, close (20px, 2px margin), audio and pin
+    // badges (6px margins).
+    int x = width() - S(8);
+    if (!state_.pinned) {
+      x -= S(20);
+      close_->SetBounds(x, (height() - S(20)) / 2, S(20), S(20));
+      x -= S(2);
+    }
+    for (RowBadge* badge : {audio_.get(), pin_.get()}) {
+      if (!badge->GetVisible())
+        continue;
+      const auto size = badge->GetPreferredSize();
+      x -= size.width();
+      badge->SetBounds(x, (height() - size.height()) / 2, size.width(),
+                       size.height());
+      x -= S(6);
+    }
+    select_->SetTextRight(x - S(2));
+  }
+  void OnPaintBackground(gfx::Canvas* canvas) override {
+    const auto bounds = gfx::RectF(GetLocalBounds());
+    cc::PaintFlags flags;
+    flags.setAntiAlias(true);
+    if (select_->HasFocus() && !state_.selected) {
+      flags.setColor(kFocusFill);
+      canvas->DrawRoundRect(bounds, S(2), flags);
+      // outline: 1px dashed var(--accent), inside the row.
+      const float dash[] = {static_cast<float>(S(3)), static_cast<float>(S(3))};
+      cc::PaintFlags outline;
+      outline.setStyle(cc::PaintFlags::kStroke_Style);
+      outline.setStrokeWidth(1);
+      outline.setColor(GetFlyColors().accent);
+      outline.setPathEffect(cc::PathEffect::MakeDash(dash, 2, 0));
+      auto inner = bounds;
+      inner.Inset(0.5f);
+      canvas->DrawRect(inner, outline);
+      return;
+    }
+    // Rows with a surface hide the hover tint under it, as in Electron.
+    if (hovered_ && !list_->rail() && !state_.HasSurface()) {
+      flags.setColor(kHoverFill);
+      canvas->DrawRoundRect(bounds, S(2), flags);
+    }
+  }
+
+ private:
+  const raw_ptr<TabSidebar> list_;
+  raw_ptr<FlyTabButton> select_ = nullptr;
+  raw_ptr<RowBadge> pin_ = nullptr;
+  raw_ptr<RowBadge> close_ = nullptr;
+  raw_ptr<RowBadge> audio_ = nullptr;
+  RowState state_;
+  bool hovered_ = false;
+};
+BEGIN_METADATA(TabRowView)
+END_METADATA
+
+namespace {
+// The rows, 40px tall and 4px apart, 4px from the list's left edge and
+// leaving the 10px scrollbar gutter on the right (259 - 4 - 10 = 245).
+class RowsView : public views::View {
+  METADATA_HEADER(RowsView, views::View)
+
+ public:
+  gfx::Size CalculatePreferredSize(
+      const views::SizeBounds&) const override {
+    const int count = static_cast<int>(children().size());
+    return gfx::Size(S(259), count ? count * S(44) - S(4) : 0);
+  }
+  void Layout(PassKey) override {
+    const int row_width = std::max(0, width() - S(14));
+    int y = 0;
+    for (views::View* child : children()) {
+      child->SetBounds(S(4), y, row_width, S(40));
+      y += S(44);
+    }
+  }
+};
+BEGIN_METADATA(RowsView)
+END_METADATA
+
+// The scrolled contents: surfaces below the rows, rail marks above them.
+class ListContents : public views::View {
+  METADATA_HEADER(ListContents, views::View)
+
+ public:
+  gfx::Size CalculatePreferredSize(
+      const views::SizeBounds& available) const override {
+    for (views::View* child : children()) {
+      if (views::IsViewClass<RowsView>(child))
+        return child->GetPreferredSize(available);
+    }
+    return gfx::Size();
+  }
+  void Layout(PassKey) override {
+    for (views::View* child : children())
+      child->SetBoundsRect(GetLocalBounds());
+  }
+};
+BEGIN_METADATA(ListContents)
+END_METADATA
+}  // namespace
+
+// The expanded row surfaces (li::before: the whole row) or the rail's tiles
+// (li::after: 28 x 40px at the row's left).
+class TabSidebar::Surfaces : public views::View {
+  METADATA_HEADER(Surfaces, views::View)
+
+ public:
+  Surfaces(TabSidebar* list, bool rail) : list_(list), rail_(rail) {
+    SetCanProcessEventsWithinSubtree(false);
+  }
+  void OnPaint(gfx::Canvas* canvas) override {
+    const auto& colors = GetFlyColors();
+    const SkColor sidebar = colors.bg_sidebar;
+    for (views::View* child : list_->rows_->children()) {
+      const auto& state = static_cast<TabRowView*>(child)->state();
+      if (!rail_ && !state.HasSurface())
+        continue;
+      gfx::RectF bounds(child->bounds());
+      if (rail_)
+        bounds.set_width(S(28));
+      SkColor fill = Mix(colors.text, 0.04f, sidebar);
+      SkColor border = Mix(colors.text, 0.09f, sidebar);
+      if (state.pinned) {
+        fill = kPinnedFill;
+        border = kPinnedBorder;
+      }
+      if (state.split_pane) {
+        border = WithAlpha(state.split_pane == 1 ? colors.accent : colors.text,
+                           0.4f);
+      }
+      if (state.selected) {
+        fill = state.pinned ? kPinnedSelectedFill : colors.panel;
+        border = colors.accent;
+      }
+      if (!rail_ && !state.pinned && !state.selected)
+        fill = SK_ColorTRANSPARENT;
+      const float radius = rail_ ? S(4) : S(2);
+      cc::PaintFlags flags;
+      flags.setAntiAlias(true);
+      flags.setColor(fill);
+      canvas->DrawRoundRect(bounds, radius, flags);
+      flags.setStyle(cc::PaintFlags::kStroke_Style);
+      flags.setStrokeWidth(1);
+      flags.setColor(border);
+      auto outline = bounds;
+      outline.Inset(0.5f);
+      canvas->DrawRoundRect(outline, radius, flags);
+      // A selected row's left border is 2px wide.
+      if (state.selected) {
+        canvas->FillRect(gfx::Rect(bounds.x() + 1, bounds.y() + 1, 1,
+                                   bounds.height() - 2),
+                         border);
+      }
+    }
+  }
+
+ private:
+  // The list outlives its children; the rows are a sibling destroyed first.
+  const raw_ptr<TabSidebar> list_;
+  const bool rail_;
+};
+BEGIN_METADATA(TabSidebar, Surfaces)
+END_METADATA
+
+// The rail's status marks: the pin at the favicon's upper left corner and
+// audio below it (.tab-pin-dot, .tab-audio-dot).
+class TabSidebar::RailMarks : public views::View {
+  METADATA_HEADER(RailMarks, views::View)
+
+ public:
+  explicit RailMarks(TabSidebar* list) : list_(list) {
+    SetCanProcessEventsWithinSubtree(false);
+  }
+  void OnPaint(gfx::Canvas* canvas) override {
+    const auto& colors = GetFlyColors();
+    for (views::View* child : list_->rows_->children()) {
+      const auto& state = static_cast<TabRowView*>(child)->state();
+      // The favicon wrapper: 5px into the row, centred vertically.
+      const gfx::Point wrapper(child->x() + S(5),
+                               child->y() + (child->height() - S(18)) / 2);
+      if (state.pinned) {
+        const int size = S(9);
+        cc::PaintFlags flags;
+        flags.setAntiAlias(true);
+        flags.setColor(colors.bg_sidebar);
+        canvas->DrawCircle(
+            gfx::PointF(wrapper.x() - S(3) + size / 2.f,
+                        wrapper.y() - S(3) + size / 2.f),
+            size / 2.f, flags);
+        canvas->DrawImageInt(
+            gfx::CreateVectorIcon(views::kKeepFilledIcon, S(7),
+                                  colors.warning),
+            wrapper.x() - S(2), wrapper.y() - S(2));
+      }
+      if (state.audible || state.muted) {
+        const int size = S(8);
+        canvas->DrawImageInt(
+            gfx::CreateVectorIcon(state.muted ? vector_icons::kVolumeOffIcon
+                                              : vector_icons::kVolumeUpIcon,
+                                  size,
+                                  state.muted ? colors.dim : colors.accent),
+            wrapper.x() + S(3) + (S(12) - size) / 2,
+            wrapper.y() + S(18) + (S(9) - size) / 2);
+      }
+    }
+  }
+
+ private:
+  const raw_ptr<TabSidebar> list_;
+};
+BEGIN_METADATA(TabSidebar, RailMarks)
+END_METADATA
+
 // Product tab actions use native models and unload/restore services. This menu
 // deliberately distinguishes tab muting from Chromium's site-wide mute command.
 class SidebarTabMenu : public ui::SimpleMenuModel::Delegate {
@@ -307,35 +702,55 @@ class SidebarTabMenu : public ui::SimpleMenuModel::Delegate {
   std::unique_ptr<views::MenuRunner> runner_;
 };
 
-TabSidebar::TabSidebar(base::RepeatingClosure new_tab, bool compact)
-    : compact_(compact) {
-  auto* layout = SetLayoutManager(std::make_unique<views::BoxLayout>(
-      views::BoxLayout::Orientation::kVertical));
-  // The expanded header and the compact rail own their new-tab controls.
-  new_tab_ = std::move(new_tab);
-  auto* scroll = AddChildView(std::make_unique<views::ScrollView>());
-  // A bounded viewport sizes plain BoxLayout contents on both compositor
-  // scrolling backends. Unbounded contents otherwise retain zero bounds.
-  scroll->ClipHeightTo(0, std::numeric_limits<int>::max());
-  scroll->SetHorizontalScrollBarMode(
+TabSidebar::TabSidebar(base::RepeatingClosure new_tab)
+    : new_tab_(std::move(new_tab)) {
+  SetUseDefaultFillLayout(true);
+  scroll_ = AddChildView(std::make_unique<views::ScrollView>());
+  // A bounded viewport sizes the contents on both compositor scrolling
+  // backends. Unbounded contents otherwise retain zero bounds.
+  scroll_->ClipHeightTo(0, std::numeric_limits<int>::max());
+  scroll_->SetHorizontalScrollBarMode(
       views::ScrollView::ScrollBarMode::kDisabled);
-  rows_ = scroll->SetContents(std::make_unique<views::View>());
-  rows_->SetLayoutManager(std::make_unique<views::BoxLayout>(
-      views::BoxLayout::Orientation::kVertical, gfx::Insets(), compact_ ? 4 : 2));
-  scroll->SetBackgroundColor(std::nullopt);
-  scroll->SetDrawOverflowIndicator(false);
-  layout->SetFlexForView(scroll, 1);
+  scroll_->SetBackgroundColor(std::nullopt);
+  scroll_->SetDrawOverflowIndicator(false);
+  auto* contents = scroll_->SetContents(std::make_unique<ListContents>());
+  // Layers in paint order: expanded surfaces, rail tiles, rows, rail marks.
+  // The rows get a layer of their own so the surfaces stay under them.
+  expanded_surfaces_ =
+      contents->AddChildView(std::make_unique<Surfaces>(this, false));
+  rail_surfaces_ =
+      contents->AddChildView(std::make_unique<Surfaces>(this, true));
+  rows_ = contents->AddChildView(std::make_unique<RowsView>());
+  rows_->SetPaintToLayer();
+  rows_->layer()->SetFillsBoundsOpaquely(false);
+  rail_marks_ = contents->AddChildView(std::make_unique<RailMarks>(this));
 }
 TabSidebar::~TabSidebar() {
   context_menu_.reset();
   if (model_)
     model_->RemoveObserver(this);
 }
+void TabSidebar::SetRail(bool rail) {
+  if (rail_ == rail)
+    return;
+  rail_ = rail;
+  for (views::View* child : rows_->children()) {
+    auto* row = static_cast<TabRowView*>(child);
+    row->UpdateClose();
+    row->SchedulePaint();
+  }
+}
 void TabSidebar::OnThemeChanged() {
   views::View::OnThemeChanged();
   for (auto& [contents, row] : tab_rows_)
     row.favicon_initialized = false;
   ScheduleRefresh();
+  RepaintSurfaces();
+}
+void TabSidebar::RepaintSurfaces() {
+  for (views::View* layer :
+       {expanded_surfaces_.get(), rail_surfaces_.get(), rail_marks_.get()})
+    layer->SchedulePaint();
 }
 void TabSidebar::SetBrowser(BrowserWindowInterface* browser) {
   if (browser_ == browser)
@@ -367,7 +782,7 @@ void TabSidebar::Refresh() {
     for (int i = 0; i < model_->count(); ++i)
       live.insert(model_->GetWebContentsAt(i));
   }
-  // Preserve existing button objects and focus through title/selection changes.
+  // Preserve existing row objects and focus through title/selection changes.
   // Remove obsolete rows before rebuilding; a reused allocation is not an
   // identity match when its original WeakPtr has expired.
   for (auto it = tab_rows_.begin(); it != tab_rows_.end();) {
@@ -378,51 +793,34 @@ void TabSidebar::Refresh() {
       ++it;
     }
   }
-  if (!model_)
+  if (!model_) {
+    RepaintSurfaces();
     return;
+  }
   for (int i = 0; i < model_->count(); ++i) {
     auto* contents = model_->GetWebContentsAt(i);
     if (!tab_rows_.contains(contents)) {
-      auto row = std::make_unique<views::View>();
-      auto* layout = row->SetLayoutManager(std::make_unique<views::BoxLayout>(
-          views::BoxLayout::Orientation::kHorizontal));
       auto callback = [&](RowAction action) {
         return base::BindRepeating(&TabSidebar::Invoke,
                                    weak_factory_.GetWeakPtr(),
                                    contents->GetWeakPtr(), action);
       };
-      auto* select = row->AddChildView(std::make_unique<FlyTabButton>(
-          callback(RowAction::kSelect), compact_));
-      select->SetHorizontalAlignment(compact_ ? gfx::ALIGN_CENTER
-                                              : gfx::ALIGN_LEFT);
-      layout->SetFlexForView(select, 1);
-      layout->set_cross_axis_alignment(
-          views::BoxLayout::CrossAxisAlignment::kCenter);
-      auto icon_button = [&](RowAction action, const gfx::VectorIcon& icon,
-                             const std::u16string& name) {
-        auto button =
-            MakeFlyIconButton(callback(action), icon, name, compact_ ? 0 : 22);
-        button->SetVectorIcon(icon, 12);
-        return row->AddChildView(std::move(button));
-      };
-      // Child order (select, pin, close, audio) is part of the row contract.
-      auto* pin = icon_button(RowAction::kPin, views::kKeepIcon, u"Pin tab");
-      auto* close = icon_button(RowAction::kClose, vector_icons::kCloseIcon,
-                                u"Close tab");
-      auto* audio = icon_button(RowAction::kMute, vector_icons::kVolumeUpIcon,
-                                u"Mute tab");
-      pin->SetVisible(!compact_);
-      close->SetVisible(!compact_);
+      auto row = std::make_unique<TabRowView>(this);
+      auto* select = row->AddChildView(
+          std::make_unique<FlyTabButton>(callback(RowAction::kSelect)));
+      auto* pin = row->AddChildView(std::make_unique<RowBadge>(
+          callback(RowAction::kPin), RowBadge::Kind::kPin));
+      auto* close = row->AddChildView(std::make_unique<RowBadge>(
+          callback(RowAction::kClose), RowBadge::Kind::kClose));
+      auto* audio = row->AddChildView(std::make_unique<RowBadge>(
+          callback(RowAction::kMute), RowBadge::Kind::kMedia));
+      row->SetParts(select, pin, close, audio);
       auto* view = rows_->AddChildView(std::move(row));
       auto& data = tab_rows_.try_emplace(contents).first->second;
       data.contents = contents->GetWeakPtr();
       data.view = view;
-      data.select = select;
-      data.pin = pin;
-      data.close = close;
-      data.audio = audio;
       for (auto* control :
-           {view, static_cast<views::View*>(select),
+           {static_cast<views::View*>(view), static_cast<views::View*>(select),
             static_cast<views::View*>(pin), static_cast<views::View*>(close),
             static_cast<views::View*>(audio)})
         control->set_context_menu_controller(this);
@@ -437,36 +835,43 @@ void TabSidebar::Refresh() {
       }
     }
     auto& row = tab_rows_.at(contents);
-    rows_->ReorderChildView(row.view, i);
+    auto* view = row.view.get();
+    rows_->ReorderChildView(view, i);
     std::u16string title = contents->GetTitle();
     if (title.empty())
       title = base::UTF8ToUTF16(contents->GetVisibleURL().spec());
     if (title.empty())
       title = u"New tab";
-    const std::u16string position = base::NumberToString16(i + 1);
-    row.select->SetText(compact_ ? std::u16string() : title);
-    if (!compact_) {
-      const GURL& url = contents->GetVisibleURL();
-      row.select->SetDomain(url.SchemeIsHTTPOrHTTPS() && url.has_host()
-                                ? base::UTF8ToUTF16(url.host())
-                                : base::UTF8ToUTF16(url.scheme() == "chrome"
-                                                        ? std::string("fly")
-                                                        : url.spec()));
-    }
-    row.select->SetSelected(i == model_->active_index());
+    const GURL& url = contents->GetVisibleURL();
+    view->select()->SetText(RowTitle(title));
+    view->select()->SetDomain(RowDomain(url));
     const auto* audible_helper =
         RecentlyAudibleHelper::FromWebContents(contents);
-    const bool audible = audible_helper ? audible_helper->WasRecentlyAudible()
-                                        : contents->IsCurrentlyAudible();
-    const bool muted = contents->IsAudioMuted();
-    const auto* audio_status = muted     ? u", muted"
-                               : audible ? u", playing audio"
-                                         : u"";
-    row.select->SetTooltipText(title + (compact_ ? audio_status : u""));
-    row.select->GetViewAccessibility().SetName(
-        position + u". " + title +
-        (i == model_->active_index() ? u", selected" : u"") +
-        (model_->IsTabPinned(i) ? u", pinned" : u"") + audio_status);
+    RowState state;
+    state.selected = i == model_->active_index();
+    state.pinned = model_->IsTabPinned(i);
+    state.audible = audible_helper ? audible_helper->WasRecentlyAudible()
+                                   : contents->IsCurrentlyAudible();
+    state.muted = contents->IsAudioMuted();
+    if (const auto split = model_->GetSplitForTab(i)) {
+      const auto tabs = model_->GetSplitData(*split)->ListTabs();
+      for (size_t pane = 0; pane < tabs.size(); ++pane) {
+        if (tabs[pane]->GetContents() == contents)
+          state.split_pane = static_cast<int>(pane) + 1;
+      }
+    }
+    const int previous_split = view->state().split_pane;
+    view->SetState(state);
+    const auto* audio_status = state.muted     ? u", muted"
+                               : state.audible ? u", playing audio"
+                                               : u"";
+    // Electron's row title: the page title and its address.
+    view->select()->SetTooltipText(title + u"\n" +
+                                   base::UTF8ToUTF16(url.spec()));
+    view->select()->GetViewAccessibility().SetName(
+        base::NumberToString16(i + 1) + u". " + title +
+        (state.selected ? u", selected" : u"") +
+        (state.pinned ? u", pinned" : u"") + audio_status);
     auto* navigation = contents->GetController().GetVisibleEntry();
     const gfx::ImageSkia icon =
         navigation && navigation->GetFavicon().valid &&
@@ -474,52 +879,36 @@ void TabSidebar::Refresh() {
             ? navigation->GetFavicon().image.AsImageSkia()
             : gfx::ImageSkia();
     if (!row.favicon_initialized || !icon.BackedBySameObjectAs(row.favicon) ||
-        (compact_ && (row.pinned != model_->IsTabPinned(i) ||
-                      row.muted != muted || row.audible != audible))) {
+        previous_split != state.split_pane) {
       row.favicon = icon;
       row.favicon_initialized = true;
-      auto image = icon.isNull()
-                       ? ui::ImageModel::FromVectorIcon(
-                             vector_icons::kGlobeIcon, GetFlyColors().dim, 16)
-                       : ui::ImageModel::FromImageSkia(
-                             gfx::ImageSkiaOperations::CreateResizedImage(
-                                 icon, skia::ImageOperations::RESIZE_BEST,
-                                 gfx::Size(16, 16)));
-      if (compact_ && GetColorProvider()) {
-        image = ui::ImageModel::FromImageSkia(
-            gfx::CanvasImageSource::MakeImageSkia<CompactTabIcon>(
-                image.Rasterize(GetColorProvider()), model_->IsTabPinned(i),
-                audible, muted, GetFlyColors().text));
-      }
-      row.select->SetImageModel(views::Button::STATE_NORMAL, image);
+      // .tab-fallback-icon: a 12px globe in the accent colour.
+      const auto favicon =
+          icon.isNull()
+              ? gfx::CreateVectorIcon(vector_icons::kGlobeIcon, 12,
+                                      GetFlyColors().accent)
+              : gfx::ImageSkiaOperations::CreateResizedImage(
+                    icon, skia::ImageOperations::RESIZE_BEST,
+                    gfx::Size(16, 16));
+      view->select()->SetImageModel(
+          views::Button::STATE_NORMAL,
+          ui::ImageModel::FromImageSkia(
+              gfx::CanvasImageSource::MakeImageSkia<RowIcon>(
+                  favicon, state.split_pane)));
     }
-    if (row.pinned != model_->IsTabPinned(i)) {
-      row.pinned = model_->IsTabPinned(i);
-      SetActionIcon(row.pin,
-                    row.pinned ? views::kKeepFilledIcon : views::kKeepIcon);
-    }
-    const auto pin_label =
-        (model_->IsTabPinned(i) ? u"Unpin " : u"Pin ") + title;
-    row.pin->GetViewAccessibility().SetName(pin_label);
-    row.pin->SetTooltipText(pin_label);
-    row.close->GetViewAccessibility().SetName(u"Close " + title);
-    row.close->SetTooltipText(u"Close " + title);
-    row.close->SetEnabled(!model_->IsTabPinned(i));
-    // Electron shows the close control on the active row; pinned rows keep
-    // their pin indicator instead.
-    row.close->SetVisible(!compact_ && !model_->IsTabPinned(i));
-    row.pin->SetVisible(!compact_ && model_->IsTabPinned(i));
-    row.audible = audible;
-    row.audio->SetVisible(!compact_ && (muted || audible));
-    if (row.muted != muted) {
-      row.muted = muted;
-      SetActionIcon(row.audio, muted ? vector_icons::kVolumeOffIcon
-                                     : vector_icons::kVolumeUpIcon);
-    }
-    const auto audio_label = (muted ? u"Unmute " : u"Mute ") + title;
-    row.audio->SetTooltipText(audio_label);
-    row.audio->GetViewAccessibility().SetName(audio_label);
+    const auto pin_label = u"Unpin " + title;
+    view->pin()->GetViewAccessibility().SetName(pin_label);
+    view->pin()->SetTooltipText(u"Pinned tab (click to unpin)");
+    view->close()->GetViewAccessibility().SetName(u"Close " + title);
+    view->close()->SetTooltipText(u"Close tab");
+    const auto audio_label = (state.muted ? u"Unmute " : u"Mute ") + title;
+    view->audio()->SetTooltipText(state.muted
+                                      ? u"Tab audio muted (click to unmute)"
+                                      : u"Tab playing audio (click to mute)");
+    view->audio()->GetViewAccessibility().SetName(audio_label);
   }
+  rows_->InvalidateLayout();
+  RepaintSurfaces();
 }
 void TabSidebar::Invoke(base::WeakPtr<content::WebContents> contents,
                         RowAction action) {
@@ -601,7 +990,12 @@ views::View* TabSidebar::row_for_testing(content::WebContents* contents) const {
 views::Button* TabSidebar::audio_for_testing(
     content::WebContents* contents) const {
   auto it = tab_rows_.find(contents);
-  return it == tab_rows_.end() ? nullptr : it->second.audio.get();
+  return it == tab_rows_.end() ? nullptr : it->second.view->audio();
+}
+gfx::ImageSkia TabSidebar::favicon_for_testing(
+    content::WebContents* contents) const {
+  auto it = tab_rows_.find(contents);
+  return it == tab_rows_.end() ? gfx::ImageSkia() : it->second.favicon;
 }
 void TabSidebar::OnTabStripModelChanged(TabStripModel*,
                                         const TabStripModelChange&,

@@ -5,6 +5,7 @@
 #define FLY_UI_FLY_THEME_H_
 
 #include <memory>
+#include <optional>
 #include <string>
 
 #include "base/functional/callback.h"
@@ -111,7 +112,21 @@ class FlyButton : public views::MdTextButton {
   // A fixed square size that follows the interface scale.
   void SetScaledSize(int size);
   void SetAccentText(bool accent);
+  // A bordered button (Electron's .nav-icon-button): the border turns to the
+  // accent on hover.
   void SetOutlined(bool outlined);
+  // One half of Electron's history pill: fully rounded on that side.
+  enum class PillHalf { kNone, kLeft, kRight };
+  void SetPillHalf(PillHalf half);
+  // Hover tints with the text colour at 7% and no outline (#WorkspaceHeader).
+  void SetHoverFill(bool hover_fill);
+  // A fill shown at rest (.sidebar-clock).
+  void SetRestingFill(SkColor color);
+  const gfx::VectorIcon* vector_icon() const { return icon_; }
+  // The icon's colour at rest: dim by default, the text colour (Electron's
+  // .nav-icon-button) or the accent (.sidebar-clock i).
+  enum class IconTone { kDim, kText, kAccent };
+  void SetIconTone(IconTone tone);
   void SetFlyFont(FlyFace face, int size,
                   gfx::Font::Weight weight = gfx::Font::Weight::NORMAL);
   void OnThemeChanged() override;
@@ -137,6 +152,10 @@ class FlyButton : public views::MdTextButton {
   bool selected_ = false;
   bool accent_text_ = false;
   bool outlined_ = false;
+  bool hover_fill_ = false;
+  PillHalf pill_half_ = PillHalf::kNone;
+  IconTone icon_tone_ = IconTone::kDim;
+  std::optional<SkColor> resting_fill_;
 };
 // Square icon button (sidebar navigation and footer actions).
 std::unique_ptr<FlyButton> MakeFlyIconButton(
