@@ -4012,6 +4012,43 @@ IN_PROC_BROWSER_TEST_F(FlyWorkspaceBrowserTest,
 }
 
 IN_PROC_BROWSER_TEST_F(FlyWorkspaceBrowserTest,
+                       EmptyDesktopReopensLastClosedTabWithoutPlaceholder) {
+  auto& window = FlyWindowController::Get();
+  const auto page = embedded_test_server()->GetURL("/title1.html?reopen-last");
+  ASSERT_TRUE(ui_test_utils::NavigateToURL(browser(), page));
+  auto original = browser()->GetWeakPtr();
+  auto* profile = browser()->GetProfile();
+  ASSERT_TRUE(ExecuteNativeCommand(browser(), "remove-tab"));
+  ASSERT_TRUE(base::test::RunUntil([&] { return !original; }));
+  ASSERT_EQ(nullptr, window.selected_browser_for_testing());
+  ASSERT_TRUE(NativeCommandAvailable(nullptr, "reopen-closed-tab"));
+  ASSERT_TRUE(InvokeNativeCommand(nullptr, "reopen-closed-tab"));
+  ASSERT_TRUE(base::test::RunUntil([&] {
+    auto* selected = window.selected_browser_for_testing();
+    return selected && Active(selected)->GetLastCommittedURL() == page;
+  }));
+  auto* restored = window.selected_browser_for_testing();
+  EXPECT_EQ(profile, restored->GetProfile());
+  EXPECT_EQ(1, restored->GetTabStripModel()->count());
+}
+
+IN_PROC_BROWSER_TEST_F(FlyWorkspaceBrowserTest,
+                       EmptyDesktopFullscreenDoesNotCreateTabs) {
+  auto& window = FlyWindowController::Get();
+  auto original = browser()->GetWeakPtr();
+  ASSERT_TRUE(ExecuteNativeCommand(browser(), "remove-tab"));
+  ASSERT_TRUE(base::test::RunUntil([&] { return !original; }));
+  auto* desktop = window.desktop_widget();
+  ASSERT_FALSE(desktop->IsFullscreen());
+  ASSERT_TRUE(InvokeNativeCommand(nullptr, "toggle-fullscreen"));
+  ASSERT_TRUE(base::test::RunUntil([&] { return desktop->IsFullscreen(); }));
+  EXPECT_EQ(nullptr, window.selected_browser_for_testing());
+  ASSERT_TRUE(InvokeNativeCommand(nullptr, "toggle-fullscreen"));
+  ASSERT_TRUE(base::test::RunUntil([&] { return !desktop->IsFullscreen(); }));
+  EXPECT_EQ(nullptr, window.selected_browser_for_testing());
+}
+
+IN_PROC_BROWSER_TEST_F(FlyWorkspaceBrowserTest,
                        EmptyDesktopSettingsStoreUsesWorkspaceProfile) {
   auto& window = FlyWindowController::Get();
   auto original = browser()->GetWeakPtr();

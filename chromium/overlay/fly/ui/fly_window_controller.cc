@@ -3490,6 +3490,21 @@ bool FlyWindowController::RunCommand(BrowserWindowInterface* browser,
     return false;
   if (!browser && !IsShellCommand(action))
     return false;
+  if (!browser && action == "spawn-tab") {
+    CreateTab();
+    return true;
+  }
+  if (!browser && action == "reopen-closed-tab") {
+    auto* profile = ActiveProfile();
+    if (!profile)
+      return false;
+    chrome::OpenWindowWithRestoredTabs(profile);
+    return true;
+  }
+  if (!browser && action == "toggle-fullscreen") {
+    desktop_->SetFullscreen(!desktop_->IsFullscreen());
+    return true;
+  }
   // All pickers share the desktop keyboard owner. Opening a different one
   // dismisses the previous one, while invoking the same action still toggles.
   for (auto [picker, command] :

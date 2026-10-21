@@ -578,7 +578,7 @@ bool IsShellCommand(std::string_view action) {
       "open-styles-dir", "open-script-storage-dir", "test-google-signin",
       "toggle-private-mode", "next-workspace", "previous-workspace",
       "toggle-global-audio-mute", "toggle-global-media", "hibernate-tabs",
-      "wake-all-tabs"};
+      "wake-all-tabs", "spawn-tab", "reopen-closed-tab", "toggle-fullscreen"};
   return std::ranges::find(actions, action) != std::end(actions);
 }
 
