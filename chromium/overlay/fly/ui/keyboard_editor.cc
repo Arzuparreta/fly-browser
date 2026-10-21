@@ -144,11 +144,12 @@ void KeyboardEditor::Toggle(content::WebContents* contents) {
     Cancel(true);
     return;
   }
-  if (!desktop_ || !contents)
+  if (!desktop_)
     return;
   restore_page_focus_ = ShouldRestoreNativePageFocus(contents);
   Observe(contents);
-  contents->StoreFocus();
+  if (contents)
+    contents->StoreFocus();
   const auto current = commands_->Read();
   original_ = current.value_or(DefaultKeyboardConfig());
   generation_ = commands_->generation();
@@ -237,6 +238,10 @@ void KeyboardEditor::Toggle(content::WebContents* contents) {
   BuildPerformancePane();
   BuildDiagnosticsPane();
   BuildAboutPane();
+  for (size_t i = 0; i < sections_->GetTabCount(); ++i) {
+    auto* tab = sections_->GetTabAt(i);
+    tab->SetHeight(FlyScaled(44));
+  }
   root->AddChildView(std::move(panel));
   DisableSubpixelText(root.get());
   overlay_->SetContentsView(std::move(root));
@@ -313,6 +318,14 @@ views::View* KeyboardEditor::AddItem(views::View* group,
 views::View* KeyboardEditor::AddPane(std::u16string title) {
   auto* scroll =
       sections_->AddTab(title, std::make_unique<views::ScrollView>());
+  // Highlight tabs default to 32px, including 16px of vertical padding.
+  // Size them from the actual font metrics instead of clipping their labels.
+  auto* tab = sections_->GetTabAt(sections_->GetTabCount() - 1);
+  int title_height = 0;
+  for (views::View* child : tab->children())
+    title_height = std::max(title_height, child->GetPreferredSize().height());
+  tab->SetHeight(
+      std::max(FlyScaled(44), title_height + tab->GetInsets().height()));
   scroll->SetHorizontalScrollBarMode(
       views::ScrollView::ScrollBarMode::kDisabled);
   scroll->ClipHeightTo(0, std::numeric_limits<int>::max());

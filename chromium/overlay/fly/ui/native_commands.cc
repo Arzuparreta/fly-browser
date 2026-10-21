@@ -2,15 +2,17 @@
 // Use of this source code is governed by the GPL-3.0-or-later license in the
 // Fly repository.
 #include "fly/ui/native_commands.h"
+#include "fly/bookmarks/bookmark_service.h"
+#include "fly/ui/command_palette.h"
 #include "fly/ui/new_tab_ui.h"
 #include "ui/events/blink/blink_event_util.h"
-#include "fly/bookmarks/bookmark_service.h"
 
 #include <algorithm>
 #include <memory>
 #include <optional>
 #include "base/callback_list.h"
 #include "base/functional/bind.h"
+#include "base/task/single_thread_task_runner.h"
 #include "components/performance_manager/public/freezing/freezing.h"
 #include "components/performance_manager/public/performance_manager.h"
 #include "components/tabs/public/tab_interface.h"
@@ -276,6 +278,30 @@ class PageKeyboardState
     }
     return router_;
   }
+  void RequestNewTabSearch(BrowserWindowInterface* browser) {
+    search_browser_ = browser->GetWeakPtr();
+    if (!web_contents()->IsLoading())
+      DidStopLoading();
+  }
+  void DidStopLoading() override {
+    if (!search_browser_)
+      return;
+    base::SingleThreadTaskRunner::GetCurrentDefault()->PostTask(
+        FROM_HERE,
+        base::BindOnce(
+            [](base::WeakPtr<BrowserWindowInterface> browser,
+               base::WeakPtr<content::WebContents> contents) {
+              auto* window = FlyWindowController::GetIfCreated();
+              if (browser && contents && window &&
+                  window->IsSelected(browser.get()) &&
+                  browser->GetTabStripModel()->GetActiveWebContents() ==
+                      contents.get() &&
+                  IsFlyNewTabPage(contents->GetVisibleURL()) &&
+                  !window->address_picker().active())
+                window->RunCommand(browser.get(), "toggle-address");
+            },
+            std::exchange(search_browser_, {}), web_contents()->GetWeakPtr()));
+  }
   void OnVisibilityChanged(content::Visibility visibility) override {
     router_.ClearPending();
   }
@@ -296,6 +322,7 @@ class PageKeyboardState
         content::WebContentsUserData<PageKeyboardState>(*contents),
         router_(DefaultKeyboardConfig()) {}
   KeyboardRouter router_;
+  base::WeakPtr<BrowserWindowInterface> search_browser_;
   uint64_t generation_ = 0;
   WEB_CONTENTS_USER_DATA_KEY_DECL();
 };
@@ -411,6 +438,16 @@ bool SplitCommand(BrowserWindowInterface* browser, std::string_view action) {
 }
 }  // namespace
 
+void RequestNativeNewTabSearch(BrowserWindowInterface* browser) {
+  if (!browser)
+    return;
+  auto* contents = browser->GetTabStripModel()->GetActiveWebContents();
+  if (!contents || !IsFlyNewTabPage(contents->GetVisibleURL()))
+    return;
+  PageKeyboardState::CreateForWebContents(contents);
+  PageKeyboardState::FromWebContents(contents)->RequestNewTabSearch(browser);
+}
+
 bool OpenNativeBlankTab(BrowserWindowInterface* browser, int index) {
   if (!browser || !chrome::IsCommandEnabled(browser, IDC_NEW_TAB))
     return false;
@@ -424,7 +461,10 @@ bool OpenNativeBlankTab(BrowserWindowInterface* browser, int index) {
     params.tabstrip_add_types |= AddTabTypes::ADD_FORCE_INDEX;
   }
   Navigate(&params);
-  return params.navigated_or_inserted_contents != nullptr;
+  if (!params.navigated_or_inserted_contents)
+    return false;
+  RequestNativeNewTabSearch(browser);
+  return true;
 }
 
 bool RequestNativeTabSuspension(content::WebContents* contents) {

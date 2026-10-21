@@ -1,61 +1,61 @@
 // Copyright Fly Browser contributors. All rights reserved.
 // Use of this source code is governed by the GPL-3.0-or-later license in the
 // Fly repository.
+#include "base/files/file_enumerator.h"
+#include "base/files/file_util.h"
+#include "base/files/scoped_temp_dir.h"
+#include "base/path_service.h"
+#include "base/strings/string_number_conversions.h"
+#include "base/threading/thread_restrictions.h"
 #include "chrome/browser/bookmarks/bookmark_model_factory.h"
+#include "chrome/browser/content_settings/host_content_settings_map_factory.h"
 #include "chrome/browser/history/history_service_factory.h"
 #include "chrome/browser/ssl/chrome_security_state_util.h"
+#include "chrome/browser/ui/browser_window/public/browser_window_interface_iterator.h"
+#include "chrome/browser/ui/views/frame/browser_view.h"
+#include "chrome/common/chrome_paths.h"
 #include "components/bookmarks/browser/bookmark_model.h"
+#include "components/content_settings/core/browser/host_content_settings_map.h"
+#include "components/download/public/common/download_item.h"
 #include "components/history/core/browser/history_service.h"
 #include "components/history/core/common/pref_names.h"
 #include "components/password_manager/core/common/password_manager_pref_names.h"
 #include "components/signin/public/base/signin_pref_names.h"
+#include "content/public/browser/download_manager.h"
+#include "content/public/browser/host_zoom_map.h"
+#include "crypto/sha2.h"
+#include "extensions/browser/extension_registry.h"
 #include "fly/bookmarks/bookmark_service.h"
 #include "fly/bookmarks/frequent_sites_service.h"
 #include "fly/preferences/search_service.h"
 #include "fly/sessions/tab_identity.h"
 #include "fly/ui/command_palette.h"
-#include "fly/ui/fly_theme.h"
+#include "fly/ui/download_shelf.h"
 #include "fly/ui/fly_actions.h"
 #include "fly/ui/fly_extensions.h"
-#include "fly/ui/sidebar_panel.h"
-#include "fly/ui/new_tab_ui.h"
-#include "fly/ui/download_shelf.h"
-#include "chrome/browser/ui/browser_window/public/browser_window_interface_iterator.h"
-#include "chrome/browser/ui/views/frame/browser_view.h"
-#include "ui/aura/window_tree_host.h"
-#include "ui/gfx/x/connection.h"
-#include "ui/gfx/x/xproto.h"
-#include "ui/ozone/public/ozone_platform.h"
-#include "fly/ui/status_bar.h"
-#include "components/download/public/common/download_item.h"
-#include "content/public/browser/download_manager.h"
-#include "ui/views/accessibility/view_accessibility.h"
-#include "ui/compositor/layer.h"
-#include "ui/compositor/layer_animator.h"
-#include "crypto/sha2.h"
-#include "base/strings/string_number_conversions.h"
-#include "base/files/file_enumerator.h"
-#include "third_party/zlib/google/zip.h"
-#include "fly/ui/user_content.h"
-#include "fly/ui/welcome_view.h"
-#include "base/files/scoped_temp_dir.h"
-#include "content/public/browser/host_zoom_map.h"
-#include "chrome/common/chrome_paths.h"
-#include "base/files/file_util.h"
-#include "extensions/browser/extension_registry.h"
-#include "base/path_service.h"
-#include "base/threading/thread_restrictions.h"
-#include "chrome/browser/content_settings/host_content_settings_map_factory.h"
-#include "components/content_settings/core/browser/host_content_settings_map.h"
+#include "fly/ui/fly_theme.h"
 #include "fly/ui/fly_window_controller.h"
 #include "fly/ui/hint_controller.h"
 #include "fly/ui/history_service.h"
 #include "fly/ui/keyboard_editor.h"
 #include "fly/ui/native_commands.h"
+#include "fly/ui/new_tab_ui.h"
+#include "fly/ui/sidebar_panel.h"
 #include "fly/ui/status_bar.h"
 #include "fly/ui/tab_sidebar.h"
+#include "fly/ui/user_content.h"
+#include "fly/ui/welcome_view.h"
+#include "third_party/zlib/google/zip.h"
+#include "ui/aura/window_tree_host.h"
+#include "ui/compositor/layer.h"
+#include "ui/compositor/layer_animator.h"
+#include "ui/gfx/x/connection.h"
+#include "ui/gfx/x/xproto.h"
+#include "ui/ozone/public/ozone_platform.h"
+#include "ui/views/accessibility/view_accessibility.h"
 #include "ui/views/controls/button/checkbox.h"
 #include "ui/views/controls/label.h"
+#include "ui/views/controls/tabbed_pane/tabbed_pane.h"
 #include "ui/views/controls/textfield/textfield.h"
 #include "url/origin.h"
 
@@ -798,6 +798,12 @@ IN_PROC_BROWSER_TEST_F(FlySidebarBrowserTest,
   const int count = model->count();
   auto* list = window.tab_sidebar_for_testing();
   ASSERT_TRUE(base::test::RunUntil([&] { return list->row_for_testing(target); }));
+  // New tabs focus search; dismiss it before interacting with the sidebar.
+  ASSERT_TRUE(base::test::RunUntil([&] { return window.address_picker().active(); }));
+  ui::test::EventGenerator keys(
+      window.desktop_widget()->GetNativeWindow()->GetRootWindow());
+  keys.PressKey(ui::VKEY_ESCAPE, ui::EF_NONE);
+  ASSERT_TRUE(base::test::RunUntil([&] { return !window.address_picker().active(); }));
   OpenByPointer();
   views::test::RunScheduledLayout(list->GetWidget());
   ui::test::EventGenerator mouse(
@@ -3910,11 +3916,39 @@ IN_PROC_BROWSER_TEST_F(FlyWorkspaceBrowserTest,
   EXPECT_TRUE(window.desktop_widget()->IsVisible());
   ui::test::EventGenerator keys(
       window.desktop_widget()->GetNativeWindow()->GetRootWindow());
+  keys.PressKey(ui::VKEY_H, ui::EF_CONTROL_DOWN);
+  ASSERT_TRUE(
+      base::test::RunUntil([&] { return window.keyboard_editor().active(); }));
+  EXPECT_EQ(nullptr, window.selected_browser_for_testing());
+  auto* sections = window.keyboard_editor().sections_for_testing();
+  ASSERT_TRUE(sections);
+  views::test::RunScheduledLayout(sections->GetWidget());
+  for (size_t i = 0; i < sections->GetTabCount(); ++i) {
+    auto* tab = sections->GetTabAt(i);
+    for (views::View* child : tab->children())
+      EXPECT_GE(tab->height() - tab->GetInsets().height(),
+                child->GetPreferredSize().height());
+  }
+  keys.PressKey(ui::VKEY_ESCAPE, ui::EF_NONE);
+  ASSERT_FALSE(window.keyboard_editor().active());
+  keys.PressKey(ui::VKEY_P, ui::EF_CONTROL_DOWN);
+  ASSERT_TRUE(base::test::RunUntil([&] { return window.palette().active(); }));
+  EXPECT_EQ(nullptr, window.selected_browser_for_testing());
+  keys.PressKey(ui::VKEY_ESCAPE, ui::EF_NONE);
+  ASSERT_FALSE(window.palette().active());
+  views::test::ButtonTestApi(window.preferences_button_for_testing())
+      .NotifyDefaultMouseClick();
+  ASSERT_TRUE(window.keyboard_editor().active());
+  keys.PressKey(ui::VKEY_ESCAPE, ui::EF_NONE);
   keys.PressKey(ui::VKEY_T, ui::EF_CONTROL_DOWN);
   ASSERT_TRUE(base::test::RunUntil(
       [&] { return window.selected_browser_for_testing() != nullptr; }));
   EXPECT_EQ(1,
             window.selected_browser_for_testing()->GetTabStripModel()->count());
+  ASSERT_TRUE(
+      base::test::RunUntil([&] { return window.address_picker().active(); }));
+  EXPECT_TRUE(window.address_picker().search_for_testing()->HasFocus());
+  keys.PressKey(ui::VKEY_ESCAPE, ui::EF_NONE);
   auto* reopened = window.selected_browser_for_testing();
   auto reopened_lifetime = reopened->GetWeakPtr();
   ASSERT_TRUE(ExecuteNativeCommand(reopened, "remove-tab"));
@@ -5025,9 +5059,11 @@ IN_PROC_BROWSER_TEST_F(
   auto* private_browser = window.selected_browser_for_testing();
   ASSERT_TRUE(private_browser->GetProfile()->IsOffTheRecord());
   auto* page = Active(private_browser);
-  ASSERT_TRUE(InvokeNativeCommand(private_browser, "toggle-address"));
+  ASSERT_TRUE(content::WaitForLoadStop(page));
   auto& address = window.address_picker();
-  ASSERT_TRUE(address.active());
+  if (!address.active())
+    ASSERT_TRUE(InvokeNativeCommand(private_browser, "toggle-address"));
+  ASSERT_TRUE(base::test::RunUntil([&] { return address.active(); }));
   const auto input = base::UTF8ToUTF16(url.spec());
   address.search_for_testing()->SetText(input);
   address.ContentsChanged(address.search_for_testing(), input);
@@ -5505,6 +5541,25 @@ IN_PROC_BROWSER_TEST_F(FlyWorkspaceBrowserTest,
       window.desktop_widget()->GetNativeWindow()->GetRootWindow());
   pointer.MoveMouseTo(row_centre);
   EXPECT_NE(u"New Blank Tab", palette.inspector_title_for_testing());
+  // Hover and keyboard navigation must leave exactly one selected row.
+  const auto assert_single_selection = [&] {
+    int count = 0;
+    for (size_t i = 0; i < palette.result_count_for_testing(); ++i) {
+      auto* button = static_cast<FlyButton*>(palette.row_for_testing(i));
+      if (!button)
+        continue;
+      count += button->selected();
+      EXPECT_FALSE(button->GetIsDefault());
+      EXPECT_NE(ui::ButtonStyle::kProminent, button->GetStyle());
+    }
+    EXPECT_EQ(1, count);
+  };
+  assert_single_selection();
+  for (int i = 0; i < 8; ++i) {
+    ui::KeyEvent down(ui::EventType::kKeyPressed, ui::VKEY_DOWN, ui::EF_NONE);
+    ASSERT_TRUE(palette.HandleOverlayKey(down));
+    assert_single_selection();
+  }
   palette.SetCategoryForTesting("Split View");
   EXPECT_EQ(u"6 commands", palette.count_for_testing());
   palette.SetCategoryForTesting("All");
@@ -5930,7 +5985,17 @@ class FlyTabMenuBrowserTest : public FlyWorkspaceBrowserTest {
  protected:
   void Menu(content::WebContents* contents,
             base::OnceCallback<void(ui::SimpleMenuModel*)> inspect) {
-    auto* sidebar = FlyWindowController::Get().tab_sidebar_for_testing();
+    auto& window = FlyWindowController::Get();
+    auto* active = Active(window.selected_browser_for_testing());
+    ASSERT_TRUE(content::WaitForLoadStop(active));
+    base::RunLoop().RunUntilIdle();
+    if (window.address_picker().active()) {
+      ui::test::EventGenerator keys(
+          window.desktop_widget()->GetNativeWindow()->GetRootWindow());
+      keys.PressKey(ui::VKEY_ESCAPE, ui::EF_NONE);
+      ASSERT_TRUE(base::test::RunUntil([&] { return !window.address_picker().active(); }));
+    }
+    auto* sidebar = window.tab_sidebar_for_testing();
     ASSERT_TRUE(base::test::RunUntil([&] {
       return sidebar->row_for_testing(contents) != nullptr;
     }));
@@ -6131,17 +6196,20 @@ IN_PROC_BROWSER_TEST_F(FlyPageScrollBrowserTest,
   // offsets may round one pixel either way.
   auto wait_offset = [&](const char* axis, int offset) {
     return base::test::RunUntil([&] {
-      return std::abs(content::EvalJs(
-                          contents,
-                          content::JsReplace(
-                              "Math.round(document.querySelector('#box')[$1])",
-                              axis))
-                          .ExtractInt() -
-                      offset) <= 1;
+      return content::EvalJs(contents, content::JsReplace(R"js(
+        (async () => {
+          const box = document.querySelector('#box');
+          for (let i = 0; i < 3; ++i) {
+            if (Math.abs(Math.round(box[$1]) - $2) > 1) return false;
+            await new Promise(requestAnimationFrame);
+          }
+          return Math.abs(Math.round(box[$1]) - $2) <= 1;
+        })()
+      )js", axis, offset)).ExtractBool();
     });
   };
   keys.PressKey(ui::VKEY_J, ui::EF_NONE);
-  ASSERT_TRUE(wait_offset("scrollTop", 80));
+  ASSERT_TRUE(wait_offset("scrollTop", 80)) << content::EvalJs(contents, "document.querySelector('#box').scrollTop");
   EXPECT_EQ(0, content::EvalJs(contents, "scrollY"));
   const int half_page =
       content::EvalJs(
@@ -6149,9 +6217,10 @@ IN_PROC_BROWSER_TEST_F(FlyPageScrollBrowserTest,
           "Math.floor(document.querySelector('#box').clientHeight / 2)")
           .ExtractInt();
   keys.PressKey(ui::VKEY_D, ui::EF_NONE);
-  ASSERT_TRUE(wait_offset("scrollTop", 80 + half_page));
+  ASSERT_TRUE(wait_offset("scrollTop", 80 + half_page))
+      << content::EvalJs(contents, "JSON.stringify({top:document.querySelector('#box').scrollTop,left:document.querySelector('#box').scrollLeft,height:document.querySelector('#box').clientHeight})");
   keys.PressKey(ui::VKEY_U, ui::EF_NONE);
-  ASSERT_TRUE(wait_offset("scrollTop", 80));
+  ASSERT_TRUE(wait_offset("scrollTop", 80)) << content::EvalJs(contents, "document.querySelector('#box').scrollTop");
   keys.PressKey(ui::VKEY_L, ui::EF_NONE);
   ASSERT_TRUE(wait_offset("scrollLeft", 80));
   keys.PressKey(ui::VKEY_G, ui::EF_NONE);
@@ -6214,6 +6283,58 @@ IN_PROC_BROWSER_TEST_F(FlyPageScrollBrowserTest,
     return content::EvalJs(child, "Math.round(scrollY)").ExtractInt() == 80;
   }));
   EXPECT_EQ(0, content::EvalJs(contents, "scrollY"));
+}
+
+IN_PROC_BROWSER_TEST_F(FlyWorkspaceBrowserTest,
+                       ExtensionAndDownloadPickersDismissWithEscape) {
+  auto& window = FlyWindowController::Get();
+  window.Select(browser(), true);
+  ui::test::EventGenerator keys(
+      window.desktop_widget()->GetNativeWindow()->GetRootWindow());
+  for (auto [action, picker] :
+       {std::pair{"open-extension-actions",
+                  &window.extensions_picker_for_testing()},
+        {"toggle-downloads", &window.downloads_picker_for_testing()}}) {
+    ASSERT_TRUE(window.RunCommand(browser(), action));
+    ASSERT_TRUE(picker->active());
+    keys.PressKey(ui::VKEY_ESCAPE, ui::EF_NONE);
+    ASSERT_TRUE(base::test::RunUntil([&] { return !picker->active(); }));
+  }
+}
+
+IN_PROC_BROWSER_TEST_F(FlyPageScrollBrowserTest,
+                       RepeatedScrollAccumulatesWithoutRestartingOrBouncing) {
+  ASSERT_TRUE(ui_test_utils::NavigateToURL(
+      browser(), embedded_test_server()->GetURL("/title1.html")));
+  auto* contents = Active(browser());
+  ASSERT_TRUE(content::ExecJs(contents, R"JS(
+    document.body.innerHTML = '<div style="height:12000px">scroll</div>';
+    window.scrollTo(0, 0);
+    window.samples = [];
+    window.sampling = true;
+    requestAnimationFrame(function sample() {
+      samples.push(scrollY);
+      if (sampling) requestAnimationFrame(sample);
+    });
+  )JS"));
+  for (int i = 0; i < 12; ++i)
+    ASSERT_TRUE(ExecuteNativeCommand(browser(), "scroll-down"));
+  ASSERT_TRUE(base::test::RunUntil([&] {
+    return content::EvalJs(contents, "Math.round(scrollY)").ExtractInt() == 960;
+  })) << content::EvalJs(contents, "JSON.stringify({y:scrollY,last:samples.slice(-5)})");
+  EXPECT_EQ(true, content::EvalJs(
+                      contents,
+                      "samples.every((y,i) => i === 0 || y >= samples[i-1])"));
+  ASSERT_TRUE(content::ExecJs(contents, "samples = [];"));
+  for (int i = 0; i < 8; ++i)
+    ASSERT_TRUE(ExecuteNativeCommand(browser(), "scroll-up"));
+  ASSERT_TRUE(base::test::RunUntil([&] {
+    return content::EvalJs(contents, "Math.round(scrollY)").ExtractInt() == 320;
+  })) << content::EvalJs(contents, "JSON.stringify({y:scrollY,last:samples.slice(-5)})");
+  EXPECT_EQ(true, content::EvalJs(
+                      contents,
+                      "samples.every((y,i) => i === 0 || y <= samples[i-1])"));
+  ASSERT_TRUE(content::ExecJs(contents, "sampling = false;"));
 }
 
 }  // namespace

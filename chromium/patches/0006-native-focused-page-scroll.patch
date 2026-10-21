@@ -108,15 +108,16 @@
  #include "third_party/blink/renderer/core/dom/focus_params.h"
  #include "third_party/blink/renderer/core/dom/layout_tree_builder_traversal.h"
  #include "third_party/blink/renderer/core/dom/scroll_marker_group_pseudo_element.h"
-@@ -152,6 +155,7 @@
+@@ -152,6 +155,8 @@
  #include "third_party/blink/renderer/core/page/scrolling/fragment_anchor.h"
  #include "third_party/blink/renderer/core/page/validation_message_client.h"
  #include "third_party/blink/renderer/core/page/viewport_description.h"
 +#include "third_party/blink/renderer/core/paint/paint_layer_scrollable_area.h"
++#include "third_party/blink/renderer/core/scroll/scroll_animator_base.h"
  #include "third_party/blink/renderer/core/paint/timing/first_meaningful_paint_detector.h"
  #include "third_party/blink/renderer/core/paint/timing/paint_timing.h"
  #include "third_party/blink/renderer/core/probe/core_probes.h"
-@@ -4889,6 +4893,80 @@
+@@ -4889,6 +4893,114 @@
    focused_frame->SetEditableSelectionOffsets(start, end);
  }
  
@@ -183,8 +184,42 @@
 +  if (target) {
 +    if (top || bottom)
 +      target->scrollTo(nullptr, options);
-+    else
++    else if (left || right || half_down || half_up) {
 +      target->scrollBy(nullptr, options);
++    } else {
++      auto* box = target->GetLayoutBox();
++      ScrollableArea* area = target == document->ScrollingElementNoLayout()
++                                 ? frame->View()->LayoutViewport()
++                                 : box ? box->GetScrollableArea() : nullptr;
++      const double zoom = target == document->ScrollingElementNoLayout()
++                              ? frame->LayoutZoomFactor()
++                              : box ? box->StyleRef().EffectiveZoom() : 1;
++      if (area) {
++        auto& animator = area->GetScrollAnimator();
++        // The compositor can reach the target before its completion callback
++        // arrives. Retire that completed curve before starting a new sequence;
++        // otherwise the old completion can cancel the new keyboard scroll.
++        // Reversing also discards the queued distance in the old direction.
++        const auto current = area->GetScrollOffset();
++        const auto remaining = animator.DesiredTargetOffset() - current;
++        const bool reversing = remaining.y() * y < 0;
++        if (animator.HasRunningAnimation() &&
++            (reversing || (std::abs(remaining.x()) < 0.5 &&
++                           std::abs(remaining.y()) < 0.5))) {
++          animator.ResetAnimationState();
++          animator.SetCurrentOffset(current);
++        }
++        area->UserScroll(ui::ScrollGranularity::kScrollByPixel,
++                         ScrollOffset(x * zoom, y * zoom),
++                         cc::ScrollSourceType::kRelativeScroll,
++                         BindOnce([](WeakPersistent<ScrollableArea> area,
++                                     ScrollableArea::ScrollCompletionMode mode) {
++                           if (area)
++                             area->OnScrollFinished(mode ==
++                                 ScrollableArea::ScrollCompletionMode::kFinished);
++                         }, WrapWeakPersistent(area)));
++      }
++    }
 +  } else {
 +    if (top || bottom)
 +      window->scrollTo(nullptr, options);

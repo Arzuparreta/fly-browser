@@ -88,6 +88,7 @@ class KeyboardEditor : public views::TextfieldController,
   void SetPrivateMode(bool on);
   void SetExtensionUsage(std::u16string text);
   views::Textfield* settings_search_for_testing() { return settings_search_; }
+  views::TabbedPane* sections_for_testing() { return sections_; }
   int selected_pane_for_testing() const;
   bool setting_visible_for_testing(std::u16string_view label) const;
   views::Textfield* search_setting_for_testing(std::string_view key);

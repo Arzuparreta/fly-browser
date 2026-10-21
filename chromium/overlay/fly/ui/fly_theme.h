@@ -9,6 +9,7 @@
 #include <string>
 
 #include "base/functional/callback.h"
+#include "base/memory/weak_ptr.h"
 #include "third_party/skia/include/core/SkColor.h"
 #include "ui/gfx/font.h"
 #include "ui/gfx/font_list.h"
@@ -118,6 +119,7 @@ class FlyButton : public views::MdTextButton {
   // One half of Electron's history pill: fully rounded on that side.
   enum class PillHalf { kNone, kLeft, kRight };
   void SetPillHalf(PillHalf half);
+  void SetPillPartner(FlyButton* partner) { pill_partner_ = partner->weak_factory_.GetWeakPtr(); }
   // Hover tints with the text colour at 7% and no outline (#WorkspaceHeader).
   void SetHoverFill(bool hover_fill);
   // A fill shown at rest (.sidebar-clock).
@@ -149,6 +151,7 @@ class FlyButton : public views::MdTextButton {
   FlyFace face_;
   int size_;
   gfx::Font::Weight weight_ = gfx::Font::Weight::NORMAL;
+  base::WeakPtr<FlyButton> pill_partner_;
   bool selected_ = false;
   bool accent_text_ = false;
   bool outlined_ = false;
@@ -156,6 +159,7 @@ class FlyButton : public views::MdTextButton {
   PillHalf pill_half_ = PillHalf::kNone;
   IconTone icon_tone_ = IconTone::kDim;
   std::optional<SkColor> resting_fill_;
+  base::WeakPtrFactory<FlyButton> weak_factory_{this};
 };
 // Square icon button (sidebar navigation and footer actions).
 std::unique_ptr<FlyButton> MakeFlyIconButton(

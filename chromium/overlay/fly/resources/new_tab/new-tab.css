@@ -68,3 +68,8 @@ footer a { color:inherit; text-decoration:underline; text-underline-offset:2px; 
 
 .navigation[hidden] { display:none; }
 main.no-collections { grid-template-columns:minmax(0,1fr) minmax(0,1fr); grid-template-rows:minmax(0,1fr); grid-template-areas:'time specimen'; }
+/* Keep destinations usable in extremely short windows, including Large. */
+@media (max-height:260px) {
+  footer { display:none; }
+  main { padding-block:4px; }
+}
