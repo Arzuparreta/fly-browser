@@ -398,6 +398,7 @@ class FlyWindowController : public views::WidgetDelegate,
   // The first state and mode changes apply without motion.
   bool sidebar_motion_ready_ = false;
   bool sidebar_motion_applied_ = false;
+  float sidebar_motion_scale_ = 0;
   raw_ptr<FlyButton> sidebar_pin_button_ = nullptr;
   raw_ptr<FlyButton> reader_button_ = nullptr;
   // The active tab while it shows Electron's reader overlay.

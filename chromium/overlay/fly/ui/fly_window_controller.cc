@@ -1444,10 +1444,11 @@ void FlyWindowController::UpdateSidebarMode() {
       ReturnFocusFromSidebar();
   }
   // A mode or scale change applies at once (the slide distance, the shadow
-  // and the details follow the new mode); Fly starts collapsed instead of
-  // animating closed.
+  // and the details follow the new mode); other preference writes leave a
+  // running slide alone. Fly starts collapsed instead of animating closed.
   sidebar_motion_ready_ = false;
-  sidebar_motion_applied_ = false;
+  if (changed || sidebar_motion_scale_ != GetFlyInterfaceScale())
+    sidebar_motion_applied_ = false;
   UpdateSidebarBounds();
   UpdateSidebarVisibility();
   sidebar_motion_ready_ = true;
@@ -1498,6 +1499,7 @@ void FlyWindowController::ApplySidebarMotion(bool animate) {
   if (!panel || !panel->layer() || !edge || !edge->layer())
     return;
   sidebar_motion_applied_ = true;
+  sidebar_motion_scale_ = GetFlyInterfaceScale();
   const bool rail = sidebar_auto_collapse_ && !sidebar_expanded_;
   const int shift = rail ? FlyScaled(kSidebarWidth - kSidebarRailWidth) : 0;
   gfx::Transform outer;
