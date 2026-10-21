@@ -709,7 +709,7 @@ std::u16string ReplaceInstallation(base::FilePath package,
   if (!tar.IsValid() || !tar.WaitForExit(&exit_code) || exit_code != 0)
     return u"The package could not be unpacked.";
   const auto app =
-      unpacked.GetPath().AppendASCII("fly-browser-native").AppendASCII("app");
+      unpacked.GetPath().AppendASCII("fly-browser").AppendASCII("app");
   if (!base::PathExists(app.AppendASCII("fly")))
     return u"The package does not contain native Fly.";
   // One rename each way, as install.sh: the running browser keeps its open
@@ -792,7 +792,7 @@ void InstallNativeUpdate(const UpdateCheckResult& update,
 }
 
 namespace {
-constexpr char kDesktopId[] = "fly-browser-native.desktop";
+constexpr char kDesktopId[] = "fly-browser.desktop";
 constexpr char kDesktopMarker[] = "X-Fly-Native=true";
 constexpr int kIconSizes[] = {48, 128, 256};
 
@@ -825,7 +825,7 @@ base::FilePath Launcher() {
   base::FilePath exe;
   if (!base::PathService::Get(base::DIR_EXE, &exe))
     return base::FilePath();
-  return exe.AppendASCII("fly-browser-native");
+  return exe.AppendASCII("fly-browser");
 }
 base::FilePath UserEntry() {
   return DataHome().AppendASCII("applications").AppendASCII(kDesktopId);
@@ -915,7 +915,7 @@ std::u16string AddEntryBlocking() {
                             .AppendASCII(base::NumberToString(size) + "x" +
                                          base::NumberToString(size))
                             .AppendASCII("apps")
-                            .AppendASCII("fly-browser-native.png");
+                            .AppendASCII("fly-browser.png");
     if (base::PathExists(source) && base::CreateDirectory(target.DirName()))
       base::CopyFile(source, target);
   }
@@ -924,11 +924,11 @@ std::u16string AddEntryBlocking() {
        "Comment=Fly on the Chromium engine\nKeywords=browser;web;internet;\n"
        "Exec=",
        DesktopExecArgument(launcher.value()),
-       " %U\nIcon=fly-browser-native\nTerminal=false\nType=Application\n"
+       " %U\nIcon=fly-browser\nTerminal=false\nType=Application\n"
        "Categories=Network;WebBrowser;\n"
        "MimeType=text/html;text/xml;application/xhtml+xml;"
        "x-scheme-handler/http;x-scheme-handler/https;\n"
-       "StartupWMClass=fly-browser-native\n",
+       "StartupWMClass=fly-browser\n",
        kDesktopMarker, "\n"});
   const auto entry = UserEntry();
   if (!base::CreateDirectory(entry.DirName()) ||
@@ -974,7 +974,7 @@ void ChangeDesktopIntegration(
                                            base::NumberToString(size) + "x" +
                                            base::NumberToString(size))
                                        .AppendASCII("apps")
-                                       .AppendASCII("fly-browser-native.png"));
+                                       .AppendASCII("fly-browser.png"));
                 RunTool({"update-desktop-database", "-q",
                          entry.DirName().value()});
               }

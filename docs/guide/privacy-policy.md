@@ -2,7 +2,7 @@
 
 Fly does not collect product telemetry or usage analytics. Product settings,
 workspace state and browsing data are kept locally. Native Chromium Fly uses
-`$XDG_CONFIG_HOME/fly-browser-native` (default `~/.config/fly-browser-native`).
+`$XDG_CONFIG_HOME/fly-browser` (default `~/.config/fly-browser`).
 Electron legacy retains its separate `~/.config/fly-browser` profile.
 
 ## Network activity

@@ -34,15 +34,15 @@ throws(() => aur.checksumFrom(sums, 'Fly-9.9.9-native-linux-x64.tar.gz'), /no en
 const root = path.join(__dirname, '..');
 const staging = fs.mkdtempSync(path.join(os.tmpdir(), 'fly-native-aur-'));
 try {
-    const app = path.join(staging, 'fly-browser-native/app');
+    const app = path.join(staging, 'fly-browser/app');
     const pkgdir = path.join(staging, 'pkg');
     fs.mkdirSync(path.join(app, 'icons'), {recursive:true});
-    fs.writeFileSync(path.join(app, 'fly-browser-native'), '#!/bin/sh\n', {mode:0o755});
+    fs.writeFileSync(path.join(app, 'fly-browser'), '#!/bin/sh\n', {mode:0o755});
     fs.chmodSync(app, 0o700);
     fs.mkdirSync(path.join(app, 'fly_resources'), {mode:0o700});
     fs.writeFileSync(path.join(app, 'fly_resources', 'asset'), 'public runtime asset', {mode:0o600});
     fs.writeFileSync(path.join(app, 'chrome-sandbox'), 'sandbox');
-    fs.writeFileSync(path.join(app, 'fly-browser-native.desktop'), '[Desktop Entry]\nName=Fly\nExec=@EXEC@ %U\nIcon=fly-browser-native\n');
+    fs.writeFileSync(path.join(app, 'fly-browser.desktop'), '[Desktop Entry]\nName=Fly\nExec=@EXEC@ %U\nIcon=fly-browser\n');
     for (const size of aur.ICON_SIZES) fs.writeFileSync(path.join(app, 'icons', `fly-logo${size}.png`), 'icon');
     const pkgbuild = path.join(staging, 'PKGBUILD');
     fs.writeFileSync(pkgbuild, files.PKGBUILD);
@@ -50,14 +50,14 @@ try {
         cwd:staging, env:{...process.env, pkgdir}, encoding:'utf8'
     });
     assert.equal(packaged.status, 0, packaged.stderr);
-    assert.match(fs.readFileSync(path.join(pkgdir, 'usr/bin/fly-browser'), 'utf8'), /exec \/opt\/fly-browser\/fly-browser-native/);
-    assert.match(fs.readFileSync(path.join(pkgdir, 'usr/share/applications/fly-browser-native.desktop'), 'utf8'), /Exec=\/usr\/bin\/fly-browser %U/);
-    assert.ok(fs.existsSync(path.join(pkgdir, 'usr/share/icons/hicolor/128x128/apps/fly-browser-native.png')));
+    assert.match(fs.readFileSync(path.join(pkgdir, 'usr/bin/fly-browser'), 'utf8'), /exec \/opt\/fly-browser\/fly-browser/);
+    assert.match(fs.readFileSync(path.join(pkgdir, 'usr/share/applications/fly-browser.desktop'), 'utf8'), /Exec=\/usr\/bin\/fly-browser %U/);
+    assert.ok(fs.existsSync(path.join(pkgdir, 'usr/share/icons/hicolor/128x128/apps/fly-browser.png')));
     assert.equal(fs.statSync(path.join(pkgdir, 'opt/fly-browser/chrome-sandbox')).mode & 0o7777, 0o4755);
     for (const directory of ['opt/fly-browser', 'opt/fly-browser/fly_resources'])
         assert.equal(fs.statSync(path.join(pkgdir, directory)).mode & 0o755, 0o755);
     assert.equal(fs.statSync(path.join(pkgdir, 'opt/fly-browser/fly_resources/asset')).mode & 0o444, 0o444);
-    assert.equal(fs.statSync(path.join(pkgdir, 'opt/fly-browser/fly-browser-native')).mode & 0o555, 0o555);
+    assert.equal(fs.statSync(path.join(pkgdir, 'opt/fly-browser/fly-browser')).mode & 0o555, 0o555);
 } finally { fs.rmSync(staging, {recursive:true, force:true}); }
 
 // Where makepkg exists, the hand-written .SRCINFO must be the one it derives.

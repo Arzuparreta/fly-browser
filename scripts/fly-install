@@ -8,7 +8,7 @@ repo=Arzuparreta/fly-browser
 config=${XDG_CONFIG_HOME:-$HOME/.config}
 cache_home=${XDG_CACHE_HOME:-$HOME/.cache}
 data=${XDG_DATA_HOME:-$HOME/.local/share}
-target=$data/fly-browser-native
+target=$data/fly-browser
 say() { printf '%s\n' "$*"; }
 die() { say "fly-install: $*" >&2; exit 1; }
 package_installed() { command -v pacman >/dev/null && pacman -Q fly-browser-bin >/dev/null 2>&1; }
@@ -40,7 +40,7 @@ install_native() (
     actual=$(sha256sum "$tmp/$name"); actual=${actual%% *}
     [ "$expected" = "$actual" ] || die 'Native package checksum mismatch; installation was not changed.'
     tar -xzf "$tmp/$name" -C "$tmp"
-    "$tmp/fly-browser-native/install.sh"
+    "$tmp/fly-browser/install.sh"
 )
 method=auto
 case ${1:-status} in
@@ -60,7 +60,7 @@ case ${1:-status} in
     status|scan|list)
         if [ -f "$target/VERSION" ]; then cat "$target/VERSION"; say "Installation: $target"; else say 'Native Fly is not installed for this user.'; fi
         if package_installed; then pacman -Q fly-browser-bin; fi
-        for profile in "$config/fly-browser-native" "$config/fly-browser" "$config/fly-browser-flags.conf"; do
+        for profile in "$config/fly-browser" "$config/fly-browser-flags.conf"; do
             [ ! -e "$profile" ] || say "Retained configuration: $profile"
         done
         say 'Electron legacy copies: use bash legacy/electron/fly-install status from the repository.' ;;
@@ -92,18 +92,18 @@ case ${1:-status} in
         fi
         if [ "$scope" != package ]; then
             rm -rf "$target"
-            for link in "$HOME/.local/bin/fly-browser-native" "$HOME/.local/bin/fly-browser"; do
-                if [ "$(readlink "$link" 2>/dev/null || true)" = "$target/fly-browser-native" ]; then rm -f "$link"; fi
+            for link in "$HOME/.local/bin/fly-browser"; do
+                if [ "$(readlink "$link" 2>/dev/null || true)" = "$target/fly-browser" ]; then rm -f "$link"; fi
             done
-            rm -f "$data/applications/fly-browser-native.desktop"
-            for size in 48 128 256; do rm -f "$data/icons/hicolor/${size}x${size}/apps/fly-browser-native.png"; done
+            rm -f "$data/applications/fly-browser.desktop"
+            for size in 48 128 256; do rm -f "$data/icons/hicolor/${size}x${size}/apps/fly-browser.png"; done
             command -v update-desktop-database >/dev/null && update-desktop-database "$data/applications" || true
         fi
-        rm -rf "$cache_home/fly-install" "$cache_home/fly-browser-native" "$cache_home/fly-browser"
+        rm -rf "$cache_home/fly-install" "$cache_home/fly-browser"
         if [ "$purge" = true ]; then
-            rm -rf "$config/fly-browser-native" "$config/fly-browser"
+            rm -rf "$config/fly-browser"
             rm -f "$config/fly-browser-flags.conf"
-            say 'Removed Fly installation and native/Electron profiles, including history, passwords and settings.'
+            say 'Removed Fly installation and profiles, including history, passwords and settings.'
         else
             say 'Removed Fly installation; native and Electron profiles are kept.'
         fi ;;

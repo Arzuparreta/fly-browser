@@ -11,7 +11,7 @@ shows two native pages; commands target the focused pane. Moving a tab between
 profiles can require a reload and uses the destination's login state.
 
 The first imported workspace uses `Default`, and later profiles are managed by
-Chromium under `$XDG_CONFIG_HOME/fly-browser-native`. Do not rename profile
+Chromium under `$XDG_CONFIG_HOME/fly-browser`. Do not rename profile
 folders or edit Chromium files while Fly is running. Fly's workspace registry
 is stored in `Local State`; it is no longer Electron's `session.json` with
 `persist:*` partitions. See [configuration](/reference/configuration).

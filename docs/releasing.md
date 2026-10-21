@@ -95,7 +95,7 @@ The `###` line replaces the title, plain lines become the description and `- ` l
 `release.yml` checks the tag against `package.json`, builds the native Linux
 package and publishes it with `SHA256SUMS.txt`, a per-archive `.sha256` and notes
 from merged pull requests. The archive is `Fly-<version>-native-linux-x64.tar.gz`.
-It contains `fly-browser-native/app/` plus `install.sh`. The native updater uses
+It contains `fly-browser/app/` plus `install.sh`. The native updater uses
 the same archive name and its `.sha256`; `fly-install` checks `SHA256SUMS.txt`.
 No Electron AppImage or `latest-linux.yml` is published. macOS and Windows native
 packaging remain unsupported; earlier downloads for those platforms are legacy.

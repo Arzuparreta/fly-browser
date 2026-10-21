@@ -53,7 +53,7 @@ Most modern web browsers consume gigabytes of memory and leak telemetry continuo
 * **Memory Conservation:** Eligible idle tabs pause in memory and resume their existing document.
 * **Complete Isolation:** Separate workspace containers keep cookies, caches, and logins entirely segregated.
 * **Crash Resilience:** Atomic file writes, rolling backup journals, and on-demand session restoration prevent data loss and crash loops.
-* **Transparent Storage:** Configuration, history, and keybinds live in human-readable files under `~/.config/fly-browser-native/`.
+* **Transparent Storage:** Configuration, history, and keybinds live in human-readable files under `~/.config/fly-browser/`.
 * **Zero Cloud Dependence:** No remote telemetry, no forced account sync, and zero phone-home profiling.
 :::
 

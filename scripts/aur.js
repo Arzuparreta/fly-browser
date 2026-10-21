@@ -7,7 +7,7 @@
 // Nothing here is edited by hand per release; the AUR workflow runs this and
 // pushes the result.
 //
-// The native tarball carries app/fly-browser-native.desktop and app/icons/.
+// The native tarball carries app/fly-browser.desktop and app/icons/.
 // The package installs that launcher and profile-separated Chromium runtime.
 //
 // `.SRCINFO` is written here rather than by `makepkg --printsrcinfo` so that
@@ -72,7 +72,7 @@ source=("${source}")
 sha256sums=('${sha256}')
 
 package() {
-    cd "fly-browser-native/app"
+    cd "fly-browser/app"
     install -d "\${pkgdir}/opt/\${_pkgname}"
     cp -a . "\${pkgdir}/opt/\${_pkgname}/"
     # A release built with umask 077 must still be usable after root owns it.
@@ -90,15 +90,16 @@ if [ -r "$flags" ]; then
     # shellcheck disable=SC2046
     set -- $(sed 's/#.*//' "$flags") "$@"
 fi
-exec /opt/fly-browser/fly-browser-native "$@"
+exec /opt/fly-browser/fly-browser "$@"
 EOF
     chmod 755 "\${pkgdir}/usr/bin/\${_pkgname}"
 
-    sed -e "s|@EXEC@|/usr/bin/fly-browser|" fly-browser-native.desktop > fly-browser.desktop
-    install -Dm644 fly-browser.desktop "\${pkgdir}/usr/share/applications/fly-browser-native.desktop"
+    install -d "\${pkgdir}/usr/share/applications"
+    sed -e "s|@EXEC@|/usr/bin/fly-browser|" fly-browser.desktop > "\${pkgdir}/usr/share/applications/fly-browser.desktop"
+    chmod 644 "\${pkgdir}/usr/share/applications/fly-browser.desktop"
     for size in ${ICON_SIZES.join(' ')}; do
         install -Dm644 "icons/fly-logo\${size}.png" \\
-            "\${pkgdir}/usr/share/icons/hicolor/\${size}x\${size}/apps/fly-browser-native.png"
+            "\${pkgdir}/usr/share/icons/hicolor/\${size}x\${size}/apps/fly-browser.png"
     done
 }
 `;

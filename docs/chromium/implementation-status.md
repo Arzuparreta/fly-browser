@@ -211,7 +211,7 @@ files the native build runs unchanged are copied by
 Linux package: `scripts/chromium/package-linux.py` turns a release build
 (`chromium/gn/release.gnargs`) into `dist/Fly-<version>-native-linux-x64.tar.gz`
 with `install.sh` ("Fly"; Electron remains separate, data in
-`$XDG_CONFIG_HOME/fly-browser-native`). Built and installed into a temporary
+`$XDG_CONFIG_HOME/fly-browser`). Built and installed into a temporary
 HOME locally; hosted CI cannot build it. Windows and macOS packages and owner acceptance remain. The release pipeline
 now builds this native Linux archive on a provisioned engine host.
 

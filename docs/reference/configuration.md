@@ -1,9 +1,8 @@
 # Configuration and storage
 
-Native Fly's launcher uses `$XDG_CONFIG_HOME/fly-browser-native`, defaulting to
-`~/.config/fly-browser-native`. A direct engine invocation must include
-`--fly-native` and the intended `--user-data-dir`. Never point Chromium at the
-Electron profile (`~/.config/fly-browser`).
+Native Fly's launcher uses `$XDG_CONFIG_HOME/fly-browser`, defaulting to
+`~/.config/fly-browser`. A direct engine invocation must include
+`--fly-native` and the intended `--user-data-dir`. Start with a clean profile when replacing an old Electron installation.
 
 ## Preferences
 
@@ -38,6 +37,6 @@ Keep these files with the rest of the profile when backing up. A full backup
 requires closing Fly and copying the entire native user data directory.
 
 Removing the native installation keeps data. Deleting the native profile is a
-separate destructive action; the original Electron profile stays independent.
+separate destructive action: `fly-install uninstall --purge`.
 The [archived Electron reference](https://github.com/Arzuparreta/fly-browser/tree/main/legacy/electron/docs)
 describes the old JSON schema for comparison only.

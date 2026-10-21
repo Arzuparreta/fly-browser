@@ -88,8 +88,8 @@ The shortcuts below are new-profile defaults. The palette shows your saved assig
 
 | Command Title | Shortcut | Action ID | Description |
 | :--- | :--- | :--- | :--- |
-| **Open User Scripts Directory** | — | — | Opens `~/.config/fly-browser-native/scripts` in default system file manager. |
-| **Open User Styles Directory** | — | — | Opens `~/.config/fly-browser-native/styles` in default system file manager. |
+| **Open User Scripts Directory** | — | — | Opens `~/.config/fly-browser/scripts` in default system file manager. |
+| **Open User Styles Directory** | — | — | Opens `~/.config/fly-browser/styles` in default system file manager. |
 | **Reload User Scripts and Styles** | — | — | Hot-reloads custom scripts and stylesheets across active pages. |
 
 ### Preferences & System
