@@ -19,6 +19,10 @@
 #include "fly/ui/fly_extensions.h"
 #include "fly/ui/sidebar_panel.h"
 #include "fly/ui/new_tab_ui.h"
+#include "fly/ui/download_shelf.h"
+#include "fly/ui/status_bar.h"
+#include "components/download/public/common/download_item.h"
+#include "content/public/browser/download_manager.h"
 #include "ui/views/accessibility/view_accessibility.h"
 #include "ui/compositor/layer.h"
 #include "ui/compositor/layer_animator.h"
@@ -1461,6 +1465,70 @@ IN_PROC_BROWSER_TEST_F(FlyWorkspaceBrowserTest,
       FlyWindowController::Get().tab_sidebar_for_testing()->row_for_testing(
           contents);
   ASSERT_TRUE(row);
+}
+
+// Electron's download shelf: it appears when a download starts, shows the
+// card, and toggle-downloads hides it again.
+IN_PROC_BROWSER_TEST_F(FlyWorkspaceBrowserTest, DownloadShelfFollowsDownloads) {
+  ASSERT_TRUE(ui_test_utils::NavigateToURL(
+      browser(), embedded_test_server()->GetURL("/title1.html")));
+  auto& window = FlyWindowController::Get();
+  auto* shelf = window.download_shelf_for_testing();
+  ASSERT_TRUE(shelf);
+  EXPECT_FALSE(shelf->GetVisible());
+  ASSERT_TRUE(content::ExecJs(Active(browser()), R"js(
+    const link = document.createElement('a');
+    link.href = URL.createObjectURL(new Blob(['fly download']));
+    link.download = 'fly-shelf.txt';
+    document.body.append(link);
+    link.click();
+  )js"));
+  ASSERT_TRUE(base::test::RunUntil(
+      [&] { return shelf->GetVisible() && shelf->card_count_for_testing() == 1; }));
+  auto* manager = browser()->GetProfile()->GetDownloadManager();
+  ASSERT_TRUE(base::test::RunUntil([&] {
+    content::DownloadManager::DownloadVector items;
+    manager->GetAllDownloads(&items);
+    return items.size() == 1 &&
+           items[0]->GetState() == download::DownloadItem::COMPLETE;
+  }));
+  ASSERT_TRUE(InvokeNativeCommand(browser(), "toggle-downloads"));
+  EXPECT_FALSE(shelf->GetVisible());
+  ASSERT_TRUE(InvokeNativeCommand(browser(), "toggle-downloads"));
+  EXPECT_TRUE(shelf->GetVisible());
+}
+
+// Electron's status bar: messages in the link area, the zoom controls above
+// the zoom pill and the mode badge entering passthrough.
+IN_PROC_BROWSER_TEST_F(FlyWorkspaceBrowserTest,
+                       StatusBarMessagesZoomControlsAndModeBadge) {
+  ASSERT_TRUE(ui_test_utils::NavigateToURL(
+      browser(), embedded_test_server()->GetURL("/title1.html")));
+  auto& window = FlyWindowController::Get();
+  auto* status = window.status_bar_for_testing();
+  window.ShowStatus(u"Saved");
+  EXPECT_EQ(u"Saved", status->message_for_testing());
+  EXPECT_NE(u"Saved", std::u16string(status->mode_label()->GetText()));
+  views::test::ButtonTestApi(status->zoom_for_testing())
+      .NotifyDefaultMouseClick();
+  EXPECT_TRUE(status->zoom_controls_open_for_testing());
+  views::test::ButtonTestApi(status->zoom_for_testing())
+      .NotifyDefaultMouseClick();
+  ASSERT_TRUE(base::test::RunUntil(
+      [&] { return !status->zoom_controls_open_for_testing(); }));
+  EXPECT_EQ(u"NORMAL", std::u16string(status->mode_label()->GetText()));
+  ui::test::EventGenerator mouse(
+      window.desktop_widget()->GetNativeWindow()->GetRootWindow());
+  const auto badge = status->mode_label()->GetBoundsInScreen().CenterPoint();
+  mouse.MoveMouseTo(badge);
+  mouse.ClickLeftButton();
+  ASSERT_TRUE(base::test::RunUntil([&] {
+    return std::u16string(status->mode_label()->GetText()) == u"PASSTHROUGH";
+  }));
+  mouse.ClickLeftButton();
+  ASSERT_TRUE(base::test::RunUntil([&] {
+    return std::u16string(status->mode_label()->GetText()) == u"NORMAL";
+  }));
 }
 
 IN_PROC_BROWSER_TEST_F(FlyWorkspaceBrowserTest,

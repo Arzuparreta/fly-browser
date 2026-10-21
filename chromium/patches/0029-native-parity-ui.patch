@@ -1,6 +1,6 @@
 --- a/chrome/browser/ui/BUILD.gn
 +++ b/chrome/browser/ui/BUILD.gn
-@@ -804,6 +804,14 @@
+@@ -804,6 +804,16 @@
        "//fly/ui/user_content.h",
        "//fly/ui/site_zoom.cc",
        "//fly/ui/site_zoom.h",
@@ -12,6 +12,8 @@
 +      "//fly/ui/sidebar_panel.h",
 +      "//fly/ui/new_tab_ui.cc",
 +      "//fly/ui/new_tab_ui.h",
++      "//fly/ui/download_shelf.cc",
++      "//fly/ui/download_shelf.h",
        "//fly/ui/fly_theme.cc",
        "//fly/ui/fly_theme.h",
        "//fly/ui/fly_window_controller.cc",

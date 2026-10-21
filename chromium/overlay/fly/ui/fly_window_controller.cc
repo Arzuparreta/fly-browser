@@ -3,6 +3,7 @@
 // Fly repository.
 #include "fly/ui/fly_window_controller.h"
 #include "fly/ui/new_tab_ui.h"
+#include "fly/ui/download_shelf.h"
 
 #include "build/build_config.h"
 #include "base/strings/string_number_conversions.h"
@@ -477,8 +478,24 @@ FlyWindowController::FlyWindowController()
               window->welcome_->SetLogo(image.AsImageSkia());
           },
           weak_factory_.GetWeakPtr()));
+  // Electron's download shelf, above the status bar; it appears when a
+  // download starts and makes room for itself.
+  download_shelf_ = column->AddChildView(std::make_unique<DownloadShelf>(
+      base::BindRepeating(
+          [](base::WeakPtr<FlyWindowController> window) {
+            if (window && window->selected_)
+              window->ToggleDownloads(window->selected_);
+          },
+          weak_factory_.GetWeakPtr())));
   status_bar_ = column->AddChildView(std::make_unique<StatusBar>(StatusBar::Actions{
-      .zoom = command("reset-zoom"),
+      .zoom = base::BindRepeating(
+          [](base::WeakPtr<FlyWindowController> window, std::string action) {
+            if (window && window->selected_ && !window->closing_)
+              InvokeNativeCommand(window->selected_, action);
+          },
+          weak_factory_.GetWeakPtr()),
+      .mode = base::BindRepeating(&FlyWindowController::ClickModeBadge,
+                                  weak_factory_.GetWeakPtr()),
       .notifications = command("toggle-notifications"),
       .workspace = base::BindRepeating(&FlyWindowController::ToggleWorkspacePicker,
                                        weak_factory_.GetWeakPtr()),
@@ -893,6 +910,7 @@ FlyWindowController::~FlyWindowController() {
   content_ = nullptr;
   status_ = nullptr;
   status_bar_ = nullptr;
+  download_shelf_ = nullptr;
   clock_ = nullptr;
   preferences_button_ = nullptr;
   tab_sidebar_ = nullptr;
@@ -2038,6 +2056,8 @@ void FlyWindowController::Prepare(BrowserWindowInterface* browser) {
       browser->RegisterBrowserDidClose(base::BindRepeating(
           &FlyWindowController::OnBrowserDidClose, weak_factory_.GetWeakPtr()));
   ApplyProfilePreferences(browser->GetProfile(), preferences_);
+  if (download_shelf_)
+    download_shelf_->AddProfile(browser->GetProfile());
   if (!browser->GetProfile()->IsOffTheRecord()) {
     extensions_->AddProfile(browser->GetProfile());
     user_content_->AddProfile(browser->GetProfile());
@@ -3739,13 +3759,25 @@ void FlyWindowController::UpdateModeLabel() {
       hints_ && hints_->active()
           ? (hints_->truncated() ? u"HINTS (target limit)" : u"HINTS")
           : NativePageModeLabel(selected_);
-  status_->SetText(selected_ && selected_->GetProfile()->IsOffTheRecord()
-                       ? u"PRIVATE · " + mode
-                       : mode);
+  // The workspace badge says when the workspace is private.
+  status_->SetText(mode);
+}
+// Electron's mode badge: a click cancels hints, leaves passthrough, or
+// enters it from NORMAL (INSERT ignores it).
+void FlyWindowController::ClickModeBadge() {
+  if (closing_ || !selected_)
+    return;
+  if (hints_ && hints_->active()) {
+    InvokeNativeCommand(selected_, "trigger-hints");
+    return;
+  }
+  const auto mode = NativePageModeLabel(selected_);
+  if (mode == u"PASSTHROUGH" || mode == u"NORMAL")
+    InvokeNativeCommand(selected_, "toggle-passthrough");
 }
 
 std::u16string FlyWindowController::status_text_for_testing() const {
-  return status_ ? std::u16string(status_->GetText()) : std::u16string();
+  return status_bar_ ? status_bar_->message_for_testing() : std::u16string();
 }
 void FlyWindowController::ShowStatus(std::u16string text) {
   RecordDiagnostic(
@@ -3753,8 +3785,9 @@ void FlyWindowController::ShowStatus(std::u16string text) {
           ? "warn"
           : "info",
       "status", text);
-  if (status_)
-    status_->SetText(std::move(text));
+  // Electron's setTargetUrl(message, timeout): the link area, for a while.
+  if (status_bar_)
+    status_bar_->ShowMessage(std::move(text), base::Milliseconds(3500));
 }
 std::vector<Profile*> FlyWindowController::WorkspaceProfiles() const {
   std::vector<Profile*> profiles;
@@ -3941,7 +3974,12 @@ bool FlyWindowController::RunProductAction(BrowserWindowInterface* browser,
     return true;
   }
   if (action == "toggle-downloads") {
-    ToggleDownloads(browser);
+    // Electron toggles its download shelf; with nothing on it, Fly lists
+    // every workspace's downloads.
+    if (download_shelf_ && download_shelf_->has_cards())
+      download_shelf_->Toggle();
+    else
+      ToggleDownloads(browser);
     return true;
   }
   if (action == "toggle-reader-view") {

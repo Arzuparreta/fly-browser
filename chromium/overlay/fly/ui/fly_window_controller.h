@@ -78,6 +78,7 @@ class TabSidebar;
 class SidebarPanel;
 class SidebarRoot;
 class SidebarClock;
+class DownloadShelf;
 class HintController;
 class KeyboardRouter;
 class WorkspaceCloseTransaction;
@@ -133,6 +134,7 @@ class FlyWindowController : public views::WidgetDelegate,
   base::DictValue NewTabLists(bool off_the_record) const;
   bool HideFrequentSite(const std::string& url);
   TabSidebar* tab_sidebar_for_testing() { return tab_sidebar_; }
+  DownloadShelf* download_shelf_for_testing() { return download_shelf_; }
   SidebarRoot* sidebar_root_for_testing() { return sidebar_root_; }
   void CreateTab();
   // An empty name takes the next "Workspace N".
@@ -288,6 +290,7 @@ class FlyWindowController : public views::WidgetDelegate,
 
  private:
   void SetTabNumbers(bool shown);
+  void ClickModeBadge();
   void LoadSidebarArtwork();
   void StopSidebarFocusObservation();
   void ToggleSidebarAutoCollapse();
@@ -457,6 +460,7 @@ class FlyWindowController : public views::WidgetDelegate,
   std::string pending_empty_action_;
   raw_ptr<views::Label> status_ = nullptr;
   raw_ptr<StatusBar> status_bar_ = nullptr;
+  raw_ptr<DownloadShelf> download_shelf_ = nullptr;
   raw_ptr<SidebarClock> clock_ = nullptr;
   raw_ptr<FlyButton> preferences_button_ = nullptr;
   raw_ptr<TabSidebar> tab_sidebar_ = nullptr;
