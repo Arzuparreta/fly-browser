@@ -5,7 +5,7 @@ const path = require('node:path');
 const {spawn, spawnSync} = require('node:child_process');
 const temporary = fs.mkdtempSync(path.join(os.tmpdir(), 'fly-launcher-'));
 try {
-    fs.copyFileSync(path.join(__dirname, '../launch.sh'), path.join(temporary, 'launch.sh'));
+    fs.writeFileSync(path.join(temporary, 'launch.sh'), fs.readFileSync(path.join(__dirname, '../legacy/electron/launch.sh'), 'utf8').replace('/../..', ''));
     fs.mkdirSync(path.join(temporary, 'node_modules/.bin'), {recursive:true});
     for (const file of ['package.json', 'package-lock.json', 'node_modules/.package-lock.json']) fs.writeFileSync(path.join(temporary, file), '{}');
     const future = new Date(Date.now()+10000);

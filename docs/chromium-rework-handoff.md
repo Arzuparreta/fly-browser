@@ -2,7 +2,7 @@
 
 Status: implementation started at M0. See the
 [execution record](./chromium/implementation-status.md) for current source pins,
-commands, results and remaining work. The runtime is still Electron.
+commands, results and remaining work. Native Chromium is now the default launcher and release target; Electron is legacy.
 
 ## Copyable agent brief
 

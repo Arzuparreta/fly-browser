@@ -7,9 +7,8 @@
 // Nothing here is edited by hand per release; the AUR workflow runs this and
 // pushes the result.
 //
-// The tarball must carry the desktop entry and the theme icons in
-// `resources/` (package.json: build.linux.extraResources). `npm test` checks
-// that it still does.
+// The native tarball carries app/fly-browser-native.desktop and app/icons/.
+// The package installs that launcher and profile-separated Chromium runtime.
 //
 // `.SRCINFO` is written here rather than by `makepkg --printsrcinfo` so that
 // it can be produced on any runner. The test compares the two where makepkg
@@ -25,12 +24,12 @@ const PKGNAME = 'fly-browser-bin';
 const NAME = 'fly-browser';
 const URL = 'https://github.com/Arzuparreta/fly-browser';
 const DESCRIPTION = 'A small, minimal browser with full keyboard control and a polished experience for mouse users';
-// Runtime libraries of Electron's Linux build, as packaged in Arch.
+// Runtime libraries of Chromium's Linux build, as packaged in Arch.
 const DEPENDS = ['alsa-lib', 'at-spi2-core', 'gtk3', 'libcups', 'libdrm', 'libnotify', 'libsecret', 'libxss', 'libxtst', 'mesa', 'nss', 'xdg-utils'];
-const ICON_SIZES = [16, 24, 32, 48, 64, 128, 256, 512];
+const ICON_SIZES = [48, 128, 256];
 
 function tarballName(version) {
-    return `Fly-${version}-x64.tar.gz`;
+    return `Fly-${version}-native-linux-x64.tar.gz`;
 }
 
 function checksumFrom(sums, file) {
@@ -73,10 +72,10 @@ source=("${source}")
 sha256sums=('${sha256}')
 
 package() {
-    cd "Fly-\${pkgver}-x64"
+    cd "fly-browser-native/app"
     install -d "\${pkgdir}/opt/\${_pkgname}"
     cp -a . "\${pkgdir}/opt/\${_pkgname}/"
-    # Electron's sandbox helper, for kernels without unprivileged user namespaces.
+    # Chromium's sandbox helper, for kernels without unprivileged user namespaces.
     chmod 4755 "\${pkgdir}/opt/\${_pkgname}/chrome-sandbox"
 
     # Flags in ~/.config/fly-browser-flags.conf (one or more per line, # for
@@ -89,14 +88,15 @@ if [ -r "$flags" ]; then
     # shellcheck disable=SC2046
     set -- $(sed 's/#.*//' "$flags") "$@"
 fi
-exec /opt/fly-browser/fly-browser "$@"
+exec /opt/fly-browser/fly-browser-native "$@"
 EOF
     chmod 755 "\${pkgdir}/usr/bin/\${_pkgname}"
 
-    install -Dm644 resources/fly-browser.desktop "\${pkgdir}/usr/share/applications/\${_pkgname}.desktop"
+    sed -e "s|@EXEC@|/usr/bin/fly-browser|" fly-browser-native.desktop > fly-browser.desktop
+    install -Dm644 fly-browser.desktop "\${pkgdir}/usr/share/applications/fly-browser-native.desktop"
     for size in ${ICON_SIZES.join(' ')}; do
-        install -Dm644 "resources/icons/\${size}x\${size}.png" \\
-            "\${pkgdir}/usr/share/icons/hicolor/\${size}x\${size}/apps/\${_pkgname}.png"
+        install -Dm644 "icons/fly-logo\${size}.png" \\
+            "\${pkgdir}/usr/share/icons/hicolor/\${size}x\${size}/apps/fly-browser-native.png"
     done
 }
 `;

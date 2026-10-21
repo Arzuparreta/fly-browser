@@ -15,8 +15,8 @@ const files = aur.render('1.2.3', sha);
 assert.match(files.PKGBUILD, /^pkgver=1\.2\.3$/m);
 assert.match(files.PKGBUILD, /^pkgrel=1$/m);
 assert.match(files.PKGBUILD, new RegExp(`^sha256sums=\\('${sha}'\\)$`, 'm'));
-assert.match(files.PKGBUILD, /releases\/download\/v\$\{pkgver\}\/Fly-\$\{pkgver\}-x64\.tar\.gz/);
-assert.match(files['.SRCINFO'], /^\tsource = Fly-1\.2\.3-x64\.tar\.gz::https:\/\/github\.com\/Arzuparreta\/fly-browser\/releases\/download\/v1\.2\.3\/Fly-1\.2\.3-x64\.tar\.gz$/m);
+assert.match(files.PKGBUILD, /releases\/download\/v\$\{pkgver\}\/Fly-\$\{pkgver\}-native-linux-x64\.tar\.gz/);
+assert.match(files['.SRCINFO'], /^\tsource = Fly-1\.2\.3-native-linux-x64\.tar\.gz::https:\/\/github\.com\/Arzuparreta\/fly-browser\/releases\/download\/v1\.2\.3\/Fly-1\.2\.3-native-linux-x64\.tar\.gz$/m);
 assert.match(aur.render('1.2.3', sha, 2)['.SRCINFO'], /^\tpkgrel = 2$/m);
 
 throws(() => aur.render('1.2.3-rc.1', sha), /pre-release/);
@@ -26,23 +26,32 @@ throws(() => aur.parseOptions(['--sums', 'x']), /Usage/);
 throws(() => aur.parseOptions(['--sums']), /needs a value/);
 
 // The checksum is the tarball's, not a neighbour's that shares a prefix.
-const sums = `${'1'.repeat(64)}  Fly-1.2.3-x64.tar.gz.sig\n${'2'.repeat(64)}  Fly-1.2.3-x64.tar.gz\n${'3'.repeat(64)}  Fly-1.2.3-x86_64.AppImage\n`;
+const sums = `${'1'.repeat(64)}  Fly-1.2.3-native-linux-x64.tar.gz.sig\n${'2'.repeat(64)}  Fly-1.2.3-native-linux-x64.tar.gz\n${'3'.repeat(64)}  Fly-1.2.3-x86_64.AppImage\n`;
 assert.equal(aur.checksumFrom(sums, aur.tarballName('1.2.3')), '2'.repeat(64));
-throws(() => aur.checksumFrom(sums, 'Fly-9.9.9-x64.tar.gz'), /no entry/);
+throws(() => aur.checksumFrom(sums, 'Fly-9.9.9-native-linux-x64.tar.gz'), /no entry/);
 
-// The package installs the desktop entry and icons from the tarball's
-// resources, so the build must keep putting them there.
+// Repackage the native archive layout into a disposable Arch package root.
 const root = path.join(__dirname, '..');
-const linux = JSON.parse(fs.readFileSync(path.join(root, 'package.json'), 'utf8')).build.linux;
-const resources = Object.fromEntries(linux.extraResources.map(entry => [entry.to, entry.from]));
-assert.equal(resources['fly-browser.desktop'], 'fly-browser.desktop');
-assert.equal(resources.icons, 'build/icons');
-for (const size of aur.ICON_SIZES) {
-    assert.ok(fs.existsSync(path.join(root, 'build/icons', `${size}x${size}.png`)), `build/icons/${size}x${size}.png`);
-}
-const desktop = fs.readFileSync(path.join(root, 'fly-browser.desktop'), 'utf8');
-assert.match(desktop, /^Exec=fly-browser %u$/m, 'The entry starts the /usr/bin launcher the package installs');
-assert.match(desktop, /^Icon=fly-browser$/m);
+const staging = fs.mkdtempSync(path.join(os.tmpdir(), 'fly-native-aur-'));
+try {
+    const app = path.join(staging, 'fly-browser-native/app');
+    const pkgdir = path.join(staging, 'pkg');
+    fs.mkdirSync(path.join(app, 'icons'), {recursive:true});
+    fs.writeFileSync(path.join(app, 'fly-browser-native'), '#!/bin/sh\n');
+    fs.writeFileSync(path.join(app, 'chrome-sandbox'), 'sandbox');
+    fs.writeFileSync(path.join(app, 'fly-browser-native.desktop'), '[Desktop Entry]\nName=Fly\nExec=@EXEC@ %U\nIcon=fly-browser-native\n');
+    for (const size of aur.ICON_SIZES) fs.writeFileSync(path.join(app, 'icons', `fly-logo${size}.png`), 'icon');
+    const pkgbuild = path.join(staging, 'PKGBUILD');
+    fs.writeFileSync(pkgbuild, files.PKGBUILD);
+    const packaged = spawnSync('bash', ['-e', '-c', 'source "$1"; package', 'package-test', pkgbuild], {
+        cwd:staging, env:{...process.env, pkgdir}, encoding:'utf8'
+    });
+    assert.equal(packaged.status, 0, packaged.stderr);
+    assert.match(fs.readFileSync(path.join(pkgdir, 'usr/bin/fly-browser'), 'utf8'), /exec \/opt\/fly-browser\/fly-browser-native/);
+    assert.match(fs.readFileSync(path.join(pkgdir, 'usr/share/applications/fly-browser-native.desktop'), 'utf8'), /Exec=\/usr\/bin\/fly-browser %U/);
+    assert.ok(fs.existsSync(path.join(pkgdir, 'usr/share/icons/hicolor/128x128/apps/fly-browser-native.png')));
+    assert.equal(fs.statSync(path.join(pkgdir, 'opt/fly-browser/chrome-sandbox')).mode & 0o7777, 0o4755);
+} finally { fs.rmSync(staging, {recursive:true, force:true}); }
 
 // Where makepkg exists, the hand-written .SRCINFO must be the one it derives.
 if (spawnSync('makepkg', ['--version']).status === 0) {

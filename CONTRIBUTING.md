@@ -55,11 +55,12 @@ Please use the structured GitHub issue forms to report problems:
    npm start
    ```
 
-Electron remains the current runtime while the approved full Chromium/Views
-implementation is developed. Native control setup is explicit and separate from
-`npm test`; see [Chromium development](docs/chromium/build.md) and the
-[implementation record](docs/chromium/implementation-status.md). A successful
-control build is not a native Fly port or a distribution package.
+Native Chromium/Views is the default runtime. `npm start` launches a prepared
+engine checkout, not Electron; set `FLY_ENGINE_ROOT` and optionally
+`FLY_ENGINE_OUTPUT`. Follow [Chromium development](docs/chromium/build.md) for
+the explicit control/native builds and tests. Native release packaging currently
+supports Linux x64. `npm run start:legacy` and `npm run dist:legacy` preserve
+Electron comparison workflows; see [legacy](legacy/electron/README.md).
 
 ***
 
@@ -67,7 +68,7 @@ control build is not a native Fly port or a distribution package.
 
 Contributions must follow these conventions:
 
-* **Language & Runtime:** Current Electron frontend modules use standard ES modules and backend code uses CommonJS. The approved native implementation uses Chromium C++, GN, Views and narrowly scoped typed WebUI/Mojo interfaces. Build tooling may use Python and Node.js. Follow the pinned upstream conventions and keep external source/build outputs outside this repository.
+* **Language & Runtime:** Legacy Electron frontend modules use standard ES modules and backend code uses CommonJS. The primary native implementation uses Chromium C++, GN, Views and narrowly scoped typed WebUI/Mojo interfaces. Build tooling may use Python and Node.js. Follow the pinned upstream conventions and keep external source/build outputs outside this repository.
 * **UK English:** All code comments, documentation, user-facing text, and issue messages must use British English spelling (e.g. `colour`, `customise`, `initialise`, `behaviour`, `optimise`, `sanitised`).
 * **Concise Code Notes:** Keep notes within code human-readable, purposeful, and concise. Avoid redundant commentary restating self-explanatory logic.
 * **Security Boundaries:**

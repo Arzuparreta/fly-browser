@@ -1,9 +1,37 @@
 # Chromium control development
 
-This tooling prepares the **unmodified upstream control** for M0. It does not
-build native Fly yet. Electron remains the default app, installer and release
-runtime until all cutover gates pass. Follow the
-[implementation record](./implementation-status.md) for actual results.
+Native Chromium is Fly's default runtime. Electron remains available for
+comparison under [legacy instructions](https://github.com/Arzuparreta/fly-browser/tree/main/legacy/electron).
+The commands below first prepare an **unmodified upstream control**; the next
+section builds Fly's native overlay. Installing npm dependencies alone does not
+build the browser. See the [implementation record](./implementation-status.md)
+for acceptance evidence and limits.
+
+## Build and launch native Fly
+
+After completing the control setup below:
+
+```sh
+python3 scripts/chromium/native.py apply --root /path/to/fly-chromium
+python3 scripts/chromium/native.py configure --root /path/to/fly-chromium
+python3 scripts/chromium/native.py build --root /path/to/fly-chromium
+python3 scripts/chromium/native.py test --root /path/to/fly-chromium
+python3 scripts/chromium/native.py test-browser --root /path/to/fly-chromium
+FLY_ENGINE_ROOT=/path/to/fly-chromium FLY_ENGINE_OUTPUT=out/FlyNative npm start
+```
+
+Browser tests require a graphical session or owned virtual display. Use only
+disposable profiles. For a static release build and tarball:
+
+```sh
+python3 scripts/chromium/release.py --root /path/to/fly-chromium
+FLY_ENGINE_ROOT=/path/to/fly-chromium npm start
+```
+
+The launcher defaults to `out/FlyRelease`, passes `--fly-native`, preserves
+arguments and uses the separate `fly-browser-native` user data directory. Set
+`FLY_ENGINE_ROOT` for your engine checkout. It never silently falls back to
+Electron. Release hosting prerequisites are in [releasing](../releasing.md).
 
 ## Source and prerequisites
 
@@ -156,7 +184,7 @@ python3 scripts/chromium/native.py build --root /path/to/fly-chromium
 ```
 
 The native output is `src/out/FlyNative`. During development, its native desktop
-window requires `--fly-native`; Electron remains the production runtime. Native
+window requires `--fly-native`, supplied by the default launcher. Electron is legacy. Native
 source changes and input fingerprints are recorded in `evidence/native-overlay.json`.
 `verify` rejects edits outside that manifest as well as changed managed files.
 To install a changed overlay, first `revert` the previous managed copy, then
@@ -308,11 +336,11 @@ python3 /path/to/fly/scripts/chromium/package-linux.py --root /path/to/engine
 ```
 
 The package is `dist/Fly-<version>-native-linux-x64.tar.gz` (with `.sha256`). It
-contains `install.sh`, which installs "Fly (native)" for the current user in
+contains `install.sh`, which installs "Fly" for the current user in
 `$XDG_DATA_HOME/fly-browser-native` with a menu entry and
-`~/.local/bin/fly-browser-native`, next to an Electron installation
+`~/.local/bin/fly-browser-native` plus the `fly-browser` alias, next to an Electron installation
 (`install.sh --remove` uninstalls and keeps data). Native data lives in
 `$XDG_CONFIG_HOME/fly-browser-native`, outside Electron Fly's `~/.config/fly-browser`.
 On its first start native Fly imports the Electron profile; if Electron Fly is
 open then, the import runs on the first start after it closes. A full static build does not fit the
-hosted CI runners, so packages are built on a local machine.
+hosted CI runners, so the release workflow uses a provisioned self-hosted engine runner.

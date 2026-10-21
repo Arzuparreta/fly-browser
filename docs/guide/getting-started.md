@@ -12,7 +12,7 @@ Typical desktop browsers consume gigabytes of memory across dozens of background
 
 - **Keyboard First**: Every single feature, tab switch, link click, and setting can be reached without touching a mouse.
 - **Resource Respect**: Eligible background pages pause without unloading, saving CPU and battery while preserving page state.
-- **Strict Privacy Isolation**: Workspaces operate in isolated container partitions. Work and personal profiles never leak cookies or storage.
+- **Strict Privacy Isolation**: Workspaces operate in isolated Chromium profiles. Work and personal profiles never leak cookies or storage.
 - **Crash & Session Resilience**: Atomic disk writes, rolling backup journals, and clean-exit sentinels protect active workspaces against power cuts or sudden terminations.
 - **Air-Gapped Security**: Untrusted scripts and shell commands are never blindly executed; they pass through clipboard verification.
 - **Distro & Shell Agnostic**: Fully integrated with Arch Linux and native terminal emulators while functioning seamlessly across all environments.
@@ -21,12 +21,15 @@ Typical desktop browsers consume gigabytes of memory across dozens of background
 
 ## Architecture at a Glance
 
-Fly combines the rendering capabilities of Chromium with Electron and native system utilities:
+Fly uses the full Chromium browser layer with native Views UI:
 
-1. **Main Process (`main.js`)**: Manages window lifecycles, memory pressure monitoring, partition isolation, native configurations, and keybinding translation.
-2. **Renderer Process (`renderer.js`)**: Powers the vertical tab sidebar, overlays, link hints, and user interface.
-3. **Webview Partitions (`modules/webview.js`)**: Renders individual web pages inside sandboxed `<webview>` tags assigned to specific workspace container partitions.
-4. **Local Configuration (`~/.config/fly-browser/`)**: Human-readable JSON files stored safely in your home directory.
+1. **Native shell** (`chromium/overlay/fly/ui/`): sidebar, split panes, pickers and Preferences.
+2. **Workspace profiles**: separate Chromium profiles for logins, storage and extensions.
+3. **Product services**: commands, keyboard bindings, bookmarks, preferences and recovery.
+4. **Local data**: Chromium-managed state under `~/.config/fly-browser-native/`.
+
+Electron source remains available for comparison through `npm run start:legacy`.
+See [installation](/guide/installation) before importing an existing profile.
 
 ---
 
@@ -40,6 +43,6 @@ Once launched, Fly presents a clean, distraction-free window:
 - Press **Ctrl + T** to open a new tab.
 - Press **Alt + F** (or **f** in NORMAL mode) to activate the Link Hints overlay and navigate links using your keyboard.
 - Press **Ctrl + P** to bring up the Command Palette for quick access to all browser functions.
-- Press **Ctrl + H** to open the Settings tab. Fly reuses it within each workspace and remembers its selected section when you switch tabs or restart. Use the section index on the left, or ↑/↓ once it has focus, to move between sections. Press **/** or **Ctrl + F** to search every setting.
+- Press **Ctrl + ,** to open Preferences. Use the section index on the left, or ↑/↓ once it has focus, to move between sections. Press **/** or **Ctrl + F** to search every setting.
 
 These are new-profile defaults. Open **Preferences → Keyboard** (default **Ctrl+,**) to choose your browser and page bindings. See the [keyboard reference](/reference/keybinds).

@@ -1,7 +1,16 @@
 # Native Chromium implementation record
 
-The native port is **incomplete**. Electron remains the production runtime.
-Full product, migration and packaged application acceptance remain outstanding.
+Native Chromium is now the default launcher, installer and release target.
+Electron source and comparison commands remain in `legacy/electron/README.md`.
+This delivery cutover does **not** establish full port acceptance: macOS/Windows
+native packages, complete migration/product acceptance and a hosted release
+rehearsal remain outstanding. Linux packages retain the native data directory
+and archive layout to stay compatible with the implemented native updater.
+
+The release workflow now requires a provisioned trusted `fly-chromium` Linux x64
+self-hosted runner with `FLY_ENGINE_ROOT`. No runner was registered at cutover;
+a tag build will queue until one is provided. No release is published by this
+implementation PR. See [releasing](../releasing.md).
 
 ## Active execution state
 
@@ -140,10 +149,10 @@ files the native build runs unchanged are copied by
 
 Linux package: `scripts/chromium/package-linux.py` turns a release build
 (`chromium/gn/release.gnargs`) into `dist/Fly-<version>-native-linux-x64.tar.gz`
-with `install.sh` ("Fly (native)" next to Electron Fly, data in
+with `install.sh` ("Fly"; Electron remains separate, data in
 `$XDG_CONFIG_HOME/fly-browser-native`). Built and installed into a temporary
-HOME locally; hosted CI cannot build it. Windows and macOS packages, release
-pipeline cutover and owner acceptance remain.
+HOME locally; hosted CI cannot build it. Windows and macOS packages and owner acceptance remain. The release pipeline
+now builds this native Linux archive on a provisioned engine host.
 
 Local validation uses the engine checkout `/mnt/storage/fly-chromium`, output
 `src/out/FlyNative`, `native.py refresh-overlay --include-upstream` followed by

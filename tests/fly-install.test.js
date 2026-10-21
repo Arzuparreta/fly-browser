@@ -11,7 +11,7 @@ const { spawnSync } = require('node:child_process');
 const { createDesktopIntegration } = require('../desktopIntegration');
 
 const root = path.join(__dirname, '..');
-const script = path.join(root, 'scripts/fly-install');
+const script = path.join(root, 'legacy/electron/fly-install');
 const template = fs.readFileSync(path.join(root, 'fly-browser.desktop'), 'utf8');
 
 // The fallback entry inside the script is the repository's.

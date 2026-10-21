@@ -108,9 +108,9 @@ body:
       label: Installation / Execution Method
       description: How do you run Fly Browser on your machine?
       options:
-        - Pre-built AppImage (.AppImage)
+        - Native Chromium Linux tarball (fly-install)
         - Release tarball (.tar.gz)
-        - Built from source (npm start)
+        - Native Chromium source build (npm start)
         - AUR package
         - Other packaging format
     validations:
