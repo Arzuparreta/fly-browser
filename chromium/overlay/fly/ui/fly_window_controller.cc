@@ -3,6 +3,7 @@
 // Fly repository.
 #include "fly/ui/fly_window_controller.h"
 #include "fly/ui/new_tab_ui.h"
+#include "chrome/browser/prefs/incognito_mode_prefs.h"
 #include "fly/ui/download_shelf.h"
 #include "chrome/browser/ui/browser_window/public/global_browser_collection.h"
 #include "chrome/browser/ui/views/frame/browser_view.h"
@@ -495,7 +496,7 @@ FlyWindowController::FlyWindowController()
   download_shelf_ = column->AddChildView(std::make_unique<DownloadShelf>(
       base::BindRepeating(
           [](base::WeakPtr<FlyWindowController> window) {
-            if (window && window->selected_)
+            if (window)
               window->ToggleDownloads(window->selected_);
           },
           weak_factory_.GetWeakPtr())));
@@ -594,17 +595,8 @@ FlyWindowController::FlyWindowController()
             if (!window || window->closing_)
               return false;
             if (!window->selected_)
-              return action == "spawn-tab" || action == "toggle-help" ||
-                     action == "open-keyboard-settings" ||
-                     action == "toggle-address" ||
-                     action == "toggle-downloads" ||
-                     action == "open-extension-actions" ||
-                     action == "extensions-open-settings" ||
-                     action == "open-diagnostics" ||
-                     action == "toggle-bookmarks" ||
-                     action == "toggle-dashboard" ||
-                     action == "new-workspace" || action == "toggle-theme" ||
-                     action == "toggle-sidebar-pin" || action == "toggle-clock";
+              return action == "spawn-tab" || IsShellCommand(action) ||
+                     action == "extensions-open-settings";
             return action == "trigger-hints" || action == "focus-sidebar" ||
                    action == "new-workspace" || action == "next-workspace" ||
                    action == "previous-workspace" ||
@@ -718,8 +710,13 @@ FlyWindowController::FlyWindowController()
       base::BindRepeating(
           [](base::WeakPtr<FlyWindowController> window, content::WebContents*,
              std::string action) {
-            if (window && !window->closing_ &&
-                !OpenDownloadEntry(window->WorkspaceProfiles(),
+            if (!window || window->closing_)
+              return;
+            if (action == "downloads-page") {
+              window->OpenInNewTab(GURL("chrome://downloads/"));
+              return;
+            }
+            if (!OpenDownloadEntry(window->WorkspaceProfiles(),
                                    window->selected_, action))
               window->ShowStatus(u"That download is no longer available.");
           },
@@ -764,8 +761,8 @@ FlyWindowController::FlyWindowController()
                 base::BindOnce(
                     [](base::WeakPtr<FlyWindowController> window,
                        std::string action) {
-                      if (window && window->selected_ && !window->closing_)
-                        InvokeNativeCommand(window->selected_, action);
+                      if (window && !window->closing_)
+                        window->RunFromEmptyWorkspace(std::move(action));
                     },
                     window, std::move(action)));
           },
@@ -853,6 +850,11 @@ FlyWindowController::FlyWindowController()
               -> BrowserWindowInterface* {
             return window ? window->selected_.get() : nullptr;
           },
+          weak_factory_.GetWeakPtr()),
+      base::BindRepeating(
+          [](base::WeakPtr<FlyWindowController> window) -> Profile* {
+            return window ? window->ActiveProfile() : nullptr;
+          },
           weak_factory_.GetWeakPtr()));
   desktop_->AddObserver(this);
   desktop_->GetFocusManager()->AddFocusChangeListener(this);
@@ -893,7 +895,7 @@ FlyWindowController::~FlyWindowController() {
     settings_menu_->Cancel();
   settings_menu_.reset();
   if (keyboard_editor_)
-    keyboard_editor_->SetExtensions(nullptr, {});
+    keyboard_editor_->SetExtensions(nullptr, {}, {});
   extensions_.reset();
   user_content_.reset();
   diagnostics_hub_.reset();
@@ -984,25 +986,26 @@ std::vector<PaletteEntry> FlyWindowController::HistoryEntries() {
   return result;
 }
 void FlyWindowController::LoadHistory(HistorySurface surface) {
-  if (!selected_)
-    return;
-  auto* contents = selected_->GetTabStripModel()->GetActiveWebContents();
+  auto* contents = selected_ ? selected_->GetTabStripModel()->GetActiveWebContents()
+                             : nullptr;
   auto* picker = surface == HistorySurface::kAddress   ? address_picker_.get()
                  : surface == HistorySurface::kHistory ? history_picker_.get()
                                                        : bookmark_picker_.get();
-  if (!contents || !picker->active() ||
+  if (!picker->active() ||
       (surface == HistorySurface::kBookmarks &&
        preferences_.ReadFrequentSitesVisible() != true))
     return;
   const auto generation = ++history_generation_;
   history_->Query(base::BindOnce(
       [](base::WeakPtr<FlyWindowController> window,
-         base::WeakPtr<content::WebContents> source, uint64_t generation,
+         base::WeakPtr<content::WebContents> source, bool empty_source,
+         uint64_t generation,
          HistorySurface surface,
          std::optional<std::vector<HistoryEntry>> rows) {
-        if (!window || window->closing_ || !source || !window->selected_ ||
+        if (!window || window->closing_ || (!empty_source && !source) ||
             generation != window->history_generation_ ||
-            window->selected_->GetTabStripModel()->GetActiveWebContents() !=
+            (window->selected_ ? window->selected_->GetTabStripModel()
+                                     ->GetActiveWebContents() : nullptr) !=
                 source.get())
           return;
         auto* picker = surface == HistorySurface::kAddress
@@ -1024,7 +1027,9 @@ void FlyWindowController::LoadHistory(HistorySurface surface) {
           picker->UpdateItems(window->BookmarkEntries(),
                               window->bookmarks_->CanEdit());
       },
-      weak_factory_.GetWeakPtr(), contents->GetWeakPtr(), generation, surface));
+      weak_factory_.GetWeakPtr(),
+      contents ? contents->GetWeakPtr() : base::WeakPtr<content::WebContents>(),
+      !contents, generation, surface));
 }
 
 void FlyWindowController::ToggleHistory(BrowserWindowInterface* browser) {
@@ -1040,19 +1045,19 @@ void FlyWindowController::ToggleHistory(BrowserWindowInterface* browser) {
   bookmark_picker_->Cancel();
   keyboard_editor_->Cancel();
   CancelHistory();
-  auto* contents = browser->GetTabStripModel()->GetActiveWebContents();
-  if (!contents)
-    return;
+  auto* contents = browser ? browser->GetTabStripModel()->GetActiveWebContents()
+                           : nullptr;
   const auto config = commands_.Read().value_or(DefaultKeyboardConfig());
   history_picker_->ToggleItems(contents, {},
                                config.shortcuts.at("toggle-history"),
-                               u"Search workspace history", false);
+                               u"Search workspace history", false, true);
   LoadHistory(HistorySurface::kHistory);
 }
 void FlyWindowController::OpenHistory(content::WebContents* source,
                                       std::string action) {
-  if (closing_ || !selected_ || !source ||
-      selected_->GetTabStripModel()->GetActiveWebContents() != source ||
+  if (closing_ ||
+      (selected_ ? selected_->GetTabStripModel()->GetActiveWebContents()
+                 : nullptr) != source ||
       !history_choices_.contains(action))
     return;
   if (action == "clear-history") {
@@ -1063,22 +1068,30 @@ void FlyWindowController::OpenHistory(content::WebContents* source,
   // visits cannot execute stale cached rows. Keep the selected destination.
   history_->Query(base::BindOnce(
       [](base::WeakPtr<FlyWindowController> window,
-         base::WeakPtr<content::WebContents> source, std::string url,
+         base::WeakPtr<content::WebContents> source, bool empty_source,
+         std::string url,
          std::optional<std::vector<HistoryEntry>> rows) {
-        if (!window || window->closing_ || !source || !window->selected_ ||
-            window->selected_->GetTabStripModel()->GetActiveWebContents() !=
+        if (!window || window->closing_ || (!empty_source && !source) ||
+            (window->selected_ ? window->selected_->GetTabStripModel()
+                                     ->GetActiveWebContents() : nullptr) !=
                 source.get() ||
             !rows || !std::ranges::any_of(*rows, [&](const HistoryEntry& item) {
               return item.url.spec() == url;
             }))
           return;
+        if (!window->selected_) {
+          window->OpenInNewTab(GURL(url));
+          return;
+        }
         NavigateParams params(window->selected_, GURL(url),
                               ui::PAGE_TRANSITION_TYPED);
         params.disposition = WindowOpenDisposition::CURRENT_TAB;
         params.window_action = NavigateParams::WindowAction::kShowWindow;
         Navigate(&params);
       },
-      weak_factory_.GetWeakPtr(), source->GetWeakPtr(), std::move(action)));
+      weak_factory_.GetWeakPtr(),
+      source ? source->GetWeakPtr() : base::WeakPtr<content::WebContents>(),
+      !source, std::move(action)));
 }
 
 views::Widget* FlyWindowController::history_clear_dialog_for_testing() const {
@@ -1112,9 +1125,10 @@ void FlyWindowController::ConfirmHistoryClear(content::WebContents* source) {
   history_clear_delegate_->SetContentsView(std::move(body));
   history_clear_delegate_->SetAcceptCallback(base::BindOnce(
       [](base::WeakPtr<FlyWindowController> window,
-         base::WeakPtr<content::WebContents> source) {
-        if (!window || window->closing_ || !source || !window->selected_ ||
-            window->selected_->GetTabStripModel()->GetActiveWebContents() !=
+         base::WeakPtr<content::WebContents> source, bool empty_source) {
+        if (!window || window->closing_ || (!empty_source && !source) ||
+            (window->selected_ ? window->selected_->GetTabStripModel()
+                                     ->GetActiveWebContents() : nullptr) !=
                 source.get())
           return;
         window->history_entries_.clear();
@@ -1142,7 +1156,9 @@ void FlyWindowController::ConfirmHistoryClear(content::WebContents* source) {
             },
             window));
       },
-      weak_factory_.GetWeakPtr(), source->GetWeakPtr()));
+      weak_factory_.GetWeakPtr(),
+      source ? source->GetWeakPtr() : base::WeakPtr<content::WebContents>(),
+      !source));
   history_clear_widget_.reset(views::DialogDelegate::CreateDialogWidget(
       history_clear_delegate_.get(), desktop_->GetNativeWindow(),
       desktop_->GetNativeView()));
@@ -1364,46 +1380,37 @@ void FlyWindowController::OnBookmarksChanged() {
 }
 void FlyWindowController::OpenBookmark(content::WebContents* source,
                                       std::string url) {
-  if (!closing_ && !selected_ && !source && bookmarks_->Contains(url)) {
-    OpenInNewTab(GURL(url));
-    return;
-  }
-  if (closing_ || !selected_ ||
-      selected_->GetTabStripModel()->GetActiveWebContents() != source ||
+  if (closing_ ||
+      (selected_ ? selected_->GetTabStripModel()->GetActiveWebContents()
+                 : nullptr) != source ||
       !bookmark_urls_.contains(url))
     return;
   if (!bookmarks_->Contains(url)) {
-    // Recompute against current native history and explicit hidden/visibility
-    // choices after dismissal, rather than navigating a stale derived row.
+    // Recompute derived rows after dismissal before opening a frequent site.
     history_->Query(base::BindOnce(
         [](base::WeakPtr<FlyWindowController> window,
-           base::WeakPtr<content::WebContents> source, std::string url,
+           base::WeakPtr<content::WebContents> source, bool empty_source,
+           std::string url,
            std::optional<std::vector<HistoryEntry>> rows) {
-          if (!window || window->closing_ || !source || !window->selected_ ||
-              window->selected_->GetTabStripModel()->GetActiveWebContents() !=
-                  source.get() ||
-              !rows)
+          if (!window || window->closing_ || (!empty_source && !source) ||
+              (window->selected_ ? window->selected_->GetTabStripModel()
+                                       ->GetActiveWebContents() : nullptr) !=
+                  source.get() || !rows)
             return;
           std::vector<SiteVisit> visits;
           for (const auto& row : *rows)
             visits.push_back({row.url.spec(), row.visited});
           const auto sites = window->frequent_sites_->Read(visits);
-          if (!sites || std::ranges::find(*sites, url, &FrequentSite::url) ==
-                            sites->end())
-            return;
-          NavigateParams params(window->selected_, GURL(url),
-                                ui::PAGE_TRANSITION_AUTO_BOOKMARK);
-          params.disposition = WindowOpenDisposition::NEW_FOREGROUND_TAB;
-          params.window_action = NavigateParams::WindowAction::kShowWindow;
-          Navigate(&params);
+          if (sites && std::ranges::find(*sites, url, &FrequentSite::url) !=
+                           sites->end())
+            window->OpenInNewTab(GURL(url));
         },
-        weak_factory_.GetWeakPtr(), source->GetWeakPtr(), std::move(url)));
+        weak_factory_.GetWeakPtr(),
+        source ? source->GetWeakPtr() : base::WeakPtr<content::WebContents>(),
+        !source, std::move(url)));
     return;
   }
-  NavigateParams params(selected_, GURL(url), ui::PAGE_TRANSITION_AUTO_BOOKMARK);
-  params.disposition = WindowOpenDisposition::NEW_FOREGROUND_TAB;
-  params.window_action = NavigateParams::WindowAction::kShowWindow;
-  Navigate(&params);
+  OpenInNewTab(GURL(url));
 }
 void FlyWindowController::RemoveBookmark(content::WebContents* source,
                                         std::string url) {
@@ -3297,10 +3304,10 @@ void FlyWindowController::OnBrowserDidClose(BrowserWindowInterface* browser) {
         Select(private_return.get(), true);
       // The empty view keeps its workspace profile loaded, so reopening it
       // reuses the profile instead of racing its destruction.
-      if (!selected_ && !workspace_close_ &&
-          !closed_profile->IsOffTheRecord())
+      if (!selected_ && !workspace_close_)
         welcome_keep_alive_ = ScopedProfileKeepAlive::TryAcquire(
-            closed_profile, ProfileKeepAliveOrigin::kChromeViewsDelegate);
+            closed_profile->GetOriginalProfile(),
+            ProfileKeepAliveOrigin::kChromeViewsDelegate);
     }
     UpdateModeLabel();
     UpdateWelcome();
@@ -3317,15 +3324,17 @@ void FlyWindowController::OnBrowserDidClose(BrowserWindowInterface* browser) {
 
 bool FlyWindowController::CanTogglePrivate(
     BrowserWindowInterface* browser) const {
-  return browser && browser->GetProfile()->AllowsBrowserWindows() &&
-         (browser->GetProfile()->IsOffTheRecord() ||
-          chrome::IsCommandEnabled(browser, IDC_NEW_INCOGNITO_WINDOW));
+  auto* profile = browser ? browser->GetProfile() : ActiveProfile();
+  return profile && profile->AllowsBrowserWindows() &&
+         (profile->IsOffTheRecord() ||
+          (browser ? chrome::IsCommandEnabled(browser, IDC_NEW_INCOGNITO_WINDOW)
+                   : IncognitoModePrefs::IsIncognitoAllowed(profile)));
 }
 
 void FlyWindowController::TogglePrivate(BrowserWindowInterface* browser) {
   if (!CanTogglePrivate(browser))
     return;
-  auto* profile = browser->GetProfile();
+  auto* profile = browser ? browser->GetProfile() : ActiveProfile();
   if (profile->IsOffTheRecord()) {
     // The native close coordinator resolves all beforeunload decisions before
     // closing this OTR profile's windows. Cancellation leaves them intact.
@@ -3334,7 +3343,8 @@ void FlyWindowController::TogglePrivate(BrowserWindowInterface* browser) {
     return;
   }
   auto* private_profile = profile->GetPrimaryOTRProfile(true);
-  private_returns_[private_profile] = browser->GetWeakPtr();
+  if (browser)
+    private_returns_[private_profile] = browser->GetWeakPtr();
   for (const auto& [model, entry] : entries_) {
     if (!entry.browser_closed && entry.widget &&
         model->GetProfile() == private_profile) {
@@ -3478,18 +3488,23 @@ bool FlyWindowController::RunCommand(BrowserWindowInterface* browser,
                                      std::string_view action) {
   if (closing_ || (browser && !entries_.contains(browser)))
     return false;
-  const bool shell_action =
-      action == "toggle-help" || action == "open-keyboard-settings" ||
-      action == "toggle-palette" || action == "toggle-bookmarks" ||
-      action == "toggle-address" || action == "toggle-downloads" ||
-      action == "open-extension-actions" || action == "open-diagnostics" ||
-      action == "toggle-dashboard" || action == "new-workspace" ||
-      action == "focus-sidebar" || action == "toggle-theme" ||
-      action == "toggle-zen-mode" || action == "toggle-sidebar-pin" ||
-      action == "toggle-window-controls" || action == "toggle-status-bar" ||
-      action == "cycle-clock-format" || action == "toggle-clock";
-  if (!browser && !shell_action)
+  if (!browser && !IsShellCommand(action))
     return false;
+  if (!browser && action == "spawn-tab") {
+    CreateTab();
+    return true;
+  }
+  if (!browser && action == "reopen-closed-tab") {
+    auto* profile = ActiveProfile();
+    if (!profile)
+      return false;
+    chrome::OpenWindowWithRestoredTabs(profile);
+    return true;
+  }
+  if (!browser && action == "toggle-fullscreen") {
+    desktop_->SetFullscreen(!desktop_->IsFullscreen());
+    return true;
+  }
   // All pickers share the desktop keyboard owner. Opening a different one
   // dismisses the previous one, while invoking the same action still toggles.
   for (auto [picker, command] :
@@ -3522,18 +3537,21 @@ bool FlyWindowController::RunCommand(BrowserWindowInterface* browser,
     ShowDiagnostics();
     return true;
   }
-  if (browser && RunProductAction(browser, action))
+  if (RunProductAction(browser, action))
     return true;
   if (action == "move-tab-to-workspace")
     return ShowTabMovePicker(
         browser, browser->GetTabStripModel()->GetActiveWebContents());
   if (action == "hibernate-tabs" || action == "wake-all-tabs") {
     std::vector<base::WeakPtr<content::WebContents>> tabs;
-    const auto workspace = entries_.at(browser).workspace_id;
+    const auto catalog = workspaces_.Read();
+    const auto workspace = browser ? entries_.at(browser).workspace_id
+                                  : catalog ? catalog->active_id : std::string();
+    auto* profile = browser ? browser->GetProfile() : ActiveProfile();
     for (const auto& [window, entry] : entries_) {
       if (entry.browser_closed ||
           (action == "wake-all-tabs" &&
-           (workspace.empty() ? window->GetProfile() != browser->GetProfile()
+           (workspace.empty() ? window->GetProfile() != profile
                               : entry.workspace_id != workspace)))
         continue;
       auto* model = window->GetTabStripModel();
@@ -3715,7 +3733,8 @@ bool FlyWindowController::RunCommand(BrowserWindowInterface* browser,
     if (!catalog || catalog->items.empty())
       return false;
     auto current = std::ranges::find(
-        catalog->items, entries_.at(browser).workspace_id, &Workspace::id);
+        catalog->items, browser ? entries_.at(browser).workspace_id
+                                : catalog->active_id, &Workspace::id);
     size_t index =
         current == catalog->items.end() ? 0 : current - catalog->items.begin();
     const size_t count = catalog->items.size();
@@ -3995,6 +4014,14 @@ void FlyWindowController::ShowStatus(std::u16string text) {
 }
 std::vector<Profile*> FlyWindowController::WorkspaceProfiles() const {
   std::vector<Profile*> profiles;
+  if (const auto catalog = workspaces_.Read()) {
+    auto* manager = g_browser_process->profile_manager();
+    for (const auto& item : catalog->items) {
+      if (auto* profile = manager->GetProfileByPath(
+              manager->user_data_dir().AppendASCII(item.profile_directory)))
+        profiles.push_back(profile);
+    }
+  }
   for (const auto& [browser, entry] : entries_) {
     if (entry.browser_closed)
       continue;
@@ -4115,12 +4142,8 @@ void FlyWindowController::CheckUpdates(bool manual) {
             result.latest);
         window->ShowStatus(u"Fly " + base::UTF8ToUTF16(result.latest) +
                            u" is available. Check for Updates opens it.");
-        if (manual && window->selected_) {
-          NavigateParams params(window->selected_, result.page,
-                                ui::PAGE_TRANSITION_AUTO_TOPLEVEL);
-          params.disposition = WindowOpenDisposition::NEW_FOREGROUND_TAB;
-          Navigate(&params);
-        }
+        if (manual)
+          window->OpenInNewTab(result.page);
       },
       weak_factory_.GetWeakPtr(), manual));
 }
@@ -4139,23 +4162,60 @@ void FlyWindowController::MaybeShowWhatsNew() {
   ResolveWhatsNewURL(*seen, base::BindOnce(&FlyWindowController::OpenInNewTab,
                                            weak_factory_.GetWeakPtr()));
 }
+Profile* FlyWindowController::ActiveProfile() const {
+  if (selected_)
+    return selected_->GetProfile();
+  const auto catalog = workspaces_.Read();
+  if (!catalog)
+    return nullptr;
+  const auto item = std::ranges::find(catalog->items, catalog->active_id,
+                                     &Workspace::id);
+  auto* manager = g_browser_process->profile_manager();
+  return item == catalog->items.end()
+             ? nullptr
+             : manager->GetProfileByPath(manager->user_data_dir().AppendASCII(
+                   item->profile_directory));
+}
+
+void FlyWindowController::OpenInNewWindow(GURL url) {
+  if (closing_)
+    return;
+  auto* profile = ActiveProfile();
+  if (!profile) {
+    ShowStatus(u"Open a workspace before opening this page.");
+    return;
+  }
+  NavigateParams params(profile, url, ui::PAGE_TRANSITION_AUTO_TOPLEVEL);
+  params.disposition = WindowOpenDisposition::NEW_WINDOW;
+  params.window_action = NavigateParams::WindowAction::kShowWindow;
+  Navigate(&params);
+}
+
 void FlyWindowController::OpenInNewTab(GURL url) {
   if (closing_)
     return;
-  if (!selected_) {
+  auto* profile = ActiveProfile();
+  if (!profile) {
     pending_shell_url_ = url.spec();
     CreateTab();
     return;
   }
-  NavigateParams params(selected_, url, ui::PAGE_TRANSITION_AUTO_TOPLEVEL);
+  NavigateParams params(profile, url, ui::PAGE_TRANSITION_AUTO_TOPLEVEL);
+  params.browser = selected_;
   params.disposition = WindowOpenDisposition::NEW_FOREGROUND_TAB;
+  params.window_action = NavigateParams::WindowAction::kShowWindow;
   Navigate(&params);
 }
 bool FlyWindowController::RunProductAction(BrowserWindowInterface* browser,
                                            std::string_view action) {
-  auto* contents = browser->GetTabStripModel()->GetActiveWebContents();
+  auto* contents = browser ? browser->GetTabStripModel()->GetActiveWebContents()
+                           : nullptr;
+  auto* profile = browser ? browser->GetProfile() : ActiveProfile();
   const auto open = [&](const GURL& url, Profile* profile = nullptr) {
-    NavigateParams params(profile ? profile : browser->GetProfile(), url,
+    auto* target_profile = profile ? profile : ActiveProfile();
+    if (!target_profile)
+      return;
+    NavigateParams params(target_profile, url,
                           ui::PAGE_TRANSITION_AUTO_TOPLEVEL);
     if (!profile)
       params.browser = browser;
@@ -4221,7 +4281,7 @@ bool FlyWindowController::RunProductAction(BrowserWindowInterface* browser,
   }
   if (action == "open-scripts-dir" || action == "open-styles-dir" ||
       action == "open-script-storage-dir") {
-    OpenUserContentDirectory(browser->GetProfile(),
+    OpenUserContentDirectory(profile,
                              action == "open-scripts-dir"  ? "scripts"
                              : action == "open-styles-dir" ? "styles"
                                                            : "script-storage");
@@ -4229,8 +4289,10 @@ bool FlyWindowController::RunProductAction(BrowserWindowInterface* browser,
   }
   if (action == "test-google-signin") {
     // A fresh off-the-record profile: no workspace cookies or tokens.
+    if (!profile)
+      return false;
     open(GURL("https://accounts.google.com/"),
-         browser->GetProfile()->GetOriginalProfile()->GetPrimaryOTRProfile(
+         profile->GetOriginalProfile()->GetPrimaryOTRProfile(
              /*create_if_needed=*/true));
     return true;
   }
@@ -4411,7 +4473,8 @@ void FlyWindowController::ChooseExtensionAction(content::WebContents*,
   }
   if (action.starts_with("extension-options:")) {
     extensions_->OpenOptions(
-        selected_, action.substr(std::string_view("extension-options:").size()));
+        selected_, action.substr(std::string_view("extension-options:").size()),
+        ActiveProfile());
     return;
   }
   if (action == "extensions-reload") {
@@ -4421,7 +4484,7 @@ void FlyWindowController::ChooseExtensionAction(content::WebContents*,
     return;
   }
   if (action == "extensions-page" || action == "extensions-store") {
-    OpenInNewTab(GURL(action == "extensions-page"
+    OpenInNewWindow(GURL(action == "extensions-page"
                           ? "chrome://extensions/"
                           : "https://chromewebstore.google.com/"));
     return;
@@ -4785,10 +4848,16 @@ std::vector<PaletteEntry> FlyWindowController::ExtensionCommandEntries(
 
 // Buttons of Preferences that act on the browser.
 void FlyWindowController::RunPreferencesAction(std::string action) {
-  if (closing_ || !selected_)
+  if (closing_)
     return;
+  if (action.starts_with("open-window:")) {
+    OpenInNewWindow(GURL(action.substr(12)));
+    return;
+  }
   auto* browser = selected_.get();
-  auto* contents = browser->GetTabStripModel()->GetActiveWebContents();
+  auto* profile = ActiveProfile();
+  auto* contents = browser ? browser->GetTabStripModel()->GetActiveWebContents()
+                           : nullptr;
   auto status = base::BindOnce(
       [](base::WeakPtr<FlyWindowController> window, std::u16string text) {
         if (window)
@@ -4799,11 +4868,11 @@ void FlyWindowController::RunPreferencesAction(std::string action) {
     keyboard_editor_->Cancel();
     TogglePrivate(browser);
   } else if (action == "clear-site-cookies") {
-    ClearSiteCookies(browser->GetProfile(),
+    ClearSiteCookies(profile,
                      contents ? contents->GetLastCommittedURL() : GURL(),
                      std::move(status));
   } else if (action == "clear-cache") {
-    ClearWorkspaceCache(browser->GetProfile(), std::move(status));
+    ClearWorkspaceCache(profile, std::move(status));
   } else if (action == "open-diagnostics" || action == "show-whats-new") {
     keyboard_editor_->Cancel();
     InvokeNativeCommand(browser, action);
@@ -4829,7 +4898,7 @@ void FlyWindowController::RunPreferencesAction(std::string action) {
                 platform_util::OpenItem(profile.get(), dir,
                                         platform_util::OPEN_FOLDER, {});
             },
-            browser->GetProfile()->GetWeakPtr()));
+            profile ? profile->GetWeakPtr() : base::WeakPtr<Profile>()));
   }
 }
 

@@ -376,19 +376,22 @@ bool FlyExtensions::Remove(Profile* profile, const std::string& id) {
   return removed;
 }
 void FlyExtensions::OpenOptions(BrowserWindowInterface* browser,
-                                const std::string& id) {
-  if (!browser)
+                                const std::string& id, Profile* profile) {
+  if (browser)
+    profile = browser->GetProfile();
+  if (!profile || profile->IsOffTheRecord())
     return;
-  const auto* extension = extensions::ExtensionRegistry::Get(
-                              browser->GetProfile())
+  const auto* extension = extensions::ExtensionRegistry::Get(profile)
                               ->enabled_extensions()
                               .GetByID(id);
   if (!extension || !extensions::OptionsPageInfo::HasOptionsPage(extension))
     return;
-  NavigateParams params(browser,
+  NavigateParams params(profile,
                         extensions::OptionsPageInfo::GetOptionsPage(extension),
                         ui::PAGE_TRANSITION_LINK);
+  params.browser = browser;
   params.disposition = WindowOpenDisposition::NEW_FOREGROUND_TAB;
+  params.window_action = NavigateParams::WindowAction::kShowWindow;
   Navigate(&params);
 }
 

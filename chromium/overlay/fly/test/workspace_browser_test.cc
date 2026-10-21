@@ -294,6 +294,23 @@ class FlyWorkspaceBrowserTest : public InProcessBrowserTest {
   content::WebContents* Active(BrowserWindowInterface* window) {
     return window->GetTabStripModel()->GetActiveWebContents();
   }
+  void ClickPreferencesButton(std::u16string_view text) {
+    auto* root = FlyWindowController::Get().keyboard_editor().sections_for_testing();
+    ASSERT_TRUE(root);
+    auto find = [&](auto&& self, views::View* view) -> views::MdTextButton* {
+      if (auto* button = views::AsViewClass<views::MdTextButton>(view);
+          button && button->GetText() == text)
+        return button;
+      for (views::View* child : view->children()) {
+        if (auto* found = self(self, child))
+          return found;
+      }
+      return nullptr;
+    };
+    auto* button = find(find, root);
+    ASSERT_TRUE(button) << base::UTF16ToUTF8(text);
+    views::test::ButtonTestApi(button).NotifyDefaultMouseClick();
+  }
   base::FilePath RestoreFixturePath() {
     return g_browser_process->profile_manager()->user_data_dir().AppendASCII(
         "fly-native-session-test.json");
@@ -3959,6 +3976,205 @@ IN_PROC_BROWSER_TEST_F(FlyWorkspaceBrowserTest,
       [&] { return window.selected_browser_for_testing() != nullptr; }));
   EXPECT_EQ(1,
             window.selected_browser_for_testing()->GetTabStripModel()->count());
+}
+
+// Settings links create a distinct native Browser even when another page is open.
+IN_PROC_BROWSER_TEST_F(FlyWorkspaceBrowserTest,
+                       StoreSettingsLinksAlwaysOpenAnotherWindow) {
+  auto& window = FlyWindowController::Get();
+  auto* original = browser();
+  const auto page = embedded_test_server()->GetURL("/title1.html");
+  ASSERT_TRUE(ui_test_utils::NavigateToURL(original, page));
+  ASSERT_TRUE(window.RunCommand(original, "toggle-help"));
+  window.keyboard_editor().ShowExtensions();
+  ClickPreferencesButton(u"Browse Chrome Web Store");
+  ASSERT_TRUE(base::test::RunUntil([&] {
+    return window.selected_browser_for_testing() &&
+           window.selected_browser_for_testing() != original;
+  }));
+  auto* store = window.selected_browser_for_testing();
+  EXPECT_EQ(original->GetProfile(), store->GetProfile());
+  EXPECT_EQ(1, original->GetTabStripModel()->count());
+  EXPECT_EQ(page, Active(original)->GetLastCommittedURL());
+  EXPECT_EQ(GURL("https://chromewebstore.google.com/"),
+            Active(store)->GetVisibleURL());
+  ASSERT_TRUE(window.RunCommand(store, "toggle-help"));
+  window.keyboard_editor().ShowExtensions();
+  ClickPreferencesButton(u"Manage in chrome://extensions");
+  ASSERT_TRUE(base::test::RunUntil([&] {
+    return window.selected_browser_for_testing() &&
+           window.selected_browser_for_testing() != store;
+  }));
+  EXPECT_EQ(GURL("chrome://extensions/"),
+            Active(window.selected_browser_for_testing())->GetVisibleURL());
+  EXPECT_EQ(1, store->GetTabStripModel()->count());
+  EXPECT_EQ(page, Active(original)->GetLastCommittedURL());
+}
+
+IN_PROC_BROWSER_TEST_F(FlyWorkspaceBrowserTest,
+                       EmptyDesktopReopensLastClosedTabWithoutPlaceholder) {
+  auto& window = FlyWindowController::Get();
+  const auto page = embedded_test_server()->GetURL("/title1.html?reopen-last");
+  ASSERT_TRUE(ui_test_utils::NavigateToURL(browser(), page));
+  auto original = browser()->GetWeakPtr();
+  auto* profile = browser()->GetProfile();
+  ASSERT_TRUE(ExecuteNativeCommand(browser(), "remove-tab"));
+  ASSERT_TRUE(base::test::RunUntil([&] { return !original; }));
+  ASSERT_EQ(nullptr, window.selected_browser_for_testing());
+  ASSERT_TRUE(NativeCommandAvailable(nullptr, "reopen-closed-tab"));
+  ASSERT_TRUE(InvokeNativeCommand(nullptr, "reopen-closed-tab"));
+  ASSERT_TRUE(base::test::RunUntil([&] {
+    auto* selected = window.selected_browser_for_testing();
+    return selected && Active(selected)->GetLastCommittedURL() == page;
+  }));
+  auto* restored = window.selected_browser_for_testing();
+  EXPECT_EQ(profile, restored->GetProfile());
+  EXPECT_EQ(1, restored->GetTabStripModel()->count());
+}
+
+IN_PROC_BROWSER_TEST_F(FlyWorkspaceBrowserTest,
+                       EmptyDesktopFullscreenDoesNotCreateTabs) {
+  auto& window = FlyWindowController::Get();
+  auto original = browser()->GetWeakPtr();
+  ASSERT_TRUE(ExecuteNativeCommand(browser(), "remove-tab"));
+  ASSERT_TRUE(base::test::RunUntil([&] { return !original; }));
+  auto* desktop = window.desktop_widget();
+  ASSERT_FALSE(desktop->IsFullscreen());
+  ASSERT_TRUE(InvokeNativeCommand(nullptr, "toggle-fullscreen"));
+  ASSERT_TRUE(base::test::RunUntil([&] { return desktop->IsFullscreen(); }));
+  EXPECT_EQ(nullptr, window.selected_browser_for_testing());
+  ASSERT_TRUE(InvokeNativeCommand(nullptr, "toggle-fullscreen"));
+  ASSERT_TRUE(base::test::RunUntil([&] { return !desktop->IsFullscreen(); }));
+  EXPECT_EQ(nullptr, window.selected_browser_for_testing());
+}
+
+IN_PROC_BROWSER_TEST_F(FlyWorkspaceBrowserTest,
+                       EmptyDesktopSettingsStoreUsesWorkspaceProfile) {
+  auto& window = FlyWindowController::Get();
+  auto original = browser()->GetWeakPtr();
+  auto* profile = browser()->GetProfile();
+  ASSERT_TRUE(ExecuteNativeCommand(browser(), "remove-tab"));
+  ASSERT_TRUE(base::test::RunUntil([&] { return !original; }));
+  ASSERT_EQ(nullptr, window.selected_browser_for_testing());
+  ASSERT_EQ(profile, window.ActiveProfile());
+  ASSERT_TRUE(InvokeNativeCommand(nullptr, "toggle-help"));
+  window.keyboard_editor().ShowExtensions();
+  ClickPreferencesButton(u"Refresh usage");
+  EXPECT_EQ(nullptr, window.selected_browser_for_testing());
+  ClickPreferencesButton(u"Browse Chrome Web Store");
+  ASSERT_TRUE(base::test::RunUntil([&] {
+    return window.selected_browser_for_testing() != nullptr;
+  }));
+  auto* store = window.selected_browser_for_testing();
+  EXPECT_EQ(profile, store->GetProfile());
+  EXPECT_EQ(1, store->GetTabStripModel()->count());
+  EXPECT_EQ(GURL("https://chromewebstore.google.com/"),
+            Active(store)->GetVisibleURL());
+  EXPECT_FALSE(window.keyboard_editor().active());
+  EXPECT_FALSE(window.address_picker().active());
+}
+
+IN_PROC_BROWSER_TEST_F(FlyWorkspaceBrowserTest,
+                       EmptyDesktopGlobalActionsAndSettingsStillWork) {
+  auto& window = FlyWindowController::Get();
+  auto original = browser()->GetWeakPtr();
+  ASSERT_TRUE(ExecuteNativeCommand(browser(), "remove-tab"));
+  ASSERT_TRUE(base::test::RunUntil([&] { return !original; }));
+  ASSERT_TRUE(NativeCommandAvailable(nullptr, "toggle-notifications"));
+  auto before = window.preferences().ReadBool("web_notifications").value_or(true);
+  ASSERT_TRUE(InvokeNativeCommand(nullptr, "toggle-notifications"));
+  EXPECT_EQ(!before, window.preferences().ReadBool("web_notifications"));
+  ASSERT_TRUE(InvokeNativeCommand(nullptr, "toggle-diagnostics-recording"));
+  EXPECT_TRUE(window.preferences().ReadBool("enable_diagnostics").value_or(false));
+  ASSERT_TRUE(InvokeNativeCommand(nullptr, "reload-user-content"));
+  ASSERT_TRUE(InvokeNativeCommand(nullptr, "toggle-help"));
+  ClickPreferencesButton(u"Clear cache");
+  EXPECT_EQ(nullptr, window.selected_browser_for_testing());
+  ClickPreferencesButton(u"What's new");
+  ASSERT_TRUE(base::test::RunUntil([&] {
+    auto* selected = window.selected_browser_for_testing();
+    if (!selected)
+      return false;
+    const auto& url = Active(selected)->GetVisibleURL();
+    return url.SchemeIsFile() ||
+           url == GURL("https://github.com/Arzuparreta/fly-browser/releases");
+  }));
+  EXPECT_EQ(1, window.selected_browser_for_testing()->GetTabStripModel()->count());
+}
+
+IN_PROC_BROWSER_TEST_F(FlyWorkspaceBrowserTest,
+                       EmptyDesktopHistoryLoadsAndOpensVisitedPage) {
+  const auto page = embedded_test_server()->GetURL("/title1.html?empty-history");
+  ASSERT_TRUE(ui_test_utils::NavigateToURL(browser(), page));
+  auto& window = FlyWindowController::Get();
+  auto original = browser()->GetWeakPtr();
+  auto* profile = browser()->GetProfile();
+  ASSERT_TRUE(ExecuteNativeCommand(browser(), "remove-tab"));
+  ASSERT_TRUE(base::test::RunUntil([&] { return !original; }));
+  ASSERT_TRUE(InvokeNativeCommand(nullptr, "toggle-history"));
+  auto& picker = window.history_picker();
+  ASSERT_TRUE(base::test::RunUntil([&] {
+    return picker.active() && picker.result_count_for_testing() >= 2;
+  }));
+  picker.search_for_testing()->SetText(u"empty-history");
+  picker.ContentsChanged(picker.search_for_testing(), u"empty-history");
+  ASSERT_EQ(1u, picker.result_count_for_testing());
+  ui::test::EventGenerator keys(
+      window.desktop_widget()->GetNativeWindow()->GetRootWindow());
+  keys.PressKey(ui::VKEY_RETURN, ui::EF_NONE);
+  ASSERT_TRUE(base::test::RunUntil([&] {
+    auto* selected = window.selected_browser_for_testing();
+    return selected && Active(selected)->GetLastCommittedURL() == page;
+  }));
+  EXPECT_EQ(profile, window.selected_browser_for_testing()->GetProfile());
+}
+
+IN_PROC_BROWSER_TEST_F(FlyWorkspaceBrowserTest,
+                       EmptyDesktopDownloadsPageAndPrivateModeOpen) {
+  auto& window = FlyWindowController::Get();
+  auto original = browser()->GetWeakPtr();
+  auto* profile = browser()->GetProfile();
+  ASSERT_TRUE(ExecuteNativeCommand(browser(), "remove-tab"));
+  ASSERT_TRUE(base::test::RunUntil([&] { return !original; }));
+  ASSERT_TRUE(InvokeNativeCommand(nullptr, "toggle-downloads"));
+  auto& picker = window.downloads_picker_for_testing();
+  ASSERT_TRUE(base::test::RunUntil([&] {
+    return picker.active() && picker.search_for_testing()->HasFocus();
+  }));
+  picker.search_for_testing()->SetText(u"Open full downloads page");
+  picker.ContentsChanged(picker.search_for_testing(), u"Open full downloads page");
+  ASSERT_EQ(1u, picker.result_count_for_testing());
+  ui::test::EventGenerator keys(
+      window.desktop_widget()->GetNativeWindow()->GetRootWindow());
+  keys.PressKey(ui::VKEY_RETURN, ui::EF_NONE);
+  ASSERT_TRUE(base::test::RunUntil([&] {
+    auto* selected = window.selected_browser_for_testing();
+    return selected && Active(selected)->GetVisibleURL() == GURL("chrome://downloads/");
+  }));
+  auto downloads = window.selected_browser_for_testing()->GetWeakPtr();
+  EXPECT_EQ(profile, downloads->GetProfile());
+  ASSERT_TRUE(ExecuteNativeCommand(downloads.get(), "remove-tab"));
+  ASSERT_TRUE(base::test::RunUntil([&] { return !downloads; }));
+  ASSERT_TRUE(InvokeNativeCommand(nullptr, "toggle-private-mode"));
+  ASSERT_TRUE(base::test::RunUntil([&] {
+    auto* selected = window.selected_browser_for_testing();
+    return selected && selected->GetProfile()->IsOffTheRecord();
+  }));
+  EXPECT_EQ(profile, window.selected_browser_for_testing()->GetProfile()->GetOriginalProfile());
+  auto private_browser = window.selected_browser_for_testing()->GetWeakPtr();
+  ASSERT_TRUE(ExecuteNativeCommand(private_browser.get(), "remove-tab"));
+  ASSERT_TRUE(base::test::RunUntil([&] { return !private_browser; }));
+  EXPECT_EQ(profile, window.ActiveProfile());
+  ASSERT_TRUE(InvokeNativeCommand(nullptr, "toggle-help"));
+  window.keyboard_editor().ShowExtensions();
+  ClickPreferencesButton(u"Browse Chrome Web Store");
+  ASSERT_TRUE(base::test::RunUntil([&] {
+    auto* selected = window.selected_browser_for_testing();
+    return selected && Active(selected)->GetVisibleURL() ==
+                           GURL("https://chromewebstore.google.com/");
+  }));
+  EXPECT_EQ(profile, window.selected_browser_for_testing()->GetProfile());
+  EXPECT_FALSE(window.selected_browser_for_testing()->GetProfile()->IsOffTheRecord());
 }
 
 IN_PROC_BROWSER_TEST_F(

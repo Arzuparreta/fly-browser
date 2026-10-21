@@ -39,6 +39,7 @@ class Checkbox;
 class TabbedPane;
 }  // namespace views
 class BrowserWindowInterface;
+class Profile;
 namespace fly {
 class FlyExtensions;
 // Browser-owned editor. Drafts and recording stay in memory until the shared
@@ -61,7 +62,8 @@ class KeyboardEditor : public views::TextfieldController,
   void ShowExtensions();
   // Extension management for the selected workspace (Extensions tab).
   void SetExtensions(FlyExtensions* extensions,
-                     base::RepeatingCallback<BrowserWindowInterface*()> browser);
+                     base::RepeatingCallback<BrowserWindowInterface*()> browser,
+                     base::RepeatingCallback<Profile*()> profile);
   void ShowPerformance();
   void ShowSearch();
   // Electron's section order.
@@ -200,6 +202,7 @@ class KeyboardEditor : public views::TextfieldController,
   void RefreshExtensions();
   raw_ptr<FlyExtensions> extensions_ = nullptr;
   base::RepeatingCallback<BrowserWindowInterface*()> extensions_browser_;
+  base::RepeatingCallback<Profile*()> extensions_profile_;
   raw_ptr<views::View> extensions_list_ = nullptr;
   raw_ptr<views::Checkbox> extensions_enabled_ = nullptr;
   raw_ptr<views::Textfield> email_handler_ = nullptr;
