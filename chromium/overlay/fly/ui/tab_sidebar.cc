@@ -100,26 +100,27 @@ std::u16string RowDomain(const GURL& url) {
 class RowIcon : public gfx::CanvasImageSource {
  public:
   RowIcon(gfx::ImageSkia favicon, int split_pane)
-      : CanvasImageSource(gfx::Size(26, 26)),
+      : CanvasImageSource(gfx::Size(S(26), S(26))),
         favicon_(std::move(favicon)),
         split_pane_(split_pane) {}
   void Draw(gfx::Canvas* canvas) override {
-    canvas->DrawImageInt(favicon_, 4 + (18 - favicon_.width()) / 2,
-                         4 + (18 - favicon_.height()) / 2);
+    canvas->DrawImageInt(favicon_, S(4) + (S(18) - favicon_.width()) / 2,
+                         S(4) + (S(18) - favicon_.height()) / 2);
     if (!split_pane_)
       return;
     const auto& colors = GetFlyColors();
-    const gfx::PointF centre(26 - 6.5f, 6.5f);
+    const float scale = GetFlyInterfaceScale();
+    const gfx::PointF centre(19.5f * scale, 6.5f * scale);
     cc::PaintFlags flags;
     flags.setAntiAlias(true);
     flags.setColor(SkColorSetARGB(153, 0, 0, 0));
-    canvas->DrawCircle(centre, 7.5f, flags);
+    canvas->DrawCircle(centre, 7.5f * scale, flags);
     flags.setColor(split_pane_ == 1 ? colors.accent : colors.text);
-    canvas->DrawCircle(centre, 6.5f, flags);
+    canvas->DrawCircle(centre, 6.5f * scale, flags);
     canvas->DrawStringRectWithFlags(
         split_pane_ == 1 ? u"1" : u"2",
         FlyFont(FlyFace::kSans, 8, gfx::Font::Weight::BOLD),
-        SkColorSetRGB(0x12, 0x12, 0x12), gfx::Rect(13, 0, 13, 13),
+        SkColorSetRGB(0x12, 0x12, 0x12), gfx::Rect(S(13), 0, S(13), S(13)),
         gfx::Canvas::TEXT_ALIGN_CENTER);
   }
 
@@ -243,8 +244,9 @@ class FlyTabButton : public FlyButton {
     // .tab-favicon-wrapper: 5px from the row's left edge, 18px square, so
     // the favicon's centre is the rail's centre line. The icon image adds
     // 4px around the wrapper for the split badge.
-    image_container_view()->SetBounds(S(5) - 4, (height() - S(18)) / 2 - 4,
-                                      S(18) + 8, S(18) + 8);
+    image_container_view()->SetBounds(S(5) - S(4),
+                                      (height() - S(18)) / 2 - S(4),
+                                      S(26), S(26));
     // The text starts past the rail's edge: 5 + 18 + 2 + 8.
     const int left = S(33);
     const int right = std::max(left, text_right_ ? text_right_ : width());
@@ -321,13 +323,13 @@ class TabRowView : public views::View {
   }
   void Layout(PassKey) override {
     select_->SetBoundsRect(GetLocalBounds());
-    // Right to left: 8px padding, close (20px, 2px margin), audio and pin
-    // badges (6px margins).
+    // Electron's flex gap (8px) adds to each control's left margin:
+    // close 2px, audio/pin 6px. Reserve close space even while hidden.
     int x = width() - S(8);
     if (!state_.pinned) {
       x -= S(20);
       close_->SetBounds(x, (height() - S(20)) / 2, S(20), S(20));
-      x -= S(2);
+      x -= S(10);
     }
     for (RowBadge* badge : {audio_.get(), pin_.get()}) {
       if (!badge->GetVisible())
@@ -336,9 +338,9 @@ class TabRowView : public views::View {
       x -= size.width();
       badge->SetBounds(x, (height() - size.height()) / 2, size.width(),
                        size.height());
-      x -= S(6);
+      x -= S(14);
     }
-    select_->SetTextRight(x - S(2));
+    select_->SetTextRight(x);
   }
   void OnPaintBackground(gfx::Canvas* canvas) override {
     const auto bounds = gfx::RectF(GetLocalBounds());
@@ -465,16 +467,17 @@ class TabSidebar::Surfaces : public views::View {
       flags.setColor(fill);
       canvas->DrawRoundRect(bounds, radius, flags);
       flags.setStyle(cc::PaintFlags::kStroke_Style);
-      flags.setStrokeWidth(1);
+      const float stroke = GetFlyInterfaceScale();
+      flags.setStrokeWidth(stroke);
       flags.setColor(border);
       auto outline = bounds;
-      outline.Inset(0.5f);
+      outline.Inset(stroke / 2);
       canvas->DrawRoundRect(outline, radius, flags);
       // A selected row's left border is 2px wide.
       if (state.selected) {
-        canvas->FillRect(gfx::Rect(bounds.x() + 1, bounds.y() + 1, 1,
-                                   bounds.height() - 2),
-                         border);
+        flags.setStyle(cc::PaintFlags::kFill_Style);
+        canvas->DrawRect(gfx::RectF(bounds.x() + stroke, bounds.y() + stroke,
+                                   stroke, bounds.height() - 2 * stroke), flags);
       }
     }
   }
@@ -954,11 +957,12 @@ void TabSidebar::Refresh() {
       // .tab-fallback-icon: a 12px globe in the accent colour.
       const auto favicon =
           icon.isNull()
-              ? gfx::CreateVectorIcon(vector_icons::kGlobeIcon, 12,
+              ? gfx::CreateVectorIcon(vector_icons::kGlobeIcon, S(12),
                                       GetFlyColors().accent)
-              : gfx::ImageSkiaOperations::CreateResizedImage(
-                    icon, skia::ImageOperations::RESIZE_BEST,
-                    gfx::Size(16, 16));
+              : gfx::ImageSkiaOperations::CreateImageWithRoundRectClip(
+                    S(2), gfx::ImageSkiaOperations::CreateResizedImage(
+                              icon, skia::ImageOperations::RESIZE_BEST,
+                              gfx::Size(S(16), S(16))));
       view->select()->SetImageModel(
           views::Button::STATE_NORMAL,
           ui::ImageModel::FromImageSkia(
