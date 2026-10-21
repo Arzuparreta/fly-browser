@@ -776,6 +776,13 @@ FlyWindowController::FlyWindowController()
                       .command_centre = true});
   workspace_picker_->SetStyle(
       {Layout::kPage, u"Workspace Dashboard", u"", 720, page_insets});
+  // Electron's dashboard: drag a tab onto a tab to reorder it (or move it to
+  // that tab's workspace), or onto a workspace to move it there.
+  workspace_picker_->SetDragDrop(
+      base::BindRepeating(
+          [](std::string_view action) { return action.starts_with("tab/"); }),
+      base::BindRepeating(&FlyWindowController::DropDashboardTab,
+                          weak_factory_.GetWeakPtr()));
   tab_move_picker_->SetStyle(
       {Layout::kCentre, u"Move tab to workspace", u"", 560});
   keyboard_editor_ =
@@ -2740,6 +2747,51 @@ void FlyWindowController::ChooseWorkspace(content::WebContents* source,
     Select(choice->second.get(), true);
 }
 
+void FlyWindowController::DropDashboardTab(std::string source,
+                                           std::string target) {
+  if (closing_ || !workspace_picker_->active() ||
+      !source.starts_with("tab/"))
+    return;
+  const auto from = tab_choices_.find(source.substr(4));
+  if (from == tab_choices_.end() || !from->second.browser ||
+      !from->second.contents)
+    return;
+  auto* browser = from->second.browser.get();
+  auto* contents = from->second.contents.get();
+  auto* model = browser->GetTabStripModel();
+  const int index = model->GetIndexOfWebContents(contents);
+  if (index == TabStripModel::kNoTab)
+    return;
+  std::string workspace;
+  if (target.starts_with("workspace/")) {
+    workspace = target.substr(10);
+  } else if (target.starts_with("tab/")) {
+    const auto to = tab_choices_.find(target.substr(4));
+    if (to == tab_choices_.end() || !to->second.browser || !to->second.contents)
+      return;
+    if (to->second.browser.get() == browser) {
+      // Same workspace window: reorder, as Electron's moveTabState.
+      const int destination =
+          model->GetIndexOfWebContents(to->second.contents.get());
+      if (destination != TabStripModel::kNoTab && destination != index)
+        model->MoveWebContentsAt(index, destination, false);
+      workspace_picker_->UpdateItems(WorkspaceEntries(), false);
+      return;
+    }
+    workspace = target.substr(4, target.find('/', 4) - 4);
+  } else {
+    return;
+  }
+  if (!entries_.contains(browser) || entries_.at(browser).workspace_id == workspace)
+    return;
+  // Another workspace: the same transaction as Move, which appends the tab.
+  Select(browser, true);
+  model->ActivateTabAt(index);
+  move_source_browser_ = browser->GetWeakPtr();
+  move_source_ = contents->GetWeakPtr();
+  ChooseTabMoveDestination(contents, "move:" + workspace);
+  workspace_picker_->UpdateItems(WorkspaceEntries(), false);
+}
 void FlyWindowController::ToggleWorkspacePicker() {
   if (closing_ || !CanShowWorkspacePicker())
     return;

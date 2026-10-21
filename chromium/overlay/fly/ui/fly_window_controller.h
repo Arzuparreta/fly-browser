@@ -291,6 +291,7 @@ class FlyWindowController : public views::WidgetDelegate,
  private:
   void SetTabNumbers(bool shown);
   void ClickModeBadge();
+  void DropDashboardTab(std::string source, std::string target);
   void LoadSidebarArtwork();
   void StopSidebarFocusObservation();
   void ToggleSidebarAutoCollapse();

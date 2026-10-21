@@ -47,6 +47,9 @@ class StatusBadge : public FlyButton {
     SetVectorIcon(icon, 10);
     SetCustomPadding(gfx::Insets::VH(1, 6));
     SetImageLabelSpacing(5);
+    // MdTextButton centres its text; the clock's time follows at the right,
+    // so a centred date would be cut.
+    SetHorizontalAlignment(gfx::ALIGN_LEFT);
     SetMinSize(gfx::Size(0, 16));
     if (!callback_set_)
       SetFocusBehavior(FocusBehavior::NEVER);

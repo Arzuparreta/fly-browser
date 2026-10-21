@@ -4013,6 +4013,41 @@ IN_PROC_BROWSER_TEST_F(FlyWorkspaceBrowserTest,
 
 // Electron's dashboard: each workspace with its tabs (pinned marked) and
 // rename/delete buttons; choosing a tab opens its workspace on that tab.
+// Electron's dashboard: dragging a tab onto another tab of its workspace
+// reorders them.
+IN_PROC_BROWSER_TEST_F(FlyWorkspaceBrowserTest, DashboardDragReordersTabs) {
+  auto& window = FlyWindowController::Get();
+  ASSERT_TRUE(ui_test_utils::NavigateToURL(
+      browser(), embedded_test_server()->GetURL("/title1.html")));
+  ASSERT_TRUE(ui_test_utils::NavigateToURLWithDisposition(
+      browser(), embedded_test_server()->GetURL("/title2.html"),
+      WindowOpenDisposition::NEW_FOREGROUND_TAB,
+      ui_test_utils::BROWSER_TEST_WAIT_FOR_LOAD_STOP));
+  auto* model = browser()->GetTabStripModel();
+  auto* first = model->GetWebContentsAt(0);
+  auto* second = model->GetWebContentsAt(1);
+  ASSERT_TRUE(InvokeNativeCommand(browser(), "toggle-dashboard"));
+  auto& picker = window.workspace_picker();
+  ASSERT_TRUE(base::test::RunUntil([&] { return picker.active(); }));
+  // Rows: the workspace, then its two tabs.
+  auto* from = picker.row_for_testing(2);
+  auto* to = picker.row_for_testing(1);
+  ASSERT_TRUE(from && to);
+  views::test::RunScheduledLayout(from->GetWidget());
+  ui::test::EventGenerator mouse(
+      window.desktop_widget()->GetNativeWindow()->GetRootWindow());
+  mouse.MoveMouseTo(from->GetBoundsInScreen().CenterPoint());
+  mouse.PressLeftButton();
+  mouse.MoveMouseBy(0, -10);
+  mouse.MoveMouseTo(to->GetBoundsInScreen().CenterPoint());
+  mouse.ReleaseLeftButton();
+  ASSERT_TRUE(base::test::RunUntil([&] {
+    return model->GetWebContentsAt(0) == second &&
+           model->GetWebContentsAt(1) == first;
+  }));
+  EXPECT_TRUE(picker.active());
+}
+
 IN_PROC_BROWSER_TEST_F(FlyWorkspaceBrowserTest,
                        DashboardListsWorkspaceTabsAndOpensThem) {
   auto& window = FlyWindowController::Get();
