@@ -3510,8 +3510,8 @@ bool FlyWindowController::RunCommand(BrowserWindowInterface* browser,
     ToggleAddress(browser);
     return true;
   }
-  if (action == "toggle-downloads") {
-    ToggleDownloads(browser);
+  if (!browser && action == "toggle-downloads") {
+    ToggleDownloads(nullptr);
     return true;
   }
   if (action == "open-extension-actions") {
