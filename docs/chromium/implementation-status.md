@@ -129,8 +129,13 @@ empty workspace view has Electron's dotted canvas, the download shelf
 (`fly/ui/download_shelf.{h,cc}`) appears when a download starts, the status
 bar shows messages in its link area and opens the zoom controls, and popup
 windows are transient for Fly's window (patch 0031) so tiling window managers
-float them as Electron's child windows. Electron files
-the native build runs unchanged are copied by
+float them as Electron's child windows. The new tab page queries native history
+independently of the address/history/bookmark pickers, follows live bookmark,
+theme, interface size and frequent-site changes, and stops memory sampling when
+Chromium hides or occludes it (including pages first loaded in the background).
+The desktop also hides/restores its selected native view host on
+minimize/restore so Chromium propagates native document visibility. Electron
+files the native build runs unchanged are copied by
 `scripts/chromium/sync-resources.js` (checked by `npm test`).
 
 Linux package: `scripts/chromium/package-linux.py` turns a release build

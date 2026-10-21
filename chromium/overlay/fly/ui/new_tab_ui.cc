@@ -23,7 +23,9 @@
 #include "base/task/thread_pool.h"
 #include "base/timer/timer.h"
 #include "base/values.h"
+#include "chrome/browser/browser_process.h"
 #include "chrome/browser/profiles/profile.h"
+#include "components/prefs/pref_change_registrar.h"
 #include "content/public/browser/browser_child_process_host_iterator.h"
 #include "content/public/browser/child_process_data.h"
 #include "content/public/browser/render_process_host.h"
@@ -31,11 +33,14 @@
 #include "content/public/browser/web_ui_controller.h"
 #include "content/public/browser/web_ui_data_source.h"
 #include "content/public/browser/web_ui_message_handler.h"
+#include "content/public/browser/web_contents.h"
+#include "content/public/browser/web_contents_observer.h"
 #include "content/public/browser/webui_config.h"
 #include "content/public/browser/webui_config_map.h"
 #include "content/public/common/url_constants.h"
 #include "fly/ui/fly_theme.h"
 #include "fly/ui/fly_window_controller.h"
+#include "fly/bookmarks/bookmark_service.h"
 #include "services/network/public/mojom/content_security_policy.mojom.h"
 
 namespace fly {
@@ -120,7 +125,8 @@ int ResidentMegabytes(std::vector<base::ProcessId> pids) {
   return static_cast<int>(bytes / (1024 * 1024));
 }
 
-class NewTabHandler : public content::WebUIMessageHandler {
+class NewTabHandler : public content::WebUIMessageHandler,
+                      public content::WebContentsObserver {
  public:
   NewTabHandler() = default;
   NewTabHandler(const NewTabHandler&) = delete;
@@ -128,12 +134,15 @@ class NewTabHandler : public content::WebUIMessageHandler {
   ~NewTabHandler() override = default;
 
   void RegisterMessages() override {
+    Observe(web_ui()->GetWebContents());
+    registrar_.Init(g_browser_process->local_state());
+    for (const char* pref : {kPreferencesPref, kBookmarksPref, kWorkspacesPref}) {
+      registrar_.Add(pref, base::BindRepeating(&NewTabHandler::Refresh,
+                                             base::Unretained(this)));
+    }
     web_ui()->RegisterMessageCallback(
         "ready", base::BindRepeating(&NewTabHandler::OnReady,
                                      base::Unretained(this)));
-    web_ui()->RegisterMessageCallback(
-        "visible", base::BindRepeating(&NewTabHandler::OnVisible,
-                                       base::Unretained(this)));
     web_ui()->RegisterMessageCallback(
         "hideSite", base::BindRepeating(&NewTabHandler::OnHideSite,
                                         base::Unretained(this)));
@@ -142,7 +151,10 @@ class NewTabHandler : public content::WebUIMessageHandler {
     memory_timer_.Stop();
     weak_factory_.InvalidateWeakPtrs();
     sampling_ = false;
+    if (history_)
+      history_->Cancel();
   }
+  void OnVisibilityChanged(content::Visibility) override { Refresh(); }
 
  private:
   bool OffTheRecord() {
@@ -150,18 +162,50 @@ class NewTabHandler : public content::WebUIMessageHandler {
   }
   void OnReady(const base::ListValue&) {
     AllowJavascript();
-    SendPage();
-    StartMemory();
+    Refresh();
   }
-  void OnVisible(const base::ListValue& args) {
+  bool Visible() const {
+    return web_contents() &&
+           web_contents()->GetVisibility() == content::Visibility::VISIBLE;
+  }
+  void Refresh() {
     if (!IsJavascriptAllowed())
-      AllowJavascript();
-    if (!args.empty() && args[0].is_bool() && args[0].GetBool()) {
-      SendPage();
-      StartMemory();
-    } else {
+      return;
+    if (!Visible()) {
       memory_timer_.Stop();
+      if (history_)
+        history_->Cancel();
+      return;
     }
+    SendPage();
+    if (!memory_timer_.IsRunning())
+      StartMemory();
+    // The page needs its own query: a picker may never have been opened,
+    // and its cancellable query must not cancel another new tab or picker.
+    if (OffTheRecord() ||
+        PreferencesService(*g_browser_process->local_state())
+                .ReadFrequentSitesVisible() != true) {
+      if (history_)
+        history_->Cancel();
+      history_entries_.clear();
+      return;
+    }
+    if (!history_) {
+      workspaces_ = std::make_unique<WorkspaceService>(
+          *g_browser_process->local_state());
+      history_ = std::make_unique<HistoryService>(
+          *g_browser_process->profile_manager(), *workspaces_);
+      history_->SetChangedCallback(base::BindRepeating(
+          &NewTabHandler::Refresh, base::Unretained(this)));
+    }
+    history_->Query(base::BindOnce(
+        [](base::WeakPtr<NewTabHandler> handler,
+           std::optional<std::vector<HistoryEntry>> rows) {
+          if (!handler || !handler->IsJavascriptAllowed() || !handler->Visible())
+            return;
+          handler->history_entries_ = rows.value_or(std::vector<HistoryEntry>());
+          handler->SendPage();
+        }, weak_factory_.GetWeakPtr()));
   }
   void OnHideSite(const base::ListValue& args) {
     auto* window = FlyWindowController::GetIfCreated();
@@ -184,7 +228,7 @@ class NewTabHandler : public content::WebUIMessageHandler {
     colours.Set("--link", Hex(colors.link));
     base::DictValue data;
     if (auto* window = FlyWindowController::GetIfCreated())
-      data = window->NewTabLists(OffTheRecord());
+      data = window->NewTabLists(OffTheRecord(), history_entries_);
     data.Set("light", !colors.dark);
     data.Set("scale", GetFlyInterfaceScale());
     data.Set("colours", std::move(colours));
@@ -198,7 +242,7 @@ class NewTabHandler : public content::WebUIMessageHandler {
                                             base::Unretained(this)));
   }
   void SampleMemory() {
-    if (sampling_ || !IsJavascriptAllowed())
+    if (sampling_ || !IsJavascriptAllowed() || !Visible())
       return;
     sampling_ = true;
     base::ThreadPool::PostTaskAndReplyWithResult(
@@ -211,12 +255,16 @@ class NewTabHandler : public content::WebUIMessageHandler {
   }
   void OnMemory(int megabytes) {
     sampling_ = false;
-    if (IsJavascriptAllowed())
+    if (IsJavascriptAllowed() && Visible())
       CallJavascriptFunction("updateFlyNewTabMemory", base::Value(megabytes));
   }
 
   base::RepeatingTimer memory_timer_;
   bool sampling_ = false;
+  PrefChangeRegistrar registrar_;
+  std::unique_ptr<WorkspaceService> workspaces_;
+  std::unique_ptr<HistoryService> history_;
+  std::vector<HistoryEntry> history_entries_;
   base::WeakPtrFactory<NewTabHandler> weak_factory_{this};
 };
 

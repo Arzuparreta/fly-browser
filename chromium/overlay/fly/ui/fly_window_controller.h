@@ -135,7 +135,8 @@ class FlyWindowController : public views::WidgetDelegate,
   StatusBar* status_bar_for_testing() { return status_bar_; }
   // Fly's new tab page: bookmarks and frequent sites (none in private
   // workspaces), and hiding a frequent site from its list.
-  base::DictValue NewTabLists(bool off_the_record) const;
+  base::DictValue NewTabLists(
+      bool off_the_record, const std::vector<HistoryEntry>& history) const;
   bool HideFrequentSite(const std::string& url);
   TabSidebar* tab_sidebar_for_testing() { return tab_sidebar_; }
   DownloadShelf* download_shelf_for_testing() { return download_shelf_; }
@@ -349,6 +350,7 @@ class FlyWindowController : public views::WidgetDelegate,
   void ApplyFlyPalette();
   void CycleClockFormat();
   void OnWidgetVisibilityChanged(views::Widget*, bool visible) override;
+  void UpdateEmbeddedVisibility();
   void ScheduleWorkspaceRefresh();
   void RebuildWorkspaceButtons();
   void SelectWindow(base::WeakPtr<BrowserWindowInterface> browser);

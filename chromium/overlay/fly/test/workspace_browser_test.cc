@@ -1110,8 +1110,14 @@ IN_PROC_BROWSER_TEST_F(FlyWorkspaceBrowserTest,
   ASSERT_TRUE(base::test::RunUntil([&] { return desktop->IsMinimized(); }));
   EXPECT_TRUE(first->GetWindow()->IsMinimized());
   EXPECT_TRUE(second->GetWindow()->IsMinimized());
+  ASSERT_TRUE(base::test::RunUntil([&] {
+    return Active(second)->GetVisibility() != content::Visibility::VISIBLE;
+  }));
   desktop->Restore();
   ASSERT_TRUE(base::test::RunUntil([&] { return !desktop->IsMinimized(); }));
+  ASSERT_TRUE(base::test::RunUntil([&] {
+    return Active(second)->GetVisibility() == content::Visibility::VISIBLE;
+  }));
   window.Select(second, true);
   ExpectVisible(Active(second), true);
 }
@@ -1471,6 +1477,121 @@ IN_PROC_BROWSER_TEST_F(FlyWorkspaceBrowserTest,
       FlyWindowController::Get().tab_sidebar_for_testing()->row_for_testing(
           contents);
   ASSERT_TRUE(row);
+}
+
+IN_PROC_BROWSER_TEST_F(FlyWorkspaceBrowserTest,
+                       NewTabLoadsFreshListsAndFollowsLivePreferences) {
+  auto& window = FlyWindowController::Get();
+  const auto visited = embedded_test_server()->GetURL("/title1.html");
+  ASSERT_TRUE(ui_test_utils::NavigateToURL(browser(), visited));
+  // Flush the native history write, without ever opening a Fly picker.
+  base::CancelableTaskTracker tracker;
+  base::test::TestFuture<history::QueryResults> flushed;
+  HistoryServiceFactory::GetForProfile(browser()->GetProfile(),
+                                       ServiceAccessType::EXPLICIT_ACCESS)
+      ->QueryHistory({}, history::QueryOptions(), flushed.GetCallback(), &tracker);
+  ASSERT_FALSE(flushed.Get().empty());
+  ASSERT_TRUE(ExecuteNativeCommand(browser(), "spawn-tab"));
+  auto* contents = Active(browser());
+  ASSERT_TRUE(content::WaitForLoadStop(contents));
+  ASSERT_TRUE(base::test::RunUntil([&] {
+    return content::EvalJs(contents,
+        "document.querySelectorAll('#sites a').length").ExtractInt() == 1;
+  }));
+  EXPECT_EQ(url::Origin::Create(visited).GetURL().spec(),
+            content::EvalJs(contents, "document.querySelector('#sites a').href"));
+  // Bookmarks also exclude their origins from frequent sites immediately.
+  ASSERT_TRUE(window.bookmarks().Add(visited.spec(), "Saved page"));
+  ASSERT_TRUE(base::test::RunUntil([&] {
+    return content::EvalJs(contents,
+        "document.querySelector('#bookmarks a')?.textContent === 'Saved page'"
+        " && document.querySelectorAll('#sites a').length === 0").ExtractBool();
+  }));
+  ASSERT_TRUE(window.bookmarks().Remove(visited.spec()));
+  ASSERT_TRUE(base::test::RunUntil([&] {
+    return content::EvalJs(contents,
+        "document.querySelectorAll('#sites a').length").ExtractInt() == 1;
+  }));
+  ASSERT_TRUE(window.preferences().SetFrequentSitesVisible(false));
+  ASSERT_TRUE(base::test::RunUntil([&] {
+    return content::EvalJs(contents,
+        "document.getElementById('frequent-sites').hidden").ExtractBool();
+  }));
+  ASSERT_TRUE(window.preferences().SetFrequentSitesVisible(true));
+  ASSERT_TRUE(window.preferences().ToggleTheme());
+  ASSERT_TRUE(window.preferences().SetString("interface_scale", "large"));
+  ASSERT_TRUE(base::test::RunUntil([&] {
+    return content::EvalJs(contents,
+        "document.body.classList.contains('light') && "
+        "document.documentElement.style.getPropertyValue('--scale') === '1.25' && "
+        "!document.getElementById('frequent-sites').hidden && "
+        "document.querySelectorAll('#sites a').length === 1").ExtractBool();
+  }));
+  // Native history deletion updates the visible new tab too.
+  HistoryServiceFactory::GetForProfile(browser()->GetProfile(),
+                                       ServiceAccessType::EXPLICIT_ACCESS)
+      ->DeleteURLs({visited});
+  ASSERT_TRUE(base::test::RunUntil([&] {
+    return content::EvalJs(contents,
+        "document.querySelectorAll('#sites a').length").ExtractInt() == 0;
+  }));
+}
+
+IN_PROC_BROWSER_TEST_F(FlyWorkspaceBrowserTest,
+                       BackgroundNewTabSamplesOnlyWhileVisible) {
+  ASSERT_TRUE(ui_test_utils::NavigateToURLWithDisposition(
+      browser(), GURL(kFlyNewTabURL), WindowOpenDisposition::NEW_BACKGROUND_TAB,
+      ui_test_utils::BROWSER_TEST_WAIT_FOR_LOAD_STOP));
+  auto* model = browser()->GetTabStripModel();
+  auto* contents = model->GetWebContentsAt(model->count() - 1);
+  ASSERT_NE(contents, Active(browser()));
+  ASSERT_NE(content::Visibility::VISIBLE, contents->GetVisibility());
+  // Give a hidden page more than a complete sample interval. Its initial
+  // ready message must not start a timer, even without a visibilitychange.
+  const auto wait_interval = [] {
+    base::RunLoop loop;
+    base::OneShotTimer timer;
+    timer.Start(FROM_HERE, base::Milliseconds(1500), loop.QuitClosure());
+    loop.Run();
+  };
+  wait_interval();
+  EXPECT_EQ("—", content::EvalJs(contents,
+      "document.getElementById('memory').textContent"));
+  model->ActivateTabAt(model->GetIndexOfWebContents(contents));
+  ASSERT_TRUE(base::test::RunUntil([&] {
+    return content::EvalJs(contents,
+        "document.getElementById('memory').textContent")
+        .ExtractString().ends_with(" MB");
+  }));
+  model->ActivateTabAt(0);
+  ASSERT_NE(content::Visibility::VISIBLE, contents->GetVisibility());
+  ASSERT_TRUE(content::ExecJs(contents,
+      "document.getElementById('memory').textContent = 'hidden'"));
+  wait_interval();
+  EXPECT_EQ("hidden", content::EvalJs(contents,
+      "document.getElementById('memory').textContent"));
+  model->ActivateTabAt(model->GetIndexOfWebContents(contents));
+  ASSERT_TRUE(base::test::RunUntil([&] {
+    return content::EvalJs(contents,
+        "document.getElementById('memory').textContent")
+        .ExtractString().ends_with(" MB");
+  }));
+  auto* desktop = FlyWindowController::Get().desktop_widget();
+  desktop->Minimize();
+  ASSERT_TRUE(base::test::RunUntil([&] {
+    return contents->GetVisibility() != content::Visibility::VISIBLE;
+  }));
+  ASSERT_TRUE(content::ExecJs(contents,
+      "document.getElementById('memory').textContent = 'minimized'"));
+  wait_interval();
+  EXPECT_EQ("minimized", content::EvalJs(contents,
+      "document.getElementById('memory').textContent"));
+  desktop->Restore();
+  ASSERT_TRUE(base::test::RunUntil([&] {
+    return content::EvalJs(contents,
+        "document.getElementById('memory').textContent")
+        .ExtractString().ends_with(" MB");
+  }));
 }
 
 // Electron's download shelf: it appears when a download starts, shows the

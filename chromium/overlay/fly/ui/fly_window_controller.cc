@@ -1261,7 +1261,8 @@ std::optional<std::vector<FrequentSite>> FlyWindowController::FrequentSites()
     visits.push_back({row.url.spec(), row.visited});
   return frequent_sites_->Read(visits);
 }
-base::DictValue FlyWindowController::NewTabLists(bool off_the_record) const {
+base::DictValue FlyWindowController::NewTabLists(
+    bool off_the_record, const std::vector<HistoryEntry>& history) const {
   // Only web pages are listed, as on Electron's new tab page.
   const auto link = [](const std::string& url, const std::string& title) {
     const GURL target(url);
@@ -1285,7 +1286,10 @@ base::DictValue FlyWindowController::NewTabLists(bool off_the_record) const {
     }
   }
   if (show_sites) {
-    if (const auto frequent = FrequentSites()) {
+    std::vector<SiteVisit> visits;
+    for (const auto& row : history)
+      visits.push_back({row.url.spec(), row.visited});
+    if (const auto frequent = frequent_sites_->Read(visits)) {
       for (const auto& site : *frequent) {
         if (auto entry = link(site.url, site.title))
           sites.Append(std::move(*entry));
@@ -1856,6 +1860,7 @@ void FlyWindowController::RunWindowControl(std::string action) {
 void FlyWindowController::OnWidgetShowStateChanged(views::Widget* widget) {
   if (widget == desktop_.get()) {
     UpdateWindowControls();
+    UpdateEmbeddedVisibility();
     UpdateClock();
   }
 }
@@ -2034,7 +2039,23 @@ void FlyWindowController::UpdateClock() {
 void FlyWindowController::CycleClockFormat() {
   preferences_.CycleClockFormat();
 }
-void FlyWindowController::OnWidgetVisibilityChanged(views::Widget*, bool) {
+void FlyWindowController::UpdateEmbeddedVisibility() {
+  if (closing_ || !selected_)
+    return;
+  const auto it = entries_.find(selected_);
+  if (it == entries_.end() || !it->second.host)
+    return;
+  // The profile BrowserWidgets are hosted inside Fly's desktop window.
+  // Minimizing that outer window does not hide a hosted widget by itself.
+  // Hide its NativeViewHost, just as workspace selection does. Calling
+  // ShowInactive on the BrowserWidget here would select the workspace and
+  // recursively show the desktop while it is still notifying observers.
+  // The host propagates visibility through Aura to the native renderers.
+  it->second.host->SetVisible(desktop_->IsVisible() && !desktop_->IsMinimized());
+}
+void FlyWindowController::OnWidgetVisibilityChanged(views::Widget* widget, bool) {
+  if (widget == desktop_.get())
+    UpdateEmbeddedVisibility();
   UpdateClock();
 }
 

@@ -2,6 +2,7 @@
 // second while the page shows, Fly's memory use (chrome.send is the WebUI
 // bridge).
 let bookmarkSnapshot;
+let siteSnapshot;
 window.updateFlyNewTab = data => {
     document.body.classList.toggle('light', data.light);
     for (const [key, value] of Object.entries(data.colours)) document.documentElement.style.setProperty(key, value);
@@ -32,22 +33,26 @@ function updateLists(data) {
         }
     }
     document.getElementById('bookmarks-empty').hidden = (data.bookmarks || []).length > 0;
-    const sites = document.getElementById('sites');
-    sites.replaceChildren();
-    for (const site of data.sites || []) {
-        const row = document.createElement('div');
-        row.className = 'site-row';
-        const link = document.createElement('a');
-        link.href = site.url;
-        link.textContent = site.title;
-        const remove = document.createElement('button');
-        remove.type = 'button';
-        remove.textContent = '×';
-        remove.dataset.hideSite = site.url;
-        remove.setAttribute('aria-label', `Remove ${site.title} from frequent sites`);
-        remove.title = 'Remove from frequent sites';
-        row.append(link, remove);
-        sites.append(row);
+    const siteData = JSON.stringify(data.sites || []);
+    if (siteSnapshot !== siteData) {
+        siteSnapshot = siteData;
+        const sites = document.getElementById('sites');
+        sites.replaceChildren();
+        for (const site of data.sites || []) {
+            const row = document.createElement('div');
+            row.className = 'site-row';
+            const link = document.createElement('a');
+            link.href = site.url;
+            link.textContent = site.title;
+            const remove = document.createElement('button');
+            remove.type = 'button';
+            remove.textContent = '×';
+            remove.dataset.hideSite = site.url;
+            remove.setAttribute('aria-label', `Remove ${site.title} from frequent sites`);
+            remove.title = 'Remove from frequent sites';
+            row.append(link, remove);
+            sites.append(row);
+        }
     }
     document.getElementById('empty').hidden = (data.sites || []).length > 0;
 }
@@ -64,9 +69,6 @@ function updateClock() {
     document.getElementById('date').textContent = now.toLocaleDateString('en-GB', {weekday:'long', day:'numeric', month:'long', year:'numeric'});
     clockTimer = setTimeout(updateClock, 60000 - Date.now() % 60000);
 }
-document.addEventListener('visibilitychange', () => {
-    updateClock();
-    chrome.send('visible', [!document.hidden]);
-});
+document.addEventListener('visibilitychange', updateClock);
 updateClock();
 chrome.send('ready');
