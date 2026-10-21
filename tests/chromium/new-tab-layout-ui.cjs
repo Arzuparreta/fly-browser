@@ -39,6 +39,7 @@ async function geometry(page) {
                 offenders.push({element:list.id, listOverflow:[list.scrollWidth,list.scrollHeight], allocation:[list.clientWidth,list.clientHeight]});
         }
         return {viewport, scroll:[root.scrollWidth,root.scrollHeight], offenders,
+            clockLeft:document.getElementById('clock').getBoundingClientRect().left,
             clockSize:getComputedStyle(document.getElementById('clock')).fontSize,
             scale:getComputedStyle(document.documentElement).zoom};
     });
@@ -79,6 +80,8 @@ async function geometry(page) {
             assert.equal(await page.evaluate(()=>document.fonts.check('16px "IBM Plex Sans"') && document.fonts.check('16px "IBM Plex Mono"') && document.fonts.check('800 32px "Doto"')),true);
             const host=await geometry(page);
             assert(host.scroll[1]<=host.viewport.height+1 && !host.offenders.length,JSON.stringify({scale,host}));
+            assert.equal(data.sidebarOverhang,scale==='large'?280:224,'The native sidebar sends its scaled overhang');
+            assert(host.clockLeft>=data.sidebarOverhang-1,'The clock must clear the expanded native sidebar');
             for (const [width,height] of sizes) {
                 await cdp.send('Emulation.setDeviceMetricsOverride',{width,height,deviceScaleFactor:1,mobile:false});
                 for(const count of [0,6,37]) {
@@ -94,6 +97,7 @@ async function geometry(page) {
                     const state=await geometry(page);
                     report.push({scale,width,height,count,...state});
                     assert(state.scroll[0]<=width+1 && state.scroll[1]<=height+1 && !state.offenders.length,JSON.stringify(report.at(-1)));
+                    assert(state.clockLeft>=Math.min(data.sidebarOverhang,Math.max(0,width-320))-1,JSON.stringify(report.at(-1)));
                     if(evidence && count===6 && [[1366,768],[640,480],[360,640],[1200,360]].some(s=>s[0]===width&&s[1]===height))
                         await page.screenshot({path:path.join(evidence,`${scale}-${width}x${height}.png`)});
                 }

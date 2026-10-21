@@ -40,6 +40,7 @@
 #include "content/public/common/url_constants.h"
 #include "fly/ui/fly_theme.h"
 #include "fly/ui/fly_window_controller.h"
+#include "fly/ui/sidebar_panel.h"
 #include "fly/bookmarks/bookmark_service.h"
 #include "services/network/public/mojom/content_security_policy.mojom.h"
 
@@ -227,8 +228,13 @@ class NewTabHandler : public content::WebUIMessageHandler,
     colours.Set("--dim", Hex(colors.dim));
     colours.Set("--link", Hex(colors.link));
     base::DictValue data;
-    if (auto* window = FlyWindowController::GetIfCreated())
+    if (auto* window = FlyWindowController::GetIfCreated()) {
       data = window->NewTabLists(OffTheRecord(), history_entries_);
+      data.Set("sidebarOverhang",
+               window->preferences().ReadSidebarAutoCollapse().value_or(false)
+                   ? FlyScaled(kSidebarWidth) - FlyScaled(kSidebarRailWidth)
+                   : 0);
+    }
     data.Set("light", !colors.dark);
     data.Set("scale", GetFlyInterfaceScale());
     data.Set("colours", std::move(colours));
