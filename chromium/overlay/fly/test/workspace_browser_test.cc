@@ -17,6 +17,10 @@
 #include "fly/ui/fly_theme.h"
 #include "fly/ui/fly_actions.h"
 #include "fly/ui/fly_extensions.h"
+#include "fly/ui/sidebar_panel.h"
+#include "ui/views/accessibility/view_accessibility.h"
+#include "ui/compositor/layer.h"
+#include "ui/compositor/layer_animator.h"
 #include "crypto/sha2.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/files/file_enumerator.h"
@@ -667,6 +671,55 @@ IN_PROC_BROWSER_TEST_F(FlySidebarBrowserTest,
   EXPECT_EQ(0, content::EvalJs(page, "visibilityEvents.length"));
 }
 
+// Electron's sidebar: the collapsed rail is the panel's left column. The
+// edge slides 224px and the panel slides back by the same amount on the
+// compositor, so rows and favicons never move.
+IN_PROC_BROWSER_TEST_F(FlySidebarBrowserTest,
+                       CollapsedRailIsThePanelsLeftColumn) {
+  auto& window = FlyWindowController::Get();
+  auto* root = window.sidebar_root_for_testing();
+  auto* list = window.tab_sidebar_for_testing();
+  ASSERT_TRUE(root);
+  ASSERT_TRUE(
+      base::test::RunUntil([&] { return list->row_count_for_testing() == 1; }));
+  auto settled = [&] {
+    return !root->edge()->layer()->GetAnimator()->is_animating() &&
+           !root->panel()->layer()->GetAnimator()->is_animating() &&
+           !root->shadow()->layer()->GetAnimator()->is_animating();
+  };
+  MoveToPage();
+  ASSERT_TRUE(base::test::RunUntil(settled));
+  const float shift = FlyScaled(224);
+  EXPECT_EQ(-shift, root->edge()->layer()->transform().To2dTranslation().x());
+  EXPECT_EQ(shift, root->panel()->layer()->transform().To2dTranslation().x());
+  EXPECT_EQ(0.f, root->shadow()->layer()->opacity());
+  EXPECT_TRUE(list->rail());
+  EXPECT_EQ(1.f, list->rail_surfaces()->layer()->opacity());
+  EXPECT_EQ(0.f, list->expanded_surfaces()->layer()->opacity());
+  auto* row = list->row_for_testing(Active(browser()));
+  ASSERT_TRUE(row);
+  const auto collapsed = row->GetBoundsInScreen();
+  const auto origin =
+      window.desktop_widget()->GetContentsView()->GetBoundsInScreen().origin();
+  // Rows are 40px tall, 4px into the list, the favicon centred at 18px.
+  EXPECT_EQ(FlyScaled(40), collapsed.height());
+  EXPECT_EQ(origin.x() + FlyScaled(4), collapsed.x());
+  OpenByPointer();
+  ASSERT_TRUE(base::test::RunUntil(settled));
+  EXPECT_TRUE(root->edge()->layer()->transform().IsIdentity());
+  EXPECT_TRUE(root->panel()->layer()->transform().IsIdentity());
+  EXPECT_EQ(1.f, root->shadow()->layer()->opacity());
+  EXPECT_FALSE(list->rail());
+  EXPECT_EQ(0.f, list->rail_surfaces()->layer()->opacity());
+  EXPECT_EQ(1.f, list->expanded_surfaces()->layer()->opacity());
+  EXPECT_EQ(collapsed, row->GetBoundsInScreen());
+  // Collapsing again animates back to the rail.
+  MoveToPage();
+  ASSERT_TRUE(base::test::RunUntil(settled));
+  EXPECT_EQ(-shift, root->edge()->layer()->transform().To2dTranslation().x());
+  EXPECT_EQ(collapsed, row->GetBoundsInScreen());
+}
+
 IN_PROC_BROWSER_TEST_F(FlySidebarBrowserTest,
                        KeyboardFocusHoldsPanelAndEscapeRestoresEditablePage) {
   ASSERT_TRUE(ui_test_utils::NavigateToURL(
@@ -798,7 +851,7 @@ IN_PROC_BROWSER_TEST_F(FlySidebarBrowserTest,
 }
 
 IN_PROC_BROWSER_TEST_F(FlySidebarBrowserTest,
-                       CompactRowsAndMenusKeepNativeIdentityAcrossProfiles) {
+                       RailRowsAndMenusKeepNativeIdentityAcrossProfiles) {
   auto* first = browser();
   const auto first_id = TabIdentity::Get(Active(first));
   ASSERT_TRUE(ExecuteNativeCommand(first, "spawn-tab"));
@@ -807,43 +860,50 @@ IN_PROC_BROWSER_TEST_F(FlySidebarBrowserTest,
   auto* second = SecondWorkspace();
   ASSERT_TRUE(second);
   auto& window = FlyWindowController::Get();
-  auto* rail = window.compact_sidebar_for_testing();
+  auto* list = window.tab_sidebar_for_testing();
   ASSERT_TRUE(base::test::RunUntil([&] {
-    return rail->row_count_for_testing() == 1 &&
-           rail->row_for_testing(Active(second));
+    return list->row_count_for_testing() == 1 &&
+           list->row_for_testing(Active(second));
   }));
   window.Select(first, true);
   ASSERT_TRUE(base::test::RunUntil([&] {
-    return rail->row_count_for_testing() == 2 && rail->row_for_testing(target);
+    return list->row_count_for_testing() == 2 && list->row_for_testing(target);
   }));
   EXPECT_EQ(first_id,
             TabIdentity::Get(first->GetTabStripModel()->GetWebContentsAt(0)));
   EXPECT_EQ(id, TabIdentity::Get(target));
   MoveToPage();
-  auto* button = rail->row_for_testing(target)->children().front().get();
-  auto* select = views::AsViewClass<views::MdTextButton>(button);
+  EXPECT_TRUE(list->rail());
+  auto* row = list->row_for_testing(target);
+  auto* select =
+      views::AsViewClass<views::MdTextButton>(row->children().front().get());
   ASSERT_TRUE(select);
   ASSERT_TRUE(select->GetImageModel(views::Button::STATE_NORMAL));
-  const auto initial_icon = select->GetImageModel(views::Button::STATE_NORMAL)
-                                ->Rasterize(select->GetColorProvider());
-  EXPECT_EQ(gfx::Size(24, 24), initial_icon.size());
+  // The favicon in its 18px wrapper with room for the split badge.
+  EXPECT_EQ(gfx::Size(26, 26),
+            select->GetImageModel(views::Button::STATE_NORMAL)
+                ->Rasterize(select->GetColorProvider())
+                .size());
   SetTabAudioMuted(target, true, TabMutedReason::kAudioIndicator, {});
   ASSERT_TRUE(base::test::RunUntil([&] {
-    return select->GetTooltipText().find(u", muted") != std::u16string::npos;
+    return std::u16string(select->GetViewAccessibility().GetCachedName())
+               .find(u", muted") != std::u16string::npos;
   }));
-  const auto muted_icon = select->GetImageModel(views::Button::STATE_NORMAL)
-                              ->Rasterize(select->GetColorProvider());
-  EXPECT_FALSE(initial_icon.BackedBySameObjectAs(muted_icon));
   SetTabAudioMuted(target, false, TabMutedReason::kAudioIndicator, {});
   ASSERT_TRUE(base::test::RunUntil([&] {
-    return select->GetTooltipText().find(u", muted") == std::u16string::npos;
+    return std::u16string(select->GetViewAccessibility().GetCachedName())
+               .find(u", muted") == std::u16string::npos;
   }));
-  views::test::RunScheduledLayout(button->GetWidget());
-  const auto point = button->GetBoundsInScreen().CenterPoint();
+  views::test::RunScheduledLayout(row->GetWidget());
+  // The favicon is on the rail's centre line, 18px from the sidebar's edge.
+  const auto origin =
+      window.desktop_widget()->GetContentsView()->GetBoundsInScreen().origin();
+  const gfx::Point point(origin.x() + 18,
+                         row->GetBoundsInScreen().CenterPoint().y());
   bool inspected = false;
   base::RepeatingTimer menu;
   menu.Start(FROM_HERE, base::Milliseconds(1), base::BindLambdaForTesting([&] {
-               auto* model = rail->context_menu_for_testing();
+               auto* model = list->context_menu_for_testing();
                if (!model)
                  return;
                menu.Stop();
@@ -855,8 +915,8 @@ IN_PROC_BROWSER_TEST_F(FlySidebarBrowserTest,
                    return;
                  }
                }
-               ADD_FAILURE() << "Missing native Pin command in compact rail";
-               rail->CloseContextMenu();
+               ADD_FAILURE() << "Missing native Pin command in the rail";
+               list->CloseContextMenu();
              }));
   ui::test::EventGenerator mouse(
       window.desktop_widget()->GetNativeWindow()->GetRootWindow());
@@ -1238,23 +1298,21 @@ IN_PROC_BROWSER_TEST_F(FlyWorkspaceBrowserTest,
   auto* sidebar = FlyWindowController::Get().tab_sidebar_for_testing();
   ASSERT_TRUE(base::test::RunUntil([&] {
     auto* entry = contents->GetController().GetVisibleEntry();
-    auto* row = sidebar->row_for_testing(contents);
-    if (!entry || !entry->GetFavicon().valid ||
-        entry->GetFavicon().image.IsEmpty() || !row)
-      return false;
-    const auto& image = static_cast<views::MdTextButton*>(row->children()[0])
-                            ->GetImageModel(views::Button::STATE_NORMAL);
-    return image && image->IsImage();
+    return entry && entry->GetFavicon().valid &&
+           !entry->GetFavicon().image.IsEmpty() &&
+           sidebar->row_for_testing(contents) &&
+           !sidebar->favicon_for_testing(contents).isNull();
   }));
   auto* row = sidebar->row_for_testing(contents);
   auto* select = static_cast<views::MdTextButton*>(row->children()[0]);
-  EXPECT_EQ(gfx::Size(16, 16), select->GetImage(views::Button::STATE_NORMAL).size());
+  // The 16px favicon inside its 18px wrapper, with room for the split badge.
+  EXPECT_EQ(gfx::Size(26, 26),
+            select->GetImage(views::Button::STATE_NORMAL).size());
   const std::string id = TabIdentity::Get(contents);
   ASSERT_TRUE(ui_test_utils::NavigateToURL(browser(), GURL("about:blank")));
-  ASSERT_TRUE(base::test::RunUntil([&] {
-    const auto& image = select->GetImageModel(views::Button::STATE_NORMAL);
-    return image && image->IsVectorIcon();
-  }));
+  // The globe fallback replaces the site's favicon in the same row.
+  ASSERT_TRUE(base::test::RunUntil(
+      [&] { return sidebar->favicon_for_testing(contents).isNull(); }));
   EXPECT_EQ(row, sidebar->row_for_testing(contents));
   EXPECT_EQ(id, TabIdentity::Get(contents));
   EXPECT_EQ(GURL("about:blank"), contents->GetLastCommittedURL());
@@ -5280,12 +5338,9 @@ IN_PROC_BROWSER_TEST_F(FlyWorkspaceBrowserTest,
   EXPECT_FALSE(second_model->IsBookmarked(profile_only));
   ASSERT_EQ(1u, window.bookmarks().Read()->size());
   const int count = second->GetTabStripModel()->count();
-  auto* pointer = window.bookmarks_button_for_testing();
-  ASSERT_TRUE(pointer && pointer->GetEnabled());
   ui::test::EventGenerator keys(
       window.desktop_widget()->GetNativeWindow()->GetRootWindow());
-  keys.MoveMouseTo(pointer->GetBoundsInScreen().CenterPoint());
-  keys.ClickLeftButton();
+  ASSERT_TRUE(InvokeNativeCommand(second, "toggle-bookmarks"));
   auto& picker = window.bookmark_picker();
   ASSERT_TRUE(base::test::RunUntil([&] { return picker.active(); }));
   ASSERT_EQ(1u, picker.result_count_for_testing());
@@ -5363,7 +5418,6 @@ IN_PROC_BROWSER_TEST_F(FlyWorkspaceBrowserTest,
   const auto future = base::DictValue().Set("schema", 2).Set("items", base::ListValue());
   g_browser_process->local_state()->SetDict(kBookmarksPref, future.Clone());
   ASSERT_TRUE(base::test::RunUntil([&] { return !picker.search_for_testing(); }));
-  EXPECT_FALSE(window.bookmarks_button_for_testing()->GetEnabled());
   EXPECT_FALSE(NativeCommandAvailable(browser(), "toggle-bookmarks"));
   EXPECT_EQ(future, g_browser_process->local_state()->GetDict(kBookmarksPref));
 }

@@ -7,6 +7,9 @@ const root = path.resolve(__dirname, '../..');
 const COPIES = [
     ['modules/readerDistiller.js', 'chromium/overlay/fly/resources/reader/readerDistiller.js'],
     ['assets/identity/icon-128.png', 'chromium/overlay/fly/resources/identity/icon-128.png'],
+    ['assets/identity/engraving-chasis@2x.png', 'chromium/overlay/fly/resources/identity/engraving-chasis@2x.png'],
+    ['assets/identity/engraving-papel@2x.png', 'chromium/overlay/fly/resources/identity/engraving-papel@2x.png'],
+    ['assets/identity/paper-grain.png', 'chromium/overlay/fly/resources/identity/paper-grain.png'],
 ];
 let stale = false;
 for (const [from, to] of COPIES) {

@@ -14,6 +14,7 @@
 #include "components/zoom/zoom_controller.h"
 #include "components/zoom/zoom_observer.h"
 #include "content/public/browser/web_contents_observer.h"
+#include "ui/gfx/image/image_skia.h"
 #include "ui/views/view.h"
 #include "url/gurl.h"
 
@@ -74,7 +75,12 @@ class StatusBar : public views::View,
   void OnZoomControllerDestroyed(zoom::ZoomController*) override;
   void OnZoomChanged(const zoom::ZoomController::ZoomChangedEventData&) override;
 
+  // Light mode lays Electron's paper grain over the bar.
+  void SetPaperGrain(gfx::ImageSkia grain);
+  void OnPaintBackground(gfx::Canvas* canvas) override;
+
  private:
+  gfx::ImageSkia paper_grain_;
   class TargetObserver;
   void ClearTarget();
   void SelectContents();

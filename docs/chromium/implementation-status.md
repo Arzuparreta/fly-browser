@@ -18,7 +18,7 @@ omnibox are gone and Fly's floating address surface is the only address UI.
 from `main.js`), the bundled IBM Plex Sans/Mono and Doto fonts (TTF copies of
 `assets/fonts`, registered with the browser's fontconfig at start) and the
 shared `FlyButton`/`FlyLabel`/background/border helpers. The sidebar,
-compact rail, footer, pickers (Command Centre, address, history, Bookmarks
+footer, pickers (Command Centre, address, history, Bookmarks
 Manager, Workspace Dashboard) and Preferences use them. The footer follows the
 Electron layout (mode badge, hovered link, zoom, notifications, connection,
 workspace and clock badges); the clock wakes at the next visible change rather
@@ -112,7 +112,13 @@ Centre (definitions generated from `COMMAND_DEFINITIONS`, chips, inspector,
 recents, extension commands, terminal fallback), Preferences with Electron's
 sections and search, in-place updates of the native package, desktop
 integration, interface scale for sizes, sidebar/overlay opacity, and the
-Diagnostics & Health Hub (patch 0029 adds the new UI sources). Electron files
+Diagnostics & Health Hub (patch 0029 adds the new UI sources).
+The sidebar (`fly/ui/sidebar_panel.{h,cc}`, `fly/ui/tab_sidebar.{h,cc}`)
+follows Electron's single panel: the collapsed rail is the panel's left 36px
+column, the edge slides 224px while the panel slides back on the compositor
+(220 ms, `cubic-bezier(0.2, 0, 0, 1)`), the shadow and the state-specific
+details crossfade, rows are 40px apart by 4px with the favicon on the rail's
+centre line, and the engraving and light-mode paper grain are Electron's. Electron files
 the native build runs unchanged are copied by
 `scripts/chromium/sync-resources.js` (checked by `npm test`).
 

@@ -442,6 +442,15 @@ void StatusBar::OnZoomChanged(
     const zoom::ZoomController::ZoomChangedEventData&) {
   UpdateZoom();
 }
+void StatusBar::SetPaperGrain(gfx::ImageSkia grain) {
+  paper_grain_ = std::move(grain);
+  SchedulePaint();
+}
+void StatusBar::OnPaintBackground(gfx::Canvas* canvas) {
+  views::View::OnPaintBackground(canvas);
+  if (!GetFlyColors().dark && !paper_grain_.isNull())
+    canvas->TileImageInt(paper_grain_, 0, 0, width(), height());
+}
 BEGIN_METADATA(StatusBar)
 END_METADATA
 }  // namespace fly

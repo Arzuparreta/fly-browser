@@ -60,7 +60,7 @@ A native upstream route alone does not establish Fly UX parity.
 | `open-extension-actions` | partial | Picker of the workspace's extension actions (popups anchored to their footer buttons), extension settings, `chrome://extensions` and the Chrome Web Store. |
 | `toggle-window-controls` | partial | Three owned Xvfb/Openbox desktop cases and all 62 services pass at ee16406; full-suite/platform acceptance remains pending. |
 | `reset-zoom` | partial | siteZoom.js: one level per hostname shared by every normal workspace (private ones separate); also from the footer. |
-| `toggle-sidebar-pin` | partial | Native button, command and live settings share persistent pinning; full product/platform acceptance remains pending. |
+| `toggle-sidebar-pin` | partial | Native button, command and live settings share persistent pinning; pinning resizes the page once, hovering never does. Full product/platform acceptance remains pending. |
 | `toggle-split-horizontal` | partial | Native split API routed; both-pane visibility/basic focus tested. All orientations/input paths, layout restore and platform acceptance remain pending. |
 | `cycle-split-orientation` | partial | Native split API routed; both-pane visibility/basic focus tested. All orientations/input paths, layout restore and platform acceptance remain pending. |
 | `close-split-view` | partial | Native split API routed; both-pane visibility/basic focus tested. All orientations/input paths, layout restore and platform acceptance remain pending. |
@@ -129,7 +129,7 @@ declared supported because Chromium has a related global flag or policy.
 | `sync_website_theme` | partial | Native renderer color scheme synchronization tested without replacing page APIs. |
 | `trusted_domains` | not applicable | Electron needed it for its Google sign-in workarounds; native Chromium is accepted directly. Kept for import. |
 | `tab_suspend_timeout_minutes` | partial | Off and 5/15/30/60-minute native deadlines tested with retained documents and protected cases. |
-| `sidebar_auto_collapse` | partial | Default enabled, native live Appearance control and recovery policy tested; import and full platform acceptance remain pending. |
+| `sidebar_auto_collapse` | partial | Default enabled, native live Appearance control and recovery policy tested. The rail is the panel's left column and the panel slides open on the compositor like Electron (edge and content transforms, fading shadow and details). Import and full platform acceptance remain pending. |
 | `show_status_bar` | partial | Live native footer and persistent choice tested. |
 | `show_clock` | partial | Live native clock, private context and no per-tick writes tested. |
 | `show_frequent_sites` | partial | Typed native choice and live Appearance control, derived ranking, bookmark exclusions and explicit hiding implemented; new runtime cases and import/platform acceptance remain pending. |

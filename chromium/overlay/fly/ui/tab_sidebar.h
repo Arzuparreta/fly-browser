@@ -22,9 +22,8 @@ namespace content {
 class WebContents;
 }
 namespace views {
-class MdTextButton;
-class ImageButton;
 class Button;
+class ScrollView;
 }  // namespace views
 namespace ui {
 class SimpleMenuModel;
@@ -33,10 +32,17 @@ class SimpleMenuModel;
 namespace fly {
 class SidebarTabMenu;
 class FlyTabButton;
-// A projection of the selected profile's upstream tab model. Rows hold weak
-// WebContents identities, never a cached tab index or an extension's session
-// ID. Every native tab is projected, including about:blank; URL and title are
-// presentation only. An empty model has no synthetic placeholder tab.
+class TabRowView;
+// Electron's #TabList: a projection of the selected profile's upstream tab
+// model. Rows hold weak WebContents identities, never a cached tab index or
+// an extension's session ID. Every native tab is projected, including
+// about:blank; URL and title are presentation only. An empty model has no
+// synthetic placeholder tab.
+//
+// One list serves both sidebar states (style.css): rows are 40px tall, 4px
+// apart, with the favicon on the collapsed rail's centre line and the text
+// past its edge. The expanded row surfaces, the rail's 28 x 40px tiles and
+// the rail's pin and audio marks are separate layers that crossfade.
 class TabSidebar : public views::View,
                    public TabStripModelObserver,
                    public views::ContextMenuController {
@@ -44,14 +50,23 @@ class TabSidebar : public views::View,
   METADATA_HEADER(TabSidebar, views::View)
 
  public:
-  explicit TabSidebar(base::RepeatingClosure new_tab, bool compact = false);
+  explicit TabSidebar(base::RepeatingClosure new_tab);
   ~TabSidebar() override;
   void SetBrowser(BrowserWindowInterface* browser);
+  // The collapsed rail shows no hover tint (a hover left over from before
+  // the rail collapsed must not tint it).
+  void SetRail(bool rail);
+  bool rail() const { return rail_; }
+  views::View* expanded_surfaces() { return expanded_surfaces_; }
+  views::View* rail_surfaces() { return rail_surfaces_; }
+  views::View* rail_marks() { return rail_marks_; }
   void OnThemeChanged() override;
   void FocusActiveTab();
   size_t row_count_for_testing() const;
   views::View* row_for_testing(content::WebContents* contents) const;
   views::Button* audio_for_testing(content::WebContents* contents) const;
+  // The site favicon a row shows (null while it shows the globe).
+  gfx::ImageSkia favicon_for_testing(content::WebContents* contents) const;
   ui::SimpleMenuModel* context_menu_for_testing() const;
   void CloseContextMenu();
 
@@ -64,6 +79,8 @@ class TabSidebar : public views::View,
   void OnTabStripModelDestroyed(TabStripModel* model) override;
 
  private:
+  class Surfaces;
+  class RailMarks;
   enum class RowAction { kSelect, kClose, kPin, kMute };
   void ScheduleRefresh();
   void Refresh();
@@ -75,19 +92,13 @@ class TabSidebar : public views::View,
   void ExecuteMenuAction(uint64_t generation,
                          base::WeakPtr<content::WebContents> contents,
                          int action);
+  void RepaintSurfaces();
 
   struct Row {
     base::WeakPtr<content::WebContents> contents;
-    raw_ptr<views::View> view;
-    raw_ptr<FlyTabButton> select;
-    raw_ptr<views::Button> pin;
-    raw_ptr<views::Button> close;
-    raw_ptr<views::Button> audio;
+    raw_ptr<TabRowView> view;
     gfx::ImageSkia favicon;
     bool favicon_initialized = false;
-    bool pinned = false;
-    bool muted = false;
-    bool audible = false;
     base::CallbackListSubscription audible_subscription;
   };
   std::map<content::WebContents*, Row> tab_rows_;
@@ -95,9 +106,13 @@ class TabSidebar : public views::View,
   uint64_t context_generation_ = 0;
   raw_ptr<BrowserWindowInterface> browser_ = nullptr;
   raw_ptr<TabStripModel> model_ = nullptr;
+  raw_ptr<views::ScrollView> scroll_ = nullptr;
   raw_ptr<views::View> rows_ = nullptr;
+  raw_ptr<views::View> expanded_surfaces_ = nullptr;
+  raw_ptr<views::View> rail_surfaces_ = nullptr;
+  raw_ptr<views::View> rail_marks_ = nullptr;
   base::RepeatingClosure new_tab_;
-  const bool compact_;
+  bool rail_ = false;
   bool refresh_pending_ = false;
   base::WeakPtrFactory<TabSidebar> weak_factory_{this};
 };
