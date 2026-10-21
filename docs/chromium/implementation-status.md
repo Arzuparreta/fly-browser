@@ -8,8 +8,8 @@ rehearsal remain outstanding. Linux packages retain the native data directory
 and archive layout to stay compatible with the implemented native updater.
 
 The release workflow now requires a provisioned trusted `fly-chromium` Linux x64
-self-hosted runner with `FLY_ENGINE_ROOT`. No runner was registered at cutover;
-a tag build will queue until one is provided. No release is published by this
+self-hosted runner with `FLY_ENGINE_ROOT`. The runner was not registered at cutover; it has since been provisioned as
+`fly-chromium-local` on the local Linux engine host. No release is published by this
 implementation PR. See [releasing](../releasing.md).
 
 ## Chromium delivery cutover validation
@@ -49,9 +49,29 @@ smoke test, not complete visual, GPU, migration or product acceptance. No person
 profile was read or modified. Disposable installer tests also exercised update,
 removal, native/legacy profile retention and the generated AUR package layout.
 
-No tag, public release or self-hosted runner was created. The release workflow
-cannot build remotely until a trusted engine runner is provisioned. Native
+No tag or public release was created during cutover. The self-hosted runner
+was provisioned afterwards; see the runner validation record below. Native
 macOS/Windows/AppImage delivery and the outstanding acceptance gates remain open.
+
+## Local release runner
+
+The repository runner `fly-chromium-local` is registered with the labels
+`self-hosted`, `Linux`, `X64`, `fly-chromium`. The runner archive was downloaded
+from GitHub's runner-downloads API and verified against its advertised SHA-256.
+Credentials remain outside the repository in `/mnt/storage/fly-actions-runner`.
+No tokens are recorded here.
+
+The user systemd service `fly-chromium-runner.service` is enabled and uses
+`FLY_ENGINE_ROOT=/mnt/storage/fly-chromium`. Existing user lingering is enabled.
+See [runner operation](../releasing.md#native-build-host) for status/restart/stop
+commands. Only the explicitly dispatched or tagged release workflow uses this
+host; ordinary PR CI is unchanged.
+
+A no-publish release rehearsal was dispatched against `main`:
+[workflow run](https://github.com/Arzuparreta/fly-browser/actions/runs/39610115115).
+This rehearsal exercises the actual runner build and artifact upload without
+creating a tag or publishing a release. Its logs and final result are available
+through the workflow link.
 
 ## Active execution state
 
