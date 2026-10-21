@@ -6196,17 +6196,20 @@ IN_PROC_BROWSER_TEST_F(FlyPageScrollBrowserTest,
   // offsets may round one pixel either way.
   auto wait_offset = [&](const char* axis, int offset) {
     return base::test::RunUntil([&] {
-      return std::abs(content::EvalJs(
-                          contents,
-                          content::JsReplace(
-                              "Math.round(document.querySelector('#box')[$1])",
-                              axis))
-                          .ExtractInt() -
-                      offset) <= 1;
+      return content::EvalJs(contents, content::JsReplace(R"js(
+        (async () => {
+          const box = document.querySelector('#box');
+          for (let i = 0; i < 3; ++i) {
+            if (Math.abs(Math.round(box[$1]) - $2) > 1) return false;
+            await new Promise(requestAnimationFrame);
+          }
+          return Math.abs(Math.round(box[$1]) - $2) <= 1;
+        })()
+      )js", axis, offset)).ExtractBool();
     });
   };
   keys.PressKey(ui::VKEY_J, ui::EF_NONE);
-  ASSERT_TRUE(wait_offset("scrollTop", 80));
+  ASSERT_TRUE(wait_offset("scrollTop", 80)) << content::EvalJs(contents, "document.querySelector('#box').scrollTop");
   EXPECT_EQ(0, content::EvalJs(contents, "scrollY"));
   const int half_page =
       content::EvalJs(
@@ -6214,9 +6217,10 @@ IN_PROC_BROWSER_TEST_F(FlyPageScrollBrowserTest,
           "Math.floor(document.querySelector('#box').clientHeight / 2)")
           .ExtractInt();
   keys.PressKey(ui::VKEY_D, ui::EF_NONE);
-  ASSERT_TRUE(wait_offset("scrollTop", 80 + half_page));
+  ASSERT_TRUE(wait_offset("scrollTop", 80 + half_page))
+      << content::EvalJs(contents, "JSON.stringify({top:document.querySelector('#box').scrollTop,left:document.querySelector('#box').scrollLeft,height:document.querySelector('#box').clientHeight})");
   keys.PressKey(ui::VKEY_U, ui::EF_NONE);
-  ASSERT_TRUE(wait_offset("scrollTop", 80));
+  ASSERT_TRUE(wait_offset("scrollTop", 80)) << content::EvalJs(contents, "document.querySelector('#box').scrollTop");
   keys.PressKey(ui::VKEY_L, ui::EF_NONE);
   ASSERT_TRUE(wait_offset("scrollLeft", 80));
   keys.PressKey(ui::VKEY_G, ui::EF_NONE);
@@ -6317,7 +6321,7 @@ IN_PROC_BROWSER_TEST_F(FlyPageScrollBrowserTest,
     ASSERT_TRUE(ExecuteNativeCommand(browser(), "scroll-down"));
   ASSERT_TRUE(base::test::RunUntil([&] {
     return content::EvalJs(contents, "Math.round(scrollY)").ExtractInt() == 960;
-  }));
+  })) << content::EvalJs(contents, "JSON.stringify({y:scrollY,last:samples.slice(-5)})");
   EXPECT_EQ(true, content::EvalJs(
                       contents,
                       "samples.every((y,i) => i === 0 || y >= samples[i-1])"));
@@ -6326,7 +6330,7 @@ IN_PROC_BROWSER_TEST_F(FlyPageScrollBrowserTest,
     ASSERT_TRUE(ExecuteNativeCommand(browser(), "scroll-up"));
   ASSERT_TRUE(base::test::RunUntil([&] {
     return content::EvalJs(contents, "Math.round(scrollY)").ExtractInt() == 320;
-  }));
+  })) << content::EvalJs(contents, "JSON.stringify({y:scrollY,last:samples.slice(-5)})");
   EXPECT_EQ(true, content::EvalJs(
                       contents,
                       "samples.every((y,i) => i === 0 || y <= samples[i-1])"));

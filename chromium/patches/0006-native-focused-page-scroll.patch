@@ -116,7 +116,7 @@
  #include "third_party/blink/renderer/core/paint/timing/first_meaningful_paint_detector.h"
  #include "third_party/blink/renderer/core/paint/timing/paint_timing.h"
  #include "third_party/blink/renderer/core/probe/core_probes.h"
-@@ -4889,6 +4893,93 @@
+@@ -4889,6 +4893,99 @@
    focused_frame->SetEditableSelectionOffsets(start, end);
  }
  
@@ -183,12 +183,12 @@
 +  if (target) {
 +    if (top || bottom)
 +      target->scrollTo(nullptr, options);
-+    else if (left || right) {
++    else if (left || right || half_down || half_up) {
 +      target->scrollBy(nullptr, options);
 +    } else {
 +      auto* box = target->GetLayoutBox();
 +      ScrollableArea* area = target == document->ScrollingElementNoLayout()
-+                                 ? frame->View()->GetScrollableArea()
++                                 ? frame->View()->LayoutViewport()
 +                                 : box ? box->GetScrollableArea() : nullptr;
 +      const double zoom = target == document->ScrollingElementNoLayout()
 +                              ? frame->LayoutZoomFactor()
@@ -196,7 +196,13 @@
 +      if (area)
 +        area->UserScroll(ui::ScrollGranularity::kScrollByPixel,
 +                         ScrollOffset(x * zoom, y * zoom),
-+                         cc::ScrollSourceType::kRelativeScroll, {});
++                         cc::ScrollSourceType::kRelativeScroll,
++                         BindOnce([](WeakPersistent<ScrollableArea> area,
++                                     ScrollableArea::ScrollCompletionMode mode) {
++                           if (area)
++                             area->OnScrollFinished(mode ==
++                                 ScrollableArea::ScrollCompletionMode::kFinished);
++                         }, WrapWeakPersistent(area)));
 +    }
 +  } else {
 +    if (top || bottom)
