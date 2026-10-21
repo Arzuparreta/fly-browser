@@ -33,7 +33,7 @@
     "desktopIntegration.js": "db3073f9ffbfebaae8f47c023b58108cadf37847318c8709a5e8aa454fac5f05",
     "appImageUpdate.js": "a7059011ee26ba10cef31134cc8de3c4370e539e0436cc774bf156020af52dbe",
     "launch.sh": "69471e4550a3ea150dff3f5108ad3fb618d7efaa669355292ec0a82a9316f0e0",
-    "scripts/fly-install": "c1e3012598e5683d4a4d4e96da2ae003962988baf677bfb423b66fe97425c475"
+    "scripts/fly-install": "030fe9ede2f5d3ee1ca6a09406ac25bf88c508e9a60c81a35ae964b6efd9aaba"
   },
   "actions": [
     {

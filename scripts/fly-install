@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # fly-install: install, update, inspect and uninstall native Chromium Fly on Linux.
 # Usage: fly-install install [--package|--native]
-#        fly-install update | status | uninstall [--yes]
+#        fly-install update | status | uninstall [all|package|native] [--yes]
 # Electron is retained in legacy/electron; its profiles and binaries are kept.
 set -euo pipefail
 repo=Arzuparreta/fly-browser
@@ -60,7 +60,28 @@ case ${1:-status} in
         if package_installed; then pacman -Q fly-browser-bin; fi
         say 'Electron legacy copies: use bash legacy/electron/fly-install status from the repository.' ;;
     uninstall|remove)
-        [ "${2:-}" = --yes ] || { read -r -p 'Remove the native user installation? [y/N] ' answer; [[ $answer = [yY] ]] || exit 1; }
+        shift
+        scope=all
+        yes=false
+        for arg in "$@"; do
+            case $arg in
+                all|package|native) scope=$arg ;;
+                --yes) yes=true ;;
+                *) die "Unknown uninstall option: $arg" ;;
+            esac
+        done
+        if [ "$yes" = false ]; then
+            read -r -p "Remove Fly installation ($scope), keeping profiles? [y/N] " answer
+            [[ $answer = [yY] ]] || exit 1
+        fi
+        if [ "$scope" != native ] && package_installed; then
+            if [ "$(id -u)" = 0 ]; then
+                pacman -R --noconfirm fly-browser-bin
+            else
+                sudo pacman -R --noconfirm fly-browser-bin
+            fi
+        fi
+        [ "$scope" != package ] || exit 0
         rm -rf "$target"
         for link in "$HOME/.local/bin/fly-browser-native" "$HOME/.local/bin/fly-browser"; do
             if [ "$(readlink "$link" 2>/dev/null || true)" = "$target/fly-browser-native" ]; then rm -f "$link"; fi
@@ -68,7 +89,7 @@ case ${1:-status} in
         rm -f "$data/applications/fly-browser-native.desktop"
         for size in 48 128 256; do rm -f "$data/icons/hicolor/${size}x${size}/apps/fly-browser-native.png"; done
         command -v update-desktop-database >/dev/null && update-desktop-database "$data/applications" || true
-        say 'Removed native user installation; both native and Electron profiles are kept. System package: sudo pacman -R fly-browser-bin.' ;;
+        say 'Removed Fly installation; native and Electron profiles are kept.' ;;
     help|--help|-h) sed -n '2,5s/^# //p' "$0" ;;
     *) die 'Use install, update, status or uninstall.' ;;
 esac

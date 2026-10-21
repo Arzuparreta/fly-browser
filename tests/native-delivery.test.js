@@ -57,6 +57,20 @@ cp "${releases}/$(basename "$url")" "$out"
     assert.equal(run('scripts/fly-install', ['uninstall', '--yes'], env).status, 0);
     assert.equal(fs.readFileSync(path.join(home, '.local/bin/fly-browser'), 'utf8'), 'unrelated launcher');
     assert.equal(fs.existsSync(path.join(env.XDG_CONFIG_HOME, 'fly-browser-native/kept')), true);
+    // Arch uninstall must remove the system package, including the legacy
+    // `uninstall all --yes` spelling, without touching profile data.
+    const calls = path.join(temp, 'package-calls');
+    fs.writeFileSync(path.join(bin, 'pacman'), '#!/bin/sh\nif [ "$1" = -Q ]; then exit 0; fi\nprintf "%s\n" "$*" >> "$FLY_TEST_CALLS"\n', {mode:0o755});
+    fs.writeFileSync(path.join(bin, 'sudo'), '#!/bin/sh\nexec "$@"\n', {mode:0o755});
+    const packageEnv = {...env, FLY_TEST_CALLS:calls};
+    assert.equal(run('scripts/fly-install', ['uninstall', 'all', '--yes'], packageEnv).status, 0);
+    assert.equal(fs.readFileSync(calls, 'utf8'), '-R --noconfirm fly-browser-bin\n');
+    assert.equal(fs.readFileSync(path.join(env.XDG_CONFIG_HOME, 'fly-browser-native/kept'), 'utf8'), 'profile');
+    fs.unlinkSync(calls);
+    assert.equal(run('scripts/fly-install', ['uninstall', 'native', '--yes'], packageEnv).status, 0);
+    assert.equal(fs.existsSync(calls), false);
+    assert.match(run('scripts/fly-install', ['uninstall', '--invalid'], packageEnv).stderr, /Unknown uninstall option/);
+    fs.writeFileSync(path.join(bin, 'pacman'), '#!/bin/sh\nexit 1\n', {mode:0o755});
     fs.unlinkSync(archive);
     assert.match(run('scripts/fly-install', ['install', '--native'], env).stderr, /no native Chromium package/);
     console.log('Native launcher and installer preserve arguments, verify releases, reject legacy-only releases and retain profile/unrelated launchers.');
