@@ -37,7 +37,10 @@ try {
     const app = path.join(staging, 'fly-browser-native/app');
     const pkgdir = path.join(staging, 'pkg');
     fs.mkdirSync(path.join(app, 'icons'), {recursive:true});
-    fs.writeFileSync(path.join(app, 'fly-browser-native'), '#!/bin/sh\n');
+    fs.writeFileSync(path.join(app, 'fly-browser-native'), '#!/bin/sh\n', {mode:0o755});
+    fs.chmodSync(app, 0o700);
+    fs.mkdirSync(path.join(app, 'fly_resources'), {mode:0o700});
+    fs.writeFileSync(path.join(app, 'fly_resources', 'asset'), 'public runtime asset', {mode:0o600});
     fs.writeFileSync(path.join(app, 'chrome-sandbox'), 'sandbox');
     fs.writeFileSync(path.join(app, 'fly-browser-native.desktop'), '[Desktop Entry]\nName=Fly\nExec=@EXEC@ %U\nIcon=fly-browser-native\n');
     for (const size of aur.ICON_SIZES) fs.writeFileSync(path.join(app, 'icons', `fly-logo${size}.png`), 'icon');
@@ -51,6 +54,10 @@ try {
     assert.match(fs.readFileSync(path.join(pkgdir, 'usr/share/applications/fly-browser-native.desktop'), 'utf8'), /Exec=\/usr\/bin\/fly-browser %U/);
     assert.ok(fs.existsSync(path.join(pkgdir, 'usr/share/icons/hicolor/128x128/apps/fly-browser-native.png')));
     assert.equal(fs.statSync(path.join(pkgdir, 'opt/fly-browser/chrome-sandbox')).mode & 0o7777, 0o4755);
+    for (const directory of ['opt/fly-browser', 'opt/fly-browser/fly_resources'])
+        assert.equal(fs.statSync(path.join(pkgdir, directory)).mode & 0o755, 0o755);
+    assert.equal(fs.statSync(path.join(pkgdir, 'opt/fly-browser/fly_resources/asset')).mode & 0o444, 0o444);
+    assert.equal(fs.statSync(path.join(pkgdir, 'opt/fly-browser/fly-browser-native')).mode & 0o555, 0o555);
 } finally { fs.rmSync(staging, {recursive:true, force:true}); }
 
 // Where makepkg exists, the hand-written .SRCINFO must be the one it derives.

@@ -75,6 +75,8 @@ package() {
     cd "fly-browser-native/app"
     install -d "\${pkgdir}/opt/\${_pkgname}"
     cp -a . "\${pkgdir}/opt/\${_pkgname}/"
+    # A release built with umask 077 must still be usable after root owns it.
+    chmod -R a+rX "\${pkgdir}/opt/\${_pkgname}"
     # Chromium's sandbox helper, for kernels without unprivileged user namespaces.
     chmod 4755 "\${pkgdir}/opt/\${_pkgname}/chrome-sandbox"
 
