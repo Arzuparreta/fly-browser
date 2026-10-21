@@ -11,7 +11,7 @@
     "webview-preload.js": "1a636fd2c4ea6998f506cce34b3a43a030790cc6f35ca8b1d5ce72bf075ae7c7",
     "workspacePartitions.js": "85ed5bb694022fe9714a4f19732972187875a0427a9a0c996d8a1db036394b0d",
     "modules/state.js": "7537d035cde47c5d4eabbf825723cfef2a8c472cbdf6460a58e0b868cdc7e8aa",
-    "modules/webview.js": "323660d49ff5954e85c85d222c4f900c51781368622ca1b20fe33fdf5d9e9305",
+    "modules/webview.js": "30a93dabadd2caf7cdd960d946c7d7e1f1d71faa47384c34060c2ec5d82340a9",
     "modules/splitView.js": "e8babb9f8f0c097880104a1765d9492dd849e07518946e6d72e77a8ec8f446e2",
     "modules/tabRestoration.js": "3f4cc34c79fd80b0a2bc1b1f68de98f26b765850b1b8a3182514f6069b26a374",
     "modules/tabTransfer.js": "714e8a09900c75981710e4c518bdbe5051564bcc71c220240309e0533c30c05e",
@@ -107,7 +107,7 @@
         },
         {
           "file": "modules/webview.js",
-          "line": 425
+          "line": 427
         },
         {
           "file": "modules/overlays/commandPalette.js",
@@ -165,7 +165,7 @@
         },
         {
           "file": "modules/webview.js",
-          "line": 431
+          "line": 433
         },
         {
           "file": "modules/overlays/commandPalette.js",
@@ -206,7 +206,7 @@
         },
         {
           "file": "modules/webview.js",
-          "line": 462
+          "line": 464
         },
         {
           "file": "modules/overlays/commandPalette.js",
@@ -291,7 +291,7 @@
         },
         {
           "file": "modules/webview.js",
-          "line": 428
+          "line": 430
         },
         {
           "file": "modules/overlays/commandPalette.js",
@@ -340,7 +340,7 @@
         },
         {
           "file": "modules/webview.js",
-          "line": 467
+          "line": 469
         },
         {
           "file": "modules/overlays/commandPalette.js",
@@ -349,6 +349,7 @@
       ],
       "baselineTestAnchors": [
         "tests/keyboard.test.js",
+        "tests/new-tab-bookmarks-ui.test.js",
         "tests/overlay-state.test.js",
         "tests/tab-numbers-ui.test.js"
       ],
@@ -452,7 +453,7 @@
         },
         {
           "file": "modules/webview.js",
-          "line": 457
+          "line": 459
         },
         {
           "file": "modules/overlays/commandPalette.js",
@@ -600,7 +601,7 @@
         },
         {
           "file": "modules/webview.js",
-          "line": 452
+          "line": 454
         },
         {
           "file": "modules/overlays/commandPalette.js",
@@ -803,7 +804,7 @@
         },
         {
           "file": "modules/webview.js",
-          "line": 483
+          "line": 485
         },
         {
           "file": "modules/overlays/commandPalette.js",
@@ -841,7 +842,7 @@
         },
         {
           "file": "modules/webview.js",
-          "line": 486
+          "line": 488
         },
         {
           "file": "modules/overlays/commandPalette.js",
@@ -1129,7 +1130,7 @@
         },
         {
           "file": "modules/webview.js",
-          "line": 480
+          "line": 482
         },
         {
           "file": "modules/overlays/commandPalette.js",
@@ -1170,7 +1171,7 @@
         },
         {
           "file": "modules/webview.js",
-          "line": 489
+          "line": 491
         },
         {
           "file": "modules/overlays/commandPalette.js",
@@ -1982,7 +1983,7 @@
         },
         {
           "file": "modules/webview.js",
-          "line": 441
+          "line": 443
         }
       ],
       "baselineTestAnchors": [],
@@ -2012,7 +2013,7 @@
         },
         {
           "file": "modules/webview.js",
-          "line": 320
+          "line": 322
         }
       ],
       "baselineTestAnchors": [],
@@ -2111,7 +2112,7 @@
         },
         {
           "file": "modules/webview.js",
-          "line": 470
+          "line": 472
         }
       ],
       "baselineTestAnchors": [],
@@ -3640,7 +3641,8 @@
       ],
       "baselineTestAnchors": [
         "tests/extensions-ui.test.js",
-        "tests/interface-scale-ui.test.js"
+        "tests/interface-scale-ui.test.js",
+        "tests/new-tab-bookmarks-ui.test.js"
       ],
       "milestone": "M2",
       "acceptance": [

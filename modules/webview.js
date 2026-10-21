@@ -45,6 +45,7 @@ export function createWebView(url, currentWS, idx) {
     }
     
     const initialSrc = isNewTab(url) ? NEW_TAB_URL : isPdfUrl(url) ? getPdfViewerUrl(url) : url;
+    webview.classList.toggle('new-tab-page', initialSrc === NEW_TAB_URL);
     loadWebviewSource(webview, currentWS, initialSrc);
 
     webview.addEventListener('will-navigate', (e) => {
@@ -110,6 +111,7 @@ export function createWebView(url, currentWS, idx) {
     });
 
     webview.addEventListener('did-navigate', async (e) => {
+        webview.classList.toggle('new-tab-page', e.url === NEW_TAB_URL);
         webview.__flyNavigationEpoch = (webview.__flyNavigationEpoch || 0) + 1;
         if (webview.__flyInjectedScriptIds) webview.__flyInjectedScriptIds.clear();
         webview.__flyDarkKey = null;

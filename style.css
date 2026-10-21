@@ -650,6 +650,14 @@ webview {
 }
 
 /* Dual-Split View Layouts (1x2 Side-by-Side and Stacked) */
+/* Reserve the floating sidebar's overhang on new tabs in host CSS pixels.
+   The host scales with the interface; guest page pixels do not. Keep this
+   space even while collapsed so opening the sidebar never moves the content. */
+body.sidebar-auto-collapse #webview-container:not(.split-active) webview.new-tab-page {
+    left: 224px;
+    width: calc(100% - 224px);
+}
+
 #webview-container.split-active {
     position: relative;
     overflow: hidden;
