@@ -7,7 +7,7 @@
 Produces dist/Fly-<version>-native-linux-x64.tar.gz (and .sha256) holding a
 fly-browser-native/ directory: the browser and its runtime files, Fly's fonts,
 What's New page, user content worker and bundled extensions, a launcher and an
-install.sh that installs it for the current user as "Fly (native)" next to an
+install.sh that installs it for the current user as "Fly" next to an
 existing Electron Fly. Native Fly keeps its data in
 $XDG_CONFIG_HOME/fly-browser-native; the Electron profile in
 ~/.config/fly-browser is only read, once, to import it.
@@ -15,6 +15,7 @@ $XDG_CONFIG_HOME/fly-browser-native; the Electron profile in
 import argparse
 import hashlib
 import json
+import platform
 import shutil
 import subprocess
 import sys
@@ -35,7 +36,7 @@ RUNTIME_FILES = [
 RUNTIME_DIRS = ['locales', 'MEIPreload', 'PrivacySandboxAttestationsPreloaded',
                 'fly_fonts', 'fly_resources']
 REQUIRED = ['chrome', 'resources.pak', 'icudtl.dat', 'locales', 'fly_fonts',
-            'fly_resources']
+            'fly_resources', 'chrome_sandbox']
 WHATS_NEW = ['whats-new.html', 'whats-new-page.js', 'whats-new-releases.js']
 
 LAUNCHER = '''#!/bin/sh
@@ -47,7 +48,7 @@ exec "$HERE/fly" --fly-native --class=fly-browser-native \\
   --user-data-dir="$CONFIG/fly-browser-native" "$@"
 '''
 
-INSTALL = '''#!/bin/sh
+INSTALL = r'''#!/bin/sh
 # Installs native Fly for the current user, next to any Electron Fly.
 #   ./install.sh            install or update
 #   ./install.sh --remove   uninstall (keeps your data)
@@ -59,7 +60,10 @@ BIN="$HOME/.local/bin"
 APPS="$DATA/applications"
 ICONS="$DATA/icons/hicolor"
 if [ "${1:-}" = "--remove" ]; then
-  rm -rf "$TARGET" "$BIN/fly-browser-native" "$APPS/fly-browser-native.desktop"
+  rm -rf "$TARGET" "$APPS/fly-browser-native.desktop"
+  for link in "$BIN/fly-browser-native" "$BIN/fly-browser"; do
+    if [ "$(readlink "$link" 2>/dev/null || true)" = "$TARGET/fly-browser-native" ]; then rm -f "$link"; fi
+  done
   for size in 48 128 256; do
     rm -f "$ICONS/${size}x${size}/apps/fly-browser-native.png"
   done
@@ -75,19 +79,25 @@ rm -rf "$TARGET.old"
 mv "$STAGE" "$TARGET"
 rm -rf "$TARGET.old"
 ln -sf "$TARGET/fly-browser-native" "$BIN/fly-browser-native"
+ln -sf "$TARGET/fly-browser-native" "$BIN/fly-browser"
 for size in 48 128 256; do
   mkdir -p "$ICONS/${size}x${size}/apps"
   cp "$TARGET/icons/fly-logo$size.png" "$ICONS/${size}x${size}/apps/fly-browser-native.png"
 done
-sed "s|@EXEC@|$TARGET/fly-browser-native|" "$TARGET/fly-browser-native.desktop" > "$APPS/fly-browser-native.desktop"
+# Escape both the quoted Desktop Entry argument and the entry's string value.
+escaped=$(printf '%s' "$TARGET/fly-browser-native" | sed 's/[\\"`$]/\\&/g; s/\\/\\\\/g; s/%/%%/g')
+{
+  sed '/^Exec=/d' "$TARGET/fly-browser-native.desktop"
+  printf 'Exec="%s" %%U\n' "$escaped"
+} > "$APPS/fly-browser-native.desktop"
 command -v update-desktop-database >/dev/null 2>&1 && update-desktop-database "$APPS" || true
 echo "Installed native Fly in $TARGET."
-echo "Start it from your applications menu (Fly (native)) or with: fly-browser-native"
+echo "Start it from your applications menu (Fly) or with: fly-browser-native"
 echo "Close Electron Fly before the first start so your workspaces are imported then."
 '''
 
 DESKTOP = '''[Desktop Entry]
-Name=Fly (native)
+Name=Fly
 GenericName=Web Browser
 Comment=Fly on the Chromium engine
 Keywords=browser;web;internet;
@@ -117,6 +127,8 @@ def main():
     parser.add_argument('--extensions-cache', type=Path,
                         default=Path(tempfile.gettempdir()) / 'fly-bundled-extensions')
     args = parser.parse_args()
+    if sys.platform != 'linux' or platform.machine() != 'x86_64':
+        fail('native release archives currently support Linux x86_64 only')
     build = args.root / 'src' / args.output
     for name in REQUIRED:
         if not (build / name).exists():
@@ -156,6 +168,15 @@ def main():
         subprocess.run([sys.executable, str(REPO / 'scripts/chromium/bundled-extensions.py'),
                         '--out', str(app / 'fly_extensions'),
                         '--cache', str(args.extensions_cache)], check=True)
+        shutil.copy2(REPO / 'LICENSE', app / 'LICENSE')
+        provenance = {
+            'product_version': version,
+            'engine': json.loads((REPO / 'chromium/upstream.lock.json').read_text()),
+            'repository_commit': subprocess.check_output(['git', 'rev-parse', 'HEAD'], cwd=REPO, text=True).strip(),
+            'repository_dirty': bool(subprocess.check_output(['git', 'status', '--porcelain', '--untracked-files=no'], cwd=REPO, text=True).strip()),
+            'binary_sha256': hashlib.sha256((app / 'fly').read_bytes()).hexdigest(),
+        }
+        (app / 'provenance.json').write_text(json.dumps(provenance, indent=2) + '\n')
         launcher = app / 'fly-browser-native'
         launcher.write_text(LAUNCHER, encoding='utf-8')
         launcher.chmod(0o755)

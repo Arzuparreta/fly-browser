@@ -15,7 +15,7 @@ The Bookmarks overlay allows you to manage saved links with full keyboard naviga
 - **Delete Bookmark**: Highlight a bookmark and press **Delete** to remove it from your collection.
 - Bookmarks are stored in:
   ```text
-  ~/.config/fly-browser/bookmarks.json
+  ~/.config/fly-browser-native/bookmarks.json
   ```
 
 ---

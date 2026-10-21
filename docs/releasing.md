@@ -1,6 +1,8 @@
 # Versioning and releases
 
-Fly has one version number. The Linux, macOS and Windows packages are built from the same commit and released together, so `0.16.0` means the same thing however you installed it, and a bug report only ever has one number to quote.
+Fly has one product version, independent of the pinned Chromium engine version.
+The active release ships native Chromium Fly for Linux x64. Electron packaging
+is retained as legacy source and is not published by this workflow.
 
 ## What the number promises
 
@@ -18,7 +20,10 @@ While Fly is below 1.0 there is no major number to spend, so **minor carries wha
 
 ## Where the version lives
 
-`package.json` declares it. That is the only place it is decided. Electron reports it through `app.getVersion()`, so Preferences, the Welcome view, diagnostics reports and the update check all read it from there, and electron-builder names every package after it.
+`package.json` declares it. `scripts/version-sync.js` writes the native
+`fly_version.h`; Preferences, update checks and diagnostics use that generated
+value. The packager reads `package.json` directly. Electron legacy still reads
+its product version from the same manifest.
 
 Three files cannot read it and hold a copy, written by `scripts/version-sync.js`:
 
@@ -87,20 +92,48 @@ The `###` line replaces the title, plain lines become the description and `- ` l
 
 ## What a tag builds
 
-`release.yml` checks the tag against `package.json`, builds every package and publishes one GitHub Release with all of them, a `SHA256SUMS.txt` and notes generated from the merged pull requests, grouped by impact. The packages are unsigned.
+`release.yml` checks the tag against `package.json`, builds the native Linux
+package and publishes it with `SHA256SUMS.txt`, a per-archive `.sha256` and notes
+from merged pull requests. The archive is `Fly-<version>-native-linux-x64.tar.gz`.
+It contains `fly-browser-native/app/` plus `install.sh`. The native updater uses
+the same archive name and its `.sha256`; `fly-install` checks `SHA256SUMS.txt`.
+No Electron AppImage or `latest-linux.yml` is published. macOS and Windows native
+packaging remain unsupported; earlier downloads for those platforms are legacy.
 
-| Platform | Packages |
-| --- | --- |
-| Linux x64 | `Fly-X.Y.Z-x86_64.AppImage`, `Fly-X.Y.Z-x64.tar.gz`, `latest-linux.yml` |
-| macOS Apple Silicon | `Fly-X.Y.Z-arm64.dmg`, `Fly-X.Y.Z-arm64.zip` |
-| macOS Intel | `Fly-X.Y.Z-x64.dmg`, `Fly-X.Y.Z-x64.zip` |
-| Windows x64 | `Fly-Setup-X.Y.Z.exe`, `Fly-X.Y.Z-portable.exe` |
+### Native build host
 
-Names carry no spaces, because GitHub renames uploaded files that have them and `SHA256SUMS.txt` would no longer match.
+Chromium cannot be built within standard hosted runner resource limits. The
+release build requires a trusted, dedicated GitHub runner labelled
+`self-hosted`, `linux`, `x64`, `fly-chromium`, with Python, Node, Git, the pinned
+Chromium host dependencies, sufficient disk/RAM and `FLY_ENGINE_ROOT` pointing
+to a dedicated external engine checkout. No runner is provisioned by the workflow.
+Without one, releases wait in the build queue and publish nothing. Do not run
+untrusted pull requests on this host. Ordinary PR checks remain `npm test`.
 
-`latest-linux.yml` is what a running AppImage reads to update itself in place: the new AppImage's name, size and SHA-512. A release without it still notifies AppImage users, who then download the file by hand.
+Prepare the pinned checkout, dependencies, hooks, upstream control build and
+full native overlay using [Chromium development](./chromium/build.md). The release
+job refreshes the managed overlay from the release commit, verifies its pins,
+dependencies and fingerprint, regenerates `out/FlyRelease`, builds `chrome` and
+`chrome_sandbox`, and invokes `package-linux.py`. It does not upload a preexisting
+binary without rebuilding it. Provisioning the host and validating a packaged
+browser are separate from the lightweight PR checks.
 
-The Linux packages carry the desktop entry and the theme icons in `resources/` (`build.linux.extraResources`), for the AUR package to install.
+Local equivalent after preparing the overlay:
+
+```sh
+python3 scripts/chromium/native.py refresh-overlay --include-upstream --root /path/to/fly-chromium
+python3 scripts/chromium/release.py --root /path/to/fly-chromium --dist /path/to/packages
+```
+
+`npm run dist -- --root /path/to/fly-chromium` packages an already built
+`out/FlyRelease`; `npm run dist:dir -- --root /path/to/fly-chromium` rebuilds and
+packages it. These commands require Linux x64. Electron comparison packages use
+`npm run dist:legacy -- --linux --publish never` and are never release assets.
+
+Before publishing, rehearse an upgrade using a disposable installed profile,
+check the migration summary, launch the installed package and verify desktop
+integration. Passing product contract tests does not establish native platform
+or migration acceptance; retain actual limitations in the implementation record.
 
 ## The AUR package
 
@@ -130,4 +163,4 @@ The first push creates `fly-browser-bin` on the AUR. If the name has been taken 
 
 To publish a release again, for example after the secret was added or when only the packaging changed, dispatch the workflow: `gh workflow run aur.yml -f tag=vX.Y.Z`, adding `-f pkgrel=2` (and so on) when the version is already on the AUR.
 
-To test a packaging change before it reaches a release, run the workflow on its branch: `gh workflow run release.yml --ref <branch>`. It builds every package and keeps them as workflow artefacts for three days, and publishes nothing.
+To test a packaging change before it reaches a release, run the workflow on its branch: `gh workflow run release.yml --ref <branch>`. It builds the native Linux package and keeps it as a workflow artefact for three days, and publishes nothing.

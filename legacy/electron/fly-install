@@ -1,0 +1,434 @@
+#!/usr/bin/env bash
+# fly-install: install, find, update and uninstall Fly on Linux.
+#
+#   fly-install status                    every Fly installation found, and whether it is current
+#   fly-install install [--package|--appimage]
+#   fly-install update                    bring every installation to the latest release
+#   fly-install uninstall package|PATH|all [--yes]
+#
+# On Arch-based systems Fly is installed as the fly-browser-bin package, built
+# by makepkg from the release's PKGBUILD in a temporary directory that is
+# removed afterwards. Elsewhere it is the AppImage, kept in ~/Applications.
+# Until fly-browser-bin is on the AUR this is what keeps the package current.
+#
+# Get it with:
+#   curl -fsSL https://raw.githubusercontent.com/Arzuparreta/fly-browser/main/scripts/fly-install -o ~/.local/bin/fly-install
+#   chmod +x ~/.local/bin/fly-install
+set -euo pipefail
+
+REPO=Arzuparreta/fly-browser
+PACKAGE=fly-browser-bin
+API=https://api.github.com/repos/$REPO/releases/latest
+DOWNLOAD=https://github.com/$REPO/releases/download
+DATA_HOME=${XDG_DATA_HOME:-$HOME/.local/share}
+APP_DIR=$HOME/Applications
+# What Fly writes when an AppImage adds itself to the applications menu (desktopIntegration.js).
+MENU_LINK=$DATA_HOME/fly-browser/fly-browser.AppImage
+MENU_ENTRY=$DATA_HOME/applications/fly-browser.desktop
+ICON_SIZES=(16 24 32 48 64 128 256 512)
+# The repository's fly-browser.desktop, for AppImages too old to carry it in
+# resources/. tests/fly-install.test.js keeps the two identical.
+DESKTOP_TEMPLATE='[Desktop Entry]
+Name=Fly
+GenericName=Web Browser
+Comment=Small, minimal web browser with full keyboard control and a polished mouse experience
+Keywords=browser;web;internet;
+Exec=fly-browser %u
+Icon=fly-browser
+Terminal=false
+Type=Application
+Categories=Network;WebBrowser;
+MimeType=text/html;text/xml;application/xhtml+xml;x-scheme-handler/http;x-scheme-handler/https;
+StartupWMClass=fly-browser'
+
+say() { printf '%s\n' "$*"; }
+warn() { printf 'fly-install: %s\n' "$*" >&2; }
+die() { warn "$*"; exit 1; }
+have() { command -v "$1" >/dev/null 2>&1; }
+
+usage() {
+    sed -n '2,7s/^# \{0,1\}//p' "$0"
+}
+
+LATEST=
+latest() {
+    if [ -z "$LATEST" ]; then
+        LATEST=$(curl -fsSL "$API" | sed -n 's/.*"tag_name": *"v\([^"]*\)".*/\1/p' | head -n 1) || true
+        [ -n "$LATEST" ] || die "could not read the latest release from GitHub"
+    fi
+    printf '%s\n' "$LATEST"
+}
+
+# True when version $1 is older than $2.
+older() {
+    [ "$1" = "$2" ] && return 1
+    if have vercmp; then
+        [ "$(vercmp "$1" "$2")" -lt 0 ]
+    else
+        [ "$(printf '%s\n%s\n' "$1" "$2" | sort -V | head -n 1)" = "$1" ]
+    fi
+}
+
+package_version() {
+    have pacman || return 0
+    { pacman -Q "$PACKAGE" 2>/dev/null || true; } | awk '{ sub(/-[0-9]+$/, "", $2); print $2 }'
+}
+
+menu_target() {
+    readlink -f "$MENU_LINK" 2>/dev/null || true
+}
+
+# Every Fly AppImage in the usual places, plus the one the menu entry starts.
+appimages() {
+    local dirs=("$APP_DIR" "$HOME/.local/bin" "$HOME/bin" "$HOME/Desktop" "$HOME/Downloads")
+    if have xdg-user-dir; then
+        dirs+=("$(xdg-user-dir DOWNLOAD 2>/dev/null || true)" "$(xdg-user-dir DESKTOP 2>/dev/null || true)")
+    fi
+    {
+        for dir in "${dirs[@]}"; do
+            [ -n "$dir" ] && [ -d "$dir" ] && find "$dir" -maxdepth 2 -type f -iname '*fly*.appimage' 2>/dev/null
+        done
+        local target
+        target=$(menu_target)
+        [ -n "$target" ] && [ -f "$target" ] && printf '%s\n' "$target"
+        true
+    } | while IFS= read -r file; do readlink -f "$file"; done | sort -u
+}
+
+appimage_version() {
+    local name tmp
+    name=$(basename "$1")
+    if [[ $name =~ ([0-9]+\.[0-9]+\.[0-9]+(-rc\.[0-9]+)?) ]]; then
+        printf '%s\n' "${BASH_REMATCH[1]}"
+        return
+    fi
+    # A renamed file: ask the AppImage's own desktop entry.
+    [ -x "$1" ] || return 0
+    tmp=$(mktemp -d)
+    (cd "$tmp" && "$1" --appimage-extract '*.desktop' >/dev/null 2>&1) || true
+    sed -n 's/^X-AppImage-Version=//p' "$tmp"/squashfs-root/*.desktop 2>/dev/null | head -n 1
+    rm -rf "$tmp"
+}
+
+confirm() {
+    [ "$ASSUME_YES" = 1 ] && return 0
+    local answer
+    printf '%s [y/N] ' "$1" > /dev/tty
+    read -r answer < /dev/tty || return 1
+    [[ $answer =~ ^[YySs] ]]
+}
+
+state() {
+    local current=$1 latest=$2
+    if [ -z "$current" ]; then printf 'version unknown'
+    elif older "$current" "$latest"; then printf 'update available (%s)' "$latest"
+    else printf 'up to date'
+    fi
+}
+
+cmd_status() {
+    local current pkg count=0 target
+    current=$(latest)
+    target=$(menu_target)
+    say "Latest release: $current"
+    say ""
+    say "Installed:"
+    pkg=$(package_version)
+    if [ -n "$pkg" ]; then
+        say "  package   $PACKAGE $pkg  (/opt/fly-browser)  $(state "$pkg" "$current")"
+        count=$((count + 1))
+    fi
+    while IFS= read -r file; do
+        [ -n "$file" ] || continue
+        local version note=
+        version=$(appimage_version "$file")
+        [ "$file" = "$target" ] && note='  [applications menu]'
+        say "  AppImage  ${version:-?}  $file  $(state "$version" "$current")$note"
+        count=$((count + 1))
+    done < <(appimages)
+    [ "$count" = 0 ] && say "  nothing found"
+
+    local entries=() dirs=() dir
+    IFS=: read -r -a dirs <<< "$DATA_HOME:${XDG_DATA_DIRS:-/usr/local/share:/usr/share}"
+    for dir in "${dirs[@]}"; do
+        [ -f "$dir/applications/fly-browser.desktop" ] && entries+=("$dir/applications/fly-browser.desktop")
+    done
+    if [ "${#entries[@]}" -gt 0 ]; then
+        say ""
+        say "Menu entries (launchers use the first):"
+        local entry origin
+        for entry in "${entries[@]}"; do
+            if grep -qx 'X-Fly-AppImage=true' "$entry"; then origin="added by Fly for ${target:-an AppImage that no longer exists}"
+            elif [ "$entry" = "$MENU_ENTRY" ]; then origin='from a source checkout (npm run install-desktop) or written by hand'
+            else origin='from the package'
+            fi
+            say "  $entry  ($origin)"
+        done
+    fi
+
+    if [ "$count" -gt 1 ]; then
+        say ""
+        say "$count installations. To keep one, remove the others: fly-install uninstall package|PATH"
+    elif [ "$count" = 0 ]; then
+        say ""
+        say "Install Fly with: fly-install install"
+    fi
+}
+
+install_package() {
+    local version=$1
+    have makepkg || die "makepkg is missing; this needs an Arch-based system (or use --appimage)"
+    (
+        local cache=${XDG_CACHE_HOME:-$HOME/.cache}/fly-install
+        mkdir -p "$cache" || die "could not create build cache: $cache"
+        tmp=$(mktemp -d "$cache/build.XXXXXXXXXX") || die "could not create build directory in $cache"
+        trap 'rm -rf "$tmp"' EXIT
+        trap 'exit 130' INT
+        trap 'exit 143' TERM
+        # Download, extracted source, package staging and compressed output coexist.
+        # This is a conservative minimum, not a reservation against other writers.
+        local available
+        available=$(LC_ALL=C df -Pk "$tmp" | awk 'END {print $4}')
+        [[ $available =~ ^[0-9]+$ ]] || die "could not check free space in $cache"
+        [ "$available" -ge 2097152 ] || die "not enough space in $cache: at least 2 GiB free is needed; free space or set XDG_CACHE_HOME to a disk with room"
+        export TMPDIR=$tmp
+        # Keep makepkg's extraction/staging here even if its config uses /tmp.
+        export BUILDDIR=$tmp
+        say "Building $PACKAGE $version with makepkg in $tmp ..."
+        curl -fsSL -o "$tmp/PKGBUILD" "$DOWNLOAD/v$version/PKGBUILD" || die "this release has no PKGBUILD"
+        cd "$tmp"
+        makepkg -si || die "makepkg failed; nothing was changed"
+    )
+    say "Installed $PACKAGE $version. Start it from your launcher or with: fly-browser"
+}
+
+# Downloads the release's AppImage to $1, checked against SHA256SUMS.txt.
+download_appimage() {
+    local destination=$1 version=$2 name part sums
+    name=Fly-$version-x86_64.AppImage
+    part=$(dirname "$destination")/.$name.part
+    sums=$(mktemp)
+    mkdir -p "$(dirname "$destination")"
+    say "Downloading $name ..."
+    if ! curl -fL --progress-bar -o "$part" "$DOWNLOAD/v$version/$name" \
+        || ! curl -fsSL -o "$sums" "$DOWNLOAD/v$version/SHA256SUMS.txt"; then
+        rm -f "$part" "$sums"
+        die "download failed; nothing was changed"
+    fi
+    local expected actual
+    expected=$(awk -v name="$name" '$2 == name || $2 == "*" name { print $1 }' "$sums")
+    actual=$(sha256sum "$part" | awk '{ print $1 }')
+    rm -f "$sums"
+    if [ -z "$expected" ] || [ "$expected" != "$actual" ]; then
+        rm -f "$part"
+        die "$name does not match the release's SHA256SUMS.txt; nothing was changed"
+    fi
+    chmod 755 "$part"
+    mv -f "$part" "$destination"
+}
+
+install_appimage() {
+    local version=$1 file=$APP_DIR/Fly-$1-x86_64.AppImage
+    download_appimage "$file" "$version"
+    say "Installed $file"
+    add_menu_entry "$file"
+}
+
+# One Exec argument, quoted by the Desktop Entry rules only when it needs to be.
+exec_argument() {
+    if [[ $1 =~ ^[A-Za-z0-9_/.+,:@=-]+$ ]]; then
+        printf '%s' "$1"
+    else
+        printf '"%s"' "$(printf '%s' "$1" | sed 's/[\\"`$]/\\&/g')" | sed 's/\\/\\\\/g; s/%/%%/g'
+    fi
+}
+
+# Tells launchers and desktop menus that entries or icons changed: the MIME
+# cache that link handling reads, and through xdg-utils each desktop's own menu
+# cache (KDE's, for instance). An icon cache is updated only where one already
+# exists, since a stale one would hide icons added later.
+refresh_menus() {
+    if have update-desktop-database; then
+        update-desktop-database -q "$DATA_HOME/applications" 2>/dev/null || true
+    fi
+    if have xdg-desktop-menu; then
+        xdg-desktop-menu forceupdate --mode user >/dev/null 2>&1 || true
+    fi
+    if [ -f "$DATA_HOME/icons/hicolor/icon-theme.cache" ] && have gtk-update-icon-cache; then
+        gtk-update-icon-cache -q -t -f "$DATA_HOME/icons/hicolor" 2>/dev/null || true
+    fi
+}
+
+# Adds the AppImage $1 to the applications menu, in the format Fly writes
+# itself (desktopIntegration.js): Fly recognises the entry, keeps it pointing at
+# the AppImage when it moves, and can remove it from Preferences. The entry and
+# icons go in the XDG user data directory, which every Linux desktop and
+# launcher reads.
+add_menu_entry() {
+    local appimage=$1 tmp template size
+    if [ -f "$MENU_ENTRY" ] && ! grep -qx 'X-Fly-AppImage=true' "$MENU_ENTRY"; then
+        warn "$MENU_ENTRY was not written by Fly, so it is left alone and Fly is not added to the menu"
+        return 0
+    fi
+    tmp=$(mktemp -d)
+    # The AppImage carries its own entry and theme icons; extracting reads them without running Fly.
+    (cd "$tmp" && "$appimage" --appimage-extract 'resources/fly-browser.desktop' && "$appimage" --appimage-extract 'resources/icons/*') >/dev/null 2>&1 || true
+    template=$DESKTOP_TEMPLATE
+    [ -s "$tmp/squashfs-root/resources/fly-browser.desktop" ] && template=$(cat "$tmp/squashfs-root/resources/fly-browser.desktop")
+
+    mkdir -p "$(dirname "$MENU_LINK")" "$(dirname "$MENU_ENTRY")"
+    ln -sfn "$appimage" "$MENU_LINK"
+    {
+        printf '%s\n' "$template" | grep -v -e '^[[:space:]]*$' -e '^Exec=' -e '^TryExec=' -e '^X-Fly-AppImage='
+        printf 'Exec=%s %%u\n' "$(exec_argument "$MENU_LINK")"
+        printf 'TryExec=%s\n' "$(printf '%s' "$MENU_LINK" | sed 's/\\/\\\\/g')"
+        printf 'X-Fly-AppImage=true\n'
+    } > "$MENU_ENTRY.tmp"
+    chmod 644 "$MENU_ENTRY.tmp"
+    mv -f "$MENU_ENTRY.tmp" "$MENU_ENTRY"
+    for size in "${ICON_SIZES[@]}"; do
+        if [ -f "$tmp/squashfs-root/resources/icons/${size}x${size}.png" ]; then
+            install -D -m 644 "$tmp/squashfs-root/resources/icons/${size}x${size}.png" "$DATA_HOME/icons/hicolor/${size}x${size}/apps/fly-browser.png"
+        fi
+    done
+    rm -rf "$tmp"
+    refresh_menus
+    say "Added Fly to your applications menu ($MENU_ENTRY)."
+}
+
+# Replaces the AppImage $1 with release $2: a versioned name follows the
+# release, a name the user chose is kept, and the menu entry follows.
+update_appimage() {
+    local old=$1 version=$2 new in_menu=0
+    new=$old
+    [[ $(basename "$old") =~ [0-9]+\.[0-9]+\.[0-9]+ ]] && new=$(dirname "$old")/Fly-$version-x86_64.AppImage
+    [ "$(menu_target)" = "$old" ] && in_menu=1
+    download_appimage "$new" "$version"
+    if [ "$new" != "$old" ]; then
+        rm -f "$old"
+        [ "$in_menu" = 1 ] && ln -sfn "$new" "$MENU_LINK"
+    fi
+    say "Updated to $new"
+}
+
+cmd_install() {
+    local method=auto version pkg found
+    for arg in "$@"; do
+        case $arg in
+            --package) method=package ;;
+            --appimage) method=appimage ;;
+            *) die "unknown option $arg" ;;
+        esac
+    done
+    if [ "$method" = auto ]; then
+        if have pacman && have makepkg; then method=package; else method=appimage; fi
+    fi
+    version=$(latest)
+    if [ "$method" = package ]; then
+        pkg=$(package_version)
+        [ -n "$pkg" ] && { say "$PACKAGE $pkg is already installed. Run: fly-install update"; return; }
+        install_package "$version"
+    else
+        found=$(appimages | head -n 1)
+        if [ -n "$found" ]; then
+            say "A Fly AppImage is already here: $found. Run: fly-install update"
+            # An AppImage that was only downloaded still gets its menu entry.
+            [ -n "$(menu_target)" ] && [ -f "$(menu_target)" ] || add_menu_entry "$found"
+            return
+        fi
+        install_appimage "$version"
+    fi
+}
+
+cmd_update() {
+    local version pkg any=0
+    version=$(latest)
+    pkg=$(package_version)
+    if [ -n "$pkg" ]; then
+        any=1
+        if older "$pkg" "$version"; then install_package "$version"; else say "$PACKAGE $pkg is up to date."; fi
+    fi
+    while IFS= read -r file; do
+        [ -n "$file" ] || continue
+        any=1
+        local current
+        current=$(appimage_version "$file")
+        if [ -z "$current" ]; then warn "skipping $file: its version is unknown"
+        elif older "$current" "$version"; then update_appimage "$file" "$version"
+        else say "$file is up to date."
+        fi
+    done < <(appimages)
+    [ "$any" = 1 ] || say "Fly is not installed. Run: fly-install install"
+}
+
+# Removes the menu entry, link and icons Fly added for an AppImage.
+remove_menu_entry() {
+    grep -qx 'X-Fly-AppImage=true' "$MENU_ENTRY" 2>/dev/null || return 0
+    rm -f "$MENU_ENTRY" "$MENU_LINK"
+    rmdir "$(dirname "$MENU_LINK")" 2>/dev/null || true
+    for size in "${ICON_SIZES[@]}"; do
+        rm -f "$DATA_HOME/icons/hicolor/${size}x${size}/apps/fly-browser.png"
+    done
+    refresh_menus
+    say "Removed the applications menu entry Fly had added."
+}
+
+uninstall_package() {
+    [ -n "$(package_version)" ] || die "$PACKAGE is not installed"
+    sudo pacman -R "$PACKAGE"
+}
+
+uninstall_appimage() {
+    local file=$1 target
+    target=$(menu_target)
+    rm -f "$file"
+    say "Removed $file"
+    if [ "$file" = "$target" ]; then remove_menu_entry; fi
+}
+
+cmd_uninstall() {
+    local target=
+    for arg in "$@"; do
+        case $arg in
+            --yes|-y) ASSUME_YES=1 ;;
+            *) target=$arg ;;
+        esac
+    done
+    case $target in
+        '')
+            cmd_status
+            say ""
+            die "say what to uninstall: fly-install uninstall package|PATH|all"
+            ;;
+        package) uninstall_package ;;
+        all)
+            confirm "Uninstall every Fly installation listed by 'fly-install status'?" || die "nothing was changed"
+            [ -n "$(package_version)" ] && uninstall_package
+            while IFS= read -r file; do
+                [ -n "$file" ] && uninstall_appimage "$file"
+            done < <(appimages)
+            remove_menu_entry
+            ;;
+        *)
+            local file
+            file=$(readlink -f "$target" 2>/dev/null) || true
+            [ -n "$file" ] && [ -f "$file" ] || die "no such file: $target"
+            [[ ${file,,} == *.appimage ]] || die "$target is not an AppImage"
+            confirm "Delete $file?" || die "nothing was changed"
+            uninstall_appimage "$file"
+            ;;
+    esac
+    say "Your profile in ~/.config/fly-browser is kept; delete it yourself for a clean slate."
+}
+
+ASSUME_YES=0
+command=${1:-status}
+[ $# -gt 0 ] && shift
+case $command in
+    status|scan|list) cmd_status ;;
+    install) cmd_install "$@" ;;
+    update|upgrade) cmd_update ;;
+    uninstall|remove) cmd_uninstall "$@" ;;
+    -h|--help|help) usage ;;
+    *) usage; exit 2 ;;
+esac

@@ -28,19 +28,19 @@ features:
   - title: Dual-Split View
     details: Browse two pages side-by-side with customisable partition ratios. Swap panes, open links directly into split view, or toggle seamlessly via keyboard shortcuts.
   - title: Multi-Account Containers
-    details: Every workspace runs inside an isolated persistent Chromium partition. Run multiple corporate and personal logins simultaneously with zero cookie cross-contamination.
+    details: Every workspace runs inside an isolated Chromium profile. Run multiple corporate and personal logins simultaneously with zero cookie cross-contamination.
   - title: Mouse-Free Navigation
     details: Full Vim-inspired link hints (f), floating omnibar, and browser and page-key customisation in Preferences.
-  - title: uBlock Origin
-    details: Included ad and tracker blocking for persistent workspaces, with filter lists and site exceptions managed in uBlock Origin.
+  - title: uBlock Origin Lite
+    details: Included ad and tracker blocking for persistent workspaces, with filter lists and site exceptions managed in uBlock Origin Lite.
   - title: Clipboard-Mediated Oversight
     details: Web commands and script executions stage safely onto your system clipboard. External terminal scanning tools like Oversight can inspect actions before execution.
   - title: User Scripts & Styles Engine
-    details: Native injection of local .user.js and .user.css files without extension overhead. Automatic file watching and live hot-reloading keep workflows fluid.
+    details: Local .user.js and .user.css files loaded through a generated component extension. Automatic file watching and live hot-reloading keep workflows fluid.
   - title: History & Bookmarks
     details: Actionable history overlay (Ctrl + Shift + H), structured bookmarks built right into the interface.
   - title: Distro-Agnostic & Zero Telemetry
-    details: An Arch package and a distro-agnostic AppImage for everything else. Zero telemetry, zero usage tracking, and anonymous GitHub release notifications for effortless updates.
+    details: Native Linux x64 tarballs and an Arch package. Zero telemetry, zero usage tracking, and anonymous GitHub release notifications for effortless updates.
 ---
 
 ![Fly Browser New Tab](/screenshots/new-tab.webp)
@@ -50,10 +50,10 @@ features:
 Most modern web browsers consume gigabytes of memory and leak telemetry continuously. **Fly** takes a smaller path: an intentional, distraction-free browser that respects your hardware and privacy, where every action works from the keyboard and pointer use remains comfortable and polished.
 
 ::: tip ARCHITECTURAL PILLARS
-* **Memory Conservation:** Idle tabs detach from DOM memory. Twenty tabs take the RAM footprint of two.
+* **Memory Conservation:** Eligible idle tabs pause in memory and resume their existing document.
 * **Complete Isolation:** Separate workspace containers keep cookies, caches, and logins entirely segregated.
 * **Crash Resilience:** Atomic file writes, rolling backup journals, and on-demand session restoration prevent data loss and crash loops.
-* **Transparent Storage:** Configuration, history, and keybinds live in human-readable files under `~/.config/fly-browser/`.
+* **Transparent Storage:** Configuration, history, and keybinds live in human-readable files under `~/.config/fly-browser-native/`.
 * **Zero Cloud Dependence:** No remote telemetry, no forced account sync, and zero phone-home profiling.
 :::
 
@@ -87,39 +87,23 @@ chmod +x ~/.local/bin/fly-install
 ~/.local/bin/fly-install install
 ```
 
-On Arch-based systems (CachyOS, EndeavourOS, Manjaro) it installs the `fly-browser-bin` package; anywhere else, the AppImage. Either way Fly lands in your applications menu, Rofi and other launchers. `fly-install update` keeps it current and `fly-install uninstall` removes it. See [Installation](/guide/installation) for every option.
+On Arch-based systems it installs `fly-browser-bin`; elsewhere it installs the
+native Chromium Linux x64 tarball. Both add Fly to the applications menu.
+`fly-install update` keeps it current. Close Electron before the first native
+start; its profile is retained and supported data is imported separately.
+See [Installation](/guide/installation) for migration limits and uninstall options.
 
-Or download the self-contained AppImage from GitHub Releases yourself and run it:
+Building from source requires the pinned external Chromium checkout and native
+overlay, not just `npm install`. Follow [Chromium development](/chromium/build),
+then run `FLY_ENGINE_ROOT=/path/to/fly-chromium npm start`.
 
-```bash
-# Make executable and launch
-chmod +x Fly-*-x86_64.AppImage
-./Fly-*-x86_64.AppImage
-```
+## Built on Chromium
 
-You can also compile directly from source:
-
-```bash
-# Clone and run from source
-git clone https://github.com/Arzuparreta/fly-browser.git
-cd fly-browser
-npm install
-npm start
-```
-
----
-
-## Built with Modern Open-Source Foundations
-
-Fly combines the battle-tested rendering speed of Chromium and Electron with custom modular subsystems written in vanilla JavaScript:
-
-* **Ghostery Network Engine:** Local request filtering without third-party extension overhead.
-* **safeStorage Encryption:** Linux `libsecret`, macOS Keychain, and Windows DPAPI hardware-backed encryption for persistent cookies.
-* **inotify Live Reloading:** Instant injection and live reloading of local `.user.js` and `.user.css` user customisations.
-* **Atomic Session Recovery:** Atomic POSIX file swaps and rolling backup journals protect session state against sudden kernel panics or power outages.
-* **Debounced Persistence:** Asynchronous disk flushing to prevent main-process stutter on single-page web applications.
-
----
+Fly uses Chromium's full browser layer, native Views controls, separate workspace
+profiles and narrowly scoped internal WebUI. uBlock Origin Lite provides native
+rule-based blocking. User content is loaded through a generated component
+extension. [Electron legacy](https://github.com/Arzuparreta/fly-browser/tree/main/legacy/electron)
+remains available for comparison, but is no longer the default release.
 
 ## Source & Issues
 

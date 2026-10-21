@@ -1,6 +1,6 @@
 name: Release
 
-# One tag, one release. `vX.Y.Z` builds the Linux, macOS and Windows packages
+# One tag, one native Chromium release. `vX.Y.Z` builds Linux x64 packages
 # and publishes them as a single GitHub Release with checksums.
 #
 # `workflow_dispatch` is how release-tag.yml starts it: that workflow tags the
@@ -21,7 +21,7 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
-  # Three platform builds are not worth spending on a tag that contradicts the
+  # A native engine build must not run on a tag that contradicts the
   # tree it points at.
   verify:
     runs-on: ubuntu-latest
@@ -42,48 +42,28 @@ jobs:
           fi
 
   build:
-    name: Build (${{ matrix.platform }})
+    name: Build native Chromium (Linux x64)
     needs: verify
-    runs-on: ${{ matrix.os }}
-    strategy:
-      fail-fast: false
-      matrix:
-        include:
-          - os: ubuntu-latest
-            platform: linux
-            command: npx electron-builder --linux AppImage tar.gz --x64
-          - os: macos-latest
-            platform: macos
-            command: npx electron-builder --mac dmg zip --arm64 --x64
-          - os: windows-latest
-            platform: windows
-            command: npx electron-builder --win nsis portable --x64
+    # Chromium exceeds hosted-runner disk/RAM limits. Provision a dedicated
+    # trusted host as documented in docs/releasing.md; never use PR triggers.
+    runs-on: [self-hosted, linux, x64, fly-chromium]
+    timeout-minutes: 720
     steps:
       - uses: actions/checkout@v4
-
       - uses: actions/setup-node@v4
         with:
           node-version: 22
-          cache: npm
-
-      - name: Install dependencies
-        run: npm ci
-
-      - name: Package application
-        run: ${{ matrix.command }} --publish never
-
-      - name: Upload platform packages
+      - name: Require provisioned engine checkout
+        run: test -n "$FLY_ENGINE_ROOT" && test -d "$FLY_ENGINE_ROOT/src"
+      - name: Apply this release overlay
+        run: python3 scripts/chromium/native.py refresh-overlay --include-upstream --root "$FLY_ENGINE_ROOT"
+      - name: Build and package native Fly
+        run: python3 scripts/chromium/release.py --root "$FLY_ENGINE_ROOT" --dist "$RUNNER_TEMP/fly-release-${{ github.run_id }}"
+      - name: Upload native package
         uses: actions/upload-artifact@v4
         with:
-          name: packages-${{ matrix.platform }}
-          # latest-linux.yml tells an AppImage where its update is and its SHA-512.
-          path: |
-            dist/*.AppImage
-            dist/latest-linux.yml
-            dist/*.tar.gz
-            dist/*.dmg
-            dist/*.zip
-            dist/*.exe
+          name: packages-linux
+          path: ${{ runner.temp }}/fly-release-${{ github.run_id }}/*
           if-no-files-found: error
           retention-days: 3
 
@@ -121,9 +101,12 @@ jobs:
           body: |
             ## Install
 
-            Download the package for your platform below and check it against
-            `SHA256SUMS.txt`. Packages are unsigned: macOS and Windows will warn
-            about an unidentified developer.
+            Download the native Chromium Linux x64 tarball below and verify it
+            against `SHA256SUMS.txt`. Extract it and run `./install.sh`, or use
+            `fly-install install`. Close Electron Fly before the first native start.
+            Electron profiles are retained; reinstall hand-installed extensions
+            from the Chrome Web Store. macOS, Windows and AppImage packages are
+            legacy Electron downloads and are not produced by this release.
 
             On Arch Linux, download `PKGBUILD` below into an empty directory
             and run `makepkg -si` there: it installs `fly-browser-bin`, with

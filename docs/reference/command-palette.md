@@ -34,14 +34,14 @@ The shortcuts below are new-profile defaults. The palette shows your saved assig
 
 | Command Title | Shortcut | Action ID | Description |
 | :--- | :--- | :--- | :--- |
-| **New Blank Tab** | `Ctrl+T` | `spawn-tab` | Creates an isolated webview in the current workspace. |
+| **New Blank Tab** | `Ctrl+T` | `spawn-tab` | Creates an isolated page in the current workspace. |
 | **Toggle Floating Address Bar** | `Ctrl+L` | `toggle-address` | Modal address bar with query completion and bang search engine aliases. |
 | **Toggle Workspace Dashboard** | `Ctrl+Shift+W` | `toggle-dashboard` | Full-page hierarchical tree of all workspaces, tabs, and windows. |
 | **Toggle Actionable History** | `Ctrl+Shift+H` | `toggle-history` | Local history ledger with domain-level filtering and record purging. |
 | **Toggle Link Hints Overlay** | `Alt+F` | `trigger-hints` | Letter tags overlaid on clickable webpage links for keyboard browsing. |
-| **Find In Page** | `Ctrl+F` / `F3` | `toggle-find` | In-page text search overlay across active webview content. |
-| **Reload Active Tab** | `Ctrl+R` / `F5` | `reload-active-tab` | Refreshes current webview document while preserving session state. |
-| **Close Current Tab** | `Ctrl+W` | `remove-tab` | Disposes of active webview and reclaims allocated V8 heap memory. |
+| **Find In Page** | `Ctrl+F` / `F3` | `toggle-find` | In-page text search overlay across active page content. |
+| **Reload Active Tab** | `Ctrl+R` / `F5` | `reload-active-tab` | Refreshes current page document while preserving session state. |
+| **Close Current Tab** | `Ctrl+W` | `remove-tab` | Disposes of active page and reclaims allocated V8 heap memory. |
 | **Pin / Unpin Active Tab** | `Ctrl+Shift+X` / `F4` | `toggle-pin-tab` | Pins essential tab to the top of the workspace or unpins it. |
 | **Mute / Unmute Active Tab** | — | — | Toggles Chromium audio output for the active tab without pausing playback. |
 | **Reset Site Zoom Level** | — | — | Restores 100% zoom for the hostname across open tabs and clears its saved preference. Private tabs reset only their separate in-memory preference. |
@@ -57,12 +57,12 @@ The shortcuts below are new-profile defaults. The palette shows your saved assig
 
 | Command Title | Shortcut | Action ID | Description |
 | :--- | :--- | :--- | :--- |
-| **Toggle Dual-Split View (Side-by-Side)** | `Ctrl+Shift+S` | `toggle-split` | Tiles two webviews side by side in equal columns for multitasking. |
-| **Toggle Dual-Split View (Stacked)** | — | — | Tiles two webviews stacked vertically in top and bottom rows. |
+| **Toggle Dual-Split View (Side-by-Side)** | `Ctrl+Shift+S` | `toggle-split` | Tiles two pages side by side in equal columns for multitasking. |
+| **Toggle Dual-Split View (Stacked)** | — | — | Tiles two pages stacked vertically in top and bottom rows. |
 | **Cycle Split View Orientation** | — | — | Cycles layout geometry between vertical side-by-side and horizontal stacked. |
 | **Switch Split Pane Focus** | `Ctrl+O` | `switch-split-focus` | Moves active input and scroll focus to the opposite split pane. |
 | **Swap Split Panes** | `Ctrl+\` | `swap-split-panes` | Reverses positions of primary and secondary split panes. |
-| **Close Split View** | — | — | Exits dual-split mode and restores primary webview to full viewport. |
+| **Close Split View** | — | — | Exits dual-split mode and restores primary page to full viewport. |
 
 ### Performance & Memory
 
@@ -88,9 +88,9 @@ The shortcuts below are new-profile defaults. The palette shows your saved assig
 
 | Command Title | Shortcut | Action ID | Description |
 | :--- | :--- | :--- | :--- |
-| **Open User Scripts Directory** | — | — | Opens `~/.config/fly-browser/scripts` in default system file manager. |
-| **Open User Styles Directory** | — | — | Opens `~/.config/fly-browser/styles` in default system file manager. |
-| **Reload User Scripts and Styles** | — | — | Hot-reloads custom scripts and stylesheets across active webviews. |
+| **Open User Scripts Directory** | — | — | Opens `~/.config/fly-browser-native/scripts` in default system file manager. |
+| **Open User Styles Directory** | — | — | Opens `~/.config/fly-browser-native/styles` in default system file manager. |
+| **Reload User Scripts and Styles** | — | — | Hot-reloads custom scripts and stylesheets across active pages. |
 
 ### Preferences & System
 
@@ -99,5 +99,5 @@ The shortcuts below are new-profile defaults. The palette shows your saved assig
 | **Open Preferences** | `Ctrl+H` | `toggle-help` | Full-page settings view with a section index (General, Appearance, Keyboard, Privacy & security, Extensions, Performance, Diagnostics, About) and a search across every section. |
 | **Toggle Private Browsing Mode** | `Ctrl+Shift+P` | `toggle-private-mode` | Switches session to in-memory non-persistent partition. |
 | **Test Clean Google Sign-In Flow** | Unassigned | `test-google-signin` | Launches Google Sign-In in a clean, volatile scratch partition to audit authentication health. |
-| **Toggle Colour Theme (Dark / Light)** | — | — | Swaps UI styling and webview shader inversion between dark and light. |
+| **Toggle Colour Theme (Dark / Light)** | — | — | Swaps UI styling and website theme preference between dark and light. |
 | **Open Native Settings Menu** | `F1` | `toggle-menu-bar` | Opens the native browser settings menu. |

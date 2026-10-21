@@ -161,4 +161,6 @@ blocker choices. Not imported: `quickmarks.json` (retired), Electron's
 
 All-platform native UI, migration, recovery, installable packages, product and
 engine update rehearsals remain pending. macOS object coverage excludes the
-unimplemented desktop adapter. Electron remains the production runtime.
+unimplemented desktop adapter. Native Chromium is now the default launcher and
+Linux release target; Electron remains legacy. This delivery cutover does not
+close the pending acceptance gates.

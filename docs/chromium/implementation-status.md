@@ -1,7 +1,57 @@
 # Native Chromium implementation record
 
-The native port is **incomplete**. Electron remains the production runtime.
-Full product, migration and packaged application acceptance remain outstanding.
+Native Chromium is now the default launcher, installer and release target.
+Electron source and comparison commands remain in `legacy/electron/README.md`.
+This delivery cutover does **not** establish full port acceptance: macOS/Windows
+native packages, complete migration/product acceptance and a hosted release
+rehearsal remain outstanding. Linux packages retain the native data directory
+and archive layout to stay compatible with the implemented native updater.
+
+The release workflow now requires a provisioned trusted `fly-chromium` Linux x64
+self-hosted runner with `FLY_ENGINE_ROOT`. No runner was registered at cutover;
+a tag build will queue until one is provided. No release is published by this
+implementation PR. See [releasing](../releasing.md).
+
+## Chromium delivery cutover validation
+
+PR [136](https://github.com/Arzuparreta/fly-browser/pull/136) migrates the default
+launcher, Linux release workflow, installer, AUR recipe and public documentation.
+Electron stays in the root for shared source contracts/assets; comparison entry
+points and archived guides are under `legacy/electron/`.
+
+Validation exercised on the local Linux x64 host:
+
+```sh
+npm test
+npm run docs:build
+git diff --check
+python3 -B -m unittest discover -s tests/chromium -p 'test_*.py'
+python3 scripts/chromium/release.py --root /mnt/storage/fly-chromium --dist /mnt/storage/fly-chromium/evidence/cutover-packages
+```
+
+All passed, including 89 Python tooling tests. The native incremental release
+build rebuilt the changed new-tab resources/object, linked `chrome` and packaged
+the required sandbox helper. The archive and `.sha256` are under the external
+`evidence/cutover-packages/`; SHA-256:
+`147d7aa088d60db297a46c204b9a3bef5bdd342b57eb32efde212543a9090e59`.
+Its `provenance.json` records source commit
+`e3839636e2a10c7ff2329bfb98743dad73e6d84a`, a clean tracked working tree, the engine
+lock and stripped binary checksum.
+
+The actual archive was extracted and installed into a disposable HOME containing
+spaces under `evidence/cutover-smoke-xbBNZr/`. `desktop-file-validate` passed. The
+installed `fly-browser` alias launched native Fly on X11 with its own native
+profile and no sandbox-disabling switch. A local DevTools endpoint confirmed the
+pinned engine and an `about:blank` page target; the process was then terminated.
+Machine-readable results: `evidence/cutover-packages/installed-smoke.json`.
+Browser logs contain a local Mesa loader warning; this is a startup/packaging
+smoke test, not complete visual, GPU, migration or product acceptance. No personal
+profile was read or modified. Disposable installer tests also exercised update,
+removal, native/legacy profile retention and the generated AUR package layout.
+
+No tag, public release or self-hosted runner was created. The release workflow
+cannot build remotely until a trusted engine runner is provisioned. Native
+macOS/Windows/AppImage delivery and the outstanding acceptance gates remain open.
 
 ## Active execution state
 
@@ -140,10 +190,10 @@ files the native build runs unchanged are copied by
 
 Linux package: `scripts/chromium/package-linux.py` turns a release build
 (`chromium/gn/release.gnargs`) into `dist/Fly-<version>-native-linux-x64.tar.gz`
-with `install.sh` ("Fly (native)" next to Electron Fly, data in
+with `install.sh` ("Fly"; Electron remains separate, data in
 `$XDG_CONFIG_HOME/fly-browser-native`). Built and installed into a temporary
-HOME locally; hosted CI cannot build it. Windows and macOS packages, release
-pipeline cutover and owner acceptance remain.
+HOME locally; hosted CI cannot build it. Windows and macOS packages and owner acceptance remain. The release pipeline
+now builds this native Linux archive on a provisioned engine host.
 
 Local validation uses the engine checkout `/mnt/storage/fly-chromium`, output
 `src/out/FlyNative`, `native.py refresh-overlay --include-upstream` followed by
