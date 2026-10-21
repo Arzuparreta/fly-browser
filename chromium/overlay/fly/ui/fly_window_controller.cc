@@ -434,7 +434,8 @@ FlyWindowController::FlyWindowController()
         static_cast<views::View*>(search),
         static_cast<views::View*>(preferences_button_.get())})
     sidebar->AddExpandedOnly(view);
-  sidebar->AddRailOnly(workspace_badge_);
+  // The badge sits over the header and never takes its clicks.
+  sidebar->AddRailOnly(workspace_badge_, false);
   sidebar->AddExpandedOnly(tab_sidebar_->expanded_surfaces(), false);
   sidebar->AddRailOnly(tab_sidebar_->rail_surfaces(), false);
   sidebar->AddRailOnly(tab_sidebar_->rail_marks(), false);
@@ -506,7 +507,12 @@ FlyWindowController::FlyWindowController()
 #endif
   params.bounds = gfx::Rect(80, 80, 1200, 800);
   desktop_->Init(std::move(params));
-  sidebar_widget_ = std::make_unique<views::Widget>();
+  sidebar_widget_ = std::make_unique<SidebarWidget>(base::BindRepeating(
+      [](FlyWindowController* window) {
+        return FlyScaled(window->sidebar_expanded_ ? kSidebarWidth
+                                                   : kSidebarRailWidth);
+      },
+      base::Unretained(this)));
   views::Widget::InitParams sidebar_params(
       views::Widget::InitParams::CLIENT_OWNS_WIDGET,
       views::Widget::InitParams::TYPE_CONTROL);
@@ -537,6 +543,10 @@ FlyWindowController::FlyWindowController()
   // Only the visible panel takes the pointer; the rest of the host (the
   // panel while collapsed, its shadow) leaves events to the page below.
   if (auto* clip = sidebar_host_->GetNativeViewContainer()) {
+    // The clip window itself never takes events; the panel's hit mask
+    // decides for points such as drops.
+    clip->SetEventTargetingPolicy(
+        aura::EventTargetingPolicy::kDescendantsOnly);
     clip->SetEventTargeter(std::make_unique<aura::WindowTargeter>());
     sidebar_targeter_ = clip->targeter();
   }
@@ -1433,9 +1443,11 @@ void FlyWindowController::UpdateSidebarMode() {
             desktop_->GetFocusManager()->GetFocusedView()))
       ReturnFocusFromSidebar();
   }
-  // A mode change applies at once; Fly starts collapsed instead of
+  // A mode or scale change applies at once (the slide distance, the shadow
+  // and the details follow the new mode); Fly starts collapsed instead of
   // animating closed.
   sidebar_motion_ready_ = false;
+  sidebar_motion_applied_ = false;
   UpdateSidebarBounds();
   UpdateSidebarVisibility();
   sidebar_motion_ready_ = true;

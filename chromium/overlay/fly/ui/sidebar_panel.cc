@@ -17,7 +17,9 @@
 #include "ui/gfx/scoped_canvas.h"
 #include "ui/gfx/geometry/skia_conversions.h"
 #include "ui/gfx/image/image_skia_rep.h"
+#include "third_party/skia/include/core/SkPath.h"
 #include "ui/views/animation/animation_sequence_block.h"
+#include "ui/views/view_targeter.h"
 
 namespace fly {
 namespace {
@@ -324,8 +326,16 @@ SidebarRoot::SidebarRoot(std::unique_ptr<SidebarPanel> panel) {
   viewport_->layer()->SetFillsBoundsOpaquely(false);
   panel_ = viewport_->AddChildView(std::move(panel));
   panel_->SetPaintToLayer();
+  SetEventTargeter(std::make_unique<views::ViewTargeter>(this));
 }
 SidebarRoot::~SidebarRoot() = default;
+views::View* SidebarRoot::TargetForRect(views::View* root,
+                                        const gfx::Rect& rect) {
+  // The panel's own coordinates equal the root's at rest.
+  if (auto* target = panel_->GetEventHandlerForRect(rect))
+    return target;
+  return this;
+}
 
 void SidebarRoot::Layout(PassKey) {
   edge_->SetBoundsRect(GetLocalBounds());
@@ -336,4 +346,16 @@ void SidebarRoot::Layout(PassKey) {
 }
 BEGIN_METADATA(SidebarRoot)
 END_METADATA
+
+SidebarWidget::SidebarWidget(base::RepeatingCallback<int()> visible_width)
+    : visible_width_(std::move(visible_width)) {}
+SidebarWidget::~SidebarWidget() = default;
+bool SidebarWidget::HasHitTestMask() const {
+  return true;
+}
+void SidebarWidget::GetHitTestMask(SkPath* mask) const {
+  const auto size = GetWindowBoundsInScreen().size();
+  *mask = SkPath::Rect(SkRect::MakeWH(
+      std::min(visible_width_.Run(), size.width()), size.height()));
+}
 }  // namespace fly

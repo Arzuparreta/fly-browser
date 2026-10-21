@@ -713,11 +713,39 @@ IN_PROC_BROWSER_TEST_F(FlySidebarBrowserTest,
   EXPECT_EQ(0.f, list->rail_surfaces()->layer()->opacity());
   EXPECT_EQ(1.f, list->expanded_surfaces()->layer()->opacity());
   EXPECT_EQ(collapsed, row->GetBoundsInScreen());
+  // Drops find their target by point: only the visible panel is hit, never
+  // its shadow or the hidden part of the collapsed panel.
+  auto* host_root = window.desktop_widget()->GetNativeWindow()->GetRootWindow();
+  auto* sidebar = window.sidebar_widget_for_testing()->GetNativeWindow();
+  auto* clip = sidebar->parent();
+  auto sidebar_at = [&](int x) {
+    gfx::Point point(origin.x() + x, origin.y() + 300);
+    wm::ConvertPointFromScreen(host_root, &point);
+    auto* hit = host_root->GetEventHandlerForPoint(point);
+    return hit && clip->Contains(hit);
+  };
+  EXPECT_TRUE(sidebar_at(100));
+  EXPECT_FALSE(sidebar_at(FlyScaled(260) + 20));
   // Collapsing again animates back to the rail.
   MoveToPage();
   ASSERT_TRUE(base::test::RunUntil(settled));
   EXPECT_EQ(-shift, root->edge()->layer()->transform().To2dTranslation().x());
   EXPECT_EQ(collapsed, row->GetBoundsInScreen());
+  EXPECT_TRUE(sidebar_at(18));
+  EXPECT_FALSE(sidebar_at(100));
+  // A larger interface while collapsed moves the edge by the larger width.
+  ASSERT_TRUE(window.preferences().SetString("interface_scale", "large"));
+  ASSERT_TRUE(base::test::RunUntil([&] {
+    return root->edge()->layer()->transform().To2dTranslation().x() ==
+           -static_cast<float>(FlyScaled(224));
+  }));
+  EXPECT_GT(FlyScaled(224), 224);
+  EXPECT_EQ(static_cast<float>(FlyScaled(224)),
+            root->panel()->layer()->transform().To2dTranslation().x());
+  ASSERT_TRUE(window.preferences().SetString("interface_scale", "normal"));
+  ASSERT_TRUE(base::test::RunUntil([&] {
+    return root->edge()->layer()->transform().To2dTranslation().x() == -shift;
+  }));
 }
 
 IN_PROC_BROWSER_TEST_F(FlySidebarBrowserTest,

@@ -6,11 +6,14 @@
 
 #include <vector>
 
+#include "base/functional/callback.h"
 #include "base/memory/raw_ptr.h"
 #include "base/time/time.h"
 #include "ui/gfx/image/image_skia.h"
 #include "fly/ui/fly_theme.h"
 #include "ui/views/view.h"
+#include "ui/views/view_targeter_delegate.h"
+#include "ui/views/widget/widget.h"
 
 namespace views {
 class AnimationSequenceBlock;
@@ -121,7 +124,7 @@ class SidebarClock : public FlyButton {
 // viewport that clips the panel (.sidebar-viewport), inside the edge
 // (#Sidebar). The edge slides by -224px while the panel slides back by the
 // same amount, so the compositor reveals content that stays put.
-class SidebarRoot : public views::View {
+class SidebarRoot : public views::View, public views::ViewTargeterDelegate {
   METADATA_HEADER(SidebarRoot, views::View)
 
  public:
@@ -135,6 +138,10 @@ class SidebarRoot : public views::View {
   views::View* edge() { return edge_; }
   views::View* shadow() { return shadow_; }
   void Layout(PassKey) override;
+  // The edge and panel transforms cancel out, and the compositor keeps a
+  // layer's starting transform until a slide ends. Events go straight into
+  // the panel; the host's hit area already limits them to what is visible.
+  views::View* TargetForRect(views::View* root, const gfx::Rect& rect) override;
 
  private:
   class Edge;
@@ -143,6 +150,19 @@ class SidebarRoot : public views::View {
   raw_ptr<views::View> shadow_ = nullptr;
   raw_ptr<views::View> viewport_ = nullptr;
   raw_ptr<SidebarPanel> panel_ = nullptr;
+};
+// The sidebar's widget: only the visible panel is hit, so drops (found by
+// point, not by event targeting) reach the page beside the rail and under
+// the shadow.
+class SidebarWidget : public views::Widget {
+ public:
+  explicit SidebarWidget(base::RepeatingCallback<int()> visible_width);
+  ~SidebarWidget() override;
+  bool HasHitTestMask() const override;
+  void GetHitTestMask(SkPath* mask) const override;
+
+ private:
+  base::RepeatingCallback<int()> visible_width_;
 };
 }  // namespace fly
 
