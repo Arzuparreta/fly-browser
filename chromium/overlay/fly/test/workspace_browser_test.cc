@@ -5985,7 +5985,17 @@ class FlyTabMenuBrowserTest : public FlyWorkspaceBrowserTest {
  protected:
   void Menu(content::WebContents* contents,
             base::OnceCallback<void(ui::SimpleMenuModel*)> inspect) {
-    auto* sidebar = FlyWindowController::Get().tab_sidebar_for_testing();
+    auto& window = FlyWindowController::Get();
+    auto* active = Active(window.selected_browser_for_testing());
+    ASSERT_TRUE(content::WaitForLoadStop(active));
+    base::RunLoop().RunUntilIdle();
+    if (window.address_picker().active()) {
+      ui::test::EventGenerator keys(
+          window.desktop_widget()->GetNativeWindow()->GetRootWindow());
+      keys.PressKey(ui::VKEY_ESCAPE, ui::EF_NONE);
+      ASSERT_TRUE(base::test::RunUntil([&] { return !window.address_picker().active(); }));
+    }
+    auto* sidebar = window.tab_sidebar_for_testing();
     ASSERT_TRUE(base::test::RunUntil([&] {
       return sidebar->row_for_testing(contents) != nullptr;
     }));
