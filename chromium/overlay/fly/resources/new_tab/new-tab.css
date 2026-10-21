@@ -1,43 +1,66 @@
-/* Electron's new tab page at the native interface's sizes; --scale follows
-   the interface size setting. */
-:root { --bg-main:#121211; --text:#e7e1d3; --accent:#e0261c; --panel:#1b1a18; --cell:#22211e; --border:#2b2a27; --dim:#8a857a; --link:#6aa2f5; --scale:1; color-scheme: dark; }
+/* Keep Default's typography. The viewport budget, including root zoom in
+   Large, belongs to the layout; content must not make the canvas taller. */
+:root { --bg-main:#121211; --text:#e7e1d3; --accent:#e0261c; --panel:#1b1a18; --cell:#22211e; --border:#2b2a27; --dim:#8a857a; --link:#6aa2f5; --scale:1; color-scheme:dark; }
 * { box-sizing:border-box; }
 html { zoom:var(--scale); }
-body { margin:0; min-height:100vh; background:radial-gradient(var(--border) .7px, transparent .7px) 0 0 / 16px 16px var(--bg-main); color:var(--text); font:16px 'IBM Plex Sans',sans-serif; }
+body { margin:0; height:calc(100dvh / var(--scale)); display:grid; grid-template-rows:minmax(0,1fr) auto; container-type:size; background:radial-gradient(var(--border) .7px,transparent .7px) 0 0 / 16px 16px var(--bg-main); color:var(--text); font:16px 'IBM Plex Sans',sans-serif; }
 body.light { color-scheme:light; background-image:url('identity/paper-grain.png'),radial-gradient(var(--border) .7px,transparent .7px); background-size:128px 128px,16px 16px; }
-main { min-height:calc(100vh - 56px); max-width:1500px; margin:auto; padding:56px clamp(28px,5vw,96px); display:grid; grid-template-columns:minmax(320px,1fr) minmax(340px,1fr); align-items:center; align-content:center; gap:28px 48px; grid-template-areas:"navigation specimen"; }
-.navigation { grid-area:navigation; min-width:0; }
-.specimen { grid-area:specimen; }
-.eyebrow, #date, footer, .annotation small { font:12px 'IBM Plex Mono',monospace; letter-spacing:.14em; color:var(--dim); }
-#clock { display:block; width:max-content; max-width:100%; font:800 clamp(72px,9vw,132px)/1.15 'Doto',monospace; letter-spacing:.04em; margin:24px 0 14px; background:var(--cell); padding:0 14px; border-radius:2px; }
-#date { font-size:14px; text-transform:uppercase; margin-bottom:44px; line-height:1.8; }
-button { background:none; color:var(--text); border:0; font-size:24px; padding:0 16px; cursor:pointer; }
-:focus-visible { outline:1px solid var(--accent); outline-offset:4px; }
-.sites-label { margin:36px 0 14px; }
-#sites { display:flex; flex-direction:column; gap:0; }
-#sites a { color:var(--link); text-decoration:none; font:15px 'IBM Plex Mono',monospace; padding:14px 0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
-#sites a::before { content:'↗'; color:var(--dim); margin-right:18px; }
-#empty, #bookmarks-empty { color:var(--dim); font-size:14px; }
-.specimen { position:relative; margin:0; width:100%; min-height:460px; aspect-ratio:1; }
-.specimen img { width:86%; height:100%; position:absolute; top:0; left:7%; object-fit:contain; }
-.annotation { position:absolute; border-top:1px solid var(--accent); padding-top:10px; min-width:120px; }
-.annotation::before { content:''; position:absolute; height:28px; border-left:1px solid var(--accent); top:-28px; left:0; }
-.annotation span { display:block; font:700 30px 'Doto',monospace; }
-.annotation small { display:block; font-size:11px; margin-top:6px; }
-.memory { right:0; top:24%; }
-footer { padding:18px 36px; border-top:1px solid var(--border); font-size:12px; }
-footer strong { color:var(--text); font-weight:700; }
-footer a { color:inherit; text-decoration:underline; text-underline-offset:2px; }
-@media(max-width:800px) { main { grid-template-columns:1fr; grid-template-areas:"navigation" "specimen"; max-width:640px; padding-top:32px; } .specimen { min-height:320px; max-width:440px; margin:auto; } #clock { font-size:80px; } }
-.site-row { display:flex; align-items:center; border-bottom:1px solid var(--border); }
-#sites .site-row a { flex:1; min-width:0; }
-.site-row button { color:var(--dim); font-size:20px; padding:8px 14px; }
-.site-row button:hover, .site-row button:focus-visible { color:var(--accent); }
-#saved-bookmarks { width:100%; min-width:0; }
-#saved-bookmarks[hidden], #frequent-sites[hidden] { display:none; }
-#bookmarks { display:flex; justify-content:flex-start; flex-wrap:wrap; gap:10px; padding:6px 0; }
-#bookmarks a { display:block; max-width:220px; padding:12px 18px; border:1px solid var(--border); border-radius:6px; background:var(--panel); color:var(--text); text-decoration:none; font:14px 'IBM Plex Sans',sans-serif; }
+main { width:100%; height:100%; max-width:calc(1500px / var(--scale)); max-height:calc(1000px / var(--scale)); min-height:0; margin:auto; padding:clamp(8px,7cqh,56px) clamp(12px,5cqw,96px); display:grid; grid-template-columns:minmax(0,1fr) minmax(0,1fr); grid-template-rows:auto minmax(0,1fr); grid-template-areas:'time specimen' 'navigation specimen'; gap:clamp(8px,3cqh,28px) clamp(12px,4cqw,48px); }
+.time { grid-area:time; min-width:0; container-type:inline-size; display:flex; flex-direction:column; justify-content:center; gap:clamp(4px,2cqh,14px); }
+#clock { display:block; width:max-content; max-width:100%; margin:0; padding:0 clamp(4px,1cqw,14px); background:var(--cell); border-radius:2px; font:800 clamp(24px,min(9vw,25cqw,22cqh),132px)/1.15 'Doto',monospace; letter-spacing:.04em; }
+.eyebrow, #date, footer, .annotation small { font:clamp(9px,2cqh,12px) 'IBM Plex Mono',monospace; letter-spacing:.14em; color:var(--dim); }
+#date { margin:0; font-size:clamp(9px,2.4cqh,14px); text-transform:uppercase; line-height:1.6; overflow-wrap:anywhere; }
+.navigation { grid-area:navigation; min-width:0; min-height:0; display:flex; flex-direction:column; gap:clamp(8px,3cqh,24px); }
+.collection { flex:1; min-width:0; min-height:0; display:flex; flex-direction:column; gap:clamp(4px,1.5cqh,12px); }
+.collection[hidden] { display:none; }
+.collection-header { flex:none; min-width:0; display:flex; align-items:center; justify-content:space-between; flex-wrap:wrap; gap:4px 8px; }
+.eyebrow { margin:0; font-weight:400; line-height:1.5; }
+.paging { display:flex; align-items:center; gap:4px; flex:none; color:var(--dim); font:clamp(9px,1.8cqh,11px) 'IBM Plex Mono',monospace; letter-spacing:0; }
+.paging[hidden] { display:none; }
+.paging button { width:24px; height:24px; padding:0; border:1px solid var(--border); border-radius:3px; font:inherit; color:var(--text); background:var(--panel); cursor:pointer; }
+.paging button:hover:enabled { border-color:var(--accent); }
+.paging button:disabled { opacity:.35; cursor:default; }
+:focus-visible { outline:1px solid var(--accent); outline-offset:2px; }
+.entries { --entry-height:clamp(26px,5.5cqh,44px); --entry-width:150px; --entry-gap:8px; flex:1; min-height:0; min-width:0; display:grid; grid-auto-rows:var(--entry-height); grid-template-columns:repeat(var(--columns,1),minmax(0,1fr)); align-content:start; gap:var(--entry-gap); }
+#bookmarks a { display:flex; align-items:center; min-width:0; padding:0 clamp(8px,2cqw,18px); border:1px solid var(--border); border-radius:6px; background:var(--panel); color:var(--text); text-decoration:none; font:clamp(11px,2.5cqh,14px) 'IBM Plex Sans',sans-serif; }
 #bookmarks a:hover, #bookmarks a:focus-visible { background:var(--cell); border-color:var(--accent); }
 #bookmarks a:active { background:var(--border); }
-#bookmarks-label { text-align:left; font-weight:400; margin:0 0 14px; }
 .bookmark-title { display:block; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+.site-row { display:flex; min-width:0; align-items:center; border-bottom:1px solid var(--border); }
+#sites a { flex:1; min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; color:var(--link); text-decoration:none; font:clamp(11px,2.8cqh,15px) 'IBM Plex Mono',monospace; }
+#sites a::before { content:'↗'; color:var(--dim); margin-right:clamp(6px,1cqw,18px); }
+.site-row button { flex:none; align-self:stretch; padding:0 8px; border:0; background:none; color:var(--dim); font-size:20px; cursor:pointer; }
+.site-row button:hover, .site-row button:focus-visible { color:var(--accent); }
+.empty { margin:0; color:var(--dim); font-size:clamp(11px,2.4cqh,14px); line-height:1.5; }
+.empty[hidden], .entries[hidden] { display:none; }
+.specimen { grid-area:specimen; position:relative; margin:0; min-width:0; min-height:0; height:100%; container-type:inline-size; }
+.specimen img { position:absolute; inset:0 auto 0 0; width:86%; height:100%; object-fit:contain; }
+.annotation { position:absolute; right:0; top:24%; max-width:100%; border-top:1px solid var(--accent); padding-top:clamp(4px,1.5cqh,10px); }
+.annotation::before { content:''; position:absolute; height:clamp(6px,3cqh,28px); border-left:1px solid var(--accent); bottom:100%; left:0; }
+.annotation span { display:block; white-space:nowrap; font:700 clamp(14px,6cqw,30px) 'Doto',monospace; }
+.annotation small { display:block; font-size:clamp(8px,2cqw,11px); margin-top:4px; }
+footer { padding:clamp(4px,2cqh,18px) clamp(12px,3cqw,36px); border-top:1px solid var(--border); font-size:clamp(9px,2cqh,12px); line-height:1.5; }
+footer strong { color:var(--text); font-weight:700; }
+footer a { color:inherit; text-decoration:underline; text-underline-offset:2px; }
+/* Portrait and short windows share a compact hero; the collections get the
+   full width instead of stacking a minimum-height illustration below them. */
+@media (max-aspect-ratio:4/5), (max-height:460px) {
+  main { grid-template-columns:minmax(0,3fr) minmax(0,2fr); grid-template-rows:minmax(0,.32fr) minmax(0,.68fr); grid-template-areas:'time specimen' 'navigation navigation'; padding-block:clamp(8px,3cqh,24px); }
+  #clock { font-size:clamp(24px,min(9vw,25cqw,18cqh),132px); }
+  .annotation { top:auto; bottom:8%; }
+}
+@media (max-height:460px) {
+  main { grid-template-rows:auto minmax(0,1fr); }
+  .navigation { flex-direction:row; }
+  .collection-header { gap:2px 4px; }
+  .paging button { width:20px; height:20px; }
+}
+/* A very wide, shallow viewport uses three columns, keeping every surface
+   on one row rather than spending its height on a large clock. */
+@media (min-aspect-ratio:5/2) {
+  main { grid-template-columns:minmax(0,1fr) minmax(0,2fr) minmax(0,1fr); grid-template-rows:minmax(0,1fr); grid-template-areas:'time navigation specimen'; padding-block:clamp(8px,4cqh,32px); }
+  .navigation { flex-direction:row; }
+}
+
+.navigation[hidden] { display:none; }
+main.no-collections { grid-template-columns:minmax(0,1fr) minmax(0,1fr); grid-template-rows:minmax(0,1fr); grid-template-areas:'time specimen'; }

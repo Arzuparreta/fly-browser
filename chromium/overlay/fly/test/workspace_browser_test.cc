@@ -1434,6 +1434,60 @@ IN_PROC_BROWSER_TEST_F(FlyWorkspaceBrowserTest,
   EXPECT_EQ(GURL("about:blank"), contents->GetLastCommittedURL());
 }
 
+// The same row supplies the expanded panel and its collapsed icon column.
+// Interface scale must resize its artwork as well as its text and surfaces.
+IN_PROC_BROWSER_TEST_F(FlySidebarBrowserTest,
+                       TabArtworkAndControlsFollowInterfaceScale) {
+  ASSERT_TRUE(ui_test_utils::NavigateToURL(
+      browser(), embedded_test_server()->GetURL("/favicon/page_with_favicon.html")));
+  auto& window = FlyWindowController::Get();
+  auto* contents = Active(browser());
+  auto* list = window.tab_sidebar_for_testing();
+  ASSERT_TRUE(base::test::RunUntil([&] {
+    return list->row_for_testing(contents) &&
+           !list->favicon_for_testing(contents).isNull();
+  }));
+  SetTabAudioMuted(contents, true, TabMutedReason::kAudioIndicator, {});
+  auto* row = list->row_for_testing(contents);
+  auto* select = static_cast<views::MdTextButton*>(row->children()[0]);
+  auto* pin = row->children()[1].get();
+  auto* close = row->children()[2].get();
+  auto* audio = row->children()[3].get();
+  for (const char* scale : {"normal", "large", "normal"}) {
+    SCOPED_TRACE(scale);
+    ASSERT_TRUE(window.preferences().SetString("interface_scale", scale));
+    ASSERT_TRUE(base::test::RunUntil([&] {
+      return select->GetImage(views::Button::STATE_NORMAL).size() ==
+                 gfx::Size(FlyScaled(26), FlyScaled(26)) &&
+             audio->GetVisible();
+    }));
+    OpenByPointer();
+    WaitForSidebarMotion();
+    views::test::RunScheduledLayout(row->GetWidget());
+    EXPECT_EQ(FlyScaled(40), row->height());
+    EXPECT_EQ(FlyScaled(18), audio->width());
+    EXPECT_EQ(FlyScaled(10), close->x() - audio->bounds().right());
+    EXPECT_EQ(FlyScaled(8), row->width() - close->bounds().right());
+    const auto expanded = row->GetBoundsInScreen();
+    MoveToPage();
+    WaitForSidebarMotion();
+    EXPECT_EQ(expanded, row->GetBoundsInScreen());
+    EXPECT_EQ(row, list->row_for_testing(contents));
+    EXPECT_EQ(gfx::Size(FlyScaled(26), FlyScaled(26)),
+              select->GetImage(views::Button::STATE_NORMAL).size());
+    // A pinned row has no close slot; pin and audio keep the CSS flex gap
+    // plus badge margin rather than crowding the title or each other.
+    browser()->GetTabStripModel()->SetTabPinned(0, true);
+    ASSERT_TRUE(base::test::RunUntil([&] { return pin->GetVisible(); }));
+    views::test::RunScheduledLayout(row->GetWidget());
+    EXPECT_EQ(FlyScaled(14), audio->x() - pin->bounds().right());
+    EXPECT_FALSE(close->GetVisible());
+    EXPECT_EQ(FlyScaled(8), row->width() - audio->bounds().right());
+    browser()->GetTabStripModel()->SetTabPinned(0, false);
+    ASSERT_TRUE(base::test::RunUntil([&] { return !pin->GetVisible(); }));
+  }
+}
+
 // New tabs open Fly's new tab page: clock, date, lists and the memory use of
 // Fly, refreshed while the page shows.
 IN_PROC_BROWSER_TEST_F(FlyWorkspaceBrowserTest,

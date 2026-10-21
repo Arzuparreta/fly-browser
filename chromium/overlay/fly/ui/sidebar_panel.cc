@@ -49,7 +49,8 @@ void FadeTo(views::View* view,
 }  // namespace
 
 // .sidebar-content::before: the engraving, 230px wide, centred, its bottom
-// 100px above the panel's bottom edge.
+// anchored to the bottom as in Electron. The native panel gives it another
+// 24px of clearance above the bottom controls; resizing never recentres it.
 class SidebarPanel::Engraving : public views::View {
   METADATA_HEADER(Engraving, views::View)
 
@@ -67,7 +68,7 @@ class SidebarPanel::Engraving : public views::View {
     const int size = FlyScaled(230);
     canvas->DrawImageInt(image, 0, 0, image.width(), image.height(),
                          (width() - size) / 2,
-                         height() - FlyScaled(100) - size, size, size, true);
+                         height() - FlyScaled(124) - size, size, size, true);
   }
 
  private:
