@@ -13,5 +13,5 @@ if [ -z "${DISPLAY:-}" ] && [ -z "${WAYLAND_DISPLAY:-}" ]; then
     echo "Fly needs a graphical session (DISPLAY or WAYLAND_DISPLAY)." >&2
     exit 1
 fi
-exec "$binary" --fly-native --class=fly-browser-native \
-    --user-data-dir="${XDG_CONFIG_HOME:-$HOME/.config}/fly-browser-native" "$@"
+exec "$binary" --fly-native --class=fly-browser \
+    --user-data-dir="${XDG_CONFIG_HOME:-$HOME/.config}/fly-browser" "$@"

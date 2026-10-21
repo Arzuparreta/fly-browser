@@ -41,24 +41,24 @@ class PackageInstallerTest(unittest.TestCase):
             home.mkdir()
             for size in (48, 128, 256):
                 (app / f'icons/fly-logo{size}.png').write_bytes(b'icon')
-            (app / 'fly-browser-native').write_text('#!/bin/sh\n')
-            (app / 'fly-browser-native.desktop').write_text(package.DESKTOP)
+            (app / 'fly-browser').write_text('#!/bin/sh\n')
+            (app / 'fly-browser.desktop').write_text(package.DESKTOP)
             installer = source / 'install.sh'
             installer.write_text(package.INSTALL)
             env = dict(os.environ, HOME=str(home), XDG_DATA_HOME=str(home / 'data'), XDG_CONFIG_HOME=str(home / 'config'))
             legacy = home / 'config/fly-browser/session.json'
             legacy.parent.mkdir(parents=True)
             legacy.write_text('legacy')
-            profile = home / 'config/fly-browser-native/Local State'
-            profile.parent.mkdir(parents=True)
+            profile = home / 'config/fly-browser/Local State'
+            profile.parent.mkdir(parents=True, exist_ok=True)
             profile.write_text('native')
-            target = home / 'data/fly-browser-native'
+            target = home / 'data/fly-browser'
             def run(*args):
                 subprocess.run(['sh', str(installer), *args], env=env, check=True, capture_output=True)
             run()
-            self.assertEqual((home / '.local/bin/fly-browser').resolve(), target / 'fly-browser-native')
-            entry = (home / 'data/applications/fly-browser-native.desktop').read_text()
-            self.assertIn(f'Exec="{target}/fly-browser-native" %U', entry)
+            self.assertEqual((home / '.local/bin/fly-browser').resolve(), target / 'fly-browser')
+            entry = (home / 'data/applications/fly-browser.desktop').read_text()
+            self.assertIn(f'Exec="{target}/fly-browser" %U', entry)
             (app / 'updated').write_text('next build')
             run()
             self.assertTrue((target / 'updated').is_file())

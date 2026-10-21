@@ -27,7 +27,7 @@ validation. Do not equate a passing npm audit with a patched Chromium engine.
 Native Linux archives carry SHA-256 checksums. Verify downloaded packages;
 checksums do not replace authenticated distribution or code signing.
 
-Native Fly stores data under `$XDG_CONFIG_HOME/fly-browser-native`. Chromium
+Native Fly stores data under `$XDG_CONFIG_HOME/fly-browser`. Chromium
 manages profile preferences, cookies and extension storage; encryption depends
 on the host and Chromium configuration. Backups may contain sensitive browsing
 data. The legacy importer only reads Electron source directories and writes to

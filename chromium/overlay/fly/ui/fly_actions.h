@@ -114,7 +114,7 @@ void InstallNativeUpdate(const UpdateCheckResult& update,
                          base::OnceCallback<void(std::u16string)> done);
 
 // Electron's desktopIntegration.js for the native package: the applications
-// menu entry (fly-browser-native.desktop, starting the package's launcher)
+// menu entry (fly-browser.desktop, starting the package's launcher)
 // and the default browser.
 struct DesktopIntegrationStatus {
   // Only a package (with its launcher next to the executable) can add itself.

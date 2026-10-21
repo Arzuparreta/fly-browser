@@ -3,8 +3,8 @@
 Native Fly watches `.user.js` and `.user.css` files under its user data directory:
 
 ```text
-~/.config/fly-browser-native/scripts/
-~/.config/fly-browser-native/styles/
+~/.config/fly-browser/scripts/
+~/.config/fly-browser/styles/
 ```
 
 Use the corresponding commands in the Command Centre to open these folders.

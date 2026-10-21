@@ -64,7 +64,7 @@ In addition to DuckDuckGo bangs, Fly includes native search engine prefixes that
 * `k <query>`: Kagi
 
 ### User-Customised Search Engines
-You can add your own search engines or override existing shortcuts in **Preferences → General → Custom search aliases** (**Ctrl + H**) or inside `~/.config/fly-browser-native/config.json`:
+You can add your own search engines or override existing shortcuts in **Preferences → General → Custom search aliases** (**Ctrl + H**) or inside `~/.config/fly-browser/config.json`:
 
 ```json
 "custom_search_aliases": {

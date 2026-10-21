@@ -5,12 +5,10 @@
       [--output out/FlyRelease] [--dist dist]
 
 Produces dist/Fly-<version>-native-linux-x64.tar.gz (and .sha256) holding a
-fly-browser-native/ directory: the browser and its runtime files, Fly's fonts,
+fly-browser/ directory: the browser and its runtime files, Fly's fonts,
 What's New page, user content worker and bundled extensions, a launcher and an
-install.sh that installs it for the current user as "Fly" next to an
-existing Electron Fly. Native Fly keeps its data in
-$XDG_CONFIG_HOME/fly-browser-native; the Electron profile in
-~/.config/fly-browser is only read, once, to import it.
+install.sh that installs it for the current user as "Fly".
+Fly keeps its data in $XDG_CONFIG_HOME/fly-browser (default ~/.config/fly-browser).
 """
 import argparse
 import hashlib
@@ -40,34 +38,33 @@ REQUIRED = ['chrome', 'resources.pak', 'icudtl.dat', 'locales', 'fly_fonts',
 WHATS_NEW = ['whats-new.html', 'whats-new-page.js', 'whats-new-releases.js']
 
 LAUNCHER = '''#!/bin/sh
-# Native Fly launcher. Data lives apart from Electron Fly's profile, which is
-# only read once to import it.
+# Fly launcher. Respect the XDG configuration directory.
 HERE=$(dirname "$(readlink -f "$0")")
 CONFIG="${XDG_CONFIG_HOME:-$HOME/.config}"
-exec "$HERE/fly" --fly-native --class=fly-browser-native \\
-  --user-data-dir="$CONFIG/fly-browser-native" "$@"
+exec "$HERE/fly" --fly-native --class=fly-browser \\
+  --user-data-dir="$CONFIG/fly-browser" "$@"
 '''
 
 INSTALL = r'''#!/bin/sh
-# Installs native Fly for the current user, next to any Electron Fly.
+# Installs Fly for the current user.
 #   ./install.sh            install or update
 #   ./install.sh --remove   uninstall (keeps your data)
 set -eu
 HERE=$(dirname "$(readlink -f "$0")")
 DATA="${XDG_DATA_HOME:-$HOME/.local/share}"
-TARGET="$DATA/fly-browser-native"
+TARGET="$DATA/fly-browser"
 BIN="$HOME/.local/bin"
 APPS="$DATA/applications"
 ICONS="$DATA/icons/hicolor"
 if [ "${1:-}" = "--remove" ]; then
-  rm -rf "$TARGET" "$APPS/fly-browser-native.desktop"
-  for link in "$BIN/fly-browser-native" "$BIN/fly-browser"; do
-    if [ "$(readlink "$link" 2>/dev/null || true)" = "$TARGET/fly-browser-native" ]; then rm -f "$link"; fi
+  rm -rf "$TARGET" "$APPS/fly-browser.desktop"
+  for link in "$BIN/fly-browser"; do
+    if [ "$(readlink "$link" 2>/dev/null || true)" = "$TARGET/fly-browser" ]; then rm -f "$link"; fi
   done
   for size in 48 128 256; do
-    rm -f "$ICONS/${size}x${size}/apps/fly-browser-native.png"
+    rm -f "$ICONS/${size}x${size}/apps/fly-browser.png"
   done
-  echo "Removed native Fly. Your data in ${XDG_CONFIG_HOME:-$HOME/.config}/fly-browser-native is kept."
+  echo "Removed native Fly. Your data in ${XDG_CONFIG_HOME:-$HOME/.config}/fly-browser is kept."
   exit 0
 fi
 STAGE="$TARGET.new"
@@ -78,22 +75,20 @@ rm -rf "$TARGET.old"
 [ -d "$TARGET" ] && mv "$TARGET" "$TARGET.old"
 mv "$STAGE" "$TARGET"
 rm -rf "$TARGET.old"
-ln -sf "$TARGET/fly-browser-native" "$BIN/fly-browser-native"
-ln -sf "$TARGET/fly-browser-native" "$BIN/fly-browser"
+ln -sf "$TARGET/fly-browser" "$BIN/fly-browser"
 for size in 48 128 256; do
   mkdir -p "$ICONS/${size}x${size}/apps"
-  cp "$TARGET/icons/fly-logo$size.png" "$ICONS/${size}x${size}/apps/fly-browser-native.png"
+  cp "$TARGET/icons/fly-logo$size.png" "$ICONS/${size}x${size}/apps/fly-browser.png"
 done
 # Escape both the quoted Desktop Entry argument and the entry's string value.
-escaped=$(printf '%s' "$TARGET/fly-browser-native" | sed 's/[\\"`$]/\\&/g; s/\\/\\\\/g; s/%/%%/g')
+escaped=$(printf '%s' "$TARGET/fly-browser" | sed 's/[\\"`$]/\\&/g; s/\\/\\\\/g; s/%/%%/g')
 {
-  sed '/^Exec=/d' "$TARGET/fly-browser-native.desktop"
+  sed '/^Exec=/d' "$TARGET/fly-browser.desktop"
   printf 'Exec="%s" %%U\n' "$escaped"
-} > "$APPS/fly-browser-native.desktop"
+} > "$APPS/fly-browser.desktop"
 command -v update-desktop-database >/dev/null 2>&1 && update-desktop-database "$APPS" || true
 echo "Installed native Fly in $TARGET."
-echo "Start it from your applications menu (Fly) or with: fly-browser-native"
-echo "Close Electron Fly before the first start so your workspaces are imported then."
+echo "Start it from your applications menu (Fly) or with: fly-browser"
 '''
 
 DESKTOP = '''[Desktop Entry]
@@ -102,12 +97,12 @@ GenericName=Web Browser
 Comment=Fly on the Chromium engine
 Keywords=browser;web;internet;
 Exec=@EXEC@ %U
-Icon=fly-browser-native
+Icon=fly-browser
 Terminal=false
 Type=Application
 Categories=Network;WebBrowser;
 MimeType=text/html;text/xml;application/xhtml+xml;x-scheme-handler/http;x-scheme-handler/https;
-StartupWMClass=fly-browser-native
+StartupWMClass=fly-browser
 '''
 
 
@@ -150,7 +145,7 @@ def main():
     name = f'Fly-{version}-native-linux-x64'
     args.dist.mkdir(parents=True, exist_ok=True)
     with tempfile.TemporaryDirectory() as tmp:
-        top = Path(tmp) / 'fly-browser-native'
+        top = Path(tmp) / 'fly-browser'
         app = top / 'app'
         app.mkdir(parents=True)
         for file in RUNTIME_FILES:
@@ -185,10 +180,10 @@ def main():
             'binary_sha256': hashlib.sha256((app / 'fly').read_bytes()).hexdigest(),
         }
         (app / 'provenance.json').write_text(json.dumps(provenance, indent=2) + '\n')
-        launcher = app / 'fly-browser-native'
+        launcher = app / 'fly-browser'
         launcher.write_text(LAUNCHER, encoding='utf-8')
         launcher.chmod(0o755)
-        (app / 'fly-browser-native.desktop').write_text(DESKTOP, encoding='utf-8')
+        (app / 'fly-browser.desktop').write_text(DESKTOP, encoding='utf-8')
         (app / 'VERSION').write_text(f'Fly {version}\nEngine Chromium {engine}\n',
                                      encoding='utf-8')
         installer = top / 'install.sh'
@@ -197,7 +192,7 @@ def main():
         normalize_package_permissions(top)
         archive = args.dist / f'{name}.tar.gz'
         with tarfile.open(archive, 'w:gz') as bundle:
-            bundle.add(top, arcname='fly-browser-native')
+            bundle.add(top, arcname='fly-browser')
     digest = hashlib.sha256(archive.read_bytes()).hexdigest()
     (args.dist / f'{name}.tar.gz.sha256').write_text(f'{digest}  {archive.name}\n')
     print(f'{archive} ({archive.stat().st_size // (1024 * 1024)} MiB)\nsha256 {digest}')
