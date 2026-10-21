@@ -110,6 +110,30 @@ to a dedicated external engine checkout. No runner is provisioned by the workflo
 Without one, releases wait in the build queue and publish nothing. Do not run
 untrusted pull requests on this host. Ordinary PR checks remain `npm test`.
 
+The local Linux engine host now has the repository runner
+`fly-chromium-local`, labelled `fly-chromium`. Its files are outside the repo at
+`/mnt/storage/fly-actions-runner`; the engine checkout is
+`/mnt/storage/fly-chromium`. It runs as the owner's user through
+`fly-chromium-runner.service`, with `FLY_ENGINE_ROOT` set by that service.
+User lingering was already enabled, so the service can start without an
+interactive login. The machine must be powered on and connected to receive jobs.
+
+Manage it locally:
+
+```sh
+systemctl --user status fly-chromium-runner.service
+systemctl --user restart fly-chromium-runner.service
+systemctl --user stop fly-chromium-runner.service
+journalctl --user -u fly-chromium-runner.service -n 50 --no-pager
+```
+
+The user service unit is at
+`~/.config/systemd/user/fly-chromium-runner.service`. To disable automatic
+startup, run `systemctl --user disable --now fly-chromium-runner.service`.
+Runner status and registration are visible in the repository's
+[Actions runner settings](https://github.com/Arzuparreta/fly-browser/settings/actions/runners).
+Release jobs use it; ordinary PR workflows continue on GitHub-hosted runners.
+
 Prepare the pinned checkout, dependencies, hooks, upstream control build and
 full native overlay using [Chromium development](./chromium/build.md). The release
 job refreshes the managed overlay from the release commit, verifies its pins,
