@@ -303,8 +303,8 @@ FlyWindowController::FlyWindowController()
   auto command = [this](std::string action) {
     return base::BindRepeating(
         [](base::WeakPtr<FlyWindowController> window, std::string action) {
-          if (window && window->selected_ && !window->closing_)
-            InvokeNativeCommand(window->selected_, action);
+          if (window && !window->closing_)
+            window->RunFromEmptyWorkspace(std::move(action));
         },
         weak_factory_.GetWeakPtr(), std::move(action));
   };
@@ -370,6 +370,8 @@ FlyWindowController::FlyWindowController()
   // .nav-history-group: one pill, each half with its own border.
   back->SetPillHalf(FlyButton::PillHalf::kLeft);
   forward->SetPillHalf(FlyButton::PillHalf::kRight);
+  back->SetPillPartner(forward);
+  forward->SetPillPartner(back);
   for (FlyButton* button : {new_tab_button_.get(), back, forward}) {
     button->SetOutlined(true);
     button->SetIconTone(FlyButton::IconTone::kText);
@@ -418,13 +420,14 @@ FlyWindowController::FlyWindowController()
   preferences_button_ = sidebar->AddChildView(MakeFlyIconButton(
       base::BindRepeating(
           [](base::WeakPtr<FlyWindowController> window) {
-            if (window && window->selected_) {
-              InvokeNativeCommand(window->selected_, "toggle-help");
+            if (window) {
+              window->RunCommand(window->selected_, "toggle-help");
               window->keyboard_editor_->ShowAppearance(true);
             }
-          }, weak_factory_.GetWeakPtr()),
+          },
+          weak_factory_.GetWeakPtr()),
       vector_icons::kSettingsIcon, u"Settings", 28));
-  preferences_button_->SetEnabled(false);
+  preferences_button_->SetEnabled(true);
   for (FlyButton* button : {sidebar_pin_button_.get(), split,
                             reader_button_.get(), search, extensions,
                             preferences_button_.get()}) {
@@ -588,8 +591,20 @@ FlyWindowController::FlyWindowController()
       base::BindRepeating(
           [](base::WeakPtr<FlyWindowController> window,
              std::string_view action) {
-            if (!window || !window->selected_ || window->closing_)
+            if (!window || window->closing_)
               return false;
+            if (!window->selected_)
+              return action == "spawn-tab" || action == "toggle-help" ||
+                     action == "open-keyboard-settings" ||
+                     action == "toggle-address" ||
+                     action == "toggle-downloads" ||
+                     action == "open-extension-actions" ||
+                     action == "extensions-open-settings" ||
+                     action == "open-diagnostics" ||
+                     action == "toggle-bookmarks" ||
+                     action == "toggle-dashboard" ||
+                     action == "new-workspace" || action == "toggle-theme" ||
+                     action == "toggle-sidebar-pin" || action == "toggle-clock";
             return action == "trigger-hints" || action == "focus-sidebar" ||
                    action == "new-workspace" || action == "next-workspace" ||
                    action == "previous-workspace" ||
@@ -602,9 +617,10 @@ FlyWindowController::FlyWindowController()
       base::BindRepeating(
           [](base::WeakPtr<FlyWindowController> window,
              content::WebContents* source, std::string action) {
-            if (!window || !window->selected_ ||
-                window->selected_->GetTabStripModel()->GetActiveWebContents() !=
-                    source)
+            if (!window || window->closing_ ||
+                (window->selected_ ? window->selected_->GetTabStripModel()
+                                         ->GetActiveWebContents()
+                                   : nullptr) != source)
               return;
             if (action.starts_with("terminal:")) {
               OpenTerminalWithCommand(action.substr(9));
@@ -614,7 +630,7 @@ FlyWindowController::FlyWindowController()
             if (action.starts_with("extension"))
               window->ChooseExtensionAction(source, std::move(action));
             else
-              InvokeNativeCommand(window->selected_, std::move(action));
+              window->RunFromEmptyWorkspace(std::move(action));
           },
           weak_factory_.GetWeakPtr()));
   address_picker_ = std::make_unique<CommandPalette>(
@@ -1145,11 +1161,15 @@ void FlyWindowController::ToggleAddress(BrowserWindowInterface* browser) {
   bookmark_picker_->Cancel();
   CancelHistory();
   keyboard_editor_->Cancel();
-  auto* contents = browser->GetTabStripModel()->GetActiveWebContents();
-  if (!contents)
+  auto* contents =
+      browser ? browser->GetTabStripModel()->GetActiveWebContents() : nullptr;
+  if (contents && contents->IsLoading() &&
+      IsFlyNewTabPage(contents->GetVisibleURL())) {
+    RequestNativeNewTabSearch(browser);
     return;
+  }
   const auto config = commands_.Read().value_or(DefaultKeyboardConfig());
-  const auto url = contents->GetVisibleURL();
+  const auto url = contents ? contents->GetVisibleURL() : GURL(kFlyNewTabURL);
   address_picker_->ToggleQuery(
       contents,
       base::BindRepeating(
@@ -1216,8 +1236,9 @@ std::vector<PaletteEntry> FlyWindowController::AddressEntries(
 }
 void FlyWindowController::ExecuteAddress(content::WebContents* source,
                                          std::string action) {
-  if (closing_ || !selected_ || !source ||
-      selected_->GetTabStripModel()->GetActiveWebContents() != source)
+  if (closing_ ||
+      (selected_ ? selected_->GetTabStripModel()->GetActiveWebContents()
+                 : nullptr) != source)
     return;
   const auto choice = address_choices_.find(action);
   if (choice == address_choices_.end())
@@ -1248,6 +1269,10 @@ void FlyWindowController::ExecuteAddress(content::WebContents* source,
                  .ResolveNavigation(payload);
   if (!target || !target->is_valid())
     return;
+  if (!selected_) {
+    OpenInNewTab(*target);
+    return;
+  }
   NavigateParams params(selected_, *target, ui::PAGE_TRANSITION_TYPED);
   params.disposition = WindowOpenDisposition::CURRENT_TAB;
   params.window_action = NavigateParams::WindowAction::kShowWindow;
@@ -1339,6 +1364,10 @@ void FlyWindowController::OnBookmarksChanged() {
 }
 void FlyWindowController::OpenBookmark(content::WebContents* source,
                                       std::string url) {
+  if (!closing_ && !selected_ && !source && bookmarks_->Contains(url)) {
+    OpenInNewTab(GURL(url));
+    return;
+  }
   if (closing_ || !selected_ ||
       selected_->GetTabStripModel()->GetActiveWebContents() != source ||
       !bookmark_urls_.contains(url))
@@ -1378,8 +1407,9 @@ void FlyWindowController::OpenBookmark(content::WebContents* source,
 }
 void FlyWindowController::RemoveBookmark(content::WebContents* source,
                                         std::string url) {
-  if (!closing_ && selected_ &&
-      selected_->GetTabStripModel()->GetActiveWebContents() == source) {
+  if (!closing_ &&
+      (selected_ ? selected_->GetTabStripModel()->GetActiveWebContents()
+                 : nullptr) == source) {
     if (bookmarks_->Contains(url))
       bookmarks_->Remove(url);
     else if (bookmark_urls_.contains(url))
@@ -2192,9 +2222,24 @@ void FlyWindowController::Select(BrowserWindowInterface* browser, bool focus) {
     next.widget->OnNativeWidgetActivationChanged(desktop_->IsActive());
     welcome_keep_alive_.reset();
     UpdateWelcome();
+    if (!pending_shell_url_.empty()) {
+      const GURL url(std::exchange(pending_shell_url_, ""));
+      pending_empty_action_.clear();
+      base::SingleThreadTaskRunner::GetCurrentDefault()->PostTask(
+          FROM_HERE,
+          base::BindOnce(
+              [](base::WeakPtr<BrowserWindowInterface> browser, GURL url) {
+                if (!browser)
+                  return;
+                NavigateParams params(browser.get(), url,
+                                      ui::PAGE_TRANSITION_TYPED);
+                params.disposition = WindowOpenDisposition::CURRENT_TAB;
+                Navigate(&params);
+              },
+              browser->GetWeakPtr(), url));
+    }
     if (!pending_empty_action_.empty()) {
-      // The empty workspace view's Bookmarks or Command Centre, once the
-      // workspace's new tab exists.
+      // A new tab requested from the empty desktop opens its search field.
       base::SingleThreadTaskRunner::GetCurrentDefault()->PostTask(
           FROM_HERE,
           base::BindOnce(
@@ -3107,6 +3152,8 @@ void FlyWindowController::CreateTab() {
     OpenNativeBlankTab(selected_);
     return;
   }
+  if (pending_empty_action_.empty())
+    pending_empty_action_ = "toggle-address";
   const auto catalog = workspaces_.Read();
   if (!catalog)
     return;
@@ -3218,7 +3265,7 @@ void FlyWindowController::OnBrowserDidClose(BrowserWindowInterface* browser) {
     tab_sidebar_->SetBrowser(nullptr);
     status_bar_->SetBrowser(nullptr, u"");
     selected_ = nullptr;
-    preferences_button_->SetEnabled(false);
+    preferences_button_->SetEnabled(true);
     if (it->second.widget) {
       it->second.host->SetVisible(false);
       it->second.widget->Hide();
@@ -3429,8 +3476,32 @@ void FlyWindowController::OnWidgetActivationChanged(views::Widget* widget,
 namespace fly {
 bool FlyWindowController::RunCommand(BrowserWindowInterface* browser,
                                      std::string_view action) {
-  if (!entries_.contains(browser) || closing_)
+  if (closing_ || (browser && !entries_.contains(browser)))
     return false;
+  const bool shell_action =
+      action == "toggle-help" || action == "open-keyboard-settings" ||
+      action == "toggle-palette" || action == "toggle-bookmarks" ||
+      action == "toggle-address" || action == "toggle-downloads" ||
+      action == "open-extension-actions" || action == "open-diagnostics" ||
+      action == "toggle-dashboard" || action == "new-workspace" ||
+      action == "focus-sidebar" || action == "toggle-theme" ||
+      action == "toggle-zen-mode" || action == "toggle-sidebar-pin" ||
+      action == "toggle-window-controls" || action == "toggle-status-bar" ||
+      action == "cycle-clock-format" || action == "toggle-clock";
+  if (!browser && !shell_action)
+    return false;
+  // All pickers share the desktop keyboard owner. Opening a different one
+  // dismisses the previous one, while invoking the same action still toggles.
+  for (auto [picker, command] :
+       {std::pair{palette_.get(), "toggle-palette"},
+        {address_picker_.get(), "toggle-address"},
+        {history_picker_.get(), "toggle-history"},
+        {bookmark_picker_.get(), "toggle-bookmarks"},
+        {downloads_picker_.get(), "toggle-downloads"},
+        {extensions_picker_.get(), "open-extension-actions"}}) {
+    if (action != command)
+      picker->Cancel();
+  }
   if (action == "toggle-history") {
     ToggleHistory(browser);
     return true;
@@ -3439,7 +3510,19 @@ bool FlyWindowController::RunCommand(BrowserWindowInterface* browser,
     ToggleAddress(browser);
     return true;
   }
-  if (RunProductAction(browser, action))
+  if (action == "toggle-downloads") {
+    ToggleDownloads(browser);
+    return true;
+  }
+  if (action == "open-extension-actions") {
+    ToggleExtensionActions(browser);
+    return true;
+  }
+  if (action == "open-diagnostics") {
+    ShowDiagnostics();
+    return true;
+  }
+  if (browser && RunProductAction(browser, action))
     return true;
   if (action == "move-tab-to-workspace")
     return ShowTabMovePicker(
@@ -3536,9 +3619,9 @@ bool FlyWindowController::RunCommand(BrowserWindowInterface* browser,
     keyboard_editor_->Cancel();
     const auto config = commands_.Read().value_or(DefaultKeyboardConfig());
     bookmark_picker_->ToggleItems(
-        browser->GetTabStripModel()->GetActiveWebContents(), BookmarkEntries(),
-        config.shortcuts.at("toggle-bookmarks"),
-        u"Search bookmarks and frequent sites", bookmarks_->CanEdit());
+        browser ? browser->GetTabStripModel()->GetActiveWebContents() : nullptr,
+        BookmarkEntries(), config.shortcuts.at("toggle-bookmarks"),
+        u"Search bookmarks and frequent sites", bookmarks_->CanEdit(), true);
     LoadHistory(HistorySurface::kBookmarks);
     return true;
   }
@@ -3556,9 +3639,9 @@ bool FlyWindowController::RunCommand(BrowserWindowInterface* browser,
     for (auto& entry : ExtensionCommandEntries(browser))
       items.push_back(std::move(entry));
     palette_->ToggleItems(
-        browser->GetTabStripModel()->GetActiveWebContents(), std::move(items),
-        config.shortcuts.at("toggle-palette"),
-        u"Search commands, shortcuts, or type shell utility...", false);
+        browser ? browser->GetTabStripModel()->GetActiveWebContents() : nullptr,
+        std::move(items), config.shortcuts.at("toggle-palette"),
+        u"Search commands, shortcuts, or type shell utility...", false, true);
     return true;
   }
   if (action == "toggle-private-mode") {
@@ -3572,7 +3655,8 @@ bool FlyWindowController::RunCommand(BrowserWindowInterface* browser,
     bookmark_picker_->Cancel();
     CancelHistory();
     keyboard_editor_->Cancel();
-    hints_->Toggle(browser->GetTabStripModel()->GetActiveWebContents());
+    hints_->Toggle(browser ? browser->GetTabStripModel()->GetActiveWebContents()
+                           : nullptr);
     return true;
   }
   if (action == "toggle-theme")
@@ -3603,9 +3687,12 @@ bool FlyWindowController::RunCommand(BrowserWindowInterface* browser,
     tab_move_picker_->Cancel();
     bookmark_picker_->Cancel();
     CancelHistory();
-    keyboard_editor_->SetPrivateMode(browser->GetProfile()->IsOffTheRecord());
+    keyboard_editor_->SetPrivateMode(browser &&
+                                     browser->GetProfile()->IsOffTheRecord());
     if (action == "toggle-help" || !keyboard_editor_->active())
-      keyboard_editor_->Toggle(browser->GetTabStripModel()->GetActiveWebContents());
+      keyboard_editor_->Toggle(
+          browser ? browser->GetTabStripModel()->GetActiveWebContents()
+                  : nullptr);
     RefreshDesktopIntegration();
     if (action == "open-keyboard-settings")
       keyboard_editor_->ShowKeyboard();
@@ -3706,6 +3793,15 @@ void FlyWindowController::OnKeyEvent(ui::KeyEvent* event) {
     return;
   if (diagnostics_hub_ && diagnostics_hub_->active()) {
     if (diagnostics_hub_->HandleOverlayKey(*event)) {
+      event->SetHandled();
+      event->StopPropagation();
+    }
+    return;
+  }
+  for (auto* picker : {downloads_picker_.get(), extensions_picker_.get()}) {
+    if (!picker->active())
+      continue;
+    if (picker->HandleOverlayKey(*event)) {
       event->SetHandled();
       event->StopPropagation();
     }
@@ -3818,7 +3914,7 @@ void FlyWindowController::OnKeyEvent(ui::KeyEvent* event) {
                                       ? (index + 1) % count
                                       : (index + count - 1) % count]
                           .id);
-      } else {
+      } else if (!RunCommand(nullptr, key.action)) {
         status_->SetText(
             base::UTF8ToUTF16(ActionLabel(key.action) + ": unavailable"));
       }
@@ -3935,10 +4031,9 @@ void FlyWindowController::ToggleDownloads(BrowserWindowInterface* browser) {
   keyboard_editor_->Cancel();
   const auto config = commands_.Read().value_or(DefaultKeyboardConfig());
   downloads_picker_->ToggleItems(
-      browser->GetTabStripModel()->GetActiveWebContents(),
+      browser ? browser->GetTabStripModel()->GetActiveWebContents() : nullptr,
       DownloadEntries(WorkspaceProfiles()),
-      config.shortcuts.at("toggle-downloads"), u"Search downloads", true,
-      true);
+      config.shortcuts.at("toggle-downloads"), u"Search downloads", true, true);
 }
 void FlyWindowController::ShowDiagnostics() {
   if (closing_ || !diagnostics_hub_)
@@ -4045,8 +4140,13 @@ void FlyWindowController::MaybeShowWhatsNew() {
                                            weak_factory_.GetWeakPtr()));
 }
 void FlyWindowController::OpenInNewTab(GURL url) {
-  if (closing_ || !selected_)
+  if (closing_)
     return;
+  if (!selected_) {
+    pending_shell_url_ = url.spec();
+    CreateTab();
+    return;
+  }
   NavigateParams params(selected_, url, ui::PAGE_TRANSITION_AUTO_TOPLEVEL);
   params.disposition = WindowOpenDisposition::NEW_FOREGROUND_TAB;
   Navigate(&params);
@@ -4295,17 +4395,17 @@ void FlyWindowController::ToggleExtensionActions(
   keyboard_editor_->Cancel();
   const auto config = commands_.Read().value_or(DefaultKeyboardConfig());
   extensions_picker_->ToggleItems(
-      browser->GetTabStripModel()->GetActiveWebContents(),
-      extensions_->ActionEntries(browser->GetProfile()),
+      browser ? browser->GetTabStripModel()->GetActiveWebContents() : nullptr,
+      extensions_->ActionEntries(browser ? browser->GetProfile() : nullptr),
       config.shortcuts.at("open-extension-actions"), u"Search extensions",
       false, true);
 }
 void FlyWindowController::ChooseExtensionAction(content::WebContents*,
                                                 std::string action) {
-  if (closing_ || !selected_)
+  if (closing_)
     return;
   if (action == "extensions-settings" || action == "extensions-open-settings") {
-    InvokeNativeCommand(selected_, "toggle-help");
+    RunCommand(selected_, "toggle-help");
     keyboard_editor_->ShowExtensions();
     return;
   }
@@ -4326,6 +4426,8 @@ void FlyWindowController::ChooseExtensionAction(content::WebContents*,
                           : "https://chromewebstore.google.com/"));
     return;
   }
+  if (!selected_)
+    return;
   const std::string id = action.substr(std::string_view("extension:").size());
   views::View* anchor = status_bar_;
   if (status_bar_ && status_bar_->GetVisible()) {
@@ -4602,8 +4704,8 @@ void FlyWindowController::UpdateWelcome() {
               run("toggle-dashboard")}});
 }
 
-// Actions of the empty workspace view. The dashboard needs no page; the others
-// open the workspace with a new tab first.
+// Shell commands do not create placeholder tabs. Only a browsing action needs
+// to reopen the workspace's native browser.
 void FlyWindowController::RunFromEmptyWorkspace(std::string action) {
   if (closing_)
     return;
@@ -4615,9 +4717,12 @@ void FlyWindowController::RunFromEmptyWorkspace(std::string action) {
     ToggleWorkspacePicker();
     return;
   }
-  if (action != "spawn-tab")
-    pending_empty_action_ = action;
-  CreateTab();
+  if (RunCommand(nullptr, action))
+    return;
+  if (action == "spawn-tab") {
+    pending_empty_action_ = "toggle-address";
+    CreateTab();
+  }
 }
 
 void FlyWindowController::choose_workspace_for_testing(std::string action) {

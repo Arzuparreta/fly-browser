@@ -393,9 +393,9 @@ void CommandPalette::UpdateItems(std::vector<PaletteEntry> items, bool removable
   for (size_t i = 0; i < filtered_.size(); ++i) {
     if (filtered_[i].action == selected && buttons_[i]->GetEnabled()) {
       if (selected_ >= 0)
-        buttons_[selected_]->SetIsDefault(false);
+        buttons_[selected_]->SetSelected(false);
       selected_ = static_cast<int>(i);
-      buttons_[i]->SetIsDefault(true);
+      buttons_[i]->SetSelected(true);
       break;
     }
   }
@@ -410,7 +410,7 @@ void CommandPalette::ToggleQuery(content::WebContents* contents,
     return;
   }
   ToggleItems(contents, {}, std::move(close_bindings), std::move(placeholder),
-              false);
+              false, true);
   if (!active())
     return;
   query_provider_ = std::move(provider);
@@ -594,12 +594,12 @@ void CommandPalette::Select(int direction) {
   if (buttons_.empty())
     return;
   if (selected_ >= 0)
-    buttons_[selected_]->SetIsDefault(false);
+    buttons_[selected_]->SetSelected(false);
   const int count = static_cast<int>(buttons_.size());
   for (int i = 0; i < count; ++i) {
     selected_ = (selected_ + direction + count) % count;
     if (buttons_[selected_]->GetEnabled()) {
-      buttons_[selected_]->SetIsDefault(true);
+      buttons_[selected_]->SetSelected(true);
       buttons_[selected_]->ScrollViewToVisible();
       UpdateInspector();
       return;
@@ -649,10 +649,10 @@ bool CommandPalette::HandleOverlayKey(const ui::KeyEvent& event) {
   if (remove_ && (event.key_code() == ui::VKEY_NEXT ||
                   event.key_code() == ui::VKEY_PRIOR)) {
     if (selected_ >= 0) {
-      buttons_[selected_]->SetIsDefault(false);
+      buttons_[selected_]->SetSelected(false);
       selected_ = std::clamp(selected_ + (event.key_code() == ui::VKEY_NEXT ? 5 : -5),
                              0, static_cast<int>(buttons_.size()) - 1);
-      buttons_[selected_]->SetIsDefault(true);
+      buttons_[selected_]->SetSelected(true);
       buttons_[selected_]->ScrollViewToVisible();
     }
     return true;
@@ -674,7 +674,7 @@ void CommandPalette::Remove(std::string action) {
                                weak_factory_.GetWeakPtr(), std::move(action)));
 }
 void CommandPalette::RemoveAfterEvent(std::string action) {
-  if (active() && !cancelled_ && removable_ && web_contents() &&
+  if (active() && !cancelled_ && removable_ && (web_contents() || empty_source_) &&
       available_.Run(action))
     remove_.Run(web_contents(), std::move(action));
 }
@@ -907,9 +907,9 @@ void CommandPalette::Hover(size_t index) {
   if (!buttons_[index]->GetEnabled())
     return;
   if (selected_ >= 0)
-    buttons_[selected_]->SetIsDefault(false);
+    buttons_[selected_]->SetSelected(false);
   selected_ = static_cast<int>(index);
-  buttons_[selected_]->SetIsDefault(true);
+  buttons_[selected_]->SetSelected(true);
   UpdateInspector();
 }
 

@@ -124,6 +124,8 @@ class FlyWindowController : public views::WidgetDelegate,
   FlyButton* preferences_button_for_testing() { return preferences_button_; }
   BrowserWindowInterface* selected_browser_for_testing() { return selected_; }
   CommandPalette& palette() { return *palette_; }
+  CommandPalette& extensions_picker_for_testing() { return *extensions_picker_; }
+  CommandPalette& downloads_picker_for_testing() { return *downloads_picker_; }
   views::View* window_controls_for_testing() { return window_controls_; }
   views::ImageButton* window_control_for_testing(std::string_view action) const;
   KeyboardEditor& keyboard_editor() { return *keyboard_editor_; }
@@ -474,6 +476,7 @@ class FlyWindowController : public views::WidgetDelegate,
   std::unique_ptr<ScopedProfileKeepAlive> welcome_keep_alive_;
   // Run on the workspace's new tab once it opens from the empty view.
   std::string pending_empty_action_;
+  std::string pending_shell_url_;
   raw_ptr<views::Label> status_ = nullptr;
   raw_ptr<StatusBar> status_bar_ = nullptr;
   raw_ptr<DownloadShelf> download_shelf_ = nullptr;

@@ -227,16 +227,23 @@ class NewTabHandler : public content::WebUIMessageHandler,
     colours.Set("--border", Hex(colors.border));
     colours.Set("--dim", Hex(colors.dim));
     colours.Set("--link", Hex(colors.link));
+    // Read the committed preference, independent of observer callback ordering.
+    const double scale = PreferencesService(*g_browser_process->local_state())
+                                     .ReadString("interface_scale")
+                                     .value_or("normal") == "large"
+                             ? 1.25
+                             : 1.0;
     base::DictValue data;
     if (auto* window = FlyWindowController::GetIfCreated()) {
       data = window->NewTabLists(OffTheRecord(), history_entries_);
-      data.Set("sidebarOverhang",
-               window->preferences().ReadSidebarAutoCollapse().value_or(false)
-                   ? FlyScaled(kSidebarWidth) - FlyScaled(kSidebarRailWidth)
-                   : 0);
+      data.Set(
+          "sidebarOverhang",
+          window->preferences().ReadSidebarAutoCollapse().value_or(false)
+              ? static_cast<int>((kSidebarWidth - kSidebarRailWidth) * scale)
+              : 0);
     }
     data.Set("light", !colors.dark);
-    data.Set("scale", GetFlyInterfaceScale());
+    data.Set("scale", scale);
     data.Set("colours", std::move(colours));
     CallJavascriptFunction("updateFlyNewTab", base::Value(std::move(data)));
   }

@@ -6,7 +6,9 @@ html { zoom:var(--scale); }
 /* Native geometry is in DIPs; divide by root zoom so the reserved space
    matches the scaled sidebar. Keep it while collapsed to avoid hover reflow.
    Very narrow windows retain at least a 320 DIP canvas to show the page. */
-body { padding-left:calc(clamp(0px,calc(100vw - 320px),var(--sidebar-overhang,0px)) / var(--scale)); }
+/* Clamp in the zoomed page's coordinate system: the 320px content budget
+   and native overhang are both DIPs, while 100vw is already divided by zoom. */
+body { padding-left:clamp(0px,calc(100vw - 320px / var(--scale)),calc(var(--sidebar-overhang,0px) / var(--scale))); }
 body { margin:0; height:calc(100dvh / var(--scale)); display:grid; grid-template-rows:minmax(0,1fr) auto; container-type:size; background:radial-gradient(var(--border) .7px,transparent .7px) 0 0 / 16px 16px var(--bg-main); color:var(--text); font:16px 'IBM Plex Sans',sans-serif; }
 body.light { color-scheme:light; background-image:url('identity/paper-grain.png'),radial-gradient(var(--border) .7px,transparent .7px); background-size:128px 128px,16px 16px; }
 main { width:100%; height:100%; max-width:calc(1500px / var(--scale)); max-height:calc(1000px / var(--scale)); min-height:0; margin:auto; padding:clamp(8px,7cqh,56px) clamp(12px,5cqw,96px); display:grid; grid-template-columns:minmax(0,1fr) minmax(0,1fr); grid-template-rows:auto minmax(0,1fr); grid-template-areas:'time specimen' 'navigation specimen'; gap:clamp(8px,3cqh,28px) clamp(12px,4cqw,48px); }

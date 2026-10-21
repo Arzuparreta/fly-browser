@@ -13,6 +13,7 @@
 #include "base/memory/weak_ptr.h"
 #include "content/public/browser/web_contents_observer.h"
 #include "fly/commands/palette_catalog.h"
+#include "fly/ui/fly_theme.h"
 #include "ui/views/controls/textfield/textfield_controller.h"
 #include "ui/views/widget/widget_observer.h"
 
@@ -125,7 +126,7 @@ class CommandPalette : public views::TextfieldController,
   std::unique_ptr<views::Widget> overlay_;
   raw_ptr<views::Textfield> search_ = nullptr;
   raw_ptr<views::View> results_ = nullptr;
-  std::vector<raw_ptr<views::MdTextButton>> buttons_;
+  std::vector<raw_ptr<FlyButton>> buttons_;
   // The action of each row in `buttons_`.
   std::vector<std::string> button_actions_;
   base::RepeatingCallback<bool(std::string_view)> draggable_;
@@ -134,7 +135,7 @@ class CommandPalette : public views::TextfieldController,
   int RowAt(const gfx::Point& screen) const;
   void DragOver(gfx::Point screen);
   void Drop(std::string source, gfx::Point screen);
-  std::vector<raw_ptr<views::MdTextButton>> remove_buttons_;
+  std::vector<raw_ptr<FlyButton>> remove_buttons_;
   std::vector<std::string> palette_bindings_;
   std::vector<PaletteEntry> catalog_;
   std::vector<PaletteEntry> filtered_;
@@ -150,7 +151,7 @@ class CommandPalette : public views::TextfieldController,
   // Command Centre.
   raw_ptr<views::Label> count_ = nullptr;
   raw_ptr<views::View> inspector_ = nullptr;
-  std::vector<raw_ptr<views::MdTextButton>> chips_;
+  std::vector<raw_ptr<FlyButton>> chips_;
   std::string category_ = "All";
   std::vector<std::string> recent_;
   std::vector<std::string> groups_;

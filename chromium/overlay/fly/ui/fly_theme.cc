@@ -341,6 +341,8 @@ void FlyButton::OnThemeChanged() {
 void FlyButton::StateChanged(ButtonState old_state) {
   views::MdTextButton::StateChanged(old_state);
   UpdateColors();
+  if (pill_partner_)
+    pill_partner_->SchedulePaint();
 }
 void FlyButton::SetText(std::u16string_view text) {
   views::MdTextButton::SetText(text);
@@ -429,6 +431,13 @@ void FlyButton::OnPaintBackground(gfx::Canvas* canvas) {
                        : colors.border);
     bounds.Inset(0.5f);
     canvas->DrawPath(shape(bounds), flags);
+    if (pill_half_ == PillHalf::kRight && pill_partner_ &&
+        (pill_partner_->GetState() == STATE_HOVERED ||
+         pill_partner_->GetState() == STATE_PRESSED || pill_partner_->HasFocus())) {
+      flags.setColor(colors.accent);
+      canvas->DrawLine(gfx::PointF(bounds.x(), bounds.y()),
+                       gfx::PointF(bounds.x(), bounds.bottom()), flags);
+    }
   }
 }
 BEGIN_METADATA(FlyButton)
