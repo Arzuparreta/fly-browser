@@ -5053,9 +5053,11 @@ IN_PROC_BROWSER_TEST_F(
   auto* private_browser = window.selected_browser_for_testing();
   ASSERT_TRUE(private_browser->GetProfile()->IsOffTheRecord());
   auto* page = Active(private_browser);
-  ASSERT_TRUE(InvokeNativeCommand(private_browser, "toggle-address"));
+  ASSERT_TRUE(content::WaitForLoadStop(page));
   auto& address = window.address_picker();
-  ASSERT_TRUE(address.active());
+  if (!address.active())
+    ASSERT_TRUE(InvokeNativeCommand(private_browser, "toggle-address"));
+  ASSERT_TRUE(base::test::RunUntil([&] { return address.active(); }));
   const auto input = base::UTF8ToUTF16(url.spec());
   address.search_for_testing()->SetText(input);
   address.ContentsChanged(address.search_for_testing(), input);
