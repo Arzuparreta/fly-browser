@@ -37,11 +37,13 @@ class WelcomeView : public views::View {
   void SetLogo(const gfx::ImageSkia& logo);
   std::u16string workspace_for_testing() const;
   views::View* card_for_testing(size_t index);
+  void OnPaintBackground(gfx::Canvas* canvas) override;
 
  private:
   raw_ptr<views::ImageView> logo_ = nullptr;
   raw_ptr<FlyLabel> workspace_ = nullptr;
   raw_ptr<views::View> grid_ = nullptr;
+  raw_ptr<views::View> card_ = nullptr;
 };
 }  // namespace fly
 

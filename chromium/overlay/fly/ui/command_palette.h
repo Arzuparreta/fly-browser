@@ -76,6 +76,10 @@ class CommandPalette : public views::TextfieldController,
   void RefreshQuery();
   // Command Centre: the last commands run from it, newest first.
   void SetRecent(std::vector<std::string> ids) { recent_ = std::move(ids); }
+  // Workspace Dashboard: rows whose action `draggable` accepts can be dragged
+  // onto another row; `drop` gets the source and target actions.
+  void SetDragDrop(base::RepeatingCallback<bool(std::string_view)> draggable,
+                   base::RepeatingCallback<void(std::string, std::string)> drop);
   void SetCategoryForTesting(std::string category);
   std::u16string inspector_title_for_testing() const;
   std::u16string count_for_testing() const;
@@ -122,6 +126,14 @@ class CommandPalette : public views::TextfieldController,
   raw_ptr<views::Textfield> search_ = nullptr;
   raw_ptr<views::View> results_ = nullptr;
   std::vector<raw_ptr<views::MdTextButton>> buttons_;
+  // The action of each row in `buttons_`.
+  std::vector<std::string> button_actions_;
+  base::RepeatingCallback<bool(std::string_view)> draggable_;
+  base::RepeatingCallback<void(std::string, std::string)> drop_;
+  int drop_target_ = -1;
+  int RowAt(const gfx::Point& screen) const;
+  void DragOver(gfx::Point screen);
+  void Drop(std::string source, gfx::Point screen);
   std::vector<raw_ptr<views::MdTextButton>> remove_buttons_;
   std::vector<std::string> palette_bindings_;
   std::vector<PaletteEntry> catalog_;

@@ -118,8 +118,24 @@ follows Electron's single panel: the collapsed rail is the panel's left 36px
 column, the edge slides 224px while the panel slides back on the compositor
 (220 ms, `cubic-bezier(0.2, 0, 0, 1)`), the shadow and the state-specific
 details crossfade, rows are 40px apart by 4px with the favicon on the rail's
-centre line, and the engraving and light-mode paper grain are Electron's. Electron files
-the native build runs unchanged are copied by
+centre line, and the engraving and light-mode paper grain are Electron's.
+The sidebar follows Electron's pointer rules: it opens when the pointer
+enters the visible panel (mid-slide included), closes when it enters the
+page, and stays as it is when the pointer leaves the window. Rows close with
+a middle click, and the tab selection numbers show while their modifier is
+held. New tabs and the start page show Fly's new tab page
+(`fly/ui/new_tab_ui.{h,cc}`, patch 0030 maps `chrome://newtab` to it), the
+empty workspace view has Electron's dotted canvas, the download shelf
+(`fly/ui/download_shelf.{h,cc}`) appears when a download starts, the status
+bar shows messages in its link area and opens the zoom controls, and popup
+windows are transient for Fly's window (patch 0031) so tiling window managers
+float them as Electron's child windows. The new tab page queries native history
+independently of the address/history/bookmark pickers, follows live bookmark,
+theme, interface size and frequent-site changes, and stops memory sampling when
+Chromium hides or occludes it (including pages first loaded in the background).
+The desktop also hides/restores its selected native view host on
+minimize/restore so Chromium propagates native document visibility. Electron
+files the native build runs unchanged are copied by
 `scripts/chromium/sync-resources.js` (checked by `npm test`).
 
 Linux package: `scripts/chromium/package-linux.py` turns a release build

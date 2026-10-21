@@ -86,11 +86,61 @@ class PickerButton : public FlyButton {
   void SetHoverCallback(base::RepeatingClosure hover) {
     hover_ = std::move(hover);
   }
+  // Rows that can be dragged (dashboard tabs) report the pointer while
+  // dragging and where they were dropped, in screen coordinates.
+  void SetDragCallbacks(base::RepeatingCallback<void(gfx::Point)> dragging,
+                        base::RepeatingCallback<void(gfx::Point)> dropped) {
+    dragging_ = std::move(dragging);
+    dropped_ = std::move(dropped);
+  }
+  bool OnMousePressed(const ui::MouseEvent& event) override {
+    press_point_ = event.location();
+    drag_moved_ = false;
+    return FlyButton::OnMousePressed(event);
+  }
+  bool OnMouseDragged(const ui::MouseEvent& event) override {
+    if (dropped_ && event.IsOnlyLeftMouseButton() &&
+        (drag_moved_ ||
+         views::View::ExceededDragThreshold(event.location() - press_point_))) {
+      drag_moved_ = true;
+      SetState(STATE_PRESSED);
+      dragging_.Run(ScreenPoint(event));
+      return true;
+    }
+    return FlyButton::OnMouseDragged(event);
+  }
+  void OnMouseReleased(const ui::MouseEvent& event) override {
+    if (drag_moved_) {
+      drag_moved_ = false;
+      SetState(STATE_NORMAL);
+      dropped_.Run(ScreenPoint(event));
+      return;
+    }
+    FlyButton::OnMouseReleased(event);
+  }
+  void OnMouseCaptureLost() override {
+    if (drag_moved_) {
+      drag_moved_ = false;
+      dropped_.Run(gfx::Point(-1, -1));
+    }
+    FlyButton::OnMouseCaptureLost();
+  }
   void OnMouseEntered(const ui::MouseEvent& event) override {
     FlyButton::OnMouseEntered(event);
     if (hover_)
       hover_.Run();
   }
+  gfx::Point ScreenPoint(const ui::MouseEvent& event) {
+    gfx::Point point = event.location();
+    views::View::ConvertPointToScreen(this, &point);
+    return point;
+  }
+  base::RepeatingCallback<void(gfx::Point)> dragging_;
+  base::RepeatingCallback<void(gfx::Point)> dropped_;
+  gfx::Point press_point_;
+  bool drag_moved_ = false;
+
+ public:
   void Layout(PassKey) override {
     LayoutSuperclass<FlyButton>(this);
     int right = width() - 10;
@@ -162,6 +212,8 @@ CommandPalette::~CommandPalette() {
   weak_factory_.InvalidateWeakPtrs();
   Observe(nullptr);
   buttons_.clear();
+  button_actions_.clear();
+  drop_target_ = -1;
   remove_buttons_.clear();
   chips_.clear();
   count_ = nullptr;
@@ -414,6 +466,8 @@ void CommandPalette::Refresh() {
                         : base::NumberToString16(count) +
                               (count == 1 ? u" match" : u" matches"));
     buttons_.clear();
+    button_actions_.clear();
+    drop_target_ = -1;
     remove_buttons_.clear();
     results_->RemoveAllChildViews();
     selected_ = -1;
@@ -443,6 +497,7 @@ void CommandPalette::Refresh() {
       button->SetEnabled(entry.action.starts_with("terminal:") ||
                          available_.Run(entry.action));
       button->GetViewAccessibility().SetName(base::UTF8ToUTF16(entry.title));
+      button_actions_.push_back(entry.action);
       buttons_.push_back(button);
     }
     if (buttons_.empty()) {
@@ -459,6 +514,8 @@ void CommandPalette::Refresh() {
   filtered_ = query_provider_ ? query_provider_.Run(search_->GetText())
                               : FilterPalette(catalog_, search_->GetText());
   buttons_.clear();
+  button_actions_.clear();
+  drop_target_ = -1;
   remove_buttons_.clear();
   results_->RemoveAllChildViews();
   selected_ = -1;
@@ -505,6 +562,14 @@ void CommandPalette::Refresh() {
                                             base::UTF8ToUTF16(entry.title));
     }
     button->GetViewAccessibility().SetName(base::UTF8ToUTF16(text));
+    if (drop_ && draggable_ && draggable_.Run(entry.action)) {
+      button->SetDragCallbacks(
+          base::BindRepeating(&CommandPalette::DragOver,
+                              weak_factory_.GetWeakPtr()),
+          base::BindRepeating(&CommandPalette::Drop,
+                              weak_factory_.GetWeakPtr(), entry.action));
+    }
+    button_actions_.push_back(entry.action);
     buttons_.push_back(button);
     if (remove_) {
       auto* remove = row->AddChildView(std::make_unique<FlyButton>(
@@ -643,6 +708,8 @@ void CommandPalette::FinishClose(bool restore_focus, std::string action) {
   empty_source_ = false;
   Observe(nullptr);
   buttons_.clear();
+  button_actions_.clear();
+  drop_target_ = -1;
   remove_buttons_.clear();
   chips_.clear();
   count_ = nullptr;
@@ -785,6 +852,44 @@ void CommandPalette::SetCategory(std::string category) {
   Refresh();
 }
 
+void CommandPalette::SetDragDrop(
+    base::RepeatingCallback<bool(std::string_view)> draggable,
+    base::RepeatingCallback<void(std::string, std::string)> drop) {
+  draggable_ = std::move(draggable);
+  drop_ = std::move(drop);
+}
+int CommandPalette::RowAt(const gfx::Point& screen) const {
+  for (size_t i = 0; i < buttons_.size(); ++i) {
+    // The whole row, its indent and row actions included.
+    const auto* row = buttons_[i]->parent();
+    if (row && row->GetBoundsInScreen().Contains(screen))
+      return static_cast<int>(i);
+  }
+  return -1;
+}
+void CommandPalette::DragOver(gfx::Point screen) {
+  const int target = RowAt(screen);
+  if (target == drop_target_)
+    return;
+  if (drop_target_ >= 0 &&
+      static_cast<size_t>(drop_target_) < buttons_.size())
+    static_cast<FlyButton*>(buttons_[drop_target_].get())->SetSelected(false);
+  drop_target_ = target;
+  if (drop_target_ >= 0)
+    static_cast<FlyButton*>(buttons_[drop_target_].get())->SetSelected(true);
+}
+void CommandPalette::Drop(std::string source, gfx::Point screen) {
+  DragOver(gfx::Point(-1, -1));
+  const int target = RowAt(screen);
+  if (target < 0 || static_cast<size_t>(target) >= button_actions_.size() ||
+      button_actions_[target] == source || !drop_)
+    return;
+  // Run after the dragged row's own event handling has returned; the drop
+  // rebuilds the list.
+  base::SingleThreadTaskRunner::GetCurrentDefault()->PostTask(
+      FROM_HERE, base::BindOnce(drop_, std::move(source),
+                                button_actions_[target]));
+}
 void CommandPalette::SetCategoryForTesting(std::string category) {
   SetCategory(std::move(category));
 }

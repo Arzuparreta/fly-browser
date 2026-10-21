@@ -2,6 +2,7 @@
 // Use of this source code is governed by the GPL-3.0-or-later license in the
 // Fly repository.
 #include "fly/ui/tab_sidebar.h"
+#include "fly/ui/new_tab_ui.h"
 #include "fly/ui/fly_window_controller.h"
 #include "fly/ui/native_commands.h"
 #include "fly/ui/fly_theme.h"
@@ -85,12 +86,11 @@ struct RowState {
 std::u16string RowTitle(std::u16string title) {
   return title.size() > 24 ? title.substr(0, 24) + u"..." : title;
 }
-// .tab-domain: "fly / new tab" for new tabs, else the host or "local page".
+// The row's second line: the host, "local page" without one, and nothing for
+// a new tab (its title says it).
 std::u16string RowDomain(const GURL& url) {
-  if (url.is_empty() || url.IsAboutBlank() ||
-      (url.SchemeIs("chrome") &&
-       (url.host() == "newtab" || url.host() == "new-tab-page")))
-    return u"fly / new tab";
+  if (IsFlyNewTabPage(url))
+    return std::u16string();
   return url.has_host() ? base::UTF8ToUTF16(url.host()) : u"local page";
 }
 
@@ -702,6 +702,59 @@ class SidebarTabMenu : public ui::SimpleMenuModel::Delegate {
   std::unique_ptr<views::MenuRunner> runner_;
 };
 
+// Electron's tab numbers (.tab-favicon-wrapper::after): 15px semibold digits
+// over the favicon with a hairline of the sidebar colour, 1-8 and 9 on the
+// last tab, while the selection modifier is held.
+class TabSidebar::Numbers : public views::View {
+  METADATA_HEADER(Numbers, views::View)
+
+ public:
+  explicit Numbers(TabSidebar* list) : list_(list) {
+    SetCanProcessEventsWithinSubtree(false);
+  }
+  void OnPaint(gfx::Canvas* canvas) override {
+    if (!list_->numbers_visible_)
+      return;
+    const auto& colors = GetFlyColors();
+    const auto& rows = list_->rows_->children();
+    const auto font =
+        FlyFont(FlyFace::kSans, 15, gfx::Font::Weight::SEMIBOLD);
+    for (size_t i = 0; i < rows.size(); ++i) {
+      const bool last = i + 1 == rows.size();
+      if (i >= 8 && !last)
+        continue;
+      const std::u16string digit =
+          i >= 8 ? u"9" : base::NumberToString16(i + 1);
+      const auto* row = rows[i].get();
+      const gfx::Rect wrapper(row->x() + S(5),
+                              row->y() + (row->height() - S(18)) / 2, S(18),
+                              S(18));
+      // -webkit-text-stroke: 3px var(--bg-sidebar), painted under the digit.
+      for (const auto& [dx, dy] : std::initializer_list<std::pair<int, int>>{
+               {-1, -1}, {0, -2}, {1, -1}, {-2, 0}, {2, 0}, {-1, 1}, {0, 2},
+               {1, 1}}) {
+        canvas->DrawStringRectWithFlags(digit, font, colors.bg_sidebar,
+                                        wrapper + gfx::Vector2d(dx, dy),
+                                        gfx::Canvas::TEXT_ALIGN_CENTER);
+      }
+      canvas->DrawStringRectWithFlags(digit, font, colors.text, wrapper,
+                                      gfx::Canvas::TEXT_ALIGN_CENTER);
+    }
+  }
+
+ private:
+  const raw_ptr<TabSidebar> list_;
+};
+BEGIN_METADATA(TabSidebar, Numbers)
+END_METADATA
+
+void TabSidebar::SetNumbersVisible(bool visible) {
+  if (numbers_visible_ == visible)
+    return;
+  numbers_visible_ = visible;
+  numbers_->SchedulePaint();
+}
+
 TabSidebar::TabSidebar(base::RepeatingClosure new_tab)
     : new_tab_(std::move(new_tab)) {
   SetUseDefaultFillLayout(true);
@@ -724,6 +777,9 @@ TabSidebar::TabSidebar(base::RepeatingClosure new_tab)
   rows_->SetPaintToLayer();
   rows_->layer()->SetFillsBoundsOpaquely(false);
   rail_marks_ = contents->AddChildView(std::make_unique<RailMarks>(this));
+  numbers_ = contents->AddChildView(std::make_unique<Numbers>(this));
+  numbers_->SetPaintToLayer();
+  numbers_->layer()->SetFillsBoundsOpaquely(false);
 }
 TabSidebar::~TabSidebar() {
   context_menu_.reset();
@@ -748,8 +804,8 @@ void TabSidebar::OnThemeChanged() {
   RepaintSurfaces();
 }
 void TabSidebar::RepaintSurfaces() {
-  for (views::View* layer :
-       {expanded_surfaces_.get(), rail_surfaces_.get(), rail_marks_.get()})
+  for (views::View* layer : {expanded_surfaces_.get(), rail_surfaces_.get(),
+                             rail_marks_.get(), numbers_.get()})
     layer->SchedulePaint();
 }
 void TabSidebar::SetBrowser(BrowserWindowInterface* browser) {
@@ -806,8 +862,21 @@ void TabSidebar::Refresh() {
                                    contents->GetWeakPtr(), action);
       };
       auto row = std::make_unique<TabRowView>(this);
-      auto* select = row->AddChildView(
-          std::make_unique<FlyTabButton>(callback(RowAction::kSelect)));
+      // A middle click closes the tab, as in other browsers.
+      auto* select = row->AddChildView(std::make_unique<FlyTabButton>(
+          base::BindRepeating(
+              [](base::WeakPtr<TabSidebar> list,
+                 base::WeakPtr<content::WebContents> contents,
+                 const ui::Event& event) {
+                if (list)
+                  list->Invoke(contents,
+                               event.flags() & ui::EF_MIDDLE_MOUSE_BUTTON
+                                   ? RowAction::kClose
+                                   : RowAction::kSelect);
+              },
+              weak_factory_.GetWeakPtr(), contents->GetWeakPtr())));
+      select->SetTriggerableEventFlags(ui::EF_LEFT_MOUSE_BUTTON |
+                                       ui::EF_MIDDLE_MOUSE_BUTTON);
       auto* pin = row->AddChildView(std::make_unique<RowBadge>(
           callback(RowAction::kPin), RowBadge::Kind::kPin));
       auto* close = row->AddChildView(std::make_unique<RowBadge>(

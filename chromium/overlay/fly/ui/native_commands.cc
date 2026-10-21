@@ -2,6 +2,8 @@
 // Use of this source code is governed by the GPL-3.0-or-later license in the
 // Fly repository.
 #include "fly/ui/native_commands.h"
+#include "fly/ui/new_tab_ui.h"
+#include "ui/events/blink/blink_event_util.h"
 #include "fly/bookmarks/bookmark_service.h"
 
 #include <algorithm>
@@ -412,8 +414,9 @@ bool SplitCommand(BrowserWindowInterface* browser, std::string_view action) {
 bool OpenNativeBlankTab(BrowserWindowInterface* browser, int index) {
   if (!browser || !chrome::IsCommandEnabled(browser, IDC_NEW_TAB))
     return false;
-  NavigateParams params(browser, GURL(url::kAboutBlankURL),
-                        ui::PAGE_TRANSITION_TYPED);
+  // Fly's new tab page (Electron showed its own page for blank tabs).
+  NavigateParams params(browser, GURL(kFlyNewTabURL),
+                        ui::PAGE_TRANSITION_AUTO_TOPLEVEL);
   params.disposition = WindowOpenDisposition::NEW_FOREGROUND_TAB;
   params.window_action = NavigateParams::WindowAction::kShowWindow;
   if (index >= 0) {
@@ -457,13 +460,25 @@ content::KeyboardEventProcessingResult RouteNativePageKey(
     const input::NativeWebKeyboardEvent& event,
     bool browser_ui_editable) {
   using Result = content::KeyboardEventProcessingResult;
+  auto* contents = browser->GetTabStripModel()->GetActiveWebContents();
+  auto& window = FlyWindowController::Get();
+  if (contents && (event.GetType() == blink::WebInputEvent::Type::kRawKeyDown ||
+                   event.GetType() == blink::WebInputEvent::Type::kKeyUp)) {
+    PageKeyboardState::CreateForWebContents(contents);
+    window.TrackTabNumbers(
+        event.GetType() == blink::WebInputEvent::Type::kRawKeyDown,
+        static_cast<ui::KeyboardCode>(event.windows_key_code),
+        static_cast<ui::DomCode>(event.dom_code),
+        ui::WebEventModifiersToEventFlags(event.GetModifiers()),
+        event.GetModifiers() & blink::WebInputEvent::kIsAutoRepeat,
+        PageKeyboardState::FromWebContents(contents)->router().mode() ==
+            KeyboardMode::kPassthrough);
+  }
   if (event.GetType() != blink::WebInputEvent::Type::kRawKeyDown) {
     return Result::NOT_HANDLED;
   }
-  auto* contents = browser->GetTabStripModel()->GetActiveWebContents();
   if (!contents)
     return Result::NOT_HANDLED;
-  auto& window = FlyWindowController::Get();
   if (window.hints().HandleKey(contents, event))
     return Result::HANDLED;
   PageKeyboardState::CreateForWebContents(contents);

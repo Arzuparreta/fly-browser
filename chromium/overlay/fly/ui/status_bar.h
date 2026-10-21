@@ -14,12 +14,16 @@
 #include "components/zoom/zoom_controller.h"
 #include "components/zoom/zoom_observer.h"
 #include "content/public/browser/web_contents_observer.h"
+#include "base/timer/timer.h"
 #include "ui/gfx/image/image_skia.h"
 #include "ui/views/view.h"
+#include "ui/views/view_tracker.h"
 #include "url/gurl.h"
 
 class BrowserWindowInterface;
 namespace views {
+class BubbleDialogDelegate;
+class Widget;
 class Label;
 }
 namespace fly {
@@ -40,7 +44,11 @@ class StatusBar : public views::View,
 
  public:
   struct Actions {
-    base::RepeatingClosure zoom;
+    // zoom-in, zoom-out or reset-zoom from the zoom controls.
+    base::RepeatingCallback<void(std::string)> zoom;
+    // A click on the mode badge (Electron: cancel hints, leave or enter
+    // passthrough).
+    base::RepeatingClosure mode;
     base::RepeatingClosure notifications;
     base::RepeatingClosure workspace;
     base::RepeatingClosure clock;
@@ -57,6 +65,11 @@ class StatusBar : public views::View,
                 bool visible);
   void SetClockVisible(bool visible);
   void SetNotificationsEnabled(bool enabled);
+  // Electron's setTargetUrl(text, timeout): a short message in the link
+  // area, replaced by the next hovered link.
+  void ShowMessage(std::u16string text, base::TimeDelta timeout);
+  std::u16string message_for_testing() const { return message_; }
+  bool zoom_controls_open_for_testing() const;
   // Container for per-profile extension action buttons.
   views::View* extensions_container() const { return extensions_; }
   views::Label* mode_label() const;
@@ -81,6 +94,13 @@ class StatusBar : public views::View,
 
  private:
   gfx::ImageSkia paper_grain_;
+  std::u16string message_;
+  base::OneShotTimer message_timer_;
+  base::OneShotTimer zoom_flash_;
+  base::RepeatingCallback<void(std::string)> zoom_action_;
+  std::unique_ptr<views::BubbleDialogDelegate> zoom_delegate_;
+  std::unique_ptr<views::Widget> zoom_widget_;
+  void ToggleZoomControls();
   class TargetObserver;
   void ClearTarget();
   void SelectContents();
@@ -103,6 +123,7 @@ class StatusBar : public views::View,
   std::unique_ptr<TargetObserver> target_observer_;
   base::ScopedObservation<zoom::ZoomController, zoom::ZoomObserver>
       zoom_observation_{this};
+  base::WeakPtrFactory<StatusBar> weak_factory_{this};
 };
 }  // namespace fly
 #endif

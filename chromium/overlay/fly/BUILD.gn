@@ -196,6 +196,7 @@ if (is_linux || is_win) {
       "//testing/gtest",
       "//crypto",
       "//third_party/zlib/google:zip",
+      "//ui/gfx/x",
       "//ui/aura",
       "//ui/base",
       "//ui/events:test_support",
@@ -237,6 +238,9 @@ copy("fonts") {
 group("user_content_resources") {
   deps = [
     ":identity_resources",
+    ":new_tab_fonts",
+    ":new_tab_identity",
+    ":new_tab_page",
     ":reader_resources",
     ":user_content_worker",
   ]
@@ -258,6 +262,40 @@ copy("identity_resources") {
     "resources/identity/paper-grain.png",
   ]
   outputs = [ "$root_out_dir/fly_resources/identity/{{source_file_part}}" ]
+}
+
+# Fly's new tab page (chrome://fly-new-tab), with Electron's fonts and
+# artwork copied by scripts/chromium/sync-resources.js.
+copy("new_tab_page") {
+  sources = [
+    "resources/new_tab/new-tab.css",
+    "resources/new_tab/new-tab.html",
+    "resources/new_tab/new-tab.js",
+  ]
+  outputs = [ "$root_out_dir/fly_resources/new_tab/{{source_file_part}}" ]
+}
+copy("new_tab_fonts") {
+  sources = [
+    "resources/new_tab/fonts/doto-0.woff2",
+    "resources/new_tab/fonts/fonts.css",
+    "resources/new_tab/fonts/plex-mono-0.woff2",
+    "resources/new_tab/fonts/plex-mono-1.woff2",
+    "resources/new_tab/fonts/plex-mono-2.woff2",
+    "resources/new_tab/fonts/plex-sans-0.woff2",
+    "resources/new_tab/fonts/plex-sans-1.woff2",
+    "resources/new_tab/fonts/plex-sans-2.woff2",
+  ]
+  outputs = [ "$root_out_dir/fly_resources/new_tab/fonts/{{source_file_part}}" ]
+}
+copy("new_tab_identity") {
+  sources = [
+    "resources/new_tab/identity/memory-chasis@2x.png",
+    "resources/new_tab/identity/memory-papel@2x.png",
+    "resources/new_tab/identity/paper-grain.png",
+    "resources/new_tab/identity/pixel-32.png",
+  ]
+  outputs =
+      [ "$root_out_dir/fly_resources/new_tab/identity/{{source_file_part}}" ]
 }
 
 copy("user_content_worker") {

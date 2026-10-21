@@ -226,9 +226,14 @@ int FlyScaled(int pixels) {
 }
 gfx::FontList FlyFont(FlyFace face, int size, gfx::Font::Weight weight) {
   size = static_cast<int>(size * g_interface_scale + 0.5f);
-  const char* family = face == FlyFace::kSans   ? "IBM Plex Sans"
-                       : face == FlyFace::kMono ? "IBM Plex Mono"
-                                                : "Doto";
+  if (face == FlyFace::kDisplay) {
+    // The bundled Doto.ttf names its family "Doto Black" (a variable font
+    // whose weights are named instances).
+    return gfx::FontList({"Doto Black", "Doto", "monospace"},
+                         gfx::Font::NORMAL, size, weight);
+  }
+  const char* family =
+      face == FlyFace::kSans ? "IBM Plex Sans" : "IBM Plex Mono";
   return gfx::FontList({family, face == FlyFace::kSans ? "sans" : "monospace"},
                        gfx::Font::NORMAL, size, weight);
 }

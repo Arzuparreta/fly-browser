@@ -27,9 +27,9 @@ A native upstream route alone does not establish Fly UX parity.
 | Action | Status | Implementation and remaining acceptance |
 | --- | --- | --- |
 | `toggle-menu-bar` | partial | Fly settings menu (startup settings, tab suspension, sidebar options, user content folders, downloads, task manager, diagnostics, What's New, updates, preferences, restart); Chromium's app menu is no longer used. |
-| `spawn-tab` | partial | Product blank tabs and native profile/session identity tested; complete all-input-path acceptance remains pending. |
+| `spawn-tab` | partial | New tabs open Fly's new tab page (`chrome://fly-new-tab`, also the start page): clock, date, bookmarks, frequent sites with removal and Fly's memory use, updated every second while shown. Native profile/session identity tested; complete all-input-path acceptance remains pending. |
 | `toggle-address` | partial | Floating native address/search, aliases, bangs, workspace lookup, bookmarks and calculator pass the complete ab4b496 Linux suite. History suggestions, platform path handling and import require further acceptance. |
-| `toggle-dashboard` | partial | Electron's dashboard: every workspace with its tabs (pinned marked), Rename/Delete per workspace, opening a listed tab and Move per tab; New workspace asks for the name. Drag-and-drop of tabs between workspaces is replaced by Move. |
+| `toggle-dashboard` | partial | Electron's dashboard: every workspace with its tabs (pinned marked), Rename/Delete per workspace, opening a listed tab, Move per tab and drag and drop (onto a tab of the same workspace to reorder, onto another workspace to move); New workspace asks for the name; Move remains available as a row action. |
 | `reload-active-tab` | partial | Native command route exists; dedicated full keyboard, mouse and palette acceptance remains pending. |
 | `remove-tab` | partial | Pinned protection, beforeunload, close/reopen and native menu tested; complete all-input-path acceptance remains pending. |
 | `focus-sidebar` | partial | Native panel focus and Escape back to editable page tested; complete accessibility, all-input-path and platform acceptance remains pending. |
@@ -48,7 +48,7 @@ A native upstream route alone does not establish Fly UX parity.
 | `toggle-tab-audio-mute` | partial | Native mute and extension reason reporting tested; full platform acceptance remains pending. |
 | `toggle-global-audio-mute` | partial | Native mute reasons and hidden/private tabs tested; full platform acceptance remains pending. |
 | `toggle-history` | partial | Shared projection of authorized native profile histories, selector, destination navigation and confirmed clearing implemented; new runtime cases, frequent sites, import and platform acceptance remain pending. |
-| `toggle-downloads` | partial | Downloads picker across workspace profiles: open, pause/resume, cancel/clear and the full `chrome://downloads` page. |
+| `toggle-downloads` | partial | Electron's download shelf above the status bar: it appears when a download starts in any workspace (progress, speed, cancel; open, show in folder, dismiss; clear completed; keep for flagged files); the command toggles it, or lists every workspace's downloads when it is empty. |
 | `toggle-status-bar` | partial | Native hover, security/private context and persistence tested; full platform acceptance remains pending. |
 | `toggle-clock` | partial | Native live settings and no tick writes tested on Linux; full platform acceptance remains pending. |
 | `cycle-clock-format` | partial | Native formatting/settings persistence tested; full platform acceptance remains pending. |
@@ -59,7 +59,7 @@ A native upstream route alone does not establish Fly UX parity.
 | `toggle-pin-tab` | partial | Native pinned state and close protection tested; complete input-path acceptance remains pending. |
 | `open-extension-actions` | partial | Picker of the workspace's extension actions (popups anchored to their footer buttons), extension settings, `chrome://extensions` and the Chrome Web Store. |
 | `toggle-window-controls` | partial | Three owned Xvfb/Openbox desktop cases and all 62 services pass at ee16406; full-suite/platform acceptance remains pending. |
-| `reset-zoom` | partial | siteZoom.js: one level per hostname shared by every normal workspace (private ones separate); also from the footer. |
+| `reset-zoom` | partial | siteZoom.js: one level per hostname shared by every normal workspace (private ones separate); the footer's zoom pill opens Electron's zoom controls (−, 100%, +) and lights after a change. |
 | `toggle-sidebar-pin` | partial | Native button, command and live settings share persistent pinning; pinning resizes the page once, hovering never does. Full product/platform acceptance remains pending. |
 | `toggle-split-horizontal` | partial | Native split API routed; both-pane visibility/basic focus tested. All orientations/input paths, layout restore and platform acceptance remain pending. |
 | `cycle-split-orientation` | partial | Native split API routed; both-pane visibility/basic focus tested. All orientations/input paths, layout restore and platform acceptance remain pending. |

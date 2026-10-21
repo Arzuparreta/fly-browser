@@ -2,11 +2,13 @@
 // Use of this source code is governed by the GPL-3.0-or-later license in the
 // Fly repository.
 #include "fly/ui/status_bar.h"
+#include "fly/ui/new_tab_ui.h"
 
 #include "base/i18n/case_conversion.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/strings/string_util.h"
 #include "base/strings/utf_string_conversions.h"
+#include "base/task/single_thread_task_runner.h"
 #include "cc/paint/paint_flags.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/ssl/chrome_security_state_util.h"
@@ -24,6 +26,9 @@
 #include "ui/views/accessibility/view_accessibility.h"
 #include "ui/views/background.h"
 #include "ui/views/border.h"
+#include "ui/accessibility/ax_enums.mojom.h"
+#include "ui/views/widget/widget.h"
+#include "ui/views/bubble/bubble_dialog_delegate_view.h"
 #include "ui/views/layout/box_layout.h"
 #include "ui/views/vector_icons.h"
 #include "ui/views/view_class_properties.h"
@@ -42,6 +47,9 @@ class StatusBadge : public FlyButton {
     SetVectorIcon(icon, 10);
     SetCustomPadding(gfx::Insets::VH(1, 6));
     SetImageLabelSpacing(5);
+    // MdTextButton centres its text; the clock's time follows at the right,
+    // so a centred date would be cut.
+    SetHorizontalAlignment(gfx::ALIGN_LEFT);
     SetMinSize(gfx::Size(0, 16));
     if (!callback_set_)
       SetFocusBehavior(FocusBehavior::NEVER);
@@ -130,23 +138,50 @@ BEGIN_METADATA(StatusBadge)
 END_METADATA
 
 namespace {
-// The mode badge (#StatusBarMode): cell fill with an accent left edge.
+// The mode badge (#StatusBarMode): cell fill with an accent left edge and a
+// 1px border tinted by the mode; a click cancels hints or leaves or enters
+// passthrough, as in Electron.
 class ModeLabel : public FlyLabel {
   METADATA_HEADER(ModeLabel, FlyLabel)
 
  public:
-  ModeLabel()
-      : FlyLabel(u"NORMAL", FlyFace::kDisplay, 11, gfx::Font::Weight::BLACK) {
+  explicit ModeLabel(base::RepeatingClosure pressed)
+      : FlyLabel(u"NORMAL", FlyFace::kDisplay, 11, gfx::Font::Weight::BLACK),
+        pressed_(std::move(pressed)) {
     SetBorder(views::CreateEmptyBorder(gfx::Insets::TLBR(1, 8, 1, 6)));
     SetHorizontalAlignment(gfx::ALIGN_CENTER);
     SetTooltipText(u"Keyboard mode");
+    GetViewAccessibility().SetRole(ax::mojom::Role::kButton);
+  }
+  // Labels take no events unless selectable; this one is a button.
+  bool GetCanProcessEventsWithinSubtree() const override { return true; }
+  bool OnMousePressed(const ui::MouseEvent& event) override {
+    return event.IsOnlyLeftMouseButton();
+  }
+  void OnMouseReleased(const ui::MouseEvent& event) override {
+    if (pressed_ && HitTestPoint(event.location()))
+      pressed_.Run();
   }
   void OnPaintBackground(gfx::Canvas* canvas) override {
     const auto& colors = GetFlyColors();
+    const std::u16string mode(GetText());
+    SkColor border = SkColorSetARGB(77, 122, 162, 247);
+    if (mode.starts_with(u"INSERT"))
+      border = SkColorSetARGB(89, 158, 206, 106);
+    else if (mode.starts_with(u"HINTS"))
+      border = SkColorSetARGB(102, 224, 175, 104);
+    else if (mode.starts_with(u"PASSTHROUGH"))
+      border = SkColorSetARGB(102, 255, 158, 100);
     cc::PaintFlags flags;
     flags.setAntiAlias(true);
     flags.setColor(colors.cell);
-    canvas->DrawRoundRect(gfx::RectF(GetLocalBounds()), 2, flags);
+    gfx::RectF bounds(GetLocalBounds());
+    canvas->DrawRoundRect(bounds, 2, flags);
+    flags.setStyle(cc::PaintFlags::kStroke_Style);
+    flags.setStrokeWidth(1);
+    flags.setColor(border);
+    bounds.Inset(0.5f);
+    canvas->DrawRoundRect(bounds, 2, flags);
     canvas->FillRect(gfx::Rect(0, 0, 2, height()), colors.accent);
   }
   gfx::Size CalculatePreferredSize(
@@ -155,10 +190,34 @@ class ModeLabel : public FlyLabel {
     size.set_width(std::max(size.width(), 60));
     return size;
   }
+
+ private:
+  base::RepeatingClosure pressed_;
 };
 BEGIN_METADATA(ModeLabel)
 END_METADATA
 }  // namespace
+
+// Electron's #ZoomControls: zoom out, reset and zoom in above the zoom pill.
+std::unique_ptr<views::View> MakeZoomControls(
+    base::RepeatingCallback<void(std::string)> action) {
+  auto controls = std::make_unique<views::View>();
+  controls->SetLayoutManager(std::make_unique<views::BoxLayout>(
+      views::BoxLayout::Orientation::kHorizontal, gfx::Insets(), 4));
+  for (const auto& [name, text, label] :
+       {std::tuple{"zoom-out", u"\u2212", u"Zoom out"},
+        std::tuple{"reset-zoom", u"100%", u"Reset zoom to 100%"},
+        std::tuple{"zoom-in", u"+", u"Zoom in"}}) {
+    auto* button = controls->AddChildView(std::make_unique<FlyButton>(
+        base::BindRepeating(action, std::string(name)), text, FlyFace::kMono,
+        12));
+    button->SetCustomPadding(gfx::Insets::VH(4, 10));
+    button->SetOutlined(true);
+    button->SetTooltipText(label);
+    button->GetViewAccessibility().SetName(label);
+  }
+  return controls;
+}
 
 class StatusBar::TargetObserver : public content::WebContentsObserver {
  public:
@@ -183,20 +242,23 @@ StatusBar::StatusBar(Actions actions)
       views::BoxLayout::CrossAxisAlignment::kCenter);
   SetBackground(FlyBackground(FlyRole::kSidebar));
   SetBorder(FlyEdgeBorder(FlyRole::kBorder, gfx::Insets::TLBR(1, 0, 0, 0)));
-  mode_ = AddChildView(std::make_unique<ModeLabel>());
+  mode_ = AddChildView(std::make_unique<ModeLabel>(std::move(actions.mode)));
   location_ = AddChildView(std::make_unique<FlyLabel>(
       u"", FlyFace::kMono, 11, gfx::Font::Weight::NORMAL,
       FlyLabel::Tone::kDim));
   location_->SetHorizontalAlignment(gfx::ALIGN_LEFT);
   location_->SetElideBehavior(gfx::ELIDE_MIDDLE);
   layout->SetFlexForView(location_, 1);
-  zoom_ = AddChildView(std::make_unique<FlyButton>(std::move(actions.zoom),
-                                                   u"100%", FlyFace::kMono, 10));
+  zoom_action_ = std::move(actions.zoom);
+  zoom_ = AddChildView(std::make_unique<FlyButton>(
+      base::BindRepeating(&StatusBar::ToggleZoomControls,
+                          base::Unretained(this)),
+      u"100%", FlyFace::kMono, 10));
   zoom_->SetVectorIcon(vector_icons::kSearchIcon, 11);
   zoom_->SetCustomPadding(gfx::Insets::VH(1, 6));
   zoom_->SetImageLabelSpacing(4);
   zoom_->SetOutlined(true);
-  zoom_->SetTooltipText(u"Page zoom: reset to 100%");
+  zoom_->SetTooltipText(u"Page zoom");
   extensions_ = AddChildView(std::make_unique<views::View>());
   extensions_->SetLayoutManager(std::make_unique<views::BoxLayout>(
       views::BoxLayout::Orientation::kHorizontal, gfx::Insets(), 2));
@@ -300,6 +362,11 @@ void StatusBar::SetNotificationsEnabled(bool enabled) {
 void StatusBar::SelectContents() {
   auto* selected = model_ ? model_->GetActiveWebContents() : nullptr;
   if (selected != web_contents()) {
+    // Another page: its zoom controls and feedback do not carry over.
+    if (zoom_widget_)
+      zoom_widget_->Close();
+    zoom_flash_.Stop();
+    zoom_->SetSelected(false);
     target_ = GURL();
     target_observer_->Set(nullptr);
     Observe(selected);
@@ -326,8 +393,61 @@ void StatusBar::SetTargetURL(content::WebContents* source, const GURL& url) {
     return;
   }
   target_ = url;
+  message_.clear();
+  message_timer_.Stop();
   target_observer_->Set(source);
   Update();
+}
+void StatusBar::ShowMessage(std::u16string text, base::TimeDelta timeout) {
+  message_ = std::move(text);
+  message_timer_.Stop();
+  if (!timeout.is_zero()) {
+    message_timer_.Start(FROM_HERE, timeout,
+                         base::BindOnce(
+                             [](StatusBar* bar) {
+                               bar->message_.clear();
+                               bar->Update();
+                             },
+                             base::Unretained(this)));
+  }
+  Update();
+}
+void StatusBar::ToggleZoomControls() {
+  if (zoom_widget_) {
+    zoom_widget_->Close();
+    return;
+  }
+  zoom_delegate_ = std::make_unique<views::BubbleDialogDelegate>(
+      zoom_, views::BubbleBorder::BOTTOM_CENTER,
+      views::BubbleBorder::DIALOG_SHADOW, /*autosize=*/true);
+  zoom_delegate_->set_margins(gfx::Insets(4));
+  zoom_delegate_->set_corner_radius(6);
+  zoom_delegate_->SetShowCloseButton(false);
+  zoom_delegate_->SetButtons(static_cast<int>(ui::mojom::DialogButton::kNone));
+  zoom_delegate_->SetBackgroundColor(GetFlyColors().bg_sidebar);
+  zoom_delegate_->SetContentsView(MakeZoomControls(base::BindRepeating(
+      [](StatusBar* bar, std::string action) {
+        if (bar->zoom_action_)
+          bar->zoom_action_.Run(action);
+      },
+      base::Unretained(this))));
+  // The widget is ours; it is released after its close finishes.
+  zoom_widget_ = views::BubbleDialogDelegate::CreateBubble(
+      zoom_delegate_.get(),
+      base::BindOnce(
+          [](base::WeakPtr<StatusBar> bar, views::Widget::ClosedReason) {
+            if (!bar)
+              return;
+            base::SingleThreadTaskRunner::GetCurrentDefault()->DeleteSoon(
+                FROM_HERE, std::move(bar->zoom_widget_));
+            base::SingleThreadTaskRunner::GetCurrentDefault()->DeleteSoon(
+                FROM_HERE, std::move(bar->zoom_delegate_));
+          },
+          weak_factory_.GetWeakPtr()));
+  zoom_widget_->Show();
+}
+bool StatusBar::zoom_controls_open_for_testing() const {
+  return zoom_widget_ != nullptr;
 }
 void StatusBar::ClearTarget() {
   target_ = GURL();
@@ -340,15 +460,16 @@ void StatusBar::UpdateZoom() {
                    : nullptr;
   const int percent = zoom ? zoom->GetZoomPercent() : 100;
   zoom_->SetText(base::NumberToString16(percent) + u"%");
-  zoom_->GetViewAccessibility().SetName(u"Page zoom " +
-                                        base::NumberToString16(percent) +
-                                        u"%: reset to 100%");
-  zoom_->SetAccentText(percent != 100);
+  zoom_->GetViewAccessibility().SetName(u"Page zoom: " +
+                                        base::NumberToString16(percent) + u"%");
+  zoom_->SetTooltipText(u"Page zoom: " + base::NumberToString16(percent) +
+                        u"%");
+  zoom_->SetEnabled(web_contents() != nullptr);
 }
 void StatusBar::Update() {
   // Like the Electron footer, the location shows only a hovered link target.
   const auto location =
-      target_.is_empty() ? std::u16string() : url_formatter::FormatUrl(target_);
+      target_.is_empty() ? message_ : url_formatter::FormatUrl(target_);
   location_->SetText(location);
   location_->SetTooltipText(location);
   location_->GetViewAccessibility().SetName(
@@ -365,7 +486,7 @@ void StatusBar::Update() {
   std::u16string text;
   const gfx::VectorIcon* icon = &vector_icons::kLockIcon;
   auto tone = StatusBadge::Tone::kNeutral;
-  if (page.is_empty() || page.IsAboutBlank()) {
+  if (IsFlyNewTabPage(page)) {
     text = u"BLANK";
     icon = &vector_icons::kGlobeIcon;
   } else if (page.SchemeIs(url::kHttpsScheme)) {
@@ -441,6 +562,11 @@ void StatusBar::OnZoomControllerDestroyed(zoom::ZoomController*) {
 void StatusBar::OnZoomChanged(
     const zoom::ZoomController::ZoomChangedEventData&) {
   UpdateZoom();
+  // .zoom-feedback: the pill lights for 1.6 s after a change.
+  zoom_->SetSelected(true);
+  zoom_flash_.Start(FROM_HERE, base::Milliseconds(1600),
+                    base::BindOnce(&FlyButton::SetSelected,
+                                   base::Unretained(zoom_.get()), false));
 }
 void StatusBar::SetPaperGrain(gfx::ImageSkia grain) {
   paper_grain_ = std::move(grain);

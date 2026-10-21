@@ -1,0 +1,43 @@
+/* Electron's new tab page at the native interface's sizes; --scale follows
+   the interface size setting. */
+:root { --bg-main:#121211; --text:#e7e1d3; --accent:#e0261c; --panel:#1b1a18; --cell:#22211e; --border:#2b2a27; --dim:#8a857a; --link:#6aa2f5; --scale:1; color-scheme: dark; }
+* { box-sizing:border-box; }
+html { zoom:var(--scale); }
+body { margin:0; min-height:100vh; background:radial-gradient(var(--border) .7px, transparent .7px) 0 0 / 16px 16px var(--bg-main); color:var(--text); font:16px 'IBM Plex Sans',sans-serif; }
+body.light { color-scheme:light; background-image:url('identity/paper-grain.png'),radial-gradient(var(--border) .7px,transparent .7px); background-size:128px 128px,16px 16px; }
+main { min-height:calc(100vh - 56px); max-width:1500px; margin:auto; padding:56px clamp(28px,5vw,96px); display:grid; grid-template-columns:minmax(320px,1fr) minmax(340px,1fr); align-items:center; align-content:center; gap:28px 48px; grid-template-areas:"navigation specimen"; }
+.navigation { grid-area:navigation; min-width:0; }
+.specimen { grid-area:specimen; }
+.eyebrow, #date, footer, .annotation small { font:12px 'IBM Plex Mono',monospace; letter-spacing:.14em; color:var(--dim); }
+#clock { display:block; width:max-content; max-width:100%; font:800 clamp(72px,9vw,132px)/1.15 'Doto',monospace; letter-spacing:.04em; margin:24px 0 14px; background:var(--cell); padding:0 14px; border-radius:2px; }
+#date { font-size:14px; text-transform:uppercase; margin-bottom:44px; line-height:1.8; }
+button { background:none; color:var(--text); border:0; font-size:24px; padding:0 16px; cursor:pointer; }
+:focus-visible { outline:1px solid var(--accent); outline-offset:4px; }
+.sites-label { margin:36px 0 14px; }
+#sites { display:flex; flex-direction:column; gap:0; }
+#sites a { color:var(--link); text-decoration:none; font:15px 'IBM Plex Mono',monospace; padding:14px 0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+#sites a::before { content:'↗'; color:var(--dim); margin-right:18px; }
+#empty, #bookmarks-empty { color:var(--dim); font-size:14px; }
+.specimen { position:relative; margin:0; width:100%; min-height:460px; aspect-ratio:1; }
+.specimen img { width:86%; height:100%; position:absolute; top:0; left:7%; object-fit:contain; }
+.annotation { position:absolute; border-top:1px solid var(--accent); padding-top:10px; min-width:120px; }
+.annotation::before { content:''; position:absolute; height:28px; border-left:1px solid var(--accent); top:-28px; left:0; }
+.annotation span { display:block; font:700 30px 'Doto',monospace; }
+.annotation small { display:block; font-size:11px; margin-top:6px; }
+.memory { right:0; top:24%; }
+footer { padding:18px 36px; border-top:1px solid var(--border); font-size:12px; }
+footer strong { color:var(--text); font-weight:700; }
+footer a { color:inherit; text-decoration:underline; text-underline-offset:2px; }
+@media(max-width:800px) { main { grid-template-columns:1fr; grid-template-areas:"navigation" "specimen"; max-width:640px; padding-top:32px; } .specimen { min-height:320px; max-width:440px; margin:auto; } #clock { font-size:80px; } }
+.site-row { display:flex; align-items:center; border-bottom:1px solid var(--border); }
+#sites .site-row a { flex:1; min-width:0; }
+.site-row button { color:var(--dim); font-size:20px; padding:8px 14px; }
+.site-row button:hover, .site-row button:focus-visible { color:var(--accent); }
+#saved-bookmarks { width:100%; min-width:0; }
+#saved-bookmarks[hidden], #frequent-sites[hidden] { display:none; }
+#bookmarks { display:flex; justify-content:flex-start; flex-wrap:wrap; gap:10px; padding:6px 0; }
+#bookmarks a { display:block; max-width:220px; padding:12px 18px; border:1px solid var(--border); border-radius:6px; background:var(--panel); color:var(--text); text-decoration:none; font:14px 'IBM Plex Sans',sans-serif; }
+#bookmarks a:hover, #bookmarks a:focus-visible { background:var(--cell); border-color:var(--accent); }
+#bookmarks a:active { background:var(--border); }
+#bookmarks-label { text-align:left; font-weight:400; margin:0 0 14px; }
+.bookmark-title { display:block; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }

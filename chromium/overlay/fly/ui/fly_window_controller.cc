@@ -2,6 +2,16 @@
 // Use of this source code is governed by the GPL-3.0-or-later license in the
 // Fly repository.
 #include "fly/ui/fly_window_controller.h"
+#include "fly/ui/new_tab_ui.h"
+#include "fly/ui/download_shelf.h"
+#include "chrome/browser/ui/browser_window/public/global_browser_collection.h"
+#include "chrome/browser/ui/views/frame/browser_view.h"
+#include "ui/aura/window_tree_host.h"
+#if BUILDFLAG(IS_LINUX)
+#include "ui/gfx/x/connection.h"
+#include "ui/gfx/x/xproto.h"
+#include "ui/ozone/public/ozone_platform.h"
+#endif
 
 #include "build/build_config.h"
 #include "base/strings/string_number_conversions.h"
@@ -60,6 +70,7 @@
 #include "ui/compositor/layer.h"
 #include "ui/compositor/layer_animator.h"
 #include "ui/gfx/animation/animation.h"
+#include "ui/gfx/animation/tween.h"
 #include "ui/gfx/codec/png_codec.h"
 #include "ui/gfx/image/image_skia_rep.h"
 #include "ui/views/animation/animation_builder.h"
@@ -278,6 +289,8 @@ FlyWindowController::FlyWindowController()
       desktop_(std::make_unique<views::Widget>()) {
   frequent_sites_ =
       std::make_unique<FrequentSitesService>(*g_browser_process->local_state());
+  RegisterFlyNewTabPage();
+  browser_collection_.Observe(GlobalBrowserCollection::GetInstance());
   SetTitle(u"Fly");
   SetCanResize(true);
   SetCanMinimize(true);
@@ -474,8 +487,24 @@ FlyWindowController::FlyWindowController()
               window->welcome_->SetLogo(image.AsImageSkia());
           },
           weak_factory_.GetWeakPtr()));
+  // Electron's download shelf, above the status bar; it appears when a
+  // download starts and makes room for itself.
+  download_shelf_ = column->AddChildView(std::make_unique<DownloadShelf>(
+      base::BindRepeating(
+          [](base::WeakPtr<FlyWindowController> window) {
+            if (window && window->selected_)
+              window->ToggleDownloads(window->selected_);
+          },
+          weak_factory_.GetWeakPtr())));
   status_bar_ = column->AddChildView(std::make_unique<StatusBar>(StatusBar::Actions{
-      .zoom = command("reset-zoom"),
+      .zoom = base::BindRepeating(
+          [](base::WeakPtr<FlyWindowController> window, std::string action) {
+            if (window && window->selected_ && !window->closing_)
+              InvokeNativeCommand(window->selected_, action);
+          },
+          weak_factory_.GetWeakPtr()),
+      .mode = base::BindRepeating(&FlyWindowController::ClickModeBadge,
+                                  weak_factory_.GetWeakPtr()),
       .notifications = command("toggle-notifications"),
       .workspace = base::BindRepeating(&FlyWindowController::ToggleWorkspacePicker,
                                        weak_factory_.GetWeakPtr()),
@@ -508,10 +537,7 @@ FlyWindowController::FlyWindowController()
   params.bounds = gfx::Rect(80, 80, 1200, 800);
   desktop_->Init(std::move(params));
   sidebar_widget_ = std::make_unique<SidebarWidget>(base::BindRepeating(
-      [](FlyWindowController* window) {
-        return FlyScaled(window->sidebar_expanded_ ? kSidebarWidth
-                                                   : kSidebarRailWidth);
-      },
+      [](FlyWindowController* window) { return window->sidebar_hit_width_; },
       base::Unretained(this)));
   views::Widget::InitParams sidebar_params(
       views::Widget::InitParams::CLIENT_OWNS_WIDGET,
@@ -759,6 +785,13 @@ FlyWindowController::FlyWindowController()
                       .command_centre = true});
   workspace_picker_->SetStyle(
       {Layout::kPage, u"Workspace Dashboard", u"", 720, page_insets});
+  // Electron's dashboard: drag a tab onto a tab to reorder it (or move it to
+  // that tab's workspace), or onto a workspace to move it there.
+  workspace_picker_->SetDragDrop(
+      base::BindRepeating(
+          [](std::string_view action) { return action.starts_with("tab/"); }),
+      base::BindRepeating(&FlyWindowController::DropDashboardTab,
+                          weak_factory_.GetWeakPtr()));
   tab_move_picker_->SetStyle(
       {Layout::kCentre, u"Move tab to workspace", u"", 560});
   keyboard_editor_ =
@@ -833,6 +866,7 @@ FlyWindowController::FlyWindowController()
 }
 
 FlyWindowController::~FlyWindowController() {
+  browser_collection_.Reset();
   closing_ = true;
   StopSidebarFocusObservation();
   tab_move_.reset();
@@ -893,6 +927,7 @@ FlyWindowController::~FlyWindowController() {
   content_ = nullptr;
   status_ = nullptr;
   status_bar_ = nullptr;
+  download_shelf_ = nullptr;
   clock_ = nullptr;
   preferences_button_ = nullptr;
   tab_sidebar_ = nullptr;
@@ -1125,8 +1160,8 @@ void FlyWindowController::ToggleAddress(BrowserWindowInterface* browser) {
           },
           weak_factory_.GetWeakPtr()),
       config.shortcuts.at("toggle-address"), u"Address or search",
-      url == GURL("about:blank") ? std::u16string()
-                                 : base::UTF8ToUTF16(url.spec()));
+      IsFlyNewTabPage(url) ? std::u16string()
+                           : base::UTF8ToUTF16(url.spec()));
   LoadHistory(HistorySurface::kAddress);
 }
 std::vector<PaletteEntry> FlyWindowController::AddressEntries(
@@ -1225,6 +1260,50 @@ std::optional<std::vector<FrequentSite>> FlyWindowController::FrequentSites()
   for (const auto& row : history_entries_)
     visits.push_back({row.url.spec(), row.visited});
   return frequent_sites_->Read(visits);
+}
+base::DictValue FlyWindowController::NewTabLists(
+    bool off_the_record, const std::vector<HistoryEntry>& history) const {
+  // Only web pages are listed, as on Electron's new tab page.
+  const auto link = [](const std::string& url, const std::string& title) {
+    const GURL target(url);
+    if (!target.is_valid() || !target.SchemeIsHTTPOrHTTPS())
+      return std::optional<base::DictValue>();
+    return std::optional<base::DictValue>(
+        base::DictValue()
+            .Set("url", target.spec())
+            .Set("title", title.empty() ? target.host() : title));
+  };
+  base::ListValue bookmarks;
+  base::ListValue sites;
+  const bool show_sites =
+      !off_the_record && preferences_.ReadFrequentSitesVisible().value_or(true);
+  if (!off_the_record) {
+    if (const auto saved = bookmarks_->Read()) {
+      for (const auto& bookmark : *saved) {
+        if (auto entry = link(bookmark.url, bookmark.title))
+          bookmarks.Append(std::move(*entry));
+      }
+    }
+  }
+  if (show_sites) {
+    std::vector<SiteVisit> visits;
+    for (const auto& row : history)
+      visits.push_back({row.url.spec(), row.visited});
+    if (const auto frequent = frequent_sites_->Read(visits)) {
+      for (const auto& site : *frequent) {
+        if (auto entry = link(site.url, site.title))
+          sites.Append(std::move(*entry));
+      }
+    }
+  }
+  return base::DictValue()
+      .Set("showBookmarks", !off_the_record)
+      .Set("showSites", show_sites)
+      .Set("bookmarks", std::move(bookmarks))
+      .Set("sites", std::move(sites));
+}
+bool FlyWindowController::HideFrequentSite(const std::string& url) {
+  return !closing_ && frequent_sites_->Hide(url);
 }
 std::vector<PaletteEntry> FlyWindowController::BookmarkEntries() {
   bookmark_urls_.clear();
@@ -1370,6 +1449,7 @@ void FlyWindowController::ClearSidebarViews() {
   workspace_picker_button_ = nullptr;
   sidebar_panel_ = nullptr;
   sidebar_root_ = nullptr;
+  tab_numbers_timer_.Stop();
 }
 void FlyWindowController::StopSidebarFocusObservation() {
   if (sidebar_focus_client_) {
@@ -1412,10 +1492,29 @@ void FlyWindowController::UpdateSidebarBounds() {
 void FlyWindowController::UpdateSidebarHitArea() {
   if (!sidebar_targeter_ || !sidebar_host_)
     return;
-  const int visible = FlyScaled(sidebar_expanded_ ? kSidebarWidth
-                                                  : kSidebarRailWidth);
   sidebar_targeter_->SetInsets(gfx::Insets::TLBR(
-      0, 0, 0, std::max(0, sidebar_host_->width() - visible)));
+      0, 0, 0, std::max(0, sidebar_host_->width() - sidebar_hit_width_)));
+}
+float FlyWindowController::SidebarShiftNow() const {
+  if (!sidebar_motion_animating_)
+    return sidebar_shift_to_;
+  const double progress =
+      std::clamp((base::TimeTicks::Now() - sidebar_motion_start_) /
+                     kSidebarMotion,
+                 0.0, 1.0);
+  return gfx::Tween::FloatValueBetween(
+      gfx::Tween::CalculateValue(gfx::Tween::FAST_OUT_SLOW_IN_3, progress),
+      sidebar_shift_from_, sidebar_shift_to_);
+}
+int FlyWindowController::VisibleSidebarWidth() const {
+  return FlyScaled(kSidebarWidth) - static_cast<int>(SidebarShiftNow() + 0.5f);
+}
+void FlyWindowController::OnSidebarMotionEnded() {
+  sidebar_motion_animating_ = false;
+  // A finished collapse gives the page back everything right of the rail.
+  sidebar_hit_width_ = FlyScaled(kSidebarWidth) -
+                       static_cast<int>(sidebar_shift_to_ + 0.5f);
+  UpdateSidebarHitArea();
 }
 void FlyWindowController::UpdateSidebarMode() {
   if (!sidebar_content_)
@@ -1502,6 +1601,15 @@ void FlyWindowController::ApplySidebarMotion(bool animate) {
   sidebar_motion_scale_ = GetFlyInterfaceScale();
   const bool rail = sidebar_auto_collapse_ && !sidebar_expanded_;
   const int shift = rail ? FlyScaled(kSidebarWidth - kSidebarRailWidth) : 0;
+  sidebar_shift_from_ = SidebarShiftNow();
+  sidebar_shift_to_ = shift;
+  sidebar_motion_start_ = base::TimeTicks::Now();
+  sidebar_motion_animating_ = animate;
+  // Expanding takes the pointer at once; collapsing keeps the panel's area
+  // until the edge has passed, so the page never gets clicks on a panel
+  // that is still visible.
+  if (!rail || !animate)
+    sidebar_hit_width_ = FlyScaled(kSidebarWidth) - shift;
   gfx::Transform outer;
   outer.Translate(-shift, 0);
   gfx::Transform inner;
@@ -1522,6 +1630,8 @@ void FlyWindowController::ApplySidebarMotion(bool animate) {
   views::AnimationBuilder builder;
   builder.SetPreemptionStrategy(
       ui::LayerAnimator::IMMEDIATELY_ANIMATE_TO_NEW_TARGET);
+  builder.OnEnded(base::BindOnce(&FlyWindowController::OnSidebarMotionEnded,
+                                 weak_factory_.GetWeakPtr()));
   auto& block = builder.Once()
                     .SetDuration(kSidebarMotion)
                     .SetTransform(edge->layer(), outer,
@@ -1652,12 +1762,21 @@ void FlyWindowController::OnMouseEvent(ui::MouseEvent* event) {
       event->type() != ui::EventType::kMouseExited &&
       event->type() != ui::EventType::kMousePressed)
     return;
+  // Like Electron, leaving the window keeps the sidebar as it is: moving
+  // from the page to the screen's left edge opens it, and touching the
+  // window border does not close it. Entering the page closes it.
+  if (event->type() == ui::EventType::kMouseExited)
+    return;
   auto point = event->root_location();
   wm::ConvertPointToScreen(desktop_->GetNativeWindow()->GetRootWindow(),
                            &point);
-  auto bounds = desktop_->GetContentsView()->GetBoundsInScreen();
-  bounds.set_width(FlyScaled(sidebar_expanded_ ? kSidebarWidth
-                                                : kSidebarRailWidth));
+  const auto window = desktop_->GetContentsView()->GetBoundsInScreen();
+  if (!window.Contains(point) &&
+      event->type() != ui::EventType::kMousePressed)
+    return;
+  // The edge the user sees, mid-slide included.
+  auto bounds = window;
+  bounds.set_width(VisibleSidebarWidth());
   const bool was_inside = sidebar_pointer_inside_;
   sidebar_pointer_inside_ = bounds.Contains(point);
   const bool pressed = event->type() == ui::EventType::kMousePressed;
@@ -1741,6 +1860,7 @@ void FlyWindowController::RunWindowControl(std::string action) {
 void FlyWindowController::OnWidgetShowStateChanged(views::Widget* widget) {
   if (widget == desktop_.get()) {
     UpdateWindowControls();
+    UpdateEmbeddedVisibility();
     UpdateClock();
   }
 }
@@ -1919,7 +2039,23 @@ void FlyWindowController::UpdateClock() {
 void FlyWindowController::CycleClockFormat() {
   preferences_.CycleClockFormat();
 }
-void FlyWindowController::OnWidgetVisibilityChanged(views::Widget*, bool) {
+void FlyWindowController::UpdateEmbeddedVisibility() {
+  if (closing_ || !selected_)
+    return;
+  const auto it = entries_.find(selected_);
+  if (it == entries_.end() || !it->second.host)
+    return;
+  // The profile BrowserWidgets are hosted inside Fly's desktop window.
+  // Minimizing that outer window does not hide a hosted widget by itself.
+  // Hide its NativeViewHost, just as workspace selection does. Calling
+  // ShowInactive on the BrowserWidget here would select the workspace and
+  // recursively show the desktop while it is still notifying observers.
+  // The host propagates visibility through Aura to the native renderers.
+  it->second.host->SetVisible(desktop_->IsVisible() && !desktop_->IsMinimized());
+}
+void FlyWindowController::OnWidgetVisibilityChanged(views::Widget* widget, bool) {
+  if (widget == desktop_.get())
+    UpdateEmbeddedVisibility();
   UpdateClock();
 }
 
@@ -1958,6 +2094,8 @@ void FlyWindowController::Prepare(BrowserWindowInterface* browser) {
       browser->RegisterBrowserDidClose(base::BindRepeating(
           &FlyWindowController::OnBrowserDidClose, weak_factory_.GetWeakPtr()));
   ApplyProfilePreferences(browser->GetProfile(), preferences_);
+  if (download_shelf_)
+    download_shelf_->AddProfile(browser->GetProfile());
   if (!browser->GetProfile()->IsOffTheRecord()) {
     extensions_->AddProfile(browser->GetProfile());
     user_content_->AddProfile(browser->GetProfile());
@@ -2640,6 +2778,72 @@ void FlyWindowController::ChooseWorkspace(content::WebContents* source,
     Select(choice->second.get(), true);
 }
 
+void FlyWindowController::OnBrowserCreated(BrowserWindowInterface* browser) {
+#if BUILDFLAG(IS_LINUX)
+  if (!browser || ShouldEmbed(browser) ||
+      (browser->GetType() != BrowserWindowInterface::TYPE_POPUP &&
+       browser->GetType() != BrowserWindowInterface::TYPE_APP_POPUP) ||
+      ui::OzonePlatform::GetPlatformNameForTest() != "x11" || !desktop_ ||
+      !desktop_->GetNativeWindow() || !desktop_->GetNativeWindow()->GetHost())
+    return;
+  auto* view = BrowserView::GetBrowserViewForBrowser(browser);
+  auto* popup = view && view->GetWidget() ? view->GetWidget()->GetNativeWindow()
+                                          : nullptr;
+  if (!popup || !popup->GetHost())
+    return;
+  // WM_TRANSIENT_FOR, set before the popup is mapped.
+  x11::Connection::Get()->SetProperty(
+      static_cast<x11::Window>(popup->GetHost()->GetAcceleratedWidget()),
+      x11::Atom::WM_TRANSIENT_FOR, x11::Atom::WINDOW,
+      static_cast<x11::Window>(
+          desktop_->GetNativeWindow()->GetHost()->GetAcceleratedWidget()));
+#endif
+}
+void FlyWindowController::DropDashboardTab(std::string source,
+                                           std::string target) {
+  if (closing_ || !workspace_picker_->active() ||
+      !source.starts_with("tab/"))
+    return;
+  const auto from = tab_choices_.find(source.substr(4));
+  if (from == tab_choices_.end() || !from->second.browser ||
+      !from->second.contents)
+    return;
+  auto* browser = from->second.browser.get();
+  auto* contents = from->second.contents.get();
+  auto* model = browser->GetTabStripModel();
+  const int index = model->GetIndexOfWebContents(contents);
+  if (index == TabStripModel::kNoTab)
+    return;
+  std::string workspace;
+  if (target.starts_with("workspace/")) {
+    workspace = target.substr(10);
+  } else if (target.starts_with("tab/")) {
+    const auto to = tab_choices_.find(target.substr(4));
+    if (to == tab_choices_.end() || !to->second.browser || !to->second.contents)
+      return;
+    if (to->second.browser.get() == browser) {
+      // Same workspace window: reorder, as Electron's moveTabState.
+      const int destination =
+          model->GetIndexOfWebContents(to->second.contents.get());
+      if (destination != TabStripModel::kNoTab && destination != index)
+        model->MoveWebContentsAt(index, destination, false);
+      workspace_picker_->UpdateItems(WorkspaceEntries(), false);
+      return;
+    }
+    workspace = target.substr(4, target.find('/', 4) - 4);
+  } else {
+    return;
+  }
+  if (!entries_.contains(browser) || entries_.at(browser).workspace_id == workspace)
+    return;
+  // Another workspace: the same transaction as Move, which appends the tab.
+  Select(browser, true);
+  model->ActivateTabAt(index);
+  move_source_browser_ = browser->GetWeakPtr();
+  move_source_ = contents->GetWeakPtr();
+  ChooseTabMoveDestination(contents, "move:" + workspace);
+  workspace_picker_->UpdateItems(WorkspaceEntries(), false);
+}
 void FlyWindowController::ToggleWorkspacePicker() {
   if (closing_ || !CanShowWorkspacePicker())
     return;
@@ -3208,6 +3412,9 @@ void FlyWindowController::OnWidgetDestroying(views::Widget* widget) {
 }
 void FlyWindowController::OnWidgetActivationChanged(views::Widget* widget,
                                                     bool active) {
+  // A blurred window can no longer see the modifier's release.
+  if (widget == desktop_.get() && !active)
+    SetTabNumbers(false);
   if (widget == desktop_.get() && selected_) {
     auto* child = entries_.at(selected_).widget.get();
     child->OnNativeWidgetActivationChanged(active);
@@ -3435,7 +3642,60 @@ bool FlyWindowController::RunCommand(BrowserWindowInterface* browser,
 }  // namespace fly
 
 namespace fly {
+void FlyWindowController::TrackTabNumbers(bool key_down,
+                                          ui::KeyboardCode code,
+                                          ui::DomCode dom_code,
+                                          int flags,
+                                          bool repeat,
+                                          bool passthrough) {
+  const bool modifier =
+      key_down && (code == ui::VKEY_CONTROL || code == ui::VKEY_MENU ||
+                   code == ui::VKEY_SHIFT || code == ui::VKEY_LWIN ||
+                   code == ui::VKEY_RWIN);
+  // Right Alt is AltGr on many layouts; in passthrough the page receives
+  // every shortcut, so the numbers would point at nothing.
+  if (!modifier || passthrough || dom_code == ui::DomCode::ALT_RIGHT) {
+    SetTabNumbers(false);
+    return;
+  }
+  if (repeat)
+    return;
+  std::vector<std::string> held;
+  const auto add = [&](bool on, const char* name) {
+    if (on)
+      held.push_back(name);
+  };
+  add(code == ui::VKEY_CONTROL || (flags & ui::EF_CONTROL_DOWN), "Ctrl");
+  add(code == ui::VKEY_MENU || (flags & ui::EF_ALT_DOWN), "Alt");
+  add(code == ui::VKEY_SHIFT || (flags & ui::EF_SHIFT_DOWN), "Shift");
+  add(code == ui::VKEY_LWIN || code == ui::VKEY_RWIN ||
+          (flags & ui::EF_COMMAND_DOWN),
+      "Meta");
+  const auto tabs = commands_.Read().value_or(DefaultKeyboardConfig()).tabs;
+  if (tabs.empty() || base::JoinString(held, "+") != tabs) {
+    SetTabNumbers(false);
+    return;
+  }
+  // The delay keeps quick chords such as Alt+S from flashing them.
+  if (!tab_numbers_shown_ && !tab_numbers_timer_.IsRunning()) {
+    tab_numbers_timer_.Start(
+        FROM_HERE, base::Milliseconds(150),
+        base::BindOnce(&FlyWindowController::SetTabNumbers,
+                       base::Unretained(this), true));
+  }
+}
+void FlyWindowController::SetTabNumbers(bool shown) {
+  tab_numbers_timer_.Stop();
+  if (shown == tab_numbers_shown_)
+    return;
+  tab_numbers_shown_ = shown;
+  if (tab_sidebar_)
+    tab_sidebar_->SetNumbersVisible(shown);
+}
 void FlyWindowController::OnKeyEvent(ui::KeyEvent* event) {
+  TrackTabNumbers(event->type() == ui::EventType::kKeyPressed,
+                  event->key_code(), event->code(), event->flags(),
+                  event->is_repeat(), false);
   if ((rename_widget_ && !rename_widget_->IsClosed()) ||
       (remove_widget_ && !remove_widget_->IsClosed()) ||
       (history_clear_widget_ && !history_clear_widget_->IsClosed()))
@@ -3603,13 +3863,25 @@ void FlyWindowController::UpdateModeLabel() {
       hints_ && hints_->active()
           ? (hints_->truncated() ? u"HINTS (target limit)" : u"HINTS")
           : NativePageModeLabel(selected_);
-  status_->SetText(selected_ && selected_->GetProfile()->IsOffTheRecord()
-                       ? u"PRIVATE · " + mode
-                       : mode);
+  // The workspace badge says when the workspace is private.
+  status_->SetText(mode);
+}
+// Electron's mode badge: a click cancels hints, leaves passthrough, or
+// enters it from NORMAL (INSERT ignores it).
+void FlyWindowController::ClickModeBadge() {
+  if (closing_ || !selected_)
+    return;
+  if (hints_ && hints_->active()) {
+    InvokeNativeCommand(selected_, "trigger-hints");
+    return;
+  }
+  const auto mode = NativePageModeLabel(selected_);
+  if (mode == u"PASSTHROUGH" || mode == u"NORMAL")
+    InvokeNativeCommand(selected_, "toggle-passthrough");
 }
 
 std::u16string FlyWindowController::status_text_for_testing() const {
-  return status_ ? std::u16string(status_->GetText()) : std::u16string();
+  return status_bar_ ? status_bar_->message_for_testing() : std::u16string();
 }
 void FlyWindowController::ShowStatus(std::u16string text) {
   RecordDiagnostic(
@@ -3617,8 +3889,9 @@ void FlyWindowController::ShowStatus(std::u16string text) {
           ? "warn"
           : "info",
       "status", text);
-  if (status_)
-    status_->SetText(std::move(text));
+  // Electron's setTargetUrl(message, timeout): the link area, for a while.
+  if (status_bar_)
+    status_bar_->ShowMessage(std::move(text), base::Milliseconds(3500));
 }
 std::vector<Profile*> FlyWindowController::WorkspaceProfiles() const {
   std::vector<Profile*> profiles;
@@ -3805,7 +4078,12 @@ bool FlyWindowController::RunProductAction(BrowserWindowInterface* browser,
     return true;
   }
   if (action == "toggle-downloads") {
-    ToggleDownloads(browser);
+    // Electron toggles its download shelf; with nothing on it, Fly lists
+    // every workspace's downloads.
+    if (download_shelf_ && download_shelf_->has_cards())
+      download_shelf_->Toggle();
+    else
+      ToggleDownloads(browser);
     return true;
   }
   if (action == "toggle-reader-view") {
@@ -4161,8 +4439,7 @@ void FlyWindowController::ApplyLegacyImport(
     content::WebContents* blank = nullptr;
     if (model->count() == 1) {
       const GURL& first = model->GetWebContentsAt(0)->GetVisibleURL();
-      if (first.is_empty() || first.IsAboutBlank() ||
-          first.SchemeIs(content::kChromeUIScheme))
+      if (IsFlyNewTabPage(first) || first.SchemeIs(content::kChromeUIScheme))
         blank = model->GetWebContentsAt(0);
     }
     for (const auto& item : *tabs) {

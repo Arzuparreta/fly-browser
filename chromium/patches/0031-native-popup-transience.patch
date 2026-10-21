@@ -1,0 +1,11 @@
+--- a/chrome/browser/ui/BUILD.gn
++++ b/chrome/browser/ui/BUILD.gn
+@@ -1146,6 +1146,8 @@
+     ]
+     if (is_linux) {
+       deps += [ "//third_party/fontconfig" ]
++      # Fly: popup windows are transient for Fly's window (X11).
++      deps += [ "//ui/gfx/x" ]
+     }
+   }
+   deps += [ "//fly:session_metadata" ]

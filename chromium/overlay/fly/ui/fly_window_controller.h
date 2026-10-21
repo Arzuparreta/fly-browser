@@ -21,7 +21,12 @@
 #include "fly/commands/command_service.h"
 #include "fly/commands/palette_catalog.h"
 #include "fly/preferences/preferences_service.h"
+#include "base/scoped_observation.h"
+#include "chrome/browser/ui/browser_window/public/browser_collection_observer.h"
+#include "chrome/browser/ui/browser_window/public/global_browser_collection.h"
 #include "fly/ui/sidebar_panel.h"
+#include "ui/events/keycodes/dom/dom_code.h"
+#include "ui/events/keycodes/keyboard_codes.h"
 #include "fly/ui/diagnostics_hub.h"
 #include "fly/ui/fly_actions.h"
 #include "fly/ui/history_service.h"
@@ -76,6 +81,7 @@ class TabSidebar;
 class SidebarPanel;
 class SidebarRoot;
 class SidebarClock;
+class DownloadShelf;
 class HintController;
 class KeyboardRouter;
 class WorkspaceCloseTransaction;
@@ -85,6 +91,7 @@ class TabMoveTransaction;
 // create an OS window. NativeViewHost controls actual clipping and visibility.
 class FlyWindowController : public views::WidgetDelegate,
                             public views::WidgetObserver,
+                            public BrowserCollectionObserver,
                             public ui::EventHandler,
                             public views::FocusChangeListener,
                             public aura::client::FocusChangeObserver {
@@ -126,7 +133,13 @@ class FlyWindowController : public views::WidgetDelegate,
                        content::WebContents* source,
                        const GURL& url);
   StatusBar* status_bar_for_testing() { return status_bar_; }
+  // Fly's new tab page: bookmarks and frequent sites (none in private
+  // workspaces), and hiding a frequent site from its list.
+  base::DictValue NewTabLists(
+      bool off_the_record, const std::vector<HistoryEntry>& history) const;
+  bool HideFrequentSite(const std::string& url);
   TabSidebar* tab_sidebar_for_testing() { return tab_sidebar_; }
+  DownloadShelf* download_shelf_for_testing() { return download_shelf_; }
   SidebarRoot* sidebar_root_for_testing() { return sidebar_root_; }
   void CreateTab();
   // An empty name takes the next "Workspace N".
@@ -265,6 +278,32 @@ class FlyWindowController : public views::WidgetDelegate,
   void UpdateSidebarBounds();
   void UpdateSidebarHitArea();
   void ApplySidebarMotion(bool animate);
+  float SidebarShiftNow() const;
+  int VisibleSidebarWidth() const;
+  void OnSidebarMotionEnded();
+ public:
+  // Electron's tabNumbers.js: the tab numbers show while the modifier that
+  // selects tabs by number is held on its own (after 150 ms); any other key
+  // event hides them. Page and interface key events both report here.
+  void TrackTabNumbers(bool key_down,
+                       ui::KeyboardCode code,
+                       ui::DomCode dom_code,
+                       int flags,
+                       bool repeat,
+                       bool passthrough);
+  bool tab_numbers_shown_for_testing() const { return tab_numbers_shown_; }
+
+ private:
+  void SetTabNumbers(bool shown);
+  void ClickModeBadge();
+  void DropDashboardTab(std::string source, std::string target);
+ public:
+  // Popup windows (sign-in popups, window.open with features, extension
+  // popups) belong to Fly's window, as Electron's child windows do; tiling
+  // window managers float them.
+  void OnBrowserCreated(BrowserWindowInterface* browser) override;
+
+ private:
   void LoadSidebarArtwork();
   void StopSidebarFocusObservation();
   void ToggleSidebarAutoCollapse();
@@ -311,6 +350,7 @@ class FlyWindowController : public views::WidgetDelegate,
   void ApplyFlyPalette();
   void CycleClockFormat();
   void OnWidgetVisibilityChanged(views::Widget*, bool visible) override;
+  void UpdateEmbeddedVisibility();
   void ScheduleWorkspaceRefresh();
   void RebuildWorkspaceButtons();
   void SelectWindow(base::WeakPtr<BrowserWindowInterface> browser);
@@ -399,6 +439,18 @@ class FlyWindowController : public views::WidgetDelegate,
   bool sidebar_motion_ready_ = false;
   bool sidebar_motion_applied_ = false;
   float sidebar_motion_scale_ = 0;
+  // The slide in progress, so the pointer and the hit area follow the edge
+  // the user sees (Electron hit-tests the animated element).
+  float sidebar_shift_from_ = 0;
+  float sidebar_shift_to_ = 0;
+  base::TimeTicks sidebar_motion_start_;
+  bool sidebar_motion_animating_ = false;
+  // Width that takes the pointer: the panel until a collapse ends.
+  int sidebar_hit_width_ = 0;
+  base::ScopedObservation<GlobalBrowserCollection, BrowserCollectionObserver>
+      browser_collection_{this};
+  base::OneShotTimer tab_numbers_timer_;
+  bool tab_numbers_shown_ = false;
   raw_ptr<FlyButton> sidebar_pin_button_ = nullptr;
   raw_ptr<FlyButton> reader_button_ = nullptr;
   // The active tab while it shows Electron's reader overlay.
@@ -424,6 +476,7 @@ class FlyWindowController : public views::WidgetDelegate,
   std::string pending_empty_action_;
   raw_ptr<views::Label> status_ = nullptr;
   raw_ptr<StatusBar> status_bar_ = nullptr;
+  raw_ptr<DownloadShelf> download_shelf_ = nullptr;
   raw_ptr<SidebarClock> clock_ = nullptr;
   raw_ptr<FlyButton> preferences_button_ = nullptr;
   raw_ptr<TabSidebar> tab_sidebar_ = nullptr;
