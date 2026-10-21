@@ -116,6 +116,14 @@ def fail(message):
     raise SystemExit(1)
 
 
+def normalize_package_permissions(root):
+    """Public runtime assets must survive a restrictive build-host umask."""
+    for file in [root, *root.rglob('*')]:
+        if file.is_symlink():
+            fail(f'Unexpected symlink in native package: {file}')
+        file.chmod(0o755 if file.is_dir() or file.stat().st_mode & 0o111 else 0o644)
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__,
                                      formatter_class=argparse.RawDescriptionHelpFormatter)
@@ -186,6 +194,7 @@ def main():
         installer = top / 'install.sh'
         installer.write_text(INSTALL, encoding='utf-8')
         installer.chmod(0o755)
+        normalize_package_permissions(top)
         archive = args.dist / f'{name}.tar.gz'
         with tarfile.open(archive, 'w:gz') as bundle:
             bundle.add(top, arcname='fly-browser-native')
