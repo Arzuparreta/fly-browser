@@ -798,6 +798,12 @@ IN_PROC_BROWSER_TEST_F(FlySidebarBrowserTest,
   const int count = model->count();
   auto* list = window.tab_sidebar_for_testing();
   ASSERT_TRUE(base::test::RunUntil([&] { return list->row_for_testing(target); }));
+  // New tabs focus search; dismiss it before interacting with the sidebar.
+  ASSERT_TRUE(base::test::RunUntil([&] { return window.address_picker().active(); }));
+  ui::test::EventGenerator keys(
+      window.desktop_widget()->GetNativeWindow()->GetRootWindow());
+  keys.PressKey(ui::VKEY_ESCAPE, ui::EF_NONE);
+  ASSERT_TRUE(base::test::RunUntil([&] { return !window.address_picker().active(); }));
   OpenByPointer();
   views::test::RunScheduledLayout(list->GetWidget());
   ui::test::EventGenerator mouse(
