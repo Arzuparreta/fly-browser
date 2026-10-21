@@ -20,6 +20,12 @@
 #include "fly/ui/sidebar_panel.h"
 #include "fly/ui/new_tab_ui.h"
 #include "fly/ui/download_shelf.h"
+#include "chrome/browser/ui/browser_window/public/browser_window_interface_iterator.h"
+#include "chrome/browser/ui/views/frame/browser_view.h"
+#include "ui/aura/window_tree_host.h"
+#include "ui/gfx/x/connection.h"
+#include "ui/gfx/x/xproto.h"
+#include "ui/ozone/public/ozone_platform.h"
 #include "fly/ui/status_bar.h"
 #include "components/download/public/common/download_item.h"
 #include "content/public/browser/download_manager.h"
@@ -4015,6 +4021,40 @@ IN_PROC_BROWSER_TEST_F(FlyWorkspaceBrowserTest,
 // rename/delete buttons; choosing a tab opens its workspace on that tab.
 // Electron's dashboard: dragging a tab onto another tab of its workspace
 // reorders them.
+// Popups belong to Fly's window (WM_TRANSIENT_FOR), as Electron's child
+// windows, so tiling window managers float them.
+IN_PROC_BROWSER_TEST_F(FlyWorkspaceBrowserTest, PopupsAreTransientForFly) {
+  if (ui::OzonePlatform::GetPlatformNameForTest() != "x11")
+    GTEST_SKIP() << "X11 only";
+  ASSERT_TRUE(ui_test_utils::NavigateToURL(
+      browser(), embedded_test_server()->GetURL("/title1.html")));
+  BrowserWindowInterface* popup = nullptr;
+  ASSERT_TRUE(content::ExecJs(
+      Active(browser()),
+      "window.open('/title2.html', 'fly-popup', 'popup,width=320,height=240')"));
+  ASSERT_TRUE(base::test::RunUntil([&] {
+    ForEachCurrentBrowserWindowInterfaceOrderedByActivation(
+        [&](BrowserWindowInterface* candidate) {
+          if (candidate->GetType() == BrowserWindowInterface::TYPE_POPUP)
+            popup = candidate;
+          return true;
+        });
+    return popup != nullptr;
+  }));
+  auto* widget = BrowserView::GetBrowserViewForBrowser(popup)->GetWidget();
+  x11::Window owner = x11::Window::None;
+  ASSERT_TRUE(x11::Connection::Get()->GetPropertyAs(
+      static_cast<x11::Window>(
+          widget->GetNativeWindow()->GetHost()->GetAcceleratedWidget()),
+      x11::Atom::WM_TRANSIENT_FOR, &owner));
+  EXPECT_EQ(static_cast<x11::Window>(FlyWindowController::Get()
+                                         .desktop_widget()
+                                         ->GetNativeWindow()
+                                         ->GetHost()
+                                         ->GetAcceleratedWidget()),
+            owner);
+}
+
 IN_PROC_BROWSER_TEST_F(FlyWorkspaceBrowserTest, DashboardDragReordersTabs) {
   auto& window = FlyWindowController::Get();
   ASSERT_TRUE(ui_test_utils::NavigateToURL(

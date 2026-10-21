@@ -4,6 +4,14 @@
 #include "fly/ui/fly_window_controller.h"
 #include "fly/ui/new_tab_ui.h"
 #include "fly/ui/download_shelf.h"
+#include "chrome/browser/ui/browser_window/public/global_browser_collection.h"
+#include "chrome/browser/ui/views/frame/browser_view.h"
+#include "ui/aura/window_tree_host.h"
+#if BUILDFLAG(IS_LINUX)
+#include "ui/gfx/x/connection.h"
+#include "ui/gfx/x/xproto.h"
+#include "ui/ozone/public/ozone_platform.h"
+#endif
 
 #include "build/build_config.h"
 #include "base/strings/string_number_conversions.h"
@@ -282,6 +290,7 @@ FlyWindowController::FlyWindowController()
   frequent_sites_ =
       std::make_unique<FrequentSitesService>(*g_browser_process->local_state());
   RegisterFlyNewTabPage();
+  browser_collection_.Observe(GlobalBrowserCollection::GetInstance());
   SetTitle(u"Fly");
   SetCanResize(true);
   SetCanMinimize(true);
@@ -857,6 +866,7 @@ FlyWindowController::FlyWindowController()
 }
 
 FlyWindowController::~FlyWindowController() {
+  browser_collection_.Reset();
   closing_ = true;
   StopSidebarFocusObservation();
   tab_move_.reset();
@@ -2747,6 +2757,27 @@ void FlyWindowController::ChooseWorkspace(content::WebContents* source,
     Select(choice->second.get(), true);
 }
 
+void FlyWindowController::OnBrowserCreated(BrowserWindowInterface* browser) {
+#if BUILDFLAG(IS_LINUX)
+  if (!browser || ShouldEmbed(browser) ||
+      (browser->GetType() != BrowserWindowInterface::TYPE_POPUP &&
+       browser->GetType() != BrowserWindowInterface::TYPE_APP_POPUP) ||
+      ui::OzonePlatform::GetPlatformNameForTest() != "x11" || !desktop_ ||
+      !desktop_->GetNativeWindow() || !desktop_->GetNativeWindow()->GetHost())
+    return;
+  auto* view = BrowserView::GetBrowserViewForBrowser(browser);
+  auto* popup = view && view->GetWidget() ? view->GetWidget()->GetNativeWindow()
+                                          : nullptr;
+  if (!popup || !popup->GetHost())
+    return;
+  // WM_TRANSIENT_FOR, set before the popup is mapped.
+  x11::Connection::Get()->SetProperty(
+      static_cast<x11::Window>(popup->GetHost()->GetAcceleratedWidget()),
+      x11::Atom::WM_TRANSIENT_FOR, x11::Atom::WINDOW,
+      static_cast<x11::Window>(
+          desktop_->GetNativeWindow()->GetHost()->GetAcceleratedWidget()));
+#endif
+}
 void FlyWindowController::DropDashboardTab(std::string source,
                                            std::string target) {
   if (closing_ || !workspace_picker_->active() ||

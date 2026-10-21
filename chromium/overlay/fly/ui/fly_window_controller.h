@@ -21,6 +21,9 @@
 #include "fly/commands/command_service.h"
 #include "fly/commands/palette_catalog.h"
 #include "fly/preferences/preferences_service.h"
+#include "base/scoped_observation.h"
+#include "chrome/browser/ui/browser_window/public/browser_collection_observer.h"
+#include "chrome/browser/ui/browser_window/public/global_browser_collection.h"
 #include "fly/ui/sidebar_panel.h"
 #include "ui/events/keycodes/dom/dom_code.h"
 #include "ui/events/keycodes/keyboard_codes.h"
@@ -88,6 +91,7 @@ class TabMoveTransaction;
 // create an OS window. NativeViewHost controls actual clipping and visibility.
 class FlyWindowController : public views::WidgetDelegate,
                             public views::WidgetObserver,
+                            public BrowserCollectionObserver,
                             public ui::EventHandler,
                             public views::FocusChangeListener,
                             public aura::client::FocusChangeObserver {
@@ -292,6 +296,13 @@ class FlyWindowController : public views::WidgetDelegate,
   void SetTabNumbers(bool shown);
   void ClickModeBadge();
   void DropDashboardTab(std::string source, std::string target);
+ public:
+  // Popup windows (sign-in popups, window.open with features, extension
+  // popups) belong to Fly's window, as Electron's child windows do; tiling
+  // window managers float them.
+  void OnBrowserCreated(BrowserWindowInterface* browser) override;
+
+ private:
   void LoadSidebarArtwork();
   void StopSidebarFocusObservation();
   void ToggleSidebarAutoCollapse();
@@ -434,6 +445,8 @@ class FlyWindowController : public views::WidgetDelegate,
   bool sidebar_motion_animating_ = false;
   // Width that takes the pointer: the panel until a collapse ends.
   int sidebar_hit_width_ = 0;
+  base::ScopedObservation<GlobalBrowserCollection, BrowserCollectionObserver>
+      browser_collection_{this};
   base::OneShotTimer tab_numbers_timer_;
   bool tab_numbers_shown_ = false;
   raw_ptr<FlyButton> sidebar_pin_button_ = nullptr;

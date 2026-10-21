@@ -196,6 +196,7 @@ if (is_linux || is_win) {
       "//testing/gtest",
       "//crypto",
       "//third_party/zlib/google:zip",
+      "//ui/gfx/x",
       "//ui/aura",
       "//ui/base",
       "//ui/events:test_support",
