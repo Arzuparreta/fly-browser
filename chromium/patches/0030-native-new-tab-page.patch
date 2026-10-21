@@ -1,0 +1,25 @@
+--- a/chrome/browser/chrome_content_browser_client.cc
++++ b/chrome/browser/chrome_content_browser_client.cc
+@@ -4,6 +4,8 @@
+ 
+ #include "chrome/browser/chrome_content_browser_client.h"
+ 
++#include "fly/ui/new_tab_ui.h"
++
+ #include <algorithm>
+ #include <iterator>
+ #include <map>
+@@ -5057,6 +5059,13 @@
+ 
+ void ChromeContentBrowserClient::BrowserURLHandlerCreated(
+     BrowserURLHandler* handler) {
++  // Fly: chrome://newtab (new tabs and the start page) shows Fly's own page,
++  // before any other new tab page handler.
++  if (base::CommandLine::ForCurrentProcess()->HasSwitch("fly-native")) {
++    fly::RegisterFlyNewTabPage();
++    handler->AddHandlerPair(&fly::RewriteNewTabURL,
++                            BrowserURLHandler::null_handler());
++  }
+   // The group policy NTP URL handler must be registered before the other NTP
+   // URL handlers below. Also register it before the "parts" handlers, so the
+   // NTP policy takes precedence over extensions that override the NTP.

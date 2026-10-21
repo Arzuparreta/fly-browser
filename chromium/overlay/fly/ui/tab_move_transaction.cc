@@ -2,6 +2,7 @@
 // Use of this source code is governed by the GPL-3.0-or-later license in the
 // Fly repository.
 #include "fly/ui/tab_move_transaction.h"
+#include "fly/ui/new_tab_ui.h"
 
 #include <utility>
 
@@ -58,7 +59,7 @@ bool TabMoveTransaction::CanMoveUrl(const GURL& url) {
   return url.is_valid() && !url.has_username() && !url.has_password() &&
          (url.SchemeIsHTTPOrHTTPS() || url.SchemeIsFile() ||
           url.SchemeIs("data") || url.SchemeIs("chrome") ||
-          url == GURL("about:blank"));
+          IsFlyNewTabPage(url));
 }
 bool TabMoveTransaction::SourceValid(bool require_selection) const {
   return !aborted_ && source_ && source_browser_ &&

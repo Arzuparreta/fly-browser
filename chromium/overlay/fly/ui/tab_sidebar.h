@@ -60,6 +60,9 @@ class TabSidebar : public views::View,
   views::View* expanded_surfaces() { return expanded_surfaces_; }
   views::View* rail_surfaces() { return rail_surfaces_; }
   views::View* rail_marks() { return rail_marks_; }
+  // The tab selection numbers over the favicons (1-8, and 9 on the last tab).
+  void SetNumbersVisible(bool visible);
+  bool numbers_visible() const { return numbers_visible_; }
   void OnThemeChanged() override;
   void FocusActiveTab();
   size_t row_count_for_testing() const;
@@ -81,6 +84,7 @@ class TabSidebar : public views::View,
  private:
   class Surfaces;
   class RailMarks;
+  class Numbers;
   enum class RowAction { kSelect, kClose, kPin, kMute };
   void ScheduleRefresh();
   void Refresh();
@@ -111,6 +115,8 @@ class TabSidebar : public views::View,
   raw_ptr<views::View> expanded_surfaces_ = nullptr;
   raw_ptr<views::View> rail_surfaces_ = nullptr;
   raw_ptr<views::View> rail_marks_ = nullptr;
+  raw_ptr<views::View> numbers_ = nullptr;
+  bool numbers_visible_ = false;
   base::RepeatingClosure new_tab_;
   bool rail_ = false;
   bool refresh_pending_ = false;

@@ -2,6 +2,7 @@
 // Use of this source code is governed by the GPL-3.0-or-later license in the
 // Fly repository.
 #include "fly/ui/fly_window_controller.h"
+#include "fly/ui/new_tab_ui.h"
 
 #include "build/build_config.h"
 #include "base/strings/string_number_conversions.h"
@@ -60,6 +61,7 @@
 #include "ui/compositor/layer.h"
 #include "ui/compositor/layer_animator.h"
 #include "ui/gfx/animation/animation.h"
+#include "ui/gfx/animation/tween.h"
 #include "ui/gfx/codec/png_codec.h"
 #include "ui/gfx/image/image_skia_rep.h"
 #include "ui/views/animation/animation_builder.h"
@@ -278,6 +280,7 @@ FlyWindowController::FlyWindowController()
       desktop_(std::make_unique<views::Widget>()) {
   frequent_sites_ =
       std::make_unique<FrequentSitesService>(*g_browser_process->local_state());
+  RegisterFlyNewTabPage();
   SetTitle(u"Fly");
   SetCanResize(true);
   SetCanMinimize(true);
@@ -508,10 +511,7 @@ FlyWindowController::FlyWindowController()
   params.bounds = gfx::Rect(80, 80, 1200, 800);
   desktop_->Init(std::move(params));
   sidebar_widget_ = std::make_unique<SidebarWidget>(base::BindRepeating(
-      [](FlyWindowController* window) {
-        return FlyScaled(window->sidebar_expanded_ ? kSidebarWidth
-                                                   : kSidebarRailWidth);
-      },
+      [](FlyWindowController* window) { return window->sidebar_hit_width_; },
       base::Unretained(this)));
   views::Widget::InitParams sidebar_params(
       views::Widget::InitParams::CLIENT_OWNS_WIDGET,
@@ -1125,8 +1125,8 @@ void FlyWindowController::ToggleAddress(BrowserWindowInterface* browser) {
           },
           weak_factory_.GetWeakPtr()),
       config.shortcuts.at("toggle-address"), u"Address or search",
-      url == GURL("about:blank") ? std::u16string()
-                                 : base::UTF8ToUTF16(url.spec()));
+      IsFlyNewTabPage(url) ? std::u16string()
+                           : base::UTF8ToUTF16(url.spec()));
   LoadHistory(HistorySurface::kAddress);
 }
 std::vector<PaletteEntry> FlyWindowController::AddressEntries(
@@ -1225,6 +1225,46 @@ std::optional<std::vector<FrequentSite>> FlyWindowController::FrequentSites()
   for (const auto& row : history_entries_)
     visits.push_back({row.url.spec(), row.visited});
   return frequent_sites_->Read(visits);
+}
+base::DictValue FlyWindowController::NewTabLists(bool off_the_record) const {
+  // Only web pages are listed, as on Electron's new tab page.
+  const auto link = [](const std::string& url, const std::string& title) {
+    const GURL target(url);
+    if (!target.is_valid() || !target.SchemeIsHTTPOrHTTPS())
+      return std::optional<base::DictValue>();
+    return std::optional<base::DictValue>(
+        base::DictValue()
+            .Set("url", target.spec())
+            .Set("title", title.empty() ? target.host() : title));
+  };
+  base::ListValue bookmarks;
+  base::ListValue sites;
+  const bool show_sites =
+      !off_the_record && preferences_.ReadFrequentSitesVisible().value_or(true);
+  if (!off_the_record) {
+    if (const auto saved = bookmarks_->Read()) {
+      for (const auto& bookmark : *saved) {
+        if (auto entry = link(bookmark.url, bookmark.title))
+          bookmarks.Append(std::move(*entry));
+      }
+    }
+  }
+  if (show_sites) {
+    if (const auto frequent = FrequentSites()) {
+      for (const auto& site : *frequent) {
+        if (auto entry = link(site.url, site.title))
+          sites.Append(std::move(*entry));
+      }
+    }
+  }
+  return base::DictValue()
+      .Set("showBookmarks", !off_the_record)
+      .Set("showSites", show_sites)
+      .Set("bookmarks", std::move(bookmarks))
+      .Set("sites", std::move(sites));
+}
+bool FlyWindowController::HideFrequentSite(const std::string& url) {
+  return !closing_ && frequent_sites_->Hide(url);
 }
 std::vector<PaletteEntry> FlyWindowController::BookmarkEntries() {
   bookmark_urls_.clear();
@@ -1370,6 +1410,7 @@ void FlyWindowController::ClearSidebarViews() {
   workspace_picker_button_ = nullptr;
   sidebar_panel_ = nullptr;
   sidebar_root_ = nullptr;
+  tab_numbers_timer_.Stop();
 }
 void FlyWindowController::StopSidebarFocusObservation() {
   if (sidebar_focus_client_) {
@@ -1412,10 +1453,29 @@ void FlyWindowController::UpdateSidebarBounds() {
 void FlyWindowController::UpdateSidebarHitArea() {
   if (!sidebar_targeter_ || !sidebar_host_)
     return;
-  const int visible = FlyScaled(sidebar_expanded_ ? kSidebarWidth
-                                                  : kSidebarRailWidth);
   sidebar_targeter_->SetInsets(gfx::Insets::TLBR(
-      0, 0, 0, std::max(0, sidebar_host_->width() - visible)));
+      0, 0, 0, std::max(0, sidebar_host_->width() - sidebar_hit_width_)));
+}
+float FlyWindowController::SidebarShiftNow() const {
+  if (!sidebar_motion_animating_)
+    return sidebar_shift_to_;
+  const double progress =
+      std::clamp((base::TimeTicks::Now() - sidebar_motion_start_) /
+                     kSidebarMotion,
+                 0.0, 1.0);
+  return gfx::Tween::FloatValueBetween(
+      gfx::Tween::CalculateValue(gfx::Tween::FAST_OUT_SLOW_IN_3, progress),
+      sidebar_shift_from_, sidebar_shift_to_);
+}
+int FlyWindowController::VisibleSidebarWidth() const {
+  return FlyScaled(kSidebarWidth) - static_cast<int>(SidebarShiftNow() + 0.5f);
+}
+void FlyWindowController::OnSidebarMotionEnded() {
+  sidebar_motion_animating_ = false;
+  // A finished collapse gives the page back everything right of the rail.
+  sidebar_hit_width_ = FlyScaled(kSidebarWidth) -
+                       static_cast<int>(sidebar_shift_to_ + 0.5f);
+  UpdateSidebarHitArea();
 }
 void FlyWindowController::UpdateSidebarMode() {
   if (!sidebar_content_)
@@ -1502,6 +1562,15 @@ void FlyWindowController::ApplySidebarMotion(bool animate) {
   sidebar_motion_scale_ = GetFlyInterfaceScale();
   const bool rail = sidebar_auto_collapse_ && !sidebar_expanded_;
   const int shift = rail ? FlyScaled(kSidebarWidth - kSidebarRailWidth) : 0;
+  sidebar_shift_from_ = SidebarShiftNow();
+  sidebar_shift_to_ = shift;
+  sidebar_motion_start_ = base::TimeTicks::Now();
+  sidebar_motion_animating_ = animate;
+  // Expanding takes the pointer at once; collapsing keeps the panel's area
+  // until the edge has passed, so the page never gets clicks on a panel
+  // that is still visible.
+  if (!rail || !animate)
+    sidebar_hit_width_ = FlyScaled(kSidebarWidth) - shift;
   gfx::Transform outer;
   outer.Translate(-shift, 0);
   gfx::Transform inner;
@@ -1522,6 +1591,8 @@ void FlyWindowController::ApplySidebarMotion(bool animate) {
   views::AnimationBuilder builder;
   builder.SetPreemptionStrategy(
       ui::LayerAnimator::IMMEDIATELY_ANIMATE_TO_NEW_TARGET);
+  builder.OnEnded(base::BindOnce(&FlyWindowController::OnSidebarMotionEnded,
+                                 weak_factory_.GetWeakPtr()));
   auto& block = builder.Once()
                     .SetDuration(kSidebarMotion)
                     .SetTransform(edge->layer(), outer,
@@ -1652,12 +1723,21 @@ void FlyWindowController::OnMouseEvent(ui::MouseEvent* event) {
       event->type() != ui::EventType::kMouseExited &&
       event->type() != ui::EventType::kMousePressed)
     return;
+  // Like Electron, leaving the window keeps the sidebar as it is: moving
+  // from the page to the screen's left edge opens it, and touching the
+  // window border does not close it. Entering the page closes it.
+  if (event->type() == ui::EventType::kMouseExited)
+    return;
   auto point = event->root_location();
   wm::ConvertPointToScreen(desktop_->GetNativeWindow()->GetRootWindow(),
                            &point);
-  auto bounds = desktop_->GetContentsView()->GetBoundsInScreen();
-  bounds.set_width(FlyScaled(sidebar_expanded_ ? kSidebarWidth
-                                                : kSidebarRailWidth));
+  const auto window = desktop_->GetContentsView()->GetBoundsInScreen();
+  if (!window.Contains(point) &&
+      event->type() != ui::EventType::kMousePressed)
+    return;
+  // The edge the user sees, mid-slide included.
+  auto bounds = window;
+  bounds.set_width(VisibleSidebarWidth());
   const bool was_inside = sidebar_pointer_inside_;
   sidebar_pointer_inside_ = bounds.Contains(point);
   const bool pressed = event->type() == ui::EventType::kMousePressed;
@@ -3208,6 +3288,9 @@ void FlyWindowController::OnWidgetDestroying(views::Widget* widget) {
 }
 void FlyWindowController::OnWidgetActivationChanged(views::Widget* widget,
                                                     bool active) {
+  // A blurred window can no longer see the modifier's release.
+  if (widget == desktop_.get() && !active)
+    SetTabNumbers(false);
   if (widget == desktop_.get() && selected_) {
     auto* child = entries_.at(selected_).widget.get();
     child->OnNativeWidgetActivationChanged(active);
@@ -3435,7 +3518,60 @@ bool FlyWindowController::RunCommand(BrowserWindowInterface* browser,
 }  // namespace fly
 
 namespace fly {
+void FlyWindowController::TrackTabNumbers(bool key_down,
+                                          ui::KeyboardCode code,
+                                          ui::DomCode dom_code,
+                                          int flags,
+                                          bool repeat,
+                                          bool passthrough) {
+  const bool modifier =
+      key_down && (code == ui::VKEY_CONTROL || code == ui::VKEY_MENU ||
+                   code == ui::VKEY_SHIFT || code == ui::VKEY_LWIN ||
+                   code == ui::VKEY_RWIN);
+  // Right Alt is AltGr on many layouts; in passthrough the page receives
+  // every shortcut, so the numbers would point at nothing.
+  if (!modifier || passthrough || dom_code == ui::DomCode::ALT_RIGHT) {
+    SetTabNumbers(false);
+    return;
+  }
+  if (repeat)
+    return;
+  std::vector<std::string> held;
+  const auto add = [&](bool on, const char* name) {
+    if (on)
+      held.push_back(name);
+  };
+  add(code == ui::VKEY_CONTROL || (flags & ui::EF_CONTROL_DOWN), "Ctrl");
+  add(code == ui::VKEY_MENU || (flags & ui::EF_ALT_DOWN), "Alt");
+  add(code == ui::VKEY_SHIFT || (flags & ui::EF_SHIFT_DOWN), "Shift");
+  add(code == ui::VKEY_LWIN || code == ui::VKEY_RWIN ||
+          (flags & ui::EF_COMMAND_DOWN),
+      "Meta");
+  const auto tabs = commands_.Read().value_or(DefaultKeyboardConfig()).tabs;
+  if (tabs.empty() || base::JoinString(held, "+") != tabs) {
+    SetTabNumbers(false);
+    return;
+  }
+  // The delay keeps quick chords such as Alt+S from flashing them.
+  if (!tab_numbers_shown_ && !tab_numbers_timer_.IsRunning()) {
+    tab_numbers_timer_.Start(
+        FROM_HERE, base::Milliseconds(150),
+        base::BindOnce(&FlyWindowController::SetTabNumbers,
+                       base::Unretained(this), true));
+  }
+}
+void FlyWindowController::SetTabNumbers(bool shown) {
+  tab_numbers_timer_.Stop();
+  if (shown == tab_numbers_shown_)
+    return;
+  tab_numbers_shown_ = shown;
+  if (tab_sidebar_)
+    tab_sidebar_->SetNumbersVisible(shown);
+}
 void FlyWindowController::OnKeyEvent(ui::KeyEvent* event) {
+  TrackTabNumbers(event->type() == ui::EventType::kKeyPressed,
+                  event->key_code(), event->code(), event->flags(),
+                  event->is_repeat(), false);
   if ((rename_widget_ && !rename_widget_->IsClosed()) ||
       (remove_widget_ && !remove_widget_->IsClosed()) ||
       (history_clear_widget_ && !history_clear_widget_->IsClosed()))
@@ -4161,8 +4297,7 @@ void FlyWindowController::ApplyLegacyImport(
     content::WebContents* blank = nullptr;
     if (model->count() == 1) {
       const GURL& first = model->GetWebContentsAt(0)->GetVisibleURL();
-      if (first.is_empty() || first.IsAboutBlank() ||
-          first.SchemeIs(content::kChromeUIScheme))
+      if (IsFlyNewTabPage(first) || first.SchemeIs(content::kChromeUIScheme))
         blank = model->GetWebContentsAt(0);
     }
     for (const auto& item : *tabs) {

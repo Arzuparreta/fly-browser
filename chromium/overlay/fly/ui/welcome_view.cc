@@ -2,6 +2,9 @@
 // Use of this source code is governed by the GPL-3.0-or-later license in the
 // Fly repository.
 #include "fly/ui/welcome_view.h"
+#include "ui/gfx/canvas.h"
+#include "cc/paint/draw_looper.h"
+#include "base/i18n/case_conversion.h"
 
 #include <memory>
 #include <utility>
@@ -35,7 +38,7 @@ class WelcomeCard : public views::Button {
     keys_ = AddChildView(std::make_unique<FlyLabel>(
         card.keys.empty() ? u"Unassigned" : card.keys, FlyFace::kMono, 13,
         gfx::Font::Weight::BOLD, FlyLabel::Tone::kAccent));
-    keys_->SetBorder(views::CreateEmptyBorder(gfx::Insets::VH(4, 8)));
+    keys_->SetBorder(FlyBorder(FlyRole::kBorder, 1, 4, gfx::Insets::VH(3, 7)));
     keys_->SetBackground(FlyBackground(FlyRole::kSelected, 4));
     keys_->SetCanProcessEventsWithinSubtree(false);
     auto* label = AddChildView(std::make_unique<FlyLabel>(
@@ -79,15 +82,16 @@ END_METADATA
 }  // namespace
 
 WelcomeView::WelcomeView() {
-  SetBackground(FlyBackground(FlyRole::kMain));
   auto* outer = SetLayoutManager(std::make_unique<views::BoxLayout>(
       views::BoxLayout::Orientation::kVertical, gfx::Insets(24)));
   outer->set_main_axis_alignment(views::BoxLayout::MainAxisAlignment::kCenter);
   outer->set_cross_axis_alignment(
       views::BoxLayout::CrossAxisAlignment::kCenter);
+  // Electron's identity layer: a matte card on the canvas, 2px corners.
   auto* card = AddChildView(std::make_unique<FixedWidthView>(650));
-  card->SetBackground(FlyBackground(FlyRole::kSidebar, 12));
-  card->SetBorder(FlyBorder(FlyRole::kBorder, 1, 12, gfx::Insets(40)));
+  card_ = card;
+  card->SetBackground(FlyBackground(FlyRole::kMain, 2));
+  card->SetBorder(FlyBorder(FlyRole::kBorder, 1, 2, gfx::Insets(40)));
   auto* layout = card->SetLayoutManager(std::make_unique<views::BoxLayout>(
       views::BoxLayout::Orientation::kVertical, gfx::Insets(), 0));
   layout->set_cross_axis_alignment(
@@ -96,7 +100,7 @@ WelcomeView::WelcomeView() {
   logo_->SetImageSize(gfx::Size(96, 96));
   logo_->SetBorder(views::CreateEmptyBorder(gfx::Insets::TLBR(0, 0, 16, 0)));
   auto* title = card->AddChildView(std::make_unique<FlyLabel>(
-      u"Fly Browser", FlyFace::kSans, 28, gfx::Font::Weight::BOLD));
+      u"Fly Browser", FlyFace::kDisplay, 28, gfx::Font::Weight::BLACK));
   title->SetBorder(views::CreateEmptyBorder(gfx::Insets::TLBR(0, 0, 8, 0)));
   workspace_ = card->AddChildView(std::make_unique<FlyLabel>(
       u"Workspace", FlyFace::kSans, 16, gfx::Font::Weight::SEMIBOLD,
@@ -123,13 +127,46 @@ WelcomeView::WelcomeView() {
   auto* versions = card->AddChildView(std::make_unique<FlyLabel>(
       base::UTF8ToUTF16(std::string("Fly v") + kFlyVersion + " · Chromium " +
                         std::string(version_info::GetVersionNumber())),
-      FlyFace::kMono, 11, gfx::Font::Weight::NORMAL, FlyLabel::Tone::kDim));
-  versions->SetBorder(views::CreateEmptyBorder(gfx::Insets::TLBR(12, 0, 0, 0)));
+      FlyFace::kMono, 11, gfx::Font::Weight::NORMAL,
+      FlyLabel::Tone::kAccent));
+  // .welcome-versions: a bordered badge 24px below the hint.
+  versions->SetBackground(FlyBackground(FlyRole::kMain, 4));
+  versions->SetBorder(FlyBorder(FlyRole::kBorder, 1, 4, gfx::Insets::VH(5, 13)));
+  auto* versions_gap = card->AddChildView(std::make_unique<views::View>());
+  versions_gap->SetPreferredSize(gfx::Size(1, 12));
+  card->ReorderChildView(versions_gap, card->children().size() - 2);
 }
 WelcomeView::~WelcomeView() = default;
 
+// #EmptyWorkspaceWelcome: the canvas with a 16px grid of 0.7px dots in the
+// border colour, and the card's shadow (0 16px 48px rgba(0, 0, 0, 0.5)).
+void WelcomeView::OnPaintBackground(gfx::Canvas* canvas) {
+  const auto& colors = GetFlyColors();
+  canvas->DrawColor(colors.bg_main);
+  cc::PaintFlags dot;
+  dot.setAntiAlias(true);
+  dot.setColor(colors.border);
+  gfx::Rect clip(size());
+  canvas->GetClipBounds(&clip);
+  for (int y = (clip.y() / 16) * 16; y < clip.bottom() + 16; y += 16) {
+    for (int x = (clip.x() / 16) * 16; x < clip.right() + 16; x += 16)
+      canvas->DrawCircle(gfx::PointF(x + 8, y + 8), 0.7f, dot);
+  }
+  if (!card_)
+    return;
+  cc::DrawLooperBuilder looper;
+  looper.AddShadow({0, 16}, 24, SkColor4f::FromColor(SkColorSetARGB(128, 0, 0, 0)),
+                   cc::DrawLooper::kOverrideAlphaFlag);
+  cc::PaintFlags shadow;
+  shadow.setAntiAlias(true);
+  shadow.setLooper(looper.Detach());
+  shadow.setColor(colors.bg_main);
+  canvas->DrawRoundRect(gfx::RectF(card_->bounds()), 2, shadow);
+}
+
 void WelcomeView::Update(std::u16string workspace, std::vector<Card> cards) {
-  workspace_->SetText(workspace);
+  // .welcome-subtitle is upper case.
+  workspace_->SetText(base::i18n::ToUpper(workspace));
   grid_->RemoveAllChildViews();
   // Two columns, as .welcome-shortcuts-grid.
   for (size_t i = 0; i < cards.size(); i += 2) {

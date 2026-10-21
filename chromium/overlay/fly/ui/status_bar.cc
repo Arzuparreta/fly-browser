@@ -2,6 +2,7 @@
 // Use of this source code is governed by the GPL-3.0-or-later license in the
 // Fly repository.
 #include "fly/ui/status_bar.h"
+#include "fly/ui/new_tab_ui.h"
 
 #include "base/i18n/case_conversion.h"
 #include "base/strings/string_number_conversions.h"
@@ -365,7 +366,7 @@ void StatusBar::Update() {
   std::u16string text;
   const gfx::VectorIcon* icon = &vector_icons::kLockIcon;
   auto tone = StatusBadge::Tone::kNeutral;
-  if (page.is_empty() || page.IsAboutBlank()) {
+  if (IsFlyNewTabPage(page)) {
     text = u"BLANK";
     icon = &vector_icons::kGlobeIcon;
   } else if (page.SchemeIs(url::kHttpsScheme)) {
