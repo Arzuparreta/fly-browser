@@ -71,6 +71,21 @@ cp "${releases}/$(basename "$url")" "$out"
     assert.equal(fs.existsSync(calls), false);
     assert.match(run('scripts/fly-install', ['uninstall', '--invalid'], packageEnv).stderr, /Unknown uninstall option/);
     fs.writeFileSync(path.join(bin, 'pacman'), '#!/bin/sh\nexit 1\n', {mode:0o755});
+    assert.match(run('scripts/fly-install', ['status'], env).stdout, /Retained configuration:/);
+    // Purging also works when only configuration remains after uninstall.
+    const electron = path.join(env.XDG_CONFIG_HOME, 'fly-browser');
+    fs.mkdirSync(electron, {recursive:true});
+    fs.writeFileSync(path.join(electron, 'settings'), 'legacy settings');
+    fs.writeFileSync(path.join(env.XDG_CONFIG_HOME, 'fly-browser-flags.conf'), '--ozone-platform=wayland');
+    const unrelated = path.join(env.XDG_CONFIG_HOME, 'other-app');
+    fs.mkdirSync(unrelated);
+    fs.writeFileSync(path.join(unrelated, 'kept'), 'unrelated');
+    assert.equal(run('scripts/fly-install', ['uninstall', '--purge', '--yes'], env).status, 0);
+    assert.equal(fs.existsSync(path.join(env.XDG_CONFIG_HOME, 'fly-browser-native')), false);
+    assert.equal(fs.existsSync(electron), false);
+    assert.equal(fs.existsSync(path.join(env.XDG_CONFIG_HOME, 'fly-browser-flags.conf')), false);
+    assert.equal(fs.readFileSync(path.join(unrelated, 'kept'), 'utf8'), 'unrelated');
+    assert.equal(run('scripts/fly-install', ['uninstall', '--purge', '--yes'], env).status, 0);
     fs.unlinkSync(archive);
     assert.match(run('scripts/fly-install', ['install', '--native'], env).stderr, /no native Chromium package/);
     console.log('Native launcher and installer preserve arguments, verify releases, reject legacy-only releases and retain profile/unrelated launchers.');

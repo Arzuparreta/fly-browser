@@ -21,12 +21,17 @@ release has only Electron assets, installation stops without substituting Electr
 fly-install status
 fly-install update
 fly-install uninstall --yes
+# Also delete profiles, history, passwords and settings (even if Fly is already removed):
+fly-install uninstall --purge --yes
 ```
 
 The user installation lives in `$XDG_DATA_HOME/fly-browser-native` (default
 `~/.local/share/fly-browser-native`). Start `~/.local/bin/fly-browser` or
 `~/.local/bin/fly-browser-native`, or choose **Fly** in your launcher. Add
-`~/.local/bin` to `PATH` if needed. Uninstall keeps profiles and legacy binaries.
+`~/.local/bin` to `PATH` if needed. Uninstall removes the Arch package and user installation, and keeps profiles by default.
+`--purge` also deletes the native and Electron Fly profiles and launcher flags
+under `$XDG_CONFIG_HOME` (default `~/.config`), even if no installation remains.
+Legacy AppImage binaries are managed separately by the legacy installer.
 
 On Arch-based systems with `pacman` and `makepkg`, installation uses the
 release's `PKGBUILD` and installs `fly-browser-bin`. You can request it with
