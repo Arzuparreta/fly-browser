@@ -1534,6 +1534,47 @@ IN_PROC_BROWSER_TEST_F(FlyWorkspaceBrowserTest,
 }
 
 IN_PROC_BROWSER_TEST_F(FlyWorkspaceBrowserTest,
+                       NewTabReservesScaledSidebarOverhang) {
+  auto& window = FlyWindowController::Get();
+  ASSERT_TRUE(ExecuteNativeCommand(browser(), "spawn-tab"));
+  auto* contents = Active(browser());
+  ASSERT_TRUE(content::WaitForLoadStop(contents));
+  for (const char* scale : {"normal", "large", "normal"}) {
+    SCOPED_TRACE(scale);
+    ASSERT_TRUE(window.preferences().SetString("interface_scale", scale));
+    for (bool collapse : {true, false}) {
+      SCOPED_TRACE(collapse);
+      ASSERT_TRUE(window.preferences().SetSidebarAutoCollapse(collapse));
+      const int overhang = collapse
+          ? FlyScaled(kSidebarWidth) - FlyScaled(kSidebarRailWidth) : 0;
+      ASSERT_TRUE(base::test::RunUntil([&] {
+        return content::EvalJs(contents, content::JsReplace(
+            "document.documentElement.style.getPropertyValue("
+            "'--sidebar-overhang') === $1", std::to_string(overhang) + "px"))
+            .ExtractBool();
+      }));
+      ASSERT_TRUE(content::ExecJs(contents,
+          "(async () => { await document.fonts.ready; "
+          "await new Promise(requestAnimationFrame); })()"));
+      const auto clock_left = content::EvalJs(contents,
+          "document.getElementById('clock').getBoundingClientRect().left")
+          .ExtractDouble();
+      EXPECT_GE(clock_left, overhang);
+      if (collapse) {
+        ASSERT_TRUE(InvokeNativeCommand(browser(), "focus-sidebar"));
+        ASSERT_TRUE(base::test::RunUntil([&] {
+          return window.sidebar_expanded_for_testing();
+        }));
+        EXPECT_EQ(clock_left, content::EvalJs(contents,
+            "document.getElementById('clock').getBoundingClientRect().left")
+            .ExtractDouble());
+        ASSERT_TRUE(InvokeNativeCommand(browser(), "focus-sidebar"));
+      }
+    }
+  }
+}
+
+IN_PROC_BROWSER_TEST_F(FlyWorkspaceBrowserTest,
                        NewTabLoadsFreshListsAndFollowsLivePreferences) {
   auto& window = FlyWindowController::Get();
   const auto visited = embedded_test_server()->GetURL("/title1.html");

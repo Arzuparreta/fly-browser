@@ -39,33 +39,6 @@ const createFixture = require('./electron-fixture');
         assert.equal(await guest('document.querySelectorAll("#bookmarks script").length'), 0);
         assert.equal(await guest('document.getElementById("frequent-sites").hidden'), true);
         assert.equal(await guest('document.getElementById("saved-bookmarks").hidden'), false);
-        // Guest zoom is independent of interface zoom. The sidebar clearance
-        // must therefore come from host geometry at both interface scales.
-        for (const scale of ['normal', 'large']) {
-            await page.evaluate(scale => window.flyAPI.updateBrowserSettings({interface_scale:scale}), scale);
-            for (const width of [1100, 1600]) {
-                await app.evaluate(({BrowserWindow}, width) => BrowserWindow.getAllWindows()[0].setContentSize(width, 900), width);
-                await page.evaluate(() => window.executeBrowserAction('focus-sidebar'));
-                await page.waitForTimeout(300);
-                const geometry = await page.evaluate(() => {
-                    const sidebar = document.getElementById('Sidebar').getBoundingClientRect();
-                    const view = document.querySelector('webview').getBoundingClientRect();
-                    return {sidebarRight:sidebar.right, viewLeft:view.left, viewWidth:view.width};
-                });
-                assert(geometry.viewLeft >= geometry.sidebarRight - 1, `${scale}: expanded sidebar must not cover the new tab`);
-                assert(geometry.viewWidth > 0);
-                await page.evaluate(() => window.executeBrowserAction('focus-sidebar'));
-                await page.waitForTimeout(300);
-                assert(Math.abs(await page.locator('webview').evaluate(view => view.getBoundingClientRect().left) - geometry.viewLeft) < 1, 'Opening and closing the sidebar must not move new-tab content');
-                await page.waitForFunction(async () => {
-                    const view = document.querySelector('webview');
-                    const width = view.getBoundingClientRect().width * window.flyAPI.getInterfaceZoomFactor() / view.getZoomFactor();
-                    return Math.abs(await view.executeJavaScript('innerWidth') - width) < 2;
-                });
-                assert(await guest('document.documentElement.scrollWidth <= innerWidth'));
-            }
-        }
-        await page.evaluate(() => window.flyAPI.updateBrowserSettings({interface_scale:'normal'}));
         for (const width of [1100, 650]) {
             await app.evaluate(({BrowserWindow}, width) => BrowserWindow.getAllWindows()[0].setContentSize(width, 800), width);
             assert(await guest('document.documentElement.scrollWidth <= innerWidth'));
@@ -74,7 +47,6 @@ const createFixture = require('./electron-fixture');
         }
         await guest('document.querySelector("#bookmarks a").click()');
         await page.waitForFunction(url => document.querySelector('webview').getURL() === url, destination);
-        assert.equal(await page.locator('webview').evaluate(view => view.classList.contains('new-tab-page')), false, 'Navigating to a website must restore the full page width');
         assert.equal(await page.locator('#TabList li').count(), 1);
         await page.evaluate(async url => {
             await window.flyAPI.saveBookmarks([{url:'https://updated.example', title:'Updated bookmark'}]);

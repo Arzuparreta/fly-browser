@@ -116,6 +116,7 @@ window.updateFlyNewTab = data => {
     document.body.classList.toggle('light', data.light);
     for (const [key, value] of Object.entries(data.colours)) document.documentElement.style.setProperty(key, value);
     document.documentElement.style.setProperty('--scale', data.scale || 1);
+    document.documentElement.style.setProperty('--sidebar-overhang', `${data.sidebarOverhang || 0}px`);
     document.getElementById('memory-fly').src = `identity/memory-${data.light ? 'papel' : 'chasis'}@2x.png`;
     document.getElementById('saved-bookmarks').hidden = !data.showBookmarks;
     document.getElementById('frequent-sites').hidden = !data.showSites;
