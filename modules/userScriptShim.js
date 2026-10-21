@@ -283,7 +283,7 @@ export function buildUserScriptWrapper(item) {
             runAt: __gm_meta__.runAt || 'document-end'
         },
         scriptHandler: 'Fly Browser',
-        version: '0.27.0'
+        version: '0.28.0'
     };
 
     var unsafeWindow = window;
