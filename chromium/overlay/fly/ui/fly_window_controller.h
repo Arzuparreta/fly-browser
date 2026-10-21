@@ -143,6 +143,8 @@ class FlyWindowController : public views::WidgetDelegate,
   TabSidebar* tab_sidebar_for_testing() { return tab_sidebar_; }
   DownloadShelf* download_shelf_for_testing() { return download_shelf_; }
   SidebarRoot* sidebar_root_for_testing() { return sidebar_root_; }
+  Profile* ActiveProfile() const;
+  void OpenInNewWindow(GURL url);
   void CreateTab();
   // An empty name takes the next "Workspace N".
   void CreateWorkspace(std::string name = {});

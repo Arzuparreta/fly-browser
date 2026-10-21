@@ -71,7 +71,8 @@ class FlyExtensions : public extensions::ExtensionRegistryObserver,
   std::vector<FlyExtensionInfo> List(Profile* profile) const;
   bool SetExtensionEnabled(Profile* profile, const std::string& id, bool on);
   bool Remove(Profile* profile, const std::string& id);
-  void OpenOptions(BrowserWindowInterface* browser, const std::string& id);
+  void OpenOptions(BrowserWindowInterface* browser, const std::string& id,
+                   Profile* profile = nullptr);
 
   // Extensions with a toolbar action, enabled in `profile`, by name.
   std::vector<const extensions::Extension*> ActionExtensions(

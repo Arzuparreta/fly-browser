@@ -564,14 +564,33 @@ std::u16string NativePageModeLabel(BrowserWindowInterface* browser) {
   return u"NORMAL";
 }
 
+bool IsShellCommand(std::string_view action) {
+  constexpr std::string_view actions[] = {
+      "toggle-help", "open-keyboard-settings", "toggle-palette",
+      "toggle-bookmarks", "toggle-history", "toggle-address", "toggle-downloads",
+      "open-extension-actions", "open-diagnostics", "toggle-dashboard",
+      "new-workspace", "focus-sidebar", "toggle-theme", "toggle-zen-mode",
+      "toggle-sidebar-pin", "toggle-window-controls", "toggle-status-bar",
+      "cycle-clock-format", "toggle-clock", "toggle-menu-bar",
+      "toggle-native-menu-visibility", "focus-nav-buttons", "reload-user-content",
+      "open-task-manager", "check-for-updates", "show-whats-new",
+      "toggle-diagnostics-recording", "toggle-notifications", "open-scripts-dir",
+      "open-styles-dir", "open-script-storage-dir", "test-google-signin",
+      "toggle-private-mode", "next-workspace", "previous-workspace",
+      "toggle-global-audio-mute", "toggle-global-media", "hibernate-tabs",
+      "wake-all-tabs"};
+  return std::ranges::find(actions, action) != std::end(actions);
+}
+
 bool InvokeNativeCommand(BrowserWindowInterface* browser, std::string action) {
-  if (!browser || !IsKnownAction(action))
+  if (!IsKnownAction(action))
     return false;
-  auto* contents = browser->GetTabStripModel()->GetActiveWebContents();
-  if (!contents)
-    return false;
-  PageKeyboardState::CreateForWebContents(contents);
-  PageKeyboardState::FromWebContents(contents)->router().Invoke(action);
+  auto* contents = browser ? browser->GetTabStripModel()->GetActiveWebContents()
+                           : nullptr;
+  if (contents) {
+    PageKeyboardState::CreateForWebContents(contents);
+    PageKeyboardState::FromWebContents(contents)->router().Invoke(action);
+  }
   auto& window = FlyWindowController::Get();
   const bool handled = window.RunCommand(browser, action);
   window.UpdateModeLabel();
@@ -581,7 +600,7 @@ bool InvokeNativeCommand(BrowserWindowInterface* browser, std::string action) {
 bool NativeCommandAvailable(BrowserWindowInterface* browser,
                             std::string_view action) {
   if (!browser)
-    return false;
+    return IsShellCommand(action) && FlyWindowController::GetIfCreated();
   if (action == "move-tab-to-workspace") {
     const auto* window = FlyWindowController::GetIfCreated();
     return window &&

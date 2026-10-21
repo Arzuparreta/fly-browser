@@ -1019,14 +1019,14 @@ void KeyboardEditor::RunAction(std::string action) {
   }
   if (extensions_ && extensions_browser_ &&
       (action == "extensions-usage" || action == "extensions-reload")) {
-    auto* browser = extensions_browser_.Run();
+    auto* profile = extensions_profile_ ? extensions_profile_.Run() : nullptr;
     if (action == "extensions-reload")
       SetExtensionUsage(extensions_->ReloadUnpacked()
                             ? u"Extensions reloaded. Reload open tabs to "
                               u"refresh their content scripts."
                             : u"No unpacked extensions to reload.");
-    else if (browser)
-      SetExtensionUsage(extensions_->Usage(browser->GetProfile()));
+    else if (profile)
+      SetExtensionUsage(extensions_->Usage(profile));
     return;
   }
   if (run_action_)
@@ -1034,15 +1034,9 @@ void KeyboardEditor::RunAction(std::string action) {
 }
 
 void KeyboardEditor::OpenUrl(std::string url) {
-  if (!extensions_browser_)
-    return;
-  auto* browser = extensions_browser_.Run();
   Cancel(true);
-  if (!browser)
-    return;
-  NavigateParams params(browser, GURL(url), ui::PAGE_TRANSITION_AUTO_TOPLEVEL);
-  params.disposition = WindowOpenDisposition::NEW_FOREGROUND_TAB;
-  Navigate(&params);
+  if (run_action_)
+    run_action_.Run("open-window:" + url);
 }
 
 void KeyboardEditor::SetUpdateStatus(std::u16string status,
@@ -1205,9 +1199,11 @@ void KeyboardEditor::ShowAppearance(bool return_to_page) {
 }
 void KeyboardEditor::SetExtensions(
     FlyExtensions* extensions,
-    base::RepeatingCallback<BrowserWindowInterface*()> browser) {
+    base::RepeatingCallback<BrowserWindowInterface*()> browser,
+    base::RepeatingCallback<Profile*()> profile) {
   extensions_ = extensions;
   extensions_browser_ = std::move(browser);
+  extensions_profile_ = std::move(profile);
 }
 void KeyboardEditor::ShowExtensions() {
   if (!active() || !extensions_list_)
@@ -1323,8 +1319,7 @@ void KeyboardEditor::SetExtensionUsage(std::u16string text) {
 void KeyboardEditor::RefreshExtensions() {
   if (!extensions_list_ || !extensions_)
     return;
-  auto* browser = extensions_browser_ ? extensions_browser_.Run() : nullptr;
-  Profile* profile = browser ? browser->GetProfile() : nullptr;
+  Profile* profile = extensions_profile_ ? extensions_profile_.Run() : nullptr;
   extensions_enabled_->SetChecked(extensions_->Enabled());
   extensions_enabled_->SetEnabled(extensions_->CanEdit());
   // Rows are rebuilt detached and attached once (see Refresh()).
@@ -1333,7 +1328,8 @@ void KeyboardEditor::RefreshExtensions() {
       views::BoxLayout::Orientation::kVertical, gfx::Insets(), 6));
   if (!profile || profile->IsOffTheRecord()) {
     rows->AddChildView(MakeEditorLabel(
-        u"Private workspaces run no extensions."));
+        profile ? u"Private workspaces run no extensions."
+                : u"Select a workspace to manage its extensions."));
   }
   const auto list = profile && !profile->IsOffTheRecord()
                         ? extensions_->List(profile)
@@ -1357,9 +1353,9 @@ void KeyboardEditor::RefreshExtensions() {
            views::Checkbox* box) {
           if (!editor || !editor->active() || !editor->extensions_browser_)
             return;
-          auto* browser = editor->extensions_browser_.Run();
-          if (browser)
-            editor->extensions_->SetExtensionEnabled(browser->GetProfile(), id,
+          auto* profile = editor->extensions_profile_.Run();
+          if (profile)
+            editor->extensions_->SetExtensionEnabled(profile, id,
                                                      box->GetChecked());
           base::SingleThreadTaskRunner::GetCurrentDefault()->PostTask(
               FROM_HERE, base::BindOnce(&KeyboardEditor::RefreshExtensions,
@@ -1375,7 +1371,8 @@ void KeyboardEditor::RefreshExtensions() {
                   return;
                 auto* browser = editor->extensions_browser_.Run();
                 editor->Cancel(true);
-                editor->extensions_->OpenOptions(browser, id);
+                editor->extensions_->OpenOptions(
+                    browser, id, editor->extensions_profile_.Run());
               },
               weak_factory_.GetWeakPtr(), info.id),
           u"Options"));
@@ -1385,8 +1382,8 @@ void KeyboardEditor::RefreshExtensions() {
             [](base::WeakPtr<KeyboardEditor> editor, std::string id) {
               if (!editor || !editor->active() || !editor->extensions_browser_)
                 return;
-              if (auto* browser = editor->extensions_browser_.Run())
-                editor->extensions_->Remove(browser->GetProfile(), id);
+              if (auto* profile = editor->extensions_profile_.Run())
+                editor->extensions_->Remove(profile, id);
               base::SingleThreadTaskRunner::GetCurrentDefault()->PostTask(
                   FROM_HERE, base::BindOnce(&KeyboardEditor::RefreshExtensions,
                                             editor));
@@ -2052,14 +2049,16 @@ void KeyboardEditor::FileSelected(const ui::SelectedFileInfo& file, int) {
   if (file_choice_ == FileChoice::kExtensionPackage ||
       file_choice_ == FileChoice::kExtensionFolder) {
     auto* browser = extensions_browser_ ? extensions_browser_.Run() : nullptr;
-    if (!extensions_ || !browser)
+    auto* profile = extensions_profile_ ? extensions_profile_.Run() : nullptr;
+    if (!extensions_ || !profile)
       return;
     if (file_choice_ == FileChoice::kExtensionPackage)
       extensions_->InstallPackage(
-          browser->GetProfile(),
-          browser->GetTabStripModel()->GetActiveWebContents(), path);
+          profile,
+          browser ? browser->GetTabStripModel()->GetActiveWebContents() : nullptr,
+          path);
     else
-      extensions_->LoadUnpacked(browser->GetProfile(), path);
+      extensions_->LoadUnpacked(profile, path);
     SetExtensionUsage(u"Installing " + path.BaseName().LossyDisplayName() +
                       u"…");
     return;
