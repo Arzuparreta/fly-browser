@@ -1935,6 +1935,10 @@ void FlyWindowController::ApplyFlyPalette() {
     return;
   for (auto* widget : {desktop_.get(), sidebar_widget_.get()}) {
     if (widget && widget->GetNativeWindow()) {
+      // Fly's palette and interface scale live outside Chromium's color
+      // provider key. Its theme-change optimization must not skip our font,
+      // geometry and artwork cache updates when that key stays the same.
+      widget->ResetLastColorProviderKey();
       widget->ThemeChanged();
       widget->GetRootView()->SchedulePaint();
     }

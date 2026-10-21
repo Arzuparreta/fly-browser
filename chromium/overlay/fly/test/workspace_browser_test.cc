@@ -1454,15 +1454,18 @@ IN_PROC_BROWSER_TEST_F(FlySidebarBrowserTest,
   auto* close = row->children()[2].get();
   auto* audio = row->children()[3].get();
   for (const char* scale : {"normal", "large", "normal"}) {
+    SCOPED_TRACE(scale);
     ASSERT_TRUE(window.preferences().SetString("interface_scale", scale));
     ASSERT_TRUE(base::test::RunUntil([&] {
       return select->GetImage(views::Button::STATE_NORMAL).size() ==
                  gfx::Size(FlyScaled(26), FlyScaled(26)) &&
-             row->height() == FlyScaled(40) && audio->GetVisible() &&
-             audio->width() == FlyScaled(18);
+             audio->GetVisible();
     }));
     OpenByPointer();
     WaitForSidebarMotion();
+    views::test::RunScheduledLayout(row->GetWidget());
+    EXPECT_EQ(FlyScaled(40), row->height());
+    EXPECT_EQ(FlyScaled(18), audio->width());
     EXPECT_EQ(FlyScaled(10), close->x() - audio->bounds().right());
     EXPECT_EQ(FlyScaled(8), row->width() - close->bounds().right());
     const auto expanded = row->GetBoundsInScreen();
@@ -1475,10 +1478,9 @@ IN_PROC_BROWSER_TEST_F(FlySidebarBrowserTest,
     // A pinned row has no close slot; pin and audio keep the CSS flex gap
     // plus badge margin rather than crowding the title or each other.
     browser()->GetTabStripModel()->SetTabPinned(0, true);
-    ASSERT_TRUE(base::test::RunUntil([&] {
-      return pin->GetVisible() &&
-             audio->x() - pin->bounds().right() == FlyScaled(14);
-    }));
+    ASSERT_TRUE(base::test::RunUntil([&] { return pin->GetVisible(); }));
+    views::test::RunScheduledLayout(row->GetWidget());
+    EXPECT_EQ(FlyScaled(14), audio->x() - pin->bounds().right());
     EXPECT_FALSE(close->GetVisible());
     EXPECT_EQ(FlyScaled(8), row->width() - audio->bounds().right());
     browser()->GetTabStripModel()->SetTabPinned(0, false);

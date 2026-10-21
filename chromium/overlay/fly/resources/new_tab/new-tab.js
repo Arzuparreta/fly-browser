@@ -45,7 +45,11 @@ function setItems(state, items) {
     }
     state.list.hidden = !items.length;
     state.empty.hidden = items.length > 0;
-    if (!items.length) state.paging.hidden = true;
+    if (!items.length) {
+        state.list.replaceChildren();
+        state.page = 0;
+        state.paging.hidden = true;
+    }
 }
 function layoutCollection(state) {
     if (!state.items.length || !state.list.getClientRects().length) return;

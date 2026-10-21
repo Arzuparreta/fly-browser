@@ -87,6 +87,10 @@ async function geometry(page) {
                         bookmarks:Array.from({length:count},(_,i)=>({url:`https://bookmark-${i}.example/`,title:`Saved page ${i} — ${'long title '.repeat(8)}`})),
                         sites:count?Array.from({length:8},(_,i)=>({url:`https://frequent-${i}.example/`,title:`frequent-${i}.example`})) : []}),{data,count});
                     await settled(page);
+                    if(!count) {
+                        assert.equal(await page.locator('#bookmarks a').count(),0);
+                        assert.equal(await page.locator('#sites a').count(),0);
+                    }
                     const state=await geometry(page);
                     report.push({scale,width,height,count,...state});
                     assert(state.scroll[0]<=width+1 && state.scroll[1]<=height+1 && !state.offenders.length,JSON.stringify(report.at(-1)));
