@@ -6643,14 +6643,19 @@ IN_PROC_BROWSER_TEST_F(FlyWorkspaceBrowserTest,
   ASSERT_TRUE(base::test::RunUntil([&] { return !split->selected(); }));
 }
 
-IN_PROC_BROWSER_TEST_F(FlyWorkspaceBrowserTest,
-                       SidebarActionsDoNotKeepPointerFocus) {
+void CheckSidebarPointerState(BrowserWindowInterface* browser,
+                              const GURL& url,
+                              bool collapse,
+                              bool leave_before_close) {
   auto& window = FlyWindowController::Get();
-  ASSERT_TRUE(ui_test_utils::NavigateToURL(
-      browser(), embedded_test_server()->GetURL("/title1.html")));
+  ASSERT_TRUE(ui_test_utils::NavigateToURL(browser, url));
   ui::test::EventGenerator pointer(
       window.desktop_widget()->GetNativeWindow()->GetRootWindow());
+  ASSERT_TRUE(window.preferences().SetSidebarAutoCollapse(collapse));
   for (const std::u16string label : {u"Settings", u"Search or enter address"}) {
+    SCOPED_TRACE(base::UTF16ToUTF8(label) +
+                 " collapse=" + base::NumberToString(collapse) +
+                 " leave=" + base::NumberToString(leave_before_close));
     FlyButton* target = nullptr;
     for (const auto& child :
          window.sidebar_root_for_testing()->panel()->children()) {
@@ -6659,16 +6664,90 @@ IN_PROC_BROWSER_TEST_F(FlyWorkspaceBrowserTest,
         target = button;
     }
     ASSERT_TRUE(target);
+    const auto desktop =
+        window.desktop_widget()->GetContentsView()->GetBoundsInScreen();
+    const auto rail = desktop.origin() + gfx::Vector2d(12, 180);
+    pointer.MoveMouseTo(rail);
+    ASSERT_TRUE(base::test::RunUntil(
+        [&] { return window.sidebar_expanded_for_testing(); }));
+    ASSERT_TRUE(base::test::RunUntil([&] {
+      return target->layer() && target->layer()->opacity() == 1.f &&
+             window.sidebar_root_for_testing()
+                 ->panel()
+                 ->layer()
+                 ->transform()
+                 .IsIdentity();
+    }));
+    views::test::RunScheduledLayout(target->GetWidget());
     pointer.MoveMouseTo(target->GetBoundsInScreen().CenterPoint());
     pointer.ClickLeftButton();
     ASSERT_TRUE(base::test::RunUntil([&] {
       return label == u"Settings" ? window.keyboard_editor().active()
                                   : window.address_picker().active();
     }));
+    if (leave_before_close)
+      pointer.MoveMouseTo(desktop.CenterPoint());
     pointer.PressKey(ui::VKEY_ESCAPE, ui::EF_NONE);
     base::RunLoop().RunUntilIdle();
+    ASSERT_FALSE(window.keyboard_editor().active());
+    ASSERT_FALSE(window.address_picker().active());
+    pointer.MoveMouseTo(desktop.CenterPoint());
+    base::RunLoop().RunUntilIdle();
+    pointer.MoveMouseTo(rail);
+    ASSERT_TRUE(base::test::RunUntil([&] {
+      return window.sidebar_expanded_for_testing() &&
+             target->layer()->opacity() == 1.f &&
+             window.sidebar_root_for_testing()
+                 ->panel()
+                 ->layer()
+                 ->transform()
+                 .IsIdentity();
+    }));
+    base::RunLoop().RunUntilIdle();
+
     EXPECT_FALSE(target->HasFocus());
     EXPECT_FALSE(target->selected());
+    EXPECT_EQ(views::Button::STATE_NORMAL, target->GetVisualState());
+    // A genuine subsequent enter/exit must still work normally.
+    pointer.MoveMouseTo(target->GetBoundsInScreen().CenterPoint());
+    EXPECT_EQ(views::Button::STATE_HOVERED, target->GetVisualState());
+    pointer.MoveMouseTo(rail);
+    EXPECT_EQ(views::Button::STATE_NORMAL, target->GetVisualState());
+  }
+}
+
+IN_PROC_BROWSER_TEST_F(FlyWorkspaceBrowserTest,
+                       SidebarActionsDoNotKeepPointerFocus) {
+  CheckSidebarPointerState(
+      browser(), embedded_test_server()->GetURL("/title1.html"), true, false);
+}
+IN_PROC_BROWSER_TEST_F(FlyWorkspaceBrowserTest,
+                       SidebarHoverAfterMovingBehindOverlay) {
+  CheckSidebarPointerState(
+      browser(), embedded_test_server()->GetURL("/title1.html"), true, true);
+}
+IN_PROC_BROWSER_TEST_F(FlyWorkspaceBrowserTest,
+                       PinnedSidebarActionsDoNotKeepHover) {
+  CheckSidebarPointerState(
+      browser(), embedded_test_server()->GetURL("/title1.html"), false, true);
+}
+
+IN_PROC_BROWSER_TEST_F(FlyWorkspaceBrowserTest,
+                       SidebarCollapseClearsTransientHover) {
+  auto& window = FlyWindowController::Get();
+  auto* panel = window.sidebar_root_for_testing()->panel();
+  for (const auto& child : panel->children()) {
+    auto* button = views::AsViewClass<FlyButton>(child.get());
+    if (!button || (button->GetTooltipText() != u"Settings" &&
+                    button->GetTooltipText() != u"Search or enter address" &&
+                    button != window.split_button_for_testing()))
+      continue;
+    panel->SetRail(false, nullptr);
+    button->SetState(views::Button::STATE_HOVERED);
+    panel->SetRail(true, nullptr);
+    EXPECT_EQ(views::Button::STATE_NORMAL, button->GetVisualState());
+    panel->SetRail(false, nullptr);
+    EXPECT_EQ(views::Button::STATE_NORMAL, button->GetVisualState());
   }
 }
 
