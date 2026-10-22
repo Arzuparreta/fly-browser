@@ -5,9 +5,10 @@ const fs = require('node:fs');
 const os = require('node:os');
 const path = require('node:path');
 const crypto = require('node:crypto');
-const {spawnSync} = require('node:child_process');
+const {spawn, spawnSync} = require('node:child_process');
 const root = path.resolve(__dirname, '..');
 const temp = fs.mkdtempSync(path.join(os.tmpdir(), 'fly-launch-downloads-'));
+(async () => {
 try {
     // A checkout with no engine beside it.
     const checkout = path.join(temp, 'projects/fly-browser');
@@ -92,14 +93,56 @@ if [ -n "$out" ]; then cp "$file" "$out"; else cat "$file"; fi
     const offline = launch(['--pr', '153'], {FLY_TEST_OFFLINE:'1'});
     assert.equal(offline.status, 23);
     assert.match(offline.stdout, /^pr 153 second\n/);
-    assert.match(offline.stderr, /starting the last downloaded test build of pull request #153/);
+    assert.match(offline.stderr, /Could not reach GitHub; starting the last downloaded copy of the test build of pull request #153/);
     console.log('--pr N starts the newest test build of the pull request, also offline once downloaded.');
+
+    // A build that is running is not deleted when a newer one arrives, and a
+    // start of another build is refused while it holds the profile (Chromium
+    // would only open a window in the running browser).
+    const channel = path.join(env.XDG_CACHE_HOME, 'fly-browser-launch/pr-153');
+    const [running] = fs.readdirSync(channel);
+    const shell = path.join(channel, running, 'fly-browser/app/sh');
+    fs.copyFileSync('/bin/sh', shell);
+    fs.chmodSync(shell, 0o755);
+    const holder = spawn(shell, ['-c', 'sleep 30; :'], {stdio:'ignore'});
+    try {
+        const profileDir = `${env.XDG_CONFIG_HOME}/fly-browser-dev`;
+        fs.mkdirSync(profileDir, {recursive:true});
+        fs.symlinkSync(`${os.hostname()}-${holder.pid}`, path.join(profileDir, 'SingletonLock'));
+        publish('test-pr-153', 'pr 153 third');
+        const busy = launch(['--pr', '153']);
+        assert.equal(busy.status, 1);
+        assert.equal(busy.stdout, '');
+        assert.match(busy.stderr, /A development Fly from another build is running/);
+        assert.equal(fs.readdirSync(channel).length, 2, 'the running build is kept beside the new one');
+        fs.unlinkSync(path.join(profileDir, 'SingletonLock'));
+    } finally { holder.kill(); }
+    await new Promise(resolve => holder.once('exit', resolve));
+    assert.match(launch(['--pr', '153']).stdout, /^pr 153 third\n/);
+    assert.equal(fs.readdirSync(channel).length, 1, 'once closed, the older build goes');
+    // A failed download falls back to the last download of the channel.
+    publish('test-pr-153', 'pr 153 fourth');
+    fs.rmSync(path.join(github, 'Arzuparreta/fly-browser/releases/download/test-pr-153/Fly-9.9.9-native-linux-x64.tar.gz'));
+    const failed = launch(['--pr', '153']);
+    assert.match(failed.stdout, /^pr 153 third\n/);
+    assert.match(failed.stderr, /The download failed; starting the last downloaded copy/);
+    // A closed pull request's test build is gone from GitHub and from the cache.
+    fs.rmSync(path.join(github, 'Arzuparreta/fly-browser/releases/download/test-pr-153'), {recursive:true});
+    const closed = launch(['--pr', '153']);
+    assert.equal(closed.status, 1);
+    assert.equal(closed.stdout, '');
+    assert.match(closed.stderr, /There is no test build of pull request #153/);
+    assert.equal(fs.existsSync(channel), false);
+    console.log('Running builds are kept, other builds are refused while one holds the profile, failed downloads fall back and closed pull requests are cleaned up.');
 
     // Missing builds, bad checksums and bad numbers start nothing.
     const missing = launch(['--pr', '7']);
     assert.equal(missing.status, 1);
     assert.equal(missing.stdout, '');
-    assert.match(missing.stderr, /no test build of pull request #7.*test-build\.py --pr 7/);
+    assert.match(missing.stderr, /There is no test build of pull request #7\. The maintainer publishes test builds/);
+    const unreachable = launch(['--pr', '7'], {FLY_TEST_OFFLINE:'1'});
+    assert.equal(unreachable.status, 1);
+    assert.match(unreachable.stderr, /Could not reach GitHub to download the test build of pull request #7/);
     publish('test-pr-8', 'tampered', {corrupt:true});
     const tampered = launch(['--pr', '8']);
     assert.equal(tampered.status, 1);
@@ -107,6 +150,9 @@ if [ -n "$out" ]; then cp "$file" "$out"; else cat "$file"; fi
     assert.match(tampered.stderr, /does not match its SHA-256 checksum/);
     assert.deepEqual(fs.readdirSync(path.join(env.XDG_CACHE_HOME, 'fly-browser-launch/pr-8')), []);
     assert.match(launch(['--pr', 'x']).stderr, /must be a number/);
+    const help = spawnSync('bash', [path.relative(temp, path.join(checkout, 'launch.sh')), '--help'], {cwd:temp, env, encoding:'utf8'});
+    assert.equal(help.status, 0, help.stderr);
+    assert.match(help.stdout, /--pr N/);
     console.log('Missing or tampered test builds start nothing and leave nothing behind.');
 
     // A local build still wins without options; --release overrides it.
@@ -119,3 +165,4 @@ if [ -n "$out" ]; then cp "$file" "$out"; else cat "$file"; fi
     assert.equal(launch(['--release']).status, 23);
     console.log('A local build is used without network; --release and --pr still download.');
 } finally { fs.rmSync(temp, {recursive:true, force:true}); }
+})().catch(error => { console.error(error); process.exit(1); });

@@ -181,6 +181,18 @@ release workflow nor the AUR publication runs, and Fly's update check and
 test builds of pull requests that are no longer open;
 `python3 scripts/chromium/test-build.py --pr N --remove` deletes one by hand.
 
+The build runs the pull request's code on the engine host with your GitHub
+credentials. Pull requests from forks are refused unless `--allow-fork` is
+given after reading their code. The checkout must have no uncommitted or
+untracked files, because the overlay and the package include them.
+
+On the computers that start test builds, `launch.sh` keeps one download per
+pull request in `~/.cache/fly-browser-launch/pr-N` and deletes it once the
+test build is gone from GitHub or has not been started for 30 days. A download
+that a running Fly uses is never deleted. While a development Fly from one
+build is running, starting another build is refused: Chromium would only open
+a window in the running one.
+
 ## The AUR package
 
 Once a stable release is published, `release.yml` calls `aur.yml`, which writes `fly-browser-bin`'s `PKGBUILD` and `.SRCINFO` with `scripts/aur.js`, attaches the `PKGBUILD` to the release (so Arch users can `makepkg -si` it without the AUR) and pushes both to the AUR. Both are generated from the version in `package.json` and the tarball's line in `SHA256SUMS.txt`, so nothing is edited per release. Release candidates are not published there.

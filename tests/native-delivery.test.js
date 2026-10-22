@@ -54,7 +54,7 @@ try {
     const offline = run('launch.sh', [], env);
     assert.equal(offline.status, 1);
     assert.match(offline.stderr, /Native Fly is not built on this computer/);
-    assert.match(offline.stderr, /published release could not be downloaded/);
+    assert.match(offline.stderr, /Could not reach GitHub to download the published release/);
 
     fs.writeFileSync(path.join(bin, 'curl'), `#!/bin/bash
 set -eu

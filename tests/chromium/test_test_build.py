@@ -11,11 +11,13 @@ build = importlib.util.module_from_spec(SPEC)
 SPEC.loader.exec_module(build)
 
 PR = {'number': 153, 'state': 'OPEN', 'headRefOid': 'a' * 40,
-      'headRefName': 'menu-system-redesign', 'url': 'https://example.test/pull/153'}
+      'headRefName': 'menu-system-redesign', 'url': 'https://example.test/pull/153',
+      'isCrossRepository': False}
 
 
 class FakeGitHub:
-    def __init__(self, releases=(), states=None, head=PR['headRefOid'], dirty=''):
+    def __init__(self, releases=(), states=None, head=PR['headRefOid'], dirty='', fork=False):
+        self.fork = fork
         self.releases = {tag: prerelease for tag, prerelease in releases}
         self.states = states or {}
         self.head = head
@@ -26,7 +28,7 @@ class FakeGitHub:
         if command[:2] == ['pr', 'view']:
             if command[2].isdigit() and command[2] != '153':
                 return {'state': self.states[command[2]]}
-            return dict(PR)
+            return {**PR, 'isCrossRepository': self.fork}
         if command[:2] == ['release', 'list']:
             return [{'tagName': tag, 'isPrerelease': pre} for tag, pre in self.releases.items()]
         raise AssertionError(command)
@@ -40,6 +42,10 @@ class FakeGitHub:
 
     def run(self, command, **kwargs):
         self.calls.append(command)
+        # release.py writes the package into --dist.
+        if any(str(part).endswith('release.py') for part in command):
+            dist = Path(command[command.index('--dist') + 1])
+            (dist / 'Fly-9.9.9-native-linux-x64.tar.gz').write_bytes(b'package')
         if command[:3] == ['gh', 'release', 'delete']:
             self.releases.pop(command[3])
         if command[:3] == ['gh', 'release', 'create']:
@@ -61,12 +67,33 @@ class TestBuildTest(unittest.TestCase):
     def test_refuses_builds_that_do_not_match_the_pushed_pull_request(self):
         for github, message in (
                 (FakeGitHub(dirty=' M launch.sh'), 'uncommitted'),
-                (FakeGitHub(head='b' * 40), 'check out and pull menu-system-redesign')):
+                (FakeGitHub(dirty='?? chromium/overlay/fly/ui/new.cc'), 'untracked'),
+                (FakeGitHub(head='b' * 40), 'check out and pull menu-system-redesign'),
+                (FakeGitHub(fork=True), 'comes from a fork')):
             with self.subTest(message), mock.patch.object(build, 'fail', side_effect=SystemExit) as fail:
                 with self.assertRaises(SystemExit):
                     github.main('--root', '/engine')
                 self.assertIn(message, fail.call_args[0][0])
                 self.assertEqual(github.calls, [])
+
+    def test_publishes_a_pre_release_at_the_pull_requests_head(self):
+        github = FakeGitHub(releases=[('test-pr-153', True), ('v0.29.3', False)])
+        github.main('--root', '/engine')
+        create = next(call for call in github.calls if call[:3] == ['gh', 'release', 'create'])
+        self.assertEqual(create[3], 'test-pr-153')
+        self.assertIn('--prerelease', create)
+        self.assertEqual(create[create.index('--target') + 1], PR['headRefOid'])
+        files = [Path(part).name for part in create if str(part).startswith('/')]
+        self.assertEqual(files, ['Fly-9.9.9-native-linux-x64.tar.gz', 'SHA256SUMS.txt'])
+        # The earlier test build is replaced, the release untouched.
+        deletes = [call for call in github.calls if call[:3] == ['gh', 'release', 'delete']]
+        self.assertEqual([call[3] for call in deletes], ['test-pr-153'])
+        self.assertEqual(github.releases, {'test-pr-153': True, 'v0.29.3': False})
+        self.assertLess(github.calls.index(deletes[0]), github.calls.index(create))
+        # The overlay is applied before the build.
+        steps = [next(str(part) for part in call if str(part).endswith('.py'))
+                 for call in github.calls if call[0] == sys.executable]
+        self.assertEqual([Path(step).name for step in steps], ['native.py', 'release.py'])
 
     def test_remove_deletes_only_this_pull_requests_test_build(self):
         github = FakeGitHub(releases=[('test-pr-153', True), ('v0.29.3', False)])

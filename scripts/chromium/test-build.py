@@ -13,6 +13,10 @@ pull request. Test builds are never releases: their tags do not start with
 `v` (no release workflow or AUR publication runs), and Fly's update check and
 fly-install read `releases/latest`, which never returns a pre-release. Test builds of closed pull requests are
 deleted on each run; `--remove` deletes this pull request's test build.
+
+The build runs the pull request's code on the engine host with the owner's
+GitHub credentials, so pull requests from forks are refused unless
+`--allow-fork` says their code has been read and is trusted.
 """
 import argparse
 import hashlib
@@ -81,10 +85,12 @@ def main():
     parser.add_argument('--jobs', type=int, default=8)
     parser.add_argument('--remove', action='store_true',
                         help="delete this pull request's test build and stop")
+    parser.add_argument('--allow-fork', action='store_true',
+                        help='build a pull request from a fork (its code runs on this host)')
     args = parser.parse_args()
 
     pr = gh_json(['pr', 'view', *([str(args.pr)] if args.pr else []),
-                  '--json', 'number,state,headRefOid,headRefName,url'])
+                  '--json', 'number,state,headRefOid,headRefName,url,isCrossRepository'])
     tag = f'test-pr-{pr["number"]}'
     if args.remove:
         delete_release(tag)
@@ -92,10 +98,14 @@ def main():
         return
     if pr['state'] != 'OPEN':
         fail(f'pull request #{pr["number"]} is {pr["state"].lower()}')
+    if pr.get('isCrossRepository') and not args.allow_fork:
+        fail(f'pull request #{pr["number"]} comes from a fork; read its code, then '
+             'pass --allow-fork to build it on this host')
     if not args.root:
         fail('pass --root or set FLY_ENGINE_ROOT to the engine checkout')
-    if output(['git', 'status', '--porcelain', '--untracked-files=no']):
-        fail('the checkout has uncommitted changes; a test build must match a pushed commit')
+    # Untracked files count too: the overlay copy and the package include them.
+    if output(['git', 'status', '--porcelain']):
+        fail('the checkout has uncommitted or untracked files; a test build must match a pushed commit')
     head = output(['git', 'rev-parse', 'HEAD'])
     if head != pr['headRefOid']:
         fail(f'this checkout is at {head[:12]}, but pull request #{pr["number"]} '
