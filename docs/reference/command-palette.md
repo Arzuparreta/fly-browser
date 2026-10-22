@@ -1,6 +1,6 @@
 # Command Centre & Palette Reference
 
-The Command Centre gives you rapid, searchable access to all Fly operations, internal features, and keyboard shortcuts from a full-page educational overlay.
+The Command Centre gives you searchable access to Fly's actions and their keyboard shortcuts from a compact panel in the middle of the window.
 
 ---
 
@@ -9,20 +9,21 @@ The Command Centre gives you rapid, searchable access to all Fly operations, int
 ![Fly Browser Command Centre Overlay](/screenshots/command-centre.webp)
 
 - Press **Ctrl + P** from anywhere in Fly.
-- Type to fuzzy-search commands, shortcuts, and keywords dynamically.
-- Click category filter chips (**All**, **Tabs & Navigation**, **Split View**, **Performance**, **Tools**, **Scripts & Styles**, **Preferences**) to filter actions instantly.
-- Use **Up** and **Down** arrow keys (or hover with your cursor) to inspect any command.
-- View the right-hand **Feature Inspector** card for in-depth architecture descriptions, default and customised keybindings, and workflow tips.
-- Press **Enter** or click **Execute Action** to run the selected action.
-- Press **Escape** or click the close button to dismiss the overlay and return focus to your webpage.
+- Type to search titles, descriptions, categories, keywords and bindings.
+- Press **Tab** and **Shift + Tab**, or click the chips (**All**, **Tabs**, **Split View**, **Performance**, **Tools**, **Scripts**, **Extensions**, **Preferences**), to filter by category.
+- Use **Up** and **Down** (or move the pointer) to select a command. **Page Up** and **Page Down** move eight rows.
+- Press **Enter** or click a row to run it.
+- Press **Escape** or click outside the panel to close it and return focus to your page.
 
 ---
 
-## Two-Column Interface Layout
+## Layout
 
-1. **Left Column (Command List)**: A compact, categorised list of operations featuring icons, action titles, category tags, and active keybinding badges.
-2. **Right Column (Feature Inspector)**: A static preview panel detailing the selected or hovered command, displaying its assigned shortcut, action identifier, operational architecture, workflow recommendations, and a direct execution trigger.
-3. **Clipboard-Mediated Terminal Fallback**: If an entered search does not match any internal command, pressing Enter or executing the fallback securely passes the instruction to your external terminal using the oversight protocol.
+Every Fly menu (the Command Centre, the address bar, history, bookmarks, downloads, extensions, workspaces, Preferences and Diagnostics) shares one look: a header with the menu's own icon and name, a search field, the list, and a footer that shows what the keyboard does in that menu. The icon and the shape of the panel tell the menus apart.
+
+1. **List**: commands grouped by category, with **Recently used** first when nothing is typed. Each row shows the shortcut on the right; NORMAL mode keys are the quieter chips.
+2. **Details**: under the list, the selected command's name and what it does.
+3. **Clipboard-mediated terminal fallback**: if a search matches no command, the only row is **Run in terminal**. Enter copies the text and passes it to your external terminal using the oversight protocol.
 
 ---
 
@@ -96,7 +97,7 @@ The shortcuts below are new-profile defaults. The palette shows your saved assig
 
 | Command Title | Shortcut | Action ID | Description |
 | :--- | :--- | :--- | :--- |
-| **Open Preferences** | `Ctrl+H` | `toggle-help` | Full-page settings view with a section index (General, Appearance, Keyboard, Privacy & security, Extensions, Performance, Diagnostics, About) and a search across every section. |
+| **Open Preferences** | `Ctrl+H` | `toggle-help` | Settings panel with a section list (General, Appearance, Keyboard, Privacy, Extensions, Performance, About) and a search across every section. |
 | **Toggle Private Browsing Mode** | `Ctrl+Shift+P` | `toggle-private-mode` | Switches session to in-memory non-persistent partition. |
 | **Test Clean Google Sign-In Flow** | Unassigned | `test-google-signin` | Launches Google Sign-In in a clean, volatile scratch partition to audit authentication health. |
 | **Toggle Colour Theme (Dark / Light)** | — | — | Swaps UI styling and website theme preference between dark and light. |

@@ -779,14 +779,28 @@ FlyWindowController::FlyWindowController()
           },
           weak_factory_.GetWeakPtr()));
   using Layout = PaletteStyle::Layout;
-  extensions_picker_->SetStyle(
-      {Layout::kCentre, u"Extensions", u"Actions of this workspace's extensions",
-       560});
-  downloads_picker_->SetStyle(
-      {Layout::kCentre, u"Downloads",
-       u"Enter opens, pauses or resumes. Remove cancels or clears.", 640});
-  address_picker_->SetStyle({.layout = Layout::kTop, .width = 640});
-  history_picker_->SetStyle({.layout = Layout::kTop, .width = 600});
+  extensions_picker_->SetStyle({.layout = Layout::kCentre,
+                                .kind = MenuKind::kExtensions,
+                                .title = u"Extensions",
+                                .width = 560,
+                                .enter_label = u"Run",
+                                .empty_text = u"No extension actions in this "
+                                              u"workspace."});
+  downloads_picker_->SetStyle({.layout = Layout::kCentre,
+                               .kind = MenuKind::kDownloads,
+                               .title = u"Downloads",
+                               .width = 640,
+                               .enter_label = u"Open",
+                               .empty_text = u"No downloads yet."});
+  address_picker_->SetStyle({.layout = Layout::kTop,
+                             .kind = MenuKind::kAddress,
+                             .width = 680,
+                             .enter_label = u"Go"});
+  history_picker_->SetStyle({.layout = Layout::kTop,
+                             .kind = MenuKind::kHistory,
+                             .title = u"History",
+                             .width = 680,
+                             .empty_text = u"No history yet."});
   auto page_insets = base::BindRepeating(
       [](base::WeakPtr<FlyWindowController> window) {
         if (!window || !window->sidebar_slot_)
@@ -799,16 +813,24 @@ FlyWindowController::FlyWindowController()
             0);
       },
       weak_factory_.GetWeakPtr());
-  bookmark_picker_->SetStyle(
-      {Layout::kPage, u"Bookmarks Manager", u"", 720, page_insets});
-  palette_->SetStyle({.layout = Layout::kPage,
-                      .title = u"Command Centre",
-                      .subtitle = u"Actions, feature guide & keyboard shortcuts",
-                      .width = 1220,
+  bookmark_picker_->SetStyle({.layout = Layout::kPage,
+                              .kind = MenuKind::kBookmarks,
+                              .title = u"Bookmarks",
+                              .width = 820,
+                              .page_insets = page_insets,
+                              .empty_text = u"No bookmarks yet."});
+  palette_->SetStyle({.layout = Layout::kCentre,
+                      .kind = MenuKind::kCommands,
+                      .title = u"Commands",
+                      .width = 760,
                       .page_insets = page_insets,
-                      .command_centre = true});
-  workspace_picker_->SetStyle(
-      {Layout::kPage, u"Workspace Dashboard", u"", 720, page_insets});
+                      .command_centre = true,
+                      .enter_label = u"Run"});
+  workspace_picker_->SetStyle({.layout = Layout::kPage,
+                               .kind = MenuKind::kWorkspaces,
+                               .title = u"Workspaces",
+                               .width = 820,
+                               .page_insets = page_insets});
   // Electron's dashboard: drag a tab onto a tab to reorder it (or move it to
   // that tab's workspace), or onto a workspace to move it there.
   workspace_picker_->SetDragDrop(
@@ -816,8 +838,11 @@ FlyWindowController::FlyWindowController()
           [](std::string_view action) { return action.starts_with("tab/"); }),
       base::BindRepeating(&FlyWindowController::DropDashboardTab,
                           weak_factory_.GetWeakPtr()));
-  tab_move_picker_->SetStyle(
-      {Layout::kCentre, u"Move tab to workspace", u"", 560});
+  tab_move_picker_->SetStyle({.layout = Layout::kCentre,
+                              .kind = MenuKind::kTabMove,
+                              .title = u"Move tab to workspace",
+                              .width = 560,
+                              .enter_label = u"Move"});
   keyboard_editor_ =
       std::make_unique<KeyboardEditor>(desktop_.get(), commands_,
                                        *g_browser_process->local_state());
@@ -1056,7 +1081,7 @@ void FlyWindowController::ToggleHistory(BrowserWindowInterface* browser) {
   const auto config = commands_.Read().value_or(DefaultKeyboardConfig());
   history_picker_->ToggleItems(contents, {},
                                config.shortcuts.at("toggle-history"),
-                               u"Search workspace history", false, true);
+                               u"Search history", false, true);
   LoadHistory(HistorySurface::kHistory);
 }
 void FlyWindowController::OpenHistory(content::WebContents* source,
@@ -3633,7 +3658,7 @@ bool FlyWindowController::RunCommand(BrowserWindowInterface* browser,
     palette_->ToggleItems(
         browser ? browser->GetTabStripModel()->GetActiveWebContents() : nullptr,
         std::move(items), config.shortcuts.at("toggle-palette"),
-        u"Search commands, shortcuts, or type shell utility...", false, true);
+        u"Search commands and shortcuts", false, true);
     return true;
   }
   if (action == "toggle-private-mode") {

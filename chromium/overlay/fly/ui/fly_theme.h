@@ -113,6 +113,8 @@ class FlyButton : public views::MdTextButton {
   // A fixed square size that follows the interface scale.
   void SetScaledSize(int size);
   void SetAccentText(bool accent);
+  // The main action of a menu: accent outline and a faint accent fill.
+  void SetPrimary(bool primary);
   // A bordered button (Electron's .nav-icon-button): the border turns to the
   // accent on hover.
   void SetOutlined(bool outlined);
@@ -154,6 +156,7 @@ class FlyButton : public views::MdTextButton {
   base::WeakPtr<FlyButton> pill_partner_;
   bool selected_ = false;
   bool accent_text_ = false;
+  bool primary_ = false;
   bool outlined_ = false;
   bool hover_fill_ = false;
   PillHalf pill_half_ = PillHalf::kNone;

@@ -294,9 +294,10 @@ class FlyWorkspaceBrowserTest : public InProcessBrowserTest {
   content::WebContents* Active(BrowserWindowInterface* window) {
     return window->GetTabStripModel()->GetActiveWebContents();
   }
+  // Preferences builds one section at a time: look in the shown section,
+  // then in each of the others.
   void ClickPreferencesButton(std::u16string_view text) {
-    auto* root = FlyWindowController::Get().keyboard_editor().sections_for_testing();
-    ASSERT_TRUE(root);
+    auto& editor = FlyWindowController::Get().keyboard_editor();
     auto find = [&](auto&& self, views::View* view) -> views::MdTextButton* {
       if (auto* button = views::AsViewClass<views::MdTextButton>(view);
           button && button->GetText() == text)
@@ -307,9 +308,17 @@ class FlyWorkspaceBrowserTest : public InProcessBrowserTest {
       }
       return nullptr;
     };
-    auto* button = find(find, root);
-    ASSERT_TRUE(button) << base::UTF16ToUTF8(text);
-    views::test::ButtonTestApi(button).NotifyDefaultMouseClick();
+    for (int pane = -1; pane < KeyboardEditor::kPaneCount; ++pane) {
+      if (pane >= 0)
+        editor.ShowPane(static_cast<KeyboardEditor::Pane>(pane));
+      auto* root = editor.root_for_testing();
+      ASSERT_TRUE(root);
+      if (auto* button = find(find, root)) {
+        views::test::ButtonTestApi(button).NotifyDefaultMouseClick();
+        return;
+      }
+    }
+    FAIL() << base::UTF16ToUTF8(text);
   }
   base::FilePath RestoreFixturePath() {
     return g_browser_process->profile_manager()->user_data_dir().AppendASCII(
@@ -2953,10 +2962,7 @@ IN_PROC_BROWSER_TEST_F(
   ASSERT_TRUE(InvokeNativeCommand(browser(), "open-keyboard-settings"));
   auto& editor = window.keyboard_editor();
   ASSERT_TRUE(editor.active());
-  auto* draft = editor.field_for_testing("spawn-tab", false);
-  ASSERT_TRUE(draft);
-  draft->SetText(u"Ctrl+Alt+Y");
-  editor.ContentsChanged(draft, u"Ctrl+Alt+Y");
+  editor.SetBindingsForTesting("spawn-tab", false, u"Ctrl+Alt+Y");
   views::test::ButtonTestApi(editor.record_for_testing("spawn-tab", false))
       .NotifyDefaultMouseClick();
   ASSERT_TRUE(editor.recording());
@@ -2967,17 +2973,16 @@ IN_PROC_BROWSER_TEST_F(
   ASSERT_TRUE(base::test::RunUntil([&] {
     return timeout->IsDrawn() && !timeout->GetVisibleBounds().IsEmpty();
   }));
-  EXPECT_TRUE(timeout->GetText().ends_with(u"Off"));
+  EXPECT_EQ(u"Off", timeout->GetText());
   ui::test::EventGenerator input(
       window.desktop_widget()->GetNativeWindow()->GetRootWindow());
-  input.MoveMouseTo(timeout->GetBoundsInScreen().CenterPoint());
-  input.ClickLeftButton();
-  ASSERT_TRUE(base::test::RunUntil(
-      [&] { return window.preferences().ReadSuspendTimeoutMinutes() == 5; }));
+  // The select changes value with the arrow keys, without opening its list.
   timeout->RequestFocus();
   ASSERT_TRUE(timeout->HasFocus());
-  input.PressKey(ui::VKEY_SPACE, ui::EF_NONE);
-  input.ReleaseKey(ui::VKEY_SPACE, ui::EF_NONE);
+  input.PressKey(ui::VKEY_DOWN, ui::EF_NONE);
+  ASSERT_TRUE(base::test::RunUntil(
+      [&] { return window.preferences().ReadSuspendTimeoutMinutes() == 5; }));
+  input.PressKey(ui::VKEY_DOWN, ui::EF_NONE);
   ASSERT_TRUE(base::test::RunUntil(
       [&] { return window.preferences().ReadSuspendTimeoutMinutes() == 15; }));
   EXPECT_EQ(keyboard_before, window.commands().Read());
@@ -2987,14 +2992,12 @@ IN_PROC_BROWSER_TEST_F(
   future.Set("schema", 99);
   prefs->SetDict(kPreferencesPref, future.Clone());
   EXPECT_FALSE(timeout->GetEnabled());
-  views::test::ButtonTestApi(timeout).NotifyDefaultMouseClick();
+  timeout->Choose(0);
   EXPECT_EQ(future, prefs->GetDict(kPreferencesPref));
   prefs->SetDict(kPreferencesPref, valid.Clone());
   EXPECT_TRUE(timeout->GetEnabled());
   editor.ShowKeyboard();
-  draft = editor.field_for_testing("spawn-tab", false);
-  ASSERT_TRUE(draft);
-  EXPECT_EQ(u"Ctrl+Alt+Y", draft->GetText());
+  EXPECT_EQ(u"Ctrl+Alt+Y", editor.bindings_for_testing("spawn-tab", false));
   EXPECT_EQ(keyboard_before, window.commands().Read());
 }
 
@@ -4075,15 +4078,9 @@ IN_PROC_BROWSER_TEST_F(FlyWorkspaceBrowserTest,
   ASSERT_TRUE(
       base::test::RunUntil([&] { return window.keyboard_editor().active(); }));
   EXPECT_EQ(nullptr, window.selected_browser_for_testing());
-  auto* sections = window.keyboard_editor().sections_for_testing();
-  ASSERT_TRUE(sections);
-  views::test::RunScheduledLayout(sections->GetWidget());
-  for (size_t i = 0; i < sections->GetTabCount(); ++i) {
-    auto* tab = sections->GetTabAt(i);
-    for (views::View* child : tab->children())
-      EXPECT_GE(tab->height() - tab->GetInsets().height(),
-                child->GetPreferredSize().height());
-  }
+  auto* preferences = window.keyboard_editor().root_for_testing();
+  ASSERT_TRUE(preferences);
+  views::test::RunScheduledLayout(preferences->GetWidget());
   keys.PressKey(ui::VKEY_ESCAPE, ui::EF_NONE);
   ASSERT_FALSE(window.keyboard_editor().active());
   keys.PressKey(ui::VKEY_P, ui::EF_CONTROL_DOWN);
@@ -5297,10 +5294,7 @@ IN_PROC_BROWSER_TEST_F(
   ASSERT_TRUE(InvokeNativeCommand(browser(), "toggle-help"));
   auto& editor = window.keyboard_editor();
   ASSERT_TRUE(editor.active());
-  auto* binding = editor.field_for_testing("spawn-tab", false);
-  ASSERT_TRUE(binding);
-  binding->SetText(u"Ctrl+Y");
-  editor.ContentsChanged(binding, u"Ctrl+Y");
+  editor.SetBindingsForTesting("spawn-tab", false, u"Ctrl+Y");
   editor.ShowSearch();
   auto* engine = editor.search_setting_for_testing("engine");
   ASSERT_TRUE(engine && engine->IsDrawn());
@@ -5310,7 +5304,7 @@ IN_PROC_BROWSER_TEST_F(
   SearchService search(*g_browser_process->local_state());
   ASSERT_TRUE(search.Read());
   EXPECT_EQ("https://example.test/?q=%s", search.Read()->engine);
-  EXPECT_EQ(u"Ctrl+Y", binding->GetText());
+  EXPECT_EQ(u"Ctrl+Y", editor.bindings_for_testing("spawn-tab", false));
   editor.search_setting_for_testing("alias")->SetText(u"GH");
   editor.search_setting_for_testing("name")->SetText(u"Custom code search");
   editor.search_setting_for_testing("url")->SetText(
@@ -5325,29 +5319,31 @@ IN_PROC_BROWSER_TEST_F(
   views::test::ButtonTestApi(editor.alias_save_for_testing())
       .NotifyDefaultMouseClick();
   EXPECT_EQ(valid, g_browser_process->local_state()->GetDict(kPreferencesPref));
-  views::test::ButtonTestApi(editor.alias_remove_for_testing())
+  ASSERT_TRUE(editor.alias_remove_for_testing("gh"));
+  views::test::ButtonTestApi(editor.alias_remove_for_testing("gh"))
       .NotifyDefaultMouseClick();
-  EXPECT_EQ(GURL("https://github.com/search?q=c%2B%2B"),
-            search.ResolveNavigation("gh c++"));
-  EXPECT_EQ(u"Ctrl+Y", binding->GetText());
+  ASSERT_TRUE(base::test::RunUntil([&] {
+    return search.ResolveNavigation("gh c++") ==
+           GURL("https://github.com/search?q=c%2B%2B");
+  }));
+  EXPECT_EQ(u"Ctrl+Y", editor.bindings_for_testing("spawn-tab", false));
   const auto future =
       base::DictValue().Set("schema", 2).Set("values", base::DictValue());
   g_browser_process->local_state()->SetDict(kPreferencesPref, future.Clone());
   EXPECT_FALSE(engine->GetEnabled());
   EXPECT_FALSE(editor.search_save_for_testing()->GetEnabled());
   EXPECT_FALSE(editor.alias_save_for_testing()->GetEnabled());
-  EXPECT_FALSE(editor.alias_remove_for_testing()->GetEnabled());
   views::test::ButtonTestApi(editor.search_save_for_testing())
       .NotifyDefaultMouseClick();
   EXPECT_EQ(future,
             g_browser_process->local_state()->GetDict(kPreferencesPref));
-  EXPECT_EQ(u"Ctrl+Y", binding->GetText());
+  EXPECT_EQ(u"Ctrl+Y", editor.bindings_for_testing("spawn-tab", false));
   editor.Cancel(true);
   ASSERT_TRUE(
-      base::test::RunUntil([&] { return !editor.search_for_testing(); }));
+      base::test::RunUntil([&] { return !editor.root_for_testing(); }));
   EXPECT_EQ(nullptr, editor.search_setting_for_testing("engine"));
   EXPECT_EQ(nullptr, editor.alias_save_for_testing());
-  EXPECT_EQ(nullptr, editor.alias_remove_for_testing());
+  EXPECT_EQ(nullptr, editor.alias_remove_for_testing("gh"));
 }
 
 IN_PROC_BROWSER_TEST_F(FlyWorkspaceBrowserTest,
@@ -5581,13 +5577,11 @@ IN_PROC_BROWSER_TEST_F(FlyWorkspaceBrowserTest,
   auto& editor = window.keyboard_editor();
   ASSERT_TRUE(base::test::RunUntil([&] { return editor.active(); }));
   EXPECT_TRUE(editor.appearance_for_testing("theme")->IsDrawn());
-  EXPECT_FALSE(editor.search_for_testing()->IsDrawn());
+  // Only the shown section exists.
+  EXPECT_EQ(nullptr, editor.search_for_testing());
   auto* state = g_browser_process->local_state();
   EXPECT_EQ(nullptr, state->GetUserPrefValue(kPreferencesPref));
-  auto* binding = editor.field_for_testing("spawn-tab", false);
-  ASSERT_TRUE(binding);
-  binding->SetText(u"Ctrl+Y");
-  editor.ContentsChanged(binding, u"Ctrl+Y");
+  editor.SetBindingsForTesting("spawn-tab", false, u"Ctrl+Y");
   for (const auto key : {"theme", "sync_website_theme", "show_clock",
                          "show_status_bar"}) {
     auto* checkbox = editor.appearance_for_testing(key);
@@ -5600,25 +5594,27 @@ IN_PROC_BROWSER_TEST_F(FlyWorkspaceBrowserTest,
   EXPECT_FALSE(window.preferences().ReadTheme()->sync_websites);
   EXPECT_FALSE(window.clock_for_testing()->GetVisible());
   EXPECT_FALSE(window.status_bar_for_testing()->GetVisible());
-  views::test::ButtonTestApi(editor.clock_format_for_testing())
-      .NotifyDefaultMouseClick();
+  editor.clock_format_for_testing()->Choose(1);
   EXPECT_EQ("time", window.preferences().ReadClock()->format);
-  EXPECT_EQ(u"Ctrl+Y", binding->GetText());
+  EXPECT_EQ(u"Ctrl+Y", editor.bindings_for_testing("spawn-tab", false));
   ASSERT_TRUE(window.preferences().ToggleTheme());
   EXPECT_TRUE(editor.appearance_for_testing("theme")->GetChecked());
-  EXPECT_EQ(u"Ctrl+Y", binding->GetText());
+  EXPECT_EQ(u"Ctrl+Y", editor.bindings_for_testing("spawn-tab", false));
   ASSERT_TRUE(NativeCommandAvailable(browser(), "open-keyboard-settings"));
   ASSERT_TRUE(InvokeNativeCommand(browser(), "open-keyboard-settings"));
   EXPECT_TRUE(editor.active());
   EXPECT_TRUE(editor.search_for_testing()->IsDrawn());
   EXPECT_TRUE(editor.search_for_testing()->HasFocus());
-  EXPECT_EQ(u"Ctrl+Y", binding->GetText());
+  EXPECT_EQ(u"Ctrl+Y", editor.bindings_for_testing("spawn-tab", false));
   ASSERT_TRUE(InvokeNativeCommand(browser(), "open-keyboard-settings"));
   EXPECT_TRUE(editor.active());
-  EXPECT_EQ(u"Ctrl+Y", binding->GetText());
+  EXPECT_EQ(u"Ctrl+Y", editor.bindings_for_testing("spawn-tab", false));
   const auto appearance = state->GetDict(kPreferencesPref).Clone();
+  // Unsaved shortcut changes take a second Escape to discard.
   keys.PressKey(ui::VKEY_ESCAPE, ui::EF_NONE);
-  ASSERT_TRUE(base::test::RunUntil([&] { return !editor.search_for_testing(); }));
+  EXPECT_TRUE(editor.active());
+  keys.PressKey(ui::VKEY_ESCAPE, ui::EF_NONE);
+  ASSERT_TRUE(base::test::RunUntil([&] { return !editor.root_for_testing(); }));
   EXPECT_EQ(appearance, state->GetDict(kPreferencesPref));
   ASSERT_TRUE(window.commands().Read());
   EXPECT_EQ(keyboard->shortcuts, window.commands().Read()->shortcuts);
@@ -5643,6 +5639,7 @@ IN_PROC_BROWSER_TEST_F(FlyWorkspaceBrowserTest,
   ASSERT_TRUE(window.RunCommand(browser(), "toggle-help"));
   auto& editor = window.keyboard_editor();
   ASSERT_TRUE(editor.active());
+  editor.ShowAppearance();
   for (const auto key : {"theme", "sync_website_theme", "show_clock",
                          "show_status_bar"})
     EXPECT_FALSE(editor.appearance_for_testing(key)->GetEnabled());
@@ -5665,7 +5662,7 @@ IN_PROC_BROWSER_TEST_F(FlyWorkspaceBrowserTest,
   editor.Cancel();
   views::test::ButtonTestApi(checkbox).NotifyDefaultMouseClick();
   EXPECT_EQ(nullptr, state->GetUserPrefValue(kPreferencesPref));
-  ASSERT_TRUE(base::test::RunUntil([&] { return !editor.search_for_testing(); }));
+  ASSERT_TRUE(base::test::RunUntil([&] { return !editor.root_for_testing(); }));
   EXPECT_EQ(nullptr, editor.appearance_for_testing("show_clock"));
 }
 
@@ -5690,23 +5687,24 @@ IN_PROC_BROWSER_TEST_F(FlyWorkspaceBrowserTest,
   ASSERT_TRUE(base::test::RunUntil([&] {
     return editor.search_for_testing()->GetText() == u"spawn";
   }));
-  auto* field = editor.field_for_testing("spawn-tab", false);
-  ASSERT_TRUE(field);
-  field->RequestFocus();
-  keys.PressKey(ui::VKEY_A, ui::EF_CONTROL_DOWN);
-  keys.PressKey(ui::VKEY_BACK, ui::EF_NONE);
-  ASSERT_TRUE(base::test::RunUntil([&] { return field->GetText().empty(); }));
+  // Selecting the cell focuses it; Delete clears it.
   auto* record = editor.record_for_testing("spawn-tab", false);
   ASSERT_TRUE(record);
+  keys.PressKey(ui::VKEY_DELETE, ui::EF_NONE);
+  ASSERT_TRUE(base::test::RunUntil(
+      [&] { return editor.bindings_for_testing("spawn-tab", false).empty(); }));
   views::test::ButtonTestApi(record).NotifyDefaultMouseClick();
   ASSERT_TRUE(editor.recording());
   const int tabs = browser()->GetTabStripModel()->count();
   keys.PressKey(ui::VKEY_Y, ui::EF_CONTROL_DOWN);
   EXPECT_FALSE(editor.recording());
-  EXPECT_EQ(u"Ctrl+Y", field->GetText());
+  EXPECT_EQ(u"Ctrl+Y", editor.bindings_for_testing("spawn-tab", false));
   EXPECT_EQ(tabs, browser()->GetTabStripModel()->count());
   views::test::ButtonTestApi(editor.save_for_testing()).NotifyDefaultMouseClick();
-  ASSERT_TRUE(base::test::RunUntil([&] { return !editor.search_for_testing(); }));
+  // Saving keeps Preferences open; with nothing unsaved, Escape closes it.
+  EXPECT_TRUE(editor.active());
+  keys.PressKey(ui::VKEY_ESCAPE, ui::EF_NONE);
+  ASSERT_TRUE(base::test::RunUntil([&] { return !editor.root_for_testing(); }));
   ASSERT_TRUE(window.commands().Read());
   EXPECT_EQ(std::vector<std::string>({"Ctrl+Y"}),
             window.commands().Read()->shortcuts.at("spawn-tab"));
@@ -5746,10 +5744,11 @@ IN_PROC_BROWSER_TEST_F(FlyWorkspaceBrowserTest,
   EXPECT_TRUE(editor.recording());
   keys.PressKey(ui::VKEY_Q, ui::EF_NONE);
   EXPECT_FALSE(editor.recording());
-  EXPECT_EQ(u"J\nQ Q", editor.field_for_testing("scroll-down", true)->GetText());
+  EXPECT_EQ(u"J\nQ Q", editor.bindings_for_testing("scroll-down", true));
   EXPECT_EQ(0, content::EvalJs(contents, "scrollY"));
   views::test::ButtonTestApi(editor.save_for_testing()).NotifyDefaultMouseClick();
-  ASSERT_TRUE(base::test::RunUntil([&] { return !editor.search_for_testing(); }));
+  keys.PressKey(ui::VKEY_ESCAPE, ui::EF_NONE);
+  ASSERT_TRUE(base::test::RunUntil([&] { return !editor.root_for_testing(); }));
   keys.PressKey(ui::VKEY_Q, ui::EF_NONE);
   keys.PressKey(ui::VKEY_Q, ui::EF_NONE);
   ASSERT_TRUE(base::test::RunUntil([&] {
@@ -5769,9 +5768,10 @@ IN_PROC_BROWSER_TEST_F(FlyWorkspaceBrowserTest,
       window.desktop_widget()->GetNativeWindow()->GetRootWindow());
   keys.PressKey(ui::VKEY_OEM_1, ui::EF_NONE);
   ASSERT_TRUE(base::test::RunUntil([&] { return !editor.recording(); }));
-  EXPECT_EQ(u"J\n;", editor.field_for_testing("scroll-down", true)->GetText());
+  EXPECT_EQ(u"J\n;", editor.bindings_for_testing("scroll-down", true));
   views::test::ButtonTestApi(editor.save_for_testing()).NotifyDefaultMouseClick();
-  ASSERT_TRUE(base::test::RunUntil([&] { return !editor.search_for_testing(); }));
+  keys.PressKey(ui::VKEY_ESCAPE, ui::EF_NONE);
+  ASSERT_TRUE(base::test::RunUntil([&] { return !editor.root_for_testing(); }));
   const auto config = window.commands().Read();
   ASSERT_TRUE(config);
   EXPECT_EQ((std::vector<std::string>{"J", ";"}), config->normal.at("scroll-down"));
@@ -5803,7 +5803,9 @@ IN_PROC_BROWSER_TEST_F(FlyWorkspaceBrowserTest,
   EXPECT_NE(std::u16string::npos, editor.error_for_testing().find(u"changed"));
   EXPECT_EQ(newer, window.commands().Read());
   keys.PressKey(ui::VKEY_ESCAPE, ui::EF_NONE);
-  ASSERT_TRUE(base::test::RunUntil([&] { return !editor.search_for_testing(); }));
+  EXPECT_TRUE(editor.active());
+  keys.PressKey(ui::VKEY_ESCAPE, ui::EF_NONE);
+  ASSERT_TRUE(base::test::RunUntil([&] { return !editor.root_for_testing(); }));
 }
 
 IN_PROC_BROWSER_TEST_F(FlyWorkspaceBrowserTest,
@@ -5825,10 +5827,10 @@ IN_PROC_BROWSER_TEST_F(FlyWorkspaceBrowserTest,
   keys.PressKey(ui::VKEY_Q, ui::EF_NONE);
   auto* second = SecondWorkspace();
   ASSERT_TRUE(second);
-  ASSERT_TRUE(base::test::RunUntil([&] { return !editor.search_for_testing(); }));
+  ASSERT_TRUE(base::test::RunUntil([&] { return !editor.root_for_testing(); }));
   EXPECT_FALSE(editor.recording());
   ASSERT_TRUE(window.RunCommand(second, "toggle-help"));
-  EXPECT_EQ(u"J", editor.field_for_testing("scroll-down", true)->GetText());
+  EXPECT_EQ(u"J", editor.bindings_for_testing("scroll-down", true));
   EXPECT_EQ(before, window.commands().Read());
 }
 
@@ -5846,10 +5848,14 @@ IN_PROC_BROWSER_TEST_F(FlyWorkspaceBrowserTest,
   search->SetText(u"cookies");
   editor.ContentsChanged(search, u"cookies");
   EXPECT_EQ(KeyboardEditor::kPrivacyPane, editor.selected_pane_for_testing());
-  EXPECT_TRUE(editor.setting_visible_for_testing(u"Clear site cookies"));
+  EXPECT_TRUE(editor.setting_visible_for_testing(u"Site cookies"));
   EXPECT_FALSE(editor.setting_visible_for_testing(u"Interface scale"));
+  // Clearing the search shows the section the matches were in.
   search->SetText(u"");
   editor.ContentsChanged(search, u"");
+  EXPECT_EQ(KeyboardEditor::kPrivacyPane, editor.selected_pane_for_testing());
+  EXPECT_TRUE(editor.setting_visible_for_testing(u"Site cookies"));
+  editor.ShowAppearance();
   EXPECT_TRUE(editor.setting_visible_for_testing(u"Interface scale"));
   // The section shown last comes back next time.
   editor.ShowPerformance();
@@ -5914,7 +5920,7 @@ IN_PROC_BROWSER_TEST_F(FlyWorkspaceBrowserTest,
   palette.ContentsChanged(palette.search_for_testing(), u"zz-no-command");
   EXPECT_EQ(u"1 match", palette.count_for_testing());
   EXPECT_EQ("terminal:zz-no-command", palette.selected_action_for_testing());
-  EXPECT_EQ(u"Terminal Oversight", palette.inspector_title_for_testing());
+  EXPECT_EQ(u"Run in terminal", palette.inspector_title_for_testing());
   palette.search_for_testing()->SetText(u"reader");
   palette.ContentsChanged(palette.search_for_testing(), u"reader");
   ASSERT_EQ("toggle-reader-view", palette.selected_action_for_testing());

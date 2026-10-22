@@ -1,10 +1,10 @@
 # Keyboard controls
 
-Open **Preferences → Keyboard**, or press **Ctrl+,** with a new profile. The editor has its own Preferences section with a pinned search bar and save bar. Search by action, category or binding. Each action shows two expandable menus side by side, **Browser shortcuts** and **Page keys** (active only when not typing), with both sets of bindings visible in their summaries. Expand either menu to edit it. Search and the customised filter check both groups. Each group supports up to eight bindings per action. Above the actions, **Select tab by number** sets one modifier for all nine digits (Alt by default, or Off).
+Open **Preferences → Keyboard**, or press **Ctrl+,** with a new profile. The editor is a table with one row per action and three columns: the action, its **shortcut** (works everywhere, also while typing) and its **NORMAL mode** key (works only when you are not typing). Filter the table by action, category or key, or turn on **Changed only** to list the actions that differ from the defaults. **Tab numbers** sets the one modifier used with 1–9 to select tabs (Alt by default, or Off).
 
-Select a binding to change it, **Add binding** to record another, or × to remove it. The recorder reports conflicts and offers an explicit reassignment with the affected action names. Select **Record a two-key sequence** for page sequences. Tab moves around the recorder; Escape cancels it.
+Select a cell with the arrow keys or the pointer. **Enter**, **Space**, a double click or **Record key** records a new binding for that cell; a NORMAL mode cell accepts one key or two keys in a row. **Delete** or **Clear** empties the cell and **Default** restores it. Changed cells are drawn in the accent colour. Typing a letter while a cell has focus filters the table.
 
-**Save bindings** validates and applies changes to every open tab immediately. **Discard changes** restores the saved profile. **Reset** restores one action; **Restore browser shortcuts** and **Restore page keys** restore their respective groups. Import stages a profile for review; export writes the current draft's changes from the defaults. No restart or configuration-file editing is needed.
+**Save shortcuts** (Ctrl+S) validates the whole draft and applies it to every open tab immediately; conflicts are reported and nothing is saved until they are resolved. **Discard changes** returns to the saved profile. **Restore, import, export…** restores all defaults, only the shortcuts or only the NORMAL keys, imports a profile for review or exports the current draft's changes from the defaults. Closing Preferences with unsaved changes asks once; close it again to discard them.
 
 ## Modes and text input
 
@@ -23,7 +23,7 @@ Opening address/search, find, dashboard, preferences, palette, bookmarks, histor
 
 ## Preferences
 
-The Preferences index on the left lists its sections. When an index entry has focus, ↑/↓ move between sections (wrapping at the ends), Home/End jump to the first or last, and Tab enters the selected section. Inside Preferences, / or the configured find shortcut (Ctrl+F by default) focuses **Search settings** instead of the page find bar. Search filters every section in place, matching labels, descriptions, option names and common synonyms; matching keyboard actions are counted, and **Show in Keyboard** opens the editor with the same filter. Enter moves to the first result. Escape clears a non-empty search, then closes Preferences.
+The section list on the left shows where you are. When a section has focus, ↑/↓ move between sections (wrapping at the ends), Home/End jump to the first or last, and Right, Enter or Tab enter the section. Ctrl+PgDn and Ctrl+PgUp (or Ctrl+Tab and Ctrl+Shift+Tab) change section from anywhere in Preferences. Tab and Shift+Tab move through the controls of the panel. Switches toggle with Space; lists open with Enter or Space, and ↑/↓ change their value directly. **/** or Ctrl+F focuses **Search settings**, which lists the matching settings of every section with the number of matches beside each section. Enter moves to the first result. Escape cancels recording, then clears a non-empty search, then closes Preferences.
 
 Browser chords also work when an iframe has focus. Vim-style page keys and hint discovery are confined to the main document and its open shadow roots; embedded frames retain their native keyboard navigation. Closed shadow roots cannot be inspected. Operating-system shortcuts may be intercepted before Electron receives them.
 

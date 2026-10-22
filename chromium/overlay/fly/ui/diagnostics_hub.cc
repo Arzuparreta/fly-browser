@@ -30,6 +30,7 @@
 #include "content/public/browser/render_process_host.h"
 #include "content/public/common/process_type.h"
 #include "fly/fly_version.h"
+#include "fly/ui/fly_menu.h"
 #include "fly/ui/fly_theme.h"
 #include "gpu/config/gpu_feature_info.h"
 #include "ui/base/clipboard/scoped_clipboard_writer.h"
@@ -39,7 +40,6 @@
 #include "ui/views/accessibility/view_accessibility.h"
 #include "ui/views/background.h"
 #include "ui/views/border.h"
-#include "ui/views/controls/button/checkbox.h"
 #include "ui/views/controls/label.h"
 #include "ui/views/controls/scroll_view.h"
 #include "ui/views/controls/tabbed_pane/tabbed_pane.h"
@@ -174,29 +174,25 @@ views::View* AddBox(views::View* parent,
 // .diag-card: a titled list of key/value rows.
 views::View* AddCard(views::View* parent, std::u16string title) {
   auto* card = AddBox(parent, views::BoxLayout::Orientation::kVertical, 6);
-  card->SetBackground(FlyBackground(FlyRole::kOverlaySidebar, 8));
+  card->SetBackground(FlyBackground(FlyRole::kOverlayMain, 8));
   card->SetBorder(FlyBorder(FlyRole::kBorder, 1, 8, gfx::Insets(14)));
-  AddText(card, std::move(title), 12, FlyLabel::Tone::kAccent, FlyFace::kMono,
-          gfx::Font::Weight::SEMIBOLD);
+  card->AddChildView(MakeMenuCaption(base::ToUpperASCII(title)));
   return card;
 }
 void AddRow(views::View* card, std::u16string key, std::u16string value) {
   auto* row = AddBox(card, views::BoxLayout::Orientation::kHorizontal, 12);
-  auto* name = AddText(row, std::move(key), 11, FlyLabel::Tone::kDim);
+  auto* name = AddText(row, std::move(key), 12, FlyLabel::Tone::kDim);
   static_cast<views::BoxLayout*>(row->GetLayoutManager())
       ->SetFlexForView(name, 1);
-  AddText(row, std::move(value), 11, FlyLabel::Tone::kText, FlyFace::kMono);
+  AddText(row, std::move(value), 12, FlyLabel::Tone::kText, FlyFace::kMono);
 }
 FlyButton* AddButton(views::View* parent,
                      std::u16string label,
                      views::Button::PressedCallback callback,
                      bool primary = false) {
-  auto* button = parent->AddChildView(
-      std::make_unique<FlyButton>(std::move(callback), std::move(label)));
-  button->SetOutlined(true);
-  if (primary)
-    button->SetSelected(true);
-  return button;
+  return parent->AddChildView(MakeMenuButton(
+      std::move(callback), std::move(label),
+      primary ? MenuButtonStyle::kPrimary : MenuButtonStyle::kSecondary));
 }
 }  // namespace
 
@@ -230,39 +226,26 @@ void DiagnosticsHub::Toggle() {
   }
   if (!desktop_)
     return;
-  overlay_ = std::make_unique<views::Widget>();
-  views::Widget::InitParams params(
-      views::Widget::InitParams::CLIENT_OWNS_WIDGET,
-      views::Widget::InitParams::TYPE_CONTROL);
-  params.parent = desktop_->GetNativeWindow();
-  params.child = true;
-  params.activatable = views::Widget::InitParams::Activatable::kNo;
-  params.opacity = views::Widget::InitParams::WindowOpacity::kTranslucent;
-  params.native_widget = new views::NativeWidgetAura(overlay_.get());
-  params.name = "FlyDiagnosticsHub";
-  params.bounds = desktop_->GetContentsView()->GetBoundsInScreen();
+  auto bounds = desktop_->GetContentsView()->GetBoundsInScreen();
   if (delegate_.page_insets)
-    params.bounds.Inset(delegate_.page_insets.Run());
-  wm::ConvertRectFromScreen(desktop_->GetNativeWindow(), &params.bounds);
-  overlay_->Init(std::move(params));
-  auto root = std::make_unique<views::View>();
+    bounds.Inset(delegate_.page_insets.Run());
+  wm::ConvertRectFromScreen(desktop_->GetNativeWindow(), &bounds);
+  overlay_ = CreateMenuWidget(desktop_, bounds, "FlyDiagnosticsHub");
+  auto scrim = std::make_unique<MenuScrim>(
+      SK_ColorTRANSPARENT,
+      base::BindRepeating(&DiagnosticsHub::Cancel, weak_factory_.GetWeakPtr()));
+  auto panel = std::make_unique<MenuPanel>();
+  auto* root = panel.get();
   root->SetLayoutManager(std::make_unique<views::BoxLayout>(
-      views::BoxLayout::Orientation::kVertical, gfx::Insets(16), 12));
-  root->SetBackground(FlyBackground(FlyRole::kOverlayMain));
-  auto* header = AddBox(root.get(), views::BoxLayout::Orientation::kHorizontal,
-                        12);
-  auto* titles = AddBox(header, views::BoxLayout::Orientation::kVertical, 2);
+      views::BoxLayout::Orientation::kVertical, gfx::Insets(FlyScaled(12)),
+      FlyScaled(10)));
+  auto* header = root->AddChildView(
+      std::make_unique<MenuHeader>(MenuKind::kDiagnostics, u"Diagnostics"));
+  auto* spacer = header->AddTrailing(std::make_unique<views::View>());
   static_cast<views::BoxLayout*>(header->GetLayoutManager())
-      ->SetFlexForView(titles, 1);
-  AddText(titles, u"Diagnostics & Health Hub", 18, FlyLabel::Tone::kAccent,
-          FlyFace::kSans, gfx::Font::Weight::SEMIBOLD);
-  AddText(titles,
-          u"Local operational metrics, runtime telemetry and "
-          u"privacy-preserving bug reporting",
-          11, FlyLabel::Tone::kDim);
-  badge_ = AddText(header, u"", 11, FlyLabel::Tone::kDim, FlyFace::kMono);
-  recording_ = header->AddChildView(std::make_unique<views::Checkbox>(
-      u"Record",
+      ->SetFlexForView(spacer, 1);
+  badge_ = header->AddStatus();
+  recording_ = header->AddTrailing(std::make_unique<FlyToggle>(
       base::BindRepeating(
           [](base::WeakPtr<DiagnosticsHub> hub) {
             if (hub && hub->recording_ && hub->delegate_.set_recording) {
@@ -270,10 +253,12 @@ void DiagnosticsHub::Toggle() {
               hub->Refresh();
             }
           },
-          weak_factory_.GetWeakPtr())));
-  header->AddChildView(MakeFlyIconButton(
-      base::BindRepeating(&DiagnosticsHub::Cancel, weak_factory_.GetWeakPtr()),
-      vector_icons::kCloseIcon, u"Close Diagnostics (Esc)", 26));
+          weak_factory_.GetWeakPtr()),
+      u"Record events"));
+  header->AddTrailing(std::make_unique<FlyLabel>(
+      u"Record", FlyFace::kSans, kMenuSmallTextSize));
+  header->AddClose(
+      base::BindRepeating(&DiagnosticsHub::Cancel, weak_factory_.GetWeakPtr()));
   tabs_ = root->AddChildView(std::make_unique<views::TabbedPane>(
       views::TabbedPane::Orientation::kHorizontal,
       views::TabbedPane::TabStripStyle::kBorder));
@@ -286,14 +271,20 @@ void DiagnosticsHub::Toggle() {
     scroll->SetHorizontalScrollBarMode(
         views::ScrollView::ScrollBarMode::kDisabled);
     scroll->ClipHeightTo(0, std::numeric_limits<int>::max());
-    scroll->SetBackgroundColor(FlyRoleColor(FlyRole::kOverlayMain));
+    scroll->SetBackgroundColor(std::nullopt);
     auto* pane = scroll->SetContents(std::make_unique<views::View>());
     pane->SetLayoutManager(std::make_unique<views::BoxLayout>(
         views::BoxLayout::Orientation::kVertical, gfx::Insets(12), 12));
     panes_.push_back(pane);
   }
   tabs_->SetListener(this);
-  overlay_->SetContentsView(std::move(root));
+  const int margin = FlyScaled(16);
+  scrim->SetPanel(std::move(panel));
+  scrim->SetPanelBounds(gfx::Rect(margin, margin,
+                                  std::max(0, bounds.width() - 2 * margin),
+                                  std::max(0, bounds.height() - 2 * margin)));
+  DisableSubpixelText(scrim.get());
+  overlay_->SetContentsView(std::move(scrim));
   Refresh();
   Sample();
   overlay_->ShowInactive();
@@ -320,8 +311,8 @@ void DiagnosticsHub::Refresh() {
     return;
   const auto session =
       delegate_.session ? delegate_.session.Run() : DiagnosticsSession();
-  badge_->SetText(session.recording ? u"● Recording (In-Memory)"
-                                    : u"Ⅱ Recording Disabled");
+  badge_->SetText(session.recording ? u"● Recording in memory"
+                                    : u"Not recording");
   recording_->SetChecked(session.recording);
   const size_t index = tabs_->GetSelectedTabIndex();
   for (size_t i = 0; i < panes_.size(); ++i) {
@@ -858,6 +849,16 @@ bool DiagnosticsHub::HandleOverlayKey(const ui::KeyEvent& event) {
     return false;
   if (event.key_code() == ui::VKEY_ESCAPE) {
     Cancel();
+    return true;
+  }
+  if (event.key_code() == ui::VKEY_TAB && !event.IsControlDown())
+    return CycleMenuFocus(overlay_->GetContentsView(), event.IsShiftDown());
+  if (tabs_ && event.IsControlDown() &&
+      (event.key_code() == ui::VKEY_NEXT || event.key_code() == ui::VKEY_PRIOR)) {
+    const size_t count = tabs_->GetTabCount();
+    tabs_->SelectTabAt((tabs_->GetSelectedTabIndex() +
+                        (event.key_code() == ui::VKEY_NEXT ? 1 : count - 1)) %
+                       count);
     return true;
   }
   return false;

@@ -200,6 +200,15 @@ TEST_F(PreferencesServiceTest,
   EXPECT_EQ("datetime", restarted.ReadClock()->format);
   EXPECT_FALSE(restarted.ReadClock()->visible);
 }
+TEST_F(PreferencesServiceTest, ClockFormatIsSetDirectlyAndValidated) {
+  ASSERT_TRUE(service_.SetClockFormat("seconds"));
+  EXPECT_EQ("seconds", service_.ReadClock()->format);
+  ASSERT_TRUE(service_.SetClockFormat("time"));
+  EXPECT_EQ("time", service_.ReadClock()->format);
+  const auto before = prefs_.GetDict(kPreferencesPref).Clone();
+  EXPECT_FALSE(service_.SetClockFormat("weekday"));
+  EXPECT_EQ(before, prefs_.GetDict(kPreferencesPref));
+}
 TEST_F(PreferencesServiceTest,
        ClockEditsPreserveOtherGroupsAndUnknownMetadata) {
   prefs_.SetDict(

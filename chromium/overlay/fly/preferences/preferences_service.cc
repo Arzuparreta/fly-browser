@@ -387,6 +387,14 @@ bool PreferencesService::SetClockVisible(bool visible) {
   next.visible = visible;
   return SaveClock(next);
 }
+bool PreferencesService::SetClockFormat(const std::string& format) {
+  const auto current = ReadClock();
+  if (!current || !ValidFormat(format))
+    return false;
+  auto next = *current;
+  next.format = format;
+  return SaveClock(next);
+}
 bool PreferencesService::CycleClockFormat() {
   const auto current = ReadClock();
   if (!current)

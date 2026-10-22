@@ -55,6 +55,8 @@ class PreferencesService {
   bool CanEditClock() const;
   bool SetClockVisible(bool visible);
   bool CycleClockFormat();
+  // "datetime", "time" or "seconds".
+  bool SetClockFormat(const std::string& format);
   std::optional<bool> ReadSidebarAutoCollapse() const;
   bool CanEditSidebarAutoCollapse() const;
   bool SetSidebarAutoCollapse(bool collapse);
