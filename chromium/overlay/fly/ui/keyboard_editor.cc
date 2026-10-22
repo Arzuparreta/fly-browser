@@ -159,7 +159,7 @@ class KeyboardEditor::RailItem : public FlyButton {
   // Matches in this section while searching; -1 hides the count.
   void SetCount(int count) {
     count_ = count;
-    SchedulePaint();
+    UpdateColors();
   }
   void OnPaintBackground(gfx::Canvas* canvas) override {
     const auto& colors = GetFlyColors();
@@ -2586,13 +2586,17 @@ bool KeyboardEditor::HandleKeyEvent(views::Textfield* sender,
   if (!active() || event.type() != ui::EventType::kKeyPressed ||
       event.key_code() != ui::VKEY_RETURN)
     return false;
-  if (sender == search_settings_["engine"].get()) {
+  // Look fields up without inserting: only the shown section's fields exist.
+  const auto setting = [&](const char* key) -> views::Textfield* {
+    const auto found = search_settings_.find(key);
+    return found == search_settings_.end() ? nullptr : found->second.get();
+  };
+  if (sender == setting("engine")) {
     SaveSearchSetting("engine");
   } else if (sender == email_handler_) {
     ApplyProductTexts();
-  } else if (sender == search_settings_["alias"].get() ||
-             sender == search_settings_["name"].get() ||
-             sender == search_settings_["url"].get()) {
+  } else if (sender == setting("alias") || sender == setting("name") ||
+             sender == setting("url")) {
     SaveSearchSetting("alias");
   } else if (sender == extensions_store_link_) {
     RunAction("extensions-store-link:" +
@@ -2768,11 +2772,14 @@ bool KeyboardEditor::HandleOverlayKey(const ui::KeyEvent& event) {
       default:
         break;
     }
-    // Typing filters the table.
-    if (event.GetCharacter() >= 0x20 && search_) {
+    // Typing filters the table; Space records like Enter.
+    const char16_t character = event.GetCharacter();
+    if (character > 0x20 && character != 0x7f && search_) {
       search_->RequestFocus();
       search_->SetSelectedRange(gfx::Range(search_->GetText().size()));
-      return false;
+      // The key was aimed at the cell, which takes no text: type it here.
+      search_->InsertOrReplaceText(std::u16string(1, character));
+      return true;
     }
   }
   return false;
@@ -3062,6 +3069,10 @@ views::Button* KeyboardEditor::alias_save_for_testing() {
 views::Button* KeyboardEditor::alias_remove_for_testing(std::string_view alias) {
   const auto found = alias_remove_.find(base::ToLowerASCII(alias));
   return found == alias_remove_.end() ? nullptr : found->second.get();
+}
+views::Textfield* KeyboardEditor::color_field_for_testing(std::string_view key) {
+  const auto found = color_fields_.find(std::string(key));
+  return found == color_fields_.end() ? nullptr : found->second.get();
 }
 views::Button* KeyboardEditor::save_for_testing() {
   return save_;

@@ -121,6 +121,7 @@ class KeyboardEditor : public views::TextfieldController,
   // Record button.
   views::Button* record_for_testing(std::string_view action, bool normal);
   views::Button* save_for_testing();
+  views::Textfield* color_field_for_testing(std::string_view key);
   std::u16string error_for_testing() const;
   FlyToggle* appearance_for_testing(std::string_view key);
   FlySelect* clock_format_for_testing();

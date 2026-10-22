@@ -5834,6 +5834,73 @@ IN_PROC_BROWSER_TEST_F(FlyWorkspaceBrowserTest,
   EXPECT_EQ(before, window.commands().Read());
 }
 
+// Enter applies a text field in any section, also while other sections' and
+// hidden rows' fields do not exist.
+IN_PROC_BROWSER_TEST_F(FlyWorkspaceBrowserTest,
+                       PreferencesTextFieldsApplyWithEnterInAnySection) {
+  auto& window = FlyWindowController::Get();
+  ASSERT_TRUE(window.RunCommand(browser(), "toggle-help"));
+  auto& editor = window.keyboard_editor();
+  ASSERT_TRUE(editor.active());
+  ui::test::EventGenerator keys(
+      window.desktop_widget()->GetNativeWindow()->GetRootWindow());
+  editor.ShowAppearance();
+  auto* accent = editor.color_field_for_testing("accent");
+  ASSERT_TRUE(accent);
+  accent->RequestFocus();
+  accent->SetText(u"#123456");
+  keys.PressKey(ui::VKEY_RETURN, ui::EF_NONE);
+  base::RunLoop().RunUntilIdle();
+  ASSERT_TRUE(editor.active());
+  const bool dark = window.preferences().ReadTheme()->mode == "dark";
+  EXPECT_EQ("#123456",
+            window.preferences().ReadThemeColor(dark, "accent").value_or(""));
+  // Every preference change refreshes the controls that are built.
+  ASSERT_TRUE(window.preferences().SetStatusBarVisible(false));
+  ASSERT_TRUE(window.preferences().SetStatusBarVisible(true));
+  EXPECT_TRUE(editor.active());
+  // A search that hides the search URL row still saves an alias with Enter.
+  auto* search = editor.settings_search_for_testing();
+  search->SetText(u"alias");
+  editor.ContentsChanged(search, u"alias");
+  ASSERT_EQ(nullptr, editor.search_setting_for_testing("engine"));
+  editor.search_setting_for_testing("alias")->SetText(u"fx");
+  editor.search_setting_for_testing("name")->SetText(u"Example");
+  auto* url = editor.search_setting_for_testing("url");
+  url->SetText(u"https://example.test/?q=%s");
+  url->RequestFocus();
+  keys.PressKey(ui::VKEY_RETURN, ui::EF_NONE);
+  base::RunLoop().RunUntilIdle();
+  ASSERT_TRUE(editor.active());
+  SearchService service(*g_browser_process->local_state());
+  EXPECT_EQ(GURL("https://example.test/?q=query"),
+            service.ResolveNavigation("fx query"));
+  editor.Cancel(true);
+  ASSERT_TRUE(base::test::RunUntil([&] { return !editor.root_for_testing(); }));
+}
+
+// In the shortcut table, typing filters and Space records.
+IN_PROC_BROWSER_TEST_F(FlyWorkspaceBrowserTest,
+                       KeyboardTableTypingFiltersAndSpaceRecords) {
+  auto& window = FlyWindowController::Get();
+  ASSERT_TRUE(window.RunCommand(browser(), "toggle-help"));
+  auto& editor = window.keyboard_editor();
+  ASSERT_TRUE(editor.record_for_testing("spawn-tab", false));
+  ui::test::EventGenerator keys(
+      window.desktop_widget()->GetNativeWindow()->GetRootWindow());
+  keys.PressKey(ui::VKEY_T, ui::EF_NONE);
+  EXPECT_EQ(u"t", editor.search_for_testing()->GetText());
+  EXPECT_TRUE(editor.search_for_testing()->HasFocus());
+  ASSERT_TRUE(editor.record_for_testing("spawn-tab", false));
+  EXPECT_FALSE(editor.recording());
+  keys.PressKey(ui::VKEY_SPACE, ui::EF_NONE);
+  keys.ReleaseKey(ui::VKEY_SPACE, ui::EF_NONE);
+  EXPECT_TRUE(editor.recording());
+  keys.PressKey(ui::VKEY_ESCAPE, ui::EF_NONE);
+  EXPECT_FALSE(editor.recording());
+  EXPECT_TRUE(editor.active());
+}
+
 // Electron's Preferences: General first, the settings search filters every
 // section and jumps to the one with matches.
 IN_PROC_BROWSER_TEST_F(FlyWorkspaceBrowserTest,
