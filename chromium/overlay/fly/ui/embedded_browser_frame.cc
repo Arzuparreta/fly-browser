@@ -96,6 +96,7 @@ class EmbeddedBrowserNativeWidget final : public views::NativeWidgetAura,
   void Restore() override { Desktop()->Restore(); }
   void SetFullscreen(bool fullscreen, int64_t display) override {
     Desktop()->SetFullscreen(fullscreen, display);
+    FlyWindowController::Get().UpdateFullscreenChrome();
   }
   bool IsFullscreen() const override { return Desktop()->IsFullscreen(); }
   gfx::Rect GetRestoredBounds() const override {

@@ -3,7 +3,10 @@
 // Fly repository.
 #include "fly/ui/fly_theme.h"
 
+#include <map>
+#include <tuple>
 #include <utility>
+#include "base/no_destructor.h"
 
 #include "base/base_paths.h"
 #include "base/files/file_path.h"
@@ -225,17 +228,24 @@ int FlyScaled(int pixels) {
   return static_cast<int>(pixels * g_interface_scale + 0.5f);
 }
 gfx::FontList FlyFont(FlyFace face, int size, gfx::Font::Weight weight) {
-  size = static_cast<int>(size * g_interface_scale + 0.5f);
-  if (face == FlyFace::kDisplay) {
-    // The bundled Doto.ttf names its family "Doto Black" (a variable font
-    // whose weights are named instances).
-    return gfx::FontList({"Doto Black", "Doto", "monospace"},
-                         gfx::Font::NORMAL, size, weight);
-  }
-  const char* family =
-      face == FlyFace::kSans ? "IBM Plex Sans" : "IBM Plex Mono";
-  return gfx::FontList({family, face == FlyFace::kSans ? "sans" : "monospace"},
-                       gfx::Font::NORMAL, size, weight);
+  size = FlyScaled(size);
+  // FontList shares its resolved platform fonts and metrics when copied.
+  // Recreating identical lists for every label re-runs font fallback and
+  // fontconfig matching hundreds of times while opening native surfaces.
+  using Key = std::tuple<FlyFace, int, gfx::Font::Weight>;
+  static base::NoDestructor<std::map<Key, gfx::FontList>> fonts;
+  const Key key{face, size, weight};
+  if (auto found = fonts->find(key); found != fonts->end())
+    return found->second;
+  const std::vector<std::string> families =
+      face == FlyFace::kDisplay
+          ? std::vector<std::string>{"Doto Black", "Doto", "monospace"}
+          : std::vector<std::string>{
+                face == FlyFace::kSans ? "IBM Plex Sans" : "IBM Plex Mono",
+                face == FlyFace::kSans ? "sans" : "monospace"};
+  return fonts
+      ->emplace(key, gfx::FontList(families, gfx::Font::NORMAL, size, weight))
+      .first->second;
 }
 void RegisterFlyFonts() {
 #if BUILDFLAG(IS_LINUX)

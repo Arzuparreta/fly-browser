@@ -836,6 +836,8 @@ void TabSidebar::ScheduleRefresh() {
 }
 void TabSidebar::Refresh() {
   refresh_pending_ = false;
+  if (state_changed_)
+    state_changed_.Run();
   std::set<content::WebContents*> live;
   if (model_) {
     for (int i = 0; i < model_->count(); ++i)
@@ -1069,6 +1071,9 @@ gfx::ImageSkia TabSidebar::favicon_for_testing(
     content::WebContents* contents) const {
   auto it = tab_rows_.find(contents);
   return it == tab_rows_.end() ? gfx::ImageSkia() : it->second.favicon;
+}
+void TabSidebar::OnSplitTabChanged(const SplitTabChange&) {
+  ScheduleRefresh();
 }
 void TabSidebar::OnTabStripModelChanged(TabStripModel*,
                                         const TabStripModelChange&,

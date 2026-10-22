@@ -1,0 +1,40 @@
+--- a/chrome/browser/ui/views/exclusive_access/exclusive_access_bubble_views.cc
++++ b/chrome/browser/ui/views/exclusive_access/exclusive_access_bubble_views.cc
+@@ -3,6 +3,12 @@
+ // found in the LICENSE file.
+ 
+ #include "chrome/browser/ui/views/exclusive_access/exclusive_access_bubble_views.h"
++
++#if BUILDFLAG(IS_LINUX) || BUILDFLAG(IS_WIN)
++#include "fly/ui/fly_window_controller.h"
++#include "base/strings/string_util.h"
++#include "base/strings/utf_string_conversions.h"
++#endif
+ 
+ #include <utility>
+ 
+@@ -107,8 +113,22 @@
+   bool got_accelerator =
+       bubble_view_context_->GetAcceleratorProvider()
+           ->GetAcceleratorForCommandId(IDC_FULLSCREEN, &accelerator);
+-  DCHECK(got_accelerator);
+-  browser_fullscreen_exit_accelerator_ = accelerator.GetShortcutText();
++#if BUILDFLAG(IS_LINUX) || BUILDFLAG(IS_WIN)
++  // Embedded Fly browsers deliberately do not register stock accelerators.
++  // Keep Chromium's security bubble, displaying Fly's actual configured keys.
++  if (!got_accelerator && fly::FlyWindowController::GetIfCreated()) {
++    const auto config = fly::FlyWindowController::Get().commands().Read()
++                            .value_or(fly::DefaultKeyboardConfig());
++    const auto& bindings = config.shortcuts.at("toggle-fullscreen");
++    browser_fullscreen_exit_accelerator_ = bindings.empty()
++        ? l10n_util::GetStringUTF16(IDS_APP_ESC_KEY)
++        : base::UTF8ToUTF16(base::JoinString(bindings, " / "));
++  } else
++#endif
++  {
++    DCHECK(got_accelerator);
++    browser_fullscreen_exit_accelerator_ = accelerator.GetShortcutText();
++  }
+ #endif
+ 
+   UpdateViewContent(params_.type);

@@ -220,6 +220,7 @@ CommandPalette::~CommandPalette() {
   inspector_ = nullptr;
   search_ = nullptr;
   results_ = nullptr;
+  results_scroll_ = nullptr;
   overlay_.reset();
   if (desktop_)
     desktop_->RemoveObserver(this);
@@ -342,8 +343,8 @@ void CommandPalette::ToggleItems(content::WebContents* contents,
     search_->GetViewAccessibility().SetName(placeholder);
     root->AddChildView(std::move(panel));
     DisableSubpixelText(root.get());
-    overlay_->SetContentsView(std::move(root));
     Refresh();
+    overlay_->SetContentsView(std::move(root));
     overlay_->ShowInactive();
     desktop_->GetNativeWindow()->StackChildAtTop(overlay_->GetNativeWindow());
     search_->RequestFocus();
@@ -363,6 +364,7 @@ void CommandPalette::ToggleItems(content::WebContents* contents,
   scroll->SetBackgroundColor(FlyRoleColor(page ? FlyRole::kOverlayMain
                                                : FlyRole::kOverlaySidebar));
   scroll->SetDrawOverflowIndicator(false);
+  results_scroll_ = scroll;
   results_ = scroll->SetContents(std::make_unique<views::View>());
   results_->SetLayoutManager(std::make_unique<views::BoxLayout>(
       views::BoxLayout::Orientation::kVertical, gfx::Insets(), 2));
@@ -375,8 +377,8 @@ void CommandPalette::ToggleItems(content::WebContents* contents,
   }
   root->AddChildView(std::move(panel));
   DisableSubpixelText(root.get());
-  overlay_->SetContentsView(std::move(root));
   Refresh();
+  overlay_->SetContentsView(std::move(root));
   overlay_->ShowInactive();
   desktop_->GetNativeWindow()->StackChildAtTop(overlay_->GetNativeWindow());
   search_->RequestFocus();
@@ -421,6 +423,16 @@ void CommandPalette::ToggleQuery(content::WebContents* contents,
 void CommandPalette::Refresh() {
   if (!active())
     return;
+  buttons_.clear();
+  remove_buttons_.clear();
+  // Remove all native layers at once, build off-widget, then attach once.
+  auto rows = std::make_unique<views::View>();
+  rows->SetLayoutManager(std::make_unique<views::BoxLayout>(
+      views::BoxLayout::Orientation::kVertical,
+      style_.command_centre ? gfx::Insets(6) : gfx::Insets(), 2));
+  results_ = nullptr;
+  results_scroll_->SetContents(std::make_unique<views::View>());
+  results_ = rows.get();
   if (style_.command_centre) {
     // Electron's filterPaletteCommands.
     const auto query = std::u16string(
@@ -507,6 +519,7 @@ void CommandPalette::Refresh() {
       empty->SetBorder(views::CreateEmptyBorder(gfx::Insets(24)));
     }
     DisableSubpixelText(results_);
+    results_scroll_->SetContents(std::move(rows));
     Select(1);
     UpdateInspector();
     return;
@@ -588,6 +601,7 @@ void CommandPalette::Refresh() {
     empty->SetBorder(views::CreateEmptyBorder(gfx::Insets(24)));
   }
   DisableSubpixelText(results_);
+  results_scroll_->SetContents(std::move(rows));
   Select(1);
 }
 void CommandPalette::Select(int direction) {
@@ -716,6 +730,7 @@ void CommandPalette::FinishClose(bool restore_focus, std::string action) {
   inspector_ = nullptr;
   search_ = nullptr;
   results_ = nullptr;
+  results_scroll_ = nullptr;
   overlay_.reset();
   filtered_.clear();
   catalog_.clear();
@@ -805,6 +820,7 @@ void CommandPalette::BuildCommandCentre(views::View* panel, int max_height) {
   scroll->SetBackgroundColor(FlyRoleColor(FlyRole::kOverlaySidebar));
   scroll->SetBorder(FlyBorder(FlyRole::kBorder, 1, 8));
   scroll->SetDrawOverflowIndicator(false);
+  results_scroll_ = scroll;
   results_ = scroll->SetContents(std::make_unique<views::View>());
   results_->SetLayoutManager(std::make_unique<views::BoxLayout>(
       views::BoxLayout::Orientation::kVertical, gfx::Insets(6), 2));

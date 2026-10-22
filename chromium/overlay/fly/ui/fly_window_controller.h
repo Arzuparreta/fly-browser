@@ -146,6 +146,9 @@ class FlyWindowController : public views::WidgetDelegate,
   Profile* ActiveProfile() const;
   void OpenInNewWindow(GURL url);
   void CreateTab();
+  void UpdateFullscreenChrome();
+  void UpdateSplitButton();
+  FlyButton* split_button_for_testing() { return split_button_; }
   // An empty name takes the next "Workspace N".
   void CreateWorkspace(std::string name = {});
   std::string NextWorkspaceName() const;
@@ -432,6 +435,8 @@ class FlyWindowController : public views::WidgetDelegate,
   std::unique_ptr<views::Widget> desktop_;
   std::unique_ptr<views::Widget> sidebar_widget_;
   raw_ptr<views::View> sidebar_content_ = nullptr;
+  raw_ptr<views::View> footer_ = nullptr;
+  raw_ptr<FlyButton> split_button_ = nullptr;
   raw_ptr<views::View> sidebar_slot_ = nullptr;
   raw_ptr<views::NativeViewHost> sidebar_host_ = nullptr;
   raw_ptr<SidebarPanel> sidebar_panel_ = nullptr;
