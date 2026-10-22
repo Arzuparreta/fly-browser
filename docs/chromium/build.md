@@ -25,13 +25,22 @@ disposable profiles. For a static release build and tarball:
 
 ```sh
 python3 scripts/chromium/release.py --root /path/to/fly-chromium
-FLY_ENGINE_ROOT=/path/to/fly-chromium npm start
+FLY_ENGINE_ROOT=/path/to/fly-chromium FLY_ENGINE_OUTPUT=out/FlyRelease npm start
 ```
 
-The launcher defaults to `out/FlyRelease`, passes `--fly-native`, preserves
-arguments and uses the separate `fly-browser` user data directory. Set
-`FLY_ENGINE_ROOT` for your engine checkout. It never silently falls back to
-Electron. Release hosting prerequisites are in [releasing](../releasing.md).
+Run `./launch.sh` (or `npm start`) to open the existing local build. The launcher
+looks for `fly-chromium` beside this repository, beside its parent directory,
+then in `~/.cache/fly-chromium`. It prefers `out/FlyNative` over `out/FlyRelease`.
+Set `FLY_ENGINE_ROOT` and `FLY_ENGINE_OUTPUT` to select another checkout or output.
+The script launches the compiled browser; it does not rebuild source changes.
+
+Local launches use a persistent `fly-browser-dev` profile under
+`${XDG_CONFIG_HOME:-$HOME/.config}` and an empty import source. They do not share
+the installed browser's profile or automatically import personal data, so both
+can run simultaneously. Arguments are preserved, including explicit
+`--user-data-dir` and `--fly-import-from` overrides. The installed launcher keeps
+its existing profile. There is no automatic fallback to Electron.
+Release hosting prerequisites are in [releasing](../releasing.md).
 
 ## Source and prerequisites
 
