@@ -11,8 +11,9 @@ a release does (scripts/chromium/release.py), and publishes the package as the
 GitHub pre-release `test-pr-N`, replacing an earlier test build of the same
 pull request. Test builds are never releases: their tags do not start with
 `v` (no release workflow or AUR publication runs), and Fly's update check and
-fly-install read `releases/latest`, which never returns a pre-release. Test builds of closed pull requests are
-deleted on each run; `--remove` deletes this pull request's test build.
+fly-install read `releases/latest`, which never returns a pre-release. Each publication and each `--remove` also
+delete the test builds of pull requests that are no longer open; `--remove`
+deletes this pull request's test build.
 
 The build runs the pull request's code on the engine host with the owner's
 GitHub credentials, so pull requests from forks are refused unless
@@ -94,6 +95,7 @@ def main():
     tag = f'test-pr-{pr["number"]}'
     if args.remove:
         delete_release(tag)
+        prune_closed()
         print(f'Deleted the test build of pull request #{pr["number"]}.')
         return
     if pr['state'] != 'OPEN':

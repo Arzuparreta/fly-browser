@@ -80,8 +80,10 @@ download_build() {
     local channel=$1 root cache what tag json sums status name expected actual dir partial old
     [ "$(uname -s)-$(uname -m)" = Linux-x86_64 ] || die 'Downloaded builds exist for Linux x86_64 only.'
     root=${XDG_CACHE_HOME:-$HOME/.cache}/fly-browser-launch
+    mkdir -p "$root/$channel"
+    # Running browsers report resolved paths; compare against resolved paths.
+    root=$(cd "$root" && pwd -P)
     cache=$root/$channel
-    mkdir -p "$cache"
     if [ "$channel" = release ]; then
         what='the published release'
     else
@@ -99,30 +101,31 @@ download_build() {
         found=$(ls -1td "$cache"/*/fly-browser/app/fly 2>/dev/null | head -n1 || true)
         [ -n "$found" ] && binary=$found
     }
-    # curl exits with 22 when GitHub answers with an error (the release or file
-    # does not exist) and with other codes when GitHub cannot be reached.
-    status=0 tag= sums=
+    # GitHub's answer: 200 found, 404 not published, anything else (000 when
+    # unreachable, rate limits, server errors) means "try the cached copy".
+    fetch() {
+        http=$(curl -sSL -o "$2" -w '%{http_code}' "$1" 2>/dev/null) || http=000
+    }
+    local http=200 answer=$cache/.answer
+    tag= sums=
     if [ "$channel" = release ]; then
-        if json=$(curl -fsSL "https://api.github.com/repos/$github/releases/latest" 2>/dev/null); then
-            tag=$(printf '%s\n' "$json" | sed -n 's/.*"tag_name": *"\(v[^"]*\)".*/\1/p' | head -n1)
-            [ -n "$tag" ] || status=22
-        else
-            status=$?
+        fetch "https://api.github.com/repos/$github/releases/latest" "$answer"
+        if [ "$http" = 200 ]; then
+            tag=$(sed -n 's/.*"tag_name": *"\(v[^"]*\)".*/\1/p' "$answer" | head -n1)
+            [ -n "$tag" ] || http=404
         fi
     else
         tag=test-$channel
     fi
-    if [ "$status" = 0 ]; then
-        if sums=$(curl -fsSL "https://github.com/$github/releases/download/$tag/SHA256SUMS.txt" 2>/dev/null); then
-            :
-        else
-            status=$?
-        fi
+    if [ "$http" = 200 ]; then
+        fetch "https://github.com/$github/releases/download/$tag/SHA256SUMS.txt" "$answer"
+        [ "$http" != 200 ] || sums=$(cat "$answer")
     fi
+    rm -f "$answer"
     name=$(printf '%s\n' "$sums" | awk '$2 ~ /-native-linux-x64\.tar\.gz$/ {sub(/^\*/, "", $2); print $2; exit}')
     expected=$(printf '%s\n' "$sums" | awk -v name="$name" '$2 == name || $2 == "*" name {print $1; exit}')
     if ! [[ $expected =~ ^[a-f0-9]{64}$ ]]; then
-        if [ "$status" = 0 ] || [ "$status" = 22 ]; then
+        if [ "$http" = 200 ] || [ "$http" = 404 ]; then
             if [ "$channel" = release ]; then
                 die 'The published release has no native package to download.'
             fi
@@ -131,11 +134,14 @@ download_build() {
             die "There is no test build of pull request #${channel#pr-}. The maintainer publishes test builds of open pull requests (docs/releasing.md)."
         fi
         if cached; then
-            say "Could not reach GitHub; starting the last downloaded copy of $what."
+            say "Could not download from GitHub (HTTP $http); starting the last downloaded copy of $what."
             touch "$cache"
             return 0
         fi
-        die "Could not reach GitHub to download $what. Check the network connection."
+        if [ "$http" = 000 ]; then
+            die "Could not reach GitHub to download $what. Check the network connection."
+        fi
+        die "GitHub did not provide $what (HTTP $http). Try again later."
     fi
     dir=$cache/$expected
     if [ -x "$dir/fly-browser/app/fly" ]; then
@@ -165,10 +171,9 @@ download_build() {
     mkdir "$partial/unpacked"
     tar -xzf "$partial/$name" -C "$partial/unpacked"
     [ -x "$partial/unpacked/fly-browser/app/fly" ] || die "$name does not contain native Fly."
-    # Another start may have finished the same download meanwhile.
-    if [ ! -e "$dir" ]; then
-        mv "$partial/unpacked" "$dir"
-    fi
+    # Another start may have finished the same download meanwhile; then this
+    # copy is dropped.
+    mv -T "$partial/unpacked" "$dir" 2>/dev/null || true
     rm -rf "$partial"
     trap - EXIT
     [ -x "$dir/fly-browser/app/fly" ] || die "$name could not be unpacked into $dir."
@@ -201,7 +206,10 @@ profile=${XDG_CONFIG_HOME:-$HOME/.config}/fly-browser-dev
 # profile: with another build running, this build would not start at all.
 if lock=$(readlink "$profile/SingletonLock" 2>/dev/null) && [ "${lock%-*}" = "$(uname -n)" ]; then
     pid=${lock##*-}
+    # Only a browser started with this profile counts; a stale lock whose
+    # process number now belongs to another program does not.
     if [[ $pid =~ ^[0-9]+$ ]] && running=$(readlink "/proc/$pid/exe" 2>/dev/null) &&
+        tr '\0' '\n' < "/proc/$pid/cmdline" 2>/dev/null | grep -qxF -- "--user-data-dir=$profile" &&
         [ "$running" != "$(readlink -f "$binary")" ]; then
         die "A development Fly from another build is running (${running}). Close it, then start this one."
     fi

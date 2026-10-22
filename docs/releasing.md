@@ -177,9 +177,10 @@ development profile.
 
 Test builds never reach users: their tags do not start with `v`, so neither the
 release workflow nor the AUR publication runs, and Fly's update check and
-`fly-install` read `releases/latest`, which never returns a pre-release. Each run deletes the
-test builds of pull requests that are no longer open;
-`python3 scripts/chromium/test-build.py --pr N --remove` deletes one by hand.
+`fly-install` read `releases/latest`, which never returns a pre-release. Each
+publication, and `python3 scripts/chromium/test-build.py --pr N --remove`
+(which deletes that pull request's test build), also deletes the test builds of
+pull requests that are no longer open.
 
 The build runs the pull request's code on the engine host with your GitHub
 credentials. Pull requests from forks are refused unless `--allow-fork` is

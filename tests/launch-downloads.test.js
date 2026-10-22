@@ -22,16 +22,30 @@ try {
     // curl serves https://<host>/<path> from github/<path>; the request log
     // shows what was downloaded.
     fs.writeFileSync(path.join(bin, 'curl'), `#!/bin/bash
-out=
+out= format= fail=
 while [ $# -gt 0 ]; do
-  case $1 in -o) out=$2; shift;; -*) ;; *) url=$1;; esac
+  case $1 in
+    -o) out=$2; shift;;
+    -w) format=$2; shift;;
+    -*f*) fail=1;;
+    -*) ;;
+    *) url=$1;;
+  esac
   shift
 done
 echo "$url" >> "${requests}"
-[ -n "\${FLY_TEST_OFFLINE:-}" ] && exit 6
+code() { [ -z "$format" ] || printf %s "$1"; }
+if [ -n "\${FLY_TEST_OFFLINE:-}" ]; then code 000; exit 6; fi
 file="${github}/\${url#https://*/}"
-[ -f "$file" ] || exit 22
+status=\${FLY_TEST_HTTP:-}
+if [ -z "$status" ]; then if [ -f "$file" ]; then status=200; else status=404; fi; fi
+if [ "$status" != 200 ]; then
+  [ -z "$fail" ] || exit 22
+  [ -z "$out" ] || echo error > "$out"
+  code "$status"; exit 0
+fi
 if [ -n "$out" ]; then cp "$file" "$out"; else cat "$file"; fi
+code 200
 `, {mode:0o755});
     const env = {...process.env, HOME:home, XDG_CACHE_HOME:path.join(home, 'cache'),
         XDG_CONFIG_HOME:path.join(home, 'config'), PATH:`${bin}:${process.env.PATH}`, DISPLAY:':0'};
@@ -93,7 +107,11 @@ if [ -n "$out" ]; then cp "$file" "$out"; else cat "$file"; fi
     const offline = launch(['--pr', '153'], {FLY_TEST_OFFLINE:'1'});
     assert.equal(offline.status, 23);
     assert.match(offline.stdout, /^pr 153 second\n/);
-    assert.match(offline.stderr, /Could not reach GitHub; starting the last downloaded copy of the test build of pull request #153/);
+    assert.match(offline.stderr, /Could not download from GitHub \(HTTP 000\); starting the last downloaded copy of the test build of pull request #153/);
+    // Rate limits and server errors are not "no test build": the cache stays.
+    const limited = launch(['--pr', '153'], {FLY_TEST_HTTP:'403'});
+    assert.equal(limited.status, 23, limited.stderr);
+    assert.match(limited.stderr, /HTTP 403/);
     console.log('--pr N starts the newest test build of the pull request, also offline once downloaded.');
 
     // A build that is running is not deleted when a newer one arrives, and a
@@ -104,10 +122,15 @@ if [ -n "$out" ]; then cp "$file" "$out"; else cat "$file"; fi
     const shell = path.join(channel, running, 'fly-browser/app/sh');
     fs.copyFileSync('/bin/sh', shell);
     fs.chmodSync(shell, 0o755);
-    const holder = spawn(shell, ['-c', 'sleep 30; :'], {stdio:'ignore'});
+    const profileDir = `${env.XDG_CONFIG_HOME}/fly-browser-dev`;
+    const holder = spawn(shell, ['-c', 'sleep 30; :', 'sh', `--user-data-dir=${profileDir}`], {stdio:'ignore'});
+    const stranger = spawn('/bin/sh', ['-c', 'sleep 30; :'], {stdio:'ignore'});
     try {
-        const profileDir = `${env.XDG_CONFIG_HOME}/fly-browser-dev`;
         fs.mkdirSync(profileDir, {recursive:true});
+        // A stale lock naming an unrelated process does not block a start.
+        fs.symlinkSync(`${os.hostname()}-${stranger.pid}`, path.join(profileDir, 'SingletonLock'));
+        assert.equal(launch(['--pr', '153']).status, 23);
+        fs.unlinkSync(path.join(profileDir, 'SingletonLock'));
         fs.symlinkSync(`${os.hostname()}-${holder.pid}`, path.join(profileDir, 'SingletonLock'));
         publish('test-pr-153', 'pr 153 third');
         const busy = launch(['--pr', '153']);
@@ -116,7 +139,7 @@ if [ -n "$out" ]; then cp "$file" "$out"; else cat "$file"; fi
         assert.match(busy.stderr, /A development Fly from another build is running/);
         assert.equal(fs.readdirSync(channel).length, 2, 'the running build is kept beside the new one');
         fs.unlinkSync(path.join(profileDir, 'SingletonLock'));
-    } finally { holder.kill(); }
+    } finally { holder.kill(); stranger.kill(); }
     await new Promise(resolve => holder.once('exit', resolve));
     assert.match(launch(['--pr', '153']).stdout, /^pr 153 third\n/);
     assert.equal(fs.readdirSync(channel).length, 1, 'once closed, the older build goes');
@@ -143,6 +166,9 @@ if [ -n "$out" ]; then cp "$file" "$out"; else cat "$file"; fi
     const unreachable = launch(['--pr', '7'], {FLY_TEST_OFFLINE:'1'});
     assert.equal(unreachable.status, 1);
     assert.match(unreachable.stderr, /Could not reach GitHub to download the test build of pull request #7/);
+    const failing = launch(['--pr', '7'], {FLY_TEST_HTTP:'503'});
+    assert.equal(failing.status, 1);
+    assert.match(failing.stderr, /GitHub did not provide the test build of pull request #7 \(HTTP 503\)/);
     publish('test-pr-8', 'tampered', {corrupt:true});
     const tampered = launch(['--pr', '8']);
     assert.equal(tampered.status, 1);
@@ -164,5 +190,27 @@ if [ -n "$out" ]; then cp "$file" "$out"; else cat "$file"; fi
     assert.equal(local.requests, '', 'a local build needs no network');
     assert.equal(launch(['--release']).status, 23);
     console.log('A local build is used without network; --release and --pr still download.');
+
+    // A cache reached through a symbolic link still protects running builds.
+    fs.rmSync(path.join(temp, 'projects/fly-chromium'), {recursive:true});
+    const realCache = path.join(temp, 'disk/cache');
+    fs.mkdirSync(realCache, {recursive:true});
+    const linkedCache = path.join(temp, 'linked-cache');
+    fs.symlinkSync(realCache, linkedCache);
+    const linked = {XDG_CACHE_HOME:linkedCache};
+    publish('test-pr-20', 'pr 20 first');
+    assert.equal(launch(['--pr', '20'], linked).status, 23);
+    const linkedChannel = path.join(realCache, 'fly-browser-launch/pr-20');
+    const [linkedBuild] = fs.readdirSync(linkedChannel);
+    const linkedShell = path.join(linkedChannel, linkedBuild, 'fly-browser/app/sh');
+    fs.copyFileSync('/bin/sh', linkedShell);
+    fs.chmodSync(linkedShell, 0o755);
+    const linkedHolder = spawn(linkedShell, ['-c', 'sleep 30; :'], {stdio:'ignore'});
+    try {
+        publish('test-pr-20', 'pr 20 second');
+        assert.match(launch(['--pr', '20'], linked).stdout, /^pr 20 second\n/);
+        assert.ok(fs.existsSync(path.join(linkedChannel, linkedBuild)), 'the running build survives behind a symlink');
+    } finally { linkedHolder.kill(); }
+    console.log('Running builds are recognised through a symbolically linked cache.');
 } finally { fs.rmSync(temp, {recursive:true, force:true}); }
 })().catch(error => { console.error(error); process.exit(1); });
