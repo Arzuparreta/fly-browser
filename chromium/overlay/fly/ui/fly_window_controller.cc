@@ -658,10 +658,6 @@ FlyWindowController::FlyWindowController()
           window->LoadHistory(HistorySurface::kHistory);
         else if (window->address_picker_ && window->address_picker_->active())
           window->LoadHistory(HistorySurface::kAddress);
-        else if (window->bookmark_picker_ &&
-                 window->bookmark_picker_->active() &&
-                 window->preferences_.ReadFrequentSitesVisible() == true)
-          window->LoadHistory(HistorySurface::kBookmarks);
         else {
           window->history_entries_.clear();
         }
@@ -1002,12 +998,9 @@ std::vector<PaletteEntry> FlyWindowController::HistoryEntries() {
 void FlyWindowController::LoadHistory(HistorySurface surface) {
   auto* contents = selected_ ? selected_->GetTabStripModel()->GetActiveWebContents()
                              : nullptr;
-  auto* picker = surface == HistorySurface::kAddress   ? address_picker_.get()
-                 : surface == HistorySurface::kHistory ? history_picker_.get()
-                                                       : bookmark_picker_.get();
-  if (!picker->active() ||
-      (surface == HistorySurface::kBookmarks &&
-       preferences_.ReadFrequentSitesVisible() != true))
+  auto* picker = surface == HistorySurface::kAddress ? address_picker_.get()
+                                                    : history_picker_.get();
+  if (!picker->active())
     return;
   const auto generation = ++history_generation_;
   history_->Query(base::BindOnce(
@@ -1024,9 +1017,7 @@ void FlyWindowController::LoadHistory(HistorySurface surface) {
           return;
         auto* picker = surface == HistorySurface::kAddress
                            ? window->address_picker_.get()
-                       : surface == HistorySurface::kHistory
-                           ? window->history_picker_.get()
-                           : window->bookmark_picker_.get();
+                           : window->history_picker_.get();
         if (!picker->active())
           return;
         window->history_entries_ = rows.value_or(std::vector<HistoryEntry>());
@@ -1035,11 +1026,8 @@ void FlyWindowController::LoadHistory(HistorySurface surface) {
               u"History is unavailable. Saved data has been preserved.");
         if (surface == HistorySurface::kAddress)
           picker->RefreshQuery();
-        else if (surface == HistorySurface::kHistory)
-          picker->UpdateItems(window->HistoryEntries(), false);
         else
-          picker->UpdateItems(window->BookmarkEntries(),
-                              window->bookmarks_->CanEdit());
+          picker->UpdateItems(window->HistoryEntries(), false);
       },
       weak_factory_.GetWeakPtr(),
       contents ? contents->GetWeakPtr() : base::WeakPtr<content::WebContents>(),
@@ -1311,13 +1299,6 @@ void FlyWindowController::ExecuteAddress(content::WebContents* source,
   Navigate(&params);
 }
 
-std::optional<std::vector<FrequentSite>> FlyWindowController::FrequentSites()
-    const {
-  std::vector<SiteVisit> visits;
-  for (const auto& row : history_entries_)
-    visits.push_back({row.url.spec(), row.visited});
-  return frequent_sites_->Read(visits);
-}
 base::DictValue FlyWindowController::NewTabLists(
     bool off_the_record, const std::vector<HistoryEntry>& history) const {
   // Only web pages are listed, as on Electron's new tab page.
@@ -1372,16 +1353,6 @@ std::vector<PaletteEntry> FlyWindowController::BookmarkEntries() {
                          bookmark.url, {}, {}});
     }
   }
-  if (const auto sites = FrequentSites())
-    for (const auto& site : *sites) {
-      bookmark_urls_.insert(site.url);
-      entries.push_back({site.url,
-                         site.url,
-                         site.title,
-                         "Frequent site · " + site.url,
-                         {},
-                         {}});
-    }
   return entries;
 }
 void FlyWindowController::OnBookmarksChanged() {
@@ -1401,31 +1372,8 @@ void FlyWindowController::OpenBookmark(content::WebContents* source,
                  : nullptr) != source ||
       !bookmark_urls_.contains(url))
     return;
-  if (!bookmarks_->Contains(url)) {
-    // Recompute derived rows after dismissal before opening a frequent site.
-    history_->Query(base::BindOnce(
-        [](base::WeakPtr<FlyWindowController> window,
-           base::WeakPtr<content::WebContents> source, bool empty_source,
-           std::string url,
-           std::optional<std::vector<HistoryEntry>> rows) {
-          if (!window || window->closing_ || (!empty_source && !source) ||
-              (window->selected_ ? window->selected_->GetTabStripModel()
-                                       ->GetActiveWebContents() : nullptr) !=
-                  source.get() || !rows)
-            return;
-          std::vector<SiteVisit> visits;
-          for (const auto& row : *rows)
-            visits.push_back({row.url.spec(), row.visited});
-          const auto sites = window->frequent_sites_->Read(visits);
-          if (sites && std::ranges::find(*sites, url, &FrequentSite::url) !=
-                           sites->end())
-            window->OpenInNewTab(GURL(url));
-        },
-        weak_factory_.GetWeakPtr(),
-        source ? source->GetWeakPtr() : base::WeakPtr<content::WebContents>(),
-        !source, std::move(url)));
+  if (!bookmarks_->Contains(url))
     return;
-  }
   OpenInNewTab(GURL(url));
 }
 void FlyWindowController::RemoveBookmark(content::WebContents* source,
@@ -1435,26 +1383,10 @@ void FlyWindowController::RemoveBookmark(content::WebContents* source,
                  : nullptr) == source) {
     if (bookmarks_->Contains(url))
       bookmarks_->Remove(url);
-    else if (bookmark_urls_.contains(url))
-      frequent_sites_->Hide(url);
   }
 }
 
 void FlyWindowController::OnPreferencesChanged() {
-  const auto frequent = preferences_.ReadFrequentSitesVisible();
-  if (frequent != applied_frequent_visibility_) {
-    applied_frequent_visibility_ = frequent;
-    if (bookmark_picker_ && bookmark_picker_->active()) {
-      if (frequent == true)
-        LoadHistory(HistorySurface::kBookmarks);
-      else {
-        ++history_generation_;
-        history_->Cancel();
-        history_entries_.clear();
-      }
-      bookmark_picker_->UpdateItems(BookmarkEntries(), bookmarks_->CanEdit());
-    }
-  }
   const auto theme = preferences_.ReadTheme();
   if (theme && theme != applied_theme_) {
     applied_theme_ = theme;
@@ -3685,8 +3617,7 @@ bool FlyWindowController::RunCommand(BrowserWindowInterface* browser,
     bookmark_picker_->ToggleItems(
         browser ? browser->GetTabStripModel()->GetActiveWebContents() : nullptr,
         BookmarkEntries(), config.shortcuts.at("toggle-bookmarks"),
-        u"Search bookmarks and frequent sites", bookmarks_->CanEdit(), true);
-    LoadHistory(HistorySurface::kBookmarks);
+        u"Search bookmarks", bookmarks_->CanEdit(), true);
     return true;
   }
   if (action == "toggle-palette") {
