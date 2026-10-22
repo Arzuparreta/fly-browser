@@ -21,34 +21,41 @@
 #include "fly/commands/palette_catalog.h"
 #include "fly/preferences/preferences_service.h"
 #include "fly/preferences/search_service.h"
+#include "ui/menus/simple_menu_model.h"
 #include "ui/shell_dialogs/select_file_dialog.h"
 #include "ui/views/controls/slider.h"
-#include "ui/views/controls/tabbed_pane/tabbed_pane_listener.h"
 #include "ui/views/controls/textfield/textfield_controller.h"
 #include "ui/views/widget/widget_observer.h"
 
 namespace views {
-class Combobox;
-class Slider;
-class ScrollView;
-class Widget;
-class View;
+class Button;
 class Label;
-class MdTextButton;
-class Checkbox;
-class TabbedPane;
+class MenuRunner;
+class ScrollView;
+class Textfield;
+class View;
+class Widget;
 }  // namespace views
 class BrowserWindowInterface;
 class Profile;
 namespace fly {
+class FlyButton;
 class FlyExtensions;
-// Browser-owned editor. Drafts and recording stay in memory until the shared
-// command service validates one complete transaction. The modal surface routes
-// recorder keys before page/browser commands, without changing page visibility.
+class FlyLabel;
+class FlySelect;
+class FlySlider;
+class FlyTextfield;
+class FlyToggle;
+class KeyHints;
+// Preferences: a panel with a section rail, one section built at a time and a
+// search across every section. The Keyboard section edits a draft of the
+// bindings in a table (action, shortcut, NORMAL key); the shared command
+// service validates the whole draft on Save. The recorder takes keys before
+// page and browser commands, without changing page visibility.
 class KeyboardEditor : public views::TextfieldController,
-                       public views::TabbedPaneListener,
                        public views::SliderListener,
                        public ui::SelectFileDialog::Listener,
+                       public ui::SimpleMenuModel::Delegate,
                        public views::WidgetObserver,
                        public content::WebContentsObserver {
  public:
@@ -56,17 +63,9 @@ class KeyboardEditor : public views::TextfieldController,
                  PrefService& local_state);
   ~KeyboardEditor() override;
   void Toggle(content::WebContents* contents);
+  // Closes at once. A user's close asks first when shortcut changes are
+  // unsaved (RequestClose).
   void Cancel(bool restore_focus = false);
-  // Pointer settings buttons return to the page when the surface closes.
-  void ShowAppearance(bool return_to_page = false);
-  void ShowExtensions();
-  // Extension management for the selected workspace (Extensions tab).
-  void SetExtensions(FlyExtensions* extensions,
-                     base::RepeatingCallback<BrowserWindowInterface*()> browser,
-                     base::RepeatingCallback<Profile*()> profile);
-  void ShowPerformance();
-  void ShowSearch();
-  // Electron's section order.
   enum Pane {
     kGeneralPane = 0,
     kAppearancePane,
@@ -74,9 +73,20 @@ class KeyboardEditor : public views::TextfieldController,
     kPrivacyPane,
     kExtensionsPane,
     kPerformancePane,
-    kDiagnosticsPane,
     kAboutPane,
+    kPaneCount,
   };
+  void ShowPane(Pane pane);
+  // Pointer settings buttons return to the page when the surface closes.
+  void ShowAppearance(bool return_to_page = false);
+  void ShowExtensions();
+  // Extension management for the selected workspace (Extensions section).
+  void SetExtensions(FlyExtensions* extensions,
+                     base::RepeatingCallback<BrowserWindowInterface*()> browser,
+                     base::RepeatingCallback<Profile*()> profile);
+  void ShowPerformance();
+  void ShowSearch();
+  void ShowKeyboard();
   // Buttons that act outside Preferences (restart, private mode, updates,
   // desktop integration, extension installs) run through this.
   void SetActionRunner(base::RepeatingCallback<void(std::string)> run) {
@@ -89,39 +99,44 @@ class KeyboardEditor : public views::TextfieldController,
                              bool can_make_default);
   void SetPrivateMode(bool on);
   void SetExtensionUsage(std::u16string text);
-  views::Textfield* settings_search_for_testing() { return settings_search_; }
-  views::TabbedPane* sections_for_testing() { return sections_; }
-  int selected_pane_for_testing() const;
-  bool setting_visible_for_testing(std::u16string_view label) const;
-  views::Textfield* search_setting_for_testing(std::string_view key);
-  views::MdTextButton* search_save_for_testing() { return search_save_; }
-  views::MdTextButton* alias_save_for_testing() { return alias_save_; }
-  views::MdTextButton* alias_remove_for_testing() { return alias_remove_; }
-  void ShowKeyboard();
   bool HandleOverlayKey(const ui::KeyEvent& event);
   bool active() const { return overlay_ && !closing_; }
   bool recording() const { return recording_.has_value(); }
-  views::Textfield* field_for_testing(std::string_view action, bool normal);
-  void EnsureRowForTesting(std::string_view action, bool normal);
-  views::MdTextButton* record_for_testing(std::string_view action, bool normal);
-  views::MdTextButton* save_for_testing() { return save_; }
-  views::Textfield* search_for_testing() { return search_; }
+
+  // Testing.
+  views::View* root_for_testing();
+  views::Textfield* settings_search_for_testing();
+  int selected_pane_for_testing() const;
+  bool setting_visible_for_testing(std::u16string_view label) const;
+  views::Textfield* search_setting_for_testing(std::string_view key);
+  views::Button* search_save_for_testing();
+  views::Button* alias_save_for_testing();
+  views::Button* alias_remove_for_testing(std::string_view alias);
+  views::Textfield* search_for_testing();
+  std::u16string bindings_for_testing(std::string_view action, bool normal);
+  void SetBindingsForTesting(std::string_view action,
+                             bool normal,
+                             std::u16string text);
+  // Shows the Keyboard section, selects and focuses the cell and returns the
+  // Record button.
+  views::Button* record_for_testing(std::string_view action, bool normal);
+  views::Button* save_for_testing();
+  views::Textfield* color_field_for_testing(std::string_view key);
   std::u16string error_for_testing() const;
-  views::Checkbox* appearance_for_testing(std::string_view key);
-  views::MdTextButton* clock_format_for_testing() { return clock_format_; }
-  views::MdTextButton* suspension_timeout_for_testing() {
-    return suspension_timeout_;
-  }
+  FlyToggle* appearance_for_testing(std::string_view key);
+  FlySelect* clock_format_for_testing();
+  FlySelect* suspension_timeout_for_testing();
 
   void ContentsChanged(views::Textfield*, const std::u16string&) override;
-  void TabSelectedAt(int index) override;
+  bool HandleKeyEvent(views::Textfield*, const ui::KeyEvent&) override;
   void SliderValueChanged(views::Slider* sender,
                           float value,
                           float old_value,
                           views::SliderChangeReason reason) override;
   void FileSelected(const ui::SelectedFileInfo& file, int index) override;
   void FileSelectionCanceled() override;
-  bool HandleKeyEvent(views::Textfield*, const ui::KeyEvent&) override;
+  // ui::SimpleMenuModel::Delegate (the Keyboard section's More menu):
+  void ExecuteCommand(int command_id, int event_flags) override;
   void OnWidgetBoundsChanged(views::Widget*, const gfx::Rect&) override;
   void OnWidgetActivationChanged(views::Widget*, bool active) override;
   void OnWidgetDestroying(views::Widget*) override;
@@ -129,114 +144,169 @@ class KeyboardEditor : public views::TextfieldController,
   void WebContentsDestroyed() override;
   void OnVisibilityChanged(content::Visibility) override;
 
- private:
   using Key = std::pair<std::string, bool>;
-  struct Field {
-    raw_ptr<views::Textfield> input;
-    raw_ptr<views::MdTextButton> record;
-  };
-  void Refresh();
+
+ private:
+  class RailItem;
+  class KeyCell;
+  class KeyRow;
+  friend class KeyCell;
+  friend class KeyRow;
+  // Section content.
+  void ShowContent();
+  void ClearContent();
+  void SelectPane(int pane, bool focus_rail);
+  bool Matches(std::u16string_view text) const;
+  void BeginGroup(std::u16string caption);
+  views::View* AddRow(std::u16string label,
+                      std::u16string description,
+                      std::u16string keywords,
+                      std::unique_ptr<views::View> control,
+                      bool wide = false);
+  views::View* AddNote(std::u16string text);
+  std::unique_ptr<views::View> Controls(
+      std::vector<std::unique_ptr<views::View>> views);
+  std::unique_ptr<FlyToggle> MakeToggle(std::string key, std::u16string name);
+  void BuildGeneral();
+  void BuildAppearance();
+  void BuildKeyboard();
+  void BuildPrivacy();
+  void BuildExtensions();
+  void BuildPerformance();
+  void BuildAbout();
+  void BuildAliases();
+  // Values.
   void RefreshAppearance();
-  views::View* AddPane(std::u16string title);
-  views::View* AddGroup(views::View* pane, std::u16string title);
-  views::View* AddItem(views::View* group,
-                       std::u16string label,
-                       std::u16string description,
-                       std::unique_ptr<views::View> control,
-                       bool control_below = false);
-  void ApplySettingsSearch();
-  void BuildGeneralPane();
-  void BuildAppearancePane();
-  void BuildKeyboardPane(bool readable);
-  void BuildPrivacyPane();
-  void BuildPerformancePane();
-  void BuildDiagnosticsPane();
-  void BuildAboutPane();
+  void RefreshSearchSection();
+  void RefreshExtensions();
+  void SetStatus(std::u16string text);
   void RunAction(std::string action);
-  void ChooseEmailHandler();
+  void OpenUrl(std::string url);
+  void ChooseEngine(size_t index);
+  void ChooseEmailHandler(size_t index);
+  void SaveSearchSetting(std::string action);
+  void RemoveAlias(std::string alias);
+  void ChangeAppearance(std::string key);
+  void ApplyProductTexts();
+  // Keyboard section.
+  void RefreshKeyboardRows();
+  void SelectCell(Key key, bool focus);
+  void CellPressed(Key key, const ui::Event& event);
+  void MoveCell(int rows, int columns);
+  void UpdateCellDetails();
+  void UpdateKeyboardState();
+  bool KeyboardDirty() const;
+  std::u16string DraftText(const Key& key) const;
+  std::u16string DefaultBindings(const Key& key) const;
+  bool IsCustomised(const Key& key) const;
   void DiscardKeyboard();
   void ResetSection(bool normal);
-  bool IsCustomised(const std::string& action) const;
+  void ResetAll();
+  void ShowMoreMenu();
   void ChooseKeyboardFile(bool save);
   base::DictValue DraftChanges() const;
   void ImportKeyboardText(std::optional<std::string> text);
-  void RefreshSearchSection();
-  void SaveSearchSetting(std::string action);
-  void ChangeAppearance(std::string key);
-  void ApplyProductTexts();
-  void CycleClockFormat();
-  void CycleSuspendTimeout();
-  void ClearAppearance();
-  void ResetAll();
   void WriteField(Key key, std::u16string value);
   void ResetField(Key key);
   void StartRecording(Key key);
   void FinishRecording();
   void StopRecording();
   void Save();
+  // Closing.
+  void RequestClose();
   void FinishClose(bool restore_focus);
+
   raw_ptr<views::Widget> desktop_;
   const raw_ref<CommandService> commands_;
   PreferencesService preferences_;
   SearchService search_preferences_;
-  std::map<std::string, raw_ptr<views::Textfield>> search_settings_;
-  raw_ptr<views::MdTextButton> search_save_ = nullptr;
-  raw_ptr<views::MdTextButton> alias_save_ = nullptr;
-  raw_ptr<views::MdTextButton> alias_remove_ = nullptr;
-  raw_ptr<views::Label> search_settings_status_ = nullptr;
-  raw_ptr<views::Label> alias_list_ = nullptr;
   PrefChangeRegistrar preferences_registrar_;
-  std::map<std::string, raw_ptr<views::Checkbox>> appearance_;
-  raw_ptr<views::MdTextButton> clock_format_ = nullptr;
-  raw_ptr<views::MdTextButton> suspension_timeout_ = nullptr;
-  raw_ptr<views::Label> suspension_status_ = nullptr;
-  raw_ptr<views::Label> appearance_status_ = nullptr;
-  raw_ptr<views::TabbedPane> sections_ = nullptr;
   std::unique_ptr<views::Widget> overlay_;
-  raw_ptr<views::Textfield> search_ = nullptr;
-  raw_ptr<views::Textfield> tabs_ = nullptr;
-  raw_ptr<views::View> rows_ = nullptr;
-  raw_ptr<views::ScrollView> rows_scroll_ = nullptr;
-  bool show_all_rows_ = false;
-  void BuildExtensionsSection();
-  void RefreshExtensions();
+  base::RepeatingCallback<void(std::string)> run_action_;
+
+  // Frame.
+  raw_ptr<views::View> root_ = nullptr;
+  raw_ptr<FlyTextfield> settings_search_ = nullptr;
+  std::vector<raw_ptr<RailItem>> rail_;
+  raw_ptr<views::View> content_host_ = nullptr;
+  raw_ptr<FlyLabel> status_ = nullptr;
+  raw_ptr<KeyHints> hints_ = nullptr;
+  int pane_ = kGeneralPane;
+  std::u16string query_;
+
+  // While a section is being built.
+  int building_pane_ = 0;
+  raw_ptr<views::View> building_parent_ = nullptr;
+  raw_ptr<views::View> group_ = nullptr;
+  std::u16string pending_group_;
+  bool section_heading_shown_ = false;
+  struct SearchRow {
+    int pane;
+    std::u16string text;
+    raw_ptr<views::View> view;
+  };
+  std::vector<SearchRow> rows_;
+  std::vector<int> matches_per_pane_;
+
+  // Controls of the shown content; null when their section is not built.
+  std::map<std::string, raw_ptr<views::Textfield>> search_settings_;
+  raw_ptr<FlyButton> search_save_ = nullptr;
+  raw_ptr<FlyButton> alias_save_ = nullptr;
+  std::map<std::string, raw_ptr<FlyButton>> alias_remove_;
+  raw_ptr<views::View> aliases_box_ = nullptr;
+  std::map<std::string, raw_ptr<FlyToggle>> appearance_;
+  raw_ptr<FlySelect> engine_choice_ = nullptr;
+  raw_ptr<FlySelect> email_choice_ = nullptr;
+  raw_ptr<views::View> email_custom_row_ = nullptr;
+  raw_ptr<views::Textfield> email_handler_ = nullptr;
+  raw_ptr<FlySelect> spellcheck_choice_ = nullptr;
+  raw_ptr<FlySelect> scale_choice_ = nullptr;
+  raw_ptr<FlySelect> clock_format_ = nullptr;
+  raw_ptr<FlySelect> suspension_timeout_ = nullptr;
+  raw_ptr<FlySelect> process_limit_ = nullptr;
+  raw_ptr<FlyToggle> private_mode_ = nullptr;
+  std::map<std::string, raw_ptr<views::Textfield>> color_fields_;
+  std::map<std::string, raw_ptr<views::View>> color_swatches_;
+  std::map<std::string, raw_ptr<FlySlider>> opacity_sliders_;
+  std::map<std::string, raw_ptr<views::Label>> opacity_labels_;
+  raw_ptr<views::Label> update_label_ = nullptr;
+  raw_ptr<FlyButton> update_action_ = nullptr;
+  raw_ptr<views::Label> desktop_entry_label_ = nullptr;
+  raw_ptr<FlyButton> desktop_entry_button_ = nullptr;
+  raw_ptr<views::Label> default_browser_label_ = nullptr;
+  raw_ptr<FlyButton> default_browser_button_ = nullptr;
+  // Extensions.
   raw_ptr<FlyExtensions> extensions_ = nullptr;
   base::RepeatingCallback<BrowserWindowInterface*()> extensions_browser_;
   base::RepeatingCallback<Profile*()> extensions_profile_;
   raw_ptr<views::View> extensions_list_ = nullptr;
-  raw_ptr<views::Checkbox> extensions_enabled_ = nullptr;
-  raw_ptr<views::Textfield> email_handler_ = nullptr;
-  raw_ptr<views::Combobox> engine_choice_ = nullptr;
-  raw_ptr<views::Combobox> email_choice_ = nullptr;
-  raw_ptr<views::Combobox> spellcheck_choice_ = nullptr;
-  raw_ptr<views::Combobox> scale_choice_ = nullptr;
-  raw_ptr<views::Checkbox> modified_only_ = nullptr;
-  raw_ptr<views::Checkbox> private_mode_ = nullptr;
-  raw_ptr<views::Textfield> settings_search_ = nullptr;
-  raw_ptr<views::Label> settings_search_status_ = nullptr;
-  raw_ptr<views::Label> update_label_ = nullptr;
-  raw_ptr<views::MdTextButton> update_action_ = nullptr;
-  raw_ptr<views::Label> desktop_entry_label_ = nullptr;
-  raw_ptr<views::MdTextButton> desktop_entry_button_ = nullptr;
-  raw_ptr<views::Label> default_browser_label_ = nullptr;
-  raw_ptr<views::MdTextButton> default_browser_button_ = nullptr;
+  raw_ptr<FlyToggle> extensions_enabled_ = nullptr;
   raw_ptr<views::Label> extensions_usage_ = nullptr;
   raw_ptr<views::Textfield> extensions_store_link_ = nullptr;
-  std::map<std::string, raw_ptr<views::View>> color_swatches_;
-  std::map<std::string, raw_ptr<views::Slider>> opacity_sliders_;
-  std::map<std::string, raw_ptr<views::Label>> opacity_labels_;
-  // Rows the settings search filters.
-  struct SearchItem {
-    int pane;
-    raw_ptr<views::View> view;
-    raw_ptr<views::View> group;
-    std::u16string text;
-  };
-  std::vector<SearchItem> items_;
-  std::vector<std::u16string> pane_titles_;
-  int last_pane_ = kGeneralPane;
-  base::RepeatingCallback<void(std::string)> run_action_;
-  // State shown in About and Privacy; kept while Preferences is closed.
+  std::u16string extensions_usage_text_;
+
+  // Keyboard section.
+  raw_ptr<FlyTextfield> search_ = nullptr;
+  raw_ptr<FlyTextfield> tabs_ = nullptr;
+  raw_ptr<FlyToggle> modified_only_ = nullptr;
+  raw_ptr<views::ScrollView> rows_scroll_ = nullptr;
+  raw_ptr<views::View> key_rows_ = nullptr;
+  std::map<Key, raw_ptr<KeyCell>> cells_;
+  std::vector<std::string> row_actions_;
+  raw_ptr<FlyLabel> cell_title_ = nullptr;
+  raw_ptr<FlyButton> record_ = nullptr;
+  raw_ptr<FlyButton> clear_ = nullptr;
+  raw_ptr<FlyButton> default_ = nullptr;
+  raw_ptr<FlyButton> save_ = nullptr;
+  raw_ptr<FlyButton> discard_ = nullptr;
+  raw_ptr<FlyButton> more_ = nullptr;
+  std::unique_ptr<ui::SimpleMenuModel> more_model_;
+  std::unique_ptr<views::MenuRunner> more_runner_;
+  bool modified_only_checked_ = false;
+  std::u16string keyboard_query_;
+  std::optional<Key> selected_cell_;
+
+  // State kept while Preferences is closed or between sections.
   std::u16string update_status_;
   std::string update_available_;
   std::u16string desktop_entry_status_;
@@ -244,6 +314,10 @@ class KeyboardEditor : public views::TextfieldController,
   std::u16string default_browser_status_;
   bool can_make_default_ = false;
   bool private_on_ = false;
+  std::u16string status_text_;
+  bool keyboard_readable_ = true;
+  bool confirm_discard_ = false;
+
   scoped_refptr<ui::SelectFileDialog> file_dialog_;
   enum class FileChoice {
     kExportKeyboard,
@@ -253,14 +327,10 @@ class KeyboardEditor : public views::TextfieldController,
   };
   FileChoice file_choice_ = FileChoice::kImportKeyboard;
   void ChooseFile(FileChoice choice);
-  void OpenUrl(std::string url);
-  raw_ptr<views::MdTextButton> process_limit_ = nullptr;
-  std::map<std::string, raw_ptr<views::Textfield>> color_fields_;
-  raw_ptr<views::Label> status_ = nullptr;
-  raw_ptr<views::MdTextButton> save_ = nullptr;
+
+  // Keyboard draft.
   KeyboardConfig original_;
   std::map<Key, std::u16string> draft_;
-  std::map<Key, Field> fields_;
   std::u16string tab_modifiers_;
   std::vector<PaletteEntry> catalog_;
   std::vector<std::string> close_bindings_;

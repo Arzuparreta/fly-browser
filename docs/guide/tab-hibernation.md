@@ -6,7 +6,7 @@ Suspension saves CPU and battery. It does **not** promise the memory savings of 
 
 ## Automatic suspension
 
-In **Preferences → Performance → Tab suspension**, choose 5, 15, 30 or 60 minutes, or **Never**. The default is 15 minutes. The native **Fly Settings → Tab Suspension** menu offers the same choices.
+In **Preferences → Performance → Suspend background tabs**, choose **Off** or 5, 15, 30 or 60 minutes. The default is 15 minutes. The native **Fly Settings → Tab Suspension** menu offers the same choices.
 
 Time counts continuously from when the page becomes hidden, including switching to another workspace. Fly checks every 30 seconds. Selecting a page restarts its background interval the next time you leave it.
 

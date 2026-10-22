@@ -1,0 +1,11 @@
+--- a/chrome/browser/ui/BUILD.gn
++++ b/chrome/browser/ui/BUILD.gn
+@@ -816,6 +816,8 @@
+       "//fly/ui/download_shelf.h",
+       "//fly/ui/fly_theme.cc",
+       "//fly/ui/fly_theme.h",
++      "//fly/ui/fly_menu.cc",
++      "//fly/ui/fly_menu.h",
+       "//fly/ui/fly_window_controller.cc",
+       "//fly/ui/fly_window_controller.h",
+       "//fly/ui/history_service.cc",

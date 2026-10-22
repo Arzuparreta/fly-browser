@@ -64,7 +64,7 @@ In addition to DuckDuckGo bangs, Fly includes native search engine prefixes that
 * `k <query>`: Kagi
 
 ### User-Customised Search Engines
-You can add your own search engines or override existing shortcuts in **Preferences → General → Custom search aliases** (**Ctrl + H**) or inside `~/.config/fly-browser/config.json`:
+You can add your own search engines or override existing shortcuts in **Preferences → General → Search aliases** (**Ctrl + H**) or inside `~/.config/fly-browser/config.json`:
 
 ```json
 "custom_search_aliases": {
@@ -110,7 +110,7 @@ When typing queries into the address bar, prepend shorthand prefixes to route se
 | `b <query>` | Brave Search | `b web standards` |
 | `k <query>` | Kagi Search | `k technical docs` |
 
-If no alias is entered, Fly uses your configured default search engine set in **Preferences → General**. The same section lists these aliases and calculator examples.
+If no alias is entered, Fly uses your configured default search engine set in **Preferences → General**. The same section lists your aliases and the built-in ones.
 
 ***
 
@@ -176,7 +176,7 @@ Fly Browser provides a Vim-inspired modal navigation engine that frees you from 
 
 ## Workspace Badges, Tab Selection & Favicons
 
-* **Selecting Tabs by Position**: Press **Alt + 1** through **Alt + 8** to select tabs 1 through 8 from anywhere, or the last tab when fewer exist. **Alt + 9** always selects the last tab. To use another modifier for all nine, choose it under **Select tab by number** in **Preferences → Keyboard**. Hold the left **Alt** key (or your chosen modifier) on its own to see these numbers painted over the tab icons: 1 to 8 on the first eight tabs and 9 on the last one. They disappear when you release Alt or press any other key.
+* **Selecting Tabs by Position**: Press **Alt + 1** through **Alt + 8** to select tabs 1 through 8 from anywhere, or the last tab when fewer exist. **Alt + 9** always selects the last tab. To use another modifier for all nine, set it in **Tab numbers** in **Preferences → Keyboard**. Hold the left **Alt** key (or your chosen modifier) on its own to see these numbers painted over the tab icons: 1 to 8 on the first eight tabs and 9 on the last one. They disappear when you release Alt or press any other key.
 * **Non-Disruptive Sidebar Cursor Navigation**: Moving with **j** / **k** or **Down** / **Up** moves the cursor highlight across tabs without activating pages or loading tabs restored on demand. Press **Enter**, **Space**, or **l** / **Right** to activate the highlighted tab.
 * **Workspace Badges**: The top of the strip displays a compact letter or number badge for the current workspace (such as `W1` or `P`). Clicking the workspace badge opens the Workspace Dashboard (**Ctrl + Shift + W**). It shares the top row of the sidebar with the Back, Forward, New Tab and Split View buttons; hover it to see the workspace's full name.
 * **Favicons & Indicators**: Each tab renders its website favicon with smart local and remote caching. Audio and mute icons control sound; pin and split-pane indicators identify those controls. Suspended pages have no extra badge.

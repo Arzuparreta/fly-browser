@@ -11,79 +11,72 @@
 #include "base/strings/string_util.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/task/single_thread_task_runner.h"
+#include "cc/paint/paint_flags.h"
 #include "components/input/native_web_keyboard_event.h"
 #include "ui/base/metadata/metadata_header_macros.h"
 #include "ui/base/metadata/metadata_impl_macros.h"
 #include "content/public/browser/web_contents.h"
+#include "fly/ui/fly_menu.h"
 #include "fly/ui/native_commands.h"
 #include "fly/ui/fly_theme.h"
-#include "chrome/app/vector_icons/vector_icons.h"
-#include "components/vector_icons/vector_icons.h"
+#include "ui/accessibility/ax_enums.mojom.h"
 #include "ui/aura/env.h"
 #include "ui/aura/window.h"
-#include "ui/color/color_id.h"
 #include "ui/events/event.h"
+#include "ui/gfx/canvas.h"
+#include "ui/gfx/text_elider.h"
+#include "ui/gfx/text_utils.h"
 #include "ui/views/accessibility/view_accessibility.h"
-#include "ui/views/background.h"
 #include "ui/views/border.h"
 #include "ui/views/controls/button/md_text_button.h"
 #include "ui/views/controls/label.h"
 #include "ui/views/controls/scroll_view.h"
 #include "ui/views/controls/textfield/textfield.h"
 #include "ui/views/layout/box_layout.h"
-#include "ui/views/widget/native_widget_aura.h"
 #include "ui/views/widget/widget.h"
 #include "ui/wm/core/coordinate_conversion.h"
 
 namespace fly {
 namespace {
-// One result row: title, optional secondary line (address, bookmark and
-// history rows) and right-aligned tags (category and shortcuts).
+int S(int pixels) {
+  return FlyScaled(pixels);
+}
+
+std::vector<std::u16string> ToUTF16(const std::vector<std::string>& values) {
+  std::vector<std::u16string> result;
+  for (const auto& value : values)
+    result.push_back(base::UTF8ToUTF16(value));
+  return result;
+}
+
+// One result row, painted in a single view: the title (the button's label),
+// an optional second line, a dim detail and the key chips at the right.
 class PickerButton : public FlyButton {
   METADATA_HEADER(PickerButton, FlyButton)
 
  public:
   PickerButton(PressedCallback callback,
                std::u16string_view title,
-               std::u16string_view subtitle,
-               const std::vector<std::u16string>& tags,
-               bool first_tag_is_category)
-      : FlyButton(std::move(callback), title, FlyFace::kSans, 13) {
-    SetCustomPadding(gfx::Insets::VH(6, 10));
+               std::u16string subtitle,
+               std::u16string detail,
+               std::vector<std::u16string> keys,
+               std::vector<std::u16string> normal_keys,
+               int indent)
+      : FlyButton(std::move(callback), title, FlyFace::kSans, kMenuTextSize),
+        subtitle_(std::move(subtitle)),
+        detail_(std::move(detail)),
+        keys_(std::move(keys)),
+        normal_keys_(std::move(normal_keys)),
+        indent_(indent) {
     SetHorizontalAlignment(gfx::ALIGN_LEFT);
-    if (!subtitle.empty()) {
-      subtitle_ = AddChildView(std::make_unique<FlyLabel>(
-          std::u16string(subtitle), FlyFace::kMono, 10,
-          gfx::Font::Weight::NORMAL, FlyLabel::Tone::kLink));
-      subtitle_->SetHorizontalAlignment(gfx::ALIGN_LEFT);
-      subtitle_->SetElideBehavior(gfx::ELIDE_MIDDLE);
-      subtitle_->SetCanProcessEventsWithinSubtree(false);
-    }
-    if (!tags.empty()) {
-      tags_ = AddChildView(std::make_unique<views::View>());
-      tags_->SetLayoutManager(std::make_unique<views::BoxLayout>(
-          views::BoxLayout::Orientation::kHorizontal, gfx::Insets(), 4));
-      tags_->SetCanProcessEventsWithinSubtree(false);
-      for (size_t i = 0; i < tags.size(); ++i) {
-        const bool category = first_tag_is_category && i == 0;
-        auto* tag = tags_->AddChildView(std::make_unique<FlyLabel>(
-            tags[i], FlyFace::kMono, category ? 9 : 10,
-            gfx::Font::Weight::NORMAL,
-            category ? FlyLabel::Tone::kAccent : FlyLabel::Tone::kText));
-        tag->SetBorder(FlyBorder(FlyRole::kBorder, 1, 2,
-                                 gfx::Insets::VH(1, 5)));
-        if (!category)
-          tag->SetBackground(FlyBackground(FlyRole::kCell, 2));
-      }
-    }
+    SetCustomPadding(gfx::Insets());
+    SetCornerRadius(S(6));
+    label()->SetElideBehavior(gfx::ELIDE_TAIL);
   }
   gfx::Size CalculatePreferredSize(
-      const views::SizeBounds& available) const override {
-    auto size = FlyButton::CalculatePreferredSize(available);
-    size.set_height(subtitle_ ? 44 : 32);
-    if (tags_)
-      size.Enlarge(tags_->GetPreferredSize().width() + 12, 0);
-    return size;
+      const views::SizeBounds&) const override {
+    return gfx::Size(S(200), S(subtitle_.empty() ? kMenuRowHeight
+                                                 : kMenuTallRowHeight));
   }
   void SetHoverCallback(base::RepeatingClosure hover) {
     hover_ = std::move(hover);
@@ -132,74 +125,119 @@ class PickerButton : public FlyButton {
     if (hover_)
       hover_.Run();
   }
+  void Layout(PassKey) override {
+    LayoutSuperclass<FlyButton>(this);
+    const int left = S(12) + S(20) * indent_;
+    const int right = TrailingLeft() - S(12);
+    const int line = label()->GetPreferredSize().height();
+    if (subtitle_.empty()) {
+      label()->SetBounds(left, (height() - line) / 2,
+                         std::max(0, right - left), line);
+    } else {
+      label()->SetBounds(left, S(5), std::max(0, right - left), line);
+    }
+  }
+  void OnPaintBackground(gfx::Canvas* canvas) override {
+    const auto& colors = GetFlyColors();
+    const bool hot = GetState() == STATE_HOVERED || GetState() == STATE_PRESSED;
+    gfx::RectF bounds(GetLocalBounds());
+    cc::PaintFlags flags;
+    flags.setAntiAlias(true);
+    if (selected()) {
+      flags.setColor(SkColorSetA(colors.text, 22));
+      canvas->DrawRoundRect(bounds, S(6), flags);
+      flags.setColor(colors.accent);
+      canvas->DrawRoundRect(
+          gfx::RectF(0, S(7), S(3), std::max(0, height() - S(14))), S(2),
+          flags);
+    } else if (hot && GetEnabled()) {
+      flags.setColor(SkColorSetA(colors.text, 12));
+      canvas->DrawRoundRect(bounds, S(6), flags);
+    }
+    if (HasFocus()) {
+      flags.setStyle(cc::PaintFlags::kStroke_Style);
+      flags.setStrokeWidth(1);
+      flags.setColor(colors.accent);
+      bounds.Inset(0.5f);
+      canvas->DrawRoundRect(bounds, S(6), flags);
+    }
+  }
+  void PaintButtonContents(gfx::Canvas* canvas) override {
+    const auto& colors = GetFlyColors();
+    const int centre = height() / 2;
+    int right = width() - S(12);
+    if (!normal_keys_.empty())
+      right = PaintKeyChipsRightAligned(canvas, width() / 2, right, centre,
+                                        normal_keys_, ChipTone::kQuiet) -
+              S(kKeyChipGap);
+    if (!keys_.empty())
+      right = PaintKeyChipsRightAligned(canvas, width() / 2, right, centre,
+                                        keys_) -
+              S(kKeyChipGap);
+    const auto small = FlyFont(FlyFace::kSans, kMenuSmallTextSize);
+    if (!detail_.empty()) {
+      const int width = std::min(gfx::GetStringWidth(detail_, small),
+                                 this->width() / 3);
+      canvas->DrawStringRectWithFlags(
+          gfx::ElideText(detail_, small, width, gfx::ELIDE_TAIL), small,
+          colors.dim, gfx::Rect(right - width - S(4), 0, width, height()),
+          gfx::Canvas::TEXT_ALIGN_RIGHT | gfx::Canvas::NO_SUBPIXEL_RENDERING);
+    }
+    if (!subtitle_.empty()) {
+      const auto title = label()->bounds();
+      const int line = small.GetHeight();
+      canvas->DrawStringRectWithFlags(
+          gfx::ElideText(subtitle_, small, title.width(), gfx::ELIDE_MIDDLE),
+          small, colors.dim,
+          gfx::Rect(title.x(), title.bottom() + S(1), title.width(), line),
+          gfx::Canvas::NO_SUBPIXEL_RENDERING);
+    }
+  }
+
+ private:
+  // Left edge of the detail and chips.
+  int TrailingLeft() const {
+    int used = 0;
+    const int gap = S(kKeyChipGap);
+    for (const auto* keys : {&keys_, &normal_keys_})
+      for (const auto& key : *keys)
+        used += KeyChipWidth(key) + gap;
+    if (!detail_.empty())
+      used += std::min(gfx::GetStringWidth(
+                           detail_, FlyFont(FlyFace::kSans, kMenuSmallTextSize)),
+                       width() / 3) +
+              S(8);
+    return std::max(width() / 2, width() - S(12) - used);
+  }
   gfx::Point ScreenPoint(const ui::MouseEvent& event) {
     gfx::Point point = event.location();
     views::View::ConvertPointToScreen(this, &point);
     return point;
   }
+  const std::u16string subtitle_;
+  const std::u16string detail_;
+  const std::vector<std::u16string> keys_;
+  const std::vector<std::u16string> normal_keys_;
+  const int indent_;
+  base::RepeatingClosure hover_;
   base::RepeatingCallback<void(gfx::Point)> dragging_;
   base::RepeatingCallback<void(gfx::Point)> dropped_;
   gfx::Point press_point_;
   bool drag_moved_ = false;
-
- public:
-  void Layout(PassKey) override {
-    LayoutSuperclass<FlyButton>(this);
-    int right = width() - 10;
-    if (tags_) {
-      const auto size = tags_->GetPreferredSize();
-      tags_->SetBounds(right - size.width(), (height() - size.height()) / 2,
-                       size.width(), size.height());
-      right = tags_->x() - 12;
-    }
-    auto title = label()->bounds();
-    title.set_width(std::max(0, right - title.x()));
-    if (subtitle_) {
-      title.set_y(7);
-      title.set_height(17);
-      subtitle_->SetBounds(title.x(), 26, title.width(), 13);
-    }
-    label()->SetBoundsRect(title);
-  }
-
- private:
-  raw_ptr<FlyLabel> subtitle_ = nullptr;
-  raw_ptr<views::View> tags_ = nullptr;
-  base::RepeatingClosure hover_;
 };
 BEGIN_METADATA(PickerButton)
 END_METADATA
-// Fixed width; height follows the contents up to an optional maximum.
-class SizedPanel : public views::View {
- public:
-  SizedPanel(int width, int max_height) : width_(width), max_(max_height) {}
-  gfx::Size CalculatePreferredSize(
-      const views::SizeBounds&) const override {
-    const int height = GetLayoutManager()->GetPreferredHeightForWidth(
-        this, width_);
-    return gfx::Size(width_, max_ > 0 ? std::min(height, max_) : height);
-  }
 
- private:
-  const int width_;
-  const int max_;
-};
-class DismissSurface : public views::View {
- public:
-  explicit DismissSurface(base::RepeatingClosure dismiss)
-      : dismiss_(std::move(dismiss)) {}
-  bool OnMousePressed(const ui::MouseEvent& event) override {
-    if (!children().empty() &&
-        children().front()->bounds().Contains(event.location()))
-      return false;
-    dismiss_.Run();
-    return true;
-  }
-
- private:
-  base::RepeatingClosure dismiss_;
-};
+std::unique_ptr<views::View> MakeEmptyState(std::u16string text) {
+  auto empty = std::make_unique<FlyLabel>(std::move(text), FlyFace::kSans,
+                                          kMenuTextSize,
+                                          gfx::Font::Weight::NORMAL,
+                                          FlyLabel::Tone::kDim);
+  empty->SetBorder(views::CreateEmptyBorder(gfx::Insets::VH(S(28), S(12))));
+  return empty;
+}
 }  // namespace
+
 CommandPalette::CommandPalette(
     views::Widget* desktop,
     base::RepeatingCallback<bool(std::string_view)> available,
@@ -219,6 +257,7 @@ CommandPalette::~CommandPalette() {
   remove_buttons_.clear();
   chips_.clear();
   count_ = nullptr;
+  hints_ = nullptr;
   inspector_ = nullptr;
   search_ = nullptr;
   results_ = nullptr;
@@ -232,7 +271,7 @@ void CommandPalette::Toggle(content::WebContents* contents,
   ToggleItems(contents, PaletteCatalog(config),
               config.shortcuts.at("toggle-palette"),
               style_.command_centre
-                  ? u"Search commands, shortcuts, or type shell utility..."
+                  ? u"Search commands and shortcuts"
                   : u"Search commands",
               false);
 }
@@ -259,131 +298,99 @@ void CommandPalette::ToggleItems(content::WebContents* contents,
   cancelled_ = false;
   pointer_at_open_ = aura::Env::GetInstance()->last_mouse_location();
   pointer_moved_ = false;
-  overlay_ = std::make_unique<views::Widget>();
-  views::Widget::InitParams params(
-      views::Widget::InitParams::CLIENT_OWNS_WIDGET,
-      views::Widget::InitParams::TYPE_CONTROL);
-  params.parent = desktop_->GetNativeWindow();
-  params.child = true;
-  params.activatable = views::Widget::InitParams::Activatable::kNo;
-  params.opacity = views::Widget::InitParams::WindowOpacity::kTranslucent;
-  params.native_widget = new views::NativeWidgetAura(overlay_.get());
-  params.name = "FlyCommandPalette";
-  params.bounds = desktop_->GetContentsView()->GetBoundsInScreen();
+  gfx::Rect bounds = desktop_->GetContentsView()->GetBoundsInScreen();
   if (style_.layout == PaletteStyle::Layout::kPage && style_.page_insets)
-    params.bounds.Inset(style_.page_insets.Run());
-  wm::ConvertRectFromScreen(desktop_->GetNativeWindow(), &params.bounds);
-  const auto bounds = params.bounds;
-  overlay_->Init(std::move(params));
-  auto root = std::make_unique<DismissSurface>(base::BindRepeating(
-      &CommandPalette::Cancel, weak_factory_.GetWeakPtr(), true));
+    bounds.Inset(style_.page_insets.Run());
+  wm::ConvertRectFromScreen(desktop_->GetNativeWindow(), &bounds);
+  overlay_ = CreateMenuWidget(desktop_, bounds, "FlyCommandPalette");
   const auto& colors = GetFlyColors();
   const bool top = style_.layout == PaletteStyle::Layout::kTop;
   const bool page = style_.layout == PaletteStyle::Layout::kPage;
-  root->SetBackground(views::CreateSolidBackground(
+  auto root = std::make_unique<MenuScrim>(
       top ? SkColorSetARGB(1, 0, 0, 0)
           : SkColorSetA(colors.dark ? SK_ColorBLACK : colors.text,
-                        page ? 0 : 150)));
-  const int width = page ? std::max(200, std::min(style_.command_centre
-                                                       ? FlyScaled(style_.width)
-                                                       : bounds.width(),
-                                                   bounds.width() - 32))
-                         : std::min(FlyScaled(style_.width), bounds.width() - 16);
-  const int margin = std::max(8, (bounds.width() - width) / 2);
-  const int vertical = page ? 16 : top ? 14 : 36;
-  root->SetLayoutManager(std::make_unique<views::BoxLayout>(
-      views::BoxLayout::Orientation::kVertical,
-      gfx::Insets::TLBR(vertical, margin, vertical, margin)));
-  const int max_height = bounds.height() - 2 * vertical;
-  std::unique_ptr<views::View> panel;
-  if (top)
-    panel = std::make_unique<SizedPanel>(width, max_height);
-  else
-    panel = std::make_unique<views::View>();
+                        colors.dark ? 120 : 60),
+      base::BindRepeating(&CommandPalette::Cancel, weak_factory_.GetWeakPtr(),
+                          true));
+  // Panel geometry: compact cards grow with their results, managers and the
+  // Command Centre keep one size so the list does not jump while filtering.
+  const int width = std::min(S(style_.width), bounds.width() - S(24));
+  const int x = (bounds.width() - width) / 2;
+  const int top_margin = top ? S(12) : page ? S(20) : std::max(S(24), bounds.height() / 9);
+  const int max_height = std::max(
+      S(120), (page ? bounds.height() - 2 * top_margin
+                    : std::min(bounds.height() - top_margin - S(24),
+                               S(style_.command_centre ? 600 : 520))));
+  auto panel = std::make_unique<MenuPanel>();
   auto* layout = panel->SetLayoutManager(std::make_unique<views::BoxLayout>(
-      views::BoxLayout::Orientation::kVertical,
-      page ? gfx::Insets::VH(18, 22) : gfx::Insets(12), 10));
+      views::BoxLayout::Orientation::kVertical, gfx::Insets(S(10)), S(8)));
   layout->set_cross_axis_alignment(
       views::BoxLayout::CrossAxisAlignment::kStretch);
-  if (!top)
-    panel->SetPreferredSize(gfx::Size(
-        width, page ? max_height : std::max(80, std::min(640, max_height))));
-  panel->SetBackground(FlyBackground(
-      page ? FlyRole::kOverlayMain : FlyRole::kOverlaySidebar, 4));
-  panel->SetBorder(FlyBorder(FlyRole::kBorder, 1, 4));
-  if (!style_.title.empty()) {
-    auto* header = panel->AddChildView(std::make_unique<views::View>());
-    auto* header_layout =
-        header->SetLayoutManager(std::make_unique<views::BoxLayout>(
-            views::BoxLayout::Orientation::kHorizontal, gfx::Insets(), 8));
-    header_layout->set_cross_axis_alignment(
-        views::BoxLayout::CrossAxisAlignment::kCenter);
-    auto* titles = header->AddChildView(std::make_unique<views::View>());
-    titles->SetLayoutManager(std::make_unique<views::BoxLayout>(
-        views::BoxLayout::Orientation::kVertical, gfx::Insets(), 2));
-    auto* title = titles->AddChildView(std::make_unique<FlyLabel>(
-        style_.title, FlyFace::kSans, page ? 18 : 15,
-        gfx::Font::Weight::SEMIBOLD,
-        page ? FlyLabel::Tone::kAccent : FlyLabel::Tone::kText));
-    title->SetHorizontalAlignment(gfx::ALIGN_LEFT);
-    if (!style_.subtitle.empty()) {
-      auto* subtitle = titles->AddChildView(std::make_unique<FlyLabel>(
-          style_.subtitle, FlyFace::kSans, 11, gfx::Font::Weight::NORMAL,
-          FlyLabel::Tone::kDim));
-      subtitle->SetHorizontalAlignment(gfx::ALIGN_LEFT);
-    }
-    header_layout->SetFlexForView(titles, 1);
-    header->AddChildView(MakeFlyIconButton(
-        base::BindRepeating(&CommandPalette::Cancel, weak_factory_.GetWeakPtr(),
-                            true),
-        vector_icons::kCloseIcon, u"Close", 26));
-  }
-  if (style_.command_centre) {
-    search_ = nullptr;
-    BuildCommandCentre(panel.get(), max_height);
-    search_->SetPlaceholderText(placeholder);
-    search_->GetViewAccessibility().SetName(placeholder);
-    root->AddChildView(std::move(panel));
-    DisableSubpixelText(root.get());
-    Refresh();
-    overlay_->SetContentsView(std::move(root));
-    overlay_->ShowInactive();
-    desktop_->GetNativeWindow()->StackChildAtTop(overlay_->GetNativeWindow());
-    search_->RequestFocus();
-    return;
-  }
-  search_ = panel->AddChildView(std::make_unique<views::Textfield>());
-  search_->SetPlaceholderText(placeholder);
-  search_->GetViewAccessibility().SetName(placeholder);
+  auto* header = panel->AddChildView(
+      std::make_unique<MenuHeader>(style_.kind, style_.title));
+  search_ = header->SetSearch(std::make_unique<FlyTextfield>(placeholder));
   search_->set_controller(this);
-  search_->SetFontList(FlyFont(FlyFace::kSans, 13));
-  search_->SetBackgroundColor(colors.bg_main);
-  search_->SetBorder(FlyBorder(FlyRole::kAccent, 1, top ? 18 : 3,
-                               gfx::Insets::VH(7, top ? 14 : 10)));
-  search_->RemoveHoverEffect();
+  count_ = style_.kind == MenuKind::kAddress ? nullptr : header->AddStatus();
+  if (style_.layout != PaletteStyle::Layout::kTop)
+    header->AddClose(base::BindRepeating(&CommandPalette::Cancel,
+                                         weak_factory_.GetWeakPtr(), true));
+  if (style_.command_centre)
+    BuildCommandCentre(panel.get());
   auto* scroll = panel->AddChildView(std::make_unique<views::ScrollView>());
-  scroll->ClipHeightTo(0, page ? max_height : top ? 380 : 520);
-  scroll->SetBackgroundColor(FlyRoleColor(page ? FlyRole::kOverlayMain
-                                               : FlyRole::kOverlaySidebar));
+  scroll->SetHorizontalScrollBarMode(
+      views::ScrollView::ScrollBarMode::kDisabled);
+  scroll->ClipHeightTo(0, max_height);
+  scroll->SetBackgroundColor(std::nullopt);
   scroll->SetDrawOverflowIndicator(false);
   results_scroll_ = scroll;
   results_ = scroll->SetContents(std::make_unique<views::View>());
-  results_->SetLayoutManager(std::make_unique<views::BoxLayout>(
-      views::BoxLayout::Orientation::kVertical, gfx::Insets(), 2));
   layout->SetFlexForView(scroll, 1);
-  if (style_.layout == PaletteStyle::Layout::kCentre) {
-    auto* hint = panel->AddChildView(std::make_unique<FlyLabel>(
-        u"↑↓ Navigate    Enter Select    Esc Close", FlyFace::kMono,
-        10, gfx::Font::Weight::NORMAL, FlyLabel::Tone::kDim));
-    hint->SetHorizontalAlignment(gfx::ALIGN_LEFT);
+  if (style_.command_centre) {
+    // The selected command's details sit under the list.
+    inspector_ = panel->AddChildView(std::make_unique<views::View>());
+    auto* detail = inspector_->SetLayoutManager(
+        std::make_unique<views::BoxLayout>(
+            views::BoxLayout::Orientation::kVertical,
+            gfx::Insets::TLBR(S(8), S(12), S(2), S(12)), S(2)));
+    detail->set_cross_axis_alignment(
+        views::BoxLayout::CrossAxisAlignment::kStretch);
+    inspector_->SetBorder(
+        FlyEdgeBorder(FlyRole::kBorder, gfx::Insets::TLBR(1, 0, 0, 0)));
   }
-  root->AddChildView(std::move(panel));
+  hints_ = panel->AddChildView(std::make_unique<KeyHints>(
+      std::vector<KeyHints::Hint>()));
+  hints_->SetBorder(views::CreateEmptyBorder(gfx::Insets::TLBR(0, S(2), 0, 0)));
+  UpdateHints();
+  root->SetPanel(std::move(panel));
+  if (top || !(page || style_.command_centre))
+    root->SetPanelGrowsTo(gfx::Rect(x, top_margin, width,
+                                    max_height + S(140)));
+  else
+    root->SetPanelBounds(gfx::Rect(
+        x, top_margin, width,
+        page ? bounds.height() - 2 * top_margin
+             : std::min(bounds.height() - top_margin - S(24),
+                        max_height + S(150))));
   DisableSubpixelText(root.get());
   Refresh();
   overlay_->SetContentsView(std::move(root));
   overlay_->ShowInactive();
   desktop_->GetNativeWindow()->StackChildAtTop(overlay_->GetNativeWindow());
   search_->RequestFocus();
+}
+void CommandPalette::UpdateHints() {
+  if (!hints_)
+    return;
+  std::vector<KeyHints::Hint> hints = {{u"↑↓", u"Move"},
+                                       {u"Enter", style_.enter_label}};
+  if (style_.command_centre)
+    hints.push_back({u"Tab", u"Category"});
+  if (remove_ && removable_)
+    hints.push_back({u"Del", u"Remove"});
+  if (drop_ && draggable_)
+    hints.push_back({u"Drag", u"Move tab"});
+  hints.push_back({u"Esc", u"Close"});
+  hints_->SetHints(std::move(hints));
 }
 void CommandPalette::UpdateItems(std::vector<PaletteEntry> items, bool removable) {
   if (!active())
@@ -393,13 +400,14 @@ void CommandPalette::UpdateItems(std::vector<PaletteEntry> items, bool removable
     selected = filtered_[selected_].action;
   catalog_ = std::move(items);
   removable_ = removable;
+  UpdateHints();
   Refresh();
   for (size_t i = 0; i < filtered_.size(); ++i) {
     if (filtered_[i].action == selected && buttons_[i]->GetEnabled()) {
       if (selected_ >= 0)
-        buttons_[selected_]->SetSelected(false);
+        SetRowSelected(selected_, false);
       selected_ = static_cast<int>(i);
-      buttons_[i]->SetSelected(true);
+      SetRowSelected(selected_, true);
       break;
     }
   }
@@ -430,19 +438,26 @@ void CommandPalette::Refresh() {
   if (!active())
     return;
   buttons_.clear();
+  button_actions_.clear();
   remove_buttons_.clear();
-  // Remove all native layers at once, build off-widget, then attach once.
+  drop_target_ = -1;
+  selected_ = -1;
+  // Build the rows off the widget and attach them once.
   auto rows = std::make_unique<views::View>();
   rows->SetLayoutManager(std::make_unique<views::BoxLayout>(
-      views::BoxLayout::Orientation::kVertical,
-      style_.command_centre ? gfx::Insets(6) : gfx::Insets(), 2));
+      views::BoxLayout::Orientation::kVertical, gfx::Insets(), S(1)));
+  rows->GetViewAccessibility().SetRole(ax::mojom::Role::kListBox);
+  rows->GetViewAccessibility().SetName(style_.title.empty() ? u"Results"
+                                                            : style_.title);
+  if (search_)
+    search_->GetViewAccessibility().ClearActiveDescendant();
   results_ = nullptr;
   results_scroll_->SetContents(std::make_unique<views::View>());
   results_ = rows.get();
+  const auto query = std::u16string(
+      base::TrimWhitespace(search_->GetText(), base::TRIM_ALL));
   if (style_.command_centre) {
     // Electron's filterPaletteCommands.
-    const auto query = std::u16string(
-        base::TrimWhitespace(search_->GetText(), base::TRIM_ALL));
     std::vector<PaletteEntry> candidates;
     for (const auto& entry : catalog_)
       if (category_ == "All" || entry.category == category_)
@@ -455,11 +470,23 @@ void CommandPalette::Refresh() {
             std::ranges::find(catalog_, id, &PaletteEntry::action);
         if (found != catalog_.end()) {
           filtered_.push_back(*found);
-          groups_.push_back("Recently Used");
+          groups_.push_back("Recently used");
         }
       }
     }
-    for (auto& entry : FilterCommandCentre(candidates, query)) {
+    auto matches = FilterCommandCentre(candidates, query);
+    // Without a search, keep each category together (first appearance order);
+    // a search keeps its ranking.
+    if (query.empty()) {
+      std::vector<std::string> order;
+      for (const auto& entry : matches)
+        if (std::ranges::find(order, entry.category) == order.end())
+          order.push_back(entry.category);
+      std::ranges::stable_sort(matches, {}, [&](const PaletteEntry& entry) {
+        return std::ranges::find(order, entry.category) - order.begin();
+      });
+    }
+    for (auto& entry : matches) {
       groups_.push_back(entry.category);
       filtered_.push_back(std::move(entry));
     }
@@ -467,15 +494,9 @@ void CommandPalette::Refresh() {
       const auto text = base::UTF16ToUTF8(search_->GetText());
       PaletteEntry terminal{"terminal-fallback", "terminal:" + text,
                             "Run in terminal: \"" + text + "\"", "Terminal",
-                            {"Enter"}, {}};
-      terminal.desc = "Pass command to air-gapped terminal protocol on Enter";
-      terminal.details =
-          "Executes this input string in your external desktop terminal via "
-          "the isolated oversight security protocol.";
-      terminal.tip =
-          "Press Enter or click Execute to copy and invoke the terminal "
-          "command.";
-      groups_.push_back("Terminal Oversight");
+                            {}, {}};
+      terminal.desc = "Copies the command and runs it in your desktop terminal.";
+      groups_.push_back("Terminal");
       filtered_.push_back(std::move(terminal));
     }
     const size_t count = filtered_.size();
@@ -483,47 +504,33 @@ void CommandPalette::Refresh() {
                         ? base::NumberToString16(count) + u" commands"
                         : base::NumberToString16(count) +
                               (count == 1 ? u" match" : u" matches"));
-    buttons_.clear();
-    button_actions_.clear();
-    drop_target_ = -1;
-    remove_buttons_.clear();
-    results_->RemoveAllChildViews();
-    selected_ = -1;
     std::string group;
     for (size_t i = 0; i < filtered_.size(); ++i) {
       const auto& entry = filtered_[i];
       if (groups_[i] != group) {
         group = groups_[i];
-        auto* header = results_->AddChildView(std::make_unique<FlyLabel>(
-            base::UTF8ToUTF16(group), FlyFace::kMono, 10,
-            gfx::Font::Weight::SEMIBOLD, FlyLabel::Tone::kAccent));
-        header->SetHorizontalAlignment(gfx::ALIGN_LEFT);
-        header->SetBorder(
-            views::CreateEmptyBorder(gfx::Insets::TLBR(10, 10, 4, 10)));
+        auto* header = results_->AddChildView(
+            MakeMenuCaption(base::UTF8ToUTF16(group)));
+        header->SetBorder(views::CreateEmptyBorder(
+            gfx::Insets::TLBR(i ? S(10) : S(2), S(12), S(4), S(12))));
       }
-      std::vector<std::u16string> tags = {base::UTF8ToUTF16(entry.category)};
-      for (const auto& shortcut : entry.shortcuts)
-        tags.push_back(base::UTF8ToUTF16(shortcut));
-      for (const auto& key : entry.normal)
-        tags.push_back(base::UTF8ToUTF16(key) + u" (NORMAL)");
       auto* button = results_->AddChildView(std::make_unique<PickerButton>(
           base::BindRepeating(&CommandPalette::Activate,
                               weak_factory_.GetWeakPtr(), entry.action),
-          base::UTF8ToUTF16(entry.title), std::u16string(), tags, true));
+          base::UTF8ToUTF16(entry.title), std::u16string(), std::u16string(),
+          ToUTF16(entry.shortcuts), ToUTF16(entry.normal), 0));
       button->SetHoverCallback(base::BindRepeating(
           &CommandPalette::Hover, weak_factory_.GetWeakPtr(), i));
       button->SetEnabled(entry.action.starts_with("terminal:") ||
                          available_.Run(entry.action));
+      button->SetFocusBehavior(views::View::FocusBehavior::NEVER);
+      button->GetViewAccessibility().SetRole(ax::mojom::Role::kListBoxOption);
       button->GetViewAccessibility().SetName(base::UTF8ToUTF16(entry.title));
       button_actions_.push_back(entry.action);
       buttons_.push_back(button);
     }
-    if (buttons_.empty()) {
-      auto* empty = results_->AddChildView(std::make_unique<FlyLabel>(
-          u"No matching results", FlyFace::kSans, 12,
-          gfx::Font::Weight::NORMAL, FlyLabel::Tone::kDim));
-      empty->SetBorder(views::CreateEmptyBorder(gfx::Insets(24)));
-    }
+    if (buttons_.empty())
+      results_->AddChildView(MakeEmptyState(u"No commands match."));
     DisableSubpixelText(results_);
     results_scroll_->SetContents(std::move(rows));
     Select(1);
@@ -532,14 +539,9 @@ void CommandPalette::Refresh() {
   }
   filtered_ = query_provider_ ? query_provider_.Run(search_->GetText())
                               : FilterPalette(catalog_, search_->GetText());
-  buttons_.clear();
-  button_actions_.clear();
-  drop_target_ = -1;
-  remove_buttons_.clear();
-  results_->RemoveAllChildViews();
-  selected_ = -1;
   const bool secondary_line = remove_ || query_provider_;
-  for (const auto& entry : filtered_) {
+  for (size_t i = 0; i < filtered_.size(); ++i) {
+    const auto& entry = filtered_[i];
     auto text = entry.title;
     if (secondary_line && !entry.category.empty())
       text += "\n" + entry.category;
@@ -547,39 +549,41 @@ void CommandPalette::Refresh() {
       text += "    " + base::JoinString(entry.shortcuts, " / ");
     if (!entry.normal.empty())
       text += "    " + base::JoinString(entry.normal, " / ") + " (NORMAL)";
-    std::vector<std::u16string> tags;
-    if (!secondary_line && !entry.category.empty())
-      tags.push_back(base::UTF8ToUTF16(entry.category));
-    for (const auto& shortcut : entry.shortcuts)
-      tags.push_back(base::UTF8ToUTF16(shortcut));
-    for (const auto& key : entry.normal)
-      tags.push_back(base::UTF8ToUTF16(key) + u" (NORMAL)");
-    auto* row = results_->AddChildView(std::make_unique<views::View>());
-    auto* row_layout = row->SetLayoutManager(std::make_unique<views::BoxLayout>(
-        views::BoxLayout::Orientation::kHorizontal, gfx::Insets(), 6));
-    row_layout->set_cross_axis_alignment(
-        views::BoxLayout::CrossAxisAlignment::kCenter);
-    auto* button = row->AddChildView(std::make_unique<PickerButton>(
+    const bool extras = !entry.row_actions.empty() || remove_;
+    views::View* parent = results_;
+    if (extras) {
+      parent = results_->AddChildView(std::make_unique<views::View>());
+      auto* row_layout =
+          parent->SetLayoutManager(std::make_unique<views::BoxLayout>(
+              views::BoxLayout::Orientation::kHorizontal, gfx::Insets(),
+              S(4)));
+      row_layout->set_cross_axis_alignment(
+          views::BoxLayout::CrossAxisAlignment::kCenter);
+    }
+    auto* button = parent->AddChildView(std::make_unique<PickerButton>(
         base::BindRepeating(&CommandPalette::Activate,
                             weak_factory_.GetWeakPtr(), entry.action),
         base::UTF8ToUTF16(entry.title),
         secondary_line ? base::UTF8ToUTF16(entry.category) : std::u16string(),
-        tags, !secondary_line && !entry.category.empty()));
+        secondary_line ? std::u16string() : base::UTF8ToUTF16(entry.category),
+        ToUTF16(entry.shortcuts), ToUTF16(entry.normal), entry.indent));
     button->SetEnabled(available_.Run(entry.action));
-    row_layout->SetFlexForView(button, 1);
-    if (entry.indent > 0)
-      row->SetBorder(views::CreateEmptyBorder(
-          gfx::Insets::TLBR(0, 20 * entry.indent, 0, 0)));
+    button->SetFocusBehavior(views::View::FocusBehavior::NEVER);
+    button->SetHoverCallback(base::BindRepeating(
+        &CommandPalette::Hover, weak_factory_.GetWeakPtr(), i));
+    if (extras)
+      static_cast<views::BoxLayout*>(parent->GetLayoutManager())
+          ->SetFlexForView(button, 1);
     for (const auto& [action, label] : entry.row_actions) {
-      auto* extra = row->AddChildView(std::make_unique<FlyButton>(
+      auto* extra = parent->AddChildView(MakeMenuButton(
           base::BindRepeating(&CommandPalette::Activate,
                               weak_factory_.GetWeakPtr(), action),
-          base::UTF8ToUTF16(label), FlyFace::kSans, 11));
-      extra->SetOutlined(true);
+          base::UTF8ToUTF16(label), MenuButtonStyle::kQuiet));
       extra->SetEnabled(available_.Run(action));
       extra->GetViewAccessibility().SetName(base::UTF8ToUTF16(label) + u" " +
                                             base::UTF8ToUTF16(entry.title));
     }
+    button->GetViewAccessibility().SetRole(ax::mojom::Role::kListBoxOption);
     button->GetViewAccessibility().SetName(base::UTF8ToUTF16(text));
     if (drop_ && draggable_ && draggable_.Run(entry.action)) {
       button->SetDragCallbacks(
@@ -591,21 +595,24 @@ void CommandPalette::Refresh() {
     button_actions_.push_back(entry.action);
     buttons_.push_back(button);
     if (remove_) {
-      auto* remove = row->AddChildView(std::make_unique<FlyButton>(
-          base::BindRepeating(&CommandPalette::Remove, weak_factory_.GetWeakPtr(),
-                              entry.action), u"Remove", FlyFace::kSans, 11));
-      remove->SetOutlined(true);
+      auto* remove = parent->AddChildView(MakeMenuButton(
+          base::BindRepeating(&CommandPalette::Remove,
+                              weak_factory_.GetWeakPtr(), entry.action),
+          u"Remove", MenuButtonStyle::kQuiet));
       remove->SetEnabled(removable_ && available_.Run(entry.action));
-      remove->GetViewAccessibility().SetName(u"Remove " + base::UTF8ToUTF16(text));
+      remove->GetViewAccessibility().SetName(u"Remove " +
+                                             base::UTF8ToUTF16(text));
       remove_buttons_.push_back(remove);
     }
   }
-  if (buttons_.empty()) {
-    auto* empty = results_->AddChildView(std::make_unique<FlyLabel>(
-        remove_ ? u"No bookmarks found." : u"No matching results",
-        FlyFace::kSans, 12, gfx::Font::Weight::NORMAL, FlyLabel::Tone::kDim));
-    empty->SetBorder(views::CreateEmptyBorder(gfx::Insets(24)));
-  }
+  if (count_)
+    count_->SetText(filtered_.empty()
+                        ? std::u16string()
+                        : base::NumberToString16(filtered_.size()));
+  if (buttons_.empty() && !(style_.layout == PaletteStyle::Layout::kTop &&
+                            query.empty() && query_provider_))
+    results_->AddChildView(MakeEmptyState(query.empty() ? style_.empty_text
+                                                        : u"No matches."));
   DisableSubpixelText(results_);
   results_scroll_->SetContents(std::move(rows));
   Select(1);
@@ -614,12 +621,12 @@ void CommandPalette::Select(int direction) {
   if (buttons_.empty())
     return;
   if (selected_ >= 0)
-    buttons_[selected_]->SetSelected(false);
+    SetRowSelected(selected_, false);
   const int count = static_cast<int>(buttons_.size());
   for (int i = 0; i < count; ++i) {
     selected_ = (selected_ + direction + count) % count;
     if (buttons_[selected_]->GetEnabled()) {
-      buttons_[selected_]->SetSelected(true);
+      SetRowSelected(selected_, true);
       buttons_[selected_]->ScrollViewToVisible();
       UpdateInspector();
       return;
@@ -627,6 +634,20 @@ void CommandPalette::Select(int direction) {
   }
   selected_ = -1;
   UpdateInspector();
+}
+void CommandPalette::SetRowSelected(int index, bool selected) {
+  if (index < 0 || index >= static_cast<int>(buttons_.size()))
+    return;
+  auto* row = buttons_[index].get();
+  row->SetSelected(selected);
+  row->GetViewAccessibility().SetIsSelected(selected);
+  if (!search_)
+    return;
+  if (selected)
+    search_->GetViewAccessibility().SetActiveDescendant(*row);
+  else if (search_->GetViewAccessibility().GetActiveDescendantView() ==
+           &row->GetViewAccessibility())
+    search_->GetViewAccessibility().ClearActiveDescendant();
 }
 void CommandPalette::RefreshQuery() {
   if (active() && query_provider_)
@@ -653,6 +674,22 @@ bool CommandPalette::HandleOverlayKey(const ui::KeyEvent& event) {
   if (event.flags() &
       (ui::EF_CONTROL_DOWN | ui::EF_ALT_DOWN | ui::EF_COMMAND_DOWN))
     return false;
+  // Tab walks the Command Centre's categories; elsewhere it moves through
+  // the menu's buttons.
+  if (event.key_code() == ui::VKEY_TAB) {
+    if (style_.command_centre && search_->HasFocus()) {
+      const auto& categories = CommandCentreCategories();
+      auto current = std::ranges::find(categories, category_);
+      size_t index = current == categories.end()
+                         ? 0
+                         : static_cast<size_t>(current - categories.begin());
+      index = (index + (event.IsShiftDown() ? categories.size() - 1 : 1)) %
+              categories.size();
+      SetCategory(categories[index]);
+      return true;
+    }
+    return CycleMenuFocus(overlay_->GetContentsView(), event.IsShiftDown());
+  }
   if (remove_ && removable_ && selected_ >= 0 &&
       event.key_code() == ui::VKEY_DELETE &&
       (!search_->HasFocus() || (search_->GetSelectedRange().is_empty() &&
@@ -660,20 +697,27 @@ bool CommandPalette::HandleOverlayKey(const ui::KeyEvent& event) {
     Remove(filtered_[selected_].action);
     return true;
   }
-  if (!search_->HasFocus())
+  if (!search_->HasFocus()) {
+    // Arrows and typing return to the list from a row button.
+    if (event.key_code() == ui::VKEY_DOWN || event.key_code() == ui::VKEY_UP) {
+      search_->RequestFocus();
+      Select(event.key_code() == ui::VKEY_DOWN ? 1 : -1);
+      return true;
+    }
     return false;
+  }
   if (event.key_code() == ui::VKEY_DOWN || event.key_code() == ui::VKEY_UP) {
     Select(event.key_code() == ui::VKEY_DOWN ? 1 : -1);
     return true;
   }
-  if (remove_ && (event.key_code() == ui::VKEY_NEXT ||
-                  event.key_code() == ui::VKEY_PRIOR)) {
+  if (event.key_code() == ui::VKEY_NEXT || event.key_code() == ui::VKEY_PRIOR) {
     if (selected_ >= 0) {
-      buttons_[selected_]->SetSelected(false);
-      selected_ = std::clamp(selected_ + (event.key_code() == ui::VKEY_NEXT ? 5 : -5),
+      SetRowSelected(selected_, false);
+      selected_ = std::clamp(selected_ + (event.key_code() == ui::VKEY_NEXT ? 8 : -8),
                              0, static_cast<int>(buttons_.size()) - 1);
-      buttons_[selected_]->SetSelected(true);
+      SetRowSelected(selected_, true);
       buttons_[selected_]->ScrollViewToVisible();
+      UpdateInspector();
     }
     return true;
   }
@@ -734,6 +778,7 @@ void CommandPalette::FinishClose(bool restore_focus, std::string action) {
   remove_buttons_.clear();
   chips_.clear();
   count_ = nullptr;
+  hints_ = nullptr;
   inspector_ = nullptr;
   search_ = nullptr;
   results_ = nullptr;
@@ -780,94 +825,34 @@ void CommandPalette::WebContentsDestroyed() {
   Cancel();
 }
 
-// Electron's .palette-page: search with the match count, category chips, the
-// grouped list and the inspector card side by side, and the footer.
-void CommandPalette::BuildCommandCentre(views::View* panel, int max_height) {
-  const auto& colors = GetFlyColors();
-  auto* search_row = panel->AddChildView(std::make_unique<views::View>());
-  auto* search_layout =
-      search_row->SetLayoutManager(std::make_unique<views::BoxLayout>(
-          views::BoxLayout::Orientation::kHorizontal, gfx::Insets(), 10));
-  search_layout->set_cross_axis_alignment(
-      views::BoxLayout::CrossAxisAlignment::kCenter);
-  search_ = search_row->AddChildView(std::make_unique<views::Textfield>());
-  search_->set_controller(this);
-  search_->SetFontList(FlyFont(FlyFace::kSans, 13));
-  search_->SetBackgroundColor(colors.bg_main);
-  search_->SetBorder(FlyBorder(FlyRole::kAccent, 1, 3, gfx::Insets::VH(7, 10)));
-  search_->RemoveHoverEffect();
-  search_layout->SetFlexForView(search_, 1);
-  count_ = search_row->AddChildView(std::make_unique<FlyLabel>(
-      u"", FlyFace::kMono, 11, gfx::Font::Weight::NORMAL,
-      FlyLabel::Tone::kDim));
+// The Command Centre adds category chips above the list.
+void CommandPalette::BuildCommandCentre(views::View* panel) {
   auto* chips = panel->AddChildView(std::make_unique<views::View>());
   chips->SetLayoutManager(std::make_unique<views::BoxLayout>(
-      views::BoxLayout::Orientation::kHorizontal, gfx::Insets(), 6));
-  // Electron's chip labels; Performance & Memory shows as "Performance".
+      views::BoxLayout::Orientation::kHorizontal, gfx::Insets(), S(4)));
   for (const auto& category : CommandCentreCategories()) {
     std::u16string label = base::UTF8ToUTF16(category);
     if (category == "Performance & Memory")
       label = u"Performance";
     else if (category == "User Scripts & Styles")
-      label = u"Scripts & Styles";
+      label = u"Scripts";
     else if (category == "Preferences & System")
       label = u"Preferences";
+    else if (category == "Tabs & Navigation")
+      label = u"Tabs";
     auto* chip = chips->AddChildView(std::make_unique<FlyButton>(
         base::BindRepeating(&CommandPalette::SetCategory,
                             weak_factory_.GetWeakPtr(), category),
-        label, FlyFace::kSans, 11));
+        label, FlyFace::kSans, kMenuSmallTextSize));
+    chip->SetCustomPadding(gfx::Insets::VH(S(3), S(10)));
+    chip->SetCornerRadius(S(12));
     chip->SetOutlined(true);
     chip->SetSelected(category == category_);
-    chip->SetCustomPadding(gfx::Insets::VH(4, 12));
+    chip->SetAccentText(category == category_);
+    chip->SetFocusBehavior(views::View::FocusBehavior::NEVER);
+    chip->GetViewAccessibility().SetName(base::UTF8ToUTF16(category));
     chips_.push_back(chip);
   }
-  auto* body = panel->AddChildView(std::make_unique<views::View>());
-  auto* body_layout = body->SetLayoutManager(std::make_unique<views::BoxLayout>(
-      views::BoxLayout::Orientation::kHorizontal, gfx::Insets(), 20));
-  body_layout->set_cross_axis_alignment(
-      views::BoxLayout::CrossAxisAlignment::kStretch);
-  static_cast<views::BoxLayout*>(panel->GetLayoutManager())
-      ->SetFlexForView(body, 1);
-  auto* scroll = body->AddChildView(std::make_unique<views::ScrollView>());
-  scroll->ClipHeightTo(0, max_height);
-  scroll->SetBackgroundColor(FlyRoleColor(FlyRole::kOverlaySidebar));
-  scroll->SetBorder(FlyBorder(FlyRole::kBorder, 1, 8));
-  scroll->SetDrawOverflowIndicator(false);
-  results_scroll_ = scroll;
-  results_ = scroll->SetContents(std::make_unique<views::View>());
-  results_->SetLayoutManager(std::make_unique<views::BoxLayout>(
-      views::BoxLayout::Orientation::kVertical, gfx::Insets(6), 2));
-  body_layout->SetFlexForView(scroll, 125);
-  inspector_ = body->AddChildView(std::make_unique<views::View>());
-  inspector_->SetBackground(FlyBackground(FlyRole::kOverlaySidebar, 8));
-  inspector_->SetBorder(FlyBorder(FlyRole::kBorder, 1, 8, gfx::Insets(22)));
-  auto* inspector_layout =
-      inspector_->SetLayoutManager(std::make_unique<views::BoxLayout>(
-          views::BoxLayout::Orientation::kVertical, gfx::Insets(), 16));
-  inspector_layout->set_cross_axis_alignment(
-      views::BoxLayout::CrossAxisAlignment::kStretch);
-  body_layout->SetFlexForView(inspector_, 85);
-  auto* footer = panel->AddChildView(std::make_unique<views::View>());
-  auto* footer_layout =
-      footer->SetLayoutManager(std::make_unique<views::BoxLayout>(
-          views::BoxLayout::Orientation::kHorizontal,
-          gfx::Insets::TLBR(10, 4, 4, 4), 16));
-  footer_layout->set_cross_axis_alignment(
-      views::BoxLayout::CrossAxisAlignment::kCenter);
-  footer->SetBorder(FlyEdgeBorder(FlyRole::kBorder, gfx::Insets::TLBR(1, 0, 0, 0)));
-  auto* keys = footer->AddChildView(std::make_unique<FlyLabel>(
-      u"↑ ↓ Navigate    Enter Select    Esc Close", FlyFace::kMono, 11,
-      gfx::Font::Weight::NORMAL, FlyLabel::Tone::kDim));
-  footer_layout->SetFlexForView(keys, 1);
-  keys->SetHorizontalAlignment(gfx::ALIGN_LEFT);
-  footer->AddChildView(std::make_unique<FlyLabel>(
-      u"Air-gapped terminal fallback enabled", FlyFace::kMono, 11,
-      gfx::Font::Weight::NORMAL, FlyLabel::Tone::kDim));
-  auto* preferences = footer->AddChildView(std::make_unique<FlyButton>(
-      base::BindRepeating(&CommandPalette::Activate, weak_factory_.GetWeakPtr(),
-                          std::string("toggle-help")),
-      u"Preferences", FlyFace::kSans, 11));
-  preferences->SetOutlined(true);
 }
 
 void CommandPalette::SetCategory(std::string category) {
@@ -875,9 +860,11 @@ void CommandPalette::SetCategory(std::string category) {
     return;
   category_ = std::move(category);
   const auto& categories = CommandCentreCategories();
-  for (size_t i = 0; i < chips_.size() && i < categories.size(); ++i)
-    static_cast<FlyButton*>(chips_[i].get())
-        ->SetSelected(categories[i] == category_);
+  for (size_t i = 0; i < chips_.size() && i < categories.size(); ++i) {
+    auto* chip = static_cast<FlyButton*>(chips_[i].get());
+    chip->SetSelected(categories[i] == category_);
+    chip->SetAccentText(categories[i] == category_);
+  }
   Refresh();
 }
 
@@ -890,7 +877,9 @@ void CommandPalette::SetDragDrop(
 int CommandPalette::RowAt(const gfx::Point& screen) const {
   for (size_t i = 0; i < buttons_.size(); ++i) {
     // The whole row, its indent and row actions included.
-    const auto* row = buttons_[i]->parent();
+    const auto* row = buttons_[i]->parent() == results_
+                          ? static_cast<const views::View*>(buttons_[i].get())
+                          : buttons_[i]->parent();
     if (row && row->GetBoundsInScreen().Contains(screen))
       return static_cast<int>(i);
   }
@@ -936,80 +925,42 @@ void CommandPalette::Hover(size_t index) {
   if (!buttons_[index]->GetEnabled())
     return;
   if (selected_ >= 0)
-    buttons_[selected_]->SetSelected(false);
+    SetRowSelected(selected_, false);
   selected_ = static_cast<int>(index);
-  buttons_[selected_]->SetSelected(true);
+  SetRowSelected(selected_, true);
   UpdateInspector();
 }
 
-// Electron's renderPaletteInspector.
+// The Command Centre's detail line: what the selected command does.
 void CommandPalette::UpdateInspector() {
   if (!inspector_)
     return;
   inspector_->RemoveAllChildViews();
-  const auto section = [&](std::u16string label) {
-    auto* caption = inspector_->AddChildView(std::make_unique<FlyLabel>(
-        std::move(label), FlyFace::kMono, 10, gfx::Font::Weight::SEMIBOLD,
-        FlyLabel::Tone::kDim));
-    caption->SetHorizontalAlignment(gfx::ALIGN_LEFT);
-  };
-  const auto text = [&](std::u16string value, FlyLabel::Tone tone) {
-    auto* label = inspector_->AddChildView(std::make_unique<FlyLabel>(
-        std::move(value), FlyFace::kSans, 12, gfx::Font::Weight::NORMAL,
-        tone));
-    label->SetMultiLine(true);
-    label->SetHorizontalAlignment(gfx::ALIGN_LEFT);
-    label->SetMaximumWidth(380);
-    return label;
-  };
   if (selected_ < 0 || selected_ >= static_cast<int>(filtered_.size())) {
-    text(u"Select or hover over a command to view detailed feature "
-         u"documentation, usage guidelines, and keyboard shortcuts.",
-         FlyLabel::Tone::kDim);
+    auto* none = inspector_->AddChildView(std::make_unique<FlyLabel>(
+        u"No command selected", FlyFace::kSans, kMenuSmallTextSize,
+        gfx::Font::Weight::NORMAL, FlyLabel::Tone::kDim));
+    none->SetHorizontalAlignment(gfx::ALIGN_LEFT);
     inspector_->InvalidateLayout();
     return;
   }
   const auto& entry = filtered_[selected_];
   const bool terminal = entry.action.starts_with("terminal:");
   auto* title = inspector_->AddChildView(std::make_unique<FlyLabel>(
-      terminal ? u"Terminal Oversight" : base::UTF8ToUTF16(entry.title),
-      FlyFace::kSans, 16, gfx::Font::Weight::BOLD));
-  title->SetMultiLine(true);
-  title->SetMaximumWidth(380);
+      terminal ? u"Run in terminal" : base::UTF8ToUTF16(entry.title),
+      FlyFace::kSans, kMenuTextSize, gfx::Font::Weight::SEMIBOLD));
   title->SetHorizontalAlignment(gfx::ALIGN_LEFT);
-  auto* badge = inspector_->AddChildView(std::make_unique<FlyLabel>(
-      terminal ? u"AIR-GAPPED SHELL"
-               : base::UTF8ToUTF16(base::ToUpperASCII(
-                     entry.category.empty() ? "General" : entry.category)),
-      FlyFace::kMono, 10, gfx::Font::Weight::SEMIBOLD,
-      FlyLabel::Tone::kAccent));
-  badge->SetHorizontalAlignment(gfx::ALIGN_LEFT);
-  if (!terminal) {
-    section(u"KEYBOARD SHORTCUT");
-    std::vector<std::string> keys = entry.shortcuts;
-    for (const auto& key : entry.normal)
-      keys.push_back(key + " (NORMAL)");
-    text(keys.empty() ? u"No shortcut assigned"
-                      : base::UTF8ToUTF16(base::JoinString(keys, "  ·  ")),
-         keys.empty() ? FlyLabel::Tone::kDim : FlyLabel::Tone::kAccent);
-    text(base::UTF8ToUTF16(entry.action), FlyLabel::Tone::kDim);
-  }
-  section(u"FEATURE OVERVIEW");
-  text(base::UTF8ToUTF16(!entry.details.empty() ? entry.details
-                         : !entry.desc.empty()  ? entry.desc
-                                                : std::string(
-                                                      "No additional details "
-                                                      "available.")),
-       FlyLabel::Tone::kText);
-  if (!entry.tip.empty()) {
-    section(u"WORKFLOW TIP");
-    text(base::UTF8ToUTF16(entry.tip), FlyLabel::Tone::kAccent);
-  }
-  auto* execute = inspector_->AddChildView(std::make_unique<FlyButton>(
-      base::BindRepeating(&CommandPalette::Activate, weak_factory_.GetWeakPtr(),
-                          entry.action),
-      u"Execute Action", FlyFace::kSans, 12));
-  execute->SetSelected(true);
+  title->SetElideBehavior(gfx::ELIDE_TAIL);
+  const std::string text = !entry.desc.empty()      ? entry.desc
+                           : !entry.details.empty() ? entry.details
+                                                    : entry.category;
+  auto* description = inspector_->AddChildView(std::make_unique<FlyLabel>(
+      base::UTF8ToUTF16(text), FlyFace::kSans, kMenuSmallTextSize,
+      gfx::Font::Weight::NORMAL, FlyLabel::Tone::kDim));
+  description->SetHorizontalAlignment(gfx::ALIGN_LEFT);
+  description->SetElideBehavior(gfx::ELIDE_TAIL);
+  description->SetTooltipText(base::UTF8ToUTF16(
+      entry.details.empty() ? text : entry.details));
   DisableSubpixelText(inspector_);
   inspector_->InvalidateLayout();
 }

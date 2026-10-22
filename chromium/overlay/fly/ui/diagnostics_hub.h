@@ -29,7 +29,6 @@ namespace ui {
 class KeyEvent;
 }
 namespace views {
-class Checkbox;
 class Label;
 class TabbedPane;
 class Textfield;
@@ -58,6 +57,7 @@ struct DiagnosticsSession {
 // Electron's Diagnostics & Health Hub (modules/overlays/diagnostics.js): a
 // page over the content area with System & Runtimes, Processes & Memory, the
 // event log and a sanitised bug report.
+class FlyToggle;
 class DiagnosticsHub : public views::TabbedPaneListener,
                        public views::TextfieldController,
                        public views::WidgetObserver,
@@ -137,7 +137,7 @@ class DiagnosticsHub : public views::TabbedPaneListener,
   raw_ptr<views::TabbedPane> tabs_ = nullptr;
   std::vector<raw_ptr<views::View>> panes_;
   raw_ptr<views::Label> badge_ = nullptr;
-  raw_ptr<views::Checkbox> recording_ = nullptr;
+  raw_ptr<FlyToggle> recording_ = nullptr;
   raw_ptr<views::Textfield> log_search_ = nullptr;
   raw_ptr<views::View> log_list_ = nullptr;
   std::string log_filter_ = "all";

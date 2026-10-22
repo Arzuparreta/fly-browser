@@ -13,6 +13,7 @@
 #include "base/memory/weak_ptr.h"
 #include "content/public/browser/web_contents_observer.h"
 #include "fly/commands/palette_catalog.h"
+#include "fly/ui/fly_menu.h"
 #include "fly/ui/fly_theme.h"
 #include "ui/views/controls/textfield/textfield_controller.h"
 #include "ui/views/widget/widget_observer.h"
@@ -24,24 +25,31 @@ class MdTextButton;
 class ScrollView;
 }  // namespace views
 namespace fly {
-// Presentation of a picker, matching the Electron surfaces it replaces.
+// Presentation of a picker. Every picker shares the menu look (fly_menu.h);
+// its kind gives it its badge and its layout its shape.
 struct PaletteStyle {
   enum class Layout {
-    kCentre,  // Modal card over a dimmed page (Command Centre).
+    kCentre,  // Compact card over a dimmed page (pickers, Command Centre).
     kTop,     // Floating card under the window top, page left visible
               // (address bar, history).
-    kPage,    // Full content-area manager (bookmarks, workspace dashboard).
+    kPage,    // Tall manager over the content area (bookmarks, workspace
+              // dashboard).
   };
   Layout layout = Layout::kCentre;
+  MenuKind kind = MenuKind::kCommands;
   std::u16string title;
-  std::u16string subtitle;
-  int width = 720;
+  int width = 640;
   // kPage only: area of the desktop contents left uncovered (sidebar rail,
   // footer), queried when the surface opens.
   base::RepeatingCallback<gfx::Insets()> page_insets;
-  // Electron's Command Centre: category chips, grouped list, match count,
-  // inspector card, recently used commands and the terminal fallback.
+  // Command Centre: category chips, grouped list, match count, a detail line
+  // for the selected command, recently used commands and the terminal
+  // fallback.
   bool command_centre = false;
+  // What Enter does, for the key hints ("Open", "Run", "Choose").
+  std::u16string enter_label = u"Open";
+  // Shown when there is nothing to list and no search.
+  std::u16string empty_text = u"Nothing here yet.";
 };
 // A native modal child surface of the existing desktop Aura host. Commands
 // execute after the surface is destroyed; no callback retains a row or tab
@@ -111,11 +119,13 @@ class CommandPalette : public views::TextfieldController,
  private:
   void Refresh();
   void Select(int direction);
+  void SetRowSelected(int index, bool selected);
   void Activate(std::string action);
   void Remove(std::string action);
   void RemoveAfterEvent(std::string action);
   void FinishClose(bool restore_focus, std::string action);
-  void BuildCommandCentre(views::View* panel, int max_height);
+  void BuildCommandCentre(views::View* panel);
+  void UpdateHints();
   void UpdateInspector();
   void SetCategory(std::string category);
   void Hover(size_t index);
@@ -153,6 +163,8 @@ class CommandPalette : public views::TextfieldController,
   bool removable_ = false;
   // Command Centre.
   raw_ptr<views::Label> count_ = nullptr;
+  raw_ptr<KeyHints> hints_ = nullptr;
+  // Command Centre's detail line for the selected command.
   raw_ptr<views::View> inspector_ = nullptr;
   std::vector<raw_ptr<FlyButton>> chips_;
   std::string category_ = "All";

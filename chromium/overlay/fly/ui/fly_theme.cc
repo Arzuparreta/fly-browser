@@ -307,6 +307,10 @@ void FlyButton::SetAccentText(bool accent) {
   accent_text_ = accent;
   UpdateColors();
 }
+void FlyButton::SetPrimary(bool primary) {
+  primary_ = primary;
+  SchedulePaint();
+}
 void FlyButton::SetOutlined(bool outlined) {
   outlined_ = outlined;
   SchedulePaint();
@@ -426,6 +430,17 @@ void FlyButton::OnPaintBackground(gfx::Canvas* canvas) {
   gfx::RectF bounds(GetLocalBounds());
   cc::PaintFlags flags;
   flags.setAntiAlias(true);
+  if (primary_ && !selected) {
+    const bool enabled = GetEnabled();
+    flags.setColor(SkColorSetA(colors.accent, !enabled ? 0 : hot ? 56 : 28));
+    canvas->DrawPath(shape(bounds), flags);
+    flags.setStyle(cc::PaintFlags::kStroke_Style);
+    flags.setStrokeWidth(HasFocus() ? 2 : 1);
+    flags.setColor(enabled ? colors.accent : colors.border);
+    bounds.Inset(HasFocus() ? 1.f : 0.5f);
+    canvas->DrawPath(shape(bounds), flags);
+    return;
+  }
   if (selected || hot || resting_fill_) {
     flags.setColor(selected || !hot ? (selected ? colors.selected
                                                 : *resting_fill_)
