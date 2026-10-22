@@ -117,7 +117,9 @@ window.updateFlyNewTab = data => {
     for (const [key, value] of Object.entries(data.colours)) document.documentElement.style.setProperty(key, value);
     document.documentElement.style.setProperty('--scale', data.scale || 1);
     document.documentElement.style.setProperty('--sidebar-overhang', `${data.sidebarOverhang || 0}px`);
-    document.getElementById('memory-fly').src = `identity/memory-${data.light ? 'papel' : 'chasis'}@2x.png`;
+    const image = document.getElementById('memory-fly');
+    const artwork = `identity/memory-${data.light ? 'papel' : 'chasis'}@2x.png`;
+    if (image.getAttribute('src') !== artwork) image.src = artwork;
     document.getElementById('saved-bookmarks').hidden = !data.showBookmarks;
     document.getElementById('frequent-sites').hidden = !data.showSites;
     document.querySelector('.navigation').hidden = !data.showBookmarks && !data.showSites;
@@ -144,4 +146,7 @@ function updateClock() {
 }
 document.addEventListener('visibilitychange', updateClock);
 updateClock();
+window.updateFlyNewTab(JSON.parse(document.getElementById('initial-data').textContent));
+// Lay out the initial snapshot in this task, before the first content paint.
+for (const state of collections.values()) layoutCollection(state);
 chrome.send('ready');

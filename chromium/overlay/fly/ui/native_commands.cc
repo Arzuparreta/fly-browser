@@ -278,30 +278,6 @@ class PageKeyboardState
     }
     return router_;
   }
-  void RequestNewTabSearch(BrowserWindowInterface* browser) {
-    search_browser_ = browser->GetWeakPtr();
-    if (!web_contents()->IsLoading())
-      DidStopLoading();
-  }
-  void DidStopLoading() override {
-    if (!search_browser_)
-      return;
-    base::SingleThreadTaskRunner::GetCurrentDefault()->PostTask(
-        FROM_HERE,
-        base::BindOnce(
-            [](base::WeakPtr<BrowserWindowInterface> browser,
-               base::WeakPtr<content::WebContents> contents) {
-              auto* window = FlyWindowController::GetIfCreated();
-              if (browser && contents && window &&
-                  window->IsSelected(browser.get()) &&
-                  browser->GetTabStripModel()->GetActiveWebContents() ==
-                      contents.get() &&
-                  IsFlyNewTabPage(contents->GetVisibleURL()) &&
-                  !window->address_picker().active())
-                window->RunCommand(browser.get(), "toggle-address");
-            },
-            std::exchange(search_browser_, {}), web_contents()->GetWeakPtr()));
-  }
   void OnVisibilityChanged(content::Visibility visibility) override {
     router_.ClearPending();
   }
@@ -322,7 +298,6 @@ class PageKeyboardState
         content::WebContentsUserData<PageKeyboardState>(*contents),
         router_(DefaultKeyboardConfig()) {}
   KeyboardRouter router_;
-  base::WeakPtr<BrowserWindowInterface> search_browser_;
   uint64_t generation_ = 0;
   WEB_CONTENTS_USER_DATA_KEY_DECL();
 };
@@ -438,15 +413,6 @@ bool SplitCommand(BrowserWindowInterface* browser, std::string_view action) {
 }
 }  // namespace
 
-void RequestNativeNewTabSearch(BrowserWindowInterface* browser) {
-  if (!browser)
-    return;
-  auto* contents = browser->GetTabStripModel()->GetActiveWebContents();
-  if (!contents || !IsFlyNewTabPage(contents->GetVisibleURL()))
-    return;
-  PageKeyboardState::CreateForWebContents(contents);
-  PageKeyboardState::FromWebContents(contents)->RequestNewTabSearch(browser);
-}
 
 bool OpenNativeBlankTab(BrowserWindowInterface* browser, int index) {
   if (!browser || !chrome::IsCommandEnabled(browser, IDC_NEW_TAB))

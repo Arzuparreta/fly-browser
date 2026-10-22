@@ -2,8 +2,10 @@
 // Use of this source code is governed by the GPL-3.0-or-later license in the
 // Fly repository.
 #include "fly/ui/command_palette.h"
+#include "fly/ui/new_tab_ui.h"
 
 #include <algorithm>
+#include <utility>
 #include "base/functional/bind.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/strings/string_util.h"
@@ -415,6 +417,10 @@ void CommandPalette::ToggleQuery(content::WebContents* contents,
               false, true);
   if (!active())
     return;
+  // An explicitly opened address field is usable during the initial new-tab
+  // navigation. Preserve its draft when that particular page commits.
+  keep_initial_new_tab_ = contents && contents->IsLoading() &&
+                          IsFlyNewTabPage(contents->GetVisibleURL());
   query_provider_ = std::move(provider);
   search_->SetText(initial);
   search_->SelectAll(false);
@@ -720,6 +726,7 @@ void CommandPalette::FinishClose(bool restore_focus, std::string action) {
   auto contents = web_contents() ? web_contents()->GetWeakPtr() : nullptr;
   const bool source_was_empty = empty_source_;
   empty_source_ = false;
+  keep_initial_new_tab_ = false;
   Observe(nullptr);
   buttons_.clear();
   button_actions_.clear();
@@ -757,6 +764,12 @@ void CommandPalette::OnWidgetDestroying(views::Widget*) {
   Cancel();
 }
 void CommandPalette::PrimaryPageChanged(content::Page&) {
+  if (std::exchange(keep_initial_new_tab_, false) && web_contents() &&
+      IsFlyNewTabPage(web_contents()->GetLastCommittedURL())) {
+    if (active() && search_)
+      search_->RequestFocus();
+    return;
+  }
   Cancel();
 }
 void CommandPalette::OnVisibilityChanged(content::Visibility visibility) {

@@ -1568,6 +1568,132 @@ IN_PROC_BROWSER_TEST_F(FlyWorkspaceBrowserTest,
   ASSERT_TRUE(row);
 }
 
+// The HTML and its blocking stylesheet must already carry the correct state,
+// independently of the asynchronous WebUI ready message and script execution.
+IN_PROC_BROWSER_TEST_F(FlyWorkspaceBrowserTest,
+                       NewTabAddressAcceptsTypingBeforeLoadFinishes) {
+  auto& window = FlyWindowController::Get();
+  ASSERT_TRUE(ExecuteNativeCommand(browser(), "spawn-tab"));
+  auto* contents = Active(browser());
+  ASSERT_TRUE(window.RunCommand(browser(), "toggle-address"));
+  ASSERT_TRUE(window.address_picker().active());
+  auto* search = window.address_picker().search_for_testing();
+  ASSERT_TRUE(search);
+  search->SetText(u"typed immediately");
+  ASSERT_TRUE(content::WaitForLoadStop(contents));
+  base::RunLoop().RunUntilIdle();
+  ASSERT_TRUE(window.address_picker().active());
+  search = window.address_picker().search_for_testing();
+  ASSERT_TRUE(search);
+  EXPECT_EQ(u"typed immediately", search->GetText());
+  EXPECT_TRUE(search->HasFocus());
+  ASSERT_TRUE(ui_test_utils::NavigateToURL(
+      browser(), embedded_test_server()->GetURL("/title1.html")));
+  ASSERT_TRUE(base::test::RunUntil([&] {
+    return !window.address_picker().active();
+  }));
+}
+
+IN_PROC_BROWSER_TEST_F(FlyWorkspaceBrowserTest,
+                       NewTabInitialResponseHasThemeGeometryAndSafeSnapshot) {
+  auto& window = FlyWindowController::Get();
+  ASSERT_TRUE(window.preferences().ToggleTheme());
+  ASSERT_TRUE(window.preferences().SetString("interface_scale", "large"));
+  ASSERT_TRUE(window.preferences().SetSidebarAutoCollapse(true));
+  ASSERT_TRUE(window.preferences().SetThemeColor(false, "bg_main", "#efe8d1"));
+  const std::string title = "</script><script>window.injected = true</script>";
+  ASSERT_TRUE(window.bookmarks().Add("https://snapshot.example/", title));
+  ASSERT_TRUE(ExecuteNativeCommand(browser(), "spawn-tab"));
+  auto* contents = Active(browser());
+  ASSERT_TRUE(content::WaitForLoadStop(contents));
+  EXPECT_EQ(true, content::EvalJs(contents, R"JS(
+    (async () => {
+      const css = [...document.styleSheets].find(sheet =>
+          sheet.href?.endsWith('/new-tab.css')).cssRules;
+      const initialStyle = [...css].at(-1).style;
+      const parsed = document;
+      const data = JSON.parse(parsed.getElementById('initial-data').textContent);
+      return parsed.body.classList.contains('light') && data.light &&
+          data.scale === 1.25 && data.sidebarOverhang === 280 &&
+          data.colours['--bg-main'] === '#efe8d1' &&
+          data.bookmarks[0].title === '</script><script>window.injected = true</script>' &&
+          parsed.querySelectorAll('script').length === 2 && !window.injected &&
+          parsed.getElementById('memory-fly').getAttribute('src').includes('papel') &&
+          initialStyle.getPropertyValue('--bg-main').trim() === '#efe8d1' &&
+          initialStyle.getPropertyValue('--scale').trim() === '1.250000' &&
+          initialStyle.getPropertyValue('--sidebar-overhang').trim() === '280px';
+    })()
+  )JS"));
+  EXPECT_EQ("rgb(239, 232, 209)", content::EvalJs(contents,
+      "getComputedStyle(document.body).backgroundColor"));
+  EXPECT_EQ(title, content::EvalJs(contents,
+      "document.querySelector('#bookmarks a').textContent"));
+  const auto queries = window.new_tab_history().query_count_for_testing();
+  ASSERT_TRUE(window.RunCommand(browser(), "toggle-private-mode"));
+  ASSERT_TRUE(base::test::RunUntil([&] {
+    return window.selected_browser_for_testing() != browser();
+  }));
+  auto* private_browser = window.selected_browser_for_testing();
+  ASSERT_TRUE(private_browser->GetProfile()->IsOffTheRecord());
+  ASSERT_TRUE(content::WaitForLoadStop(Active(private_browser)));
+  EXPECT_EQ(true, content::EvalJs(Active(private_browser), R"JS(
+    (() => {
+      const data = JSON.parse(document.getElementById('initial-data').textContent);
+      return data.light && !data.showBookmarks && !data.showSites &&
+          data.bookmarks.length === 0 && data.sites.length === 0 &&
+          document.querySelectorAll('#bookmarks a, #sites a').length === 0;
+    })()
+  )JS"));
+  EXPECT_EQ(queries, window.new_tab_history().query_count_for_testing());
+}
+
+IN_PROC_BROWSER_TEST_F(FlyWorkspaceBrowserTest,
+                       NewTabsShareHistoryAndInvalidateDeletedEntries) {
+  auto& window = FlyWindowController::Get();
+  const auto visited = embedded_test_server()->GetURL("/title1.html");
+  ASSERT_TRUE(ui_test_utils::NavigateToURL(browser(), visited));
+  base::CancelableTaskTracker tracker;
+  base::test::TestFuture<history::QueryResults> flushed;
+  auto* history = HistoryServiceFactory::GetForProfile(
+      browser()->GetProfile(), ServiceAccessType::EXPLICIT_ACCESS);
+  history->QueryHistory({}, history::QueryOptions(), flushed.GetCallback(), &tracker);
+  ASSERT_FALSE(flushed.Get().empty());
+  ASSERT_TRUE(ExecuteNativeCommand(browser(), "spawn-tab"));
+  ASSERT_TRUE(content::WaitForLoadStop(Active(browser())));
+  ASSERT_TRUE(base::test::RunUntil([&] {
+    return content::EvalJs(Active(browser()),
+        "document.querySelectorAll('#sites a').length").ExtractInt() == 1;
+  }));
+  const auto queries = window.new_tab_history().query_count_for_testing();
+  for (int i = 0; i < 3; ++i) {
+    ASSERT_TRUE(ExecuteNativeCommand(browser(), "spawn-tab"));
+    ASSERT_TRUE(content::WaitForLoadStop(Active(browser())));
+    EXPECT_EQ(1, content::EvalJs(Active(browser()),
+        "document.querySelectorAll('#sites a').length"));
+    EXPECT_EQ(queries, window.new_tab_history().query_count_for_testing());
+  }
+  ASSERT_TRUE(window.preferences().ToggleTheme());
+  ASSERT_TRUE(window.preferences().SetString("interface_scale", "large"));
+  base::RunLoop().RunUntilIdle();
+  EXPECT_EQ(queries, window.new_tab_history().query_count_for_testing());
+  // All new tabs are hidden when the original HTTP tab is selected. Deletion
+  // must invalidate their cached history without querying in the background.
+  browser()->GetTabStripModel()->ActivateTabAt(0);
+  base::RunLoop().RunUntilIdle();
+  history->DeleteURLs({visited});
+  ASSERT_TRUE(base::test::RunUntil([&] {
+    return window.new_tab_history().entries().empty();
+  }));
+  EXPECT_EQ(queries, window.new_tab_history().query_count_for_testing());
+  ASSERT_TRUE(ExecuteNativeCommand(browser(), "spawn-tab"));
+  ASSERT_TRUE(content::WaitForLoadStop(Active(browser())));
+  ASSERT_TRUE(base::test::RunUntil([&] {
+    return window.new_tab_history().query_count_for_testing() > queries;
+  }));
+  EXPECT_EQ(0, content::EvalJs(Active(browser()),
+      "document.querySelectorAll('#sites a').length"));
+}
+
 IN_PROC_BROWSER_TEST_F(FlyWorkspaceBrowserTest,
                        NewTabReservesScaledSidebarOverhang) {
   auto& window = FlyWindowController::Get();

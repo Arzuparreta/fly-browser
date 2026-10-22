@@ -18,7 +18,6 @@ class WebContents;
 namespace fly {
 // Opens Fly's new tab page in this browser's own profile.
 // A nonnegative index requests native tab-strip placement, including pin rules.
-void RequestNativeNewTabSearch(BrowserWindowInterface* browser);
 bool OpenNativeBlankTab(BrowserWindowInterface* browser, int index = -1);
 
 // Retained-document native freezing votes. A request is not a claim that the

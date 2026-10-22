@@ -648,6 +648,9 @@ FlyWindowController::FlyWindowController()
           weak_factory_.GetWeakPtr()),
       base::BindRepeating(&FlyWindowController::ExecuteAddress,
                           weak_factory_.GetWeakPtr()));
+  new_tab_history_ = std::make_unique<NewTabHistory>(
+      *g_browser_process->profile_manager(), workspaces_,
+      *g_browser_process->local_state());
   history_ = std::make_unique<HistoryService>(
       *g_browser_process->profile_manager(), workspaces_);
   history_->SetChangedCallback(base::BindRepeating(
@@ -923,6 +926,7 @@ FlyWindowController::~FlyWindowController() {
   workspace_picker_.reset();
   history_clear_widget_.reset();
   history_clear_delegate_.reset();
+  new_tab_history_.reset();
   history_.reset();
   history_clear_service_.reset();
   history_picker_.reset();
@@ -1181,13 +1185,6 @@ void FlyWindowController::ToggleAddress(BrowserWindowInterface* browser) {
   keyboard_editor_->Cancel();
   auto* contents =
       browser ? browser->GetTabStripModel()->GetActiveWebContents() : nullptr;
-  // Only an explicit address action may defer focus until the new page loads;
-  // creating the tab itself no longer requests a search surface.
-  if (contents && contents->IsLoading() &&
-      IsFlyNewTabPage(contents->GetVisibleURL())) {
-    RequestNativeNewTabSearch(browser);
-    return;
-  }
   const auto config = commands_.Read().value_or(DefaultKeyboardConfig());
   const auto url = contents ? contents->GetVisibleURL() : GURL(kFlyNewTabURL);
   address_picker_->ToggleQuery(

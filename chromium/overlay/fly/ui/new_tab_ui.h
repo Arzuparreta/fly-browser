@@ -4,6 +4,16 @@
 #ifndef FLY_UI_NEW_TAB_UI_H_
 #define FLY_UI_NEW_TAB_UI_H_
 
+#include <cstddef>
+#include <optional>
+#include <string>
+#include <utility>
+#include <vector>
+#include "base/callback_list.h"
+#include "base/memory/raw_ref.h"
+#include "base/memory/weak_ptr.h"
+#include "components/prefs/pref_change_registrar.h"
+#include "fly/ui/history_service.h"
 #include "url/gurl.h"
 
 namespace content {
@@ -11,6 +21,36 @@ class BrowserContext;
 }
 
 namespace fly {
+// One demand-driven history snapshot for all regular new tabs. Private pages
+// never subscribe or receive it. Invalidation clears stale/deleted entries even
+// while no page is visible; opening another tab reuses a valid snapshot.
+class NewTabHistory {
+ public:
+  NewTabHistory(ProfileManager& manager,
+                WorkspaceService& workspaces,
+                PrefService& prefs);
+  ~NewTabHistory();
+  base::CallbackListSubscription Subscribe(base::RepeatingClosure changed);
+  const std::vector<HistoryEntry>& entries() const { return entries_; }
+  size_t query_count_for_testing() const { return query_count_; }
+
+ private:
+  void OnWorkspacesChanged();
+  void Invalidate();
+  void EnsureQuery();
+  void OnQuery(std::optional<std::vector<HistoryEntry>> rows);
+  const raw_ref<WorkspaceService> workspaces_;
+  std::optional<std::vector<std::pair<std::string, std::string>>> catalog_;
+  HistoryService history_;
+  PrefChangeRegistrar registrar_;
+  base::RepeatingClosureList changed_;
+  std::vector<HistoryEntry> entries_;
+  bool valid_ = false;
+  bool querying_ = false;
+  size_t query_count_ = 0;
+  base::WeakPtrFactory<NewTabHistory> weak_factory_{this};
+};
+
 // Fly's new tab page (chrome://fly-new-tab/): clock, date, bookmarks,
 // frequent sites and the live memory use of Fly, served from
 // <out>/fly_resources/new_tab.
