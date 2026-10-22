@@ -77,7 +77,7 @@ prune_channel() {
 
 # Downloads (or reuses) the package of a GitHub release and sets `binary`.
 download_build() {
-    local channel=$1 root cache what tag json sums status name expected actual dir partial old
+    local channel=$1 root cache what tag sums name expected actual dir partial old
     [ "$(uname -s)-$(uname -m)" = Linux-x86_64 ] || die 'Downloaded builds exist for Linux x86_64 only.'
     root=${XDG_CACHE_HOME:-$HOME/.cache}/fly-browser-launch
     mkdir -p "$root/$channel"
@@ -106,7 +106,8 @@ download_build() {
     fetch() {
         http=$(curl -sSL -o "$2" -w '%{http_code}' "$1" 2>/dev/null) || http=000
     }
-    local http=200 answer=$cache/.answer
+    local http=200 answer
+    answer=$(mktemp "$cache/.answer.XXXXXXXXXX")
     tag= sums=
     if [ "$channel" = release ]; then
         fetch "https://api.github.com/repos/$github/releases/latest" "$answer"
@@ -207,9 +208,13 @@ profile=${XDG_CONFIG_HOME:-$HOME/.config}/fly-browser-dev
 if lock=$(readlink "$profile/SingletonLock" 2>/dev/null) && [ "${lock%-*}" = "$(uname -n)" ]; then
     pid=${lock##*-}
     # Only a browser started with this profile counts; a stale lock whose
-    # process number now belongs to another program does not.
-    if [[ $pid =~ ^[0-9]+$ ]] && running=$(readlink "/proc/$pid/exe" 2>/dev/null) &&
-        tr '\0' '\n' < "/proc/$pid/cmdline" 2>/dev/null | grep -qxF -- "--user-data-dir=$profile" &&
+    # process number now belongs to another program does not. Chromium
+    # rewrites its command line as one space-separated string.
+    command=
+    if [[ $pid =~ ^[0-9]+$ ]] && running=$(readlink "/proc/$pid/exe" 2>/dev/null); then
+        command=$( (tr '\0' ' ' < "/proc/$pid/cmdline") 2>/dev/null || true)
+    fi
+    if [[ " $command " == *" --user-data-dir=$profile "* ]] &&
         [ "$running" != "$(readlink -f "$binary")" ]; then
         die "A development Fly from another build is running (${running}). Close it, then start this one."
     fi

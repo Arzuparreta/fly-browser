@@ -137,6 +137,13 @@ code 200
         assert.equal(busy.status, 1);
         assert.equal(busy.stdout, '');
         assert.match(busy.stderr, /A development Fly from another build is running/);
+        // Chromium rewrites its command line as one space-separated string.
+        const joined = spawn(shell, ['-c', 'sleep 30; :', `fly --fly-native --user-data-dir=${profileDir} --class=fly-browser-dev`], {stdio:'ignore'});
+        try {
+            fs.unlinkSync(path.join(profileDir, 'SingletonLock'));
+            fs.symlinkSync(`${os.hostname()}-${joined.pid}`, path.join(profileDir, 'SingletonLock'));
+            assert.match(launch(['--pr', '153']).stderr, /A development Fly from another build is running/);
+        } finally { joined.kill(); }
         assert.equal(fs.readdirSync(channel).length, 2, 'the running build is kept beside the new one');
         fs.unlinkSync(path.join(profileDir, 'SingletonLock'));
     } finally { holder.kill(); stranger.kill(); }
