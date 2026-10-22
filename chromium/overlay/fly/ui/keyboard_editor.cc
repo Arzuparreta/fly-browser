@@ -244,9 +244,12 @@ void KeyboardEditor::Toggle(content::WebContents* contents) {
   }
   root->AddChildView(std::move(panel));
   DisableSubpixelText(root.get());
-  overlay_->SetContentsView(std::move(root));
   RefreshAppearance();
-  Refresh();
+  // The keyboard editors are expensive controls and belong to a hidden pane.
+  // Build them only when that pane is actually requested.
+  if (reopen_pane == kKeyboardPane)
+    Refresh();
+  overlay_->SetContentsView(std::move(root));
   overlay_->ShowInactive();
   desktop_->GetNativeWindow()->StackChildAtTop(overlay_->GetNativeWindow());
   // Electron reopens the section shown last in this session.
@@ -1410,6 +1413,8 @@ void KeyboardEditor::TabSelectedAt(int index) {
   last_pane_ = index;
   if (index != kKeyboardPane)
     StopRecording();
+  else if (rows_scroll_ && fields_.empty())
+    Refresh();
 }
 void KeyboardEditor::ClearAppearance() {
   if (sections_) {
@@ -1646,10 +1651,10 @@ void KeyboardEditor::Refresh() {
   auto rows = std::make_unique<views::View>();
   rows->SetLayoutManager(std::make_unique<views::BoxLayout>(
       views::BoxLayout::Orientation::kVertical, gfx::Insets(), 10));
-  // Each action carries two editors and six buttons. Building the whole
-  // catalogue costs about a second, so the list starts with the first actions;
-  // searching or "Show all" reaches the rest.
-  constexpr size_t kInitialRows = 25;
+  // Each action carries two editors and six buttons. Only three rows fit
+  // in the initial viewport; do not construct dozens of off-screen controls.
+  // Searching or "Show all" still reaches the complete catalogue.
+  constexpr size_t kInitialRows = 3;
   const auto matches = FilterPalette(catalog_, search_->GetText());
   const bool limited = !show_all_rows_ && search_->GetText().empty() &&
                        !(modified_only_ && modified_only_->GetChecked()) &&

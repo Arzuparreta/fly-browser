@@ -519,17 +519,23 @@ IN_PROC_BROWSER_TEST_F(FlyWorkspaceBrowserTest,
   ASSERT_TRUE(InvokeNativeCommand(original, "spawn-tab"));
   ASSERT_EQ(count + 1, original->GetTabStripModel()->count());
   ASSERT_TRUE(content::WaitForLoadStop(Active(original)));
+  base::RunLoop().RunUntilIdle();
+  EXPECT_FALSE(window.address_picker().active());
   EXPECT_EQ(GURL(kFlyNewTabURL), Active(original)->GetLastCommittedURL());
   EXPECT_EQ(original->GetProfile(), Active(original)->GetBrowserContext());
 
   window.CreateTab();
   ASSERT_EQ(count + 2, original->GetTabStripModel()->count());
   ASSERT_TRUE(content::WaitForLoadStop(Active(original)));
+  base::RunLoop().RunUntilIdle();
+  EXPECT_FALSE(window.address_picker().active());
   EXPECT_EQ(GURL(kFlyNewTabURL), Active(original)->GetLastCommittedURL());
   ASSERT_TRUE(OpenNativeBlankTab(original, 1));
   auto* inserted = original->GetTabStripModel()->GetWebContentsAt(1);
   ASSERT_EQ(inserted, Active(original));
   ASSERT_TRUE(content::WaitForLoadStop(inserted));
+  base::RunLoop().RunUntilIdle();
+  EXPECT_FALSE(window.address_picker().active());
   EXPECT_EQ(GURL(kFlyNewTabURL), inserted->GetLastCommittedURL());
 
   ASSERT_TRUE(window.RunCommand(original, "toggle-private-mode"));
@@ -540,9 +546,13 @@ IN_PROC_BROWSER_TEST_F(FlyWorkspaceBrowserTest,
   ASSERT_TRUE(private_browser);
   ASSERT_TRUE(private_browser->GetProfile()->IsOffTheRecord());
   ASSERT_TRUE(content::WaitForLoadStop(Active(private_browser)));
+  base::RunLoop().RunUntilIdle();
+  EXPECT_FALSE(window.address_picker().active());
   EXPECT_EQ(GURL(kFlyNewTabURL), Active(private_browser)->GetLastCommittedURL());
   ASSERT_TRUE(InvokeNativeCommand(private_browser, "spawn-tab"));
   ASSERT_TRUE(content::WaitForLoadStop(Active(private_browser)));
+  base::RunLoop().RunUntilIdle();
+  EXPECT_FALSE(window.address_picker().active());
   EXPECT_EQ(GURL(kFlyNewTabURL), Active(private_browser)->GetLastCommittedURL());
   EXPECT_EQ(private_browser->GetProfile(),
             Active(private_browser)->GetBrowserContext());
@@ -558,6 +568,8 @@ IN_PROC_BROWSER_TEST_F(FlyWorkspaceBrowserTest,
   ASSERT_FALSE(created->GetProfile()->IsOffTheRecord());
   EXPECT_NE(original->GetProfile(), created->GetProfile());
   ASSERT_TRUE(content::WaitForLoadStop(Active(created)));
+  base::RunLoop().RunUntilIdle();
+  EXPECT_FALSE(window.address_picker().active());
   EXPECT_EQ(GURL(kFlyNewTabURL), Active(created)->GetLastCommittedURL());
 
   // Splitting a one-tab workspace must create the second pane through the
@@ -569,6 +581,8 @@ IN_PROC_BROWSER_TEST_F(FlyWorkspaceBrowserTest,
   for (int index = 0; index < split_model->count(); ++index) {
     auto* pane = split_model->GetWebContentsAt(index);
     ASSERT_TRUE(content::WaitForLoadStop(pane));
+    base::RunLoop().RunUntilIdle();
+    EXPECT_FALSE(window.address_picker().active());
     EXPECT_EQ(GURL(kFlyNewTabURL), pane->GetLastCommittedURL());
     EXPECT_EQ(created->GetProfile(), pane->GetBrowserContext());
     ExpectVisible(pane, true);
@@ -815,12 +829,10 @@ IN_PROC_BROWSER_TEST_F(FlySidebarBrowserTest,
   const int count = model->count();
   auto* list = window.tab_sidebar_for_testing();
   ASSERT_TRUE(base::test::RunUntil([&] { return list->row_for_testing(target); }));
-  // New tabs focus search; dismiss it before interacting with the sidebar.
-  ASSERT_TRUE(base::test::RunUntil([&] { return window.address_picker().active(); }));
-  ui::test::EventGenerator keys(
-      window.desktop_widget()->GetNativeWindow()->GetRootWindow());
-  keys.PressKey(ui::VKEY_ESCAPE, ui::EF_NONE);
-  ASSERT_TRUE(base::test::RunUntil([&] { return !window.address_picker().active(); }));
+  // A newly created tab must leave search closed, including after load.
+  ASSERT_TRUE(content::WaitForLoadStop(target));
+  base::RunLoop().RunUntilIdle();
+  EXPECT_FALSE(window.address_picker().active());
   OpenByPointer();
   views::test::RunScheduledLayout(list->GetWidget());
   ui::test::EventGenerator mouse(
@@ -3963,8 +3975,9 @@ IN_PROC_BROWSER_TEST_F(FlyWorkspaceBrowserTest,
   EXPECT_EQ(1,
             window.selected_browser_for_testing()->GetTabStripModel()->count());
   ASSERT_TRUE(
-      base::test::RunUntil([&] { return window.address_picker().active(); }));
-  EXPECT_TRUE(window.address_picker().search_for_testing()->HasFocus());
+      content::WaitForLoadStop(Active(window.selected_browser_for_testing())));
+  base::RunLoop().RunUntilIdle();
+  EXPECT_FALSE(window.address_picker().active());
   keys.PressKey(ui::VKEY_ESCAPE, ui::EF_NONE);
   auto* reopened = window.selected_browser_for_testing();
   auto reopened_lifetime = reopened->GetWeakPtr();
@@ -3978,37 +3991,36 @@ IN_PROC_BROWSER_TEST_F(FlyWorkspaceBrowserTest,
             window.selected_browser_for_testing()->GetTabStripModel()->count());
 }
 
-// Settings links create a distinct native Browser even when another page is open.
+// Settings tools share the profile but never enter the embedded hierarchy.
 IN_PROC_BROWSER_TEST_F(FlyWorkspaceBrowserTest,
                        StoreSettingsLinksAlwaysOpenAnotherWindow) {
   auto& window = FlyWindowController::Get();
   auto* original = browser();
   const auto page = embedded_test_server()->GetURL("/title1.html");
   ASSERT_TRUE(ui_test_utils::NavigateToURL(original, page));
-  ASSERT_TRUE(window.RunCommand(original, "toggle-help"));
-  window.keyboard_editor().ShowExtensions();
-  ClickPreferencesButton(u"Browse Chrome Web Store");
-  ASSERT_TRUE(base::test::RunUntil([&] {
-    return window.selected_browser_for_testing() &&
-           window.selected_browser_for_testing() != original;
-  }));
-  auto* store = window.selected_browser_for_testing();
-  EXPECT_EQ(original->GetProfile(), store->GetProfile());
-  EXPECT_EQ(1, original->GetTabStripModel()->count());
-  EXPECT_EQ(page, Active(original)->GetLastCommittedURL());
-  EXPECT_EQ(GURL("https://chromewebstore.google.com/"),
-            Active(store)->GetVisibleURL());
-  ASSERT_TRUE(window.RunCommand(store, "toggle-help"));
-  window.keyboard_editor().ShowExtensions();
-  ClickPreferencesButton(u"Manage in chrome://extensions");
-  ASSERT_TRUE(base::test::RunUntil([&] {
-    return window.selected_browser_for_testing() &&
-           window.selected_browser_for_testing() != store;
-  }));
-  EXPECT_EQ(GURL("chrome://extensions/"),
-            Active(window.selected_browser_for_testing())->GetVisibleURL());
-  EXPECT_EQ(1, store->GetTabStripModel()->count());
-  EXPECT_EQ(page, Active(original)->GetLastCommittedURL());
+  for (const auto& [label, url] :
+       {std::pair{u"Browse Chrome Web Store",
+                  "https://chromewebstore.google.com/"},
+        std::pair{u"Manage in chrome://extensions", "chrome://extensions/"}}) {
+    ASSERT_TRUE(window.RunCommand(original, "toggle-help"));
+    window.keyboard_editor().ShowExtensions();
+    auto created = std::make_unique<BrowserCreatedWaiter>();
+    ClickPreferencesButton(label);
+    auto* tool = created->Wait();
+    created.reset();
+    ASSERT_TRUE(tool);
+    EXPECT_EQ(original, window.selected_browser_for_testing());
+    EXPECT_EQ(original->GetProfile(), tool->GetProfile());
+    EXPECT_FALSE(FlyWindowController::ShouldEmbed(tool));
+    EXPECT_NE(window.desktop_widget()->GetNativeWindow()->GetHost(),
+              tool->GetWindow()->GetNativeWindow()->GetHost());
+    EXPECT_EQ(GURL(url), Active(tool)->GetVisibleURL());
+    EXPECT_EQ(1, original->GetTabStripModel()->count());
+    EXPECT_EQ(page, Active(original)->GetLastCommittedURL());
+    auto lifetime = tool->GetWeakPtr();
+    tool->GetWindow()->Close();
+    ASSERT_TRUE(base::test::RunUntil([&] { return !lifetime; }));
+  }
 }
 
 IN_PROC_BROWSER_TEST_F(FlyWorkspaceBrowserTest,
@@ -4061,17 +4073,18 @@ IN_PROC_BROWSER_TEST_F(FlyWorkspaceBrowserTest,
   window.keyboard_editor().ShowExtensions();
   ClickPreferencesButton(u"Refresh usage");
   EXPECT_EQ(nullptr, window.selected_browser_for_testing());
+  BrowserCreatedWaiter created;
   ClickPreferencesButton(u"Browse Chrome Web Store");
-  ASSERT_TRUE(base::test::RunUntil([&] {
-    return window.selected_browser_for_testing() != nullptr;
-  }));
-  auto* store = window.selected_browser_for_testing();
+  auto* store = created.Wait();
+  ASSERT_TRUE(store);
+  EXPECT_EQ(nullptr, window.selected_browser_for_testing());
   EXPECT_EQ(profile, store->GetProfile());
-  EXPECT_EQ(1, store->GetTabStripModel()->count());
+  EXPECT_FALSE(FlyWindowController::ShouldEmbed(store));
   EXPECT_EQ(GURL("https://chromewebstore.google.com/"),
             Active(store)->GetVisibleURL());
   EXPECT_FALSE(window.keyboard_editor().active());
   EXPECT_FALSE(window.address_picker().active());
+  store->GetWindow()->Close();
 }
 
 IN_PROC_BROWSER_TEST_F(FlyWorkspaceBrowserTest,
@@ -4167,14 +4180,15 @@ IN_PROC_BROWSER_TEST_F(FlyWorkspaceBrowserTest,
   EXPECT_EQ(profile, window.ActiveProfile());
   ASSERT_TRUE(InvokeNativeCommand(nullptr, "toggle-help"));
   window.keyboard_editor().ShowExtensions();
+  BrowserCreatedWaiter created;
   ClickPreferencesButton(u"Browse Chrome Web Store");
-  ASSERT_TRUE(base::test::RunUntil([&] {
-    auto* selected = window.selected_browser_for_testing();
-    return selected && Active(selected)->GetVisibleURL() ==
-                           GURL("https://chromewebstore.google.com/");
-  }));
-  EXPECT_EQ(profile, window.selected_browser_for_testing()->GetProfile());
-  EXPECT_FALSE(window.selected_browser_for_testing()->GetProfile()->IsOffTheRecord());
+  auto* store = created.Wait();
+  ASSERT_TRUE(store);
+  EXPECT_EQ(profile, store->GetProfile());
+  EXPECT_FALSE(store->GetProfile()->IsOffTheRecord());
+  EXPECT_FALSE(FlyWindowController::ShouldEmbed(store));
+  EXPECT_EQ(nullptr, window.selected_browser_for_testing());
+  store->GetWindow()->Close();
 }
 
 IN_PROC_BROWSER_TEST_F(
@@ -6551,6 +6565,120 @@ IN_PROC_BROWSER_TEST_F(FlyPageScrollBrowserTest,
                       contents,
                       "samples.every((y,i) => i === 0 || y <= samples[i-1])"));
   ASSERT_TRUE(content::ExecJs(contents, "sampling = false;"));
+}
+
+// Measure complete synchronous construction plus first layout, including a cold
+// opening and repeated openings. These surfaces must not block input for
+// seconds.
+IN_PROC_BROWSER_TEST_F(FlyWorkspaceBrowserTest, SurfaceOpeningLatency) {
+  auto& window = FlyWindowController::Get();
+  for (const char* scale : {"normal", "large"}) {
+    ASSERT_TRUE(window.preferences().SetString("interface_scale", scale));
+    for (int pass = 0; pass < 3; ++pass) {
+      for (const std::string action :
+           {"toggle-help", "toggle-palette", "toggle-address",
+            "toggle-dashboard", "toggle-bookmarks", "toggle-history",
+            "toggle-downloads", "open-extension-actions", "open-diagnostics"}) {
+        SCOPED_TRACE(action + " / " + scale);
+        const auto start = base::TimeTicks::Now();
+        ASSERT_TRUE(window.RunCommand(browser(), action));
+        window.desktop_widget()->LayoutRootViewIfNecessary();
+        const auto elapsed = base::TimeTicks::Now() - start;
+        LOG(INFO) << "SURFACE_LATENCY " << action << " scale=" << scale
+                  << " pass=" << pass << " ms=" << elapsed.InMillisecondsF();
+        EXPECT_LT(elapsed, base::Milliseconds(200));
+        if (action == "toggle-help") {
+          const auto keyboard_start = base::TimeTicks::Now();
+          window.keyboard_editor().ShowKeyboard();
+          window.keyboard_editor()
+              .search_for_testing()
+              ->GetWidget()
+              ->LayoutRootViewIfNecessary();
+          EXPECT_LT(base::TimeTicks::Now() - keyboard_start,
+                    base::Milliseconds(200));
+        } else if (action == "toggle-palette") {
+          auto& palette = window.palette();
+          const auto filter_start = base::TimeTicks::Now();
+          palette.search_for_testing()->SetText(u"tab");
+          palette.ContentsChanged(palette.search_for_testing(), u"tab");
+          palette.search_for_testing()
+              ->GetWidget()
+              ->LayoutRootViewIfNecessary();
+          EXPECT_LT(base::TimeTicks::Now() - filter_start,
+                    base::Milliseconds(200));
+        }
+        ASSERT_TRUE(window.RunCommand(browser(), action));
+        base::RunLoop().RunUntilIdle();
+      }
+    }
+  }
+}
+
+IN_PROC_BROWSER_TEST_F(FlyWorkspaceBrowserTest, PageFullscreenHidesFlyChrome) {
+  auto& window = FlyWindowController::Get();
+  ASSERT_TRUE(ui_test_utils::NavigateToURL(
+      browser(), embedded_test_server()->GetURL("/title1.html")));
+  auto* contents = Active(browser());
+  const bool footer_visible = window.status_bar_for_testing()->IsDrawn();
+  ASSERT_TRUE(content::ExecJs(contents, "document.body.requestFullscreen()"));
+  ASSERT_TRUE(base::test::RunUntil(
+      [&] { return window.desktop_widget()->IsFullscreen(); }));
+  window.desktop_widget()->LayoutRootViewIfNecessary();
+  EXPECT_FALSE(window.sidebar_widget_for_testing()->IsVisible());
+  EXPECT_FALSE(window.status_bar_for_testing()->IsDrawn());
+  ASSERT_TRUE(base::test::RunUntil([&] {
+    return window.desktop_widget()->GetContentsView()->GetBoundsInScreen() ==
+           contents->GetRenderWidgetHostView()->GetViewBounds();
+  }));
+  ASSERT_TRUE(content::ExecJs(contents, "document.exitFullscreen()"));
+  ASSERT_TRUE(base::test::RunUntil(
+      [&] { return !window.desktop_widget()->IsFullscreen(); }));
+  EXPECT_TRUE(window.sidebar_widget_for_testing()->IsVisible());
+  EXPECT_EQ(footer_visible, window.status_bar_for_testing()->IsDrawn());
+}
+
+IN_PROC_BROWSER_TEST_F(FlyWorkspaceBrowserTest,
+                       SplitButtonTracksActiveTabState) {
+  auto& window = FlyWindowController::Get();
+  auto* split = window.split_button_for_testing();
+  EXPECT_FALSE(split->selected());
+  ASSERT_TRUE(InvokeNativeCommand(browser(), "toggle-split"));
+  ASSERT_TRUE(base::test::RunUntil([&] { return split->selected(); }));
+  ASSERT_TRUE(InvokeNativeCommand(browser(), "spawn-tab"));
+  ASSERT_TRUE(base::test::RunUntil([&] { return !split->selected(); }));
+  browser()->GetTabStripModel()->ActivateTabAt(0);
+  ASSERT_TRUE(base::test::RunUntil([&] { return split->selected(); }));
+  ASSERT_TRUE(InvokeNativeCommand(browser(), "toggle-split"));
+  ASSERT_TRUE(base::test::RunUntil([&] { return !split->selected(); }));
+}
+
+IN_PROC_BROWSER_TEST_F(FlyWorkspaceBrowserTest,
+                       SidebarActionsDoNotKeepPointerFocus) {
+  auto& window = FlyWindowController::Get();
+  ASSERT_TRUE(ui_test_utils::NavigateToURL(
+      browser(), embedded_test_server()->GetURL("/title1.html")));
+  ui::test::EventGenerator pointer(
+      window.desktop_widget()->GetNativeWindow()->GetRootWindow());
+  for (const std::u16string label : {u"Settings", u"Search or enter address"}) {
+    FlyButton* target = nullptr;
+    for (const auto& child :
+         window.sidebar_root_for_testing()->panel()->children()) {
+      auto* button = views::AsViewClass<FlyButton>(child.get());
+      if (button && button->GetTooltipText() == label)
+        target = button;
+    }
+    ASSERT_TRUE(target);
+    pointer.MoveMouseTo(target->GetBoundsInScreen().CenterPoint());
+    pointer.ClickLeftButton();
+    ASSERT_TRUE(base::test::RunUntil([&] {
+      return label == u"Settings" ? window.keyboard_editor().active()
+                                  : window.address_picker().active();
+    }));
+    pointer.PressKey(ui::VKEY_ESCAPE, ui::EF_NONE);
+    base::RunLoop().RunUntilIdle();
+    EXPECT_FALSE(target->HasFocus());
+    EXPECT_FALSE(target->selected());
+  }
 }
 
 }  // namespace

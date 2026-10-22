@@ -463,7 +463,6 @@ bool OpenNativeBlankTab(BrowserWindowInterface* browser, int index) {
   Navigate(&params);
   if (!params.navigated_or_inserted_contents)
     return false;
-  RequestNativeNewTabSearch(browser);
   return true;
 }
 

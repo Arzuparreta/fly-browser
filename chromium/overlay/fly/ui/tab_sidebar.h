@@ -53,6 +53,10 @@ class TabSidebar : public views::View,
   explicit TabSidebar(base::RepeatingClosure new_tab);
   ~TabSidebar() override;
   void SetBrowser(BrowserWindowInterface* browser);
+  void SetStateChangedCallback(base::RepeatingClosure callback) {
+    state_changed_ = std::move(callback);
+  }
+  void OnSplitTabChanged(const SplitTabChange& change) override;
   // The collapsed rail shows no hover tint (a hover left over from before
   // the rail collapsed must not tint it).
   void SetRail(bool rail);
@@ -86,6 +90,7 @@ class TabSidebar : public views::View,
   class RailMarks;
   class Numbers;
   enum class RowAction { kSelect, kClose, kPin, kMute };
+  base::RepeatingClosure state_changed_;
   void ScheduleRefresh();
   void Refresh();
   void Invoke(base::WeakPtr<content::WebContents> contents, RowAction action);

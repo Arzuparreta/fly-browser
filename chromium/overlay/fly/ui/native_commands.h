@@ -16,7 +16,7 @@ namespace content {
 class WebContents;
 }
 namespace fly {
-// Opens an actual about:blank navigation in this browser's own profile.
+// Opens Fly's new tab page in this browser's own profile.
 // A nonnegative index requests native tab-strip placement, including pin rules.
 void RequestNativeNewTabSearch(BrowserWindowInterface* browser);
 bool OpenNativeBlankTab(BrowserWindowInterface* browser, int index = -1);

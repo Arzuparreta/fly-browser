@@ -21,6 +21,7 @@ namespace views {
 class Label;
 class Widget;
 class MdTextButton;
+class ScrollView;
 }  // namespace views
 namespace fly {
 // Presentation of a picker, matching the Electron surfaces it replaces.
@@ -125,6 +126,7 @@ class CommandPalette : public views::TextfieldController,
   base::RepeatingCallback<void(content::WebContents*, std::string)> remove_;
   std::unique_ptr<views::Widget> overlay_;
   raw_ptr<views::Textfield> search_ = nullptr;
+  raw_ptr<views::ScrollView> results_scroll_ = nullptr;
   raw_ptr<views::View> results_ = nullptr;
   std::vector<raw_ptr<FlyButton>> buttons_;
   // The action of each row in `buttons_`.

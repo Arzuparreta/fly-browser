@@ -391,6 +391,8 @@ FlyWindowController::FlyWindowController()
       sidebar->AddChildView(std::make_unique<TabSidebar>(base::BindRepeating(
           &FlyWindowController::CreateTab, weak_factory_.GetWeakPtr())));
   parts.tabs = tab_sidebar_;
+  tab_sidebar_->SetStateChangedCallback(base::BindRepeating(
+      &FlyWindowController::UpdateSplitButton, weak_factory_.GetWeakPtr()));
   // .sidebar-clock-row with .sidebar-clock: 6px above, 4px below.
   auto* clock_row = sidebar->AddChildView(std::make_unique<views::View>());
   clock_row->SetLayoutManager(std::make_unique<views::FillLayout>());
@@ -407,7 +409,7 @@ FlyWindowController::FlyWindowController()
       base::BindRepeating(&FlyWindowController::ToggleSidebarAutoCollapse,
                           weak_factory_.GetWeakPtr()),
       views::kKeepIcon, u"Pin / Auto-Collapse Sidebar", 28));
-  auto* split = sidebar->AddChildView(MakeFlyIconButton(
+  split_button_ = sidebar->AddChildView(MakeFlyIconButton(
       command("toggle-split"), kSplitSceneIcon, u"Toggle Split View", 28));
   reader_button_ = sidebar->AddChildView(MakeFlyIconButton(
       command("toggle-reader-view"), kMenuBookIcon, u"Toggle Reader View",
@@ -429,9 +431,12 @@ FlyWindowController::FlyWindowController()
           weak_factory_.GetWeakPtr()),
       vector_icons::kSettingsIcon, u"Settings", 28));
   preferences_button_->SetEnabled(true);
-  for (FlyButton* button : {sidebar_pin_button_.get(), split,
-                            reader_button_.get(), search, extensions,
-                            preferences_button_.get()}) {
+  for (FlyButton* button :
+       {sidebar_pin_button_.get(), split_button_.get(), reader_button_.get(),
+        search, extensions, preferences_button_.get()}) {
+    // Pointer actions must not leave a focused accent after dismissal.
+    // Keyboard traversal can still focus and activate these controls.
+    button->SetRequestFocusOnPress(false);
     button->SetOutlined(true);
     button->SetCornerRadius(4);
     button->SetIconTone(FlyButton::IconTone::kText);
@@ -446,7 +451,8 @@ FlyWindowController::FlyWindowController()
         static_cast<views::View*>(new_tab_button_.get()),
         static_cast<views::View*>(back), static_cast<views::View*>(forward),
         static_cast<views::View*>(workspace_buttons_.get()),
-        static_cast<views::View*>(clock_row), static_cast<views::View*>(split),
+        static_cast<views::View*>(clock_row),
+        static_cast<views::View*>(split_button_.get()),
         static_cast<views::View*>(reader_button_.get()),
         static_cast<views::View*>(search),
         static_cast<views::View*>(preferences_button_.get())})
@@ -491,38 +497,44 @@ FlyWindowController::FlyWindowController()
               window->welcome_->SetLogo(image.AsImageSkia());
           },
           weak_factory_.GetWeakPtr()));
+  footer_ = column->AddChildView(std::make_unique<views::View>());
+  footer_->SetLayoutManager(std::make_unique<views::BoxLayout>(
+      views::BoxLayout::Orientation::kVertical));
   // Electron's download shelf, above the status bar; it appears when a
   // download starts and makes room for itself.
-  download_shelf_ = column->AddChildView(std::make_unique<DownloadShelf>(
-      base::BindRepeating(
+  download_shelf_ =
+      footer_->AddChildView(std::make_unique<DownloadShelf>(base::BindRepeating(
           [](base::WeakPtr<FlyWindowController> window) {
             if (window)
               window->ToggleDownloads(window->selected_);
           },
           weak_factory_.GetWeakPtr())));
-  status_bar_ = column->AddChildView(std::make_unique<StatusBar>(StatusBar::Actions{
-      .zoom = base::BindRepeating(
-          [](base::WeakPtr<FlyWindowController> window, std::string action) {
-            if (window && window->selected_ && !window->closing_)
-              InvokeNativeCommand(window->selected_, action);
-          },
-          weak_factory_.GetWeakPtr()),
-      .mode = base::BindRepeating(&FlyWindowController::ClickModeBadge,
+  status_bar_ =
+      footer_->AddChildView(std::make_unique<StatusBar>(StatusBar::Actions{
+          .zoom = base::BindRepeating(
+              [](base::WeakPtr<FlyWindowController> window,
+                 std::string action) {
+                if (window && window->selected_ && !window->closing_)
+                  InvokeNativeCommand(window->selected_, action);
+              },
+              weak_factory_.GetWeakPtr()),
+          .mode = base::BindRepeating(&FlyWindowController::ClickModeBadge,
+                                      weak_factory_.GetWeakPtr()),
+          .notifications = command("toggle-notifications"),
+          .workspace =
+              base::BindRepeating(&FlyWindowController::ToggleWorkspacePicker,
                                   weak_factory_.GetWeakPtr()),
-      .notifications = command("toggle-notifications"),
-      .workspace = base::BindRepeating(&FlyWindowController::ToggleWorkspacePicker,
+          .clock = base::BindRepeating(&FlyWindowController::CycleClockFormat,
                                        weak_factory_.GetWeakPtr()),
-      .clock = base::BindRepeating(&FlyWindowController::CycleClockFormat,
-                                   weak_factory_.GetWeakPtr()),
-      .contents_changed = base::BindRepeating(
-          [](base::WeakPtr<FlyWindowController> window) {
-            if (!window)
-              return;
-            window->ScheduleExtensionRefresh();
-            window->RefreshReaderState();
-          },
-          weak_factory_.GetWeakPtr()),
-  }));
+          .contents_changed = base::BindRepeating(
+              [](base::WeakPtr<FlyWindowController> window) {
+                if (!window)
+                  return;
+                window->ScheduleExtensionRefresh();
+                window->RefreshReaderState();
+              },
+              weak_factory_.GetWeakPtr()),
+      }));
   status_ = status_bar_->mode_label();
   layout->SetFlexForView(column, 1);
   SetContentsView(std::move(root));
@@ -940,6 +952,8 @@ FlyWindowController::~FlyWindowController() {
     sidebar_widget_.reset();
   }
   sidebar_slot_ = nullptr;
+  footer_ = nullptr;
+  split_button_ = nullptr;
   welcome_ = nullptr;
   welcome_keep_alive_.reset();
   content_ = nullptr;
@@ -1179,6 +1193,8 @@ void FlyWindowController::ToggleAddress(BrowserWindowInterface* browser) {
   keyboard_editor_->Cancel();
   auto* contents =
       browser ? browser->GetTabStripModel()->GetActiveWebContents() : nullptr;
+  // Only an explicit address action may defer focus until the new page loads;
+  // creating the tab itself no longer requests a search surface.
   if (contents && contents->IsLoading() &&
       IsFlyNewTabPage(contents->GetVisibleURL())) {
     RequestNativeNewTabSearch(browser);
@@ -1479,6 +1495,7 @@ void FlyWindowController::ClearSidebarViews() {
   sidebar_content_ = nullptr;
   sidebar_pin_button_ = nullptr;
   reader_button_ = nullptr;
+  split_button_ = nullptr;
   reader_poll_.Stop();
   new_tab_button_ = nullptr;
   workspace_badge_ = nullptr;
@@ -1595,6 +1612,11 @@ bool FlyWindowController::sidebar_expanded_for_testing() const {
 void FlyWindowController::UpdateSidebarVisibility() {
   if (closing_ || !sidebar_content_ || !sidebar_widget_->GetNativeWindow())
     return;
+  if (desktop_->IsFullscreen()) {
+    sidebar_host_->SetVisible(false);
+    sidebar_widget_->Hide();
+    return;
+  }
   bool menu_open = tab_sidebar_->context_menu_for_testing() ||
                    workspace_rename_dialog_for_testing() ||
                    workspace_remove_dialog_for_testing();
@@ -1788,8 +1810,10 @@ void FlyWindowController::OnWindowFocused(aura::Window* gained, aura::Window*) {
 }
 void FlyWindowController::OnWidgetBoundsChanged(views::Widget* widget,
                                                 const gfx::Rect&) {
-  if (widget == desktop_.get())
+  if (widget == desktop_.get()) {
+    UpdateFullscreenChrome();
     UpdateSidebarBounds();
+  }
 }
 void FlyWindowController::OnMouseEvent(ui::MouseEvent* event) {
   if (closing_ || !sidebar_content_ || SidebarOverlayBlocked())
@@ -1896,6 +1920,7 @@ void FlyWindowController::RunWindowControl(std::string action) {
 }
 void FlyWindowController::OnWidgetShowStateChanged(views::Widget* widget) {
   if (widget == desktop_.get()) {
+    UpdateFullscreenChrome();
     UpdateWindowControls();
     UpdateEmbeddedVisibility();
     UpdateClock();
@@ -2080,6 +2105,27 @@ void FlyWindowController::UpdateClock() {
 void FlyWindowController::CycleClockFormat() {
   preferences_.CycleClockFormat();
 }
+void FlyWindowController::UpdateFullscreenChrome() {
+  if (closing_)
+    return;
+  const bool fullscreen = desktop_->IsFullscreen();
+  sidebar_slot_->SetVisible(!fullscreen);
+  sidebar_host_->SetVisible(!fullscreen);
+  if (fullscreen)
+    sidebar_widget_->Hide();
+  footer_->SetVisible(!fullscreen);
+  if (!fullscreen)
+    UpdateSidebarVisibility();
+  desktop_->GetContentsView()->InvalidateLayout();
+}
+void FlyWindowController::UpdateSplitButton() {
+  if (closing_ || !split_button_)
+    return;
+  auto* model = selected_ ? selected_->GetTabStripModel() : nullptr;
+  split_button_->SetSelected(
+      model && model->active_index() >= 0 &&
+      model->GetSplitForTab(model->active_index()).has_value());
+}
 void FlyWindowController::UpdateEmbeddedVisibility() {
   if (closing_ || !selected_)
     return;
@@ -2260,6 +2306,7 @@ void FlyWindowController::Select(BrowserWindowInterface* browser, bool focus) {
   }
   ScheduleWorkspaceRefresh();
   UpdateModeLabel();
+  UpdateSplitButton();
   desktop_->Show();
   UpdateSidebarBounds();
   UpdateSidebarVisibility();
@@ -3159,8 +3206,6 @@ void FlyWindowController::CreateTab() {
     OpenNativeBlankTab(selected_);
     return;
   }
-  if (pending_empty_action_.empty())
-    pending_empty_action_ = "toggle-address";
   const auto catalog = workspaces_.Read();
   if (!catalog)
     return;
@@ -3503,6 +3548,7 @@ bool FlyWindowController::RunCommand(BrowserWindowInterface* browser,
   }
   if (!browser && action == "toggle-fullscreen") {
     desktop_->SetFullscreen(!desktop_->IsFullscreen());
+    UpdateFullscreenChrome();
     return true;
   }
   // All pickers share the desktop keyboard owner. Opening a different one
@@ -4186,7 +4232,9 @@ void FlyWindowController::OpenInNewWindow(GURL url) {
     return;
   }
   NavigateParams params(profile, url, ui::PAGE_TRANSITION_AUTO_TOPLEVEL);
-  params.disposition = WindowOpenDisposition::NEW_WINDOW;
+  // A tool window belongs to the workspace profile but lives on the desktop,
+  // outside the embedded normal-window hierarchy.
+  params.disposition = WindowOpenDisposition::NEW_POPUP;
   params.window_action = NavigateParams::WindowAction::kShowWindow;
   Navigate(&params);
 }
