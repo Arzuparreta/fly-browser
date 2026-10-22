@@ -107,7 +107,7 @@ download_build() {
         http=$(curl -sSL -o "$2" -w '%{http_code}' "$1" 2>/dev/null) || http=000
     }
     local http=200 answer
-    answer=$(mktemp "$cache/.answer.XXXXXXXXXX")
+    answer=$(mktemp "$cache/download.answer.XXXXXXXXXX")
     tag= sums=
     if [ "$channel" = release ]; then
         fetch "https://api.github.com/repos/$github/releases/latest" "$answer"
