@@ -326,9 +326,8 @@ class FlyWindowController : public views::WidgetDelegate,
   std::vector<PaletteEntry> AddressEntries(std::u16string_view query);
   void ExecuteAddress(content::WebContents* source, std::string action);
   void ToggleHistory(BrowserWindowInterface* browser);
-  enum class HistorySurface { kAddress, kHistory, kBookmarks };
+  enum class HistorySurface { kAddress, kHistory };
   void LoadHistory(HistorySurface surface);
-  std::optional<std::vector<FrequentSite>> FrequentSites() const;
   void CancelHistory();
   std::vector<PaletteEntry> HistoryEntries();
   void OpenHistory(content::WebContents* source, std::string action);
@@ -385,7 +384,6 @@ class FlyWindowController : public views::WidgetDelegate,
   std::set<std::string> bookmark_urls_;
   std::map<std::string, std::string> address_choices_;
   std::optional<ThemePreferences> applied_theme_;
-  std::optional<bool> applied_frequent_visibility_;
   PrefChangeRegistrar preferences_registrar_;
   base::OneShotTimer clock_timer_;
   base::RepeatingTimer suspension_timer_;

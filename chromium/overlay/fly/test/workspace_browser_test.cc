@@ -4361,34 +4361,36 @@ IN_PROC_BROWSER_TEST_F(FlyWorkspaceBrowserTest,
 }
 
 IN_PROC_BROWSER_TEST_F(FlyWorkspaceBrowserTest,
-                       NativeFrequentSitesNavigateHideAndHonorLiveChoices) {
+                       BookmarksExcludeFrequentSitesAndHonorLiveEdits) {
   const auto url = embedded_test_server()->GetURL("/title1.html");
   ASSERT_TRUE(ui_test_utils::NavigateToURL(browser(), url));
-  ASSERT_TRUE(content::ExecJs(Active(browser()),
-                              "document.cookie='frequent=retained';"));
+  // Ensure this visit is eligible for frequent sites before opening bookmarks.
+  base::CancelableTaskTracker tracker;
+  base::test::TestFuture<history::QueryResults> flushed;
+  HistoryServiceFactory::GetForProfile(browser()->GetProfile(),
+                                       ServiceAccessType::EXPLICIT_ACCESS)
+      ->QueryHistory({}, history::QueryOptions(), flushed.GetCallback(), &tracker);
+  ASSERT_FALSE(flushed.Get().empty());
   auto& window = FlyWindowController::Get();
+  ASSERT_TRUE(window.preferences().SetFrequentSitesVisible(true));
   auto& picker = window.bookmark_picker();
-  auto open_sites = [&] {
-    ASSERT_TRUE(InvokeNativeCommand(browser(), "toggle-bookmarks"));
-    ASSERT_TRUE(base::test::RunUntil([&] {
-      return picker.active() && picker.search_for_testing()->HasFocus() &&
-             picker.result_count_for_testing() == 1;
-    }));
-    picker.search_for_testing()->SetText(u"Frequent site");
-    picker.ContentsChanged(picker.search_for_testing(), u"Frequent site");
-    ASSERT_EQ(1u, picker.result_count_for_testing());
-  };
-  open_sites();
+  ASSERT_TRUE(InvokeNativeCommand(browser(), "toggle-bookmarks"));
+  ASSERT_TRUE(base::test::RunUntil([&] {
+    return picker.active() && picker.search_for_testing()->HasFocus();
+  }));
+  EXPECT_EQ(0u, picker.result_count_for_testing());
   ASSERT_TRUE(window.preferences().SetFrequentSitesVisible(false));
   EXPECT_EQ(0u, picker.result_count_for_testing());
   ASSERT_TRUE(window.preferences().SetFrequentSitesVisible(true));
-  ASSERT_TRUE(base::test::RunUntil([&] {
-    return picker.result_count_for_testing() == 1;
-  }));
-  ASSERT_TRUE(window.bookmarks().Add(url.spec(), "Saved visit"));
   EXPECT_EQ(0u, picker.result_count_for_testing());
-  ASSERT_TRUE(window.bookmarks().Remove(url.spec()));
-  EXPECT_EQ(1u, picker.result_count_for_testing());
+  ASSERT_TRUE(window.bookmarks().Add(url.spec(), "Saved visit"));
+  ASSERT_EQ(1u, picker.result_count_for_testing());
+  picker.search_for_testing()->SetText(u"Frequent site");
+  picker.ContentsChanged(picker.search_for_testing(), u"Frequent site");
+  EXPECT_EQ(0u, picker.result_count_for_testing());
+  picker.search_for_testing()->SetText(u"Saved visit");
+  picker.ContentsChanged(picker.search_for_testing(), u"Saved visit");
+  ASSERT_EQ(1u, picker.result_count_for_testing());
   const int count = browser()->tab_strip_model()->count();
   ui::test::EventGenerator keys(
       window.desktop_widget()->GetNativeWindow()->GetRootWindow());
@@ -4397,36 +4399,25 @@ IN_PROC_BROWSER_TEST_F(FlyWorkspaceBrowserTest,
     return !picker.search_for_testing() &&
            browser()->tab_strip_model()->count() == count + 1;
   }));
-  auto* opened = Active(browser());
-  // Frequent sites open the origin, which the fixture server answers with an
-  // error page; only the committed destination and its profile matter here.
-  content::WaitForLoadStop(opened);
-  EXPECT_EQ(url::Origin::Create(url).GetURL(), opened->GetLastCommittedURL());
-  EXPECT_EQ(browser()->GetProfile(), opened->GetBrowserContext());
-  ASSERT_TRUE(ui_test_utils::NavigateToURL(browser(), url));
-  EXPECT_EQ("frequent=retained",
-            content::EvalJs(Active(browser()), "document.cookie"));
-  open_sites();
+  content::WaitForLoadStop(Active(browser()));
+  EXPECT_EQ(url, Active(browser())->GetLastCommittedURL());
+  ASSERT_TRUE(InvokeNativeCommand(browser(), "toggle-bookmarks"));
+  ASSERT_TRUE(base::test::RunUntil([&] {
+    return picker.active() && picker.result_count_for_testing() == 1;
+  }));
   ASSERT_TRUE(picker.remove_for_testing(0));
   views::test::ButtonTestApi(picker.remove_for_testing(0))
       .NotifyDefaultMouseClick();
   ASSERT_TRUE(base::test::RunUntil([&] {
     return picker.active() && picker.result_count_for_testing() == 0;
   }));
-  const auto* hidden = g_browser_process->local_state()
-                           ->GetDict(kBookmarksPref)
-                           .FindList("hidden_sites");
-  ASSERT_TRUE(hidden);
-  ASSERT_EQ(1u, hidden->size());
-  EXPECT_EQ(url::Origin::Create(url).Serialize(), hidden->front().GetString());
   EXPECT_TRUE(window.bookmarks().Read()->empty());
-  picker.Cancel(true);
-  ASSERT_TRUE(
-      base::test::RunUntil([&] { return !picker.search_for_testing(); }));
-  FrequentSitesService restarted(*g_browser_process->local_state());
-  const auto sites = restarted.Read({{url.spec(), base::Time::Now()}});
-  ASSERT_TRUE(sites);
-  EXPECT_TRUE(sites->empty());
+  // Removing a bookmark must not hide the origin from frequent sites.
+  FrequentSitesService sites(*g_browser_process->local_state());
+  const auto frequent = sites.Read({{url.spec(), base::Time::Now()}});
+  ASSERT_TRUE(frequent);
+  ASSERT_EQ(1u, frequent->size());
+  EXPECT_EQ(url::Origin::Create(url).Serialize(), frequent->front().url);
 }
 
 IN_PROC_BROWSER_TEST_F(FlyWorkspaceBrowserTest,
