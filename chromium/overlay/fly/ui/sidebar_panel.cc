@@ -10,16 +10,18 @@
 #include "cc/paint/paint_flags.h"
 #include "fly/ui/fly_theme.h"
 #include "third_party/skia/include/core/SkClipOp.h"
+#include "third_party/skia/include/core/SkPath.h"
 #include "ui/base/metadata/metadata_impl_macros.h"
 #include "ui/compositor/layer.h"
 #include "ui/compositor/layer_animator.h"
 #include "ui/gfx/canvas.h"
-#include "ui/gfx/scoped_canvas.h"
 #include "ui/gfx/geometry/skia_conversions.h"
 #include "ui/gfx/image/image_skia_rep.h"
-#include "third_party/skia/include/core/SkPath.h"
+#include "ui/gfx/scoped_canvas.h"
 #include "ui/views/animation/animation_sequence_block.h"
+#include "ui/views/controls/button/button.h"
 #include "ui/views/view_targeter.h"
+#include "ui/views/view_utils.h"
 
 namespace fly {
 namespace {
@@ -27,6 +29,14 @@ namespace {
 void Layered(views::View* view) {
   view->SetPaintToLayer();
   view->layer()->SetFillsBoundsOpaquely(false);
+}
+void ClearPointerState(views::View* view) {
+  if (auto* button = views::AsViewClass<views::Button>(view);
+      button && (button->GetState() == views::Button::STATE_HOVERED ||
+                 button->GetState() == views::Button::STATE_PRESSED))
+    button->SetState(views::Button::STATE_NORMAL);
+  for (views::View* child : view->children())
+    ClearPointerState(child);
 }
 void FadeTo(views::View* view,
             float opacity,
@@ -43,8 +53,14 @@ void FadeTo(views::View* view,
   }
   // Faded controls ignore the pointer but stay focusable (Electron's
   // pointer-events: none), so focusing one still expands the sidebar.
-  if (interactive)
+  if (interactive) {
+    // Disabling event dispatch while the pointer is on a control prevents
+    // Views from delivering its mouse exit. Clear the transient state before
+    // fading it out; persistent toggle selection and keyboard focus survive.
+    if (opacity == 0)
+      ClearPointerState(view);
     view->SetCanProcessEventsWithinSubtree(opacity > 0);
+  }
 }
 }  // namespace
 
