@@ -1,0 +1,34 @@
+--- a/chrome/browser/first_run/first_run.cc
++++ b/chrome/browser/first_run/first_run.cc
+@@ -353,10 +353,14 @@
+   if (g_first_run == internal::FIRST_RUN_UNKNOWN) {
+     const base::CommandLine* command_line =
+         base::CommandLine::ForCurrentProcess();
++    // Fly: native Fly has its own first start. Chromium's would show an
++    // empty terms-of-service dialog (closing it quits) and Chromium's welcome
++    // page on every new profile.
+     g_first_run = internal::DetermineFirstRunState(
+         IsFirstRunSentinelPresent(),
+         command_line->HasSwitch(switches::kForceFirstRun),
+-        command_line->HasSwitch(switches::kNoFirstRun));
++        command_line->HasSwitch(switches::kNoFirstRun) ||
++            command_line->HasSwitch("fly-native"));
+   }
+   return g_first_run == internal::FIRST_RUN_TRUE;
+ }
+--- a/chrome/browser/ui/startup/infobar_utils.cc
++++ b/chrome/browser/ui/startup/infobar_utils.cc
+@@ -304,9 +304,12 @@
+ #endif
+ 
+ #if !BUILDFLAG(IS_CHROMEOS) && !BUILDFLAG(IS_ANDROID)
++  // Fly: native Fly offers default-browser setup in Preferences and restores
++  // sessions itself; Chromium's startup infobars do not apply.
+   if (is_web_app ||
+       startup_command_line.HasSwitch(switches::kNoDefaultBrowserCheck) ||
+-      startup_command_line.HasSwitch(switches::kNoFirstRun)) {
++      startup_command_line.HasSwitch(switches::kNoFirstRun) ||
++      startup_command_line.HasSwitch("fly-native")) {
+     return;
+   }
+ 
