@@ -159,6 +159,41 @@ check the migration summary, launch the installed package and verify desktop
 integration. Passing product contract tests does not establish native platform
 or migration acceptance; retain actual limitations in the implementation record.
 
+## Test builds of pull requests
+
+A pull request can be tried on any Linux x64 computer without building
+Chromium there. On the engine host, check out the pull request's branch, pushed
+and without local changes, and run:
+
+```sh
+python3 scripts/chromium/test-build.py --root /mnt/storage/fly-chromium
+```
+
+It builds and packages the branch exactly as a release does and publishes the
+package as the GitHub pre-release `test-pr-N` (N is the pull request number),
+replacing an earlier test build of that pull request. Anywhere else,
+`./launch.sh --pr N` downloads it, checks its SHA-256 and starts it with the
+development profile.
+
+Test builds never reach users: their tags do not start with `v`, so neither the
+release workflow nor the AUR publication runs, and Fly's update check and
+`fly-install` read `releases/latest`, which never returns a pre-release. Each
+publication, and `python3 scripts/chromium/test-build.py --pr N --remove`
+(which deletes that pull request's test build), also deletes the test builds of
+pull requests that are no longer open.
+
+The build runs the pull request's code on the engine host with your GitHub
+credentials. Pull requests from forks are refused unless `--allow-fork` is
+given after reading their code. The checkout must have no uncommitted or
+untracked files, because the overlay and the package include them.
+
+On the computers that start test builds, `launch.sh` keeps one download per
+pull request in `~/.cache/fly-browser-launch/pr-N` and deletes it once the
+test build is gone from GitHub or has not been started for 30 days. A download
+that a running Fly uses is never deleted. While a development Fly from one
+build is running, starting another build is refused: Chromium would only open
+a window in the running one.
+
 ## The AUR package
 
 Once a stable release is published, `release.yml` calls `aur.yml`, which writes `fly-browser-bin`'s `PKGBUILD` and `.SRCINFO` with `scripts/aur.js`, attaches the `PKGBUILD` to the release (so Arch users can `makepkg -si` it without the AUR) and pushes both to the AUR. Both are generated from the version in `package.json` and the tarball's line in `SHA256SUMS.txt`, so nothing is edited per release. Release candidates are not published there.

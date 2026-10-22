@@ -33,13 +33,18 @@ looks for `fly-chromium` beside this repository, beside its parent directory,
 then in `~/.cache/fly-chromium`. It prefers `out/FlyNative` over `out/FlyRelease`.
 Set `FLY_ENGINE_ROOT` and `FLY_ENGINE_OUTPUT` to select another checkout or output.
 The script launches the compiled browser; it does not rebuild source changes.
+Without a local build it downloads and starts the published release instead.
+`./launch.sh --pr N` starts the test build of pull request N and `--release`
+the published release, with or without a local build; see
+[test builds](../releasing.md#test-builds-of-pull-requests).
 
 Local launches use a persistent `fly-browser-dev` profile under
 `${XDG_CONFIG_HOME:-$HOME/.config}` and an empty import source. They do not share
 the installed browser's profile or automatically import personal data, so both
 can run simultaneously. Arguments are preserved, including explicit
 `--user-data-dir` and `--fly-import-from` overrides. The installed launcher keeps
-its existing profile. There is no automatic fallback to Electron.
+its existing profile. Downloaded builds use the same development profile. There
+is no automatic fallback to Electron.
 Release hosting prerequisites are in [releasing](../releasing.md).
 
 ## Source and prerequisites
