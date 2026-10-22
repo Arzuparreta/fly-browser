@@ -46,14 +46,21 @@ packages for those platforms are not yet available.
 
 ## Development
 
-Build the pinned engine and overlay using [Chromium development](docs/chromium/build.md).
-Then launch it:
+`./launch.sh` (or `npm start`) starts Fly with a separate development profile on
+any Linux x64 computer. Without a local engine build it downloads the published
+release; `./launch.sh --pr 153` downloads the test build of pull request #153
+([test builds](docs/releasing.md#test-builds-of-pull-requests)). Downloads are
+checked against their SHA-256 and kept in `~/.cache/fly-browser-launch`.
+
+To run your own changes, build the pinned engine and overlay using
+[Chromium development](docs/chromium/build.md). The launcher then starts that
+build:
 
 ```sh
 FLY_ENGINE_ROOT=/path/to/fly-chromium npm start
 ```
 
-`FLY_ENGINE_OUTPUT` defaults to `out/FlyRelease`. `npm ci` installs tooling;
+`npm ci` installs tooling;
 it does not download or build Chromium. `npm test` checks product contracts and
 legacy regressions; native tooling and browser tests are separate explicit
 commands. See [releasing](docs/releasing.md) for native build hosts and packaging.

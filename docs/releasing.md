@@ -159,6 +159,28 @@ check the migration summary, launch the installed package and verify desktop
 integration. Passing product contract tests does not establish native platform
 or migration acceptance; retain actual limitations in the implementation record.
 
+## Test builds of pull requests
+
+A pull request can be tried on any Linux x64 computer without building
+Chromium there. On the engine host, check out the pull request's branch, pushed
+and without local changes, and run:
+
+```sh
+python3 scripts/chromium/test-build.py --root /mnt/storage/fly-chromium
+```
+
+It builds and packages the branch exactly as a release does and publishes the
+package as the GitHub pre-release `test-pr-N` (N is the pull request number),
+replacing an earlier test build of that pull request. Anywhere else,
+`./launch.sh --pr N` downloads it, checks its SHA-256 and starts it with the
+development profile.
+
+Test builds never reach users: their tags do not start with `v`, so neither the
+release workflow nor the AUR publication runs, and Fly's update check and
+`fly-install` read `releases/latest`, which never returns a pre-release. Each run deletes the
+test builds of pull requests that are no longer open;
+`python3 scripts/chromium/test-build.py --pr N --remove` deletes one by hand.
+
 ## The AUR package
 
 Once a stable release is published, `release.yml` calls `aur.yml`, which writes `fly-browser-bin`'s `PKGBUILD` and `.SRCINFO` with `scripts/aur.js`, attaches the `PKGBUILD` to the release (so Arch users can `makepkg -si` it without the AUR) and pushes both to the AUR. Both are generated from the version in `package.json` and the tarball's line in `SHA256SUMS.txt`, so nothing is edited per release. Release candidates are not published there.

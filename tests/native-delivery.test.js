@@ -48,7 +48,13 @@ try {
     fs.renameSync(cacheEngine, engine);
     fs.unlinkSync(native);
     fs.unlinkSync(executable);
-    assert.match(run('launch.sh', [], env).stderr, /Native Fly is not built/);
+    // Without a build the launcher falls back to the published release; here
+    // the network is unavailable and nothing was downloaded before.
+    fs.writeFileSync(path.join(bin, 'curl'), '#!/bin/sh\nexit 6\n', {mode:0o755});
+    const offline = run('launch.sh', [], env);
+    assert.equal(offline.status, 1);
+    assert.match(offline.stderr, /Native Fly is not built on this computer/);
+    assert.match(offline.stderr, /published release could not be downloaded/);
 
     fs.writeFileSync(path.join(bin, 'curl'), `#!/bin/bash
 set -eu

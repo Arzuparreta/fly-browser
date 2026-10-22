@@ -94,7 +94,7 @@ Before opening a pull request:
    npm run docs:build
    ```
 
-3. Run Fly (`./launch.sh`) and exercise what you changed. Say in the pull request which platform and display server you tested on, and what you could not test.
+3. Run Fly (`./launch.sh`) and exercise what you changed. Without a local engine build, `./launch.sh` starts the published release; to try a pull request on another computer, publish its test build (see [releasing](docs/releasing.md#test-builds-of-pull-requests)) and run `./launch.sh --pr N`. Say in the pull request which platform and display server you tested on, and what you could not test.
 
 ***
 
