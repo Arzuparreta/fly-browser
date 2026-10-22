@@ -3,6 +3,7 @@
 // Fly repository.
 #include "fly/ui/new_tab_ui.h"
 
+#include <map>
 #include <memory>
 #include <string>
 #include <string_view>
@@ -14,11 +15,14 @@
 #include "base/files/file_path.h"
 #include "base/files/file_util.h"
 #include "base/functional/bind.h"
+#include "base/json/json_writer.h"
 #include "base/memory/ref_counted_memory.h"
 #include "base/memory/weak_ptr.h"
+#include "base/no_destructor.h"
 #include "base/path_service.h"
 #include "base/process/process.h"
 #include "base/process/process_metrics.h"
+#include "base/strings/string_util.h"
 #include "base/strings/stringprintf.h"
 #include "base/task/thread_pool.h"
 #include "base/timer/timer.h"
@@ -28,20 +32,21 @@
 #include "components/prefs/pref_change_registrar.h"
 #include "content/public/browser/browser_child_process_host_iterator.h"
 #include "content/public/browser/child_process_data.h"
+#include "content/public/browser/navigation_handle.h"
 #include "content/public/browser/render_process_host.h"
+#include "content/public/browser/web_contents.h"
+#include "content/public/browser/web_contents_observer.h"
 #include "content/public/browser/web_ui.h"
 #include "content/public/browser/web_ui_controller.h"
 #include "content/public/browser/web_ui_data_source.h"
 #include "content/public/browser/web_ui_message_handler.h"
-#include "content/public/browser/web_contents.h"
-#include "content/public/browser/web_contents_observer.h"
 #include "content/public/browser/webui_config.h"
 #include "content/public/browser/webui_config_map.h"
 #include "content/public/common/url_constants.h"
+#include "fly/bookmarks/bookmark_service.h"
 #include "fly/ui/fly_theme.h"
 #include "fly/ui/fly_window_controller.h"
 #include "fly/ui/sidebar_panel.h"
-#include "fly/bookmarks/bookmark_service.h"
 #include "services/network/public/mojom/content_security_policy.mojom.h"
 
 namespace fly {
@@ -69,36 +74,160 @@ std::string PagePath(const std::string& request) {
   std::string path = request.substr(0, request.find_first_of("?#"));
   return path.empty() ? "new-tab.html" : path;
 }
-void Serve(const std::string& request,
-           content::WebUIDataSource::GotDataCallback done) {
-  const std::string path = PagePath(request);
-  if (!kFiles.contains(path)) {
-    std::move(done).Run(nullptr);
-    return;
+// Immutable, bounded product assets are read once per browser process, off the
+// UI thread. Startup warms them; concurrent tabs share the same pending load.
+// No profile data enters this cache.
+class NewTabResources {
+ public:
+  using Bytes = scoped_refptr<base::RefCountedMemory>;
+  using Bundle = std::map<std::string, Bytes>;
+  static NewTabResources& Get() {
+    static base::NoDestructor<NewTabResources> instance;
+    return *instance;
   }
-  base::ThreadPool::PostTaskAndReplyWithResult(
-      FROM_HERE, {base::MayBlock(), base::TaskPriority::USER_BLOCKING},
-      base::BindOnce(
-          [](std::string path) -> scoped_refptr<base::RefCountedMemory> {
-            base::FilePath assets;
+  void Warm() {
+    if (loading_ || loaded_)
+      return;
+    loading_ = true;
+    base::ThreadPool::PostTaskAndReplyWithResult(
+        FROM_HERE, {base::MayBlock(), base::TaskPriority::USER_BLOCKING},
+        base::BindOnce([] {
+          Bundle bundle;
+          base::FilePath assets;
+          if (!base::PathService::Get(base::DIR_ASSETS, &assets))
+            return bundle;
+          for (const auto path : kFiles) {
             std::string bytes;
-            if (!base::PathService::Get(base::DIR_ASSETS, &assets) ||
-                !base::ReadFileToStringWithMaxSize(
+            if (base::ReadFileToStringWithMaxSize(
                     assets.AppendASCII("fly_resources")
                         .AppendASCII("new_tab")
                         .AppendASCII(path),
-                    &bytes, 4 * 1024 * 1024))
-              return nullptr;
-            return base::MakeRefCounted<base::RefCountedString>(
-                std::move(bytes));
-          },
-          path),
-      std::move(done));
-}
+                    &bytes, 4 * 1024 * 1024)) {
+              bundle.emplace(path, base::MakeRefCounted<base::RefCountedString>(
+                                       std::move(bytes)));
+            }
+          }
+          return bundle;
+        }),
+        base::BindOnce(&NewTabResources::Loaded, base::Unretained(this)));
+  }
+  void Read(std::string path, content::WebUIDataSource::GotDataCallback done) {
+    if (!kFiles.contains(path)) {
+      std::move(done).Run(nullptr);
+    } else if (loaded_) {
+      const auto it = bundle_.find(path);
+      std::move(done).Run(it == bundle_.end() ? nullptr : it->second);
+    } else {
+      pending_.emplace_back(std::move(path), std::move(done));
+      Warm();
+    }
+  }
+
+ private:
+  void Loaded(Bundle bundle) {
+    bundle_ = std::move(bundle);
+    loaded_ = true;
+    loading_ = false;
+    auto pending = std::move(pending_);
+    for (auto& [path, done] : pending)
+      Read(std::move(path), std::move(done));
+  }
+  bool loading_ = false;
+  bool loaded_ = false;
+  Bundle bundle_;
+  std::vector<std::pair<std::string, content::WebUIDataSource::GotDataCallback>>
+      pending_;
+};
 
 std::string Hex(SkColor color) {
   return base::StringPrintf("#%02x%02x%02x", SkColorGetR(color),
                             SkColorGetG(color), SkColorGetB(color));
+}
+
+// A current snapshot is embedded as inert JSON in the document. The first
+// stylesheet includes the current theme/geometry, so painting never depends on
+// a renderer -> browser -> renderer ready message. Dynamic bytes are never
+// cached with the product assets, nor shared between regular/private pages.
+base::DictValue PageData(bool private_page, bool include_lists = true) {
+  const auto& colors = GetFlyColors();
+  base::DictValue colours;
+  colours.Set("--bg-main", Hex(colors.bg_main));
+  colours.Set("--text", Hex(colors.text));
+  colours.Set("--accent", Hex(colors.accent));
+  colours.Set("--panel", Hex(colors.panel));
+  colours.Set("--cell", Hex(colors.cell));
+  colours.Set("--border", Hex(colors.border));
+  colours.Set("--dim", Hex(colors.dim));
+  colours.Set("--link", Hex(colors.link));
+  const double scale = PreferencesService(*g_browser_process->local_state())
+                                   .ReadString("interface_scale")
+                                   .value_or("normal") == "large"
+                           ? 1.25
+                           : 1.0;
+  base::DictValue data;
+  if (auto* window = FlyWindowController::GetIfCreated()) {
+    if (include_lists)
+      data = window->NewTabLists(
+          private_page, private_page ? std::vector<HistoryEntry>()
+                                     : window->new_tab_history().entries());
+    data.Set("sidebarOverhang",
+             window->preferences().ReadSidebarAutoCollapse().value_or(false)
+                 ? static_cast<int>((kSidebarWidth - kSidebarRailWidth) * scale)
+                 : 0);
+  }
+  data.Set("light", !colors.dark);
+  data.Set("scale", scale);
+  data.Set("colours", std::move(colours));
+  return data;
+}
+void Serve(bool private_page,
+           const std::string& request,
+           content::WebUIDataSource::GotDataCallback done) {
+  const auto path = PagePath(request);
+  NewTabResources::Get().Read(
+      path,
+      base::BindOnce(
+          [](bool private_page, std::string path,
+             content::WebUIDataSource::GotDataCallback done,
+             scoped_refptr<base::RefCountedMemory> bytes) {
+            if (!bytes || (path != "new-tab.html" && path != "new-tab.css")) {
+              std::move(done).Run(std::move(bytes));
+              return;
+            }
+            const auto data = PageData(private_page, path == "new-tab.html");
+            std::string text(base::as_string_view(base::span(*bytes)));
+            if (path == "new-tab.html") {
+              auto json = base::WriteJson(data).value_or("{}");
+              // Titles/URLs are untrusted. Never let JSON close its inert
+              // script.
+              base::ReplaceSubstringsAfterOffset(&json, 0, "<", "\\u003c");
+              base::ReplaceSubstringsAfterOffset(
+                  &text, 0, "<!--INITIAL_DATA-->",
+                  "<script id=\"initial-data\" type=\"application/json\">" +
+                      json + "</script>");
+              base::ReplaceSubstringsAfterOffset(
+                  &text, 0, "<!--BODY_CLASS-->",
+                  data.FindBool("light").value_or(false) ? "light" : "");
+              if (data.FindBool("light").value_or(false))
+                base::ReplaceSubstringsAfterOffset(
+                    &text, 0, "memory-chasis@2x.png", "memory-papel@2x.png");
+            } else {
+              text += "\n:root{";
+              for (const auto [key, value] : *data.FindDict("colours"))
+                text += key + ":" + value.GetString() + ";";
+              text +=
+                  "--scale:" +
+                  std::to_string(data.FindDouble("scale").value_or(1)) +
+                  ";--sidebar-overhang:" +
+                  std::to_string(data.FindInt("sidebarOverhang").value_or(0)) +
+                  "px;color-scheme:" +
+                  (data.FindBool("light").value_or(false) ? "light" : "dark") +
+                  ";}";
+            }
+            std::move(done).Run(
+                base::MakeRefCounted<base::RefCountedString>(std::move(text)));
+          },
+          private_page, path, std::move(done)));
 }
 
 // Fly's processes: the browser, renderers and child processes (GPU,
@@ -137,13 +266,14 @@ class NewTabHandler : public content::WebUIMessageHandler,
   void RegisterMessages() override {
     Observe(web_ui()->GetWebContents());
     registrar_.Init(g_browser_process->local_state());
-    for (const char* pref : {kPreferencesPref, kBookmarksPref, kWorkspacesPref}) {
+    for (const char* pref :
+         {kPreferencesPref, kBookmarksPref, kWorkspacesPref}) {
       registrar_.Add(pref, base::BindRepeating(&NewTabHandler::Refresh,
-                                             base::Unretained(this)));
+                                               base::Unretained(this)));
     }
     web_ui()->RegisterMessageCallback(
-        "ready", base::BindRepeating(&NewTabHandler::OnReady,
-                                     base::Unretained(this)));
+        "ready",
+        base::BindRepeating(&NewTabHandler::OnReady, base::Unretained(this)));
     web_ui()->RegisterMessageCallback(
         "hideSite", base::BindRepeating(&NewTabHandler::OnHideSite,
                                         base::Unretained(this)));
@@ -152,15 +282,17 @@ class NewTabHandler : public content::WebUIMessageHandler,
     memory_timer_.Stop();
     weak_factory_.InvalidateWeakPtrs();
     sampling_ = false;
-    if (history_)
-      history_->Cancel();
+    history_subscription_ = {};
   }
   void OnVisibilityChanged(content::Visibility) override { Refresh(); }
+  void DidStartNavigation(content::NavigationHandle* navigation) override {
+    if (navigation->IsInPrimaryMainFrame() &&
+        !IsFlyNewTabPage(navigation->GetURL()))
+      web_contents()->SetPageBaseBackgroundColor(std::nullopt);
+  }
 
  private:
-  bool OffTheRecord() {
-    return Profile::FromWebUI(web_ui())->IsOffTheRecord();
-  }
+  bool OffTheRecord() { return Profile::FromWebUI(web_ui())->IsOffTheRecord(); }
   void OnReady(const base::ListValue&) {
     AllowJavascript();
     Refresh();
@@ -174,40 +306,27 @@ class NewTabHandler : public content::WebUIMessageHandler,
       return;
     if (!Visible()) {
       memory_timer_.Stop();
-      if (history_)
-        history_->Cancel();
+      history_subscription_ = {};
       return;
     }
+    web_contents()->SetPageBaseBackgroundColor(GetFlyColors().bg_main);
     SendPage();
     if (!memory_timer_.IsRunning())
       StartMemory();
-    // The page needs its own query: a picker may never have been opened,
-    // and its cancellable query must not cancel another new tab or picker.
-    if (OffTheRecord() ||
-        PreferencesService(*g_browser_process->local_state())
-                .ReadFrequentSitesVisible() != true) {
-      if (history_)
-        history_->Cancel();
-      history_entries_.clear();
-      return;
+    const bool show_sites =
+        !OffTheRecord() && PreferencesService(*g_browser_process->local_state())
+                               .ReadFrequentSitesVisible()
+                               .value_or(true);
+    if (!show_sites) {
+      history_subscription_ = {};
+    } else if (!history_subscription_) {
+      if (auto* window = FlyWindowController::GetIfCreated())
+        history_subscription_ =
+            window->new_tab_history().Subscribe(base::BindRepeating(
+                &NewTabHandler::SendPage, weak_factory_.GetWeakPtr()));
     }
-    if (!history_) {
-      workspaces_ = std::make_unique<WorkspaceService>(
-          *g_browser_process->local_state());
-      history_ = std::make_unique<HistoryService>(
-          *g_browser_process->profile_manager(), *workspaces_);
-      history_->SetChangedCallback(base::BindRepeating(
-          &NewTabHandler::Refresh, base::Unretained(this)));
-    }
-    history_->Query(base::BindOnce(
-        [](base::WeakPtr<NewTabHandler> handler,
-           std::optional<std::vector<HistoryEntry>> rows) {
-          if (!handler || !handler->IsJavascriptAllowed() || !handler->Visible())
-            return;
-          handler->history_entries_ = rows.value_or(std::vector<HistoryEntry>());
-          handler->SendPage();
-        }, weak_factory_.GetWeakPtr()));
   }
+
   void OnHideSite(const base::ListValue& args) {
     auto* window = FlyWindowController::GetIfCreated();
     if (window && !OffTheRecord() && !args.empty() && args[0].is_string())
@@ -217,36 +336,10 @@ class NewTabHandler : public content::WebUIMessageHandler,
   void SendPage() {
     if (!IsJavascriptAllowed())
       return;
-    const auto& colors = GetFlyColors();
-    base::DictValue colours;
-    colours.Set("--bg-main", Hex(colors.bg_main));
-    colours.Set("--text", Hex(colors.text));
-    colours.Set("--accent", Hex(colors.accent));
-    colours.Set("--panel", Hex(colors.panel));
-    colours.Set("--cell", Hex(colors.cell));
-    colours.Set("--border", Hex(colors.border));
-    colours.Set("--dim", Hex(colors.dim));
-    colours.Set("--link", Hex(colors.link));
-    // Read the committed preference, independent of observer callback ordering.
-    const double scale = PreferencesService(*g_browser_process->local_state())
-                                     .ReadString("interface_scale")
-                                     .value_or("normal") == "large"
-                             ? 1.25
-                             : 1.0;
-    base::DictValue data;
-    if (auto* window = FlyWindowController::GetIfCreated()) {
-      data = window->NewTabLists(OffTheRecord(), history_entries_);
-      data.Set(
-          "sidebarOverhang",
-          window->preferences().ReadSidebarAutoCollapse().value_or(false)
-              ? static_cast<int>((kSidebarWidth - kSidebarRailWidth) * scale)
-              : 0);
-    }
-    data.Set("light", !colors.dark);
-    data.Set("scale", scale);
-    data.Set("colours", std::move(colours));
-    CallJavascriptFunction("updateFlyNewTab", base::Value(std::move(data)));
+    CallJavascriptFunction("updateFlyNewTab",
+                           base::Value(PageData(OffTheRecord())));
   }
+
   // The memory figure follows Fly live, once a second while the page shows.
   void StartMemory() {
     SampleMemory();
@@ -263,8 +356,7 @@ class NewTabHandler : public content::WebUIMessageHandler,
         {base::MayBlock(), base::TaskPriority::USER_VISIBLE,
          base::TaskShutdownBehavior::CONTINUE_ON_SHUTDOWN},
         base::BindOnce(&ResidentMegabytes, FlyProcesses()),
-        base::BindOnce(&NewTabHandler::OnMemory,
-                       weak_factory_.GetWeakPtr()));
+        base::BindOnce(&NewTabHandler::OnMemory, weak_factory_.GetWeakPtr()));
   }
   void OnMemory(int megabytes) {
     sampling_ = false;
@@ -275,20 +367,21 @@ class NewTabHandler : public content::WebUIMessageHandler,
   base::RepeatingTimer memory_timer_;
   bool sampling_ = false;
   PrefChangeRegistrar registrar_;
-  std::unique_ptr<WorkspaceService> workspaces_;
-  std::unique_ptr<HistoryService> history_;
-  std::vector<HistoryEntry> history_entries_;
+  base::CallbackListSubscription history_subscription_;
   base::WeakPtrFactory<NewTabHandler> weak_factory_{this};
 };
 
 class NewTabUI : public content::WebUIController {
  public:
   explicit NewTabUI(content::WebUI* web_ui) : content::WebUIController(web_ui) {
+    web_ui->GetWebContents()->SetPageBaseBackgroundColor(
+        GetFlyColors().bg_main);
     auto* source = content::WebUIDataSource::CreateAndAdd(
         Profile::FromWebUI(web_ui), kFlyNewTabHost);
     source->SetRequestFilter(
         base::BindRepeating([](const std::string&) { return true; }),
-        base::BindRepeating(&Serve));
+        base::BindRepeating(&Serve,
+                            Profile::FromWebUI(web_ui)->IsOffTheRecord()));
     using Directive = network::mojom::CSPDirectiveName;
     source->OverrideContentSecurityPolicy(Directive::ScriptSrc,
                                           "script-src 'self';");
@@ -315,6 +408,62 @@ class NewTabConfig : public content::DefaultWebUIConfig<NewTabUI> {
 };
 }  // namespace
 
+NewTabHistory::NewTabHistory(ProfileManager& manager,
+                             WorkspaceService& workspaces,
+                             PrefService& prefs)
+    : workspaces_(workspaces), history_(manager, workspaces) {
+  history_.SetChangedCallback(
+      base::BindRepeating(&NewTabHistory::Invalidate, base::Unretained(this)));
+  registrar_.Init(&prefs);
+  registrar_.Add(kWorkspacesPref,
+                 base::BindRepeating(&NewTabHistory::OnWorkspacesChanged,
+                                     base::Unretained(this)));
+  OnWorkspacesChanged();
+}
+NewTabHistory::~NewTabHistory() = default;
+base::CallbackListSubscription NewTabHistory::Subscribe(
+    base::RepeatingClosure changed) {
+  auto subscription = changed_.Add(std::move(changed));
+  EnsureQuery();
+  return subscription;
+}
+void NewTabHistory::OnWorkspacesChanged() {
+  std::optional<std::vector<std::pair<std::string, std::string>>> catalog;
+  if (const auto saved = workspaces_->Read()) {
+    catalog.emplace();
+    for (const auto& workspace : saved->items)
+      catalog->emplace_back(workspace.id, workspace.profile_directory);
+  }
+  // Renaming/selecting a workspace does not change authorized history sources.
+  if (catalog == catalog_)
+    return;
+  catalog_ = std::move(catalog);
+  Invalidate();
+}
+void NewTabHistory::Invalidate() {
+  valid_ = false;
+  entries_.clear();
+  history_.Cancel();
+  querying_ = false;
+  // Drop the cache immediately, but publish one replacement to visible pages
+  // when the query finishes instead of flashing an empty list in between.
+  EnsureQuery();
+}
+void NewTabHistory::EnsureQuery() {
+  if (valid_ || querying_ || changed_.empty())
+    return;
+  querying_ = true;
+  ++query_count_;
+  history_.Query(
+      base::BindOnce(&NewTabHistory::OnQuery, weak_factory_.GetWeakPtr()));
+}
+void NewTabHistory::OnQuery(std::optional<std::vector<HistoryEntry>> rows) {
+  querying_ = false;
+  valid_ = rows.has_value();
+  entries_ = rows.value_or(std::vector<HistoryEntry>());
+  changed_.Notify();
+}
+
 bool IsFlyNewTabPage(const GURL& url) {
   return url.is_empty() || url.IsAboutBlank() ||
          (url.SchemeIs(content::kChromeUIScheme) &&
@@ -333,6 +482,7 @@ void RegisterFlyNewTabPage() {
   if (registered)
     return;
   registered = true;
+  NewTabResources::Get().Warm();
   content::WebUIConfigMap::GetInstance().AddWebUIConfig(
       std::make_unique<NewTabConfig>());
 }

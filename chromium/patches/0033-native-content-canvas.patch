@@ -1,0 +1,31 @@
+--- a/chrome/browser/ui/views/frame/contents_web_view.cc
++++ b/chrome/browser/ui/views/frame/contents_web_view.cc
+@@ -7,6 +7,10 @@
+ #include "base/debug/dump_without_crashing.h"
+ #include "build/build_config.h"
+ #include "chrome/browser/ui/color/chrome_color_id.h"
++#if BUILDFLAG(IS_LINUX) || BUILDFLAG(IS_WIN)
++#include "base/command_line.h"
++#include "fly/ui/fly_theme.h"
++#endif
+ #include "chrome/browser/ui/views/frame/safe_invoke/safe_invoke.h"
+ #include "chrome/browser/ui/views/frame/web_contents_close_handler.h"
+ #include "chrome/browser/ui/views/status_bubble_views.h"
+@@ -186,9 +190,16 @@
+ #endif
+ 
+ void ContentsWebView::UpdateBackgroundColor() {
+-  const SkColor color = GetColorProvider()->GetColor(
++  SkColor color = GetColorProvider()->GetColor(
+       is_letterboxing() ? kColorWebContentsBackgroundLetterboxing
+                         : kColorWebContentsBackground);
++#if BUILDFLAG(IS_LINUX) || BUILDFLAG(IS_WIN)
++  // The native surface is visible before a new renderer has produced a frame.
++  // Use the same canvas as Fly's page rather than Chromium's default white.
++  if (!is_letterboxing() &&
++      base::CommandLine::ForCurrentProcess()->HasSwitch("fly-native"))
++    color = fly::GetFlyColors().bg_main;
++#endif
+   // `color` must be opaque, see RenderWidgetHostView::SetBackgroundColor() for
+   // details.
+   // TODO(crbug.com/456309057): Update this to be a CHECK.

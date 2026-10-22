@@ -146,6 +146,7 @@ class CommandPalette : public views::TextfieldController,
   gfx::Point pointer_at_open_;
   bool pointer_moved_ = false;
   bool empty_source_ = false;
+  bool keep_initial_new_tab_ = false;
   bool closing_ = false;
   bool cancelled_ = false;
   bool restore_page_focus_ = false;

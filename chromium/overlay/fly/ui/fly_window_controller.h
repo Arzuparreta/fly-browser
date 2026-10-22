@@ -67,6 +67,7 @@ class SimpleMenuModel;
 
 class ScopedProfileKeepAlive;
 namespace fly {
+class NewTabHistory;
 class WelcomeView;
 class CommandPalette;
 class BookmarkService;
@@ -117,6 +118,7 @@ class FlyWindowController : public views::WidgetDelegate,
   CommandPalette& bookmark_picker() { return *bookmark_picker_; }
   CommandPalette& address_picker() { return *address_picker_; }
   CommandPalette& history_picker() { return *history_picker_; }
+  NewTabHistory& new_tab_history() { return *new_tab_history_; }
   bool CanShowHistory() const { return workspaces_.Read().has_value(); }
   views::Widget* history_clear_dialog_for_testing() const;
   PreferencesService& preferences() { return preferences_; }
@@ -375,6 +377,7 @@ class FlyWindowController : public views::WidgetDelegate,
   PreferencesService preferences_;
   std::unique_ptr<BookmarkService> bookmarks_;
   std::unique_ptr<FrequentSitesService> frequent_sites_;
+  std::unique_ptr<NewTabHistory> new_tab_history_;
   std::unique_ptr<HistoryService> history_;
   std::unique_ptr<HistoryService> history_clear_service_;
   bool history_clear_running_ = false;
