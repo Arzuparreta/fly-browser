@@ -1,6 +1,6 @@
 --- a/chrome/browser/first_run/first_run.cc
 +++ b/chrome/browser/first_run/first_run.cc
-@@ -353,10 +353,14 @@
+@@ -353,10 +353,14 @@ bool IsChromeFirstRun() {
    if (g_first_run == internal::FIRST_RUN_UNKNOWN) {
      const base::CommandLine* command_line =
          base::CommandLine::ForCurrentProcess();
@@ -18,7 +18,57 @@
  }
 --- a/chrome/browser/ui/startup/infobar_utils.cc
 +++ b/chrome/browser/ui/startup/infobar_utils.cc
-@@ -304,9 +304,12 @@
+@@ -14,6 +14,7 @@
+ #include "base/memory/weak_ptr.h"
+ #include "base/metrics/histogram_functions.h"
+ #include "base/rand_util.h"
++#include "base/task/sequenced_task_runner.h"
+ #include "build/branding_buildflags.h"
+ #include "build/buildflag.h"
+ #include "chrome/browser/browser_process.h"
+@@ -21,6 +22,8 @@
+ #include "chrome/browser/infobars/infobar_features.h"
+ #include "chrome/browser/obsolete_system/obsolete_system.h"
+ #include "chrome/browser/profiles/profile.h"
++#include "chrome/browser/sessions/exit_type_service.h"
++#include "chrome/browser/sessions/session_restore.h"
+ #include "chrome/browser/ui/browser_window/public/browser_window_interface.h"
+ #include "chrome/browser/ui/session_crashed_bubble.h"
+ #include "chrome/browser/ui/startup/automation_infobar_delegate.h"
+@@ -217,7 +220,31 @@ void AddInfoBarsIfNecessary(BrowserWindowInterface* browser,
+   const bool should_display_bubble =
+       !is_web_app && HasPendingUncleanExit(browser->GetProfile());
+   base::UmaHistogramBoolean("Startup.CrashBubbleShown", should_display_bubble);
+-  if (should_display_bubble) {
++  if (should_display_bubble &&
++      startup_command_line.HasSwitch("fly-native")) {
++    // Fly: native Fly windows never draw the app menu the restore bubble
++    // anchors to. Restore the interrupted session as the bubble's Restore
++    // button does. The lock keeps the crash unacknowledged until the restore
++    // has started, so session saving resumes once it completes. Post it:
++    // this runs while the tab strip notifies its observers.
++    if (!browser->GetProfile()->IsOffTheRecord()) {
++      std::unique_ptr<ExitTypeService::CrashedLock> lock;
++      if (auto* exit_type =
++              ExitTypeService::GetInstanceForProfile(browser->GetProfile())) {
++        lock = exit_type->CreateCrashedLock();
++      }
++      base::SequencedTaskRunner::GetCurrentDefault()->PostTask(
++          FROM_HERE,
++          base::BindOnce(
++              [](base::WeakPtr<BrowserWindowInterface> browser,
++                 std::unique_ptr<ExitTypeService::CrashedLock> lock) {
++                if (browser) {
++                  SessionRestore::RestoreSessionAfterCrash(browser.get());
++                }
++              },
++              browser->GetWeakPtr(), std::move(lock)));
++    }
++  } else if (should_display_bubble) {
+     SessionCrashedBubble::ShowIfNotOffTheRecordProfile(
+         browser,
+         /*skip_tab_checking=*/false);
+@@ -304,9 +331,12 @@ void AddInfoBarsIfNecessary(BrowserWindowInterface* browser,
  #endif
  
  #if !BUILDFLAG(IS_CHROMEOS) && !BUILDFLAG(IS_ANDROID)

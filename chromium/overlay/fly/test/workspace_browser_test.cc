@@ -12,7 +12,11 @@
 #include "chrome/browser/history/history_service_factory.h"
 #include "chrome/browser/ssl/chrome_security_state_util.h"
 #include "chrome/browser/ui/browser_window/public/browser_window_interface_iterator.h"
+#include "chrome/browser/sessions/exit_type_service.h"
+#include "chrome/browser/sessions/session_service.h"
+#include "chrome/browser/sessions/session_service_factory.h"
 #include "chrome/browser/ui/views/frame/browser_view.h"
+#include "chrome/browser/ui/views/session_crashed_bubble_view.h"
 #include "chrome/common/chrome_paths.h"
 #include "components/bookmarks/browser/bookmark_model.h"
 #include "components/content_settings/core/browser/host_content_settings_map.h"
@@ -375,6 +379,39 @@ class FlyWorkspaceBrowserTest : public InProcessBrowserTest {
               content::EvalJs(contents, "document.visibilityState"));
   }
 };
+
+// After a crash or forced exit Chromium anchored its restore bubble to the
+// app menu, which a Fly window never draws, and ended the browser process on
+// every following start. Native Fly restores the interrupted session instead,
+// as the bubble's Restore button does, and then saves sessions again.
+IN_PROC_BROWSER_TEST_F(FlyWorkspaceBrowserTest, PRE_StartsAfterUncleanExit) {
+  ASSERT_TRUE(ui_test_utils::NavigateToURL(
+      browser(), embedded_test_server()->GetURL("/title1.html")));
+  ASSERT_TRUE(AddTabAtIndex(1, embedded_test_server()->GetURL("/title2.html"),
+                            ui::PAGE_TRANSITION_TYPED));
+  ExitTypeService::GetInstanceForProfile(browser()->GetProfile())
+      ->SetWaitingForUserToAckCrashForTest(true);
+}
+IN_PROC_BROWSER_TEST_F(FlyWorkspaceBrowserTest, StartsAfterUncleanExit) {
+  auto* profile = browser()->GetProfile();
+  EXPECT_EQ(ExitType::kCrashed, ExitTypeService::GetLastSessionExitType(profile));
+  EXPECT_EQ(nullptr, SessionCrashedBubbleView::GetInstanceForTest());
+  const auto restored = [&](std::string_view path) {
+    auto* model = browser()->GetTabStripModel();
+    for (int i = 0; i < model->count(); ++i) {
+      if (model->GetWebContentsAt(i)->GetVisibleURL().path() == path)
+        return true;
+    }
+    return false;
+  };
+  ASSERT_TRUE(base::test::RunUntil(
+      [&] { return restored("/title1.html") && restored("/title2.html"); }));
+  ASSERT_TRUE(base::test::RunUntil([&] {
+    return SessionServiceFactory::GetForProfile(profile)->is_saving_enabled();
+  }));
+  EXPECT_FALSE(ExitTypeService::GetInstanceForProfile(profile)
+                   ->waiting_for_user_to_ack_crash());
+}
 
 IN_PROC_BROWSER_TEST_F(FlyWorkspaceBrowserTest,
                        OneDesktopTwoProfilesAndNativeIds) {
