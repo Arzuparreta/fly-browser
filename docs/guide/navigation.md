@@ -32,7 +32,7 @@ Press **Ctrl + L** at any time to open the floating, high-contrast address overl
 
 ## DuckDuckGo Bang Redirection
 
-![Preferences General section with address bar aliases and calculator](/screenshots/preferences-5.webp)
+![Preferences General section with search aliases](/screenshots/preferences-5.webp)
 
 Fly supports over 13,500 DuckDuckGo bangs directly from the floating address bar. Bangs route queries directly to the target website:
 

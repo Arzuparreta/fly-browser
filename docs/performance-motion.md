@@ -42,6 +42,51 @@ event cannot close it while the pointer is over it.
 interface, the reader and What's New, and dashboard navigation scrolls
 immediately. Websites keep their own motion.
 
+## Native sidebar
+
+Native Fly keeps the same geometry, duration and curve. The edge and the
+panel are Views layers whose transforms animate in opposite directions, and
+the shadow and the state-specific details fade with them
+(`FlyWindowController::ApplySidebarMotion`).
+
+A page animates on its renderer's compositor thread, which is why the
+Electron sidebar kept moving while its page was busy. Chromium's own
+interface has no such thread: its compositor runs on the browser's main
+thread, the same thread that handles input, tabs and messages from every
+page. Each frame of the slide needs that thread. Chromium ticks the
+animation and commits the layer tree on every frame, and anything that
+paints during the slide adds painting and GPU raster to the same frames.
+On a weak CPU, any other work on that thread during the slide shows up
+as a skipped frame.
+
+Two rules keep that work to the minimum Chromium needs:
+
+- Fly buttons switch their hover look immediately. Views' default 170 ms
+  hover fade repainted the button under the pointer on every frame of a
+  slide without changing its pixels.
+- Starting a slide repaints only the row under the pointer, the only row
+  whose look differs between the rail and the expanded sidebar.
+
+The first opening after Fly starts rasterises the expanded-only details for
+the first time, and on the machine below missed about 50 ms of frames.
+Later openings reuse those tiles.
+
+Measured on the machine below with a development build (DCHECKs on),
+30 tabs, the sidebar opened and closed 10 times with the real X11 pointer,
+recorded with Chromium tracing, per transition:
+
+| | Before | After |
+| --- | ---: | ---: |
+| Frames presented in 220 ms at 144 Hz | 33 | 33 |
+| Buttons repainted | 25 | 1 |
+| GPU raster tasks | 27.5 (13.3 ms) | 3 (4.8 ms) |
+| Main-thread layer tree commits | 34 | 34 |
+
+This machine already presented every frame before the change, also with
+the browser limited to one core (`taskset -c 0,8`) and with
+`--disable-gpu`. The change removes work from each frame; it was not
+measured on a slower CPU or GPU.
+
 ## Other changes
 
 - Download progress fills animate `scaleX` instead of `width`.
