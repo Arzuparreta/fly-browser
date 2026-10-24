@@ -76,9 +76,15 @@ void HintController::Toggle(content::WebContents* contents) {
   active_ = true;
   cancellation_ = "none";
   state_changed_.Run(true);
-  accessibility_ =
-      content::BrowserAccessibilityState::GetInstance()
-          ->CreateScopedModeForWebContents(contents, ui::kAXModeBasic);
+  // Hints only need what is on screen, so Blink serializes the visible part of
+  // the page. Filters add to every mode the page receives, so a page that
+  // already has a tree for an assistive technology keeps its full tree.
+  const ui::AXMode mode =
+      contents->GetAccessibilityMode().has_mode(ui::AXMode::kWebContents)
+          ? ui::kAXModeBasic
+          : ui::AXMode(ui::kAXModeBasic.flags(), ui::AXMode::kOnScreenOnly);
+  accessibility_ = content::BrowserAccessibilityState::GetInstance()
+                       ->CreateScopedModeForWebContents(contents, mode);
   startup_timeout_.Start(
       FROM_HERE, base::Seconds(5),
       base::BindOnce(&HintController::CancelWithReason,
