@@ -18,20 +18,57 @@
  }
 --- a/chrome/browser/ui/startup/infobar_utils.cc
 +++ b/chrome/browser/ui/startup/infobar_utils.cc
-@@ -214,8 +214,11 @@ void AddInfoBarsIfNecessary(BrowserWindowInterface* browser,
-   }
- 
-   // Web apps should not display the session restore bubble (crbug.com/40800614)
-+  // Fly: native Fly restores its sessions itself, and its embedded windows
-+  // have no drawn app menu to anchor Chromium's restore bubble to.
+@@ -14,6 +14,7 @@
+ #include "base/memory/weak_ptr.h"
+ #include "base/metrics/histogram_functions.h"
+ #include "base/rand_util.h"
++#include "base/task/sequenced_task_runner.h"
+ #include "build/branding_buildflags.h"
+ #include "build/buildflag.h"
+ #include "chrome/browser/browser_process.h"
+@@ -21,6 +22,8 @@
+ #include "chrome/browser/infobars/infobar_features.h"
+ #include "chrome/browser/obsolete_system/obsolete_system.h"
+ #include "chrome/browser/profiles/profile.h"
++#include "chrome/browser/sessions/exit_type_service.h"
++#include "chrome/browser/sessions/session_restore.h"
+ #include "chrome/browser/ui/browser_window/public/browser_window_interface.h"
+ #include "chrome/browser/ui/session_crashed_bubble.h"
+ #include "chrome/browser/ui/startup/automation_infobar_delegate.h"
+@@ -217,7 +220,31 @@ void AddInfoBarsIfNecessary(BrowserWindowInterface* browser,
    const bool should_display_bubble =
--      !is_web_app && HasPendingUncleanExit(browser->GetProfile());
-+      !is_web_app && !startup_command_line.HasSwitch("fly-native") &&
-+      HasPendingUncleanExit(browser->GetProfile());
+       !is_web_app && HasPendingUncleanExit(browser->GetProfile());
    base::UmaHistogramBoolean("Startup.CrashBubbleShown", should_display_bubble);
-   if (should_display_bubble) {
+-  if (should_display_bubble) {
++  if (should_display_bubble &&
++      startup_command_line.HasSwitch("fly-native")) {
++    // Fly: native Fly windows never draw the app menu the restore bubble
++    // anchors to. Restore the interrupted session as the bubble's Restore
++    // button does. The lock keeps the crash unacknowledged until the restore
++    // has started, so session saving resumes once it completes. Post it:
++    // this runs while the tab strip notifies its observers.
++    if (!browser->GetProfile()->IsOffTheRecord()) {
++      std::unique_ptr<ExitTypeService::CrashedLock> lock;
++      if (auto* exit_type =
++              ExitTypeService::GetInstanceForProfile(browser->GetProfile())) {
++        lock = exit_type->CreateCrashedLock();
++      }
++      base::SequencedTaskRunner::GetCurrentDefault()->PostTask(
++          FROM_HERE,
++          base::BindOnce(
++              [](base::WeakPtr<BrowserWindowInterface> browser,
++                 std::unique_ptr<ExitTypeService::CrashedLock> lock) {
++                if (browser) {
++                  SessionRestore::RestoreSessionAfterCrash(browser.get());
++                }
++              },
++              browser->GetWeakPtr(), std::move(lock)));
++    }
++  } else if (should_display_bubble) {
      SessionCrashedBubble::ShowIfNotOffTheRecordProfile(
-@@ -304,9 +307,12 @@ void AddInfoBarsIfNecessary(BrowserWindowInterface* browser,
+         browser,
+         /*skip_tab_checking=*/false);
+@@ -304,9 +331,12 @@ void AddInfoBarsIfNecessary(BrowserWindowInterface* browser,
  #endif
  
  #if !BUILDFLAG(IS_CHROMEOS) && !BUILDFLAG(IS_ANDROID)
