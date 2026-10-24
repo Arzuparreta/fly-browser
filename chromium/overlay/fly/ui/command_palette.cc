@@ -344,6 +344,12 @@ void CommandPalette::ToggleItems(content::WebContents* contents,
   scroll->SetDrawOverflowIndicator(false);
   results_scroll_ = scroll;
   results_ = scroll->SetContents(std::make_unique<views::View>());
+  // Rows are built for what the panel can show and a margin; scrolling and
+  // keyboard selection build the rest as they reach it.
+  initial_rows_ = static_cast<size_t>(max_height / S(kMenuRowHeight)) + 4;
+  scroll_subscription_ = scroll->AddContentsScrolledCallback(
+      base::BindRepeating(&CommandPalette::OnResultsScrolled,
+                          weak_factory_.GetWeakPtr()));
   layout->SetFlexForView(scroll, 1);
   if (style_.command_centre) {
     // The selected command's details sit under the list.
@@ -403,7 +409,10 @@ void CommandPalette::UpdateItems(std::vector<PaletteEntry> items, bool removable
   UpdateHints();
   Refresh();
   for (size_t i = 0; i < filtered_.size(); ++i) {
-    if (filtered_[i].action == selected && buttons_[i]->GetEnabled()) {
+    if (filtered_[i].action != selected)
+      continue;
+    EnsureRows(i + 1);
+    if (buttons_[i]->GetEnabled()) {
       if (selected_ >= 0)
         SetRowSelected(selected_, false);
       selected_ = static_cast<int>(i);
@@ -442,6 +451,7 @@ void CommandPalette::Refresh() {
   remove_buttons_.clear();
   drop_target_ = -1;
   selected_ = -1;
+  last_group_.clear();
   // Build the rows off the widget and attach them once.
   auto rows = std::make_unique<views::View>();
   rows->SetLayoutManager(std::make_unique<views::BoxLayout>(
@@ -504,31 +514,7 @@ void CommandPalette::Refresh() {
                         ? base::NumberToString16(count) + u" commands"
                         : base::NumberToString16(count) +
                               (count == 1 ? u" match" : u" matches"));
-    std::string group;
-    for (size_t i = 0; i < filtered_.size(); ++i) {
-      const auto& entry = filtered_[i];
-      if (groups_[i] != group) {
-        group = groups_[i];
-        auto* header = results_->AddChildView(
-            MakeMenuCaption(base::UTF8ToUTF16(group)));
-        header->SetBorder(views::CreateEmptyBorder(
-            gfx::Insets::TLBR(i ? S(10) : S(2), S(12), S(4), S(12))));
-      }
-      auto* button = results_->AddChildView(std::make_unique<PickerButton>(
-          base::BindRepeating(&CommandPalette::Activate,
-                              weak_factory_.GetWeakPtr(), entry.action),
-          base::UTF8ToUTF16(entry.title), std::u16string(), std::u16string(),
-          ToUTF16(entry.shortcuts), ToUTF16(entry.normal), 0));
-      button->SetHoverCallback(base::BindRepeating(
-          &CommandPalette::Hover, weak_factory_.GetWeakPtr(), i));
-      button->SetEnabled(entry.action.starts_with("terminal:") ||
-                         available_.Run(entry.action));
-      button->SetFocusBehavior(views::View::FocusBehavior::NEVER);
-      button->GetViewAccessibility().SetRole(ax::mojom::Role::kListBoxOption);
-      button->GetViewAccessibility().SetName(base::UTF8ToUTF16(entry.title));
-      button_actions_.push_back(entry.action);
-      buttons_.push_back(button);
-    }
+    EnsureRows(initial_rows_);
     if (buttons_.empty())
       results_->AddChildView(MakeEmptyState(u"No commands match."));
     DisableSubpixelText(results_);
@@ -539,9 +525,71 @@ void CommandPalette::Refresh() {
   }
   filtered_ = query_provider_ ? query_provider_.Run(search_->GetText())
                               : FilterPalette(catalog_, search_->GetText());
-  const bool secondary_line = remove_ || query_provider_;
-  for (size_t i = 0; i < filtered_.size(); ++i) {
-    const auto& entry = filtered_[i];
+  EnsureRows(initial_rows_);
+  if (count_)
+    count_->SetText(filtered_.empty()
+                        ? std::u16string()
+                        : base::NumberToString16(filtered_.size()));
+  if (buttons_.empty() && !(style_.layout == PaletteStyle::Layout::kTop &&
+                            query.empty() && query_provider_))
+    results_->AddChildView(MakeEmptyState(query.empty() ? style_.empty_text
+                                                        : u"No matches."));
+  DisableSubpixelText(results_);
+  results_scroll_->SetContents(std::move(rows));
+  Select(1);
+}
+void CommandPalette::EnsureRows(size_t count) {
+  if (!results_)
+    return;
+  count = std::min(count, filtered_.size());
+  while (buttons_.size() < count)
+    AppendRow(buttons_.size());
+}
+void CommandPalette::ScrollSelectedIntoView() {
+  if (selected_ < 0 || static_cast<size_t>(selected_) >= buttons_.size())
+    return;
+  // A row built just now has no bounds until the next layout.
+  if (auto* widget = buttons_[selected_]->GetWidget())
+    widget->LayoutRootViewIfNecessary();
+  buttons_[selected_]->ScrollViewToVisible();
+}
+void CommandPalette::OnResultsScrolled() {
+  if (!results_ || buttons_.size() >= filtered_.size())
+    return;
+  const auto visible = results_scroll_->GetVisibleRect();
+  if (visible.bottom() + 2 * S(kMenuTallRowHeight) >= results_->height())
+    EnsureRows(buttons_.size() + initial_rows_);
+}
+void CommandPalette::AppendRow(size_t i) {
+  const auto& entry = filtered_[i];
+  views::View* row = nullptr;
+  FlyButton* added = nullptr;
+  if (style_.command_centre) {
+    if (groups_[i] != last_group_) {
+      last_group_ = groups_[i];
+      auto* header = results_->AddChildView(
+          MakeMenuCaption(base::UTF8ToUTF16(last_group_)));
+      header->SetBorder(views::CreateEmptyBorder(
+          gfx::Insets::TLBR(i ? S(10) : S(2), S(12), S(4), S(12))));
+    }
+    auto* button = results_->AddChildView(std::make_unique<PickerButton>(
+        base::BindRepeating(&CommandPalette::Activate,
+                            weak_factory_.GetWeakPtr(), entry.action),
+        base::UTF8ToUTF16(entry.title), std::u16string(), std::u16string(),
+        ToUTF16(entry.shortcuts), ToUTF16(entry.normal), 0));
+    button->SetHoverCallback(base::BindRepeating(
+        &CommandPalette::Hover, weak_factory_.GetWeakPtr(), i));
+    button->SetEnabled(entry.action.starts_with("terminal:") ||
+                       available_.Run(entry.action));
+    button->SetFocusBehavior(views::View::FocusBehavior::NEVER);
+    button->GetViewAccessibility().SetRole(ax::mojom::Role::kListBoxOption);
+    button->GetViewAccessibility().SetName(base::UTF8ToUTF16(entry.title));
+    button_actions_.push_back(entry.action);
+    buttons_.push_back(button);
+    row = button;
+    added = button;
+  } else {
+    const bool secondary_line = remove_ || query_provider_;
     auto text = entry.title;
     if (secondary_line && !entry.category.empty())
       text += "\n" + entry.category;
@@ -604,30 +652,26 @@ void CommandPalette::Refresh() {
                                              base::UTF8ToUTF16(text));
       remove_buttons_.push_back(remove);
     }
+    row = parent;
+    added = button;
   }
-  if (count_)
-    count_->SetText(filtered_.empty()
-                        ? std::u16string()
-                        : base::NumberToString16(filtered_.size()));
-  if (buttons_.empty() && !(style_.layout == PaletteStyle::Layout::kTop &&
-                            query.empty() && query_provider_))
-    results_->AddChildView(MakeEmptyState(query.empty() ? style_.empty_text
-                                                        : u"No matches."));
-  DisableSubpixelText(results_);
-  results_scroll_->SetContents(std::move(rows));
-  Select(1);
+  // Rows that are not built yet still count for assistive technology.
+  added->GetViewAccessibility().SetPosInSet(static_cast<int>(i) + 1);
+  added->GetViewAccessibility().SetSetSize(static_cast<int>(filtered_.size()));
+  DisableSubpixelText(row);
 }
 void CommandPalette::Select(int direction) {
   if (buttons_.empty())
     return;
   if (selected_ >= 0)
     SetRowSelected(selected_, false);
-  const int count = static_cast<int>(buttons_.size());
+  const int count = static_cast<int>(filtered_.size());
   for (int i = 0; i < count; ++i) {
     selected_ = (selected_ + direction + count) % count;
+    EnsureRows(static_cast<size_t>(selected_) + 1);
     if (buttons_[selected_]->GetEnabled()) {
       SetRowSelected(selected_, true);
-      buttons_[selected_]->ScrollViewToVisible();
+      ScrollSelectedIntoView();
       UpdateInspector();
       return;
     }
@@ -714,9 +758,10 @@ bool CommandPalette::HandleOverlayKey(const ui::KeyEvent& event) {
     if (selected_ >= 0) {
       SetRowSelected(selected_, false);
       selected_ = std::clamp(selected_ + (event.key_code() == ui::VKEY_NEXT ? 8 : -8),
-                             0, static_cast<int>(buttons_.size()) - 1);
+                             0, static_cast<int>(filtered_.size()) - 1);
+      EnsureRows(static_cast<size_t>(selected_) + 1);
       SetRowSelected(selected_, true);
-      buttons_[selected_]->ScrollViewToVisible();
+      ScrollSelectedIntoView();
       UpdateInspector();
     }
     return true;

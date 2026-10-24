@@ -6,6 +6,7 @@
 
 #include <memory>
 #include <vector>
+#include "base/callback_list.h"
 #include "base/functional/callback.h"
 #include "ui/gfx/geometry/insets.h"
 #include "base/memory/raw_ptr.h"
@@ -101,10 +102,13 @@ class CommandPalette : public views::TextfieldController,
   bool active() const { return overlay_ && !closing_; }
   views::Textfield* search_for_testing() { return search_; }
   views::MdTextButton* row_for_testing(size_t index) {
+    EnsureRows(index + 1);
     return index < buttons_.size() ? buttons_[index].get() : nullptr;
   }
+  size_t built_rows_for_testing() const { return buttons_.size(); }
   size_t result_count_for_testing() const { return filtered_.size(); }
   views::MdTextButton* remove_for_testing(size_t index) {
+    EnsureRows(index + 1);
     return index < remove_buttons_.size() ? remove_buttons_[index].get() : nullptr;
   }
   void ContentsChanged(views::Textfield*, const std::u16string&) override;
@@ -118,6 +122,11 @@ class CommandPalette : public views::TextfieldController,
 
  private:
   void Refresh();
+  // Builds the rows of filtered_ up to `count`.
+  void EnsureRows(size_t count);
+  void AppendRow(size_t index);
+  void OnResultsScrolled();
+  void ScrollSelectedIntoView();
   void Select(int direction);
   void SetRowSelected(int index, bool selected);
   void Activate(std::string action);
@@ -170,6 +179,10 @@ class CommandPalette : public views::TextfieldController,
   std::string category_ = "All";
   std::vector<std::string> recent_;
   std::vector<std::string> groups_;
+  // The Command Centre caption of the last built row.
+  std::string last_group_;
+  size_t initial_rows_ = 24;
+  base::CallbackListSubscription scroll_subscription_;
   base::WeakPtrFactory<CommandPalette> weak_factory_{this};
 };
 }  // namespace fly
