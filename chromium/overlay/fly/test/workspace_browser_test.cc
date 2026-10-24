@@ -125,6 +125,7 @@
 #include "components/performance_manager/public/performance_manager.h"
 #include "components/prefs/pref_service.h"
 #include "components/tabs/public/tab_interface.h"
+#include "content/public/browser/browser_accessibility_state.h"
 #include "content/public/browser/devtools_agent_host.h"
 #include "content/public/browser/devtools_agent_host_client.h"
 #include "content/public/browser/favicon_status.h"
@@ -133,6 +134,7 @@
 #include "content/public/browser/navigation_entry.h"
 #include "content/public/browser/render_frame_host.h"
 #include "content/public/browser/render_widget_host_view.h"
+#include "content/public/browser/scoped_accessibility_mode.h"
 #include "content/public/browser/web_contents.h"
 #include "content/public/common/content_features.h"
 #include "content/public/test/browser_test.h"
@@ -143,6 +145,7 @@
 #include "net/dns/mock_host_resolver.h"
 #include "net/test/embedded_test_server/embedded_test_server.h"
 #include "net/test/embedded_test_server/http_request.h"
+#include "ui/accessibility/ax_mode.h"
 #include "ui/aura/client/focus_client.h"
 #include "ui/aura/window.h"
 #include "ui/aura/window_tree_host.h"
@@ -6775,6 +6778,91 @@ class FlyPageScrollBrowserTest : public FlyWorkspaceBrowserTest {
     host_resolver()->AddRule("*", "127.0.0.1");
   }
 };
+
+// Hints read only the visible part of the page. A button deep inside a tall
+// frame, scrolled into view, must still get a hint, whether the frame is in
+// the page's process or in another site's process.
+IN_PROC_BROWSER_TEST_F(FlyPageScrollBrowserTest,
+                       HintsReachTargetsDeepInScrolledFrames) {
+  for (const bool cross_site : {false, true}) {
+    SCOPED_TRACE(cross_site ? "cross-site frame" : "same-site frame");
+    ASSERT_TRUE(ui_test_utils::NavigateToURL(
+        browser(), embedded_test_server()->GetURL("a.com", "/title1.html")));
+    auto* contents = Active(browser());
+    ASSERT_TRUE(content::ExecJs(
+        contents,
+        content::JsReplace(R"js(
+      document.body.style.margin = '0';
+      document.body.innerHTML = '<div style="height:4000px"></div>' +
+          '<iframe style="display:block;border:0;width:300px;height:6000px">' +
+          '</iframe><div style="height:4000px"></div>';
+      window.addEventListener('message', e => document.title = e.data);
+      new Promise(resolve => {
+        const frame = document.querySelector('iframe');
+        frame.onload = resolve;
+        frame.src = $1;
+      });
+    )js",
+                           embedded_test_server()->GetURL(
+                               cross_site ? "b.com" : "a.com", "/title1.html"))));
+    auto* frame = content::ChildFrameAt(contents->GetPrimaryMainFrame(), 0);
+    ASSERT_TRUE(frame);
+    EXPECT_EQ(cross_site, frame->IsCrossProcessSubframe());
+    ASSERT_TRUE(content::ExecJs(frame, R"js(
+      document.body.style.margin = '0';
+      document.body.innerHTML =
+          '<div style="height:5000px"></div><button id="deep">Deep</button>';
+      document.querySelector('#deep').onclick =
+          () => parent.postMessage('deep activated', '*');
+    )js"));
+    ASSERT_TRUE(content::ExecJs(contents, "window.scrollTo(0, 4000 + 5000 - 100)"));
+    ASSERT_EQ(true, content::EvalJs(frame, R"js(
+      new Promise(resolve => new IntersectionObserver(entries => {
+        if (entries[0].isIntersecting) resolve(true);
+      }).observe(document.querySelector('#deep')));
+    )js"));
+    auto& window = FlyWindowController::Get();
+    window.Select(browser(), true);
+    contents->Focus();
+    ASSERT_TRUE(base::test::RunUntil([&] {
+      return contents->GetRenderWidgetHostView()->HasFocus();
+    }));
+    ui::test::EventGenerator keys(
+        window.desktop_widget()->GetNativeWindow()->GetRootWindow());
+    keys.PressKey(ui::VKEY_F, ui::EF_ALT_DOWN);
+    ASSERT_TRUE(base::test::RunUntil([&] {
+      return window.hints().active() &&
+             window.hints().target_count_for_testing() > 0;
+    })) << "cancellation=" << window.hints().cancellation_for_testing();
+    EXPECT_EQ(1u, window.hints().target_count_for_testing());
+    EXPECT_TRUE(contents->GetAccessibilityMode().HasFilterFlags(
+        ui::AXMode::kOnScreenOnly));
+    content::TitleWatcher title(contents, u"deep activated");
+    keys.PressKey(ui::VKEY_Q, ui::EF_NONE);
+    EXPECT_EQ(u"deep activated", title.WaitAndGetTitle());
+    EXPECT_FALSE(window.hints().active());
+    EXPECT_FALSE(contents->GetAccessibilityMode().has_mode(
+        ui::AXMode::kWebContents));
+  }
+
+  // A screen reader's full tree is not reduced to the visible part.
+  auto* contents = Active(browser());
+  auto screen_reader = content::BrowserAccessibilityState::GetInstance()
+                           ->CreateScopedModeForWebContents(
+                               contents, ui::kAXModeComplete);
+  auto& window = FlyWindowController::Get();
+  ui::test::EventGenerator keys(
+      window.desktop_widget()->GetNativeWindow()->GetRootWindow());
+  keys.PressKey(ui::VKEY_F, ui::EF_ALT_DOWN);
+  ASSERT_TRUE(base::test::RunUntil([&] {
+    return window.hints().active() &&
+           window.hints().target_count_for_testing() > 0;
+  })) << "cancellation=" << window.hints().cancellation_for_testing();
+  EXPECT_FALSE(contents->GetAccessibilityMode().HasFilterFlags(
+      ui::AXMode::kOnScreenOnly));
+  keys.PressKey(ui::VKEY_ESCAPE, ui::EF_NONE);
+  EXPECT_FALSE(window.hints().active());
+}
 
 IN_PROC_BROWSER_TEST_F(FlyPageScrollBrowserTest,
                        FocusedContainerPixelsHalfPageAndEditableKeys) {
