@@ -1560,6 +1560,9 @@ void FlyWindowController::UpdateSidebarMode() {
   UpdateSidebarVisibility();
   sidebar_motion_ready_ = true;
 }
+std::u16string FlyWindowController::workspace_header_for_testing() const {
+  return std::u16string(workspace_label_->GetText());
+}
 bool FlyWindowController::sidebar_expanded_for_testing() const {
   return sidebar_expanded_;
 }
@@ -1982,8 +1985,10 @@ void FlyWindowController::UpdateWorkspaceHeader() {
     name = u"Private";
     badge = u"P";
     compact = u"P";
-  } else if (catalog && selected_) {
-    const auto& id = entries_.at(selected_).workspace_id;
+  } else if (catalog) {
+    // An empty workspace has no selected browser; it is the active one.
+    const std::string& id =
+        selected_ ? entries_.at(selected_).workspace_id : catalog->active_id;
     for (size_t i = 0; i < catalog->items.size(); ++i) {
       if (catalog->items[i].id != id)
         continue;
@@ -4745,6 +4750,10 @@ void FlyWindowController::UpdateWelcome() {
     for (const auto& item : catalog->items)
       if (item.id == catalog->active_id)
         name = base::UTF8ToUTF16(item.name);
+  // The sidebar header and the status bar name the empty workspace too.
+  if (status_bar_)
+    status_bar_->SetBrowser(nullptr, name);
+  UpdateWorkspaceHeader();
   const auto config = commands_.Read().value_or(DefaultKeyboardConfig());
   // Electron writes bindings as "Ctrl + T".
   const auto keys = [&](const char* action) {
