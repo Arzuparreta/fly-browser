@@ -841,6 +841,23 @@ IN_PROC_BROWSER_TEST_F(FlySidebarBrowserTest, SlideUpdatesOnlyTheHoveredRow) {
   EXPECT_TRUE(other_close->GetVisible());
 }
 
+// Rows and badges are refreshed with unchanged text often (titles, loading,
+// hovered links); an unchanged text must not repaint them.
+IN_PROC_BROWSER_TEST_F(FlySidebarBrowserTest, UnchangedButtonTextKeepsBorder) {
+  auto* list = FlyWindowController::Get().tab_sidebar_for_testing();
+  auto* contents = Active(browser());
+  ASSERT_TRUE(base::test::RunUntil(
+      [&] { return list->row_for_testing(contents); }));
+  auto* select =
+      static_cast<views::LabelButton*>(list->row_for_testing(contents)->children()[0].get());
+  // MdTextButton::SetText() replaces the border, which repaints the button.
+  const auto* border = select->GetBorder();
+  select->SetText(std::u16string(select->GetText()));
+  EXPECT_EQ(border, select->GetBorder());
+  select->SetText(u"Changed");
+  EXPECT_NE(border, select->GetBorder());
+}
+
 // Electron's sidebar: the collapsed rail is the panel's left column. The
 // edge slides 224px and the panel slides back by the same amount on the
 // compositor, so rows and favicons never move.

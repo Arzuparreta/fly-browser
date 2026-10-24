@@ -80,6 +80,7 @@ struct RowState {
   bool muted = false;
   int split_pane = 0;  // 1 or 2 inside a split view.
   bool HasSurface() const { return selected || pinned || split_pane; }
+  bool operator==(const RowState&) const = default;
 };
 
 // Electron's tab text: titles longer than 24 characters are cut there.
@@ -295,7 +296,11 @@ class TabRowView : public views::View {
   RowBadge* audio_badge() { return audio_; }
   const RowState& state() const { return state_; }
   bool hovered() const { return hovered_; }
-  void SetState(const RowState& state) {
+  // Returns whether the row's look changed.
+  bool SetState(const RowState& state) {
+    if (has_state_ && state == state_)
+      return false;
+    has_state_ = true;
     state_ = state;
     pin_->SetVisible(state.pinned);
     audio_->SetVisible(state.audible || state.muted);
@@ -305,6 +310,7 @@ class TabRowView : public views::View {
     UpdateClose();
     InvalidateLayout();
     SchedulePaint();
+    return true;
   }
   void UpdateClose() {
     // .tab-close-btn keeps its space and shows on the hovered or selected
@@ -376,6 +382,7 @@ class TabRowView : public views::View {
   raw_ptr<RowBadge> close_ = nullptr;
   raw_ptr<RowBadge> audio_ = nullptr;
   RowState state_;
+  bool has_state_ = false;
   bool hovered_ = false;
 };
 BEGIN_METADATA(TabRowView)
@@ -851,10 +858,15 @@ void TabSidebar::Refresh() {
   // Preserve existing row objects and focus through title/selection changes.
   // Remove obsolete rows before rebuilding; a reused allocation is not an
   // identity match when its original WeakPtr has expired.
+  // Titles, favicons and loading change far more often than the rows'
+  // number, order or state; only those relayout the list and repaint its
+  // surfaces.
+  bool changed = false;
   for (auto it = tab_rows_.begin(); it != tab_rows_.end();) {
     if (!live.contains(it->first) || !it->second.contents) {
       auto removed = rows_->RemoveChildViewT(it->second.view.get());
       it = tab_rows_.erase(it);
+      changed = true;
     } else {
       ++it;
     }
@@ -866,6 +878,7 @@ void TabSidebar::Refresh() {
   for (int i = 0; i < model_->count(); ++i) {
     auto* contents = model_->GetWebContentsAt(i);
     if (!tab_rows_.contains(contents)) {
+      changed = true;
       auto callback = [&](RowAction action) {
         return base::BindRepeating(&TabSidebar::Invoke,
                                    weak_factory_.GetWeakPtr(),
@@ -915,7 +928,10 @@ void TabSidebar::Refresh() {
     }
     auto& row = tab_rows_.at(contents);
     auto* view = row.view.get();
-    rows_->ReorderChildView(view, i);
+    if (rows_->GetIndexOf(view) != static_cast<size_t>(i)) {
+      rows_->ReorderChildView(view, i);
+      changed = true;
+    }
     std::u16string title = contents->GetTitle();
     if (title.empty())
       title = base::UTF8ToUTF16(contents->GetVisibleURL().spec());
@@ -940,7 +956,7 @@ void TabSidebar::Refresh() {
       }
     }
     const int previous_split = view->state().split_pane;
-    view->SetState(state);
+    changed |= view->SetState(state);
     const auto* audio_status = state.muted     ? u", muted"
                                : state.audible ? u", playing audio"
                                                : u"";
@@ -987,8 +1003,10 @@ void TabSidebar::Refresh() {
                                       : u"Tab playing audio (click to mute)");
     view->audio()->GetViewAccessibility().SetName(audio_label);
   }
-  rows_->InvalidateLayout();
-  RepaintSurfaces();
+  if (changed) {
+    rows_->InvalidateLayout();
+    RepaintSurfaces();
+  }
 }
 void TabSidebar::Invoke(base::WeakPtr<content::WebContents> contents,
                         RowAction action) {
