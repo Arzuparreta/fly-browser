@@ -193,6 +193,7 @@ class FlyWindowController : public views::WidgetDelegate,
                              const gfx::Rect& bounds) override;
   void FocusSidebar();
   bool sidebar_expanded_for_testing() const;
+  std::u16string workspace_header_for_testing() const;
   bool clock_timer_running_for_testing() const {
     return clock_timer_.IsRunning();
   }

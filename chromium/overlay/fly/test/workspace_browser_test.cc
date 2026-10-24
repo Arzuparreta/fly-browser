@@ -4785,6 +4785,9 @@ IN_PROC_BROWSER_TEST_F(FlyWorkspaceBrowserTest,
   ASSERT_TRUE(welcome);
   EXPECT_TRUE(welcome->GetVisible());
   EXPECT_EQ(u"EMPTY SOON", welcome->workspace_for_testing());
+  EXPECT_EQ(u"Empty soon", window.workspace_header_for_testing());
+  EXPECT_EQ(u"EMPTY SOON",
+            window.status_bar_for_testing()->workspace_for_testing()->GetText());
   auto* new_tab = static_cast<views::Button*>(welcome->card_for_testing(0));
   ASSERT_TRUE(new_tab);
   views::test::ButtonTestApi(new_tab).NotifyDefaultMouseClick();
