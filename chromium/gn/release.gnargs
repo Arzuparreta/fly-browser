@@ -11,5 +11,8 @@ use_remoteexec = false
 use_siso = true
 proprietary_codecs = true
 ffmpeg_branding = "Chrome"
+# Widevine: the browser loads Google's CDM, which the component updater
+# downloads into the user data directory. Fly never ships the CDM itself.
+enable_widevine = true
 # No profile-guided optimisation data is fetched for this checkout.
 chrome_pgo_phase = 0
