@@ -346,9 +346,6 @@ class FlyWindowController : public views::WidgetDelegate,
   void CheckUpdates(bool manual);
   void MaybeShowWhatsNew();
   void OpenInNewTab(GURL url);
-  void QueueLegacyImport(BrowserWindowInterface* browser);
-  void ApplyLegacyImport(base::WeakPtr<BrowserWindowInterface> browser,
-                         int attempts);
   void ApplyProfilePreferencesEverywhere();
   void ScheduleExtensionRefresh();
   void RefreshExtensionActions();
@@ -406,11 +403,6 @@ class FlyWindowController : public views::WidgetDelegate,
   SiteZoom site_zoom_;
   std::unique_ptr<CommandPalette> extensions_picker_;
   bool extension_refresh_pending_ = false;
-  // Pending per-profile import state (fly-legacy-import.json), loaded once.
-  std::optional<base::DictValue> legacy_import_;
-  bool legacy_import_loading_ = false;
-  scoped_refptr<base::SequencedTaskRunner> legacy_import_writer_;
-  std::vector<base::WeakPtr<BrowserWindowInterface>> legacy_import_waiting_;
   std::unique_ptr<DiagnosticsHub> diagnostics_hub_;
   std::vector<DiagnosticEvent> diagnostics_events_;
   DiagnosticsSession CurrentDiagnostics();

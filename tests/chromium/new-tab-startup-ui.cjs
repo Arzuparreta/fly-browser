@@ -25,7 +25,7 @@ const report = [];
         try {
             const start = performance.now();
             child = spawn(binary, ['--fly-native', `--user-data-dir=${profile}`,
-                `--fly-import-from=${home}/empty`, '--no-first-run', '--test-type',
+                '--no-first-run', '--test-type',
                 '--ozone-platform=x11', '--password-store=basic', '--remote-debugging-port=0'], {
                 env:{...process.env,HOME:home,XDG_CONFIG_HOME:home,XDG_CACHE_HOME:home},
                 stdio:'ignore'});

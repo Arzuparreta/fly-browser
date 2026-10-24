@@ -21,13 +21,12 @@ class Profile;
 
 namespace fly {
 // User scripts and styles (<user data>/scripts/*.user.js and
-// styles/*.user.css), the Electron userContent.js feature.
+// styles/*.user.css).
 //
-// Native Fly generates the "Fly User Content" extension in
+// Fly generates the "Fly User Content" extension in
 // <user data>/fly-user-content: its fixed worker (fly_resources/user_content)
-// plus content.js holding the current files and legacy GM values from
-// script-storage/. The worker parses metadata, registers chrome.userScripts
-// and serves the GM_* bridge. Edits in the folders regenerate content.js and
+// plus content.js holding the current files. The worker parses metadata,
+// registers chrome.userScripts and serves the GM_* bridge. Edits in the folders regenerate content.js and
 // reload the extension in every workspace.
 class UserContentService : public ProfileObserver {
  public:
@@ -42,7 +41,7 @@ class UserContentService : public ProfileObserver {
   void AddProfile(Profile* profile);
   // Rereads the folders now (reload-user-content).
   void Reload();
-  // Electron's email_handler for the Share menu ("system" or a compose URL
+  // The email_handler preference for the Share menu ("system" or a compose URL
   // with %s/%b); regenerates the extension when it changes.
   void SetEmailHandler(std::string handler);
   size_t script_count() const { return scripts_; }

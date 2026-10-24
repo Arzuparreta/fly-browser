@@ -29,16 +29,9 @@
 #include "chrome/browser/shell_integration_linux.h"
 #endif
 #include "fly/ui/fly_extensions.h"
-#include "fly/import/legacy_import.h"
 #include "base/files/file_util.h"
 #include "chrome/browser/ui/tabs/tab_enums.h"
-#include "base/files/important_file_writer.h"
-#include "base/json/json_reader.h"
-#include "base/json/json_writer.h"
 #include "base/task/thread_pool.h"
-#include "chrome/browser/history/history_service_factory.h"
-#include "components/history/core/browser/history_service.h"
-#include "content/public/browser/host_zoom_map.h"
 #include "content/public/common/url_constants.h"
 #include "fly/ui/diagnostics_hub.h"
 #include "fly/ui/site_zoom.h"
@@ -56,7 +49,6 @@
 #include "base/command_line.h"
 #include "base/path_service.h"
 #include "ui/gfx/image/image.h"
-#include "base/containers/adapters.h"
 #include "fly/fly_version.h"
 #include "chrome/app/vector_icons/vector_icons.h"
 #include "components/omnibox/browser/vector_icons.h"
@@ -2146,7 +2138,6 @@ void FlyWindowController::Prepare(BrowserWindowInterface* browser) {
     extensions_->AddProfile(browser->GetProfile());
     user_content_->AddProfile(browser->GetProfile());
     site_zoom_.AddProfile(browser->GetProfile());
-    QueueLegacyImport(browser);
   }
   ScheduleWorkspaceRefresh();
 }
@@ -4554,161 +4545,6 @@ void FlyWindowController::ChooseExtensionAction(content::WebContents*,
     anchor = desktop_->GetContentsView();
   }
   extensions_->RunAction(selected_, id, anchor);
-}
-
-void FlyWindowController::QueueLegacyImport(BrowserWindowInterface* browser) {
-  if (legacy_import_) {
-    base::SingleThreadTaskRunner::GetCurrentDefault()->PostTask(
-        FROM_HERE, base::BindOnce(&FlyWindowController::ApplyLegacyImport,
-                                  weak_factory_.GetWeakPtr(),
-                                  browser->GetWeakPtr(), 0));
-    return;
-  }
-  legacy_import_waiting_.push_back(browser->GetWeakPtr());
-  if (legacy_import_loading_)
-    return;
-  legacy_import_loading_ = true;
-  const auto file = g_browser_process->profile_manager()
-                        ->user_data_dir()
-                        .AppendASCII(kLegacyImportFile);
-  base::ThreadPool::PostTaskAndReplyWithResult(
-      FROM_HERE, {base::MayBlock(), base::TaskPriority::USER_VISIBLE},
-      base::BindOnce(
-          [](base::FilePath file) -> std::optional<base::DictValue> {
-            std::string text;
-            if (!base::ReadFileToStringWithMaxSize(file, &text,
-                                                   64 * 1024 * 1024)) {
-              if (base::PathExists(
-                      file.DirName().AppendASCII(kLegacyImportWaitingFile)))
-                return base::DictValue().Set(
-                    "summary",
-                    "Electron Fly was open, so its workspaces were not "
-                    "imported. Close Electron Fly and restart Fly to import "
-                    "them.");
-              return std::nullopt;
-            }
-            return base::JSONReader::ReadDict(text, base::JSON_PARSE_RFC);
-          },
-          file),
-      base::BindOnce(
-          [](base::WeakPtr<FlyWindowController> window,
-             std::optional<base::DictValue> state) {
-            if (!window)
-              return;
-            window->legacy_import_ =
-                state ? std::move(*state) : base::DictValue();
-            if (const auto* summary =
-                    window->legacy_import_->FindString("summary");
-                summary && !window->legacy_import_->FindBool("announced"))
-              window->ShowStatus(base::UTF8ToUTF16(*summary));
-            for (auto& browser : window->legacy_import_waiting_)
-              window->ApplyLegacyImport(browser, 0);
-            window->legacy_import_waiting_.clear();
-          },
-          weak_factory_.GetWeakPtr()));
-}
-void FlyWindowController::ApplyLegacyImport(
-    base::WeakPtr<BrowserWindowInterface> browser,
-    int attempts) {
-  if (!browser || closing_ || !legacy_import_)
-    return;
-  auto* profiles = legacy_import_->FindDict("profiles");
-  Profile* profile = browser->GetProfile();
-  const auto directory = profile->GetPath().BaseName().AsUTF8Unsafe();
-  auto* entry = profiles ? profiles->FindDict(directory) : nullptr;
-  if (!entry)
-    return;
-  auto* model = browser->GetTabStripModel();
-  // Startup adds the browser's first tab after its window; wait for it.
-  if (model->empty() && attempts < 20) {
-    base::SingleThreadTaskRunner::GetCurrentDefault()->PostDelayedTask(
-        FROM_HERE,
-        base::BindOnce(&FlyWindowController::ApplyLegacyImport,
-                       weak_factory_.GetWeakPtr(), browser, attempts + 1),
-        base::Milliseconds(100));
-    return;
-  }
-  if (const auto* zoom = entry->FindDict("zoom")) {
-    auto* map = content::HostZoomMap::GetDefaultForBrowserContext(profile);
-    for (const auto [host, level] : *zoom)
-      if (level.is_double() || level.is_int())
-        map->SetZoomLevelForHost(host, level.GetDouble());
-  }
-  if (const auto* history = entry->FindList("history")) {
-    if (auto* service = HistoryServiceFactory::GetForProfile(
-            profile, ServiceAccessType::EXPLICIT_ACCESS)) {
-      // Electron lists the newest visit first; adding the oldest first leaves
-      // each page with its newest title.
-      for (const auto& item : base::Reversed(*history)) {
-        const auto* visit = item.GetIfDict();
-        const auto* url = visit ? visit->FindString("url") : nullptr;
-        if (!url || !GURL(*url).SchemeIsHTTPOrHTTPS())
-          continue;
-        const auto stamp = visit->FindDouble("timestamp");
-        service->AddPage(GURL(*url),
-                         stamp ? base::Time::FromMillisecondsSinceUnixEpoch(
-                                     *stamp)
-                               : base::Time::Now(),
-                         history::SOURCE_BROWSED);
-        if (const auto* title = visit->FindString("title"))
-          service->SetPageTitle(GURL(*url), base::UTF8ToUTF16(*title));
-      }
-    }
-  }
-  if (const auto* tabs = entry->FindList("tabs"); tabs && !tabs->empty()) {
-    // A lone blank startup tab gives way to the imported ones.
-    content::WebContents* blank = nullptr;
-    if (model->count() == 1) {
-      const GURL& first = model->GetWebContentsAt(0)->GetVisibleURL();
-      if (IsFlyNewTabPage(first) || first.SchemeIs(content::kChromeUIScheme))
-        blank = model->GetWebContentsAt(0);
-    }
-    for (const auto& item : *tabs) {
-      const auto* tab = item.GetIfDict();
-      const auto* url = tab ? tab->FindString("url") : nullptr;
-      if (!url || !GURL(*url).is_valid())
-        continue;
-      NavigateParams params(browser.get(), GURL(*url),
-                            ui::PAGE_TRANSITION_AUTO_TOPLEVEL);
-      params.disposition = WindowOpenDisposition::NEW_BACKGROUND_TAB;
-      Navigate(&params);
-      if (tab->FindBool("pinned").value_or(false) &&
-          params.navigated_or_inserted_contents) {
-        const int index = model->GetIndexOfWebContents(
-            params.navigated_or_inserted_contents);
-        if (index != TabStripModel::kNoTab)
-          model->SetTabPinned(index, true);
-      }
-    }
-    if (blank && model->count() > 1) {
-      const int index = model->GetIndexOfWebContents(blank);
-      if (index != TabStripModel::kNoTab)
-        model->CloseWebContentsAt(index, TabCloseTypes::CLOSE_NONE);
-    }
-    if (!model->empty())
-      model->ActivateTabAt(0);
-  }
-  profiles->Remove(directory);
-  legacy_import_->Set("announced", true);
-  std::string json;
-  base::JSONWriter::WriteWithOptions(
-      *legacy_import_, base::JSONWriter::OPTIONS_PRETTY_PRINT, &json);
-  // One sequence keeps the snapshots in order, and shutdown waits for the
-  // last one, so applied tabs and history are never added twice.
-  if (!legacy_import_writer_) {
-    legacy_import_writer_ = base::ThreadPool::CreateSequencedTaskRunner(
-        {base::MayBlock(), base::TaskPriority::USER_VISIBLE,
-         base::TaskShutdownBehavior::BLOCK_SHUTDOWN});
-  }
-  legacy_import_writer_->PostTask(
-      FROM_HERE,
-      base::BindOnce(
-          [](base::FilePath file, std::string json) {
-            base::ImportantFileWriter::WriteFileAtomically(file, json);
-          },
-          g_browser_process->profile_manager()->user_data_dir().AppendASCII(
-              kLegacyImportFile),
-          std::move(json)));
 }
 
 // Electron highlights the reader button while the active tab shows the reader.

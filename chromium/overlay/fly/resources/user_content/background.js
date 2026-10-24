@@ -1,18 +1,16 @@
 // Fly User Content: runs the files in Fly's scripts/ and styles/ folders.
 //
-// Native Fly writes content.js next to this file (self.FLY_USER_CONTENT =
-// {version, flyVersion, scripts: [{file, text}], styles: [{file, text}],
-// legacyStorage: {scriptId: {...}}}) and reloads this extension when the
-// folders change. Metadata parsing and URL matching are the Electron
-// userContent.js rules; the GM_* API is modules/userScriptShim.js, bridged to
+// Fly writes content.js next to this file (self.FLY_USER_CONTENT =
+// {version, flyVersion, scripts: [{file, text}], styles: [{file, text}]}) and
+// reloads this extension when the folders change. The GM_* API is bridged to
 // this worker through user script messaging.
 'use strict';
 
 importScripts('content.js');
 
-const CONTENT = self.FLY_USER_CONTENT || {scripts: [], styles: [], legacyStorage: {}};
+const CONTENT = self.FLY_USER_CONTENT || {scripts: [], styles: []};
 
-// ---- Shared with Electron userContent.js (pure functions) ----------------
+// ---- Metadata parsing and URL matching (pure functions) -------------------
 function escapeRegex(str) {
   return str.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 }
@@ -321,12 +319,6 @@ async function register() {
         worldId: 'fly-styles'});
   }
   if (registrations.length) await chrome.userScripts.register(registrations);
-  // Values saved by Electron Fly (script-storage/) seed scripts that have none.
-  for (const [id, values] of Object.entries(CONTENT.legacyStorage || {})) {
-    const key = 'gm:' + id;
-    const current = await chrome.storage.local.get(key);
-    if (!current[key]) await chrome.storage.local.set({[key]: values});
-  }
   await chrome.storage.local.set({registered: CONTENT.version, metas});
 }
 
