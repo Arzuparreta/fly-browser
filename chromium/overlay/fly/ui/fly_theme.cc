@@ -303,11 +303,15 @@ void FlyButton::SetSelected(bool selected) {
   UpdateColors();
 }
 void FlyButton::SetVectorIcon(const gfx::VectorIcon& icon, int size) {
+  if (icon_ == &icon && icon_size_ == size)
+    return;
   icon_ = &icon;
   icon_size_ = size;
   UpdateColors();
 }
 void FlyButton::SetAccentText(bool accent) {
+  if (accent_text_ == accent)
+    return;
   accent_text_ = accent;
   UpdateColors();
 }
@@ -363,6 +367,10 @@ void FlyButton::StateChanged(ButtonState old_state) {
     pill_partner_->SchedulePaint();
 }
 void FlyButton::SetText(std::u16string_view text) {
+  // MdTextButton::SetText() replaces the border, which relays out and
+  // repaints the button; rows and badges refresh with unchanged text often.
+  if (text == GetText())
+    return;
   views::MdTextButton::SetText(text);
   if (text.empty() && GetCustomPadding())
     SetBorder(views::CreateEmptyBorder(*GetCustomPadding()));
