@@ -317,4 +317,79 @@ const KeyboardConfig& DefaultKeyboardConfig() {
   }());
   return *config;
 }
+KeyboardValidation ResolveKeyboardChanges(const base::DictValue& changes) {
+  const auto* shortcuts = changes.FindDict("shortcuts");
+  const auto* normal = changes.FindDict("normal");
+  if (!shortcuts || !normal)
+    return Invalid("Invalid binding tables.");
+  auto candidate = DefaultKeyboardConfig().ToValue();
+  if (const auto* tabs = changes.Find("tabs"))
+    candidate.Set("tabs", tabs->Clone());
+  // Explicit choices claim their chords first. Defaults yield conflicting
+  // chords/sequences, preserving assignments across later default changes.
+  std::set<std::string> global_choices;
+  std::set<std::string> page_choices;
+  for (const auto* table : {shortcuts, normal}) {
+    for (const auto [action, value] : *table) {
+      if (!IsKnownAction(action))
+        return Invalid("Unknown action: " + action);
+      if (!value.is_list())
+        return Invalid("Bindings must be lists: " + action);
+      for (const auto& binding : value.GetList()) {
+        if (!binding.is_string())
+          return Invalid("Bindings must be text: " + action);
+        (table == shortcuts ? global_choices : page_choices)
+            .insert(binding.GetString());
+      }
+    }
+  }
+  // A newly introduced default tab modifier cannot steal an explicit choice.
+  if (!changes.contains("tabs")) {
+    const auto numbered = CompileBindings({}, DefaultKeyboardConfig().tabs);
+    for (const auto& [chord, action] : numbered) {
+      if (global_choices.contains(chord) ||
+          std::ranges::any_of(page_choices, [&](const std::string& choice) {
+            return Conflicts(choice, chord);
+          })) {
+        candidate.Set("tabs", "");
+        break;
+      }
+    }
+  }
+  for (const auto scope : {"shortcuts", "normal"}) {
+    auto* table = candidate.FindDict(scope);
+    const bool global = std::string_view(scope) == "shortcuts";
+    const auto& chosen = global ? *shortcuts : *normal;
+    for (auto [action, value] : *table) {
+      if (const auto* override = chosen.Find(action)) {
+        value = override->Clone();
+        continue;
+      }
+      value.GetList().EraseIf([&](const base::Value& binding) {
+        const auto& chord = binding.GetString();
+        if (global_choices.contains(chord))
+          return true;
+        if (!global) {
+          for (const auto& stroke : base::SplitString(
+                   chord, " ", base::KEEP_WHITESPACE, base::SPLIT_WANT_ALL)) {
+            if (global_choices.contains(stroke))
+              return true;
+          }
+        }
+        for (const auto& choice : page_choices) {
+          if (Conflicts(chord, choice))
+            return true;
+          if (global) {
+            const auto strokes = base::SplitString(
+                choice, " ", base::KEEP_WHITESPACE, base::SPLIT_WANT_ALL);
+            if (std::ranges::find(strokes, chord) != strokes.end())
+              return true;
+          }
+        }
+        return false;
+      });
+    }
+  }
+  return ValidateKeyboardConfig(candidate);
+}
 }  // namespace fly

@@ -46,35 +46,6 @@ const cases = {
         return {name, input, ok: result.ok, ...(result.ok ? {output: result.config} : {})};
     })
 };
-// Electron keybinds.json files as the import must read them: values earlier
-// versions wrote as defaults are not user choices (keybinds.js storedDefault).
-const storedDefaults = JSON.parse(fs.readFileSync(path.join(root, 'stored-keybind-defaults.json'), 'utf8'));
-const legacyFiles = [
-    {name: 'unversioned former default', input: {'focus-sidebar': 'Ctrl+S'}},
-    {name: 'unversioned choice', input: {'focus-sidebar': 'Ctrl+Q', 'spawn-tab': 'Ctrl+Y'}},
-    {name: 'unversioned disabled action', input: {'reload-active-tab': ''}},
-    {name: 'unversioned retired action', input: {'toggle-notes': 'Ctrl+J', 'jump-to-tab-1': 'Ctrl+1'}},
-    {name: 'saved defaults without changesOnly', input: {version: 2, shortcuts: structuredClone(defaults.config.shortcuts),
-        normal: structuredClone(defaults.config.normal), tabs: defaults.config.tabs}},
-    {name: 'saved file with one change', input: {version: 2, shortcuts: {...structuredClone(defaults.config.shortcuts),
-        'spawn-tab': ['Ctrl+Y']}, normal: {'scroll-down': ['N']}}},
-    {name: 'changes only', input: {version: 2, changesOnly: true, shortcuts: {'spawn-tab': ['Ctrl+Y']}, normal: {}}},
-    {name: 'changes only keeps a former default', input: {version: 2, changesOnly: true,
-        shortcuts: {'focus-sidebar': ['Ctrl+S']}, normal: {}}},
-    {name: 'choice takes a default chord', input: {version: 2, changesOnly: true,
-        shortcuts: {'spawn-tab': ['Ctrl+W']}, normal: {}}},
-    {name: 'choice takes the tab chords', input: {version: 2, changesOnly: true,
-        shortcuts: {'spawn-tab': ['Alt+1']}, normal: {}}},
-    {name: 'page choice takes a default key', input: {version: 2, changesOnly: true,
-        shortcuts: {}, normal: {'scroll-up': ['J']}}},
-    {name: 'page choice shadows a default sequence', input: {version: 2, changesOnly: true,
-        shortcuts: {}, normal: {'scroll-down': ['G']}}},
-    {name: 'unsupported version', input: {version: 3, shortcuts: {}, normal: {}}},
-];
-const legacyKeyboardCases = legacyFiles.map(({name, input}) => {
-    const result = keybinds.resolveKeybinds(structuredClone(input));
-    return {name, input, ok: result.ok, ...(result.ok ? {output: result.config} : {})};
-});
 // Command Centre texts (modules/overlays/commandPalette.js COMMAND_DEFINITIONS);
 // actions are functions there and are not evaluated here.
 const paletteSource = fs.readFileSync(path.join(root, 'modules/overlays/commandPalette.js'), 'utf8')
@@ -112,8 +83,6 @@ namespace fly {
 inline constexpr std::string_view kActionMetadataJSON = ${literal(keybinds.ACTION_METADATA)};
 inline constexpr std::string_view kDefaultKeyboardJSON = ${literal(defaults.config)};
 inline constexpr std::string_view kKeyboardCasesJSON = ${literal(cases)};
-inline constexpr std::string_view kStoredKeyboardDefaultsJSON = ${literal(storedDefaults)};
-inline constexpr std::string_view kLegacyKeyboardCasesJSON = ${literal(legacyKeyboardCases)};
 inline constexpr std::string_view kWebsiteThemeCasesJSON = ${literal(websiteThemeCases)};
 inline constexpr std::string_view kPaletteEntriesJSON = ${literal(paletteEntries)};
 inline constexpr std::string_view kCommandDefinitionsJSON = ${literal(commandDefinitions)};

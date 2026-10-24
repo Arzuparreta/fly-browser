@@ -20,16 +20,15 @@ try {
     fs.writeFileSync(executable, '#!/bin/sh\nprintf "%s\\n" "$@"\nexit 17\n', {mode:0o755});
     const launch = run('launch.sh', ['https://example.org/a b'], env);
     assert.equal(launch.status, 17, launch.stderr);
-    assert.equal(launch.stdout, `--fly-native\n--class=fly-browser-dev\n--user-data-dir=${env.XDG_CONFIG_HOME}/fly-browser-dev\n--fly-import-from=${env.XDG_CONFIG_HOME}/fly-browser-dev/empty-import\nhttps://example.org/a b\n`);
-    assert.deepEqual(fs.readdirSync(path.join(env.XDG_CONFIG_HOME, 'fly-browser-dev/empty-import')), []);
+    assert.equal(launch.stdout, `--fly-native\n--class=fly-browser-dev\n--user-data-dir=${env.XDG_CONFIG_HOME}/fly-browser-dev\nhttps://example.org/a b\n`);
     // Prefer the development build; preserve explicit output and caller arguments.
     const native = path.join(engine, 'src/out/FlyNative/chrome');
     fs.mkdirSync(path.dirname(native), {recursive:true});
     fs.writeFileSync(native, '#!/bin/sh\nprintf "native:%s\\n" "$@"\nexit 19\n', {mode:0o755});
     assert.equal(run('launch.sh', [], env).status, 19);
     assert.equal(run('launch.sh', [], {...env, FLY_ENGINE_OUTPUT:'out/FlyRelease'}).status, 17);
-    const custom = run('launch.sh', ['--user-data-dir=/custom profile', '--fly-import-from=/custom import'], env);
-    assert.match(custom.stdout, /native:--user-data-dir=\/custom profile\nnative:--fly-import-from=\/custom import\n$/);
+    const custom = run('launch.sh', ['--user-data-dir=/custom profile', '--class=custom'], env);
+    assert.match(custom.stdout, /native:--user-data-dir=\/custom profile\nnative:--class=custom\n$/);
     // Model this machine's external engine layout without depending on its files.
     const checkout = path.join(temp, 'storage/projects/fly-browser');
     const nearbyEngine = path.join(temp, 'storage/fly-chromium');

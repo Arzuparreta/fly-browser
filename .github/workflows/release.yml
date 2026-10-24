@@ -103,10 +103,7 @@ jobs:
 
             Download the native Chromium Linux x64 tarball below and verify it
             against `SHA256SUMS.txt`. Extract it and run `./install.sh`, or use
-            `fly-install install`. Close Electron Fly before the first native start.
-            Electron profiles are retained; reinstall hand-installed extensions
-            from the Chrome Web Store. macOS, Windows and AppImage packages are
-            legacy Electron downloads and are not produced by this release.
+            `fly-install install`.
 
             On Arch Linux, download `PKGBUILD` below into an empty directory
             and run `makepkg -si` there: it installs `fly-browser-bin`, with

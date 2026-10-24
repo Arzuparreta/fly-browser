@@ -219,7 +219,5 @@ if lock=$(readlink "$profile/SingletonLock" 2>/dev/null) && [ "${lock%-*}" = "$(
         die "A development Fly from another build is running (${running}). Close it, then start this one."
     fi
 fi
-# A fresh development profile must not auto-import the owner's installed data.
-mkdir -p "$profile/empty-import"
 exec "$binary" --fly-native --class=fly-browser-dev \
-    --user-data-dir="$profile" --fly-import-from="$profile/empty-import" "$@"
+    --user-data-dir="$profile" "$@"

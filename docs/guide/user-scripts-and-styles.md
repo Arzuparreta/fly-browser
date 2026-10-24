@@ -22,8 +22,7 @@ that isolated world's window, so scripts needing page globals and GM APIs
 together may need adaptation.
 
 Supported helpers include GM value storage, network requests, tabs and
-notifications. Legacy `script-storage` values seed persistent extension
-storage. `GM_xmlhttpRequest` checks grants, `@connect`, redirect destinations
+notifications. GM values persist in extension storage. `GM_xmlhttpRequest` checks grants, `@connect`, redirect destinations
 and local-network access. `GM_registerMenuCommand` records commands but does
 not yet expose a menu. Do not assume full Tampermonkey compatibility.
 

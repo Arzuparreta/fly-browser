@@ -27,7 +27,6 @@
 #include "components/input/native_web_keyboard_event.h"
 #include "content/public/browser/web_contents.h"
 #include "fly/fly_version.h"
-#include "fly/import/legacy_import.h"
 #include "fly/ui/fly_extensions.h"
 #include "fly/ui/fly_menu.h"
 #include "fly/ui/fly_theme.h"
@@ -2883,8 +2882,8 @@ void KeyboardEditor::SliderValueChanged(views::Slider* sender,
   }
 }
 
-// Electron's Export (only the changes, so later imports keep newer
-// defaults) and Import (read as Electron loads keybinds.json).
+// Export writes only the changes from the defaults, so a later import keeps
+// newer defaults; Import reads that file back into the draft.
 void KeyboardEditor::ChooseKeyboardFile(bool save) {
   ChooseFile(save ? FileChoice::kExportKeyboard : FileChoice::kImportKeyboard);
 }
@@ -3032,7 +3031,11 @@ void KeyboardEditor::ImportKeyboardText(std::optional<std::string> text) {
     SetStatus(u"The file is not a keyboard bindings file.");
     return;
   }
-  const auto resolved = ResolveLegacyKeyboard(*raw);
+  if (raw->FindInt("version") != 2) {
+    SetStatus(u"Unsupported keyboard configuration version.");
+    return;
+  }
+  const auto resolved = ResolveKeyboardChanges(*raw);
   if (!resolved.config) {
     SetStatus(base::UTF8ToUTF16(resolved.error));
     return;

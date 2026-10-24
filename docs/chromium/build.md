@@ -39,10 +39,9 @@ the published release, with or without a local build; see
 [test builds](../releasing.md#test-builds-of-pull-requests).
 
 Local launches use a persistent `fly-browser-dev` profile under
-`${XDG_CONFIG_HOME:-$HOME/.config}` and an empty import source. They do not share
-the installed browser's profile or automatically import personal data, so both
-can run simultaneously. Arguments are preserved, including explicit
-`--user-data-dir` and `--fly-import-from` overrides. The installed launcher keeps
+`${XDG_CONFIG_HOME:-$HOME/.config}`. They do not share the installed browser's
+profile, so both can run simultaneously. Arguments are preserved, including an
+explicit `--user-data-dir` override. The installed launcher keeps
 its existing profile. Downloaded builds use the same development profile. There
 is no automatic fallback to Electron.
 Release hosting prerequisites are in [releasing](../releasing.md).
