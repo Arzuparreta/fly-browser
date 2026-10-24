@@ -1,6 +1,6 @@
 # User scripts and styles
 
-Native Fly watches `.user.js` and `.user.css` files under its user data directory:
+Fly watches `.user.js` and `.user.css` files under its user data directory:
 
 ```text
 ~/.config/fly-browser/scripts/
@@ -32,5 +32,4 @@ by [uBlock Origin Lite](/guide/extensions), separately from user content.
 
 For debugging, inspect Chromium's extension and page developer tools. Source
 implementation: `chromium/overlay/fly/resources/user_content/` and
-`chromium/overlay/fly/ui/user_content.cc`. The archived Electron guide under
-`legacy/electron/docs/` explains the previous injection mechanism only.
+`chromium/overlay/fly/ui/user_content.cc`.

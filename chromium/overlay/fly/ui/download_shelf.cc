@@ -36,7 +36,7 @@ namespace {
 int S(int pixels) {
   return FlyScaled(pixels);
 }
-// Electron's formatBytes and formatSpeed.
+// A size or speed in the largest unit it fills, with one decimal.
 std::string Units(double value, const std::vector<const char*>& units,
                   bool whole_first) {
   if (value <= 0)
@@ -297,7 +297,7 @@ class DownloadCard : public views::Button {
                        content::DownloadItemUtils::GetBrowserContext(item_))
                  : nullptr;
   }
-  // A completed card opens its file, as in Electron.
+  // A completed card opens its file.
   void Open() {
     if (item_ && item_->GetState() == download::DownloadItem::COMPLETE &&
         !item_->GetFileExternallyRemoved())
@@ -410,7 +410,7 @@ void DownloadShelf::OnDownloadCreated(content::DownloadManager*,
   if (item->GetState() != download::DownloadItem::IN_PROGRESS ||
       cards_.contains(item))
     return;
-  // Newest first, like Electron's prepend.
+  // Newest first.
   auto* card = cards_view_->AddChildViewAt(
       std::make_unique<DownloadCard>(this, item), 0);
   cards_[item] = card;

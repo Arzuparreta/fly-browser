@@ -24,8 +24,3 @@ jobs:
         run: npm ci --no-audit --no-fund
       - name: Regression tests and generated-file checks
         run: npm test
-      - name: Validate application syntax
-        run: |
-          for file in main.js renderer.js preload.js webview-preload.js keyboard.js keybinds.js; do
-            node --check "$file"
-          done

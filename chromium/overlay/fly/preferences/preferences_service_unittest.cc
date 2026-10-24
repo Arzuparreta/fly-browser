@@ -5,9 +5,7 @@
 
 #include "base/command_line.h"
 
-#include "base/json/json_reader.h"
 #include "components/prefs/testing_pref_service.h"
-#include "fly/commands/generated_contract.h"
 #include "testing/gtest/include/gtest/gtest.h"
 
 namespace fly {
@@ -338,20 +336,13 @@ TEST_F(PreferencesServiceTest,
   EXPECT_FALSE(service_.SetStatusBarVisible(true));
   EXPECT_EQ(policy, prefs_.GetDict(kPreferencesPref));
 }
-TEST_F(PreferencesServiceTest, NativeWebsiteThemeMatchesRetainedRuntime) {
+TEST_F(PreferencesServiceTest, WebsitesAreDarkOnlyInDarkModeWhenSynced) {
   ASSERT_EQ(ThemePreferences(), service_.ReadTheme());
   EXPECT_EQ(nullptr, prefs_.GetUserPref(kPreferencesPref));
-  const auto cases =
-      base::JSONReader::ReadList(kWebsiteThemeCasesJSON, base::JSON_PARSE_RFC);
-  ASSERT_TRUE(cases);
-  for (const auto& value : *cases) {
-    const auto& item = value.GetDict();
-    const auto& input = *item.FindDict("input");
-    const ThemePreferences theme{*input.FindString("theme"),
-                                 *input.FindBool("sync_website_theme")};
-    EXPECT_EQ(*item.FindString("expected"),
-              WebsiteUsesDarkTheme(theme) ? "dark" : "light");
-  }
+  EXPECT_TRUE(WebsiteUsesDarkTheme({"dark", true}));
+  EXPECT_FALSE(WebsiteUsesDarkTheme({"dark", false}));
+  EXPECT_FALSE(WebsiteUsesDarkTheme({"light", true}));
+  EXPECT_FALSE(WebsiteUsesDarkTheme({"light", false}));
 }
 TEST_F(PreferencesServiceTest,
        ThemeChoicesPreserveOtherGroupsAndSurviveRestart) {
@@ -405,7 +396,7 @@ TEST_F(PreferencesServiceTest, MalformedFutureAndPolicyThemeDataIsPreserved) {
   EXPECT_FALSE(service_.SetWebsiteThemeSync(false));
   EXPECT_EQ(policy, prefs_.GetDict(kPreferencesPref));
 }
-TEST_F(PreferencesServiceTest, RemainingSettingsUseElectronDefaultsAndValidate) {
+TEST_F(PreferencesServiceTest, RemainingSettingsHaveDefaultsAndValidate) {
   EXPECT_EQ(false, service_.ReadBool("disable_gpu"));
   EXPECT_EQ(true, service_.ReadBool("background_throttling"));
   EXPECT_EQ(true, service_.ReadBool("web_notifications"));
@@ -421,7 +412,7 @@ TEST_F(PreferencesServiceTest, RemainingSettingsUseElectronDefaultsAndValidate) 
   EXPECT_TRUE(service_.SetInt("process_limit", 2));
   EXPECT_TRUE(service_.SetString("interface_scale", "large"));
   EXPECT_TRUE(service_.SetThemeColor(false, "accent", "#00AA11"));
-  // Electron's webmail choices are longer than 64 characters.
+  // The webmail choices are longer than 64 characters.
   constexpr char kZoho[] =
       "https://mail.zoho.eu/zm/comp.do?originalMode=compose&app=6&subject=%s&"
       "body=%b";

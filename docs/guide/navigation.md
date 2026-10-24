@@ -102,7 +102,7 @@ When typing queries into the address bar, prepend shorthand prefixes to route se
 | `ddg <query>` | DuckDuckGo | `ddg rust async tutorial` |
 | `a <query>` | Arch Linux Wiki | `a hyprland config` |
 | `pkg <query>` | Arch Linux Package Search | `pkg neovim` |
-| `gh <query>` | GitHub Repository Search | `gh electron` |
+| `gh <query>` | GitHub Repository Search | `gh chromium` |
 | `yt <query>` | YouTube Search | `yt ambient coding music` |
 | `r <query>` | Reddit Search | `r archlinux` |
 | `so <query>` | StackOverflow | `so javascript closures` |
@@ -125,7 +125,7 @@ To dedicate maximum horizontal screen real estate to web content, Fly features a
 
 ***
 
-## Sidebar and Webview Focus Management
+## Sidebar and Page Focus Management
 
 Fly maintains clean separation between sidebar navigation and active web page interaction:
 

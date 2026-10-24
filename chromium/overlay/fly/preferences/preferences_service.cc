@@ -55,7 +55,7 @@ bool ValidHexColor(std::string_view value) {
 bool ValidString(std::string_view key, std::string_view value) {
   if (!base::IsStringASCII(value))
     return false;
-  // Webmail compose URLs (Electron's Gmail, Zoho, Outlook choices) are longer
+  // Webmail compose URLs (the Gmail, Zoho and Outlook choices) are longer
   // than other settings.
   if (key == "email_handler") {
     return value == "system" ||

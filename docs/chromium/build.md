@@ -1,13 +1,12 @@
-# Chromium control development
+# Chromium development
 
-Native Chromium is Fly's default runtime. Electron remains available for
-comparison under [legacy instructions](https://github.com/Arzuparreta/fly-browser/tree/main/legacy/electron).
-The commands below first prepare an **unmodified upstream control**; the next
-section builds Fly's native overlay. Installing npm dependencies alone does not
-build the browser. See the [implementation record](./implementation-status.md)
-for acceptance evidence and limits.
+Fly is built from a pinned Chromium checkout with Fly's overlay
+(`chromium/overlay`) and integration patches (`chromium/patches`) applied. The
+commands below first prepare an **unmodified upstream control**; the next
+section builds Fly's overlay on top of it. Installing npm dependencies alone
+does not build the browser.
 
-## Build and launch native Fly
+## Build and launch Fly
 
 After completing the control setup below:
 
@@ -42,8 +41,7 @@ Local launches use a persistent `fly-browser-dev` profile under
 `${XDG_CONFIG_HOME:-$HOME/.config}`. They do not share the installed browser's
 profile, so both can run simultaneously. Arguments are preserved, including an
 explicit `--user-data-dir` override. The installed launcher keeps
-its existing profile. Downloaded builds use the same development profile. There
-is no automatic fallback to Electron.
+its existing profile. Downloaded builds use the same development profile.
 Release hosting prerequisites are in [releasing](../releasing.md).
 
 ## Source and prerequisites
@@ -121,19 +119,14 @@ If interrupted, inspect the recorded PID/host and its child processes before
 removing that directory. Never remove an active lease or sync while building.
 Build/install output and disposable profiles are outside the product repository.
 
-## Contracts and tooling verification
+## Tooling tests
 
 ```sh
-node scripts/chromium/capture-contracts.js
-node scripts/chromium/capture-contracts.js --check
-python3 -B -m unittest discover -s tests/chromium -p 'test_*.py'
+npm run test:chromium-tooling
 ```
 
-Contract capture reads repository loaders/catalogues only, never user data.
-The generated [parity ledger](./parity-ledger.md) maps actions and preferences
-to milestones/acceptance rows; every native result starts pending. Python tests
-use local disposable repositories and do not fetch source or compile Chromium.
-Ordinary PR CI remains the existing `npm test` workflow.
+These Python tests use local disposable repositories and do not fetch source or
+compile Chromium. Ordinary PR CI runs only `npm test`.
 
 ## Desktop fixture harness
 
@@ -162,13 +155,8 @@ The harness disables Playwright's default focus emulation via `noDefaults` and
 explicit CDP guards; otherwise the automation itself keeps background documents
 visible. It asserts both test tabs share one native window and observes native
 hidden state without replacing any page getter or media method. Security stays
-enabled. Audio-only fixture checks are preparatory evidence: they do not cover
-Fly workspace composition, native split, minimisation, video, Twitch/real Pie,
-packaged applications or the complete A08/A09 acceptance rows.
-
-The first successful harness checks used the system Chromium executable. That
-validates the harness only; the same-pin upstream control and native Fly still
-need separate runs. The implementation record distinguishes their evidence.
+enabled. Audio-only fixture checks do not cover Fly workspace composition,
+native split, minimisation, video, Twitch/real Pie or packaged applications.
 
 ## Resolve a future engine update
 
@@ -197,7 +185,7 @@ python3 scripts/chromium/native.py build --root /path/to/fly-chromium
 ```
 
 The native output is `src/out/FlyNative`. During development, its native desktop
-window requires `--fly-native`, supplied by the default launcher. Electron is legacy. Native
+window requires `--fly-native`, supplied by the default launcher. Native
 source changes and input fingerprints are recorded in `evidence/native-overlay.json`.
 `verify` rejects edits outside that manifest as well as changed managed files.
 To install a changed overlay, first `revert` the previous managed copy, then
@@ -226,7 +214,7 @@ operation is active. Revert this core-only overlay before applying browser hooks
 The manual workflow's `units` depth performs this native compilation and test
 execution on the selected platforms. `contracts` runs only the small Python
 transaction/checkout tests and JavaScript syntax checks. Neither depth passes
-desktop, migration or package acceptance by itself.
+desktop or package acceptance by itself.
 
 
 ### Browser topology acceptance
@@ -351,9 +339,7 @@ python3 /path/to/fly/scripts/chromium/package-linux.py --root /path/to/engine
 The package is `dist/Fly-<version>-native-linux-x64.tar.gz` (with `.sha256`). It
 contains `install.sh`, which installs "Fly" for the current user in
 `$XDG_DATA_HOME/fly-browser` with a menu entry and
-`~/.local/bin/fly-browser` plus the `fly-browser` alias, next to an Electron installation
-(`install.sh --remove` uninstalls and keeps data). Native data lives in
-`$XDG_CONFIG_HOME/fly-browser`, outside Electron Fly's `~/.config/fly-browser`.
-On its first start native Fly imports the Electron profile; if Electron Fly is
-open then, the import runs on the first start after it closes. A full static build does not fit the
-hosted CI runners, so the release workflow uses a provisioned self-hosted engine runner.
+`~/.local/bin/fly-browser` plus the `fly-browser` alias (`install.sh --remove`
+uninstalls and keeps data). Fly's data lives in `$XDG_CONFIG_HOME/fly-browser`
+(default `~/.config/fly-browser`). A full static build does not fit the hosted
+CI runners, so the release workflow uses a provisioned self-hosted engine runner.

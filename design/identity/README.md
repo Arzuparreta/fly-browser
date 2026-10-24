@@ -1,8 +1,9 @@
-# Fly visual identity: design handoff
+# Fly visual identity
 
-This folder hands the agreed visual direction to whoever implements it in the application. It holds the decisions, the system, the exported assets and the generator that produced them. Nothing here is wired into the app yet.
-
-Open `direction-board.html` in a browser for the full presentation: reading of the references, system, both themes mocked up, icon and engraving. The ten reference images it discusses are `style_reference_1.jpg` to `style_reference_10.jpg` in the repository root.
+This folder holds Fly's visual direction: the decisions, the system, the
+masters and the generators that produce them. Open `direction-board.html` in a
+browser for the full presentation: the system, both themes mocked up, the icon
+and the engraving.
 
 ## The idea
 
@@ -37,7 +38,7 @@ Open `direction-board.html` in a browser for the full presentation: reading of t
 
 ### Interface tokens per theme
 
-These are the values used in the mockups. Map them onto the existing theme system (`modules/theme.js`, the `:root` and `body.light-mode` variables in `style.css` and the user colour settings) rather than hard coding them.
+These are the values used in the mockups. The browser's palette is in `chromium/overlay/fly/ui/fly_theme.{h,cc}`; user colour settings override it.
 
 | Token | Chasis | Papel |
 | :--- | :--- | :--- |
@@ -59,7 +60,7 @@ These are the values used in the mockups. Map them onto the existing theme syste
 | Data | IBM Plex Mono 400, 500, italic 400 | Domains, memory, key hints, captions. |
 | Display | Doto 500 to 900 | Clock, mode badge, workspace number, counters. |
 
-All three are under the SIL Open Font License. Bundle them inside the app as subset `woff2` files; the app must not fetch fonts at runtime. Doto sits on cells (`Cell` token) the way a departures board does.
+All three are under the SIL Open Font License. The browser bundles them (`chromium/overlay/fly/resources/fonts` for the interface, subset `woff2` files in `resources/new_tab/fonts` for its pages) and never fetches fonts at runtime. Doto sits on cells (`Cell` token) the way a departures board does.
 
 ### Textures and devices
 
@@ -74,22 +75,12 @@ All three are under the SIL Open Font License. Bundle them inside the app as sub
 
 ## Components shown in the mockups
 
-- **Sidebar header:** small colour fly, `FLY` in Doto, window controls.
-- **Workspace card:** workspace number in Doto cells, name, container, its key hint.
-- **Tab board:** columns for jump number, title over domain (domain in Link colour, mono), state and memory. Text state badges are omitted. Audio/mute, pin and split-pane controls convey actionable state. The active row gets the panel background and the red bar.
-- **Engraving:** the engraved fly at the bottom of the sidebar, under the tabs, replacing `#Sidebar::before` and `assets/logo.svg`.
-- **New tab:** Doto clock on cells, date in spaced mono capitals, search field with corner brackets and its `/` hint, a short list of frequent sites with key hints, and the fly memory with hairline annotations.
-- **Status bar:** mode badge in Doto on a cell (`NORMAL`, `INSERT`, `HINTS`, `PASSTHROUGH`, `SPLIT` already exist in `modules/statusBar.js`), workspace, key hints, and on the right the blocker state, connection security and time.
-
-### Data behind the annotations
-
-Annotate only with values the browser really has. Checked in the code on 14 October 2026:
-
-| Annotation | Source |
-| :--- | :--- |
-| Memory in use | `app.getAppMetrics()` is already read in `main.js` and `diagnostics.js`. |
-| Telemetry | Always zero by policy; a fixed statement, not a measurement. |
-| Trackers blocked | **No counter exists.** Add one from the Ghostery blocker events only if it costs nothing measurable; otherwise drop this annotation. |
+- **Sidebar header:** the text FLY.
+- **Workspace card:** workspace number in Doto cells, name, its key hint.
+- **Tab board:** title over domain (domain in Link colour, mono). Audio/mute, pin and split-pane controls convey actionable state. The active row gets the panel background and the red bar.
+- **Engraving:** the engraved fly at the bottom of the sidebar, under the tabs.
+- **New tab:** Doto clock on cells, date in spaced mono capitals, search field with corner brackets and its `/` hint, a short list of frequent sites with key hints, and the fly memory.
+- **Status bar:** mode badge in Doto on a cell (`NORMAL`, `INSERT`, `HINTS`, `PASSTHROUGH`), key hints, and on the right connection security and time.
 
 ## Assets in this folder
 
@@ -99,36 +90,26 @@ Annotate only with values the browser really has. Checked in the code on 14 Octo
 | `assets/fly-icon.svg` | Colour icon with the sticker die cut. |
 | `assets/fly-engraving-{chasis,papel}.svg` | Debossed line art per theme, transparent background. |
 | `assets/fly-memory-{chasis,papel}.svg` | New tab memory per theme, transparent background. |
-| `assets/png/icon-{1024,512,256,128,64,48}.png` | Icon renders. 1024 feeds `build/icon.png` (electron-builder derives the macOS icon from it), the rest cover Linux hicolor sizes and `build/icon.ico`. |
+| `assets/png/icon-{1024,512,256,128,64,48}.png` | Icon renders. 48, 128 and 256 are the application icons (`chromium/overlay/fly/resources/icons/fly-logo*.png`). |
 | `assets/png/engraving-{chasis,papel}@2x.png` | Engraving at 512 px for a 256 px slot. |
 | `assets/png/memory-{chasis,papel}@2x.png` | Memory at 1200 px. |
+| `assets/png/pixel-{16,24,32}.{png,svg}` | Hand-drawn pixel icons for sizes where the illustration turns to mush. |
+| `assets/png/paper-grain.png` | Static paper grain tiled over light-theme surfaces. |
+| `assets/png/wordmark.png` | FLY set in Doto. |
+| `social.html` | 1280 × 640 source for `docs/public/og-image.png`; render it with Chromium after its fonts have loaded. |
 
-### Performance rules for the implementation
+### Performance rules
 
-Fly targets old machines without a dedicated GPU.
-
-- Use the PNG renders in the interface. Do not run the SVG filters (deboss, sticker, blur) at runtime.
-- The current sidebar and several overlays use `backdrop-filter: blur(16px)`, which is costly without a GPU. The new direction does not need it; removing it is the owner's call.
-- `index.html` loads Font Awesome from a CDN. With fonts bundled locally, icons should be local too, for privacy and offline start.
-
-## Still open
-
-1. **Small icons, 16, 24 and 32 px.** The illustration turns to mush below 48 px. These need a hand drawn pixel art fly that keeps the two red eyes. Until then do not ship 16 to 32 px from the vector.
-2. **Wordmark.** The mockups set `FLY` in Doto; no separate lockup has been drawn.
-3. **Social image and documentation logo** (`docs/public/og-image.png`, `docs/public/logo.png`): not redrawn yet.
+Fly targets old machines without a dedicated GPU. Use the PNG renders in the
+interface; do not run the SVG filters (deboss, sticker, blur) at runtime.
 
 ## Regenerating the assets
 
 ```bash
 node design/identity/generator/export.js
+python3 design/identity/generator/pixels.py
 ```
 
-SVG export needs only Node. PNG export also needs Playwright with Chromium (`npm i -g playwright`, then run with `NODE_PATH` pointing at the global modules if needed). `generator/anatomy.js` holds the fly's anatomy, `generator/render.js` the line and colour renderers, and the theme values for the engraving and memory sit at the top of `generator/export.js`.
+`export.js` writes the SVG masters and their PNG renders. SVG export needs only Node; PNG export also needs Playwright with Chromium (`npm i -g playwright`, then run with `NODE_PATH` pointing at the global modules if needed). `generator/anatomy.js` holds the fly's anatomy, `generator/render.js` the line and colour renderers, and the theme values for the engraving and memory sit at the top of `generator/export.js`. `pixels.py` (Pillow) draws the pixel icons and the paper grain.
 
-## Implemented application
-
-The application now uses this direction. Runtime PNGs, pixel masters and static grain live in `assets/identity`; local fonts and licences in `assets/fonts`; local Font Awesome 6.4.2 and its licence in `assets/vendor/fontawesome`. Google Fonts supplied the Latin woff2 subsets. Runtime pages make no font or icon CDN requests.
-
-`python3 scripts/build-identity.py` (Pillow) regenerates pixel icons, grain and the Windows ICO. `social.html` is the 1280 × 640 source for `docs/public/og-image.png`; render it with Chromium after local fonts have loaded. The wordmark is FLY set in bundled Doto, with a PNG in `assets/identity`. The documentation logo uses the sticker and its favicon uses the 32-pixel master. See [VIS-01](../../docs/fork-fixes.md#vis-01) for implementation validation and remaining limits.
-
-The owner subsequently simplified the sidebar masthead to the text FLY alone (VIS-02). Pixel icons remain application/favicon assets; the lower sidebar engraving remains.
+The browser ships copies of the files it uses in `chromium/overlay/fly/resources/` (`identity/`, `icons/` and `new_tab/identity/`). After regenerating, copy the changed files there.

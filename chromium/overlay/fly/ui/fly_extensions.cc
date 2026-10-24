@@ -602,7 +602,7 @@ void LoadUnpackedNow(base::WeakPtr<Profile> profile,
 
 namespace {
 // A local install in progress: a unique staging folder inside the
-// extensions folder (Electron's .install-*), with the copy in `unpacked`.
+// extensions folder (.install-*), with the copy in `unpacked`.
 struct Staged {
   base::FilePath staging;
   base::FilePath unpacked;
@@ -635,11 +635,11 @@ std::optional<std::string> KeyId(const base::FilePath& root) {
 std::string IdIn(const base::FilePath& folder, const base::FilePath& root) {
   return KeyId(root).value_or(crx_file::id_util::GenerateIdForPath(folder));
 }
-// Electron's extensionStore.js install step: the destination is the folder
-// of an installed extension with the same manifest key, otherwise
-// local-<first 24 hex of sha256(absolute source path)>, so reinstalling the
-// same source replaces it and keeps its id. A different id is refused; the
-// old folder is set aside and restored if the swap fails.
+// The install step: the destination is the folder of an installed extension
+// with the same manifest key, otherwise local-<first 24 hex of sha256(absolute
+// source path)>, so reinstalling the same source replaces it and keeps its id.
+// A different id is refused; the old folder is set aside and restored if the
+// swap fails.
 std::pair<base::FilePath, std::u16string> Finish(Staged staged,
                                                  base::FilePath source) {
   base::ScopedClosureRunner cleanup(base::BindOnce(
@@ -662,7 +662,8 @@ std::pair<base::FilePath, std::u16string> Finish(Staged staged,
     }
   }
   if (destination.empty()) {
-    // Electron hashes path.resolve(), which does not resolve symlinks.
+    // The absolute path without resolving symbolic links, so a link and its
+    // target are different sources.
 #if BUILDFLAG(IS_POSIX)
     const auto resolved =
         base::MakeAbsoluteFilePathNoResolveSymbolicLinks(source);
@@ -686,7 +687,7 @@ std::pair<base::FilePath, std::u16string> Finish(Staged staged,
   }
   // The checks UnpackedInstaller::LoadExtension runs, before anything is
   // replaced, so a copy Chromium rejects leaves the installed one working
-  // (Electron restores it). Declarative net request rules are indexed only
+  // (it is restored). Declarative net request rules are indexed only
   // at load.
   std::u16string load_error;
   extensions::file_util::MaybeCleanupMetadataFolder(staged.unpacked);

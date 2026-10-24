@@ -1,11 +1,9 @@
 #!/usr/bin/env node
 // Propagates the declared version into the files that cannot read package.json.
 //
-// `package.json` is where Fly says what version it is. Electron reports it
-// through `app.getVersion()` and electron-builder names every package after
-// it, so nothing at runtime has to be told. The copies below are the exceptions:
-// npm's lockfile keeps its own record, and the user-script shim is a string
-// injected into pages that cannot ask the main process.
+// `package.json` is where Fly says what version it is; the packager reads it
+// there. The copies below are the exceptions: npm's lockfile keeps its own
+// record, and the browser is compiled with the version in fly_version.h.
 //
 // Copies are only safe if drift is impossible. `--check` is that guarantee:
 // `npm test` runs it on every push and pull request.
@@ -21,15 +19,13 @@ const path = require('node:path');
 const ROOT = path.resolve(__dirname, '..');
 const PACKAGE = path.join(ROOT, 'package.json');
 
-// Semantic Versioning 2.0.0 without build metadata, which electron-builder's
-// Windows installer cannot express.
+// Semantic Versioning 2.0.0 without build metadata.
 const SEMVER = /^(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)(?:-((?:0|[1-9]\d*|\d*[a-zA-Z-][0-9a-zA-Z-]*)(?:\.(?:0|[1-9]\d*|\d*[a-zA-Z-][0-9a-zA-Z-]*))*))?$/;
 
 // Each pattern holds the literal text around the version in groups 1 and 3, so
 // a replacement never reformats the file.
 const TARGETS = [
     {file: 'package-lock.json', json: true},
-    {file: 'modules/userScriptShim.js', pattern: /^(        version: ')([^']+)(')$/m},
     {file: 'chromium/overlay/fly/fly_version.h', pattern: /^(inline constexpr char kFlyVersion\[\] = ")([^"]+)(";)$/m}
 ];
 
@@ -47,7 +43,7 @@ function declaredVersion(root = ROOT) {
 
 function validate(version) {
     if (!SEMVER.test(version)) {
-        fail(`${JSON.stringify(version)} is not a version npm and electron-builder both accept.\nExpected MAJOR.MINOR.PATCH with an optional -rc.N suffix.`);
+        fail(`${JSON.stringify(version)} is not a version Fly accepts.\nExpected MAJOR.MINOR.PATCH with an optional -rc.N suffix.`);
     }
     return version;
 }

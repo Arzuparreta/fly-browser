@@ -19,9 +19,9 @@ class ImageView;
 
 namespace fly {
 class FlyLabel;
-// Electron Fly's empty workspace view (#EmptyWorkspaceWelcome): logo, product
-// name, the workspace, four shortcut cards and the version line. Shown in the
-// content area while the current workspace has no tabs.
+// The empty workspace view: logo, product name, the workspace, four shortcut
+// cards and the version line. Shown in the content area while the current
+// workspace has no tabs.
 class WelcomeView : public views::View {
   METADATA_HEADER(WelcomeView, views::View)
 

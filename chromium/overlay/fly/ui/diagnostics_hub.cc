@@ -57,7 +57,7 @@ constexpr char kIssuesPage[] =
     "https://github.com/Arzuparreta/fly-browser/issues";
 
 // Paths, the user name, URL queries and local network addresses never leave
-// a report (Electron's sanitiser).
+// a report.
 std::string Sanitise(std::string text) {
   base::FilePath home;
   if (base::PathService::Get(base::DIR_HOME, &home) &&

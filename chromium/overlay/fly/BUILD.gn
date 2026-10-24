@@ -28,7 +28,7 @@ source_set("commands") {
     "commands/calculator.h",
     "commands/command_service.cc",
     "commands/command_service.h",
-    "commands/generated_contract.h",
+    "commands/generated_catalog.h",
     "commands/hint_codes.cc",
     "commands/hint_codes.h",
     "commands/keyboard_config.cc",
@@ -222,21 +222,21 @@ copy("fonts") {
   outputs = [ "$root_out_dir/fly_fonts/{{source_file_part}}" ]
 }
 
-# The Fly User Content extension's fixed files; native Fly copies them into
-# <user data>/fly-user-content together with the generated content.js.
-# Files the native browser reads at run time from <out>/fly_resources.
+# Files the browser reads at run time from <out>/fly_resources.
 group("user_content_resources") {
   deps = [
+    ":icons",
     ":identity_resources",
     ":new_tab_fonts",
     ":new_tab_identity",
     ":new_tab_page",
     ":reader_resources",
     ":user_content_worker",
+    ":whats_new_page",
   ]
 }
 
-# Electron Fly's reader, copied by scripts/chromium/sync-resources.js.
+# Reader view: Mozilla Readability with Fly's reading layout.
 copy("reader_resources") {
   sources = [ "resources/reader/readerDistiller.js" ]
   outputs = [ "$root_out_dir/fly_resources/reader/{{source_file_part}}" ]
@@ -254,8 +254,8 @@ copy("identity_resources") {
   outputs = [ "$root_out_dir/fly_resources/identity/{{source_file_part}}" ]
 }
 
-# Fly's new tab page (chrome://fly-new-tab), with Electron's fonts and
-# artwork copied by scripts/chromium/sync-resources.js.
+# Fly's new tab page (chrome://fly-new-tab), its web fonts and artwork. The
+# What's New page uses the same fonts.
 copy("new_tab_page") {
   sources = [
     "resources/new_tab/new-tab.css",
@@ -281,7 +281,7 @@ copy("new_tab_identity") {
   sources = [
     "resources/new_tab/identity/memory-chasis@2x.png",
     "resources/new_tab/identity/memory-papel@2x.png",
-    "resources/new_tab/identity/paper-grain.png",
+    "resources/identity/paper-grain.png",
     "resources/new_tab/identity/pixel-32.png",
   ]
   outputs =
@@ -296,4 +296,26 @@ copy("user_content_worker") {
     "resources/user_content/offscreen.js",
   ]
   outputs = [ "$root_out_dir/fly_resources/user_content/{{source_file_part}}" ]
+}
+
+# The application icons: the What's New page uses one, and the package installs
+# them for the desktop menu.
+copy("icons") {
+  sources = [
+    "resources/icons/fly-logo128.png",
+    "resources/icons/fly-logo256.png",
+    "resources/icons/fly-logo48.png",
+  ]
+  outputs = [ "$root_out_dir/fly_resources/icons/{{source_file_part}}" ]
+}
+
+# What's New (fly_resources/whats-new.html). scripts/whats-new.js writes
+# whats-new-releases.js when a release is prepared.
+copy("whats_new_page") {
+  sources = [
+    "resources/whats_new/whats-new-page.js",
+    "resources/whats_new/whats-new-releases.js",
+    "resources/whats_new/whats-new.html",
+  ]
+  outputs = [ "$root_out_dir/fly_resources/{{source_file_part}}" ]
 }

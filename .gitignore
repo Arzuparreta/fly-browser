@@ -2,9 +2,8 @@
 node_modules/
 jspm_packages/
 
-# Local configuration and active session caches
+# Local configuration
 .config/
-session.json
 
 # Operating system metadata files
 .DS_Store
@@ -18,8 +17,6 @@ yarn-debug.log*
 yarn-error.log*
 notes.txt
 .gemini/
-electron-dev-skill/
-electron-dev.skill
 
 # VitePress build and cache
 docs/.vitepress/dist/

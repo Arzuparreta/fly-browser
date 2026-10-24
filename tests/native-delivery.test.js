@@ -88,8 +88,8 @@ cp "${releases}/$(basename "$url")" "$out"
     assert.equal(run('scripts/fly-install', ['uninstall', '--yes'], env).status, 0);
     assert.equal(fs.readFileSync(path.join(home, '.local/bin/fly-browser'), 'utf8'), 'unrelated launcher');
     assert.equal(fs.existsSync(path.join(env.XDG_CONFIG_HOME, 'fly-browser/kept')), true);
-    // Arch uninstall must remove the system package, including the legacy
-    // `uninstall all --yes` spelling, without touching profile data.
+    // Arch uninstall must remove the system package, also when spelled
+    // `uninstall all --yes`, without touching profile data.
     const calls = path.join(temp, 'package-calls');
     fs.writeFileSync(path.join(bin, 'pacman'), '#!/bin/sh\nif [ "$1" = -Q ]; then exit 0; fi\nprintf "%s\n" "$*" >> "$FLY_TEST_CALLS"\n', {mode:0o755});
     fs.writeFileSync(path.join(bin, 'sudo'), '#!/bin/sh\nexec "$@"\n', {mode:0o755});
@@ -104,20 +104,19 @@ cp "${releases}/$(basename "$url")" "$out"
     fs.writeFileSync(path.join(bin, 'pacman'), '#!/bin/sh\nexit 1\n', {mode:0o755});
     assert.match(run('scripts/fly-install', ['status'], env).stdout, /Retained configuration:/);
     // Purging also works when only configuration remains after uninstall.
-    const electron = path.join(env.XDG_CONFIG_HOME, 'fly-browser');
-    fs.mkdirSync(electron, {recursive:true});
-    fs.writeFileSync(path.join(electron, 'settings'), 'legacy settings');
+    const profile = path.join(env.XDG_CONFIG_HOME, 'fly-browser');
+    fs.mkdirSync(profile, {recursive:true});
+    fs.writeFileSync(path.join(profile, 'settings'), 'settings');
     fs.writeFileSync(path.join(env.XDG_CONFIG_HOME, 'fly-browser-flags.conf'), '--ozone-platform=wayland');
     const unrelated = path.join(env.XDG_CONFIG_HOME, 'other-app');
     fs.mkdirSync(unrelated);
     fs.writeFileSync(path.join(unrelated, 'kept'), 'unrelated');
     assert.equal(run('scripts/fly-install', ['uninstall', '--purge', '--yes'], env).status, 0);
-    assert.equal(fs.existsSync(path.join(env.XDG_CONFIG_HOME, 'fly-browser')), false);
-    assert.equal(fs.existsSync(electron), false);
+    assert.equal(fs.existsSync(profile), false);
     assert.equal(fs.existsSync(path.join(env.XDG_CONFIG_HOME, 'fly-browser-flags.conf')), false);
     assert.equal(fs.readFileSync(path.join(unrelated, 'kept'), 'utf8'), 'unrelated');
     assert.equal(run('scripts/fly-install', ['uninstall', '--purge', '--yes'], env).status, 0);
     fs.unlinkSync(archive);
-    assert.match(run('scripts/fly-install', ['install', '--native'], env).stderr, /no native Chromium package/);
-    console.log('Native launcher and installer preserve arguments, verify releases, reject legacy-only releases and retain profile/unrelated launchers.');
+    assert.match(run('scripts/fly-install', ['install', '--native'], env).stderr, /no Linux package/);
+    console.log('Native launcher and installer preserve arguments, verify releases, reject releases without a Linux package and retain profile/unrelated launchers.');
 } finally { fs.rmSync(temp, {recursive:true, force:true}); }

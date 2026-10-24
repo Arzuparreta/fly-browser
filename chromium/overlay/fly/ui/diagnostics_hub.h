@@ -37,7 +37,7 @@ class Widget;
 }  // namespace views
 
 namespace fly {
-// One entry of the in-memory diagnostics log (Electron's logEvent).
+// One entry of the in-memory diagnostics log.
 struct DiagnosticEvent {
   base::Time time;
   std::string level;     // info, warn or error.
@@ -54,9 +54,8 @@ struct DiagnosticsSession {
   std::vector<DiagnosticEvent> events;
 };
 
-// Electron's Diagnostics & Health Hub (modules/overlays/diagnostics.js): a
-// page over the content area with System & Runtimes, Processes & Memory, the
-// event log and a sanitised bug report.
+// Diagnostics & Health Hub: a page over the content area with System &
+// Runtimes, Processes & Memory, the event log and a sanitised bug report.
 class FlyToggle;
 class DiagnosticsHub : public views::TabbedPaneListener,
                        public views::TextfieldController,
@@ -81,7 +80,7 @@ class DiagnosticsHub : public views::TabbedPaneListener,
   // Rebuilds the visible tab from current data.
   void Refresh();
   bool HandleOverlayKey(const ui::KeyEvent& event);
-  // The Markdown report Electron copies into GitHub issues.
+  // The Markdown report to copy into a GitHub issue.
   std::string MarkdownReport();
   void SelectTabForTesting(size_t index);
   std::u16string tab_text_for_testing() const;

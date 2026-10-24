@@ -76,7 +76,6 @@ enum Command : int {
   kWindowControls,
   kScriptsDir,
   kStylesDir,
-  kScriptStorageDir,
   kReloadUserContent,
   kPreferences,
   kRestart,
@@ -170,7 +169,6 @@ void SettingsMenu::Build() {
   model_->AddSeparator(ui::NORMAL_SEPARATOR);
   model_->AddItem(kScriptsDir, u"Open User Scripts Directory");
   model_->AddItem(kStylesDir, u"Open User Styles Directory");
-  model_->AddItem(kScriptStorageDir, u"Open User Script Storage Directory");
   model_->AddItem(kReloadUserContent, u"Reload User Scripts and Styles");
   model_->AddSeparator(ui::NORMAL_SEPARATOR);
   model_->AddItem(kDownloads, u"Downloads");
@@ -263,9 +261,6 @@ void SettingsMenu::ExecuteCommand(int command, int) {
       break;
     case kStylesDir:
       action = "open-styles-dir";
-      break;
-    case kScriptStorageDir:
-      action = "open-script-storage-dir";
       break;
     case kReloadUserContent:
       action = "reload-user-content";
@@ -867,9 +862,9 @@ DesktopIntegrationStatus ReadStatusBlocking() {
   status.is_default = status.default_browser == kDesktopId;
   return status;
 }
-// Electron's desktopIntegration.js execArgument + entryString: plain when
-// safe, otherwise double-quoted with \ " ` $ escaped; then the desktop-entry
-// string escapes and %% for a literal %.
+// A desktop entry Exec argument: plain when safe, otherwise double-quoted
+// with \ " ` $ escaped; then the desktop-entry string escapes and %% for a
+// literal %.
 std::string DesktopExecArgument(const std::string& value) {
   std::string argument;
   const bool plain =

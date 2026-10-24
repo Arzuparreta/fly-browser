@@ -54,7 +54,7 @@
 
 namespace fly {
 namespace {
-// Electron's row colours (style.css #TabList).
+// Row colours.
 constexpr SkColor kHoverFill = SkColorSetARGB(115, 54, 74, 133);
 constexpr SkColor kFocusFill = SkColorSetARGB(41, 122, 162, 247);
 constexpr SkColor kPinnedFill = SkColorSetARGB(20, 224, 175, 104);
@@ -83,7 +83,7 @@ struct RowState {
   bool operator==(const RowState&) const = default;
 };
 
-// Electron's tab text: titles longer than 24 characters are cut there.
+// Titles longer than 24 characters are cut there.
 std::u16string RowTitle(std::u16string title) {
   return title.size() > 24 ? title.substr(0, 24) + u"..." : title;
 }
@@ -271,8 +271,8 @@ class FlyTabButton : public FlyButton {
 BEGIN_METADATA(FlyTabButton)
 END_METADATA
 
-// One #TabList li. Child order (select, pin, close, audio) is part of the
-// row contract.
+// One tab row. Child order (select, pin, close, audio) is part of the row
+// contract.
 class TabRowView : public views::View {
   METADATA_HEADER(TabRowView, views::View)
 
@@ -330,8 +330,8 @@ class TabRowView : public views::View {
   }
   void Layout(PassKey) override {
     select_->SetBoundsRect(GetLocalBounds());
-    // Electron's flex gap (8px) adds to each control's left margin:
-    // close 2px, audio/pin 6px. Reserve close space even while hidden.
+    // An 8px gap adds to each control's left margin: close 2px, audio/pin 6px.
+    // Reserve close space even while hidden.
     int x = width() - S(8);
     if (!state_.pinned) {
       x -= S(20);
@@ -368,7 +368,7 @@ class TabRowView : public views::View {
       canvas->DrawRect(inner, outline);
       return;
     }
-    // Rows with a surface hide the hover tint under it, as in Electron.
+    // Rows with a surface hide the hover tint under it.
     if (hovered_ && !list_->rail() && !state_.HasSurface()) {
       flags.setColor(kHoverFill);
       canvas->DrawRoundRect(bounds, S(2), flags);
@@ -713,9 +713,9 @@ class SidebarTabMenu : public ui::SimpleMenuModel::Delegate {
   std::unique_ptr<views::MenuRunner> runner_;
 };
 
-// Electron's tab numbers (.tab-favicon-wrapper::after): 15px semibold digits
-// over the favicon with a hairline of the sidebar colour, 1-8 and 9 on the
-// last tab, while the selection modifier is held.
+// Tab numbers: 15px semibold digits over the favicon with a hairline of the
+// sidebar colour, 1-8 and 9 on the last tab, while the selection modifier is
+// held.
 class TabSidebar::Numbers : public views::View {
   METADATA_HEADER(Numbers, views::View)
 
@@ -960,7 +960,7 @@ void TabSidebar::Refresh() {
     const auto* audio_status = state.muted     ? u", muted"
                                : state.audible ? u", playing audio"
                                                : u"";
-    // Electron's row title: the page title and its address.
+    // The row's tooltip: the page title and its address.
     view->select()->SetTooltipText(title + u"\n" +
                                    base::UTF8ToUTF16(url.spec()));
     view->select()->GetViewAccessibility().SetName(

@@ -1,8 +1,7 @@
 #!/usr/bin/env bash
-# fly-install: install, update, inspect and uninstall native Chromium Fly on Linux.
+# fly-install: install, update, inspect and uninstall Fly on Linux.
 # Usage: fly-install install [--package|--native]
 #        fly-install update | status | uninstall [all|package|native] [--purge] [--yes]
-# Electron is retained in legacy/electron; its profiles and binaries are kept.
 set -euo pipefail
 repo=Arzuparreta/fly-browser
 config=${XDG_CONFIG_HOME:-$HOME/.config}
@@ -28,15 +27,15 @@ install_native() (
     name=Fly-$version-native-linux-x64.tar.gz
     curl -fsSL "$base/SHA256SUMS.txt" -o "$tmp/SHA256SUMS.txt"
     expected=$(awk -v name="$name" '$2 == name || $2 == "*" name {print $1}' "$tmp/SHA256SUMS.txt")
-    [[ $expected =~ ^[a-f0-9]{64}$ ]] || die 'This release has no native Chromium package checksum; Electron was not installed.'
+    [[ $expected =~ ^[a-f0-9]{64}$ ]] || die 'This release has no Linux package checksum; nothing was installed.'
     if [ "$method" = package ]; then
         command -v makepkg >/dev/null || die 'The --package option needs makepkg on an Arch-based system.'
         curl -fsSL "$base/PKGBUILD" -o "$tmp/PKGBUILD"
-        grep -Fq -- '-native-linux-x64.tar.gz' "$tmp/PKGBUILD" && grep -Fq -- "$expected" "$tmp/PKGBUILD" || die 'PKGBUILD does not match the native Chromium release.'
+        grep -Fq -- '-native-linux-x64.tar.gz' "$tmp/PKGBUILD" && grep -Fq -- "$expected" "$tmp/PKGBUILD" || die 'PKGBUILD does not match the release.'
         (cd "$tmp" && makepkg -si)
         exit
     fi
-    curl -fL "$base/$name" -o "$tmp/$name" || die 'This release has no native Chromium package; Electron was not installed. See docs/guide/installation.md.'
+    curl -fL "$base/$name" -o "$tmp/$name" || die 'This release has no Linux package; nothing was installed. See docs/guide/installation.md.'
     actual=$(sha256sum "$tmp/$name"); actual=${actual%% *}
     [ "$expected" = "$actual" ] || die 'Native package checksum mismatch; installation was not changed.'
     tar -xzf "$tmp/$name" -C "$tmp"
@@ -50,7 +49,6 @@ case ${1:-status} in
             case $arg in
                 --native) method=native ;;
                 --package) method=package ;;
-                --appimage) die 'AppImage is Electron legacy. Use --native for Chromium.' ;;
                 *) die "Unknown option: $arg" ;;
             esac
         done
@@ -58,12 +56,11 @@ case ${1:-status} in
         elif [ "$method" = auto ] && [ "$command" = install ] && command -v pacman >/dev/null && command -v makepkg >/dev/null; then method=package; fi
         install_native ;;
     status|scan|list)
-        if [ -f "$target/VERSION" ]; then cat "$target/VERSION"; say "Installation: $target"; else say 'Native Fly is not installed for this user.'; fi
+        if [ -f "$target/VERSION" ]; then cat "$target/VERSION"; say "Installation: $target"; else say 'Fly is not installed for this user.'; fi
         if package_installed; then pacman -Q fly-browser-bin; fi
         for profile in "$config/fly-browser" "$config/fly-browser-flags.conf"; do
             [ ! -e "$profile" ] || say "Retained configuration: $profile"
-        done
-        say 'Electron legacy copies: use bash legacy/electron/fly-install status from the repository.' ;;
+        done ;;
     uninstall|remove)
         shift
         scope=all
@@ -105,8 +102,8 @@ case ${1:-status} in
             rm -f "$config/fly-browser-flags.conf"
             say 'Removed Fly installation and profiles, including history, passwords and settings.'
         else
-            say 'Removed Fly installation; native and Electron profiles are kept.'
+            say 'Removed Fly installation; profiles are kept.'
         fi ;;
-    help|--help|-h) sed -n '2,5s/^# //p' "$0" ;;
+    help|--help|-h) sed -n '2,4s/^# //p' "$0" ;;
     *) die 'Use install, update, status or uninstall.' ;;
 esac

@@ -13,7 +13,7 @@ Before proposing features or submitting pull requests, please keep Fly's foundat
 * **Low Resource Footprint:** Every feature must respect system resources. Background timers, heavy libraries, and persistent memory allocations are strictly avoided.
 * **Keyboard-First Workflow:** Navigation, workspace management, and settings should be fully operable via keyboard shortcuts and modal states (NORMAL, INSERT, PASSTHROUGH).
 * **Minimalist Architecture (KISS):** Keep implementations simple and maintainable. Prefer platform primitives and explicit ownership.
-* **Minimal Dependencies:** Avoid introducing new external dependencies. The approved [Chromium rework](docs/chromium-rework.md) authorises Chromium and its native build toolchain. Discuss unrelated new dependencies with the maintainer prior to opening a PR.
+* **Minimal Dependencies:** Avoid introducing new external dependencies beyond Chromium and its build toolchain. Discuss new dependencies with the maintainer prior to opening a PR.
 * **Strict Privacy & Zero Telemetry:** Fly never collects telemetry, user analytics, or background metrics. User data remains strictly local.
 
 ***
@@ -32,9 +32,9 @@ Please use the structured GitHub issue forms to report problems:
 ## 3. Development Setup
 
 ### Prerequisites
-* Linux (recommended), macOS, or Windows
-* Node.js (version 20 LTS or newer)
-* npm package manager
+* Linux x86_64
+* Node.js (version 20 LTS or newer) and npm
+* Python 3.9 or newer
 * Git
 
 ### Local Setup Steps
@@ -55,12 +55,10 @@ Please use the structured GitHub issue forms to report problems:
    npm start
    ```
 
-Native Chromium/Views is the default runtime. `npm start` launches a prepared
-engine checkout, not Electron; set `FLY_ENGINE_ROOT` and optionally
-`FLY_ENGINE_OUTPUT`. Follow [Chromium development](docs/chromium/build.md) for
-the explicit control/native builds and tests. Native release packaging currently
-supports Linux x64. `npm run start:legacy` and `npm run dist:legacy` preserve
-Electron comparison workflows; see [legacy](legacy/electron/README.md).
+`npm start` starts the engine build in `FLY_ENGINE_ROOT` (optionally the output
+in `FLY_ENGINE_OUTPUT`), or the published release when there is none. Follow
+[Chromium development](docs/chromium/build.md) to build the pinned engine with
+Fly's overlay and to run its tests.
 
 ***
 
@@ -68,14 +66,13 @@ Electron comparison workflows; see [legacy](legacy/electron/README.md).
 
 Contributions must follow these conventions:
 
-* **Language & Runtime:** Legacy Electron frontend modules use standard ES modules and backend code uses CommonJS. The primary native implementation uses Chromium C++, GN, Views and narrowly scoped typed WebUI/Mojo interfaces. Build tooling may use Python and Node.js. Follow the pinned upstream conventions and keep external source/build outputs outside this repository.
+* **Language & Runtime:** Fly is Chromium C++, GN, Views and narrowly scoped typed WebUI/Mojo interfaces, under `chromium/overlay/fly` with the integration patches in `chromium/patches`. Build tooling may use Python and Node.js. Follow the pinned upstream conventions and keep external source/build outputs outside this repository.
 * **UK English:** All code comments, documentation, user-facing text, and issue messages must use British English spelling (e.g. `colour`, `customise`, `initialise`, `behaviour`, `optimise`, `sanitised`).
 * **Concise Code Notes:** Keep notes within code human-readable, purposeful, and concise. Avoid redundant commentary restating self-explanatory logic.
 * **Security Boundaries:**
-  * Webviews must always maintain `contextIsolation: true`, `nodeIntegration: false`, and sandbox protections.
-  * IPC messaging must follow existing whitelists in `preload.js` without exposing direct Node.js handles.
+  * Keep Chromium sandboxing, site isolation and profile-scoped extension services. Internal WebUI capabilities must be origin-bound and typed.
   * File and URL inputs must be vetted to prevent scheme traversal or unsanitised execution.
-  * Native integration must retain Chromium sandboxing, site isolation and profile-scoped extension services. Internal WebUI capabilities must be origin-bound and typed. Do not replace web visibility APIs or reassign a live tab to another profile.
+  * Do not replace web visibility APIs or reassign a live tab to another profile.
 
 ***
 

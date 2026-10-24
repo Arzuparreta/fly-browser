@@ -35,7 +35,7 @@
 #include "chrome/app/vector_icons/vector_icons.h"
 
 namespace fly {
-// A footer badge (style.css .status-badge): tinted fill and 1px outline.
+// A status bar badge: tinted fill and 1px outline.
 class StatusBadge : public FlyButton {
   METADATA_HEADER(StatusBadge, FlyButton)
 
@@ -138,9 +138,8 @@ BEGIN_METADATA(StatusBadge)
 END_METADATA
 
 namespace {
-// The mode badge (#StatusBarMode): cell fill with an accent left edge and a
-// 1px border tinted by the mode; a click cancels hints or leaves or enters
-// passthrough, as in Electron.
+// The mode badge: cell fill with an accent left edge and a 1px border tinted by
+// the mode; a click cancels hints or leaves or enters passthrough.
 class ModeLabel : public FlyLabel {
   METADATA_HEADER(ModeLabel, FlyLabel)
 
@@ -198,7 +197,7 @@ BEGIN_METADATA(ModeLabel)
 END_METADATA
 }  // namespace
 
-// Electron's #ZoomControls: zoom out, reset and zoom in above the zoom pill.
+// Zoom out, reset and zoom in, above the zoom pill.
 std::unique_ptr<views::View> MakeZoomControls(
     base::RepeatingCallback<void(std::string)> action) {
   auto controls = std::make_unique<views::View>();
@@ -336,7 +335,7 @@ void StatusBar::SetClock(const std::u16string& date,
                          bool visible) {
   clock_->SetVisible(visible);
   // The date uses the badge label; the time is drawn in the display face and
-  // accent colour, like the Electron clock.
+  // accent colour.
   clock_->SetText(date);
   clock_->SetTooltipText(tooltip);
   clock_->GetViewAccessibility().SetName(tooltip);
@@ -467,7 +466,7 @@ void StatusBar::UpdateZoom() {
   zoom_->SetEnabled(web_contents() != nullptr);
 }
 void StatusBar::Update() {
-  // Like the Electron footer, the location shows only a hovered link target.
+  // The location shows only a hovered link target.
   const auto location =
       target_.is_empty() ? message_ : url_formatter::FormatUrl(target_);
   location_->SetText(location);

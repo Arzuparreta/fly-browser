@@ -148,9 +148,9 @@
 
 namespace fly {
 namespace {
-// Electron's getWorkspaceBadgeText (webview.js): a trailing number of one or
-// two digits after the first letter ("Workspace 1" is "W1"), the first two
-// digits of a longer number, otherwise the first two letters in capitals.
+// The workspace badge: a trailing number of one or two digits after the first
+// letter ("Workspace 1" is "W1"), the first two digits of a longer number,
+// otherwise the first two letters in capitals.
 std::u16string WorkspaceBadgeText(const std::u16string& name) {
   if (name.empty())
     return u"1";
@@ -301,8 +301,8 @@ FlyWindowController::FlyWindowController()
         },
         weak_factory_.GetWeakPtr(), std::move(action));
   };
-  // Electron's sidebar (index.html #Sidebar): one 260px panel whose left
-  // 36px column is the collapsed rail.
+  // The sidebar: one 260px panel whose left 36px column is the collapsed
+  // rail.
   auto panel = std::make_unique<SidebarPanel>();
   auto* sidebar = panel.get();
   sidebar_content_ = sidebar;
@@ -330,7 +330,7 @@ FlyWindowController::FlyWindowController()
     window_control_buttons_.emplace(action, button);
   }
   parts.window_controls = window_controls_;
-  // #WorkspaceHeader opens the dashboard; the short badge (rail) and the
+  // The workspace header opens the dashboard; the short badge (rail) and the
   // full name (expanded) share its slot and crossfade.
   workspace_picker_button_ = sidebar->AddChildView(std::make_unique<FlyButton>(
       base::BindRepeating(&FlyWindowController::ToggleWorkspacePicker,
@@ -396,7 +396,7 @@ FlyWindowController::FlyWindowController()
   clock_->SetHorizontalAlignment(gfx::ALIGN_LEFT);
   clock_->SetIconTone(FlyButton::IconTone::kAccent);
   parts.clock_row = clock_row;
-  // .bottom-theme-layout, in the Electron order.
+  // The bottom row: pin, theme and the other sidebar controls, in order.
   sidebar_pin_button_ = sidebar->AddChildView(MakeFlyIconButton(
       base::BindRepeating(&FlyWindowController::ToggleSidebarAutoCollapse,
                           weak_factory_.GetWeakPtr()),
@@ -436,7 +436,7 @@ FlyWindowController::FlyWindowController()
     parts.footer.push_back(button);
   }
   sidebar->SetParts(std::move(parts));
-  // Details that exist only expanded fade with the edge (style.css).
+  // Details that exist only expanded fade with the edge.
   for (views::View* view :
        {static_cast<views::View*>(window_controls_.get()),
         static_cast<views::View*>(workspace_label_.get()),
@@ -492,7 +492,7 @@ FlyWindowController::FlyWindowController()
   footer_ = column->AddChildView(std::make_unique<views::View>());
   footer_->SetLayoutManager(std::make_unique<views::BoxLayout>(
       views::BoxLayout::Orientation::kVertical));
-  // Electron's download shelf, above the status bar; it appears when a
+  // The download shelf, above the status bar; it appears when a
   // download starts and makes room for itself.
   download_shelf_ =
       footer_->AddChildView(std::make_unique<DownloadShelf>(base::BindRepeating(
@@ -823,7 +823,7 @@ FlyWindowController::FlyWindowController()
                                .title = u"Workspaces",
                                .width = 820,
                                .page_insets = page_insets});
-  // Electron's dashboard: drag a tab onto a tab to reorder it (or move it to
+  // The dashboard: drag a tab onto a tab to reorder it (or move it to
   // that tab's workspace), or onto a workspace to move it there.
   workspace_picker_->SetDragDrop(
       base::BindRepeating(
@@ -1315,7 +1315,7 @@ void FlyWindowController::ExecuteAddress(content::WebContents* source,
 
 base::DictValue FlyWindowController::NewTabLists(
     bool off_the_record, const std::vector<HistoryEntry>& history) const {
-  // Only web pages are listed, as on Electron's new tab page.
+  // Only web pages are listed.
   const auto link = [](const std::string& url, const std::string& title) {
     const GURL target(url);
     if (!target.is_valid() || !target.SchemeIsHTTPOrHTTPS())
@@ -1596,10 +1596,10 @@ void FlyWindowController::UpdateSidebarVisibility() {
   }
   UpdateClock();
 }
-// Electron's slide (style.css #Sidebar): collapsed, the edge sits 224px to
-// the left and the panel 224px back to the right inside it, so the panel's
-// left 36px show. Both transforms run on the compositor; the shadow
-// and the state-specific details fade with them.
+// The slide: collapsed, the edge sits 224px to the left and the panel 224px
+// back to the right inside it, so the panel's left 36px show. Both transforms
+// run on the compositor; the shadow and the state-specific details fade with
+// them.
 void FlyWindowController::ApplySidebarMotion(bool animate) {
   auto* panel = sidebar_root_ ? sidebar_root_->panel() : nullptr;
   auto* edge = sidebar_root_ ? sidebar_root_->edge() : nullptr;
@@ -1772,7 +1772,7 @@ void FlyWindowController::OnMouseEvent(ui::MouseEvent* event) {
       event->type() != ui::EventType::kMouseExited &&
       event->type() != ui::EventType::kMousePressed)
     return;
-  // Like Electron, leaving the window keeps the sidebar as it is: moving
+  // Leaving the window keeps the sidebar as it is: moving
   // from the page to the screen's left edge opens it, and touching the
   // window border does not close it. Entering the page closes it.
   if (event->type() == ui::EventType::kMouseExited)
@@ -1955,7 +1955,7 @@ void FlyWindowController::ApplyFlyPalette() {
     }
   }
   if (scale_changed) {
-    // Widths follow the scale like Electron's zoomed interface.
+    // Widths follow the interface scale.
     if (auto* sidebar = sidebar_content_.get())
       sidebar->SetPreferredSize(gfx::Size(FlyScaled(260), 0));
     UpdateSidebarMode();
@@ -2024,7 +2024,7 @@ void FlyWindowController::UpdateClock() {
   const auto now = base::Time::Now();
   const auto text = FormatClock(now, settings->format);
   // The sidebar and the footer draw the date and the time separately (time
-  // in the accent display face), like the Electron clocks.
+  // in the accent display face).
   std::u16string date;
   std::u16string time = text.label;
   if (settings->format == "datetime") {
@@ -2686,7 +2686,7 @@ void FlyWindowController::PromptNewWorkspace() {
   field->SelectAll(false);
 }
 
-// Electron's workspace dashboard: every workspace with its tabs (pinned ones
+// The workspace dashboard: every workspace with its tabs (pinned ones
 // marked), rename and delete on each workspace, and a move on each tab.
 std::vector<PaletteEntry> FlyWindowController::WorkspaceEntries() {
   private_choices_.clear();
@@ -2875,7 +2875,7 @@ void FlyWindowController::DropDashboardTab(std::string source,
     if (to == tab_choices_.end() || !to->second.browser || !to->second.contents)
       return;
     if (to->second.browser.get() == browser) {
-      // Same workspace window: reorder, as Electron's moveTabState.
+      // Same workspace window: reorder.
       const int destination =
           model->GetIndexOfWebContents(to->second.contents.get());
       if (destination != TabStripModel::kNoTab && destination != index)
@@ -3290,8 +3290,8 @@ void FlyWindowController::OnBrowserDidClose(BrowserWindowInterface* browser) {
         }
         return false;
       };
-      // Electron keeps the workspace whose last tab closed and shows its
-      // empty workspace view; leaving private mode returns to the window it
+      // A workspace whose last tab closed stays and shows its empty
+      // workspace view; leaving private mode returns to the window it
       // came from.
       if (!choose(true) && private_return &&
           entries_.contains(private_return.get()) &&
@@ -3980,7 +3980,7 @@ void FlyWindowController::UpdateModeLabel() {
   // The workspace badge says when the workspace is private.
   status_->SetText(mode);
 }
-// Electron's mode badge: a click cancels hints, leaves passthrough, or
+// The mode badge: a click cancels hints, leaves passthrough, or
 // enters it from NORMAL (INSERT ignores it).
 void FlyWindowController::ClickModeBadge() {
   if (closing_ || !selected_)
@@ -4003,7 +4003,7 @@ void FlyWindowController::ShowStatus(std::u16string text) {
           ? "warn"
           : "info",
       "status", text);
-  // Electron's setTargetUrl(message, timeout): the link area, for a while.
+  // The status bar's link area, for a while.
   if (status_bar_)
     status_bar_->ShowMessage(std::move(text), base::Milliseconds(3500));
 }
@@ -4239,8 +4239,8 @@ bool FlyWindowController::RunProductAction(BrowserWindowInterface* browser,
     return true;
   }
   if (action == "toggle-downloads") {
-    // Electron toggles its download shelf; with nothing on it, Fly lists
-    // every workspace's downloads.
+    // Toggles the download shelf; with nothing on it, Fly lists every
+    // workspace's downloads.
     if (download_shelf_ && download_shelf_->has_cards())
       download_shelf_->Toggle();
     else
@@ -4248,7 +4248,6 @@ bool FlyWindowController::RunProductAction(BrowserWindowInterface* browser,
     return true;
   }
   if (action == "toggle-reader-view") {
-    // Messages as Electron Fly's toggleReaderViewOnActiveTab.
     ToggleReaderView(
         contents,
         base::BindOnce(
@@ -4276,12 +4275,9 @@ bool FlyWindowController::RunProductAction(BrowserWindowInterface* browser,
                      : base::WeakPtr<content::WebContents>()));
     return true;
   }
-  if (action == "open-scripts-dir" || action == "open-styles-dir" ||
-      action == "open-script-storage-dir") {
-    OpenUserContentDirectory(profile,
-                             action == "open-scripts-dir"  ? "scripts"
-                             : action == "open-styles-dir" ? "styles"
-                                                           : "script-storage");
+  if (action == "open-scripts-dir" || action == "open-styles-dir") {
+    OpenUserContentDirectory(
+        profile, action == "open-scripts-dir" ? "scripts" : "styles");
     return true;
   }
   if (action == "test-google-signin") {
@@ -4547,7 +4543,7 @@ void FlyWindowController::ChooseExtensionAction(content::WebContents*,
   extensions_->RunAction(selected_, id, anchor);
 }
 
-// Electron highlights the reader button while the active tab shows the reader.
+// The reader button is highlighted while the active tab shows the reader.
 // The overlay can also close from the page (Escape, its close button), so the
 // state is checked again while it is on.
 void FlyWindowController::SetReaderActive(content::WebContents* contents,
@@ -4637,7 +4633,7 @@ void FlyWindowController::UpdateWelcome() {
     status_bar_->SetBrowser(nullptr, name);
   UpdateWorkspaceHeader();
   const auto config = commands_.Read().value_or(DefaultKeyboardConfig());
-  // Electron writes bindings as "Ctrl + T".
+  // Bindings are written as "Ctrl + T".
   const auto keys = [&](const char* action) {
     const auto found = config.shortcuts.find(action);
     if (found == config.shortcuts.end() || found->second.empty())
@@ -4687,7 +4683,7 @@ void FlyWindowController::choose_workspace_for_testing(std::string action) {
       std::move(action));
 }
 
-// Electron's getExtensionPaletteCommands.
+// Command Centre entries for the extensions' commands.
 std::vector<PaletteEntry> FlyWindowController::ExtensionCommandEntries(
     BrowserWindowInterface* browser) {
   std::vector<PaletteEntry> entries;
@@ -4802,8 +4798,7 @@ void FlyWindowController::InstallUpdate() {
     return;
   }
   if (!update_.package.is_valid()) {
-    // No native package in this release: open its page, as Electron's
-    // "Download release".
+    // No package for this system in the release: open its page.
     keyboard_editor_->Cancel();
     OpenInNewTab(update_.page);
     return;
@@ -4835,7 +4830,7 @@ void FlyWindowController::InstallUpdate() {
 }
 
 namespace {
-// Electron's Preferences → About → Desktop integration texts.
+// The texts of Preferences → About → Desktop integration.
 void ShowDesktopIntegration(KeyboardEditor& editor,
                             const DesktopIntegrationStatus& status,
                             std::u16string error) {
@@ -4912,7 +4907,7 @@ void FlyWindowController::ChangeDesktopIntegration(bool make_default) {
       weak_factory_.GetWeakPtr(), make_default));
 }
 
-// Electron's offerDesktopIntegration: once, on the first start of a package
+// Offers desktop integration once, on the first start of a package
 // that no menu entry lists yet.
 void FlyWindowController::MaybeOfferDesktopIntegration() {
   if (closing_ || !preferences_.CanEdit() ||

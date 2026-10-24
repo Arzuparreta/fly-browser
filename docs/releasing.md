@@ -1,8 +1,7 @@
 # Versioning and releases
 
 Fly has one product version, independent of the pinned Chromium engine version.
-The active release ships native Chromium Fly for Linux x64. Electron packaging
-is retained as legacy source and is not published by this workflow.
+A release ships Fly for Linux x64.
 
 ## What the number promises
 
@@ -20,17 +19,14 @@ While Fly is below 1.0 there is no major number to spend, so **minor carries wha
 
 ## Where the version lives
 
-`package.json` declares it. `scripts/version-sync.js` writes the native
-`fly_version.h`; Preferences, update checks and diagnostics use that generated
-value. The packager reads `package.json` directly. Electron legacy still reads
-its product version from the same manifest.
+`package.json` declares it. The packager reads it there directly.
 
-Three files cannot read it and hold a copy, written by `scripts/version-sync.js`:
+Two files cannot read it and hold a copy, written by `scripts/version-sync.js`:
 
 ```
-package-lock.json            (twice: the root, and packages[""])
-modules/userScriptShim.js    (GM_info.version, injected into pages)
-chromium/overlay/fly/fly_version.h   (native Fly: update check, What's New, diagnostics)
+package-lock.json                    (twice: the root, and packages[""])
+chromium/overlay/fly/fly_version.h   (the browser: Preferences, update check,
+                                      What's New, diagnostics, GM_info)
 ```
 
 Copies drift, so `npm test` runs `node scripts/version-sync.js --check`, and fails if any copy disagrees. The release workflow refuses a tag that names a different version from the tree it points at.
@@ -71,9 +67,9 @@ In Claude Code, `/release` runs these steps and waits between them.
 
 ## The What's New page
 
-After an upgrade Fly opens `assets/whats-new.html`, listing every release since the version that profile last ran. Opened by hand (command palette → Show What's New) it lists the latest release.
+After an upgrade Fly opens its What's New page (`chromium/overlay/fly/resources/whats_new/`), listing every release since the version that profile last ran. Opened by hand (command palette → Show What's New) it lists the latest release.
 
-Nobody writes it. `prepare` records the release in `assets/whats-new-releases.js` from the pull requests going out, with `scripts/whats-new.js`, and the bump pull request carries that change. Each pull request labelled `major`, `minor` or `patch` becomes an entry under its title: `major` ones are marked *Action needed*, `minor` and `major` ones get a card each, and `patch` ones are gathered under *Fixes*. `impact:none` is left out.
+Nobody writes it. `prepare` records the release in `whats-new-releases.js` there from the pull requests going out, with `scripts/whats-new.js`, and the bump pull request carries that change. Each pull request labelled `major`, `minor` or `patch` becomes an entry under its title: `major` ones are marked *Action needed*, `minor` and `major` ones get a card each, and `patch` ones are gathered under *Fixes*. `impact:none` is left out.
 
 To say more than the title, a pull request adds an optional section to its description:
 
@@ -92,15 +88,13 @@ The `###` line replaces the title, plain lines become the description and `- ` l
 
 ## What a tag builds
 
-`release.yml` checks the tag against `package.json`, builds the native Linux
+`release.yml` checks the tag against `package.json`, builds the Linux
 package and publishes it with `SHA256SUMS.txt`, a per-archive `.sha256` and notes
 from merged pull requests. The archive is `Fly-<version>-native-linux-x64.tar.gz`.
-It contains `fly-browser/app/` plus `install.sh`. The native updater uses
+It contains `fly-browser/app/` plus `install.sh`. The in-app updater uses
 the same archive name and its `.sha256`; `fly-install` checks `SHA256SUMS.txt`.
-No Electron AppImage or `latest-linux.yml` is published. macOS and Windows native
-packaging remain unsupported; earlier downloads for those platforms are legacy.
 
-### Native build host
+### Build host
 
 Chromium cannot be built within standard hosted runner resource limits. The
 release build requires a trusted, dedicated GitHub runner labelled
@@ -135,7 +129,7 @@ Runner status and registration are visible in the repository's
 Release jobs use it; ordinary PR workflows continue on GitHub-hosted runners.
 
 Prepare the pinned checkout, dependencies, hooks, upstream control build and
-full native overlay using [Chromium development](./chromium/build.md). The release
+full Fly overlay using [Chromium development](./chromium/build.md). The release
 job refreshes the managed overlay from the release commit, verifies its pins,
 dependencies and fingerprint, regenerates `out/FlyRelease`, builds `chrome` and
 `chrome_sandbox`, and invokes `package-linux.py`. It does not upload a preexisting
@@ -151,13 +145,11 @@ python3 scripts/chromium/release.py --root /path/to/fly-chromium --dist /path/to
 
 `npm run dist -- --root /path/to/fly-chromium` packages an already built
 `out/FlyRelease`; `npm run dist:dir -- --root /path/to/fly-chromium` rebuilds and
-packages it. These commands require Linux x64. Electron comparison packages use
-`npm run dist:legacy -- --linux --publish never` and are never release assets.
+packages it. These commands require Linux x64.
 
-Before publishing, rehearse an upgrade using a disposable installed profile,
-check the migration summary, launch the installed package and verify desktop
-integration. Passing product contract tests does not establish native platform
-or migration acceptance; retain actual limitations in the implementation record.
+Before publishing a change to packaging, rehearse an upgrade using a disposable
+installed profile, launch the installed package and verify desktop
+integration. Passing `npm test` does not establish that the package works.
 
 ## Test builds of pull requests
 
@@ -222,4 +214,4 @@ The first push creates `fly-browser-bin` on the AUR. If the name has been taken 
 
 To publish a release again, for example after the secret was added or when only the packaging changed, dispatch the workflow: `gh workflow run aur.yml -f tag=vX.Y.Z`, adding `-f pkgrel=2` (and so on) when the version is already on the AUR.
 
-To test a packaging change before it reaches a release, run the workflow on its branch: `gh workflow run release.yml --ref <branch>`. It builds the native Linux package and keeps it as a workflow artefact for three days, and publishes nothing.
+To test a packaging change before it reaches a release, run the workflow on its branch: `gh workflow run release.yml --ref <branch>`. It builds the Linux package and keeps it as a workflow artefact for three days, and publishes nothing.

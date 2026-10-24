@@ -27,8 +27,8 @@ class Label;
 }  // namespace views
 
 namespace fly {
-// The product palette shared with the Electron interface (style.css and
-// main.js DEFAULT_THEME_COLORS). Derived colours follow the same rules.
+// The product palette (design/identity), which user colour settings
+// override. Derived colours follow the same rules in both themes.
 struct FlyColors {
   bool dark = true;
   SkColor accent;
@@ -42,7 +42,7 @@ struct FlyColors {
   SkColor dim;
   SkColor link;
   SkColor warning;
-  // Electron's sidebar_opacity and overlay_opacity (40-100).
+  // The sidebar_opacity and overlay_opacity preferences (40-100).
   int sidebar_opacity = 100;
   int overlay_opacity = 100;
 };
@@ -55,7 +55,7 @@ enum class FlyFace { kSans, kMono, kDisplay };
 gfx::FontList FlyFont(FlyFace face,
                       int size,
                       gfx::Font::Weight weight = gfx::Font::Weight::NORMAL);
-// Electron's "large" interface scale (1.25) zooms Fly's whole interface:
+// The "large" interface scale (1.25) zooms Fly's whole interface:
 // fonts, and every size given through FlyScaled().
 void SetFlyInterfaceScale(float scale);
 float GetFlyInterfaceScale();
@@ -71,8 +71,7 @@ enum class FlyRole {
   kSelected,
   kBorder,
   kAccent,
-  // The sidebar over the canvas at the sidebar opacity
-  // (color-mix(bg_sidebar, transparent) over bg_main in Electron).
+  // The sidebar colour mixed over the canvas at the sidebar opacity.
   kSidebarSurface,
   // Overlay surfaces at the overlay opacity: the page shows through.
   kOverlayMain,
@@ -115,20 +114,20 @@ class FlyButton : public views::MdTextButton {
   void SetAccentText(bool accent);
   // The main action of a menu: accent outline and a faint accent fill.
   void SetPrimary(bool primary);
-  // A bordered button (Electron's .nav-icon-button): the border turns to the
-  // accent on hover.
+  // A bordered button: the border turns to the accent on hover.
   void SetOutlined(bool outlined);
-  // One half of Electron's history pill: fully rounded on that side.
+  // One half of the back/forward pill: fully rounded on that side.
   enum class PillHalf { kNone, kLeft, kRight };
   void SetPillHalf(PillHalf half);
   void SetPillPartner(FlyButton* partner) { pill_partner_ = partner->weak_factory_.GetWeakPtr(); }
-  // Hover tints with the text colour at 7% and no outline (#WorkspaceHeader).
+  // Hover tints with the text colour at 7% and no outline (the workspace
+  // header).
   void SetHoverFill(bool hover_fill);
-  // A fill shown at rest (.sidebar-clock).
+  // A fill shown at rest (the sidebar clock).
   void SetRestingFill(SkColor color);
   const gfx::VectorIcon* vector_icon() const { return icon_; }
-  // The icon's colour at rest: dim by default, the text colour (Electron's
-  // .nav-icon-button) or the accent (.sidebar-clock i).
+  // The icon's colour at rest: dim by default, the text colour (bordered
+  // buttons) or the accent (the sidebar clock).
   enum class IconTone { kDim, kText, kAccent };
   void SetIconTone(IconTone tone);
   void SetFlyFont(FlyFace face, int size,

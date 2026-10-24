@@ -20,7 +20,7 @@ TEST(PaletteCatalogTest, PreservesExplicitAliasesAndEveryAction) {
       EXPECT_EQ("toggle-zen-mode", entry.action);
   }
   // An alias may target another action, but every action still has a route.
-  EXPECT_EQ(82u, actions.size());
+  EXPECT_EQ(81u, actions.size());
   EXPECT_EQ("spawn-tab", catalog.front().id);
 }
 TEST(PaletteCatalogTest, UsesChosenBindingsAndUnicodeMultiwordSearch) {

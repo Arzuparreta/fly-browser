@@ -92,7 +92,7 @@ class FlyExtensions : public extensions::ExtensionRegistryObserver,
   bool IsBundled(const std::string& id) const;
   // Reloads every unpacked extension in every workspace; false when none.
   bool ReloadUnpacked();
-  // Electron's extensions folder (<user data>/extensions): packages and
+  // The extensions folder (<user data>/extensions): packages and
   // folders the user adds are copied there and load unpacked.
   static base::FilePath Folder();
   // A .crx installs through Chromium's prompt (off-store allowed, as from

@@ -36,7 +36,7 @@ body:
     attributes:
       label: Keyboard & Modal Workflow
       description: How should this feature be triggered and navigated using the keyboard without mouse dependency?
-      placeholder: "e.g. Triggered via Command Palette action, customisable in keybinds.json, or bound to a modal shortcut..."
+      placeholder: "e.g. Triggered via Command Palette action, customisable in Preferences → Keyboard, or bound to a modal shortcut..."
     validations:
       required: true
 

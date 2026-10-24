@@ -26,7 +26,7 @@ throws(() => aur.parseOptions(['--sums', 'x']), /Usage/);
 throws(() => aur.parseOptions(['--sums']), /needs a value/);
 
 // The checksum is the tarball's, not a neighbour's that shares a prefix.
-const sums = `${'1'.repeat(64)}  Fly-1.2.3-native-linux-x64.tar.gz.sig\n${'2'.repeat(64)}  Fly-1.2.3-native-linux-x64.tar.gz\n${'3'.repeat(64)}  Fly-1.2.3-x86_64.AppImage\n`;
+const sums = `${'1'.repeat(64)}  Fly-1.2.3-native-linux-x64.tar.gz.sig\n${'2'.repeat(64)}  Fly-1.2.3-native-linux-x64.tar.gz\n${'3'.repeat(64)}  Fly-1.2.3-native-linux-x64.tar.gz.sha256\n`;
 assert.equal(aur.checksumFrom(sums, aur.tarballName('1.2.3')), '2'.repeat(64));
 throws(() => aur.checksumFrom(sums, 'Fly-9.9.9-native-linux-x64.tar.gz'), /no entry/);
 

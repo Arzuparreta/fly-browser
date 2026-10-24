@@ -529,7 +529,7 @@ chrome.runtime.onUserScriptMessage.addListener((message, sender, respond) => {
 });
 register().catch((err) => console.error('Fly User Content registration failed', err));
 
-// ---- Share menu (Electron Fly's page context menu "Share...") --------------
+// ---- Share menu (the page context menu's "Share...") ---------------------
 const SHARE = [
   ['whatsapp', 'Share to WhatsApp', (u, t) => `https://web.whatsapp.com/send?text=${t}%20${u}`],
   ['x', 'Share to X (Twitter)', (u, t) => `https://twitter.com/intent/tweet?text=${t}&url=${u}`],
@@ -538,7 +538,7 @@ const SHARE = [
 ];
 function createShareMenu() {
   chrome.contextMenus.removeAll(() => {
-    // Electron Fly adds Share to every page context menu.
+    // Share is in every page context menu.
     const contexts = ['all'];
     chrome.contextMenus.create({id: 'share', title: 'Share...', contexts});
     for (const [id, title] of SHARE)
@@ -582,7 +582,7 @@ chrome.contextMenus.onClicked.addListener((info, tab) => {
     const page = info.pageUrl || (tab && tab.url) || '';
     const body = encodeURIComponent(selected ? `${selected}\n\nSource: ${page}` :
         info.srcUrl ? `${info.srcUrl}\n\nPage: ${page}` : page);
-    // Electron Fly also put a shared snippet on the clipboard.
+    // A shared selection is also put on the clipboard.
     if (selected) copyText(selected).catch(err => console.error('Fly share:', err));
     const handler = CONTENT.emailHandler || 'system';
     if (handler === 'system') {

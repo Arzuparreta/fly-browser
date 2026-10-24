@@ -34,8 +34,9 @@ RUNTIME_FILES = [
 RUNTIME_DIRS = ['locales', 'MEIPreload', 'PrivacySandboxAttestationsPreloaded',
                 'fly_fonts', 'fly_resources']
 REQUIRED = ['chrome', 'resources.pak', 'icudtl.dat', 'locales', 'fly_fonts',
-            'fly_resources', 'chrome_sandbox']
-WHATS_NEW = ['whats-new.html', 'whats-new-page.js', 'whats-new-releases.js']
+            'fly_resources/whats-new.html', 'fly_resources/icons/fly-logo48.png',
+            'fly_resources/icons/fly-logo128.png',
+            'fly_resources/icons/fly-logo256.png', 'chrome_sandbox']
 
 LAUNCHER = '''#!/bin/sh
 # Fly launcher. Respect the XDG configuration directory.
@@ -163,11 +164,8 @@ def main():
         for directory in RUNTIME_DIRS:
             if (build / directory).is_dir():
                 shutil.copytree(build / directory, app / directory, symlinks=False)
-        for file in WHATS_NEW:
-            shutil.copy2(REPO / 'assets' / file, app / 'fly_resources' / file)
-        shutil.copytree(REPO / 'assets' / 'fonts', app / 'fly_resources' / 'fonts')
-        shutil.copytree(REPO / 'assets' / 'icons', app / 'fly_resources' / 'icons')
-        shutil.copytree(REPO / 'assets' / 'icons', app / 'icons')
+        # The desktop menu entry and the AUR package install these icons.
+        shutil.copytree(app / 'fly_resources' / 'icons', app / 'icons')
         subprocess.run([sys.executable, str(REPO / 'scripts/chromium/bundled-extensions.py'),
                         '--out', str(app / 'fly_extensions'),
                         '--cache', str(args.extensions_cache)], check=True)

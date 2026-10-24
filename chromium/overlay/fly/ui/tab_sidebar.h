@@ -33,16 +33,14 @@ namespace fly {
 class SidebarTabMenu;
 class FlyTabButton;
 class TabRowView;
-// Electron's #TabList: a projection of the selected profile's upstream tab
-// model. Rows hold weak WebContents identities, never a cached tab index or
-// an extension's session ID. Every native tab is projected, including
-// about:blank; URL and title are presentation only. An empty model has no
-// synthetic placeholder tab.
-//
-// One list serves both sidebar states (style.css): rows are 40px tall, 4px
-// apart, with the favicon on the collapsed rail's centre line and the text
-// past its edge. The expanded row surfaces, the rail's 28 x 40px tiles and
-// the rail's pin and audio marks are separate layers that crossfade.
+// The tab list: a projection of the selected profile's upstream tab model. Rows
+// hold weak WebContents identities, never a cached tab index or an extension's
+// session ID. Every native tab is projected, including about:blank; URL and
+// title are presentation only. An empty model has no synthetic placeholder tab.
+// One list serves both sidebar states: rows are 40px tall, 4px apart, with the
+// favicon on the collapsed rail's centre line and the text past its edge. The
+// expanded row surfaces, the rail's 28 x 40px tiles and the rail's pin and
+// audio marks are separate layers that crossfade.
 class TabSidebar : public views::View,
                    public TabStripModelObserver,
                    public views::ContextMenuController {

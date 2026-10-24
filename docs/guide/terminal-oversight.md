@@ -59,9 +59,5 @@ If you wish to enable active security scanning and paging:
 
 ## Terminal Emulator Detection
 
-Fly detects your host platform and terminal emulator dynamically:
-
-- **Linux**: Scans for installed emulators in priority order:
-  `kitty` -> `alacritty` -> `foot` -> `st` -> `xterm` -> `xdg-terminal-exec`.
-- **macOS**: Automatically interfaces with the native `Terminal.app`.
-- **Windows**: Prefers `Windows Terminal` (`wt.exe`) with graceful fallback to `cmd.exe`.
+Fly opens the first terminal emulator it finds, in this order:
+`kitty` -> `alacritty` -> `foot` -> `st` -> `xterm` -> `xdg-terminal-exec`.

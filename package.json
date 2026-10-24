@@ -1,175 +1,28 @@
 {
   "name": "fly-browser",
   "version": "0.31.0",
-  "description": "A small, minimal Linux browser with full keyboard control and a polished experience for mouse users.",
-  "main": "main.js",
-  "desktopName": "fly-browser.desktop",
+  "private": true,
+  "description": "A small, minimal Linux browser built on Chromium, with full keyboard control and a polished experience for mouse users.",
   "license": "GPL-3.0-or-later",
   "scripts": {
     "start": "bash launch.sh",
-    "test": "node tests/bookmark-store.test.js && node tests/frequent-sites.test.js && node tests/tab-suspension.test.js && node tests/site-zoom.test.js && node tests/auth-security.test.js && node tests/closed-output.test.js && node tests/clock.test.js && node tests/audio-controls.test.js && node tests/pinned-tabs.test.js && node tests/tab-context-menu.test.js && node tests/search-aliases.test.js && node tests/config-writes.test.js && node tests/profile-migration.test.js && node tests/workspace-partitions.test.js && node tests/keyboard.test.js && node scripts/sync-keyboard.js --check && node scripts/generate-keybind-docs.js --check && node tests/navigation-focus.test.js && node tests/overlay-state.test.js && node tests/extensions.test.js && node tests/extension-packages.test.js && node tests/extension-store.test.js && node tests/tab-numbers.test.js && node tests/focus-recovery.test.js && node tests/sidebar-pointer.test.js && node scripts/generate-extension-preload.js --check && node tests/launcher.test.js && node tests/launch-downloads.test.js && node tests/release-tooling.test.js && node tests/aur-package.test.js && node tests/desktop-integration.test.js && node tests/appimage-update.test.js && node tests/fly-install.test.js && node tests/native-delivery.test.js && node scripts/version-sync.js --check && node scripts/chromium/capture-contracts.js --check && node scripts/chromium/generate-commands.js --check && node scripts/chromium/sync-resources.js --check && python3 scripts/chromium/bundled-extensions.py --check",
+    "test": "node scripts/chromium/generate-commands.js --check && node scripts/version-sync.js --check && python3 scripts/chromium/bundled-extensions.py --check && node tests/release-tooling.test.js && node tests/aur-package.test.js && node tests/native-delivery.test.js && node tests/launch-downloads.test.js",
+    "test:chromium-tooling": "python3 -B -m unittest discover -s tests/chromium -p 'test_*.py'",
     "docs:dev": "vitepress dev docs",
     "docs:build": "vitepress build docs",
     "docs:preview": "vitepress preview docs",
-    "install-desktop": "mkdir -p ~/.local/share/applications ~/.local/share/icons/hicolor/{48x48,128x128,256x256}/apps && cp fly-browser.desktop ~/.local/share/applications/ && cp assets/icons/fly-logo48.png ~/.local/share/icons/hicolor/48x48/apps/fly-browser.png && cp assets/icons/fly-logo128.png ~/.local/share/icons/hicolor/128x128/apps/fly-browser.png && cp assets/icons/fly-logo256.png ~/.local/share/icons/hicolor/256x256/apps/fly-browser.png && update-desktop-database ~/.local/share/applications && gtk-update-icon-cache -f -t ~/.local/share/icons/hicolor",
     "release": "node scripts/release.js",
-    "dist": "python3 scripts/chromium/package-linux.py",
-    "dist:linux": "python3 scripts/chromium/package-linux.py",
-    "dist:dir": "python3 scripts/chromium/release.py",
-    "test:keyboard-ui": "node tests/tab-suspension-ui.test.js && node tests/tab-restoration-ui.test.js && node tests/desktop-integration-ui.test.js && node tests/split-view-ui.test.js && node tests/address-bar-dismiss-ui.test.js && node tests/appimage-update-ui.test.js && node tests/keyboard-ui.test.js && node tests/empty-search-ui.test.js && node tests/navigation-focus-ui.test.js && node tests/overlay-state-ui.test.js && node tests/sidebar-pointer-focus-ui.test.js && node tests/settings-nav-ui.test.js && node tests/settings-tabs-ui.test.js && node tests/interface-scale-ui.test.js && node tests/site-zoom-ui.test.js && node tests/website-theme-ui.test.js && node tests/whats-new-ui.test.js && node tests/tab-close-typing-ui.test.js && node tests/tab-close-button-ui.test.js && node tests/tab-context-menu-ui.test.js && node tests/sidebar-cursor-ui.test.js && node tests/tab-numbers-ui.test.js && node tests/legacy-keybinds-ui.test.js && node tests/oauth-popup-ui.test.js && node tests/self-closing-tab-ui.test.js && node tests/motion-ui.test.js && node tests/collapsed-sidebar-ui.test.js && node tests/bookmarks-ui.test.js && node tests/workspace-partitions-ui.test.js",
-    "test:new-tab-bookmarks-ui": "node tests/new-tab-bookmarks-ui.test.js",
-    "test:frequent-sites-ui": "node tests/frequent-sites-ui.test.js",
-    "test:identity-ui": "node tests/identity-ui.test.js",
-    "test:blocking-ui": "node tests/extensions-ui.test.js && node tests/blocking-startup-ui.test.js",
-    "test:extensions-ui": "node tests/extension-install-ui.test.js && node tests/extensions-ui.test.js && node tests/settings-tabs-ui.test.js",
     "chromium": "python3 scripts/chromium/engine.py",
-    "test:chromium-tooling": "python3 -B -m unittest discover -s tests/chromium -p 'test_*.py'",
-    "start:legacy": "install-electron && electron . --log-level=3",
-    "dist:legacy": "electron-builder",
-    "dist:linux:legacy": "electron-builder --linux",
-    "dist:dir:legacy": "electron-builder --dir"
-  },
-  "build": {
-    "appId": "io.github.arzuparreta.fly-browser",
-    "productName": "Fly Browser",
-    "directories": {
-      "output": "dist",
-      "buildResources": "build"
-    },
-    "toolsets": {
-      "appimage": "1.0.3"
-    },
-    "files": [
-      "main.js",
-      "siteZoom.js",
-      "frequentSites.js",
-      "bookmarkStore.js",
-      "tabSuspension.js",
-      "preload.js",
-      "webview-preload.js",
-      "hinter.js",
-      "security.js",
-      "keybinds.js",
-      "stored-keybind-defaults.json",
-      "profileMigration.js",
-      "workspacePartitions.js",
-      "closedOutput.js",
-      "tabNumbers.js",
-      "tabContextMenu.js",
-      "userContent.js",
-      "diagnostics.js",
-      "desktopIntegration.js",
-      "appImageUpdate.js",
-      "index.html",
-      "style.css",
-      "renderer.js",
-      "modules/**/*",
-      "assets/**/*",
-      "package.json",
-      "keyboard.js",
-      "extensions.js",
-      "extensionPackages.js",
-      "extensionStore.js",
-      "extension-store.preload.js",
-      "extension-api.preload.js"
-    ],
-    "artifactName": "Fly-${version}-${arch}.${ext}",
-    "linux": {
-      "target": [
-        "AppImage",
-        "tar.gz"
-      ],
-      "category": "Network;WebBrowser",
-      "icon": "build/icons",
-      "syncDesktopName": true,
-      "mimeTypes": [
-        "text/html",
-        "text/xml",
-        "application/xhtml+xml",
-        "x-scheme-handler/http",
-        "x-scheme-handler/https"
-      ],
-      "desktop": {
-        "entry": {
-          "Name": "Fly",
-          "GenericName": "Web Browser",
-          "Keywords": "browser;web;internet;"
-        }
-      },
-      "extraResources": [
-        {
-          "from": "build/icons",
-          "to": "icons",
-          "filter": [
-            "*.png"
-          ]
-        },
-        {
-          "from": "fly-browser.desktop",
-          "to": "fly-browser.desktop"
-        }
-      ]
-    },
-    "mac": {
-      "target": [
-        {
-          "target": "dmg",
-          "arch": [
-            "x64",
-            "arm64"
-          ]
-        },
-        {
-          "target": "zip",
-          "arch": [
-            "x64",
-            "arm64"
-          ]
-        }
-      ],
-      "category": "public.app-category.productivity",
-      "icon": "build/icon.png",
-      "hardenedRuntime": true,
-      "gatekeeperAssess": false
-    },
-    "win": {
-      "target": [
-        "portable",
-        "nsis"
-      ],
-      "icon": "build/icon.ico"
-    },
-    "portable": {
-      "artifactName": "Fly-${version}-portable.${ext}"
-    },
-    "nsis": {
-      "artifactName": "Fly-Setup-${version}.${ext}",
-      "oneClick": false,
-      "allowToChangeInstallationDirectory": true,
-      "createDesktopShortcut": true,
-      "createStartMenuShortcut": true
-    },
-    "asarUnpack": [
-      "assets/extensions/**/*"
-    ]
+    "dist": "python3 scripts/chromium/package-linux.py",
+    "dist:dir": "python3 scripts/chromium/release.py"
   },
   "allowScripts": {
-    "electron@44.7.0": true,
-    "esbuild@0.25.12": true,
-    "electron-winstaller@5.4.0": false
+    "esbuild@0.25.12": true
   },
   "devDependencies": {
-    "electron": "^44.7.0",
-    "electron-builder": "^26.15.3",
     "vitepress": "^1.6.4"
   },
-  "dependencies": {
-    "adm-zip": "0.6.1",
-    "electron-chrome-extensions": "4.9.0",
-    "electron-updater": "^6.8.10"
-  },
   "overrides": {
-    "vite": "^6.4.3",
-    "global-agent": "^4.1.3"
+    "vite": "^6.4.3"
   }
 }

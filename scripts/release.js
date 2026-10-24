@@ -224,7 +224,7 @@ function prepare(options) {
         `Bump to \`${version}\`, derived from the impact labels below.`,
         '',
         summarise(pulls, tag),
-        `Merging this tags \`v${version}\` and publishes the Linux, macOS and Windows packages. Nothing in this pull request is hand-written: \`scripts/version-sync.js\` wrote the version and \`scripts/whats-new.js\` the What's New page from the pull requests above.`,
+        `Merging this tags \`v${version}\` and publishes the Linux package. Nothing in this pull request is hand-written: \`scripts/version-sync.js\` wrote the version and \`scripts/whats-new.js\` the What's New page from the pull requests above.`,
         ''
     ].join('\n');
     const url = gh('pr', 'create', '--base', 'main', '--head', branch, '--title', `Version ${version}`,

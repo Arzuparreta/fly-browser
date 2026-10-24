@@ -18,7 +18,7 @@ struct PaletteEntry {
   std::string category;
   std::vector<std::string> shortcuts;
   std::vector<std::string> normal;
-  // Command Centre texts (Electron COMMAND_DEFINITIONS).
+  // Command Centre texts (commands.json).
   std::string desc;
   std::string details;
   std::string tip;
@@ -34,15 +34,15 @@ std::vector<PaletteEntry> PaletteCatalog(const KeyboardConfig& config);
 std::vector<PaletteEntry> FilterPalette(
     const std::vector<PaletteEntry>& entries,
     std::u16string_view query);
-// Electron's Command Centre list: only its COMMAND_DEFINITIONS, with the
-// current bindings (the keyboard editor lists every action).
+// The Command Centre list: the entries of commands.json, with the current
+// bindings (the keyboard editor lists every action).
 std::vector<PaletteEntry> CommandCentreCatalog(const KeyboardConfig& config);
-// Electron's Command Centre search: the whole query, case-insensitive, in the
+// Command Centre search: the whole query, case-insensitive, in the
 // title, description, details, category, keywords or a binding.
 std::vector<PaletteEntry> FilterCommandCentre(
     const std::vector<PaletteEntry>& entries,
     std::u16string_view query);
-// Electron's Command Centre filter chips, in order ("All" first).
+// The Command Centre filter chips, in order ("All" first).
 const std::vector<std::string>& CommandCentreCategories();
 }  // namespace fly
 #endif

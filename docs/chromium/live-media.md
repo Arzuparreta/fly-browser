@@ -1,8 +1,8 @@
 # Explicit live Twitch/Pie desktop regression
 
-This is an additional A09 test for a public service. It does not replace the
-network-free media fixtures, pass all of A09, or establish packaged/macOS/Windows
-acceptance. Ordinary pull requests still run only the existing lightweight
+This is an additional media test against a public service. It does not replace
+the network-free media fixtures or establish that a package works. Ordinary pull
+requests still run only the existing lightweight
 checks. Live failures and unavailable/offline samples stay recorded as failures
 or coverage gaps, never as passes.
 

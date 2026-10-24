@@ -15,7 +15,7 @@
 #include "base/strings/string_split.h"
 #include "base/strings/string_util.h"
 #include "base/strings/utf_string_conversions.h"
-#include "fly/commands/generated_contract.h"
+#include "fly/commands/generated_catalog.h"
 #include "third_party/icu/source/common/unicode/locid.h"
 #include "third_party/icu/source/common/unicode/unistr.h"
 
@@ -165,6 +165,17 @@ std::string NormalizeStroke(std::string_view input) {
 
 bool IsKnownAction(std::string_view id) {
   return Metadata().contains(id);
+}
+bool IsRetiredAction(std::string_view id) {
+  static const base::NoDestructor<base::ListValue> retired([] {
+    auto parsed =
+        base::JSONReader::ReadList(kRetiredActionsJSON, base::JSON_PARSE_RFC);
+    CHECK(parsed);
+    return std::move(*parsed);
+  }());
+  return std::ranges::any_of(*retired, [&](const base::Value& value) {
+    return value.is_string() && value.GetString() == id;
+  });
 }
 std::string ActionLabel(std::string_view id) {
   const auto* row = Metadata().FindDict(id);
@@ -342,6 +353,10 @@ KeyboardValidation ResolveKeyboardChanges(const base::DictValue& changes) {
   std::set<std::string> page_choices;
   for (const auto* table : {shortcuts, normal}) {
     for (const auto [action, value] : *table) {
+      // Bindings saved for an action Fly no longer has are dropped; the next
+      // save removes them.
+      if (IsRetiredAction(action))
+        continue;
       if (!IsKnownAction(action))
         return Invalid("Unknown action: " + action);
       if (!value.is_list())

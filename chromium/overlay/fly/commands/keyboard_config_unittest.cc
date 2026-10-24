@@ -4,34 +4,143 @@
 #include "fly/commands/keyboard_config.h"
 #include "fly/commands/keyboard_router.h"
 
-#include "base/json/json_reader.h"
-#include "fly/commands/generated_contract.h"
+#include <initializer_list>
+#include <string_view>
+#include <utility>
+
 #include "testing/gtest/include/gtest/gtest.h"
 
 namespace fly {
 namespace {
-TEST(KeyboardConfigTest, MatchesCurrentJavaScriptGrammarAndDefaults) {
-  const auto cases =
-      base::JSONReader::ReadDict(kKeyboardCasesJSON, base::JSON_PARSE_RFC);
-  ASSERT_TRUE(cases);
-  for (const auto& value : *cases->FindList("normalize")) {
-    const auto& row = value.GetDict();
-    SCOPED_TRACE(value.DebugString());
-    EXPECT_EQ(*row.FindString("output"),
-              NormalizeStroke(*row.FindString("input")))
-        << *row.FindString("input");
-  }
-  for (const auto& value : *cases->FindList("configs")) {
-    const auto& row = value.GetDict();
-    SCOPED_TRACE(*row.FindString("name"));
-    const auto validated = ValidateKeyboardConfig(*row.FindDict("input"));
-    EXPECT_EQ(*row.FindBool("ok"), validated.config.has_value())
-        << validated.error;
-    if (validated.config) {
-      ASSERT_TRUE(row.FindDict("output"));
-      EXPECT_EQ(*row.FindDict("output"), validated.config->ToValue());
-    }
-  }
+TEST(KeyboardConfigTest, StrokesAreNormalised) {
+  const std::pair<std::string_view, std::string_view> cases[] = {
+      {"control+shift+a", "Ctrl+Shift+A"},
+      {"Meta+Ctrl+return", "Ctrl+Meta+Enter"},
+      {"Ctrl++", "Ctrl+Plus"},
+      {"Ctrl+Shift+Plus", "Ctrl+Plus"},
+      {"Ctrl+A+B", ""},
+      {"Ctrl+Ctrl+A", ""},
+      {"Ctrl+ñ", "Ctrl+Ñ"},
+      {"ñ", "Ñ"},
+      {"Shift+ñ", "Ñ"},
+      {"Cmd+X", "Meta+X"},
+      {"Super+F24", "Meta+F24"},
+      {"F25", ""},
+      {"F01", ""},
+      {" ", ""},
+      {"  Alt + PageDown ", "Alt+PageDown"},
+      {"Ctrl+\\", "Ctrl+\\"},
+      {"Shift+/", "/"},
+      {"AltGraph+A", ""},
+      {"", ""},
+      {"Ctrl+", ""},
+      {"Shift+Escape", "Shift+Escape"},
+      {"Ctrl+💡", ""},
+      {"Shift+ß", "Shift+SS"},
+      {"   ", ""},
+  };
+  for (const auto& [input, output] : cases)
+    EXPECT_EQ(output, NormalizeStroke(input)) << input;
+}
+
+// The default configuration with one edit applied; `edit` receives the
+// shortcuts table, the page-key table and the whole configuration.
+template <typename Edit>
+base::DictValue Edited(Edit edit) {
+  auto config = DefaultKeyboardConfig().ToValue();
+  auto shortcuts = config.FindDict("shortcuts")->Clone();
+  auto normal = config.FindDict("normal")->Clone();
+  edit(shortcuts, normal, config);
+  config.Set("shortcuts", std::move(shortcuts));
+  config.Set("normal", std::move(normal));
+  return config;
+}
+
+base::ListValue List(std::initializer_list<std::string_view> items) {
+  base::ListValue list;
+  for (const auto item : items)
+    list.Append(item);
+  return list;
+}
+
+TEST(KeyboardConfigTest, ValidEditsAreNormalised) {
+  EXPECT_EQ(DefaultKeyboardConfig().ToValue(),
+            ValidateKeyboardConfig(DefaultKeyboardConfig().ToValue())
+                .config->ToValue());
+  auto result = ValidateKeyboardConfig(Edited(
+      [](auto&, auto&, auto& config) { config.Set("tabs", "shift+ctrl"); }));
+  ASSERT_TRUE(result.config) << result.error;
+  EXPECT_EQ("Ctrl+Shift", result.config->tabs);
+  result = ValidateKeyboardConfig(
+      Edited([](auto&, auto&, auto& config) { config.Set("tabs", ""); }));
+  ASSERT_TRUE(result.config) << result.error;
+  EXPECT_EQ("", result.config->tabs);
+  // Equal bindings in another spelling are one binding.
+  result = ValidateKeyboardConfig(Edited([](auto& shortcuts, auto&, auto&) {
+    shortcuts.Set("spawn-tab", List({"Ctrl+T", "control+t"}));
+  }));
+  ASSERT_TRUE(result.config) << result.error;
+  EXPECT_EQ(DefaultKeyboardConfig(), *result.config);
+  // A single binding may be text; layout letters are kept.
+  result = ValidateKeyboardConfig(Edited([](auto& shortcuts, auto&, auto&) {
+    shortcuts.Set("spawn-tab", "Ctrl+ñ");
+  }));
+  ASSERT_TRUE(result.config) << result.error;
+  EXPECT_EQ(std::vector<std::string>{"Ctrl+Ñ"},
+            result.config->shortcuts.at("spawn-tab"));
+}
+
+TEST(KeyboardConfigTest, InvalidEditsAreRejected) {
+  const struct {
+    const char* name;
+    base::DictValue config;
+  } cases[] = {
+      {"shortcut conflict", Edited([](auto& shortcuts, auto&, auto&) {
+         shortcuts.Set("spawn-tab", "Ctrl+W");
+       })},
+      {"prefix conflict", Edited([](auto&, auto& normal, auto&) {
+         normal.Set("scroll-up", "G");
+       })},
+      {"page key shadowed by a shortcut",
+       Edited([](auto&, auto& normal, auto&) {
+         normal.Set("spawn-tab", "Ctrl+T");
+       })},
+      {"shortcut without a modifier", Edited([](auto& shortcuts, auto&, auto&) {
+         shortcuts.Set("spawn-tab", "A");
+       })},
+      {"reserved Escape", Edited([](auto&, auto& normal, auto&) {
+         normal.Set("scroll-down", "Escape");
+       })},
+      {"reserved Tab", Edited([](auto&, auto& normal, auto&) {
+         normal.Set("scroll-down", "Shift+Tab");
+       })},
+      {"unknown action", Edited([](auto& shortcuts, auto&, auto&) {
+         shortcuts.Set("fake", "Ctrl+A");
+       })},
+      {"numeric binding", Edited([](auto& shortcuts, auto&, auto&) {
+         shortcuts.Set("spawn-tab", base::ListValue().Append(42));
+       })},
+      {"tab modifier without Ctrl, Alt or Meta",
+       Edited([](auto&, auto&, auto& config) { config.Set("tabs", "Shift"); })},
+      {"tab modifier with a key",
+       Edited([](auto&, auto&, auto& config) { config.Set("tabs", "Alt+5"); })},
+      {"no way out of passthrough", Edited([](auto& shortcuts, auto&, auto&) {
+         shortcuts.Set("toggle-passthrough", base::ListValue());
+       })},
+      {"page key on a tab-number chord", Edited([](auto&, auto& normal, auto&) {
+         normal.Set("scroll-down", List({"Alt+1"}));
+       })},
+      {"sequence of three keys", Edited([](auto&, auto& normal, auto&) {
+         normal.Set("page-top", "G G G");
+       })},
+      {"more than eight bindings", Edited([](auto& shortcuts, auto&, auto&) {
+         shortcuts.Set("spawn-tab",
+                       List({"Ctrl+T", "Ctrl+T", "Ctrl+T", "Ctrl+T", "Ctrl+T",
+                             "Ctrl+T", "Ctrl+T", "Ctrl+T", "Ctrl+T"}));
+       })},
+  };
+  for (const auto& test : cases)
+    EXPECT_FALSE(ValidateKeyboardConfig(test.config).config) << test.name;
 }
 
 TEST(KeyboardConfigTest, DefaultsAreCopiedAndExplicitDisablesSurvive) {
