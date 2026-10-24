@@ -1,0 +1,16 @@
+--- a/chrome/browser/ui/views/frame/app_menu_button.cc
++++ b/chrome/browser/ui/views/frame/app_menu_button.cc
+@@ -57,7 +57,12 @@ views::BubbleAnchor AppMenuButton::GetAnchor() {
+   auto* const elements = BrowserElementsViews::From(this);
+   CHECK(elements);
+   auto* const element = elements->GetElement(kFallbackPopupAnchorElementId);
+-  CHECK(element);
++  // Fly: an embedded native Fly window keeps this button undrawn and can be
++  // asked for an anchor before its fallback anchor is shown. Anchor to the
++  // button instead of ending the browser process.
++  if (!element) {
++    return views::BubbleAnchor(this);
++  }
+   return views::BubbleAnchor(element);
+ }
+ 

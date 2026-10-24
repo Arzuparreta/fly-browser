@@ -12,7 +12,9 @@
 #include "chrome/browser/history/history_service_factory.h"
 #include "chrome/browser/ssl/chrome_security_state_util.h"
 #include "chrome/browser/ui/browser_window/public/browser_window_interface_iterator.h"
+#include "chrome/browser/sessions/exit_type_service.h"
 #include "chrome/browser/ui/views/frame/browser_view.h"
+#include "chrome/browser/ui/views/session_crashed_bubble_view.h"
 #include "chrome/common/chrome_paths.h"
 #include "components/bookmarks/browser/bookmark_model.h"
 #include "components/content_settings/core/browser/host_content_settings_map.h"
@@ -375,6 +377,20 @@ class FlyWorkspaceBrowserTest : public InProcessBrowserTest {
               content::EvalJs(contents, "document.visibilityState"));
   }
 };
+
+// After a crash or forced exit Chromium anchored its restore bubble to the
+// app menu, which a Fly window never draws, and ended the browser process on
+// every following start. Fly restores sessions itself and shows no bubble.
+IN_PROC_BROWSER_TEST_F(FlyWorkspaceBrowserTest, PRE_StartsAfterUncleanExit) {
+  ExitTypeService::GetInstanceForProfile(browser()->GetProfile())
+      ->SetWaitingForUserToAckCrashForTest(true);
+}
+IN_PROC_BROWSER_TEST_F(FlyWorkspaceBrowserTest, StartsAfterUncleanExit) {
+  EXPECT_EQ(ExitType::kCrashed,
+            ExitTypeService::GetLastSessionExitType(browser()->GetProfile()));
+  EXPECT_EQ(nullptr, SessionCrashedBubbleView::GetInstanceForTest());
+  EXPECT_TRUE(FlyWindowController::Get().IsSelected(browser()));
+}
 
 IN_PROC_BROWSER_TEST_F(FlyWorkspaceBrowserTest,
                        OneDesktopTwoProfilesAndNativeIds) {
