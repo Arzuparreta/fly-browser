@@ -294,6 +294,7 @@ class TabRowView : public views::View {
   views::Button* audio() { return audio_; }
   RowBadge* audio_badge() { return audio_; }
   const RowState& state() const { return state_; }
+  bool hovered() const { return hovered_; }
   void SetState(const RowState& state) {
     state_ = state;
     pin_->SetVisible(state.pinned);
@@ -793,8 +794,12 @@ void TabSidebar::SetRail(bool rail) {
   if (rail_ == rail)
     return;
   rail_ = rail;
+  // Only the hovered row looks different on the rail (no hover tint, no
+  // close button). Repainting every row would delay the slide's first frame.
   for (views::View* child : rows_->children()) {
     auto* row = static_cast<TabRowView*>(child);
+    if (!row->hovered())
+      continue;
     row->UpdateClose();
     row->SchedulePaint();
   }

@@ -732,6 +732,46 @@ IN_PROC_BROWSER_TEST_F(FlySidebarBrowserTest,
   EXPECT_EQ(0, content::EvalJs(page, "visibilityEvents.length"));
 }
 
+// Opening the sidebar over a row shows that row's hover look and close
+// button; the other rows keep theirs. Hover switches without a fade, so no
+// button repaints on every frame of the slide.
+IN_PROC_BROWSER_TEST_F(FlySidebarBrowserTest, SlideUpdatesOnlyTheHoveredRow) {
+  ASSERT_TRUE(ui_test_utils::NavigateToURL(
+      browser(), embedded_test_server()->GetURL("/title1.html")));
+  auto* first = Active(browser());
+  ASSERT_TRUE(AddTabAtIndex(1, embedded_test_server()->GetURL("/title2.html"),
+                            ui::PAGE_TRANSITION_TYPED));
+  auto* second = Active(browser());
+  auto& window = FlyWindowController::Get();
+  auto* list = window.tab_sidebar_for_testing();
+  ASSERT_TRUE(base::test::RunUntil([&] {
+    return list->row_for_testing(first) && list->row_for_testing(second);
+  }));
+  MoveToPage();
+  WaitForSidebarMotion();
+  auto* row = list->row_for_testing(first);
+  auto* select = static_cast<views::Button*>(row->children()[0].get());
+  auto* close = row->children()[2].get();
+  auto* other_close = list->row_for_testing(second)->children()[2].get();
+  EXPECT_FALSE(select->GetAnimateOnStateChange());
+  EXPECT_FALSE(close->GetVisible());
+  EXPECT_TRUE(other_close->GetVisible());
+  // The row reaches under the rail, so pointing at the rail opens the
+  // sidebar with the pointer already on the row.
+  const auto bounds = row->GetBoundsInScreen();
+  MovePointer(gfx::Point(bounds.x() + FlyScaled(18), bounds.CenterPoint().y()));
+  ASSERT_TRUE(base::test::RunUntil(
+      [&] { return window.sidebar_expanded_for_testing(); }));
+  EXPECT_TRUE(close->GetVisible());
+  EXPECT_TRUE(other_close->GetVisible());
+  WaitForSidebarMotion();
+  EXPECT_TRUE(close->GetVisible());
+  MoveToPage();
+  WaitForSidebarMotion();
+  EXPECT_FALSE(close->GetVisible());
+  EXPECT_TRUE(other_close->GetVisible());
+}
+
 // Electron's sidebar: the collapsed rail is the panel's left column. The
 // edge slides 224px and the panel slides back by the same amount on the
 // compositor, so rows and favicons never move.

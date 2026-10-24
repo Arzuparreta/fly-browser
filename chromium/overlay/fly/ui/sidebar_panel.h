@@ -79,6 +79,9 @@ class SidebarPanel : public views::View {
   gfx::Size CalculatePreferredSize(
       const views::SizeBounds& available) const override;
   void Layout(PassKey) override;
+  // Layout() skips hidden parts (window controls, workspaces), so showing or
+  // hiding one lays the panel out again.
+  void ChildVisibilityChanged(views::View* child) override;
   void OnPaintBackground(gfx::Canvas* canvas) override;
   void OnThemeChanged() override;
 

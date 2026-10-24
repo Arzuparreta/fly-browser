@@ -222,6 +222,10 @@ void SidebarPanel::Layout(PassKey) {
   }
 }
 
+void SidebarPanel::ChildVisibilityChanged(views::View* child) {
+  InvalidateLayout();
+}
+
 void SidebarPanel::OnPaintBackground(gfx::Canvas* canvas) {
   canvas->DrawColor(FlyRoleColor(FlyRole::kSidebarSurface));
   // Light mode lays paper grain over the sidebar colour.
@@ -259,6 +263,11 @@ SidebarClock::~SidebarClock() = default;
 void SidebarClock::SetClock(const std::u16string& text,
                             const std::u16string& date,
                             const std::u16string& time) {
+  // Every sidebar state change refreshes the clock; an unchanged one needs
+  // no layout.
+  if (GetText() == text && date_->GetText() == date &&
+      time_->GetText() == time)
+    return;
   if (GetText() != text)
     SetText(text);
   label()->SetVisible(false);

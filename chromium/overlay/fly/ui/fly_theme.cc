@@ -286,6 +286,10 @@ FlyButton::FlyButton(PressedCallback callback,
   SetInstallFocusRingOnFocus(false);
   views::InkDrop::Get(this)->SetMode(views::InkDropHost::InkDropMode::OFF);
   SetHasInkDropActionOnClick(false);
+  // The hover look switches with the state (PaintButtonContents), so
+  // LabelButton's hover fade would only repaint an unchanged button on every
+  // frame for 170ms, and force a commit on each frame of a sidebar slide.
+  SetAnimateOnStateChange(false);
   label()->SetFontList(FlyFont(face_, size_, weight_));
   label()->SetElideBehavior(gfx::ELIDE_TAIL);
   // Rows and badges paint over translucent overlays and scroll layers.
