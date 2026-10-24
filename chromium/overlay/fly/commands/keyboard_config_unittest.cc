@@ -79,6 +79,26 @@ TEST(KeyboardConfigTest, ChangesWinAndDefaultsGiveUpCollidingChords) {
   EXPECT_EQ("Ctrl", resolved.config->tabs);
 }
 
+TEST(KeyboardConfigTest, ChangesAreComparedInTheirNormalisedSpelling) {
+  const auto changes =
+      base::DictValue()
+          .Set("shortcuts",
+               base::DictValue()
+                   .Set("spawn-tab", base::ListValue().Append("ctrl+w"))
+                   .Set("toggle-address", base::ListValue().Append("alt+1")))
+          .Set("normal", base::DictValue().Set(
+                             "scroll-down", base::ListValue().Append("g  g")));
+  const auto resolved = ResolveKeyboardChanges(changes);
+  ASSERT_TRUE(resolved.config) << resolved.error;
+  EXPECT_EQ(std::vector<std::string>{"Ctrl+W"},
+            resolved.config->shortcuts.at("spawn-tab"));
+  EXPECT_TRUE(resolved.config->shortcuts.at("remove-tab").empty());
+  EXPECT_EQ("", resolved.config->tabs);
+  EXPECT_EQ(std::vector<std::string>{"G G"},
+            resolved.config->normal.at("scroll-down"));
+  EXPECT_TRUE(resolved.config->normal.at("page-top").empty());
+}
+
 TEST(KeyboardConfigTest, MalformedChangesAreRejected) {
   EXPECT_FALSE(ResolveKeyboardChanges(base::DictValue()).config);
   const auto with = [](base::Value value) {

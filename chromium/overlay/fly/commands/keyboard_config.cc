@@ -83,6 +83,17 @@ KeyboardValidation Invalid(std::string message) {
   return {std::nullopt, std::move(message)};
 }
 
+// A binding as ValidateKeyboardConfig will store it: each stroke normalised,
+// strokes separated by one space.
+std::string NormalizeSequence(std::string_view binding) {
+  std::vector<std::string> strokes;
+  for (const auto& stroke :
+       base::SplitString(binding, base::kWhitespaceASCII,
+                         base::TRIM_WHITESPACE, base::SPLIT_WANT_NONEMPTY))
+    strokes.push_back(NormalizeStroke(stroke));
+  return base::JoinString(strokes, " ");
+}
+
 const base::DictValue& Metadata() {
   static const base::NoDestructor<base::DictValue> metadata([] {
     auto parsed =
@@ -339,7 +350,7 @@ KeyboardValidation ResolveKeyboardChanges(const base::DictValue& changes) {
         if (!binding.is_string())
           return Invalid("Bindings must be text: " + action);
         (table == shortcuts ? global_choices : page_choices)
-            .insert(binding.GetString());
+            .insert(NormalizeSequence(binding.GetString()));
       }
     }
   }
