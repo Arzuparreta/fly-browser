@@ -141,18 +141,6 @@ UserContentService::Generated UserContentService::Generate(
                             FILE_PATH_LITERAL(".user.js"));
   auto styles = ReadFolder(user_data.AppendASCII("styles"),
                            FILE_PATH_LITERAL(".user.css"));
-  base::DictValue legacy;
-  base::FileEnumerator stored(user_data.AppendASCII("script-storage"), false,
-                              base::FileEnumerator::FILES,
-                              FILE_PATH_LITERAL("*.json"));
-  for (auto path = stored.Next(); !path.empty(); path = stored.Next()) {
-    std::string text;
-    if (!base::ReadFileToStringWithMaxSize(path, &text, kMaxFileBytes))
-      continue;
-    if (auto values = base::JSONReader::ReadDict(text, base::JSON_PARSE_RFC))
-      legacy.Set(path.BaseName().RemoveExtension().AsUTF8Unsafe(),
-                 std::move(*values));
-  }
   result.scripts = scripts.size();
   result.styles = styles.size();
   base::DictValue content;
@@ -160,7 +148,6 @@ UserContentService::Generated UserContentService::Generate(
   content.Set("emailHandler", std::move(email_handler));
   content.Set("scripts", std::move(scripts));
   content.Set("styles", std::move(styles));
-  content.Set("legacyStorage", std::move(legacy));
   std::string json;
   base::JSONWriter::Write(content, &json);
   const auto digest = base::SHA1HashString(json + worker + manifest_text +

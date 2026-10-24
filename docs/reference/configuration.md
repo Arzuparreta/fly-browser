@@ -24,17 +24,13 @@ share one renderer. Interface scale and website zoom are separate preferences.
 
 Put `.user.js` in `<user data>/scripts/` and `.user.css` in `<user data>/styles/`.
 Fly generates `<user data>/fly-user-content/`, a component extension, from these
-files. Do not edit the generated component. Legacy `script-storage/` values
-seed extension storage on import; new GM values live in extension storage.
+files. Do not edit the generated component. GM values live in extension
+storage.
 See [user scripts and styles](/guide/user-scripts-and-styles).
 
-## Import and backup
+## Backup
 
-The importer reads legacy JSON files once, maps them to native preferences,
-and records its summary and pending profile data in `fly-legacy-import.json`.
-An interrupted import uses `fly-legacy-import.partial` for rollback and retry.
-Keep these files with the rest of the profile when backing up. A full backup
-requires closing Fly and copying the entire native user data directory.
+A full backup requires closing Fly and copying the entire user data directory.
 
 Removing the native installation keeps data. Deleting the native profile is a
 separate destructive action: `fly-install uninstall --purge`.

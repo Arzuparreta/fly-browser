@@ -29,6 +29,11 @@ struct KeyboardValidation {
 std::string NormalizeStroke(std::string_view input);
 KeyboardValidation ValidateKeyboardConfig(const base::DictValue& input);
 const KeyboardConfig& DefaultKeyboardConfig();
+// The complete configuration for `changes` ({shortcuts, normal, tabs?}, each
+// table holding only the actions that differ from the defaults). The listed
+// bindings win; a default gives up only the chords that collide with them.
+// Without "tabs", a default tab modifier that collides is turned off.
+KeyboardValidation ResolveKeyboardChanges(const base::DictValue& changes);
 bool IsKnownAction(std::string_view id);
 std::string ActionLabel(std::string_view id);
 bool IsRepeatableAction(std::string_view id);

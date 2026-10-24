@@ -25,11 +25,7 @@ SHA-256 and adds Fly to the applications menu. Use `fly-install update`,
 `fly-browser-bin` package. A release must contain the native tarball; the
 installer fails clearly on older Electron-only releases.
 
-Close Electron Fly before the first native start. Native Fly imports legacy
-workspaces and supported settings into a separate profile, retaining the
-original. Reinstall hand-installed extensions from the Chrome Web Store.
-uBlock Origin Lite replaces the legacy blocker. See
-[installation and migration](docs/guide/installation.md) for limitations.
+See [installation](docs/guide/installation.md) for details.
 
 Native release packaging currently supports Linux x86_64. macOS, Windows and
 AppImage downloads from earlier releases belong to Electron legacy; native

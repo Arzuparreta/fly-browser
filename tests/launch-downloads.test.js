@@ -77,7 +77,7 @@ code 200
     fs.writeFileSync(path.join(api, 'latest'), JSON.stringify({tag_name:'v9.9.9'}, null, 2));
     publish('v9.9.9', 'release 9.9.9');
     const profile = `${env.XDG_CONFIG_HOME}/fly-browser-dev`;
-    const flags = `--fly-native\n--class=fly-browser-dev\n--user-data-dir=${profile}\n--fly-import-from=${profile}/empty-import\n`;
+    const flags = `--fly-native\n--class=fly-browser-dev\n--user-data-dir=${profile}\n`;
 
     // No local build: the published release, checked and started with the
     // development profile and the caller's arguments.
