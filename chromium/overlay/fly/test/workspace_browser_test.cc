@@ -68,15 +68,22 @@
 #include <set>
 
 #include "base/command_line.h"
+#include "base/feature_list.h"
 #include "base/files/file_util.h"
 #include "base/functional/bind.h"
 #include "base/json/json_reader.h"
 #include "base/json/json_writer.h"
+#include "base/metrics/field_trial.h"
+#include "base/metrics/field_trial_params.h"
 #include "base/run_loop.h"
 #include "base/synchronization/lock.h"
 #include "base/thread_annotations.h"
 #include "base/strings/strcat.h"
 #include "base/strings/utf_string_conversions.h"
+#include "components/services/storage/dom_storage/features.h"
+#include "content/public/common/content_features.h"
+#include "net/base/network_anonymization_key.h"
+#include "net/http/http_cache.h"
 #include "base/task/single_thread_task_runner.h"
 #include "base/test/bind.h"
 #include "base/test/run_until.h"
@@ -411,6 +418,31 @@ IN_PROC_BROWSER_TEST_F(FlyWorkspaceBrowserTest, StartsAfterUncleanExit) {
   }));
   EXPECT_FALSE(ExitTypeService::GetInstanceForProfile(profile)
                    ->waiting_for_user_to_ack_crash());
+}
+
+// Native Fly runs Chromium's default features, not the experiments of
+// testing/variations/fieldtrial_testing_config.json. Storage keeps the SQLite
+// stages earlier releases wrote, Privacy Sandbox APIs stay off and the HTTP
+// cache and connections stay partitioned by site.
+IN_PROC_BROWSER_TEST_F(FlyWorkspaceBrowserTest,
+                       RunsChromiumDefaultsWithoutTestingExperiments) {
+  EXPECT_FALSE(base::FieldTrialList::TrialExists("WebUIReloadButtonStudy"));
+  EXPECT_FALSE(base::FieldTrialList::TrialExists("PartitionAllocMiracleObject"));
+  EXPECT_EQ(storage::DomStorageSqliteRolloutStage::kUseSqliteForNewDatabases,
+            storage::GetSqliteRolloutStage(/*in_memory=*/false));
+  EXPECT_TRUE(base::FeatureList::IsEnabled(features::kIdbSqliteOnDiskRollout));
+  EXPECT_EQ("UseSqliteForNewStores",
+            base::GetFieldTrialParamValueByFeature(
+                features::kIdbSqliteOnDiskRollout, "stage"));
+  for (const char* feature :
+       {"BrowsingTopics", "ConversionMeasurement", "Fledge",
+        "AdInterestGroupAPI", "SharedStorageAPI"}) {
+    SCOPED_TRACE(feature);
+    EXPECT_TRUE(base::FeatureList::GetInstance()->IsFeatureOverriddenFromCommandLine(
+        feature, base::FeatureList::OVERRIDE_DISABLE_FEATURE));
+  }
+  EXPECT_TRUE(net::HttpCache::IsSplitCacheEnabled());
+  EXPECT_TRUE(net::NetworkAnonymizationKey::IsPartitioningEnabled());
 }
 
 IN_PROC_BROWSER_TEST_F(FlyWorkspaceBrowserTest,

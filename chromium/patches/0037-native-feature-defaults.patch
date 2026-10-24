@@ -1,0 +1,84 @@
+--- a/chrome/app/chrome_main_delegate.cc
++++ b/chrome/app/chrome_main_delegate.cc
+@@ -30,6 +30,8 @@
+ #include "base/process/process_handle.h"
+ #include "base/profiler/thread_group_profiler.h"
+ #include "base/rand_util.h"
++#include "base/base_switches.h"
++#include "base/strings/string_split.h"
+ #include "base/strings/string_util.h"
+ #include "base/strings/sys_string_conversions.h"
+ #include "base/strings/utf_string_conversions.h"
+@@ -280,6 +282,57 @@ ChromeMainDelegate::GetNonWildcardDomainNonPortSchemes() {
+ 
+ namespace {
+ 
++#if !defined(BUILDING_CHROME_RENDERER)
++// Fly: native Fly runs Chromium's default features instead of the experiments
++// that testing/variations/fieldtrial_testing_config.json applies to unbranded
++// builds; its README asks browsers other than Chrome to disable it. Those
++// experiments cost memory, idle CPU and tab-switching time. Experiments that
++// already migrated profile data written by earlier Fly releases stay on, with
++// the stage those releases ran: localStorage and IndexedDB in SQLite and the
++// migrated search engine data. The Privacy Sandbox APIs that the config turned
++// off stay off. A feature named on the command line keeps the state given
++// there.
++void ApplyFlyFeatureDefaults(base::CommandLine* command_line) {
++  // variations::switches::kDisableFieldTrialTestingConfig
++  command_line->AppendSwitch("disable-field-trial-config");
++  const auto named = [&](std::string_view feature) {
++    for (const char* list : {switches::kEnableFeatures,
++                             switches::kDisableFeatures}) {
++      for (std::string_view entry :
++           base::SplitStringPiece(command_line->GetSwitchValueASCII(list), ",",
++                                  base::TRIM_WHITESPACE,
++                                  base::SPLIT_WANT_NONEMPTY)) {
++        if (entry.starts_with('*'))
++          entry.remove_prefix(1);
++        if (entry.substr(0, entry.find_first_of(":<")) == feature)
++          return true;
++      }
++    }
++    return false;
++  };
++  const auto add = [&](const char* list, std::string_view entry) {
++    if (named(entry.substr(0, entry.find(':'))))
++      return;
++    std::string value = command_line->GetSwitchValueASCII(list);
++    if (!value.empty())
++      value += ',';
++    value += entry;
++    command_line->AppendSwitchASCII(list, value);
++  };
++  add(switches::kEnableFeatures,
++      "DomStorageSqliteNewDatabases:DomStorageSqliteNewDatabasesStage/"
++      "UseSqliteForNewDatabases");
++  add(switches::kEnableFeatures,
++      "IdbSqliteOnDiskRollout:stage/UseSqliteForNewStores");
++  add(switches::kEnableFeatures, "PrepopulatedEnginesMigration");
++  add(switches::kEnableFeatures, "ApplySearchEngineTypeMigration");
++  for (const char* feature :
++       {"BrowsingTopics", "ConversionMeasurement", "Fledge",
++        "AdInterestGroupAPI", "SharedStorageAPI"})
++    add(switches::kDisableFeatures, feature);
++}
++#endif  // !defined(BUILDING_CHROME_RENDERER)
++
+ #if BUILDFLAG(IS_WIN)
+ #if !defined(BUILDING_CHROME_RENDERER)
+ // Early versions of Chrome incorrectly registered a chromehtml: URL handler,
+@@ -1129,6 +1182,14 @@ std::optional<int> ChromeMainDelegate::BasicStartupComplete() {
+       *base::CommandLine::ForCurrentProcess();
+ #endif  // !defined(BUILDING_CHROME_RENDERER)
+ 
++#if !defined(BUILDING_CHROME_RENDERER)
++  // Fly: before the browser process creates its feature list.
++  if (command_line.HasSwitch("fly-native") &&
++      !command_line.HasSwitch(switches::kProcessType)) {
++    ApplyFlyFeatureDefaults(base::CommandLine::ForCurrentProcess());
++  }
++#endif  // !defined(BUILDING_CHROME_RENDERER)
++
+   // Only allow disabling web security via the command-line flag if the user has
+   // specified a distinct profile directory. This still enables tests to disable
+   // web security by setting the kWebKitWebSecurityEnabled pref directly.

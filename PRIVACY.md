@@ -23,6 +23,11 @@ against software on your machine. uBlock Origin Lite is bundled, including in
 private workspaces, unless disabled or removed. Other extensions follow
 Chromium's incognito permissions.
 
+Fly runs Chromium's default features, not the experiments Chromium enables in
+its development builds. Chromium's advertising APIs (Topics, Protected
+Audience, Attribution Reporting and Shared Storage) are turned off, and the
+HTTP cache and network connections stay partitioned by site.
+
 ## Local data and migration
 
 On first native start Fly imports supported Electron data into the separate

@@ -167,6 +167,7 @@ if (is_linux || is_win) {
       "//chrome/browser/extensions:test_support",
       "//chrome/browser/history",
       "//components/history/core/common",
+      "//components/services/storage:storage_features",
       "//chrome/browser/profiles:profile",
       "//chrome/browser/profiles:profile_manager",
       "//chrome/browser/profiles/keep_alive",
