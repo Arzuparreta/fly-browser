@@ -55,6 +55,34 @@ TEST_F(CommandServiceTest, PartialEditorProjectionCannotSilentlyResetBindings) {
   EXPECT_EQ(nullptr, prefs_.GetUserPref(kKeyboardPref));
 }
 
+TEST_F(CommandServiceTest, BindingsOfRetiredActionsAreDropped) {
+  ASSERT_TRUE(IsRetiredAction("open-script-storage-dir"));
+  prefs_.SetDict(
+      kKeyboardPref,
+      base::DictValue()
+          .Set("schema", 1)
+          .Set("shortcuts",
+               base::DictValue()
+                   .Set("open-script-storage-dir",
+                        base::ListValue().Append("Ctrl+Shift+Y"))
+                   .Set("spawn-tab", base::ListValue().Append("Ctrl+Y")))
+          .Set("normal", base::DictValue().Set(
+                             "open-script-storage-dir",
+                             base::ListValue().Append("Y"))));
+  const auto config = service_->Read();
+  ASSERT_TRUE(config);
+  EXPECT_EQ(std::vector<std::string>{"Ctrl+Y"},
+            config->shortcuts.at("spawn-tab"));
+  EXPECT_FALSE(config->shortcuts.contains("open-script-storage-dir"));
+  EXPECT_TRUE(service_->CanEdit());
+  ASSERT_TRUE(service_->Save(config->ToValue()).config);
+  const auto& saved = prefs_.GetDict(kKeyboardPref);
+  EXPECT_FALSE(
+      saved.FindDict("shortcuts")->contains("open-script-storage-dir"));
+  EXPECT_FALSE(saved.FindDict("normal")->contains("open-script-storage-dir"));
+  EXPECT_EQ(1u, saved.FindDict("shortcuts")->size());
+}
+
 TEST_F(CommandServiceTest, ChosenChordRemovesDefaultOwner) {
   auto stored =
       base::DictValue()

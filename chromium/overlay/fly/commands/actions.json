@@ -1,5 +1,6 @@
 {
   "tabs": "Alt",
+  "retired": ["open-script-storage-dir"],
   "actions": {
     "toggle-menu-bar": {"label": "Open native settings menu", "category": "System", "shortcuts": ["F1"], "normal": []},
     "spawn-tab": {"label": "New Blank Tab", "category": "Navigation & Workspaces", "shortcuts": ["Ctrl+T"], "normal": ["T"]},

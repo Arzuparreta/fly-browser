@@ -35,6 +35,9 @@ const KeyboardConfig& DefaultKeyboardConfig();
 // Without "tabs", a default tab modifier that collides is turned off.
 KeyboardValidation ResolveKeyboardChanges(const base::DictValue& changes);
 bool IsKnownAction(std::string_view id);
+// An action Fly used to have (actions.json "retired"): saved bindings for it
+// are ignored instead of making the whole configuration invalid.
+bool IsRetiredAction(std::string_view id);
 std::string ActionLabel(std::string_view id);
 bool IsRepeatableAction(std::string_view id);
 std::map<std::string, std::string> CompileBindings(const BindingTable& table,

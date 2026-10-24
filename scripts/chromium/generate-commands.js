@@ -2,7 +2,9 @@
 // Builds Fly's command catalogue from its two sources:
 //
 //   chromium/overlay/fly/commands/actions.json   every action: label, category
-//                                                and default bindings
+//                                                and default bindings; and the
+//                                                retired action ids that saved
+//                                                bindings may still name
 //   chromium/overlay/fly/commands/commands.json  the Command Centre entries
 //
 // and writes what is derived from them:
@@ -44,6 +46,11 @@ const commands = readJson('commands.json');
 if (typeof catalogue.tabs !== 'string') fail('actions.json: "tabs" must be a modifier such as "Alt", or "" for none');
 const actions = catalogue.actions;
 if (!actions || typeof actions !== 'object' || Array.isArray(actions)) fail('actions.json: "actions" must be an object');
+const retired = catalogue.retired ?? [];
+if (!Array.isArray(retired) || !retired.every(isText)) fail('actions.json: "retired" must be a list of action ids');
+for (const id of retired) {
+    if (Object.hasOwn(actions, id)) fail(`actions.json: ${id} is both an action and retired`);
+}
 for (const [id, action] of Object.entries(actions)) {
     if (!/^[a-z0-9]+(-[a-z0-9]+)*$/.test(id)) fail(`actions.json: "${id}" is not a lower-case, hyphenated id`);
     if (!isText(action.label) || !isText(action.category)) fail(`actions.json: ${id} needs a label and a category`);
@@ -87,6 +94,7 @@ namespace fly {
 inline constexpr std::string_view kActionMetadataJSON = ${literal(metadata)};
 inline constexpr std::string_view kDefaultKeyboardJSON = ${literal(defaults)};
 inline constexpr std::string_view kCommandDefinitionsJSON = ${literal(entries)};
+inline constexpr std::string_view kRetiredActionsJSON = ${literal(retired)};
 }  // namespace fly
 #endif  // FLY_COMMANDS_GENERATED_CATALOG_H_
 `;
