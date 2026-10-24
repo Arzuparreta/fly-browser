@@ -1,0 +1,26 @@
+--- a/chrome/app/chrome_main_delegate.cc
++++ b/chrome/app/chrome_main_delegate.cc
+@@ -193,6 +193,7 @@
+ #include "chrome/gpu/chrome_content_gpu_client.h"  // nogncheck
+ #include "chrome/utility/chrome_content_utility_client.h"  // nogncheck
+ #include "components/devtools/devtools_pipe/devtools_pipe.h"  // nogncheck
++#include "fly/app/feature_defaults.h"  // nogncheck
+ 
+ #if BUILDFLAG(IS_WIN)
+ #include "chrome/browser/chrome_browser_main_win.h"  // nogncheck
+@@ -1129,6 +1130,15 @@ std::optional<int> ChromeMainDelegate::BasicStartupComplete() {
+       *base::CommandLine::ForCurrentProcess();
+ #endif  // !defined(BUILDING_CHROME_RENDERER)
+ 
++#if !defined(BUILDING_CHROME_RENDERER)
++  // Fly: native Fly runs Chromium's default features; the browser process
++  // sets them up before it creates its feature list.
++  if (command_line.HasSwitch("fly-native") &&
++      !command_line.HasSwitch(switches::kProcessType)) {
++    fly::ApplyFeatureDefaults(base::CommandLine::ForCurrentProcess());
++  }
++#endif  // !defined(BUILDING_CHROME_RENDERER)
++
+   // Only allow disabling web security via the command-line flag if the user has
+   // specified a distinct profile directory. This still enables tests to disable
+   // web security by setting the kWebKitWebSecurityEnabled pref directly.
