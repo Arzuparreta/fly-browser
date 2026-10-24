@@ -6084,6 +6084,35 @@ IN_PROC_BROWSER_TEST_F(FlyWorkspaceBrowserTest,
 
 // Electron's Command Centre: count, category chips, inspector card,
 // recently used commands and the terminal fallback.
+// A long list builds the rows its panel can show; keyboard selection builds
+// the rest as it reaches them, so typing does not rebuild every result.
+IN_PROC_BROWSER_TEST_F(FlyWorkspaceBrowserTest,
+                       CommandCentreBuildsRowsAsSelectionReachesThem) {
+  auto& palette = FlyWindowController::Get().palette();
+  ASSERT_TRUE(InvokeNativeCommand(browser(), "toggle-palette"));
+  ASSERT_TRUE(base::test::RunUntil([&] { return palette.active(); }));
+  const size_t total = palette.result_count_for_testing();
+  const size_t built = palette.built_rows_for_testing();
+  ASSERT_GT(built, 0u);
+  ASSERT_LT(built, total);
+  for (size_t i = 0;
+       i < 2 * built && palette.built_rows_for_testing() == built; ++i) {
+    ui::KeyEvent down(ui::EventType::kKeyPressed, ui::VKEY_DOWN, ui::EF_NONE);
+    ASSERT_TRUE(palette.HandleOverlayKey(down));
+  }
+  EXPECT_GT(palette.built_rows_for_testing(), built);
+  EXPECT_FALSE(palette.selected_action_for_testing().empty());
+  palette.Cancel();
+  ASSERT_TRUE(base::test::RunUntil([&] { return !palette.active(); }));
+  // Up from the first row wraps to the last command.
+  ASSERT_TRUE(InvokeNativeCommand(browser(), "toggle-palette"));
+  ASSERT_TRUE(base::test::RunUntil([&] { return palette.active(); }));
+  ui::KeyEvent up(ui::EventType::kKeyPressed, ui::VKEY_UP, ui::EF_NONE);
+  ASSERT_TRUE(palette.HandleOverlayKey(up));
+  EXPECT_EQ(total, palette.built_rows_for_testing());
+  EXPECT_FALSE(palette.selected_action_for_testing().empty());
+}
+
 IN_PROC_BROWSER_TEST_F(FlyWorkspaceBrowserTest,
                        CommandCentreFiltersInspectsAndRemembersCommands) {
   ASSERT_TRUE(ui_test_utils::NavigateToURL(
