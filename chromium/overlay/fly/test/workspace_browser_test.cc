@@ -15,7 +15,10 @@
 #include "chrome/browser/sessions/exit_type_service.h"
 #include "chrome/browser/sessions/session_service.h"
 #include "chrome/browser/sessions/session_service_factory.h"
+#include "chrome/browser/extensions/extension_action_dispatcher.h"
 #include "chrome/browser/ui/views/frame/browser_view.h"
+#include "extensions/browser/extension_action_manager.h"
+#include "extensions/browser/extension_action.h"
 #include "chrome/browser/ui/views/session_crashed_bubble_view.h"
 #include "chrome/common/chrome_paths.h"
 #include "components/bookmarks/browser/bookmark_model.h"
@@ -4977,6 +4980,22 @@ IN_PROC_BROWSER_TEST_F(FlyWorkspaceBrowserTest,
   ASSERT_TRUE(base::test::RunUntil([&] {
     return window.extension_actions_for_testing()->children().size() == 1u;
   }));
+  // A tab or action change updates the button in place: a blocker updates
+  // its count on every request.
+  const auto* button = window.extension_actions_for_testing()->children()[0].get();
+  auto* contents = Active(second);
+  auto* blocker = extensions::ExtensionRegistry::Get(second->GetProfile())
+                      ->enabled_extensions()
+                      .GetByID(kId);
+  auto* action = extensions::ExtensionActionManager::Get(second->GetProfile())
+                     ->GetExtensionAction(*blocker);
+  ASSERT_TRUE(action);
+  action->SetBadgeText(extensions::ExtensionTabUtil::GetTabId(contents), "7");
+  extensions::ExtensionActionDispatcher::Get(second->GetProfile())
+      ->NotifyChange(action, contents, second->GetProfile());
+  ASSERT_TRUE(base::test::RunUntil(
+      [&] { return window.extension_badge_for_testing(0) == "7"; }));
+  EXPECT_EQ(button, window.extension_actions_for_testing()->children()[0].get());
   // Switching it off in one workspace leaves the other.
   ASSERT_TRUE(extensions.SetExtensionEnabled(second->GetProfile(), kId, false));
   EXPECT_FALSE(loaded(second));

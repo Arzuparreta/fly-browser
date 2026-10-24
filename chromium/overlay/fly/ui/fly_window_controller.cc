@@ -4354,22 +4354,39 @@ class ExtensionActionButton : public FlyButton {
                         const gfx::Image& icon,
                         std::u16string title,
                         std::string badge)
-      : FlyButton(std::move(callback), u""), id_(std::move(id)),
-        badge_(std::move(badge)) {
+      : FlyButton(std::move(callback), u""), id_(std::move(id)) {
     SetCustomPadding(gfx::Insets());
     SetPreferredSize(gfx::Size(20, 18));
     SetHorizontalAlignment(gfx::ALIGN_CENTER);
-    if (!icon.IsEmpty())
-      views::LabelButton::SetImageModel(
-          STATE_NORMAL,
-          ui::ImageModel::FromImageSkia(
-              gfx::ImageSkiaOperations::CreateResizedImage(
-                  icon.AsImageSkia(), skia::ImageOperations::RESIZE_BEST,
-                  gfx::Size(14, 14))));
-    SetTooltipText(title);
-    GetViewAccessibility().SetName(title);
+    Update(icon, title, std::move(badge));
   }
   const std::string& id() const { return id_; }
+  const std::string& badge() const { return badge_; }
+  // Extensions update their action often (a blocker's count on every
+  // request); only what changed is resized or repainted.
+  void Update(const gfx::Image& icon,
+              const std::u16string& title,
+              std::string badge) {
+    if (icon.IsEmpty() != icon_.IsEmpty() ||
+        (!icon.IsEmpty() &&
+         !icon.AsImageSkia().BackedBySameObjectAs(icon_.AsImageSkia()))) {
+      icon_ = icon;
+      views::LabelButton::SetImageModel(
+          STATE_NORMAL,
+          icon.IsEmpty()
+              ? ui::ImageModel()
+              : ui::ImageModel::FromImageSkia(
+                    gfx::ImageSkiaOperations::CreateResizedImage(
+                        icon.AsImageSkia(), skia::ImageOperations::RESIZE_BEST,
+                        gfx::Size(14, 14))));
+    }
+    SetTooltipText(title);
+    GetViewAccessibility().SetName(title);
+    if (badge != badge_) {
+      badge_ = std::move(badge);
+      SchedulePaint();
+    }
+  }
   void PaintButtonContents(gfx::Canvas* canvas) override {
     FlyButton::PaintButtonContents(canvas);
     if (badge_.empty())
@@ -4388,7 +4405,8 @@ class ExtensionActionButton : public FlyButton {
 
  private:
   const std::string id_;
-  const std::string badge_;
+  gfx::Image icon_;
+  std::string badge_;
 };
 BEGIN_METADATA(ExtensionActionButton)
 END_METADATA
@@ -4396,6 +4414,16 @@ END_METADATA
 
 views::View* FlyWindowController::extension_actions_for_testing() const {
   return status_bar_ ? status_bar_->extensions_container() : nullptr;
+}
+std::string FlyWindowController::extension_badge_for_testing(
+    size_t index) const {
+  auto* container = extension_actions_for_testing();
+  auto* button =
+      container && index < container->children().size()
+          ? views::AsViewClass<ExtensionActionButton>(
+                container->children()[index])
+          : nullptr;
+  return button ? button->badge() : std::string();
 }
 void FlyWindowController::ScheduleExtensionRefresh() {
   if (extension_refresh_pending_ || closing_)
@@ -4415,14 +4443,32 @@ void FlyWindowController::RefreshExtensionActions() {
   if (closing_ || !status_bar_ || !extensions_)
     return;
   auto* container = status_bar_->extensions_container();
+  if (!selected_) {
+    container->RemoveAllChildViews();
+    return;
+  }
+  auto* contents = selected_->GetTabStripModel()->GetActiveWebContents();
+  const auto extensions = extensions_->ActionExtensions(selected_->GetProfile());
+  // The same extensions in the same order update in place.
+  bool same = container->children().size() == extensions.size();
+  for (size_t i = 0; same && i < extensions.size(); ++i) {
+    auto* button =
+        views::AsViewClass<ExtensionActionButton>(container->children()[i]);
+    same = button && button->id() == extensions[i]->id();
+  }
+  if (same) {
+    for (size_t i = 0; i < extensions.size(); ++i) {
+      views::AsViewClass<ExtensionActionButton>(container->children()[i])
+          ->Update(extensions_->ActionIcon(contents, *extensions[i]),
+                   extensions_->ActionTitle(contents, *extensions[i]),
+                   extensions_->ActionBadge(contents, *extensions[i]));
+    }
+    return;
+  }
   // Buttons may be the target of the click that led here: rebuild only after
   // the input has been dispatched (this runs from a posted task).
   container->RemoveAllChildViews();
-  if (!selected_)
-    return;
-  auto* contents = selected_->GetTabStripModel()->GetActiveWebContents();
-  for (const auto* extension :
-       extensions_->ActionExtensions(selected_->GetProfile())) {
+  for (const auto* extension : extensions) {
     const std::string id = extension->id();
     container->AddChildView(std::make_unique<ExtensionActionButton>(
         base::BindRepeating(
