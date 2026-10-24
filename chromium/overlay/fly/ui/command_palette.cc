@@ -545,6 +545,14 @@ void CommandPalette::EnsureRows(size_t count) {
   while (buttons_.size() < count)
     AppendRow(buttons_.size());
 }
+void CommandPalette::ScrollSelectedIntoView() {
+  if (selected_ < 0 || static_cast<size_t>(selected_) >= buttons_.size())
+    return;
+  // A row built just now has no bounds until the next layout.
+  if (auto* widget = buttons_[selected_]->GetWidget())
+    widget->LayoutRootViewIfNecessary();
+  buttons_[selected_]->ScrollViewToVisible();
+}
 void CommandPalette::OnResultsScrolled() {
   if (!results_ || buttons_.size() >= filtered_.size())
     return;
@@ -663,7 +671,7 @@ void CommandPalette::Select(int direction) {
     EnsureRows(static_cast<size_t>(selected_) + 1);
     if (buttons_[selected_]->GetEnabled()) {
       SetRowSelected(selected_, true);
-      buttons_[selected_]->ScrollViewToVisible();
+      ScrollSelectedIntoView();
       UpdateInspector();
       return;
     }
@@ -753,7 +761,7 @@ bool CommandPalette::HandleOverlayKey(const ui::KeyEvent& event) {
                              0, static_cast<int>(filtered_.size()) - 1);
       EnsureRows(static_cast<size_t>(selected_) + 1);
       SetRowSelected(selected_, true);
-      buttons_[selected_]->ScrollViewToVisible();
+      ScrollSelectedIntoView();
       UpdateInspector();
     }
     return true;

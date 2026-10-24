@@ -6095,6 +6095,15 @@ IN_PROC_BROWSER_TEST_F(FlyWorkspaceBrowserTest,
   const size_t built = palette.built_rows_for_testing();
   ASSERT_GT(built, 0u);
   ASSERT_LT(built, total);
+  // The selected row is scrolled into view, also right after it is built.
+  const auto selected_row_visible = [&] {
+    for (size_t i = 0; i < palette.built_rows_for_testing(); ++i) {
+      auto* row = static_cast<FlyButton*>(palette.row_for_testing(i));
+      if (row->selected())
+        return !row->GetVisibleBounds().IsEmpty();
+    }
+    return false;
+  };
   for (size_t i = 0;
        i < 2 * built && palette.built_rows_for_testing() == built; ++i) {
     ui::KeyEvent down(ui::EventType::kKeyPressed, ui::VKEY_DOWN, ui::EF_NONE);
@@ -6102,6 +6111,7 @@ IN_PROC_BROWSER_TEST_F(FlyWorkspaceBrowserTest,
   }
   EXPECT_GT(palette.built_rows_for_testing(), built);
   EXPECT_FALSE(palette.selected_action_for_testing().empty());
+  EXPECT_TRUE(selected_row_visible());
   palette.Cancel();
   ASSERT_TRUE(base::test::RunUntil([&] { return !palette.active(); }));
   // Up from the first row wraps to the last command.
@@ -6111,6 +6121,7 @@ IN_PROC_BROWSER_TEST_F(FlyWorkspaceBrowserTest,
   ASSERT_TRUE(palette.HandleOverlayKey(up));
   EXPECT_EQ(total, palette.built_rows_for_testing());
   EXPECT_FALSE(palette.selected_action_for_testing().empty());
+  EXPECT_TRUE(selected_row_visible());
 }
 
 IN_PROC_BROWSER_TEST_F(FlyWorkspaceBrowserTest,

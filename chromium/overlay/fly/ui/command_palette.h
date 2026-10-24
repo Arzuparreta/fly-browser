@@ -126,6 +126,7 @@ class CommandPalette : public views::TextfieldController,
   void EnsureRows(size_t count);
   void AppendRow(size_t index);
   void OnResultsScrolled();
+  void ScrollSelectedIntoView();
   void Select(int direction);
   void SetRowSelected(int index, bool selected);
   void Activate(std::string action);
