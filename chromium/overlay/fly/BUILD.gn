@@ -112,8 +112,15 @@ source_set("session_metadata") {
   ]
 }
 
+# Included by chrome/app/chrome_main_delegate.cc (0037-native-feature-defaults).
+source_set("feature_defaults") {
+  sources = [ "app/feature_defaults.h" ]
+  deps = [ "//base" ]
+}
+
 test("fly_unittests") {
   sources = [
+    "app/feature_defaults_unittest.cc",
     "bookmarks/bookmark_service_unittest.cc",
     "bookmarks/frequent_sites_service_unittest.cc",
     "commands/calculator_unittest.cc",
@@ -129,6 +136,7 @@ test("fly_unittests") {
   deps = [
     ":bookmarks",
     ":commands",
+    ":feature_defaults",
     ":legacy_import",
     ":preferences",
     ":workspaces",
