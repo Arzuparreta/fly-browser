@@ -30,11 +30,10 @@ namespace fly {
 class FlyButton;
 class FlyLabel;
 class StatusBadge;
-// Read-only presentation of native page/profile state, laid out like the
-// Electron footer: mode and hovered link on the left; zoom, extension
-// actions, notifications, connection, workspace and clock badges on the right.
-// Link targets arrive from the browser delegate; page code never receives a
-// privileged UI binding.
+// Read-only presentation of page and profile state: mode and hovered link on
+// the left; zoom, extension actions, notifications, connection, workspace and
+// clock badges on the right. Link targets arrive from the browser delegate;
+// page code never receives a privileged UI binding.
 class StatusBar : public views::View,
                   public TabStripModelObserver,
                   public content::WebContentsObserver,
@@ -46,8 +45,7 @@ class StatusBar : public views::View,
   struct Actions {
     // zoom-in, zoom-out or reset-zoom from the zoom controls.
     base::RepeatingCallback<void(std::string)> zoom;
-    // A click on the mode badge (Electron: cancel hints, leave or enter
-    // passthrough).
+    // A click on the mode badge: cancel hints, leave or enter passthrough.
     base::RepeatingClosure mode;
     base::RepeatingClosure notifications;
     base::RepeatingClosure workspace;
@@ -65,8 +63,7 @@ class StatusBar : public views::View,
                 bool visible);
   void SetClockVisible(bool visible);
   void SetNotificationsEnabled(bool enabled);
-  // Electron's setTargetUrl(text, timeout): a short message in the link
-  // area, replaced by the next hovered link.
+  // A short message in the link area, replaced by the next hovered link.
   void ShowMessage(std::u16string text, base::TimeDelta timeout);
   std::u16string message_for_testing() const { return message_; }
   bool zoom_controls_open_for_testing() const;
@@ -88,7 +85,7 @@ class StatusBar : public views::View,
   void OnZoomControllerDestroyed(zoom::ZoomController*) override;
   void OnZoomChanged(const zoom::ZoomController::ZoomChangedEventData&) override;
 
-  // Light mode lays Electron's paper grain over the bar.
+  // Light mode lays the paper grain over the bar.
   void SetPaperGrain(gfx::ImageSkia grain);
   void OnPaintBackground(gfx::Canvas* canvas) override;
 

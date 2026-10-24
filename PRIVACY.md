@@ -1,9 +1,8 @@
 # Privacy policy
 
 Fly does not collect product telemetry or usage analytics. Product settings,
-workspace state and browsing data are kept locally. Native Chromium Fly uses
-`$XDG_CONFIG_HOME/fly-browser-native` (default `~/.config/fly-browser-native`).
-Electron legacy retains its separate `~/.config/fly-browser` profile.
+workspace state and browsing data are kept locally in
+`$XDG_CONFIG_HOME/fly-browser` (default `~/.config/fly-browser`).
 
 ## Network activity
 
@@ -28,18 +27,16 @@ its development builds. Chromium's advertising APIs (Topics, Protected
 Audience, Attribution Reporting and Shared Storage) are turned off, and the
 HTTP cache and network connections stay partitioned by site.
 
-## Local data and migration
+## Local data
 
-On first native start Fly imports supported Electron data into the separate
-native profile, leaving the source intact. Hand-installed extensions need
-reinstallation, and some logins may require signing in again. User scripts and
-styles can read or modify matching pages; review them before installing.
+User scripts and styles can read or modify matching pages; review them before
+installing.
 
 Uninstalling retains profiles. To back up or remove browsing data, close Fly
-first and handle the complete native profile directory. Removing it is separate
-from removing Electron data. Cookie encryption and other storage protections
-depend on the operating system and Chromium configuration; do not assume that
-a profile backup is encrypted. No Fly cloud sync service is provided.
+first and handle the complete profile directory. Cookie encryption and other
+storage protections depend on the operating system and Chromium configuration;
+do not assume that a profile backup is encrypted. No Fly cloud sync service is
+provided.
 
 Questions and vulnerabilities: use the project's GitHub issues for general
 questions and private Security Advisories for sensitive reports.

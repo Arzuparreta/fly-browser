@@ -1,8 +1,8 @@
 # Configuration and storage
 
-Native Fly's launcher uses `$XDG_CONFIG_HOME/fly-browser`, defaulting to
+Fly's launcher uses `$XDG_CONFIG_HOME/fly-browser`, defaulting to
 `~/.config/fly-browser`. A direct engine invocation must include
-`--fly-native` and the intended `--user-data-dir`. Start with a clean profile when replacing an old Electron installation.
+`--fly-native` and the intended `--user-data-dir`.
 
 ## Preferences
 
@@ -11,11 +11,10 @@ performance, privacy and extensions. Fly stores product dictionaries in
 Chromium's `Local State`; workspace profiles hold Chromium `Preferences`,
 cookies, history and extension state. Files are managed by Chromium's
 PrefService. Close Fly and back up the directory before inspecting or changing
-anything manually. Editing the old Electron `config.json` after import does
-not change native settings.
+anything manually.
 
 The implementation contracts are in
-`chromium/overlay/fly/preferences/preferences_service.{h,cc}` and the native
+`chromium/overlay/fly/preferences/preferences_service.{h,cc}` and the
 workspace, keyboard, bookmark and session services. The default process limit
 is four; it is a renderer process policy, not a guarantee that every site can
 share one renderer. Interface scale and website zoom are separate preferences.
@@ -25,14 +24,11 @@ share one renderer. Interface scale and website zoom are separate preferences.
 Put `.user.js` in `<user data>/scripts/` and `.user.css` in `<user data>/styles/`.
 Fly generates `<user data>/fly-user-content/`, a component extension, from these
 files. Do not edit the generated component. GM values live in extension
-storage.
-See [user scripts and styles](/guide/user-scripts-and-styles).
+storage. See [user scripts and styles](/guide/user-scripts-and-styles).
 
 ## Backup
 
 A full backup requires closing Fly and copying the entire user data directory.
 
-Removing the native installation keeps data. Deleting the native profile is a
-separate destructive action: `fly-install uninstall --purge`.
-The [archived Electron reference](https://github.com/Arzuparreta/fly-browser/tree/main/legacy/electron/docs)
-describes the old JSON schema for comparison only.
+Removing the installation keeps data. Deleting the profile is a separate
+destructive action: `fly-install uninstall --purge`.

@@ -46,7 +46,7 @@ export default defineConfig({
           { text: 'Workspaces & Containers', link: '/guide/workspaces-and-containers' },
           { text: 'Tab Suspension', link: '/guide/tab-hibernation' },
           { text: 'Privacy & Ad Blocking', link: '/guide/privacy-and-shields' },
-          { text: 'Bookmarks, Quickmarks & History', link: '/guide/bookmarks-and-history' },
+          { text: 'Bookmarks & History', link: '/guide/bookmarks-and-history' },
           { text: 'Terminal Security & Oversight', link: '/guide/terminal-oversight' },
           { text: 'User Scripts & Styles', link: '/guide/user-scripts-and-styles' },
           { text: 'Community Scripts', link: '/guide/community-scripts' },
@@ -67,16 +67,8 @@ export default defineConfig({
           { text: 'Command Palette', link: '/reference/command-palette' },
           { text: 'Configuration Files', link: '/reference/configuration' },
           { text: 'Versioning & Releases', link: '/releasing' },
-          { text: 'Chromium Rework Plan', link: '/chromium-rework' },
-          { text: 'Implementation Agent Handoff', link: '/chromium-rework-handoff' },
-          { text: 'Chromium Implementation Status', link: '/chromium/implementation-status' },
-          { text: 'Chromium Control Development', link: '/chromium/build' },
-          { text: 'Native Parity Ledger', link: '/chromium/parity-ledger' },
-          { text: 'Fork Performance Audit', link: '/performance-audit' },
-          { text: 'Fly vs Chromium Resource Use', link: '/performance-vs-chromium' },
-          { text: 'Ad Blocking Follow-up', link: '/performance-shields-removal' },
-          { text: 'Interface Motion', link: '/performance-motion' },
-          { text: 'Adoption and Review', link: '/adoption-review' }
+          { text: 'Chromium Development', link: '/chromium/build' },
+          { text: 'Live Media Test', link: '/chromium/live-media' }
         ]
       }
     ],

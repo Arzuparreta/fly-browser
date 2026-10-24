@@ -70,28 +70,25 @@ throws(() => release.parseOptions(['--version']), /needs a value/);
 const temporary = fs.mkdtempSync(path.join(os.tmpdir(), 'fly-version-'));
 try {
     const lock = {name: 'fly-browser', version: '0.1.0', lockfileVersion: 3, packages: {'': {name: 'fly-browser', version: '0.1.0'}, 'node_modules/dep': {version: '0.1.0'}}};
-    fs.mkdirSync(path.join(temporary, 'modules'));
     fs.writeFileSync(path.join(temporary, 'package.json'), '{\n  "name": "fly-browser",\n  "version": "0.1.0",\n  "dependencies": {\n    "dep": "0.1.0"\n  }\n}\n');
     fs.writeFileSync(path.join(temporary, 'package-lock.json'), JSON.stringify(lock, null, 2) + '\n');
-    fs.writeFileSync(path.join(temporary, 'modules/userScriptShim.js'), "    var GM_info = {\n        version: '0.1.0'\n    };\n");
     fs.mkdirSync(path.join(temporary, 'chromium/overlay/fly'), {recursive: true});
     fs.writeFileSync(path.join(temporary, 'chromium/overlay/fly/fly_version.h'), 'inline constexpr char kFlyVersion[] = "0.1.0";\n');
 
     assert.equal(versionSync.setDeclaredVersion('0.2.0', temporary), true);
     assert.match(fs.readFileSync(path.join(temporary, 'package.json'), 'utf8'), /"version": "0\.2\.0",\n  "dependencies": \{\n    "dep": "0\.1\.0"/);
     assert.equal(versionSync.declaredVersion(temporary), '0.2.0');
-    assert.deepEqual(versionSync.sync('0.2.0', {check: true, root: temporary}), ['package-lock.json: 0.1.0', 'modules/userScriptShim.js: 0.1.0', 'chromium/overlay/fly/fly_version.h: 0.1.0']);
-    assert.equal(versionSync.sync('0.2.0', {check: true, root: temporary}).length, 3, 'Check mode writes nothing');
+    assert.deepEqual(versionSync.sync('0.2.0', {check: true, root: temporary}), ['package-lock.json: 0.1.0', 'chromium/overlay/fly/fly_version.h: 0.1.0']);
+    assert.equal(versionSync.sync('0.2.0', {check: true, root: temporary}).length, 2, 'Check mode writes nothing');
     versionSync.sync('0.2.0', {check: false, root: temporary});
     assert.deepEqual(versionSync.sync('0.2.0', {check: true, root: temporary}), []);
     const written = JSON.parse(fs.readFileSync(path.join(temporary, 'package-lock.json'), 'utf8'));
     assert.equal(written.version, '0.2.0');
     assert.equal(written.packages[''].version, '0.2.0');
     assert.equal(written.packages['node_modules/dep'].version, '0.1.0', 'Dependencies keep their versions');
-    assert.equal(fs.readFileSync(path.join(temporary, 'modules/userScriptShim.js'), 'utf8'), "    var GM_info = {\n        version: '0.2.0'\n    };\n");
     assert.equal(fs.readFileSync(path.join(temporary, 'chromium/overlay/fly/fly_version.h'), 'utf8'), 'inline constexpr char kFlyVersion[] = "0.2.0";\n');
 
-    fs.writeFileSync(path.join(temporary, 'modules/userScriptShim.js'), '// moved\n');
+    fs.writeFileSync(path.join(temporary, 'chromium/overlay/fly/fly_version.h'), '// moved\n');
     throws(() => versionSync.sync('0.2.0', {check: true, root: temporary}), /layout changed/);
 } finally { fs.rmSync(temporary, {recursive: true, force: true}); }
 

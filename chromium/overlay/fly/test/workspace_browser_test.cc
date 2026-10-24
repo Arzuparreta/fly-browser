@@ -859,9 +859,9 @@ IN_PROC_BROWSER_TEST_F(FlySidebarBrowserTest, UnchangedButtonTextKeepsBorder) {
   EXPECT_NE(border, select->GetBorder());
 }
 
-// Electron's sidebar: the collapsed rail is the panel's left column. The
-// edge slides 224px and the panel slides back by the same amount on the
-// compositor, so rows and favicons never move.
+// The sidebar: the collapsed rail is the panel's left column. The edge slides
+// 224px and the panel slides back by the same amount on the compositor, so rows
+// and favicons never move.
 IN_PROC_BROWSER_TEST_F(FlySidebarBrowserTest,
                        CollapsedRailIsThePanelsLeftColumn) {
   auto& window = FlyWindowController::Get();
@@ -936,8 +936,8 @@ IN_PROC_BROWSER_TEST_F(FlySidebarBrowserTest,
   }));
 }
 
-// As in Electron, leaving the window (the screen's left edge, the window
-// border) keeps the sidebar open; entering the page closes it.
+// Leaving the window (the screen's left edge, the window border) keeps the
+// sidebar open; entering the page closes it.
 IN_PROC_BROWSER_TEST_F(FlySidebarBrowserTest, LeavingTheWindowKeepsTheSidebar) {
   auto& window = FlyWindowController::Get();
   OpenByPointer();
@@ -954,8 +954,8 @@ IN_PROC_BROWSER_TEST_F(FlySidebarBrowserTest, LeavingTheWindowKeepsTheSidebar) {
   EXPECT_FALSE(window.sidebar_expanded_for_testing());
 }
 
-// Electron's rows: a middle click closes the tab; holding the selection
-// modifier on its own shows the tab numbers, any other key hides them.
+// Tab rows: a middle click closes the tab; holding the selection modifier on
+// its own shows the tab numbers, any other key hides them.
 IN_PROC_BROWSER_TEST_F(FlySidebarBrowserTest,
                        MiddleClickClosesAndModifierShowsTabNumbers) {
   auto& window = FlyWindowController::Get();
@@ -1986,8 +1986,8 @@ IN_PROC_BROWSER_TEST_F(FlyWorkspaceBrowserTest,
   }));
 }
 
-// Electron's download shelf: it appears when a download starts, shows the
-// card, and toggle-downloads hides it again.
+// The download shelf appears when a download starts, shows the card, and
+// toggle-downloads hides it again.
 IN_PROC_BROWSER_TEST_F(FlyWorkspaceBrowserTest, DownloadShelfFollowsDownloads) {
   ASSERT_TRUE(ui_test_utils::NavigateToURL(
       browser(), embedded_test_server()->GetURL("/title1.html")));
@@ -2017,7 +2017,7 @@ IN_PROC_BROWSER_TEST_F(FlyWorkspaceBrowserTest, DownloadShelfFollowsDownloads) {
   EXPECT_TRUE(shelf->GetVisible());
 }
 
-// Electron's status bar: messages in the link area, the zoom controls above
+// The status bar: messages in the link area, the zoom controls above
 // the zoom pill and the mode badge entering passthrough.
 IN_PROC_BROWSER_TEST_F(FlyWorkspaceBrowserTest,
                        StatusBarMessagesZoomControlsAndModeBadge) {
@@ -2416,7 +2416,7 @@ IN_PROC_BROWSER_TEST_F(FlyWorkspaceBrowserTest,
   ASSERT_TRUE(window.IsSelected(second));
   auto second_lifetime = second->GetWeakPtr();
   second->GetWindow()->Close();
-  // Electron keeps the emptied workspace on screen with its welcome view; the
+  // The emptied workspace stays on screen with its welcome view; the
   // sidebar no longer observes the closed window.
   ASSERT_TRUE(base::test::RunUntil([&] { return !second_lifetime; }));
   EXPECT_EQ(nullptr, window.selected_browser_for_testing());
@@ -3967,7 +3967,7 @@ IN_PROC_BROWSER_TEST_F(
   window.Select(browser(), true);
   ASSERT_TRUE(base::test::RunUntil(
       [&] { return !window.workspace_remove_dialog_for_testing(); }));
-  // The UI retains the legacy rule that the last workspace cannot be removed.
+  // The UI keeps the rule that the last workspace cannot be removed.
   second->GetWindow()->Close();
   ASSERT_TRUE(base::test::RunUntil([&] { return !second_weak; }));
   ASSERT_TRUE(service.Remove(item.id));
@@ -4174,7 +4174,7 @@ IN_PROC_BROWSER_TEST_F(FlyWorkspaceBrowserTest,
   picker.ContentsChanged(picker.search_for_testing(), u"New workspace");
   ASSERT_EQ(1u, picker.result_count_for_testing());
   keys.PressKey(ui::VKEY_RETURN, ui::EF_NONE);
-  // Electron asks for the name first.
+  // Fly asks for the name first.
   ASSERT_TRUE(base::test::RunUntil(
       [&] { return window.workspace_name_dialog_for_testing() != nullptr; }));
   window.workspace_name_dialog_for_testing()->AcceptDialog();
@@ -4719,7 +4719,7 @@ IN_PROC_BROWSER_TEST_F(FlyWorkspaceBrowserTest,
   picker.Cancel(true);
   ASSERT_TRUE(
       base::test::RunUntil([&] { return !picker.search_for_testing(); }));
-  // Electron's Diagnostics & Health Hub: system, processes, log and report.
+  // Diagnostics & Health Hub: system, processes, log and report.
   ASSERT_TRUE(InvokeNativeCommand(browser(), "open-diagnostics"));
   auto* hub = window.diagnostics_hub_for_testing();
   ASSERT_TRUE(hub && hub->active());
@@ -4738,12 +4738,11 @@ IN_PROC_BROWSER_TEST_F(FlyWorkspaceBrowserTest,
   EXPECT_FALSE(hub->active());
 }
 
-// Electron's dashboard: each workspace with its tabs (pinned marked) and
+// The dashboard: each workspace with its tabs (pinned marked) and
 // rename/delete buttons; choosing a tab opens its workspace on that tab.
-// Electron's dashboard: dragging a tab onto another tab of its workspace
-// reorders them.
-// Popups belong to Fly's window (WM_TRANSIENT_FOR), as Electron's child
-// windows, so tiling window managers float them.
+// Dragging a tab onto another tab of its workspace reorders them.
+// Popups belong to Fly's window (WM_TRANSIENT_FOR), so tiling window managers
+// float them.
 IN_PROC_BROWSER_TEST_F(FlyWorkspaceBrowserTest, PopupsAreTransientForFly) {
   if (ui::OzonePlatform::GetPlatformNameForTest() != "x11")
     GTEST_SKIP() << "X11 only";
@@ -4851,8 +4850,8 @@ IN_PROC_BROWSER_TEST_F(FlyWorkspaceBrowserTest,
   EXPECT_EQ(1, original->GetTabStripModel()->active_index());
 }
 
-// Electron keeps a workspace whose last tab closed and shows its empty view;
-// the view's New Tab card reopens that workspace.
+// A workspace whose last tab closed stays and shows its empty view; the view's
+// New Tab card reopens that workspace.
 IN_PROC_BROWSER_TEST_F(FlyWorkspaceBrowserTest,
                        LastTabClosedShowsTheWorkspaceWelcomeView) {
   auto& window = FlyWindowController::Get();
@@ -4885,10 +4884,10 @@ IN_PROC_BROWSER_TEST_F(FlyWorkspaceBrowserTest,
   EXPECT_FALSE(welcome->GetVisible());
 }
 
-// Electron's siteZoom.js: zoom changes by 0.5 levels per step and one level
-// per hostname is shared by every normal workspace, whatever path changed it.
+// Site zoom changes by 0.5 levels per step and one level per hostname is shared
+// by every normal workspace, whatever path changed it.
 IN_PROC_BROWSER_TEST_F(FlyWorkspaceBrowserTest,
-                       SiteZoomUsesElectronStepsAndIsSharedByWorkspaces) {
+                       SiteZoomUsesHalfLevelStepsAndIsSharedByWorkspaces) {
   auto& window = FlyWindowController::Get();
   auto* original = browser();
   const GURL page = embedded_test_server()->GetURL("/title1.html");
@@ -4920,11 +4919,10 @@ IN_PROC_BROWSER_TEST_F(FlyWorkspaceBrowserTest,
   EXPECT_DOUBLE_EQ(0.0, level(original));
 }
 
-// Electron Fly's reader (readerDistiller.js) opens over the article with its
-// toolbar, lights the reader button, and closes on the second toggle and on
-// Escape.
+// The reader (readerDistiller.js) opens over the article with its toolbar,
+// lights the reader button, and closes on the second toggle and on Escape.
 IN_PROC_BROWSER_TEST_F(FlyWorkspaceBrowserTest,
-                       ElectronReaderViewOpensOverTheArticleAndCloses) {
+                       ReaderViewOpensOverTheArticleAndCloses) {
   const GURL article =
       embedded_test_server()->GetURL("/dom_distiller/simple_article.html");
   ASSERT_TRUE(ui_test_utils::NavigateToURL(browser(), article));
@@ -5017,7 +5015,7 @@ IN_PROC_BROWSER_TEST_F(FlyWorkspaceBrowserTest,
 }
 
 IN_PROC_BROWSER_TEST_F(FlyWorkspaceBrowserTest,
-                       LocalExtensionsLandInElectronFoldersAndReplace) {
+                       LocalExtensionsLandInTheExtensionsFolderAndReplace) {
   auto& extensions = FlyWindowController::Get().extensions();
   auto* profile = browser()->GetProfile();
   // Outlives `sources`, whose destructor deletes files.
@@ -5142,7 +5140,7 @@ IN_PROC_BROWSER_TEST_F(FlyWorkspaceBrowserTest,
   }));
   EXPECT_EQ(local_folders().size(), 2u);
   // An extension with a manifest key keeps one folder whatever path it is
-  // installed from, as in Electron.
+  // installed from.
   auto write_keyed = [&](const base::FilePath& dir, std::string_view version) {
     base::ScopedAllowBlockingForTesting allow_blocking;
     ASSERT_TRUE(base::CreateDirectory(dir));
@@ -5240,8 +5238,7 @@ class FlyGmRequestBrowserTest : public FlyWorkspaceBrowserTest {
 };
 
 // Every redirect hop of GM_xmlhttpRequest is held to the script's @connect
-// hosts and kept off local network addresses before it is sent, as Electron
-// Fly checked each hop.
+// hosts and kept off local network addresses before it is sent.
 IN_PROC_BROWSER_TEST_F(FlyGmRequestBrowserTest, RedirectHopsAreCheckedBeforeSending) {
   base::FilePath user_data;
   ASSERT_TRUE(base::PathService::Get(chrome::DIR_USER_DATA, &user_data));
@@ -5773,7 +5770,7 @@ IN_PROC_BROWSER_TEST_F(FlyWorkspaceBrowserTest,
   ASSERT_TRUE(window.RunCommand(browser(), "toggle-help"));
   auto& editor = window.keyboard_editor();
   ASSERT_TRUE(editor.active());
-  // Preferences opens on General, as Electron's.
+  // Preferences opens on General.
   editor.ShowKeyboard();
   ui::test::EventGenerator keys(
       window.desktop_widget()->GetNativeWindow()->GetRootWindow());
@@ -5996,10 +5993,10 @@ IN_PROC_BROWSER_TEST_F(FlyWorkspaceBrowserTest,
   EXPECT_TRUE(editor.active());
 }
 
-// Electron's Preferences: General first, the settings search filters every
-// section and jumps to the one with matches.
+// Preferences: General first, the settings search filters every section and
+// jumps to the one with matches.
 IN_PROC_BROWSER_TEST_F(FlyWorkspaceBrowserTest,
-                       PreferencesFollowElectronSectionsAndSearch) {
+                       PreferencesOpenOnGeneralAndSearchEverySection) {
   auto& window = FlyWindowController::Get();
   ASSERT_TRUE(InvokeNativeCommand(browser(), "toggle-help"));
   auto& editor = window.keyboard_editor();
@@ -6029,7 +6026,7 @@ IN_PROC_BROWSER_TEST_F(FlyWorkspaceBrowserTest,
             editor.selected_pane_for_testing());
 }
 
-// Electron's Command Centre: count, category chips, inspector card,
+// The Command Centre: count, category chips, inspector card,
 // recently used commands and the terminal fallback.
 // A long list builds the rows its panel can show; keyboard selection builds
 // the rest as it reaches them, so typing does not rebuild every result.
@@ -6083,7 +6080,7 @@ IN_PROC_BROWSER_TEST_F(FlyWorkspaceBrowserTest,
   EXPECT_TRUE(palette.count_for_testing().ends_with(u" commands"));
   EXPECT_EQ(u"New Blank Tab", palette.inspector_title_for_testing());
   // A row that opens under the resting pointer is not selected by it; once
-  // the pointer moves, hovering selects like Electron's mouseenter.
+  // the pointer moves, hovering selects.
   auto* row = palette.row_for_testing(3);
   ASSERT_TRUE(row);
   const auto row_centre = row->GetBoundsInScreen().CenterPoint();
@@ -6152,7 +6149,7 @@ IN_PROC_BROWSER_TEST_F(FlyWorkspaceBrowserTest,
       window.desktop_widget()->GetNativeWindow()->GetRootWindow());
   keys.PressKey(ui::VKEY_P, ui::EF_CONTROL_DOWN);
   ASSERT_TRUE(base::test::RunUntil([&] { return window.palette().active(); }));
-  // Electron's Command Centre lists New Blank Tab (not Duplicate Tab).
+  // The Command Centre lists New Blank Tab (not Duplicate Tab).
   for (auto key : {ui::VKEY_N, ui::VKEY_E, ui::VKEY_W, ui::VKEY_SPACE,
                    ui::VKEY_B, ui::VKEY_L, ui::VKEY_A, ui::VKEY_N, ui::VKEY_K})
     keys.PressKey(key, ui::EF_NONE);
@@ -6832,7 +6829,7 @@ IN_PROC_BROWSER_TEST_F(FlyPageScrollBrowserTest,
   window.Select(browser(), true);
   ui::test::EventGenerator keys(
       window.desktop_widget()->GetNativeWindow()->GetRootWindow());
-  // Electron's zoom step (factor 1.095) leaves fractional device pixels, so
+  // A zoom step (factor 1.095) leaves fractional device pixels, so
   // offsets may round one pixel either way.
   auto wait_offset = [&](const char* axis, int offset) {
     return base::test::RunUntil([&] {

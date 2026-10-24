@@ -74,8 +74,6 @@ body:
         - NixOS / Guix
         - Alpine / Void Linux
         - Other Linux distribution
-        - macOS
-        - Windows
     validations:
       required: true
 
@@ -96,8 +94,6 @@ body:
       options:
         - Wayland
         - X11
-        - macOS Quartz
-        - Windows DWM
         - Not sure
     validations:
       required: true
@@ -108,9 +104,9 @@ body:
       label: Installation / Execution Method
       description: How do you run Fly Browser on your machine?
       options:
-        - Native Chromium Linux tarball (fly-install)
+        - Installer script (fly-install)
         - Release tarball (.tar.gz)
-        - Native Chromium source build (npm start)
+        - Source build (npm start)
         - AUR package
         - Other packaging format
     validations:

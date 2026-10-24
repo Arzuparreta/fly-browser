@@ -20,10 +20,10 @@ class WebContents;
 }
 
 namespace fly {
-// Electron Fly's siteZoom.js: one zoom level per hostname, shared by every
-// normal workspace (private workspaces keep their own, unsaved), changed in
-// steps of 0.5 levels between -5 and 5. Chromium stores each profile's host
-// levels; this keeps the workspace profiles equal.
+// Site zoom: one zoom level per hostname, shared by every normal workspace
+// (private workspaces keep their own, unsaved), changed in steps of 0.5 levels
+// between -5 and 5. Chromium stores each profile's host levels; this keeps the
+// workspace profiles equal.
 class SiteZoom : public ProfileObserver {
  public:
   SiteZoom();
@@ -32,7 +32,7 @@ class SiteZoom : public ProfileObserver {
   SiteZoom& operator=(const SiteZoom&) = delete;
 
   void AddProfile(Profile* profile);
-  // zoom-in, zoom-out or reset-zoom on the page, as Electron.
+  // zoom-in, zoom-out or reset-zoom on the page.
   static void Change(content::WebContents* contents, std::string_view action);
 
   // ProfileObserver:

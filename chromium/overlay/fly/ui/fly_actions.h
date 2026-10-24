@@ -30,7 +30,7 @@ class Widget;
 namespace fly {
 class PreferencesService;
 
-// The Electron "native settings menu" (toggle-menu-bar): startup settings,
+// The native settings menu (toggle-menu-bar): startup settings,
 // tab suspension, sidebar options, user content folders and app entries.
 class SettingsMenu : public ui::SimpleMenuModel::Delegate {
  public:
@@ -54,9 +54,9 @@ class SettingsMenu : public ui::SimpleMenuModel::Delegate {
   std::unique_ptr<views::MenuRunner> runner_;
 };
 
-// Electron Fly's reader view: modules/readerDistiller.js (Mozilla
-// Readability with Fly's overlay, toolbar and per-site preferences), run in
-// the page as Electron did. Running it again closes the overlay.
+// Reader view: fly_resources/reader/readerDistiller.js (Mozilla Readability
+// with Fly's overlay, toolbar and per-site preferences), run in the page.
+// Running it again closes the overlay.
 struct ReaderResult {
   bool active = false;
   std::u16string title;
@@ -69,23 +69,22 @@ void ToggleReaderView(content::WebContents* contents,
 void QueryReaderView(content::WebContents* contents,
                      base::OnceCallback<void(bool)> done);
 
-// Electron's Privacy buttons: the cookies of `url`'s site, or the cache,
-// cache storage and service workers of the workspace profile. `done` gets the
-// message Electron showed.
+// The Privacy buttons in Preferences: the cookies of `url`'s site, or the
+// cache, cache storage and service workers of the workspace profile. `done`
+// gets the message to show.
 void ClearSiteCookies(Profile* profile,
                       const GURL& url,
                       base::OnceCallback<void(std::u16string)> done);
 void ClearWorkspaceCache(Profile* profile,
                          base::OnceCallback<void(std::u16string)> done);
 
-// Electron's air-gapped terminal fallback: copies the text (prefixed with
+// The air-gapped terminal fallback: copies the text (prefixed with
 // "oversight" for scripts, URLs and sudo/curl/wget) to the clipboard and opens
 // the first terminal found (kitty, alacritty, foot, st, xterm, or
 // xdg-terminal-exec); nothing runs until the user pastes it.
 void OpenTerminalWithCommand(const std::string& text);
 
-// `scripts`, `styles` or `script-storage` below the user data directory,
-// created on demand.
+// `scripts` or `styles` below the user data directory, created on demand.
 base::FilePath UserContentDirectory(std::string_view name);
 void OpenUserContentDirectory(Profile* profile, std::string_view name);
 
@@ -106,16 +105,16 @@ struct UpdateCheckResult {
 // Queries the latest published Fly release (GitHub, no credentials).
 void CheckForUpdates(base::OnceCallback<void(UpdateCheckResult)> done);
 
-// Electron's appImageUpdate: downloads `update.package`, checks it against
+// The in-place update: downloads `update.package`, checks it against
 // `update.checksum`, unpacks it and replaces this installation (the directory
 // of the running executable) in one rename. `done` gets an empty string on
 // success, otherwise the reason. The caller restarts.
 void InstallNativeUpdate(const UpdateCheckResult& update,
                          base::OnceCallback<void(std::u16string)> done);
 
-// Electron's desktopIntegration.js for the native package: the applications
-// menu entry (fly-browser.desktop, starting the package's launcher)
-// and the default browser.
+// Desktop integration for the package: the applications menu entry
+// (fly-browser.desktop, starting the package's launcher) and the default
+// browser.
 struct DesktopIntegrationStatus {
   // Only a package (with its launcher next to the executable) can add itself.
   bool supported = false;

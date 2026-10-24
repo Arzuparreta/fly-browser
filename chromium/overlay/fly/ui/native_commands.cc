@@ -417,7 +417,7 @@ bool SplitCommand(BrowserWindowInterface* browser, std::string_view action) {
 bool OpenNativeBlankTab(BrowserWindowInterface* browser, int index) {
   if (!browser || !chrome::IsCommandEnabled(browser, IDC_NEW_TAB))
     return false;
-  // Fly's new tab page (Electron showed its own page for blank tabs).
+  // Fly's new tab page.
   NavigateParams params(browser, GURL(kFlyNewTabURL),
                         ui::PAGE_TRANSITION_AUTO_TOPLEVEL);
   params.disposition = WindowOpenDisposition::NEW_FOREGROUND_TAB;
@@ -540,7 +540,7 @@ bool IsShellCommand(std::string_view action) {
       "toggle-native-menu-visibility", "focus-nav-buttons", "reload-user-content",
       "open-task-manager", "check-for-updates", "show-whats-new",
       "toggle-diagnostics-recording", "toggle-notifications", "open-scripts-dir",
-      "open-styles-dir", "open-script-storage-dir", "test-google-signin",
+      "open-styles-dir", "test-google-signin",
       "toggle-private-mode", "next-workspace", "previous-workspace",
       "toggle-global-audio-mute", "toggle-global-media", "hibernate-tabs",
       "wake-all-tabs", "spawn-tab", "reopen-closed-tab", "toggle-fullscreen"};
@@ -622,12 +622,11 @@ bool NativeCommandAvailable(BrowserWindowInterface* browser,
       "toggle-menu-bar",        "toggle-native-menu-visibility",
       "focus-nav-buttons",      "toggle-downloads",
       "toggle-reader-view",     "open-scripts-dir",
-      "open-styles-dir",        "open-script-storage-dir",
-      "test-google-signin",     "check-for-updates",
-      "show-whats-new",         "open-diagnostics",
-      "toggle-diagnostics-recording", "toggle-notifications",
-      "open-task-manager",      "reload-user-content",
-      "open-extension-actions"};
+      "open-styles-dir",        "test-google-signin",
+      "check-for-updates",      "show-whats-new",
+      "open-diagnostics",       "toggle-diagnostics-recording",
+      "toggle-notifications",   "open-task-manager",
+      "reload-user-content",    "open-extension-actions"};
   if (std::ranges::find(kProductActions, action) !=
       std::end(kProductActions))
     return FlyWindowController::GetIfCreated() != nullptr;

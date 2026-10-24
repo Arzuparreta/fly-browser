@@ -26,7 +26,7 @@ features:
   - title: Tab Suspension
     details: Eligible background pages pause in memory and resume without reloading, preserving their document and JavaScript state.
   - title: Dual-Split View
-    details: Browse two pages side-by-side with customisable partition ratios. Swap panes, open links directly into split view, or toggle seamlessly via keyboard shortcuts.
+    details: Browse two pages side-by-side with customisable split ratios. Swap panes, open links directly into split view, or toggle seamlessly via keyboard shortcuts.
   - title: Multi-Account Containers
     details: Every workspace runs inside an isolated Chromium profile. Run multiple corporate and personal logins simultaneously with zero cookie cross-contamination.
   - title: Mouse-Free Navigation
@@ -88,22 +88,20 @@ chmod +x ~/.local/bin/fly-install
 ```
 
 On Arch-based systems it installs `fly-browser-bin`; elsewhere it installs the
-native Chromium Linux x64 tarball. Both add Fly to the applications menu.
-`fly-install update` keeps it current. Close Electron before the first native
-start; its profile is retained and supported data is imported separately.
-See [Installation](/guide/installation) for migration limits and uninstall options.
+Linux x64 tarball. Both add Fly to the applications menu.
+`fly-install update` keeps it current. See [Installation](/guide/installation)
+for uninstall options.
 
-Building from source requires the pinned external Chromium checkout and native
+Building from source requires the pinned external Chromium checkout and Fly's
 overlay, not just `npm install`. Follow [Chromium development](/chromium/build),
 then run `FLY_ENGINE_ROOT=/path/to/fly-chromium npm start`.
 
 ## Built on Chromium
 
 Fly uses Chromium's full browser layer, native Views controls, separate workspace
-profiles and narrowly scoped internal WebUI. uBlock Origin Lite provides native
+profiles and narrowly scoped internal WebUI. uBlock Origin Lite provides
 rule-based blocking. User content is loaded through a generated component
-extension. [Electron legacy](https://github.com/Arzuparreta/fly-browser/tree/main/legacy/electron)
-remains available for comparison, but is no longer the default release.
+extension.
 
 ## Source & Issues
 

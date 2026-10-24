@@ -31,7 +31,7 @@ class PackageInstallerTest(unittest.TestCase):
             package.normalize_package_permissions(root)
             self.assertEqual(binary.stat().st_mode & 0o7777, 0o755)
 
-    def test_install_update_remove_keeps_profile_and_legacy(self):
+    def test_install_update_remove_keeps_profile(self):
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
             home = root / 'home with spaces'
@@ -46,9 +46,9 @@ class PackageInstallerTest(unittest.TestCase):
             installer = source / 'install.sh'
             installer.write_text(package.INSTALL)
             env = dict(os.environ, HOME=str(home), XDG_DATA_HOME=str(home / 'data'), XDG_CONFIG_HOME=str(home / 'config'))
-            legacy = home / 'config/fly-browser/session.json'
-            legacy.parent.mkdir(parents=True)
-            legacy.write_text('legacy')
+            preferences = home / 'config/fly-browser/Default/Preferences'
+            preferences.parent.mkdir(parents=True)
+            preferences.write_text('{}')
             profile = home / 'config/fly-browser/Local State'
             profile.parent.mkdir(parents=True, exist_ok=True)
             profile.write_text('native')
@@ -66,7 +66,7 @@ class PackageInstallerTest(unittest.TestCase):
             self.assertFalse(target.exists())
             self.assertFalse((home / '.local/bin/fly-browser').is_symlink())
             self.assertEqual(profile.read_text(), 'native')
-            self.assertEqual(legacy.read_text(), 'legacy')
+            self.assertEqual(preferences.read_text(), '{}')
 
 
 if __name__ == '__main__':

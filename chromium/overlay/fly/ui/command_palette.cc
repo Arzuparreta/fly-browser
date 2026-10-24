@@ -467,7 +467,7 @@ void CommandPalette::Refresh() {
   const auto query = std::u16string(
       base::TrimWhitespace(search_->GetText(), base::TRIM_ALL));
   if (style_.command_centre) {
-    // Electron's filterPaletteCommands.
+    // The chosen category, then the query (FilterCommandCentre).
     std::vector<PaletteEntry> candidates;
     for (const auto& entry : catalog_)
       if (category_ == "All" || entry.category == category_)

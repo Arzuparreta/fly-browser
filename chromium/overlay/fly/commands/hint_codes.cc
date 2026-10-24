@@ -3,7 +3,6 @@
 // Fly repository.
 #include "fly/commands/hint_codes.h"
 #include <utility>
-#include "fly/commands/generated_contract.h"
 namespace fly {
 std::vector<std::string> GenerateHintCodes(size_t count) {
   if (!count || count > kMaxHintTargets)

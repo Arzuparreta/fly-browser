@@ -20,27 +20,27 @@ class AnimationSequenceBlock;
 }
 
 namespace fly {
-// Electron's sidebar motion (style.css, docs/performance-motion.md):
-// --motion-normal with cubic-bezier(0.2, 0, 0, 1).
+// Sidebar motion: 220 ms with cubic-bezier(0.2, 0, 0, 1), animating only
+// transforms and opacity.
 inline constexpr base::TimeDelta kSidebarMotion = base::Milliseconds(220);
 // Width of the panel's shadow beyond its right edge: CSS 6px 0 28px is a
 // 6px offset and a blur of sigma 14, which fades out within 3 sigma.
 inline constexpr int kSidebarShadowExtent = 48;
-// Electron's widths: the panel, its collapsed strip and the slide between.
+// The widths of the panel, its collapsed strip and the slide between.
 inline constexpr int kSidebarWidth = 260;
 inline constexpr int kSidebarRailWidth = 36;
 
-// Electron's .sidebar-content: one layout for both sidebar states. The
-// collapsed rail is the panel's left column, so rows, icons and text never
-// move; rail-only and expanded-only details crossfade.
+// One layout for both sidebar states. The collapsed rail is the panel's left
+// column, so rows, icons and text never move; rail-only and expanded-only
+// details crossfade.
 class SidebarPanel : public views::View {
   METADATA_HEADER(SidebarPanel, views::View)
 
  public:
   struct TopRow {
-    raw_ptr<views::View> header = nullptr;  // #WorkspaceHeader (clickable)
-    raw_ptr<views::View> badge = nullptr;   // #WorkspaceBadge (rail only)
-    raw_ptr<views::View> label = nullptr;   // #WorkspaceLabel
+    raw_ptr<views::View> header = nullptr;  // The workspace header (clickable)
+    raw_ptr<views::View> badge = nullptr;   // Short badge (rail only)
+    raw_ptr<views::View> label = nullptr;   // Full name
     raw_ptr<views::View> new_tab = nullptr;
     raw_ptr<views::View> back = nullptr;
     raw_ptr<views::View> forward = nullptr;
@@ -67,8 +67,8 @@ class SidebarPanel : public views::View {
   // Parts shown only in one state fade with the edge. They get their own
   // layers; the panel's own decorations (engraving, footer line) are
   // registered here too.
-  // `interactive` parts ignore the pointer while hidden (Electron's
-  // pointer-events: none); decorations never take it.
+  // `interactive` parts ignore the pointer while hidden; decorations never
+  // take it.
   void AddExpandedOnly(views::View* view, bool interactive = true);
   void AddRailOnly(views::View* view, bool interactive = true);
   // Adds the crossfade to `block`, or applies it at once when null.
@@ -123,10 +123,9 @@ class SidebarClock : public FlyButton {
   raw_ptr<views::Label> time_ = nullptr;
 };
 
-// The sidebar widget's contents: the shadow (#Sidebar::after) and the
-// viewport that clips the panel (.sidebar-viewport), inside the edge
-// (#Sidebar). The edge slides by -224px while the panel slides back by the
-// same amount, so the compositor reveals content that stays put.
+// The sidebar widget's contents: the shadow and the viewport that clips the
+// panel, inside the edge. The edge slides by -224px while the panel slides back
+// by the same amount, so the compositor reveals content that stays put.
 class SidebarRoot : public views::View, public views::ViewTargeterDelegate {
   METADATA_HEADER(SidebarRoot, views::View)
 
@@ -137,7 +136,7 @@ class SidebarRoot : public views::View, public views::ViewTargeterDelegate {
   ~SidebarRoot() override;
 
   SidebarPanel* panel() { return panel_; }
-  // #Sidebar: slides by -224px while collapsed.
+  // The edge: slides by -224px while collapsed.
   views::View* edge() { return edge_; }
   views::View* shadow() { return shadow_; }
   void Layout(PassKey) override;

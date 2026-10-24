@@ -180,7 +180,7 @@
 +  options->setTop(y);
 +  // Call Blink's implementations directly. Page overrides of scrollBy/scrollTo
 +  // do not intercept browser controls; native zoom, snapping and smooth-scroll
-+  // completion follow the same paths as the retained product's DOM commands.
++  // completion follow the same paths as page scripts' scroll calls.
 +  if (target) {
 +    if (top || bottom)
 +      target->scrollTo(nullptr, options);

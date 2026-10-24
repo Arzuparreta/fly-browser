@@ -60,7 +60,7 @@ int S(int pixels) {
   return FlyScaled(pixels);
 }
 
-// Electron's Preferences choices (index.html).
+// The search engines Preferences offers.
 constexpr std::array<std::string_view, 5> kSearchEngines = {
     "https://duckduckgo.com/?q=%s", "https://www.google.com/search?q=%s",
     "https://www.startpage.com/sp/search?query=%s",

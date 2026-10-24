@@ -8,7 +8,7 @@ const crypto = require('node:crypto');
 const {spawn, spawnSync} = require('node:child_process');
 const {parseArgs} = require('node:util');
 const {validateNativeBuild} = require('./control-smoke');
-const {parseCrx, unpackPackage} = require('../../extensionPackages');
+const {parseCrx, unpackPackage} = require('./crx');
 const PIE_ID = 'jpkfgepcmmchgfbjblnodjhldacghenp';
 const pause = ms => new Promise(resolve => setTimeout(resolve, ms));
 const sha256 = file => crypto.createHash('sha256').update(fs.readFileSync(file)).digest('hex');

@@ -20,10 +20,10 @@ class ScrollView;
 
 namespace fly {
 class DownloadCard;
-// Electron's download shelf (downloads.js, #DownloadShelf): a 52px bar above
-// the status bar that appears when a download starts in any workspace, with
-// a card per download (progress, speed, cancel; open, show in folder and
-// dismiss once complete), "clear completed" and close.
+// The download shelf: a 52px bar above the status bar that appears when a
+// download starts in any workspace, with a card per download (progress, speed,
+// cancel; open, show in folder and dismiss once complete), "clear completed"
+// and close.
 class DownloadShelf : public views::View,
                       public content::DownloadManager::Observer,
                       public download::DownloadItem::Observer {

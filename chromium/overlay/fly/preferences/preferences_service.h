@@ -78,7 +78,7 @@ class PreferencesService {
   bool SetSuspendTimeoutMinutes(int minutes);
   bool CycleSuspendTimeout();
 
-  // Remaining product settings, validated per key with the Electron defaults:
+  // Remaining product settings, validated per key, with their defaults:
   // bools disable_gpu, background_throttling, enable_diagnostics,
   // web_notifications, desktop_integration_offered; int process_limit (1-8);
   // strings spellchecker_language, interface_scale (normal|large),
@@ -98,7 +98,7 @@ class PreferencesService {
                                             std::string_view key) const;
   bool SetThemeColor(bool dark, std::string_view key, const std::string& hex);
   bool ResetThemeColors();
-  // Electron's sidebar_opacity and overlay_opacity (40-100, default 100),
+  // sidebar_opacity and overlay_opacity (40-100, default 100),
   // stored with the colours of each theme.
   int ReadThemeOpacity(bool dark, std::string_view key) const;
   bool SetThemeOpacity(bool dark, std::string_view key, int percent);
@@ -106,7 +106,7 @@ class PreferencesService {
   // per-workspace switches, extensions suspended by the global switch.
   std::optional<base::DictValue> ReadNativeExtensions() const;
   bool SetNativeExtensions(base::DictValue state);
-  // Command Centre's recently used commands (Electron keeps four), newest
+  // The Command Centre's four most recently used commands, newest
   // first, in their own Local State entry.
   std::vector<std::string> ReadRecentCommands() const;
   void RecordRecentCommand(std::string_view action);

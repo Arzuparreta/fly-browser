@@ -1,100 +1,142 @@
 #!/usr/bin/env node
-// Keep the native catalogue/defaults and cross-language grammar cases derived
-// from the current product contract. No browser or engine checkout is needed.
+// Builds Fly's command catalogue from its two sources:
+//
+//   chromium/overlay/fly/commands/actions.json   every action: label, category
+//                                                and default bindings
+//   chromium/overlay/fly/commands/commands.json  the Command Centre entries
+//
+// and writes what is derived from them:
+//
+//   chromium/overlay/fly/commands/generated_catalog.h   the same data for C++
+//   docs/reference/keybinds.md                          the default bindings table
+//   docs/reference/command-palette.md                   the Command Centre tables
+//
+//   node scripts/chromium/generate-commands.js           write both
+//   node scripts/chromium/generate-commands.js --check   fail if either is stale
+'use strict';
 const fs = require('node:fs');
 const path = require('node:path');
-const assert = require('node:assert/strict');
-const vm = require('node:vm');
-const keyboard = require('../../keyboard');
-const keybinds = require('../../keybinds');
+
 const root = path.resolve(__dirname, '../..');
-const defaults = keyboard.validateConfig(keybinds.getDefaults(), keybinds.ACTION_METADATA);
-assert(defaults.ok);
-const normalize = ['control+shift+a', 'Meta+Ctrl+return', 'Ctrl++', 'Ctrl+Shift+Plus',
-    'Ctrl+A+B', 'Ctrl+Ctrl+A', 'Ctrl+ñ', 'ñ', 'Shift+ñ', 'Cmd+X', 'Super+F24',
-    'F25', 'F01', ' ', '  Alt + PageDown ', 'Ctrl+\\', 'Shift+/', 'AltGraph+A', '',
-    'Ctrl+', 'Shift+Escape', 'Ctrl+💡', 'Shift+ß', '   '];
-const configs = [{name:'defaults', input: defaults.config}];
-const edit = (name, mutate) => {
-    const input = structuredClone(defaults.config);
-    mutate(input);
-    configs.push({name, input});
+const commandsDir = path.join(root, 'chromium/overlay/fly/commands');
+const HEADER = path.join(commandsDir, 'generated_catalog.h');
+const KEYBINDS = path.join(root, 'docs/reference/keybinds.md');
+const PALETTE = path.join(root, 'docs/reference/command-palette.md');
+
+function fail(message) {
+    console.error(`generate-commands: ${message}`);
+    process.exit(1);
+}
+
+function readJson(file) {
+    try {
+        return JSON.parse(fs.readFileSync(path.join(commandsDir, file), 'utf8'));
+    } catch (error) {
+        fail(`${file}: ${error.message}`);
+    }
+}
+
+const isText = value => typeof value === 'string' && value.trim() !== '';
+const isBindingList = value => Array.isArray(value) && value.every(isText);
+
+const catalogue = readJson('actions.json');
+const commands = readJson('commands.json');
+if (typeof catalogue.tabs !== 'string') fail('actions.json: "tabs" must be a modifier such as "Alt", or "" for none');
+const actions = catalogue.actions;
+if (!actions || typeof actions !== 'object' || Array.isArray(actions)) fail('actions.json: "actions" must be an object');
+for (const [id, action] of Object.entries(actions)) {
+    if (!/^[a-z0-9]+(-[a-z0-9]+)*$/.test(id)) fail(`actions.json: "${id}" is not a lower-case, hyphenated id`);
+    if (!isText(action.label) || !isText(action.category)) fail(`actions.json: ${id} needs a label and a category`);
+    if (!isBindingList(action.shortcuts) || !isBindingList(action.normal)) fail(`actions.json: ${id} needs "shortcuts" and "normal" lists ([] for none)`);
+}
+if (!Array.isArray(commands)) fail('commands.json must be a list');
+const commandIds = new Set();
+for (const command of commands) {
+    const name = command && command.id;
+    if (!isText(name)) fail('commands.json: every entry needs an id');
+    if (commandIds.has(name)) fail(`commands.json: ${name} is listed twice`);
+    commandIds.add(name);
+    for (const field of ['title', 'desc', 'details', 'tip', 'category']) {
+        if (!isText(command[field])) fail(`commands.json: ${name} needs a "${field}"`);
+    }
+    if (!Object.hasOwn(actions, command.actionId)) fail(`commands.json: ${name} runs "${command.actionId}", which actions.json does not define`);
+    if (!Array.isArray(command.keywords) || !command.keywords.every(isText)) fail(`commands.json: ${name} needs a "keywords" list`);
+}
+
+const metadata = Object.fromEntries(Object.entries(actions).map(([id, {label, category}]) => [id, {label, category}]));
+const defaults = {
+    version: 2,
+    shortcuts: Object.fromEntries(Object.entries(actions).map(([id, action]) => [id, action.shortcuts])),
+    normal: Object.fromEntries(Object.entries(actions).map(([id, action]) => [id, action.normal])),
+    tabs: catalogue.tabs
 };
-edit('explicitly disabled reload', c => { c.shortcuts['reload-active-tab'] = []; });
-edit('custom tab modifier', c => { c.tabs = 'shift+ctrl'; });
-edit('no numbered tabs', c => { c.tabs = ''; });
-edit('duplicate binding', c => { c.shortcuts['spawn-tab'] = ['Ctrl+T', 'control+t']; });
-edit('shortcut conflict', c => { c.shortcuts['spawn-tab'] = 'Ctrl+W'; });
-edit('prefix conflict', c => { c.normal['scroll-up'] = 'G'; });
-edit('page shadowed by global', c => { c.normal['spawn-tab'] = 'Ctrl+T'; });
-edit('bare global', c => { c.shortcuts['spawn-tab'] = 'A'; });
-edit('reserved Escape', c => { c.normal['scroll-down'] = 'Escape'; });
-edit('reserved Tab', c => { c.normal['scroll-down'] = 'Shift+Tab'; });
-edit('unknown action', c => { c.shortcuts.fake = 'Ctrl+A'; });
-edit('numeric binding', c => { c.shortcuts['spawn-tab'] = [42]; });
-edit('invalid tab modifier', c => { c.tabs = 'Shift'; });
-edit('tab key included', c => { c.tabs = 'Alt+5'; });
-edit('no passthrough escape', c => { c.shortcuts['toggle-passthrough'] = []; });
-edit('tab selection collision', c => { c.normal['scroll-down'] = ['Alt+1']; });
-edit('too long a sequence', c => { c.normal['page-top'] = 'G G G'; });
-edit('too many bindings', c => { c.shortcuts['spawn-tab'] = Array(9).fill('Ctrl+T'); });
-edit('Unicode layout binding', c => { c.shortcuts['spawn-tab'] = 'Ctrl+ñ'; });
-const cases = {
-    normalize: normalize.map(input => ({input, output: keyboard.normalise(input)})),
-    configs: configs.map(({name, input}) => {
-        const result = keyboard.validateConfig(input, keybinds.ACTION_METADATA);
-        return {name, input, ok: result.ok, ...(result.ok ? {output: result.config} : {})};
-    })
+const entries = commands.map(({id, title, desc, details, tip, category, actionId, keywords}) =>
+    ({id, title, desc, details, tip, category, actionId, keywords}));
+
+const literal = value => {
+    const json = JSON.stringify(value);
+    if (json.includes(')fly_json"')) fail('a text contains the raw string delimiter )fly_json"');
+    return `R"fly_json(${json})fly_json"`;
 };
-// Command Centre texts (modules/overlays/commandPalette.js COMMAND_DEFINITIONS);
-// actions are functions there and are not evaluated here.
-const paletteSource = fs.readFileSync(path.join(root, 'modules/overlays/commandPalette.js'), 'utf8')
-    .match(/export const COMMAND_DEFINITIONS = (\[[\s\S]*?\n\]);/);
-assert(paletteSource, 'Command Centre definitions must remain discoverable');
-const commandDefinitions = vm.runInNewContext('(' + paletteSource[1] + ')', Object.create(null), {timeout: 1000})
-    .map(({id, title, desc, details, tip, category, actionId, keywords}) =>
-        ({id, title, desc, details, tip, category, actionId: actionId || id, keywords: keywords || []}));
-assert(commandDefinitions.every(item => keybinds.ACTION_METADATA[item.actionId]));
-const hinter = fs.readFileSync(path.join(root, 'hinter.js'), 'utf8');
-const charsetSource = hinter.match(/const charset = (\[[^;]+\]);/);
-const generatorSource = hinter.match(/function generateHintCodes\(count, alphabet\) \{[\s\S]*?return \{ codes, codeLength: len \};\s*\}/);
-assert(charsetSource && generatorSource, 'Baseline hint contract must remain discoverable');
-const hintAlphabet = vm.runInNewContext(charsetSource[1], Object.create(null), {timeout: 1000}).join('');
-assert(/^[a-z]+$/.test(hintAlphabet) && new Set(hintAlphabet).size === hintAlphabet.length && hintAlphabet.length >= 2);
-const hintCases = [1, 12, 13, 144, 145, 500].map(count => ({count, ...JSON.parse(JSON.stringify(
-    vm.runInNewContext('(' + generatorSource[0] + ')(' + count + ',' + JSON.stringify([...hintAlphabet]) + ')',
-        Object.create(null), {timeout: 1000})))}));
-const websiteThemeSource = fs.readFileSync(path.join(root, 'main.js'), 'utf8')
-    .match(/function websiteTheme\(cfg\) \{[\s\S]*?\n\}/);
-assert(websiteThemeSource, 'Baseline website theme contract must remain discoverable');
-const websiteThemeCases = ['dark', 'light'].flatMap(theme => [true, false].map(sync => {
-    const input = {theme, sync_website_theme: sync};
-    return {input, expected: vm.runInNewContext('(' + websiteThemeSource[0] + ')(' + JSON.stringify(input) + ')',
-        Object.create(null), {timeout: 1000})};
-}));
-const paletteEntries = JSON.parse(fs.readFileSync(path.join(root, 'chromium/baseline-contracts.json'), 'utf8')).paletteEntries;
-assert(paletteEntries.every(item => keybinds.ACTION_METADATA[item.actionId]));
-const literal = value => `R"fly_json(${JSON.stringify(value)})fly_json"`;
-const result = `// Generated by scripts/chromium/generate-commands.js. Do not edit.
-#ifndef FLY_COMMANDS_GENERATED_CONTRACT_H_
-#define FLY_COMMANDS_GENERATED_CONTRACT_H_
+const header = `// Generated by scripts/chromium/generate-commands.js from actions.json and
+// commands.json. Do not edit.
+#ifndef FLY_COMMANDS_GENERATED_CATALOG_H_
+#define FLY_COMMANDS_GENERATED_CATALOG_H_
 #include <string_view>
 namespace fly {
-inline constexpr std::string_view kActionMetadataJSON = ${literal(keybinds.ACTION_METADATA)};
-inline constexpr std::string_view kDefaultKeyboardJSON = ${literal(defaults.config)};
-inline constexpr std::string_view kKeyboardCasesJSON = ${literal(cases)};
-inline constexpr std::string_view kWebsiteThemeCasesJSON = ${literal(websiteThemeCases)};
-inline constexpr std::string_view kPaletteEntriesJSON = ${literal(paletteEntries)};
-inline constexpr std::string_view kCommandDefinitionsJSON = ${literal(commandDefinitions)};
-inline constexpr std::string_view kHintAlphabet = ${JSON.stringify(hintAlphabet)};
-inline constexpr std::string_view kHintCasesJSON = ${literal(hintCases)};
+inline constexpr std::string_view kActionMetadataJSON = ${literal(metadata)};
+inline constexpr std::string_view kDefaultKeyboardJSON = ${literal(defaults)};
+inline constexpr std::string_view kCommandDefinitionsJSON = ${literal(entries)};
 }  // namespace fly
-#endif  // FLY_COMMANDS_GENERATED_CONTRACT_H_
+#endif  // FLY_COMMANDS_GENERATED_CATALOG_H_
 `;
-const output = path.join(root, 'chromium/overlay/fly/commands/generated_contract.h');
+
+// Page keys are shown as typed: a single letter in lower case.
+const shown = (binding, page) => page
+    ? binding.split(' ').map(stroke => /^\p{L}$/u.test(stroke) ? stroke.toLowerCase() : stroke).join(' ')
+    : binding;
+const cell = (bindings, page) => bindings.length
+    ? bindings.map(binding => '`' + shown(binding, page).replace(/\|/g, '&#124;') + '`').join(' / ')
+    : 'Unassigned';
+const rows = Object.values(actions)
+    .map(action => ({...action}))
+    .sort((a, b) => a.category.localeCompare(b.category) || a.label.localeCompare(b.label))
+    .map(action => `| ${action.label} | ${cell(action.shortcuts)} | ${cell(action.normal, true)} |`);
+if (catalogue.tabs) rows.push(`| Select tab by number (9: last tab) | \`${catalogue.tabs}+1\` … \`${catalogue.tabs}+9\` | Unassigned |`);
+const table = ['| Action | Browser shortcuts | Page keys |', '| :--- | :--- | :--- |', ...rows].join('\n');
+
+// Replaces the text between a document's generated-section markers.
+function fill(file, name, text) {
+    const start = `<!-- ${name}: generated by scripts/chromium/generate-commands.js -->`;
+    const end = `<!-- end of ${name} -->`;
+    const source = fs.readFileSync(file, 'utf8');
+    const from = source.indexOf(start);
+    const to = source.indexOf(end);
+    if (from < 0 || to < from) fail(`${path.relative(root, file)} must contain the markers ${start} and ${end}`);
+    return source.slice(0, from + start.length) + '\n\n' + text + '\n\n' + source.slice(to);
+}
+
+// The Command Centre entries by category, in the order commands.json lists them.
+const categories = [...new Set(commands.map(command => command.category))];
+const palette = categories.map(category => [
+    `### ${category}`,
+    '',
+    '| Command | Shortcut | Page key | Action | What it does |',
+    '| :--- | :--- | :--- | :--- | :--- |',
+    ...commands.filter(command => command.category === category).map(command =>
+        `| **${command.title}** | ${cell(actions[command.actionId].shortcuts)} | ` +
+        `${cell(actions[command.actionId].normal, true)} | \`${command.actionId}\` | ${command.desc.replace(/\|/g, '&#124;')}. |`)
+].join('\n')).join('\n\n');
+
+const outputs = [
+    [HEADER, header],
+    [KEYBINDS, fill(KEYBINDS, 'default bindings', table)],
+    [PALETTE, fill(PALETTE, 'command tables', palette)],
+];
 if (process.argv.includes('--check')) {
-    if (!fs.existsSync(output) || fs.readFileSync(output, 'utf8') !== result) {
-        console.error('Native command contracts are stale. Run node scripts/chromium/generate-commands.js');
-        process.exitCode = 1;
-    }
-} else fs.writeFileSync(output, result);
+    const stale = outputs.filter(([file, text]) => !fs.existsSync(file) || fs.readFileSync(file, 'utf8') !== text);
+    for (const [file] of stale) console.error(`${path.relative(root, file)} is stale. Run node scripts/chromium/generate-commands.js`);
+    if (stale.length) process.exitCode = 1;
+} else {
+    for (const [file, text] of outputs) fs.writeFileSync(file, text);
+}

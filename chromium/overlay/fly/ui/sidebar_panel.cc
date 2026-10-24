@@ -51,8 +51,8 @@ void FadeTo(views::View* view,
         ui::LayerAnimationElement::OPACITY);
     view->layer()->SetOpacity(opacity);
   }
-  // Faded controls ignore the pointer but stay focusable (Electron's
-  // pointer-events: none), so focusing one still expands the sidebar.
+  // Faded controls ignore the pointer but stay focusable, so focusing one
+  // still expands the sidebar.
   if (interactive) {
     // Disabling event dispatch while the pointer is on a control prevents
     // Views from delivering its mouse exit. Clear the transient state before
@@ -64,9 +64,9 @@ void FadeTo(views::View* view,
 }
 }  // namespace
 
-// .sidebar-content::before: the engraving, 230px wide, centred, its bottom
-// anchored to the bottom as in Electron. The native panel gives it another
-// 24px of clearance above the bottom controls; resizing never recentres it.
+// The engraving, 230px wide, centred, its bottom anchored to the bottom. The
+// panel gives it another 24px of clearance above the bottom controls; resizing
+// never recentres it.
 class SidebarPanel::Engraving : public views::View {
   METADATA_HEADER(Engraving, views::View)
 
@@ -155,7 +155,7 @@ gfx::Size SidebarPanel::CalculatePreferredSize(
   return gfx::Size(FlyScaled(kSidebarWidth - 1), 0);
 }
 
-// Electron's geometry (style.css), every length through the interface scale.
+// Every length goes through the interface scale.
 void SidebarPanel::Layout(PassKey) {
   const auto s = [](int pixels) { return FlyScaled(pixels); };
   const int content = width();
@@ -195,7 +195,7 @@ void SidebarPanel::Layout(PassKey) {
     parts_.workspaces->SetBounds(x, y, row, height);
     y += height + s(4);
   }
-  // #TabList fills the free height above the clock row; the content keeps
+  // The tab list fills the free height above the clock row; the content keeps
   // 42px at the bottom for the footer.
   y += s(4);
   const int clock_height =
@@ -302,8 +302,8 @@ void SidebarClock::OnThemeChanged() {
 BEGIN_METADATA(SidebarClock)
 END_METADATA
 
-// #Sidebar::after: box-shadow 6px 0 28px rgba(0, 0, 0, 0.65), outside the
-// panel only.
+// The shadow: 6px to the right, 28px blur, black at 65%, outside the panel
+// only.
 class SidebarRoot::Shadow : public views::View {
   METADATA_HEADER(Shadow, views::View)
 
@@ -327,7 +327,7 @@ class SidebarRoot::Shadow : public views::View {
 BEGIN_METADATA(SidebarRoot, Shadow)
 END_METADATA
 
-// #Sidebar: its border-right travels with the edge, outside the viewport.
+// The edge: its right border travels with it, outside the viewport.
 class SidebarRoot::Edge : public views::View {
   METADATA_HEADER(Edge, views::View)
 

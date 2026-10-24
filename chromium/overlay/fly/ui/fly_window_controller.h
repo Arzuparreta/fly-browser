@@ -223,10 +223,10 @@ class FlyWindowController : public views::WidgetDelegate,
   void UpdateReaderButton();
   void UpdateWelcome();
   void RunPreferencesAction(std::string action);
-  // Electron's in-place update: downloads the native package of the newer
-  // release, checks its SHA-256, replaces this installation and restarts.
+  // The in-place update: downloads the package of the newer release, checks its
+  // SHA-256, replaces this installation and restarts.
   void InstallUpdate();
-  // Electron's desktop integration (menu entry and default browser).
+  // Desktop integration (menu entry and default browser).
   void RefreshDesktopIntegration();
   void ChangeDesktopIntegration(bool make_default);
   void MaybeOfferDesktopIntegration();
@@ -254,7 +254,7 @@ class FlyWindowController : public views::WidgetDelegate,
     base::WeakPtr<content::WebContents> contents;
   };
   std::map<std::string, TabChoice> tab_choices_;
-  // Electron asks for the new workspace's name first.
+  // Asks for the new workspace's name first.
   void PromptNewWorkspace();
   bool WorkspaceChoiceAvailable(std::string_view action) const;
   void ChooseWorkspace(content::WebContents* source, std::string action);
@@ -293,9 +293,9 @@ class FlyWindowController : public views::WidgetDelegate,
   int VisibleSidebarWidth() const;
   void OnSidebarMotionEnded();
  public:
-  // Electron's tabNumbers.js: the tab numbers show while the modifier that
-  // selects tabs by number is held on its own (after 150 ms); any other key
-  // event hides them. Page and interface key events both report here.
+  // Tab numbers show while the modifier that selects tabs by number is held on
+  // its own (after 150 ms); any other key event hides them. Page and interface
+  // key events both report here.
   void TrackTabNumbers(bool key_down,
                        ui::KeyboardCode code,
                        ui::DomCode dom_code,
@@ -309,9 +309,8 @@ class FlyWindowController : public views::WidgetDelegate,
   void ClickModeBadge();
   void DropDashboardTab(std::string source, std::string target);
  public:
-  // Popup windows (sign-in popups, window.open with features, extension
-  // popups) belong to Fly's window, as Electron's child windows do; tiling
-  // window managers float them.
+  // Popup windows (sign-in popups, window.open with features, extension popups)
+  // belong to Fly's window; tiling window managers float them.
   void OnBrowserCreated(BrowserWindowInterface* browser) override;
 
  private:
@@ -443,8 +442,8 @@ class FlyWindowController : public views::WidgetDelegate,
   bool sidebar_motion_ready_ = false;
   bool sidebar_motion_applied_ = false;
   float sidebar_motion_scale_ = 0;
-  // The slide in progress, so the pointer and the hit area follow the edge
-  // the user sees (Electron hit-tests the animated element).
+  // The slide in progress, so the pointer and the hit area follow the edge the
+  // user sees.
   float sidebar_shift_from_ = 0;
   float sidebar_shift_to_ = 0;
   base::TimeTicks sidebar_motion_start_;
@@ -457,7 +456,7 @@ class FlyWindowController : public views::WidgetDelegate,
   bool tab_numbers_shown_ = false;
   raw_ptr<FlyButton> sidebar_pin_button_ = nullptr;
   raw_ptr<FlyButton> reader_button_ = nullptr;
-  // The active tab while it shows Electron's reader overlay.
+  // The active tab while it shows the reader overlay.
   base::WeakPtr<content::WebContents> reader_contents_;
   base::RepeatingTimer reader_poll_;
   raw_ptr<FlyButton> new_tab_button_ = nullptr;

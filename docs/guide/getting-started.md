@@ -28,9 +28,6 @@ Fly uses the full Chromium browser layer with native Views UI:
 3. **Product services**: commands, keyboard bindings, bookmarks, preferences and recovery.
 4. **Local data**: Chromium-managed state under `~/.config/fly-browser/`.
 
-Electron source remains available for comparison through `npm run start:legacy`.
-See [installation](/guide/installation) before importing an existing profile.
-
 ---
 
 ## First Steps

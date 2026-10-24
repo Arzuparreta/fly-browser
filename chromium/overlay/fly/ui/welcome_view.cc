@@ -87,7 +87,7 @@ WelcomeView::WelcomeView() {
   outer->set_main_axis_alignment(views::BoxLayout::MainAxisAlignment::kCenter);
   outer->set_cross_axis_alignment(
       views::BoxLayout::CrossAxisAlignment::kCenter);
-  // Electron's identity layer: a matte card on the canvas, 2px corners.
+  // A matte card on the canvas, 2px corners.
   auto* card = AddChildView(std::make_unique<FixedWidthView>(650));
   card_ = card;
   card->SetBackground(FlyBackground(FlyRole::kMain, 2));
@@ -138,7 +138,7 @@ WelcomeView::WelcomeView() {
 }
 WelcomeView::~WelcomeView() = default;
 
-// #EmptyWorkspaceWelcome: the canvas with a 16px grid of 0.7px dots in the
+// The canvas with a 16px grid of 0.7px dots in the
 // border colour, and the card's shadow (0 16px 48px rgba(0, 0, 0, 0.5)).
 void WelcomeView::OnPaintBackground(gfx::Canvas* canvas) {
   const auto& colors = GetFlyColors();

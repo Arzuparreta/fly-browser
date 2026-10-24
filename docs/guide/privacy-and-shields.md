@@ -6,8 +6,7 @@ browsing discards its in-memory site data; downloaded files remain on disk.
 
 Fly bundles **uBlock Origin Lite** for ad and tracker blocking, including private
 workspaces. Open its footer popup to adjust it. Turning extensions or the blocker
-off removes that protection. Full uBlock Origin settings from Electron cannot
-be imported as Lite settings. See [extensions](/guide/extensions).
+off removes that protection. See [extensions](/guide/extensions).
 
 Fly keeps product data locally and checks GitHub for release updates. Websites,
 installed extensions and Chromium services can make network requests of their

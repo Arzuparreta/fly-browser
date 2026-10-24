@@ -13,7 +13,7 @@
  }
  
  void Zoom(BrowserWindowInterface* browser, content::PageZoom zoom) {
-+  // Fly: Electron's zoom steps (0.5 levels), shared per hostname by
++  // Fly: zoom steps of 0.5 levels, shared per hostname by
 +  // fly::SiteZoom across workspaces; also reached by Ctrl+wheel.
 +  if (base::CommandLine::ForCurrentProcess()->HasSwitch("fly-native")) {
 +    fly::SiteZoom::Change(
