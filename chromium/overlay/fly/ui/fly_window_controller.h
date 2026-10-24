@@ -177,6 +177,7 @@ class FlyWindowController : public views::WidgetDelegate,
   UserContentService& user_content() { return *user_content_; }
   CommandPalette& extensions_picker() { return *extensions_picker_; }
   views::View* extension_actions_for_testing() const;
+  std::string extension_badge_for_testing(size_t index) const;
   DiagnosticsHub* diagnostics_hub_for_testing() const {
     return diagnostics_hub_.get();
   }
