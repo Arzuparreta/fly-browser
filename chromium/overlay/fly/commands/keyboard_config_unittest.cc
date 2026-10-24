@@ -99,6 +99,19 @@ TEST(KeyboardConfigTest, ChangesAreComparedInTheirNormalisedSpelling) {
   EXPECT_TRUE(resolved.config->normal.at("page-top").empty());
 }
 
+TEST(KeyboardConfigTest, APageSequenceStrokeTurnsTheDefaultTabNumbersOff) {
+  const auto changes =
+      base::DictValue()
+          .Set("shortcuts", base::DictValue())
+          .Set("normal", base::DictValue().Set(
+                             "scroll-down", base::ListValue().Append("G Alt+1")));
+  const auto resolved = ResolveKeyboardChanges(changes);
+  ASSERT_TRUE(resolved.config) << resolved.error;
+  EXPECT_EQ("", resolved.config->tabs);
+  EXPECT_EQ(std::vector<std::string>{"G Alt+1"},
+            resolved.config->normal.at("scroll-down"));
+}
+
 TEST(KeyboardConfigTest, MalformedChangesAreRejected) {
   EXPECT_FALSE(ResolveKeyboardChanges(base::DictValue()).config);
   const auto with = [](base::Value value) {

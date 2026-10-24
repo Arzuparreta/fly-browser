@@ -354,13 +354,17 @@ KeyboardValidation ResolveKeyboardChanges(const base::DictValue& changes) {
       }
     }
   }
-  // A newly introduced default tab modifier cannot steal an explicit choice.
+  // A newly introduced default tab modifier cannot steal an explicit choice,
+  // including any stroke of a page-key sequence.
   if (!changes.contains("tabs")) {
     const auto numbered = CompileBindings({}, DefaultKeyboardConfig().tabs);
     for (const auto& [chord, action] : numbered) {
       if (global_choices.contains(chord) ||
           std::ranges::any_of(page_choices, [&](const std::string& choice) {
-            return Conflicts(choice, chord);
+            return std::ranges::contains(
+                base::SplitString(choice, " ", base::KEEP_WHITESPACE,
+                                  base::SPLIT_WANT_ALL),
+                chord);
           })) {
         candidate.Set("tabs", "");
         break;
