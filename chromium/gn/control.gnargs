@@ -10,3 +10,6 @@ use_siso = true
 # This selects FFmpeg codecs; it does not enable Google product branding.
 proprietary_codecs = true
 ffmpeg_branding = "Chrome"
+# Widevine: the browser loads Google's CDM, which the component updater
+# downloads into the user data directory. Fly never ships the CDM itself.
+enable_widevine = true

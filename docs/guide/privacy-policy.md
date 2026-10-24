@@ -10,7 +10,9 @@ Fly checks GitHub for release updates and downloads an update when requested.
 The installer also contacts GitHub for packages and checksums. These requests
 expose normal connection information such as your IP to the service provider.
 Websites, search engines, installed extensions, the bundled blocker and Chromium
-services make requests needed for their features. Zero Fly telemetry is not a
+services make requests needed for their features. Chromium's component updater
+downloads data and modules from Google, including the Widevine module that
+protected video services such as Netflix and Spotify need. Zero Fly telemetry is not a
 promise of zero network activity.
 
 ## Isolation and blocking
