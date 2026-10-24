@@ -68,7 +68,19 @@
      SessionCrashedBubble::ShowIfNotOffTheRecordProfile(
          browser,
          /*skip_tab_checking=*/false);
-@@ -304,9 +331,12 @@ void AddInfoBarsIfNecessary(BrowserWindowInterface* browser,
+@@ -253,7 +280,10 @@ void AddInfoBarsIfNecessary(BrowserWindowInterface* browser,
+   infobars::ContentInfoBarManager* infobar_manager =
+       infobars::ContentInfoBarManager::FromWebContents(web_contents);
+ 
+-  if (!google_apis::HasAPIKeyConfigured()) {
++  // Fly: native Fly uses no Google API services; the missing keys are
++  // expected there.
++  if (!google_apis::HasAPIKeyConfigured() &&
++      !startup_command_line.HasSwitch("fly-native")) {
+     if (infobars::IsInfoBarMigrated(
+             infobars::InfoBarDelegate::GOOGLE_API_KEYS_INFOBAR_DELEGATE)) {
+       if (auto* manager =
+@@ -304,9 +334,12 @@ void AddInfoBarsIfNecessary(BrowserWindowInterface* browser,
  #endif
  
  #if !BUILDFLAG(IS_CHROMEOS) && !BUILDFLAG(IS_ANDROID)
