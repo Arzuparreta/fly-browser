@@ -1,6 +1,6 @@
 {
   "name": "fly-browser",
-  "version": "0.32.0",
+  "version": "0.33.0",
   "private": true,
   "description": "A small, minimal Linux browser built on Chromium, with full keyboard control and a polished experience for mouse users.",
   "license": "GPL-3.0-or-later",
