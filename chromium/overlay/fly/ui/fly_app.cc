@@ -575,14 +575,19 @@ void FlyApp::TogglePrivate(BrowserWindowInterface* browser) {
     return;
   auto* profile = browser ? browser->GetProfile() : ActiveProfile();
   if (profile->IsOffTheRecord()) {
-    // Leaving private mode returns to the workspace's own window.
+    // Leaving private mode returns to the workspace's own window: a new one
+    // now if it has none, otherwise its window once the private windows have
+    // closed (OnBrowserClosed).
     auto* original = profile->GetOriginalProfile();
+    const auto workspace = WorkspaceFor(original);
     const auto browsers = BrowsersByActivation();
-    if (std::ranges::none_of(browsers, [&](BrowserWindowInterface* other) {
-          return other->GetProfile() == original;
-        })) {
-      if (const auto workspace = WorkspaceFor(original))
+    if (workspace) {
+      if (std::ranges::none_of(browsers, [&](BrowserWindowInterface* other) {
+            return other->GetProfile() == original;
+          }))
         OpenWorkspace(workspace->id);
+      else
+        private_returns_[profile] = workspace->id;
     }
     // The native close coordinator resolves all beforeunload decisions before
     // closing this OTR profile's windows. Cancellation leaves them intact.
@@ -1247,6 +1252,27 @@ void FlyApp::HoldKeepAlive() {
 void FlyApp::ReleaseKeepAliveIfIdle() {
   if (!workspace_close_ && !creating_profile_ && !tab_move_)
     keep_alive_.reset();
+}
+
+void FlyApp::OnBrowserClosed(BrowserWindowInterface* browser) {
+  const auto found = private_returns_.find(browser->GetProfile());
+  if (closing_ || found == private_returns_.end())
+    return;
+  // Wait for the profile's last private window.
+  for (auto* other : BrowsersByActivation()) {
+    if (other != browser && other->GetProfile() == browser->GetProfile())
+      return;
+  }
+  auto id = found->second;
+  private_returns_.erase(found);
+  // Not from inside the closing window's notification.
+  base::SingleThreadTaskRunner::GetCurrentDefault()->PostTask(
+      FROM_HERE, base::BindOnce(
+                     [](base::WeakPtr<FlyApp> app, std::string id) {
+                       if (app && !app->closing_)
+                         app->OpenWorkspace(id);
+                     },
+                     weak_factory_.GetWeakPtr(), std::move(id)));
 }
 
 void FlyApp::OnBrowserCreated(BrowserWindowInterface* browser) {

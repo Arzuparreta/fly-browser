@@ -1809,10 +1809,10 @@ void FlyWindowController::RebuildWorkspaceButtons() {
   workspace_refresh_pending_ = false;
   if (!workspace_buttons_ || Closing())
     return;
+  // WorkspaceEntries() rebuilds the dashboard's window choices itself.
   if (workspace_picker_->active())
     workspace_picker_->UpdateItems(WorkspaceEntries(), false);
   workspace_buttons_->RemoveAllChildViews();
-  window_choices_.clear();
   auto& app = FlyApp::Get();
   const auto catalog = app.workspaces().Read();
   if (!catalog) {

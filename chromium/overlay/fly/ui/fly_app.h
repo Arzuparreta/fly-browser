@@ -152,6 +152,8 @@ class FlyApp : public BrowserCollectionObserver {
 
   // BrowserCollectionObserver:
   void OnBrowserCreated(BrowserWindowInterface* browser) override;
+  // After private mode is turned off, brings back the workspace window.
+  void OnBrowserClosed(BrowserWindowInterface* browser) override;
   // The active workspace is the one of the Fly window used last. Chromium
   // also counts a window as used when it is shown, before the window
   // manager activates it.
@@ -224,6 +226,9 @@ class FlyApp : public BrowserCollectionObserver {
   base::CallbackListSubscription close_subscription_;
   base::CallbackListSubscription terminating_subscription_;
   base::CallbackListSubscription session_restored_subscription_;
+  // Private profiles being closed by "leave private mode", and the workspace
+  // whose window comes back once they have closed. Keys are compared only.
+  std::map<const Profile*, std::string> private_returns_;
   base::WeakPtrFactory<FlyApp> weak_factory_{this};
 };
 }  // namespace fly

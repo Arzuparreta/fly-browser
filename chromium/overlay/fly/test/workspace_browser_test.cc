@@ -730,11 +730,15 @@ IN_PROC_BROWSER_TEST_F(FlyWorkspaceBrowserTest,
   EXPECT_TRUE(normal->GetProfile()->HasPrimaryOTRProfile());
   ExpectVisible(contents, true);
   ASSERT_TRUE(content::ExecJs(contents, "window.onbeforeunload = null"));
+  // Leaving brings the workspace's own window back, even from minimised.
+  normal->GetWindow()->Minimize();
+  ASSERT_TRUE(
+      base::test::RunUntil([&] { return normal->GetWindow()->IsMinimized(); }));
   ASSERT_TRUE(Window(private_model).RunCommand("toggle-private-mode"));
   ASSERT_TRUE(base::test::RunUntil([&] {
-    return !normal->GetProfile()->HasPrimaryOTRProfile();
+    return !normal->GetProfile()->HasPrimaryOTRProfile() &&
+           LastActive() == normal && !normal->GetWindow()->IsMinimized();
   }));
-  EXPECT_EQ(normal, LastActive());
 }
 
 class FlySidebarBrowserTest : public FlyWorkspaceBrowserTest {
@@ -4186,6 +4190,10 @@ IN_PROC_BROWSER_TEST_F(FlyWorkspaceBrowserTest,
   ASSERT_TRUE(second_picker.active());
   second_picker.search_for_testing()->SetText(u"Private");
   second_picker.ContentsChanged(second_picker.search_for_testing(), u"Private");
+  ASSERT_EQ(1u, second_picker.result_count_for_testing());
+  // A sidebar refresh while the dashboard is open keeps its window rows.
+  App().BroadcastWorkspaceRefresh();
+  base::RunLoop().RunUntilIdle();
   ASSERT_EQ(1u, second_picker.result_count_for_testing());
   ui::test::EventGenerator second_keys(
       second_window.widget()->GetNativeWindow()->GetRootWindow());
