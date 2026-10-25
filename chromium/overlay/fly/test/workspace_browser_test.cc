@@ -7161,6 +7161,21 @@ IN_PROC_BROWSER_TEST_F(FlyWorkspaceBrowserTest,
       ui::PageTransitionCoreTypeIs(transition, ui::PAGE_TRANSITION_TYPED));
   EXPECT_TRUE(ui::PageTransitionGetQualifier(transition) &
               ui::PAGE_TRANSITION_FROM_ADDRESS_BAR);
+  // A search is never preloaded, whatever its engine's address looks like.
+  SearchService search(*g_browser_process->local_state());
+  ASSERT_TRUE(search.SetEngine(
+      embedded_test_server()->GetURL("/results/%s").spec()));
+  const auto results = search.ResolveNavigation("unfinished query");
+  ASSERT_TRUE(results);
+  ASSERT_TRUE(base::test::RunUntil([&] { return !address.showing(); }));
+  ASSERT_TRUE(InvokeNativeCommand(browser(), "toggle-address"));
+  ASSERT_TRUE(base::test::RunUntil([&] { return address.active(); }));
+  address.search_for_testing()->SetText(u"unfinished query");
+  address.ContentsChanged(address.search_for_testing(), u"unfinished query");
+  base::RunLoop().RunUntilIdle();
+  EXPECT_TRUE(
+      content::test::PrerenderTestHelper::GetHostForUrl(*contents, *results)
+          .is_null());
 }
 
 }  // namespace

@@ -119,24 +119,6 @@
 
 namespace fly {
 namespace {
-// Whether `url` is a results page of the search engine or a search alias:
-// the same host and path as one of their templates.
-bool IsSearchNavigation(const GURL& url) {
-  const auto search = SearchService(*g_browser_process->local_state()).Read();
-  if (!search)
-    return true;
-  const auto matches = [&](std::string pattern) {
-    base::ReplaceSubstringsAfterOffset(&pattern, 0, "%s", "fly");
-    const GURL engine(pattern);
-    return engine.is_valid() && engine.host() == url.host() &&
-           engine.path() == url.path();
-  };
-  return matches(search->engine) ||
-         std::ranges::any_of(search->aliases, [&](const auto& entry) {
-           return matches(entry.second.url);
-         });
-}
-
 // The workspace badge: a trailing number of one or two digits after the first
 // letter ("Workspace 1" is "W1"), the first two digits of a longer number,
 // otherwise the first two letters in capitals.
@@ -2509,14 +2491,14 @@ void FlyWindowController::LoadHistory(HistorySurface surface) {
   if (!picker->active())
     return;
   const auto generation = ++history_generation_;
-  history_rows_deletions_ = history_->deletion_count();
+  // What these rows are read against, published with them: a refresh still
+  // in flight must not make the rows on screen look current.
   const auto catalog = FlyApp::Get().workspaces().Read();
-  history_rows_workspaces_ =
-      catalog ? catalog->items : std::vector<Workspace>();
   history_->Query(base::BindOnce(
       [](base::WeakPtr<FlyWindowController> window,
          base::WeakPtr<content::WebContents> source, bool empty_source,
-         uint64_t generation, HistorySurface surface,
+         uint64_t generation, HistorySurface surface, uint64_t deletions,
+         std::vector<Workspace> workspaces,
          std::optional<std::vector<HistoryEntry>> rows) {
         if (!window || window->Closing() || (!empty_source && !source) ||
             generation != window->history_generation_ ||
@@ -2528,6 +2510,8 @@ void FlyWindowController::LoadHistory(HistorySurface surface) {
         if (!picker->active())
           return;
         window->history_entries_ = rows.value_or(std::vector<HistoryEntry>());
+        window->history_rows_deletions_ = deletions;
+        window->history_rows_workspaces_ = std::move(workspaces);
         if (!rows && window->status_)
           window->status_->SetText(
               u"History is unavailable. Saved data has been preserved.");
@@ -2538,7 +2522,8 @@ void FlyWindowController::LoadHistory(HistorySurface surface) {
       },
       weak_factory_.GetWeakPtr(),
       contents ? contents->GetWeakPtr() : base::WeakPtr<content::WebContents>(),
-      !contents, generation, surface),
+      !contents, generation, surface, history_->deletion_count(),
+      catalog ? catalog->items : std::vector<Workspace>()),
       // Suggestions never load the profile of a workspace that is not open.
       /*loaded_only=*/surface == HistorySurface::kAddress);
 }
@@ -2792,11 +2777,12 @@ void FlyWindowController::PrepareAddressChoice(std::string_view action) {
   const bool known_page =
       action.starts_with("history:") || action.starts_with("bookmark:");
   std::optional<GURL> target;
+  bool search = false;
   if (known_page) {
     target = GURL(choice->second);
   } else if (action.starts_with("navigate:")) {
     target = SearchService(*g_browser_process->local_state())
-                 .ResolveNavigation(choice->second);
+                 .ResolveNavigation(choice->second, &search);
   }
   if (!target || !target->SchemeIsHTTPOrHTTPS())
     return;
@@ -2821,7 +2807,7 @@ void FlyWindowController::PrepareAddressChoice(std::string_view action) {
                            .value_or(false);
   if (!preload || *target == prerendered_url_ ||
       *target == contents->GetLastCommittedURL() ||
-      (!known_page && IsSearchNavigation(*target)) ||
+      search ||
       content::DevToolsAgentHost::IsDebuggerAttached(contents))
     return;
   prerendered_url_ = *target;

@@ -32,6 +32,16 @@ TEST_F(SearchServiceTest, BuiltinsEncodingAndDirectNavigationNeverWrite) {
   EXPECT_EQ(GURL("http://localhost:8000/fixture"),
             service_.ResolveNavigation("localhost:8000/fixture"));
   EXPECT_EQ(GURL("about:blank"), service_.ResolveNavigation("about:blank"));
+  // Callers can tell a search from an address, whatever the template's shape.
+  bool search = false;
+  ASSERT_TRUE(service_.ResolveNavigation("gh fly", &search));
+  EXPECT_TRUE(search);
+  ASSERT_TRUE(service_.ResolveNavigation("fly browser", &search));
+  EXPECT_TRUE(search);
+  ASSERT_TRUE(service_.ResolveNavigation("fly !w", &search));
+  EXPECT_TRUE(search);
+  ASSERT_TRUE(service_.ResolveNavigation("example.com/path", &search));
+  EXPECT_FALSE(search);
   // Unsupported schemes are never rewritten into an https URL for another host.
   EXPECT_FALSE(service_.ResolveNavigation("mailto:user@example.com"));
   EXPECT_FALSE(service_.ResolveNavigation("ftp://files.example.org"));
@@ -147,5 +157,16 @@ TEST_F(SearchServiceTest, DuckDuckGoBangsPreserveCompleteInput) {
   EXPECT_EQ(GURL("https://example.com/wow!"),
             service_.ResolveNavigation("wow!"));
 }
+
+// A search engine whose placeholder sits in the path is still a search.
+TEST_F(SearchServiceTest, PathTemplatesAreSearches) {
+  ASSERT_TRUE(service_.SetEngine("https://search.example/results/%s"));
+  bool search = false;
+  const auto target = service_.ResolveNavigation("unfinished query", &search);
+  ASSERT_TRUE(target);
+  EXPECT_EQ("search.example", target->host());
+  EXPECT_TRUE(search);
+}
+
 }  // namespace
 }  // namespace fly
