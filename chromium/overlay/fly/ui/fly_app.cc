@@ -125,6 +125,7 @@ FlyApp::FlyApp()
   close_subscription_ = chrome::AddClosingAllBrowsersCallback(
       base::BindRepeating(&FlyApp::OnClosingAllBrowsers,
                           weak_factory_.GetWeakPtr()));
+  RegisterFlyWindowColors();
   session_restored_subscription_ =
       SessionRestore::RegisterOnSessionRestoredCallback(base::BindRepeating(
           &FlyApp::OnSessionRestored, base::Unretained(this)));

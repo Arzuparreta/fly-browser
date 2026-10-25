@@ -39,7 +39,10 @@ class SearchService {
   bool RemoveAlias(std::string_view key);
   // Workspace switching and calculator evaluation belong to the address UI.
   // Invalid explicit URLs/protocols and unreadable search settings return null.
-  std::optional<GURL> ResolveNavigation(std::string_view input) const;
+  // `search`, when given, tells whether the result is a search (engine, alias
+  // or bang) rather than an address.
+  std::optional<GURL> ResolveNavigation(std::string_view input,
+                                        bool* search = nullptr) const;
 
  private:
   const raw_ref<PrefService> local_state_;

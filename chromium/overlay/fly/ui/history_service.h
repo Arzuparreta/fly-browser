@@ -44,13 +44,17 @@ class HistoryService : public history::HistoryServiceObserver {
   ~HistoryService() override;
   // A new operation cancels the previous reply. Missing/unreadable profiles or
   // a changed workspace catalog fail closed instead of returning partial data.
-  void Query(QueryCallback callback);
+  // `loaded_only` leaves out the workspaces whose profile is not loaded
+  // instead of loading it.
+  void Query(QueryCallback callback, bool loaded_only = false);
   // Clear native history in every authorized workspace after loading and
   // checking deletion policy in all of them. Cookies/site storage are
   // untouched.
   void Clear(base::OnceCallback<void(bool)> callback);
   void Cancel();
   void SetChangedCallback(base::RepeatingClosure callback);
+  // Counts deletions and stores going away, as soon as they are reported.
+  uint64_t deletion_count() const { return deletion_count_; }
   void OnURLVisited(history::HistoryService*,
                     const history::VisitedURLInfo&) override;
   void OnURLsModified(history::HistoryService*,
@@ -64,6 +68,8 @@ class HistoryService : public history::HistoryServiceObserver {
     Workspace workspace;
     std::unique_ptr<ScopedProfileKeepAlive> keep_alive;
     base::WeakPtr<Profile> profile;
+    // Not loaded, and left out of a loaded-only query.
+    bool skipped = false;
     Source();
     ~Source();
     Source(Source&&);
@@ -80,6 +86,8 @@ class HistoryService : public history::HistoryServiceObserver {
   const raw_ref<ProfileManager> manager_;
   const raw_ref<WorkspaceService> workspaces_;
   std::vector<Source> sources_;
+  bool loaded_only_ = false;
+  uint64_t deletion_count_ = 0;
   std::vector<HistoryEntry> entries_;
   QueryCallback query_callback_;
   base::OnceCallback<void(bool)> clear_callback_;

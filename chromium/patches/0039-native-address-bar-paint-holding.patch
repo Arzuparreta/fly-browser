@@ -1,0 +1,26 @@
+--- a/content/browser/renderer_host/navigator.cc
++++ b/content/browser/renderer_host/navigator.cc
+@@ -582,11 +582,23 @@
+   const bool allow_paint_holding_for_initial_empty_document =
+       was_on_initial_empty_document && old_frame_origin.opaque() &&
+       !old_frame_origin.GetTupleOrPrecursorTupleIfOpaque().IsValid();
++  bool browser_address_bar_navigation = false;
++#if BUILDFLAG(IS_LINUX) || BUILDFLAG(IS_WIN)
++  // Fly: a navigation the user starts from the browser's own address bar keeps
++  // the previous page on screen until the new one paints, as after the user
++  // interacted with that page. Pages cannot start these navigations.
++  browser_address_bar_navigation =
++      !navigation_request->IsRendererInitiated() &&
++      (ui::PageTransitionGetQualifier(ui::PageTransitionFromInt(
++           navigation_request->common_params().transition)) &
++       ui::PAGE_TRANSITION_FROM_ADDRESS_BAR);
++#endif
+   const bool allow_main_frame_paint_holding =
+       !navigation_request->was_initiated_by_animated_transition() &&
+       (allow_paint_holding_for_initial_empty_document ||
+        old_frame_origin.IsSameOriginWith(params.origin) ||
+        old_frame_host->HasStickyUserActivation() ||
++       browser_address_bar_navigation ||
+        client->AllowNonActivatedCrossOriginPaintHolding() ||
+        !base::FeatureList::IsEnabled(
+            features::kLimitCrossOriginNonActivatedPaintHolding));

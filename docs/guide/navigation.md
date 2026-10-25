@@ -19,10 +19,11 @@ Link Hints allow you to click any link, button, or input field on a web page usi
 
 ## Floating Address Bar (`Ctrl + L`)
 
-Press **Ctrl + L** at any time to open the floating, high-contrast address overlay:
+Press **Ctrl + L** at any time to open the floating, high-contrast address overlay. **Ctrl + T** and the sidebar's **+** button open a new tab with it ready.
 
-- **Direct Navigation**: Type any full or partial URL and press **Enter**.
-- **Live Search Autocomplete**: As you type, Fly queries your browsing history and active bookmarks live. Use the **Up** and **Down** arrow keys to select a suggestion and press **Enter**.
+- **Direct Navigation**: Type any full or partial URL and press **Enter**. The current page stays on screen until the new one has painted.
+- **Live Search Autocomplete**: As you type, Fly queries the browsing history of the workspaces whose window is open, and your bookmarks. Use the **Up** and **Down** arrow keys to select a suggestion and press **Enter**. Fly connects to the highlighted result's site while you choose.
+- **Preloading**: With **Preferences → Performance → Preload the address bar's result** turned on, Fly also loads the page that the highlighted address, history or bookmark result opens, so it appears at once on **Enter**. The site sees that visit even if you do not open it. Searches are never preloaded. It is off by default.
 - **Direct Calculator**: Type any arithmetic expression (e.g. `240 * 1.2`, `15% of 200`, `sqrt(144)`) to compute the answer live in the dropdown. Press **Enter** to copy the answer to your clipboard, or press the **Down Arrow** or **Tab** to put the result into the address bar and continue calculating.
 - **DuckDuckGo Bangs**: Type any DuckDuckGo bang (e.g. `!w Arch Linux`, `!gh FlyBrowser`, `!yt ambient`) to route directly to thousands of external search destinations.
 - **Workspace Switching**: Type `ws` followed by a workspace name (e.g. `ws work`) to bring that workspace's window to the front, or open it, from the address bar.

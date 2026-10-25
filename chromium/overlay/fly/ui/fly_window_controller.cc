@@ -29,6 +29,10 @@
 #include "chrome/browser/browser_process.h"
 #include "chrome/browser/lifetime/application_lifetime.h"
 #include "chrome/browser/platform_util.h"
+#include "chrome/browser/predictors/autocomplete_action_predictor.h"
+#include "chrome/browser/predictors/autocomplete_action_predictor_factory.h"
+#include "chrome/browser/predictors/loading_predictor.h"
+#include "chrome/browser/predictors/loading_predictor_factory.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/profiles/profile_manager.h"
 #include "chrome/browser/ui/browser_commands.h"
@@ -41,10 +45,12 @@
 #include "components/omnibox/browser/vector_icons.h"
 #include "components/tabs/public/tab_interface.h"
 #include "components/vector_icons/vector_icons.h"
+#include "content/public/browser/devtools_agent_host.h"
 #include "content/public/browser/media_session.h"
 #include "content/public/browser/navigation_controller.h"
 #include "content/public/browser/render_widget_host_view.h"
 #include "content/public/browser/web_contents.h"
+#include "services/network/public/cpp/constants.h"
 #include "extensions/common/extension.h"
 #include "fly/bookmarks/bookmark_service.h"
 #include "fly/commands/calculator.h"
@@ -109,6 +115,7 @@
 #include "ui/views/window/dialog_delegate.h"
 #include "ui/views/window/vector_icons/vector_icons.h"
 #include "ui/wm/core/coordinate_conversion.h"
+#include "url/origin.h"
 
 namespace fly {
 namespace {
@@ -504,7 +511,7 @@ void FlyWindowController::BuildSidebar() {
   workspace_label_->SetElideBehavior(gfx::ELIDE_TAIL);
   workspace_label_->SetCanProcessEventsWithinSubtree(false);
   new_tab_button_ = sidebar->AddChildView(MakeFlyIconButton(
-      base::BindRepeating(&FlyWindowController::CreateTab,
+      base::BindRepeating(base::IgnoreResult(&FlyWindowController::CreateTab),
                           weak_factory_.GetWeakPtr()),
       kAddIcon, u"New Tab / Navigation", 28));
   new_tab_button_->SetOutlined(true);
@@ -535,7 +542,8 @@ void FlyWindowController::BuildSidebar() {
   parts.workspaces = workspace_buttons_;
   tab_sidebar_ =
       sidebar->AddChildView(std::make_unique<TabSidebar>(base::BindRepeating(
-          &FlyWindowController::CreateTab, weak_factory_.GetWeakPtr())));
+          base::IgnoreResult(&FlyWindowController::CreateTab),
+          weak_factory_.GetWeakPtr())));
   parts.tabs = tab_sidebar_;
   tab_sidebar_->SetStateChangedCallback(base::BindRepeating(
       &FlyWindowController::UpdateSplitButton, weak_factory_.GetWeakPtr()));
@@ -737,6 +745,9 @@ void FlyWindowController::BuildSurfaces() {
           },
           weak_factory_.GetWeakPtr()),
       base::BindRepeating(&FlyWindowController::ExecuteAddress,
+                          weak_factory_.GetWeakPtr()));
+  address_picker_->SetSelectionCallback(
+      base::BindRepeating(&FlyWindowController::PrepareAddressChoice,
                           weak_factory_.GetWeakPtr()));
   history_picker_ = std::make_unique<CommandPalette>(
       widget_,
@@ -2400,9 +2411,25 @@ void FlyWindowController::OnWorkspacesChanged() {
     workspace_picker_->UpdateItems(WorkspaceEntries(), false);
 }
 
-void FlyWindowController::CreateTab() {
-  if (!Closing())
-    OpenNativeBlankTab(browser_);
+bool FlyWindowController::CreateTab() {
+  if (Closing() || !OpenNativeBlankTab(browser_))
+    return false;
+  // As in Chrome, a new tab opens with the address bar ready for typing.
+  // A bar still open on the previous tab finishes closing first.
+  address_picker_->Cancel();
+  if (!address_picker_->showing()) {
+    ToggleAddress();
+    return true;
+  }
+  base::SingleThreadTaskRunner::GetCurrentDefault()->PostTask(
+      FROM_HERE, base::BindOnce(
+                     [](base::WeakPtr<FlyWindowController> window) {
+                       if (window && !window->Closing() &&
+                           !window->address_picker_->showing())
+                         window->ToggleAddress();
+                     },
+                     weak_factory_.GetWeakPtr()));
+  return true;
 }
 
 bool FlyWindowController::CanShowHistory() const {
@@ -2464,10 +2491,14 @@ void FlyWindowController::LoadHistory(HistorySurface surface) {
   if (!picker->active())
     return;
   const auto generation = ++history_generation_;
+  // What these rows are read against, published with them: a refresh still
+  // in flight must not make the rows on screen look current.
+  const auto catalog = FlyApp::Get().workspaces().Read();
   history_->Query(base::BindOnce(
       [](base::WeakPtr<FlyWindowController> window,
          base::WeakPtr<content::WebContents> source, bool empty_source,
-         uint64_t generation, HistorySurface surface,
+         uint64_t generation, HistorySurface surface, uint64_t deletions,
+         std::vector<Workspace> workspaces,
          std::optional<std::vector<HistoryEntry>> rows) {
         if (!window || window->Closing() || (!empty_source && !source) ||
             generation != window->history_generation_ ||
@@ -2479,6 +2510,8 @@ void FlyWindowController::LoadHistory(HistorySurface surface) {
         if (!picker->active())
           return;
         window->history_entries_ = rows.value_or(std::vector<HistoryEntry>());
+        window->history_rows_deletions_ = deletions;
+        window->history_rows_workspaces_ = std::move(workspaces);
         if (!rows && window->status_)
           window->status_->SetText(
               u"History is unavailable. Saved data has been preserved.");
@@ -2489,7 +2522,10 @@ void FlyWindowController::LoadHistory(HistorySurface surface) {
       },
       weak_factory_.GetWeakPtr(),
       contents ? contents->GetWeakPtr() : base::WeakPtr<content::WebContents>(),
-      !contents, generation, surface));
+      !contents, generation, surface, history_->deletion_count(),
+      catalog ? catalog->items : std::vector<Workspace>()),
+      // Suggestions never load the profile of a workspace that is not open.
+      /*loaded_only=*/surface == HistorySurface::kAddress);
 }
 
 void FlyWindowController::ToggleHistory() {
@@ -2515,6 +2551,12 @@ void FlyWindowController::ToggleHistory() {
 
 void FlyWindowController::OpenHistory(content::WebContents* source,
                                       std::string action) {
+  OpenHistoryRow(source, std::move(action), /*loaded_only=*/false);
+}
+
+void FlyWindowController::OpenHistoryRow(content::WebContents* source,
+                                         std::string action,
+                                         bool loaded_only) {
   if (Closing() || ActiveContents() != source ||
       !history_choices_.contains(action))
     return;
@@ -2522,8 +2564,18 @@ void FlyWindowController::OpenHistory(content::WebContents* source,
     ConfirmHistoryClear(source);
     return;
   }
-  // Requery the native stores after dismissal, so retired workspaces or deleted
-  // visits cannot execute stale cached rows. Keep the selected destination.
+  // Rows still current open at once. After a deletion or a catalogue change,
+  // requery the native stores so retired workspaces or deleted visits cannot
+  // execute stale cached rows. Keep the selected destination.
+  const auto catalog = FlyApp::Get().workspaces().Read();
+  if (history_->deletion_count() == history_rows_deletions_ && catalog &&
+      catalog->items == history_rows_workspaces_ &&
+      std::ranges::any_of(history_entries_, [&](const HistoryEntry& item) {
+        return item.url.spec() == action;
+      })) {
+    NavigateFromAddressBar(GURL(action));
+    return;
+  }
   history_->Query(base::BindOnce(
       [](base::WeakPtr<FlyWindowController> window,
          base::WeakPtr<content::WebContents> source, bool empty_source,
@@ -2534,15 +2586,12 @@ void FlyWindowController::OpenHistory(content::WebContents* source,
               return item.url.spec() == url;
             }))
           return;
-        NavigateParams params(window->browser_, GURL(url),
-                              ui::PAGE_TRANSITION_TYPED);
-        params.disposition = WindowOpenDisposition::CURRENT_TAB;
-        params.window_action = NavigateParams::WindowAction::kShowWindow;
-        Navigate(&params);
+        window->NavigateFromAddressBar(GURL(url));
       },
       weak_factory_.GetWeakPtr(),
       source ? source->GetWeakPtr() : base::WeakPtr<content::WebContents>(),
-      !source, std::move(action)));
+      !source, std::move(action)),
+      loaded_only);
 }
 
 void FlyWindowController::ConfirmHistoryClear(content::WebContents* source) {
@@ -2606,6 +2655,8 @@ void FlyWindowController::ToggleAddress() {
   const auto config =
       FlyApp::Get().commands().Read().value_or(DefaultKeyboardConfig());
   const auto url = contents ? contents->GetVisibleURL() : GURL(kFlyNewTabURL);
+  prepared_origin_.clear();
+  prerendered_url_ = GURL();
   address_picker_->ToggleQuery(
       contents,
       base::BindRepeating(
@@ -2696,7 +2747,7 @@ void FlyWindowController::ExecuteAddress(content::WebContents* source,
   }
   if (action.starts_with("history:")) {
     history_choices_.insert(payload);
-    OpenHistory(source, payload);
+    OpenHistoryRow(source, payload, /*loaded_only=*/true);
     return;
   }
   std::optional<GURL> target;
@@ -2707,10 +2758,69 @@ void FlyWindowController::ExecuteAddress(content::WebContents* source,
                  .ResolveNavigation(payload);
   if (!target || !target->is_valid())
     return;
-  NavigateParams params(browser_, *target, ui::PAGE_TRANSITION_TYPED);
+  NavigateFromAddressBar(*target);
+}
+
+void FlyWindowController::NavigateFromAddressBar(const GURL& url) {
+  if (Closing())
+    return;
+  // FROM_ADDRESS_BAR keeps the current page on screen until the new one
+  // paints (patch 0039) and lets a page preloaded for it take over.
+  NavigateParams params(browser_, url,
+                        ui::PageTransitionFromInt(
+                            ui::PAGE_TRANSITION_TYPED |
+                            ui::PAGE_TRANSITION_FROM_ADDRESS_BAR));
   params.disposition = WindowOpenDisposition::CURRENT_TAB;
   params.window_action = NavigateParams::WindowAction::kShowWindow;
   Navigate(&params);
+}
+
+void FlyWindowController::PrepareAddressChoice(std::string_view action) {
+  auto* contents = ActiveContents();
+  const auto choice = address_choices_.find(std::string(action));
+  if (Closing() || !contents || choice == address_choices_.end())
+    return;
+  const bool known_page =
+      action.starts_with("history:") || action.starts_with("bookmark:");
+  std::optional<GURL> target;
+  bool search = false;
+  if (known_page) {
+    target = GURL(choice->second);
+  } else if (action.starts_with("navigate:")) {
+    target = SearchService(*g_browser_process->local_state())
+                 .ResolveNavigation(choice->second, &search);
+  }
+  if (!target || !target->SchemeIsHTTPOrHTTPS())
+    return;
+  auto* profile = browser_->GetProfile();
+  // Connect to the site while the user decides, as Chrome's omnibox does.
+  const auto origin = url::Origin::Create(*target).Serialize();
+  if (origin != prepared_origin_) {
+    prepared_origin_ = origin;
+    if (auto* predictor =
+            predictors::LoadingPredictorFactory::GetForProfile(profile)) {
+      predictor->PrepareForPageLoad(
+          /*initiator_origin=*/std::nullopt, *target,
+          predictors::HintOrigin::OMNIBOX,
+          network::GetNoOpNetworkRestrictionsId(), /*preconnectable=*/true);
+    }
+  }
+  // Load the page itself only for a typed address or a known page, never a
+  // search, and only when the user turned it on.
+  const bool preload = FlyApp::Get()
+                           .preferences()
+                           .ReadBool("preload_address_results")
+                           .value_or(false);
+  if (!preload || *target == prerendered_url_ ||
+      *target == contents->GetLastCommittedURL() ||
+      search ||
+      content::DevToolsAgentHost::IsDebuggerAttached(contents))
+    return;
+  prerendered_url_ = *target;
+  if (auto* predictor =
+          predictors::AutocompleteActionPredictorFactory::GetForProfile(
+              profile))
+    predictor->StartPrerendering(*target, *contents);
 }
 
 std::vector<PaletteEntry> FlyWindowController::BookmarkEntries() {
@@ -2974,9 +3084,14 @@ bool FlyWindowController::RunCommand(std::string_view action) {
     app.OpenAdjacentWorkspace(browser_, action == "next-workspace" ? 1 : -1);
     return true;
   }
+  if (action == "spawn-tab")
+    return CreateTab();
   const bool handled = ExecuteNativeCommand(browser_, action);
   if (!handled && status_)
     status_->SetText(base::UTF8ToUTF16(ActionLabel(action) + ": unavailable"));
+  // A close the page holds back shows in the tab list straight away.
+  if (handled && tab_sidebar_)
+    tab_sidebar_->ScheduleRefresh();
   return handled;
 }
 

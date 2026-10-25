@@ -189,9 +189,12 @@ bool SearchService::RemoveAlias(std::string_view input) {
   local_state_->SetDict(kPreferencesPref, std::move(store));
   return true;
 }
-std::optional<GURL> SearchService::ResolveNavigation(
-    std::string_view text) const {
+std::optional<GURL> SearchService::ResolveNavigation(std::string_view text,
+                                                    bool* search) const {
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
+  bool unused = false;
+  bool& is_search = search ? *search : unused;
+  is_search = false;
   const auto input = Trim(text);
   if (input.empty() || !ValidText(input, 2 * 1024 * 1024))
     return std::nullopt;
@@ -209,12 +212,15 @@ std::optional<GURL> SearchService::ResolveNavigation(
   const auto words =
       base::SplitStringPiece(input, base::kWhitespaceASCII,
                              base::TRIM_WHITESPACE, base::SPLIT_WANT_NONEMPTY);
-  for (const auto word : words)
+  for (const auto word : words) {
     if (word.size() > 1 && word.front() == '!' &&
         std::ranges::all_of(word.substr(1), [](char c) {
           return base::IsAsciiAlphaNumeric(c);
-        }))
+        })) {
+      is_search = true;
       return CheckedURL(Expand(kDefaultEngine, input, false));
+    }
+  }
   const auto settings = Read();
   if (!settings)
     return std::nullopt;
@@ -222,9 +228,11 @@ std::optional<GURL> SearchService::ResolveNavigation(
   if (separator != std::string::npos) {
     const auto found =
         settings->aliases.find(AliasKey(input.substr(0, separator)));
-    if (found != settings->aliases.end())
+    if (found != settings->aliases.end()) {
+      is_search = true;
       return CheckedURL(
           Expand(found->second.url, Trim(input.substr(separator)), true));
+    }
   } else {
     const bool local = lower == "localhost" || lower.starts_with("localhost:");
     // Addresses: localhost, IPv6 literals ("[...]"), anything with a dot and
@@ -249,6 +257,7 @@ std::optional<GURL> SearchService::ResolveNavigation(
     if (input.find(':') != std::string::npos)
       return std::nullopt;
   }
+  is_search = true;
   return CheckedURL(Expand(settings->engine, input, false));
 }
 }  // namespace fly

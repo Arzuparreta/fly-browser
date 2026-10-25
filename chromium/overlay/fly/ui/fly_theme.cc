@@ -16,6 +16,13 @@
 #include "cc/paint/paint_flags.h"
 #include "ui/base/metadata/metadata_impl_macros.h"
 #include "ui/base/models/image_model.h"
+#include "ui/color/color_id.h"
+#include "ui/color/color_mixer.h"
+#include "ui/color/color_provider.h"
+#include "ui/color/color_provider_key.h"
+#include "ui/color/color_provider_manager.h"
+#include "ui/color/color_recipe.h"
+#include "ui/color/color_transform.h"
 #include "ui/gfx/canvas.h"
 #include "ui/gfx/color_utils.h"
 #include "ui/gfx/geometry/rounded_corners_f.h"
@@ -177,8 +184,30 @@ bool SetFlyColors(const FlyColors& colors) {
       current.dim != colors.dim || current.link != colors.link ||
       current.sidebar_opacity != colors.sidebar_opacity ||
       current.overlay_opacity != colors.overlay_opacity;
+  const bool window_colour_changed =
+      current.dark != colors.dark || current.bg_main != colors.bg_main;
   current = colors;
+  // Windows created from now on take the new background.
+  if (window_colour_changed)
+    ui::ColorProviderManager::Get().ResetColorProviderCache();
   return changed;
+}
+void RegisterFlyWindowColors() {
+  static bool registered = false;
+  if (std::exchange(registered, true))
+    return;
+  ui::ColorProviderManager::Get().AppendColorProviderInitializer(
+      base::BindRepeating([](ui::ColorProvider* provider,
+                             const ui::ColorProviderKey& key) {
+        const bool dark =
+            key.color_mode == ui::ColorProviderKey::ColorMode::kDark;
+        const auto& current = GetFlyColors();
+        const SkColor background = current.dark == dark
+                                       ? current.bg_main
+                                       : DefaultFlyColors(dark).bg_main;
+        provider->AddMixer()[ui::kColorWindowBackground] =
+            ui::ColorTransform(background);
+      }));
 }
 SkColor FlyRoleColor(FlyRole role) {
   const auto& colors = GetFlyColors();

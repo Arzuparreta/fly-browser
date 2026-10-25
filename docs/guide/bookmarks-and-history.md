@@ -25,6 +25,6 @@ The Bookmarks overlay allows you to manage saved links with full keyboard naviga
 ![Fly Browser Actionable History Overlay](/screenshots/history.webp)
 
 - Press **Ctrl + Shift + H** to open the History overlay.
-- Search through your browsing history in real time.
+- Search through your browsing history in real time. The overlay lists the history of every workspace; the address bar suggests pages only from workspaces whose window is open, so typing never starts a closed workspace.
 - Press **Enter** on any result to open the page.
 - Click **Purge History** to wipe all stored history records from `history.json`.

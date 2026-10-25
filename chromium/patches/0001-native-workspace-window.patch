@@ -25,9 +25,17 @@
        browser->GetType() == BrowserWindowInterface::Type::TYPE_NORMAL) {
      return std::unique_ptr<BrowserWindow, BrowserWindowDeleter>(
          new WebUIBrowserWindow(browser));
-@@ -59,6 +68,12 @@
+@@ -58,7 +67,20 @@
+   if (in_tab_dragging) {
      view->browser_widget()->SetTabDragKind(TabDragKind::kAllTabs);
    }
++#if BUILDFLAG(IS_LINUX) || BUILDFLAG(IS_WIN)
++  // Fly's palette is in place before the native window exists, so the window
++  // starts in Fly's background colour rather than Chromium's grey.
++  if (fly_window) {
++    fly::FlyApp::Get();
++  }
++#endif
    view->browser_widget()->InitBrowserWidget();
 +#if BUILDFLAG(IS_LINUX) || BUILDFLAG(IS_WIN)
 +  // Fly's sidebar, footer and floating surfaces live in this window.

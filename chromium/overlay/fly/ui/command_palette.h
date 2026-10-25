@@ -67,6 +67,11 @@ class CommandPalette : public views::TextfieldController,
                                               std::string)> remove = {});
   ~CommandPalette() override;
   void SetStyle(PaletteStyle style) { style_ = std::move(style); }
+  // Runs with the action of each newly highlighted row.
+  void SetSelectionCallback(
+      base::RepeatingCallback<void(std::string_view)> callback) {
+    selection_callback_ = std::move(callback);
+  }
   void Toggle(content::WebContents* contents, const KeyboardConfig& config);
   // Only app-scoped choices may explicitly allow an initially empty source.
   // Destruction of an observed page always cancels its queued action.
@@ -100,6 +105,8 @@ class CommandPalette : public views::TextfieldController,
   void Cancel(bool restore_focus = false);
   bool HandleOverlayKey(const ui::KeyEvent& event);
   bool active() const { return overlay_ && !closing_; }
+  // Still on screen or finishing its close.
+  bool showing() const { return !!overlay_; }
   views::Textfield* search_for_testing() { return search_; }
   views::MdTextButton* row_for_testing(size_t index) {
     EnsureRows(index + 1);
@@ -162,6 +169,7 @@ class CommandPalette : public views::TextfieldController,
   std::vector<PaletteEntry> filtered_;
   QueryProvider query_provider_;
   int selected_ = -1;
+  base::RepeatingCallback<void(std::string_view)> selection_callback_;
   gfx::Point pointer_at_open_;
   bool pointer_moved_ = false;
   bool empty_source_ = false;

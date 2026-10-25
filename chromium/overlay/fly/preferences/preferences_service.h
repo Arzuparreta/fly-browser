@@ -80,7 +80,8 @@ class PreferencesService {
 
   // Remaining product settings, validated per key, with their defaults:
   // bools disable_gpu, background_throttling, enable_diagnostics,
-  // web_notifications, desktop_integration_offered; int process_limit (1-8);
+  // web_notifications, desktop_integration_offered, preload_address_results;
+  // int process_limit (1-8);
   // strings spellchecker_language, interface_scale (normal|large),
   // email_handler, last_seen_version.
   std::optional<bool> ReadBool(std::string_view key) const;
