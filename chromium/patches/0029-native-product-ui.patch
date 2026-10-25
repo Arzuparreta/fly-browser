@@ -1,11 +1,9 @@
 --- a/chrome/browser/ui/BUILD.gn
 +++ b/chrome/browser/ui/BUILD.gn
-@@ -804,6 +804,16 @@
+@@ -804,6 +804,14 @@
        "//fly/ui/user_content.h",
        "//fly/ui/site_zoom.cc",
        "//fly/ui/site_zoom.h",
-+      "//fly/ui/welcome_view.cc",
-+      "//fly/ui/welcome_view.h",
 +      "//fly/ui/diagnostics_hub.cc",
 +      "//fly/ui/diagnostics_hub.h",
 +      "//fly/ui/sidebar_panel.cc",

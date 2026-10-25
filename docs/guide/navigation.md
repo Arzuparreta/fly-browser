@@ -25,7 +25,7 @@ Press **Ctrl + L** at any time to open the floating, high-contrast address overl
 - **Live Search Autocomplete**: As you type, Fly queries your browsing history and active bookmarks live. Use the **Up** and **Down** arrow keys to select a suggestion and press **Enter**.
 - **Direct Calculator**: Type any arithmetic expression (e.g. `240 * 1.2`, `15% of 200`, `sqrt(144)`) to compute the answer live in the dropdown. Press **Enter** to copy the answer to your clipboard, or press the **Down Arrow** or **Tab** to put the result into the address bar and continue calculating.
 - **DuckDuckGo Bangs**: Type any DuckDuckGo bang (e.g. `!w Arch Linux`, `!gh FlyBrowser`, `!yt ambient`) to route directly to thousands of external search destinations.
-- **Workspace Switching**: Type `ws` followed by a workspace name (e.g. `ws work`) to switch workspaces instantly from the address bar.
+- **Workspace Switching**: Type `ws` followed by a workspace name (e.g. `ws work`) to bring that workspace's window to the front, or open it, from the address bar.
 - Press **Escape** to hide the address bar and return focus directly to the active web page.
 
 ---

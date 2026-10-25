@@ -2,73 +2,6 @@
 // Use of this source code is governed by the GPL-3.0-or-later license in the
 // Fly repository.
 #include "fly/ui/fly_window_controller.h"
-#include "fly/ui/new_tab_ui.h"
-#include "chrome/browser/prefs/incognito_mode_prefs.h"
-#include "fly/ui/download_shelf.h"
-#include "chrome/browser/ui/browser_window/public/global_browser_collection.h"
-#include "chrome/browser/ui/views/frame/browser_view.h"
-#include "ui/aura/window_tree_host.h"
-#if BUILDFLAG(IS_LINUX)
-#include "ui/gfx/x/connection.h"
-#include "ui/gfx/x/xproto.h"
-#include "ui/ozone/public/ozone_platform.h"
-#endif
-
-#include "build/build_config.h"
-#include "base/strings/string_number_conversions.h"
-#include "chrome/browser/ui/navigator/browser_navigator.h"
-#include "chrome/browser/ui/navigator/browser_navigator_params.h"
-#include "fly/bookmarks/bookmark_service.h"
-#include "fly/commands/calculator.h"
-#include "fly/commands/keyboard_router.h"
-#include "fly/preferences/search_service.h"
-#include "fly/ui/command_palette.h"
-#include "fly/ui/fly_theme.h"
-#include "fly/ui/fly_actions.h"
-#if BUILDFLAG(IS_LINUX)
-#include "chrome/browser/shell_integration_linux.h"
-#endif
-#include "fly/ui/fly_extensions.h"
-#include "base/files/file_util.h"
-#include "chrome/browser/ui/tabs/tab_enums.h"
-#include "base/task/thread_pool.h"
-#include "content/public/common/url_constants.h"
-#include "fly/ui/diagnostics_hub.h"
-#include "fly/ui/site_zoom.h"
-#include "fly/ui/user_content.h"
-#include "fly/ui/welcome_view.h"
-#include "ui/gfx/canvas.h"
-#include "ui/gfx/text_utils.h"
-#include "cc/paint/paint_flags.h"
-#include "extensions/common/extension.h"
-#include "ui/gfx/image/image_skia_operations.h"
-#include "skia/ext/image_operations.h"
-#include "base/version.h"
-#include "base/strings/stringprintf.h"
-#include "base/base_paths.h"
-#include "base/command_line.h"
-#include "base/path_service.h"
-#include "ui/gfx/image/image.h"
-#include "fly/fly_version.h"
-#include "chrome/app/vector_icons/vector_icons.h"
-#include "components/omnibox/browser/vector_icons.h"
-#include "components/vector_icons/vector_icons.h"
-#include "fly/ui/hint_controller.h"
-#include "fly/ui/keyboard_editor.h"
-#include "fly/ui/native_commands.h"
-#include "fly/ui/status_bar.h"
-#include "fly/ui/tab_sidebar.h"
-#include "fly/ui/sidebar_panel.h"
-#include "ui/aura/window_targeter.h"
-#include "ui/compositor/layer.h"
-#include "ui/compositor/layer_animator.h"
-#include "ui/gfx/animation/animation.h"
-#include "ui/gfx/animation/tween.h"
-#include "ui/gfx/codec/png_codec.h"
-#include "ui/gfx/image/image_skia_rep.h"
-#include "ui/views/animation/animation_builder.h"
-#include "ui/base/clipboard/clipboard_buffer.h"
-#include "ui/base/clipboard/scoped_clipboard_writer.h"
 
 #include <algorithm>
 #include <array>
@@ -77,60 +10,91 @@
 #include <utility>
 #include <vector>
 
+#include "base/base_paths.h"
 #include "base/check.h"
 #include "base/command_line.h"
+#include "base/files/file_util.h"
 #include "base/functional/bind.h"
 #include "base/logging.h"
-#include "base/no_destructor.h"
+#include "base/path_service.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/strings/string_util.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/task/single_thread_task_runner.h"
+#include "base/task/thread_pool.h"
+#include "build/build_config.h"
+#include "cc/paint/paint_flags.h"
 #include "chrome/app/chrome_command_ids.h"
+#include "chrome/app/vector_icons/vector_icons.h"
 #include "chrome/browser/browser_process.h"
 #include "chrome/browser/lifetime/application_lifetime.h"
-#include "chrome/browser/lifetime/application_lifetime_desktop.h"
 #include "chrome/browser/platform_util.h"
 #include "chrome/browser/profiles/profile.h"
-#include "chrome/browser/profiles/keep_alive/profile_keep_alive_types.h"
-#include "chrome/browser/profiles/keep_alive/scoped_profile_keep_alive.h"
-#include "chrome/browser/profiles/profile_attributes_storage.h"
 #include "chrome/browser/profiles/profile_manager.h"
-#include "chrome/browser/profiles/profiles_state.h"
 #include "chrome/browser/ui/browser_commands.h"
 #include "chrome/browser/ui/browser_window/public/browser_window_interface.h"
-#include "chrome/browser/ui/browser_window/public/create_browser_window.h"
+#include "chrome/browser/ui/navigator/browser_navigator.h"
+#include "chrome/browser/ui/navigator/browser_navigator_params.h"
 #include "chrome/browser/ui/tabs/tab_muted_utils.h"
 #include "chrome/browser/ui/tabs/tab_strip_model.h"
-#include "chrome/common/pref_names.h"
 #include "components/input/native_web_keyboard_event.h"
-#include "components/keep_alive_registry/keep_alive_types.h"
-#include "components/keep_alive_registry/scoped_keep_alive.h"
-#include "components/prefs/pref_service.h"
+#include "components/omnibox/browser/vector_icons.h"
+#include "components/tabs/public/tab_interface.h"
+#include "components/vector_icons/vector_icons.h"
 #include "content/public/browser/media_session.h"
 #include "content/public/browser/navigation_controller.h"
 #include "content/public/browser/render_widget_host_view.h"
 #include "content/public/browser/web_contents.h"
+#include "extensions/common/extension.h"
+#include "fly/bookmarks/bookmark_service.h"
+#include "fly/commands/calculator.h"
+#include "fly/commands/keyboard_router.h"
+#include "fly/preferences/search_service.h"
+#include "fly/ui/command_palette.h"
+#include "fly/ui/diagnostics_hub.h"
+#include "fly/ui/download_shelf.h"
+#include "fly/ui/fly_app.h"
+#include "fly/ui/fly_browser_frame.h"
+#include "fly/ui/fly_extensions.h"
+#include "fly/ui/fly_theme.h"
+#include "fly/ui/hint_controller.h"
+#include "fly/ui/keyboard_editor.h"
+#include "fly/ui/native_commands.h"
+#include "fly/ui/new_tab_ui.h"
+#include "fly/ui/sidebar_panel.h"
+#include "fly/ui/status_bar.h"
 #include "fly/ui/tab_move_transaction.h"
-#include "fly/ui/workspace_close_transaction.h"
+#include "fly/ui/tab_sidebar.h"
+#include "fly/ui/user_content.h"
+#include "skia/ext/image_operations.h"
 #include "ui/aura/client/focus_client.h"
 #include "ui/aura/window.h"
+#include "ui/aura/window_targeter.h"
 #include "ui/base/base_window.h"
+#include "ui/base/clipboard/clipboard_buffer.h"
+#include "ui/base/clipboard/scoped_clipboard_writer.h"
 #include "ui/base/ime/input_method.h"
 #include "ui/base/ime/text_input_client.h"
 #include "ui/base/ime/text_input_type.h"
 #include "ui/base/metadata/metadata_impl_macros.h"
-#include "ui/color/color_id.h"
+#include "ui/compositor/layer.h"
+#include "ui/compositor/layer_animator.h"
 #include "ui/events/event.h"
+#include "ui/gfx/animation/animation.h"
+#include "ui/gfx/animation/tween.h"
+#include "ui/gfx/canvas.h"
+#include "ui/gfx/codec/png_codec.h"
+#include "ui/gfx/image/image.h"
+#include "ui/gfx/image/image_skia_operations.h"
+#include "ui/gfx/image/image_skia_rep.h"
+#include "ui/gfx/text_utils.h"
 #include "ui/menus/simple_menu_model.h"
-#include "ui/native_theme/native_theme.h"
 #include "ui/views/accessibility/view_accessibility.h"
+#include "ui/views/animation/animation_builder.h"
 #include "ui/views/background.h"
 #include "ui/views/border.h"
 #include "ui/views/context_menu_controller.h"
-#include "ui/views/controls/button/checkbox.h"
 #include "ui/views/controls/button/image_button.h"
-#include "ui/views/controls/button/md_text_button.h"
 #include "ui/views/controls/label.h"
 #include "ui/views/controls/menu/menu_runner.h"
 #include "ui/views/controls/native/native_view_host.h"
@@ -169,9 +133,7 @@ std::u16string WorkspaceBadgeText(const std::u16string& name) {
   }
   return base::ToUpperASCII(name.substr(0, 2));
 }
-}  // namespace
 
-namespace {
 class WorkspaceMenuButton : public FlyButton,
                             public views::ContextMenuController,
                             public ui::SimpleMenuModel::Delegate {
@@ -234,6 +196,7 @@ class WorkspaceMenuButton : public FlyButton,
     runner_->RunMenuAt(GetWidget(), nullptr, gfx::Rect(point, gfx::Size()),
                        views::MenuAnchorPosition::kTopLeft, source);
   }
+
  private:
   const std::string id_;
   const bool up_;
@@ -249,4088 +212,50 @@ class WorkspaceMenuButton : public FlyButton,
 BEGIN_METADATA(WorkspaceMenuButton)
 END_METADATA
 
-std::unique_ptr<FlyWindowController>& Instance() {
-  static base::NoDestructor<std::unique_ptr<FlyWindowController>> instance;
-  return *instance;
-}
-}  // namespace
-
-bool FlyWindowController::ShouldEmbed(const BrowserWindowInterface* browser) {
-  // Explicit development gate until migration and the acceptance suite pass.
-  return base::CommandLine::ForCurrentProcess()->HasSwitch("fly-native") &&
-         browser->GetType() == BrowserWindowInterface::Type::TYPE_NORMAL;
-}
-
-FlyWindowController& FlyWindowController::Get() {
-  if (!Instance()) {
-    Instance() = std::make_unique<FlyWindowController>();
-  }
-  return *Instance();
-}
-FlyWindowController* FlyWindowController::GetIfCreated() {
-  return Instance().get();
-}
-
-FlyWindowController::FlyWindowController()
-    : workspaces_(*g_browser_process->local_state()),
-      commands_(*g_browser_process->local_state()),
-      preferences_(*g_browser_process->local_state()),
-      bookmarks_(std::make_unique<BookmarkService>(*g_browser_process->local_state())),
-      keep_alive_(
-          std::make_unique<ScopedKeepAlive>(KeepAliveOrigin::FLY_WINDOW,
-                                            KeepAliveRestartOption::DISABLED)),
-      desktop_(std::make_unique<views::Widget>()) {
-  frequent_sites_ =
-      std::make_unique<FrequentSitesService>(*g_browser_process->local_state());
-  RegisterFlyNewTabPage();
-  browser_collection_.Observe(GlobalBrowserCollection::GetInstance());
-  SetTitle(u"Fly");
-  SetCanResize(true);
-  SetCanMinimize(true);
-  SetCanMaximize(true);
-  RegisterFlyFonts();
-  auto root = std::make_unique<views::View>();
-  root->SetBackground(FlyBackground(FlyRole::kMain));
-  auto* layout = root->SetLayoutManager(std::make_unique<views::BoxLayout>(
-      views::BoxLayout::Orientation::kHorizontal));
-  auto command = [this](std::string action) {
-    return base::BindRepeating(
-        [](base::WeakPtr<FlyWindowController> window, std::string action) {
-          if (window && !window->closing_)
-            window->RunFromEmptyWorkspace(std::move(action));
-        },
-        weak_factory_.GetWeakPtr(), std::move(action));
-  };
-  // The sidebar: one 260px panel whose left 36px column is the collapsed
-  // rail.
-  auto panel = std::make_unique<SidebarPanel>();
-  auto* sidebar = panel.get();
-  sidebar_content_ = sidebar;
-  sidebar_panel_ = sidebar;
-  SidebarPanel::Parts parts;
-  window_controls_ = sidebar->AddChildView(std::make_unique<views::View>());
-  // .window-controls: buttons at the right, a rule below.
-  window_controls_->SetBorder(FlyEdgeBorder(FlyRole::kBorder,
-                                            gfx::Insets::TLBR(0, 0, 1, 0),
-                                            gfx::Insets::TLBR(2, 0, 6, 0)));
-  window_controls_->SetLayoutManager(std::make_unique<views::BoxLayout>(
-      views::BoxLayout::Orientation::kHorizontal, gfx::Insets(), 5))
-      ->set_main_axis_alignment(views::BoxLayout::MainAxisAlignment::kEnd);
-  for (const auto& [action, icon, label] :
-       {std::tuple{"minimize", &views::kChromeMinimizeIcon, u"Minimize Fly"},
-        std::tuple{"maximize", &views::kChromeMaximizeIcon, u"Maximize Fly"},
-        std::tuple{"close", &views::kCloseIcon, u"Close Fly"}}) {
-    auto* button =
-        window_controls_->AddChildView(views::ImageButton::CreateIconButton(
-            base::BindRepeating(&FlyWindowController::RunWindowControl,
-                                weak_factory_.GetWeakPtr(),
-                                std::string(action)),
-            *icon, label, views::ImageButton::MaterialIconStyle::kSmall));
-    button->SetPreferredSize(gfx::Size(26, 24));
-    window_control_buttons_.emplace(action, button);
-  }
-  parts.window_controls = window_controls_;
-  // The workspace header opens the dashboard; the short badge (rail) and the
-  // full name (expanded) share its slot and crossfade.
-  workspace_picker_button_ = sidebar->AddChildView(std::make_unique<FlyButton>(
-      base::BindRepeating(&FlyWindowController::ToggleWorkspacePicker,
-                          weak_factory_.GetWeakPtr()),
-      u"", FlyFace::kSans, 14));
-  workspace_picker_button_->SetTooltipText(
-      u"Workspace: Click to open Workspace Dashboard");
-  workspace_picker_button_->SetCornerRadius(4);
-  workspace_picker_button_->SetHoverFill(true);
-  workspace_badge_ = sidebar->AddChildView(std::make_unique<FlyLabel>(
-      u"W1", FlyFace::kMono, 12, gfx::Font::Weight::MEDIUM));
-  workspace_badge_->SetHorizontalAlignment(gfx::ALIGN_CENTER);
-  workspace_badge_->SetCanProcessEventsWithinSubtree(false);
-  workspace_label_ = sidebar->AddChildView(std::make_unique<FlyLabel>(
-      u"Workspace", FlyFace::kSans, 14, gfx::Font::Weight::SEMIBOLD));
-  workspace_label_->SetHorizontalAlignment(gfx::ALIGN_LEFT);
-  workspace_label_->SetElideBehavior(gfx::ELIDE_TAIL);
-  workspace_label_->SetCanProcessEventsWithinSubtree(false);
-  new_tab_button_ = sidebar->AddChildView(MakeFlyIconButton(
-      base::BindRepeating(&FlyWindowController::CreateTab,
-                          weak_factory_.GetWeakPtr()),
-      kAddIcon, u"New Tab / Navigation", 28));
-  new_tab_button_->SetOutlined(true);
-  new_tab_button_->SetCornerRadius(4);
-  auto* back = sidebar->AddChildView(MakeFlyIconButton(
-      command("go-back"), vector_icons::kArrowBackIcon, u"Go back", 30));
-  auto* forward = sidebar->AddChildView(MakeFlyIconButton(
-      command("go-forward"), vector_icons::kArrowForwardIcon, u"Go forward",
-      30));
-  // .nav-history-group: one pill, each half with its own border.
-  back->SetPillHalf(FlyButton::PillHalf::kLeft);
-  forward->SetPillHalf(FlyButton::PillHalf::kRight);
-  back->SetPillPartner(forward);
-  forward->SetPillPartner(back);
-  for (FlyButton* button : {new_tab_button_.get(), back, forward}) {
-    button->SetOutlined(true);
-    button->SetIconTone(FlyButton::IconTone::kText);
-  }
-  parts.top = {.header = workspace_picker_button_,
-               .badge = workspace_badge_,
-               .label = workspace_label_,
-               .new_tab = new_tab_button_,
-               .back = back,
-               .forward = forward};
-  workspace_buttons_ = sidebar->AddChildView(std::make_unique<views::View>());
-  workspace_buttons_->SetLayoutManager(std::make_unique<views::BoxLayout>(
-      views::BoxLayout::Orientation::kVertical, gfx::Insets(), 2));
-  parts.workspaces = workspace_buttons_;
-  tab_sidebar_ =
-      sidebar->AddChildView(std::make_unique<TabSidebar>(base::BindRepeating(
-          &FlyWindowController::CreateTab, weak_factory_.GetWeakPtr())));
-  parts.tabs = tab_sidebar_;
-  tab_sidebar_->SetStateChangedCallback(base::BindRepeating(
-      &FlyWindowController::UpdateSplitButton, weak_factory_.GetWeakPtr()));
-  // .sidebar-clock-row with .sidebar-clock: 6px above, 4px below.
-  auto* clock_row = sidebar->AddChildView(std::make_unique<views::View>());
-  clock_row->SetLayoutManager(std::make_unique<views::FillLayout>());
-  clock_row->SetBorder(views::CreateEmptyBorder(gfx::Insets::TLBR(6, 0, 4, 0)));
-  clock_ = clock_row->AddChildView(std::make_unique<SidebarClock>(
-      base::BindRepeating(&FlyWindowController::CycleClockFormat,
-                          weak_factory_.GetWeakPtr())));
-  clock_->SetVectorIcon(kTimerIcon, 11);
-  clock_->SetHorizontalAlignment(gfx::ALIGN_LEFT);
-  clock_->SetIconTone(FlyButton::IconTone::kAccent);
-  parts.clock_row = clock_row;
-  // The bottom row: pin, theme and the other sidebar controls, in order.
-  sidebar_pin_button_ = sidebar->AddChildView(MakeFlyIconButton(
-      base::BindRepeating(&FlyWindowController::ToggleSidebarAutoCollapse,
-                          weak_factory_.GetWeakPtr()),
-      views::kKeepIcon, u"Pin / Auto-Collapse Sidebar", 28));
-  split_button_ = sidebar->AddChildView(MakeFlyIconButton(
-      command("toggle-split"), kSplitSceneIcon, u"Toggle Split View", 28));
-  reader_button_ = sidebar->AddChildView(MakeFlyIconButton(
-      command("toggle-reader-view"), kMenuBookIcon, u"Toggle Reader View",
-      28));
-  auto* search = sidebar->AddChildView(MakeFlyIconButton(
-      command("toggle-address"), vector_icons::kSearchIcon,
-      u"Search or enter address", 28));
-  auto* extensions = sidebar->AddChildView(MakeFlyIconButton(
-      command("open-extension-actions"), vector_icons::kExtensionOldIcon,
-      u"Extensions", 28));
-  preferences_button_ = sidebar->AddChildView(MakeFlyIconButton(
-      base::BindRepeating(
-          [](base::WeakPtr<FlyWindowController> window) {
-            if (window) {
-              window->RunCommand(window->selected_, "toggle-help");
-              window->keyboard_editor_->ShowAppearance(true);
-            }
-          },
-          weak_factory_.GetWeakPtr()),
-      vector_icons::kSettingsIcon, u"Settings", 28));
-  preferences_button_->SetEnabled(true);
-  for (FlyButton* button :
-       {sidebar_pin_button_.get(), split_button_.get(), reader_button_.get(),
-        search, extensions, preferences_button_.get()}) {
-    // Pointer actions must not leave a focused accent after dismissal.
-    // Keyboard traversal can still focus and activate these controls.
-    button->SetRequestFocusOnPress(false);
-    button->SetOutlined(true);
-    button->SetCornerRadius(4);
-    button->SetIconTone(FlyButton::IconTone::kText);
-    button->SetVectorIcon(*button->vector_icon(), 12);
-    parts.footer.push_back(button);
-  }
-  sidebar->SetParts(std::move(parts));
-  // Details that exist only expanded fade with the edge.
-  for (views::View* view :
-       {static_cast<views::View*>(window_controls_.get()),
-        static_cast<views::View*>(workspace_label_.get()),
-        static_cast<views::View*>(new_tab_button_.get()),
-        static_cast<views::View*>(back), static_cast<views::View*>(forward),
-        static_cast<views::View*>(workspace_buttons_.get()),
-        static_cast<views::View*>(clock_row),
-        static_cast<views::View*>(split_button_.get()),
-        static_cast<views::View*>(reader_button_.get()),
-        static_cast<views::View*>(search),
-        static_cast<views::View*>(preferences_button_.get())})
-    sidebar->AddExpandedOnly(view);
-  // The badge sits over the header and never takes its clicks.
-  sidebar->AddRailOnly(workspace_badge_, false);
-  sidebar->AddExpandedOnly(tab_sidebar_->expanded_surfaces(), false);
-  sidebar->AddRailOnly(tab_sidebar_->rail_surfaces(), false);
-  sidebar->AddRailOnly(tab_sidebar_->rail_marks(), false);
-  sidebar_slot_ = root->AddChildView(std::make_unique<views::View>());
-  sidebar_slot_->SetPreferredSize(gfx::Size(FlyScaled(kSidebarWidth), 0));
-  auto* column = root->AddChildView(std::make_unique<views::View>());
-  auto* column_layout =
-      column->SetLayoutManager(std::make_unique<views::BoxLayout>(
-          views::BoxLayout::Orientation::kVertical));
-  content_ = column->AddChildView(std::make_unique<views::View>());
-  content_->SetLayoutManager(std::make_unique<views::FillLayout>());
-  column_layout->SetFlexForView(content_, 1);
-  // Below the workspace hosts: shown while the workspace has no tabs.
-  welcome_ = content_->AddChildView(std::make_unique<WelcomeView>());
-  welcome_->SetVisible(false);
-  base::ThreadPool::PostTaskAndReplyWithResult(
-      FROM_HERE, {base::MayBlock(), base::TaskPriority::USER_VISIBLE},
-      base::BindOnce([]() {
-        base::FilePath assets;
-        std::string bytes;
-        if (base::PathService::Get(base::DIR_ASSETS, &assets))
-          base::ReadFileToStringWithMaxSize(
-              assets.AppendASCII("fly_resources")
-                  .AppendASCII("identity")
-                  .AppendASCII("icon-128.png"),
-              &bytes, 1024 * 1024);
-        return bytes;
-      }),
-      base::BindOnce(
-          [](base::WeakPtr<FlyWindowController> window, std::string bytes) {
-            if (!window || !window->welcome_ || bytes.empty())
-              return;
-            const auto image = gfx::Image::CreateFrom1xPNGBytes(
-                base::as_byte_span(bytes));
-            if (!image.IsEmpty())
-              window->welcome_->SetLogo(image.AsImageSkia());
-          },
-          weak_factory_.GetWeakPtr()));
-  footer_ = column->AddChildView(std::make_unique<views::View>());
-  footer_->SetLayoutManager(std::make_unique<views::BoxLayout>(
-      views::BoxLayout::Orientation::kVertical));
-  // The download shelf, above the status bar; it appears when a
-  // download starts and makes room for itself.
-  download_shelf_ =
-      footer_->AddChildView(std::make_unique<DownloadShelf>(base::BindRepeating(
-          [](base::WeakPtr<FlyWindowController> window) {
-            if (window)
-              window->ToggleDownloads(window->selected_);
-          },
-          weak_factory_.GetWeakPtr())));
-  status_bar_ =
-      footer_->AddChildView(std::make_unique<StatusBar>(StatusBar::Actions{
-          .zoom = base::BindRepeating(
-              [](base::WeakPtr<FlyWindowController> window,
-                 std::string action) {
-                if (window && window->selected_ && !window->closing_)
-                  InvokeNativeCommand(window->selected_, action);
-              },
-              weak_factory_.GetWeakPtr()),
-          .mode = base::BindRepeating(&FlyWindowController::ClickModeBadge,
-                                      weak_factory_.GetWeakPtr()),
-          .notifications = command("toggle-notifications"),
-          .workspace =
-              base::BindRepeating(&FlyWindowController::ToggleWorkspacePicker,
-                                  weak_factory_.GetWeakPtr()),
-          .clock = base::BindRepeating(&FlyWindowController::CycleClockFormat,
-                                       weak_factory_.GetWeakPtr()),
-          .contents_changed = base::BindRepeating(
-              [](base::WeakPtr<FlyWindowController> window) {
-                if (!window)
-                  return;
-                window->ScheduleExtensionRefresh();
-                window->RefreshReaderState();
-              },
-              weak_factory_.GetWeakPtr()),
-      }));
-  status_ = status_bar_->mode_label();
-  layout->SetFlexForView(column, 1);
-  SetContentsView(std::move(root));
-  views::Widget::InitParams params(
-      views::Widget::InitParams::CLIENT_OWNS_WIDGET);
-  params.delegate = this;
-  params.name = "FlyDesktopWindow";
-#if BUILDFLAG(IS_LINUX)
-  // Task switchers and the menu entry (StartupWMClass) match on this; the
-  // launcher's --class sets it.
-  params.wm_class_name = shell_integration_linux::GetProgramClassName();
-  params.wm_class_class = shell_integration_linux::GetProgramClassClass();
-  params.wm_role_name = "browser";
-  params.wayland_app_id = params.wm_class_class;
-#endif
-  params.bounds = gfx::Rect(80, 80, 1200, 800);
-  desktop_->Init(std::move(params));
-  sidebar_widget_ = std::make_unique<SidebarWidget>(base::BindRepeating(
-      [](FlyWindowController* window) { return window->sidebar_hit_width_; },
-      base::Unretained(this)));
-  views::Widget::InitParams sidebar_params(
-      views::Widget::InitParams::CLIENT_OWNS_WIDGET,
-      views::Widget::InitParams::TYPE_CONTROL);
-  sidebar_params.parent = desktop_->GetNativeWindow();
-  sidebar_params.child = true;
-  sidebar_params.activatable = views::Widget::InitParams::Activatable::kNo;
-  sidebar_params.native_widget =
-      new views::NativeWidgetAura(sidebar_widget_.get());
-  sidebar_params.name = "FlyNativeSidebar";
-  // The panel's shadow falls on the page beside it.
-  sidebar_params.opacity =
-      views::Widget::InitParams::WindowOpacity::kTranslucent;
-  sidebar_widget_->Init(std::move(sidebar_params));
-  sidebar_root_ = sidebar_widget_->SetContentsView(
-      std::make_unique<SidebarRoot>(std::move(panel)));
-  sidebar_widget_->AddObserver(this);
-  LoadSidebarArtwork();
-  auto sidebar_host = std::make_unique<views::NativeViewHost>();
-  // Profile BrowserWidgets retain Chromium's native transient-window stacking.
-  // Use the clip-window host for every desktop child so Aura owns all sibling
-  // layers consistently; Views-managed layer reordering cannot order this
-  // transient hierarchy against independent native controls.
-  sidebar_host->SetLayerManagedByViews(false);
-  sidebar_host->SetProperty(views::kViewIgnoredByLayoutKey, true);
-  sidebar_host_ =
-      desktop_->GetContentsView()->AddChildView(std::move(sidebar_host));
-  sidebar_host_->Attach(sidebar_widget_->GetNativeView());
-  // Only the visible panel takes the pointer; the rest of the host (the
-  // panel while collapsed, its shadow) leaves events to the page below.
-  if (auto* clip = sidebar_host_->GetNativeViewContainer()) {
-    // The clip window itself never takes events; the panel's hit mask
-    // decides for points such as drops.
-    clip->SetEventTargetingPolicy(
-        aura::EventTargetingPolicy::kDescendantsOnly);
-    clip->SetEventTargeter(std::make_unique<aura::WindowTargeter>());
-    sidebar_targeter_ = clip->targeter();
-  }
-  hints_ = std::make_unique<HintController>(
-      desktop_.get(), base::BindRepeating(
-                          [](base::WeakPtr<FlyWindowController> window, bool) {
-                            if (window)
-                              window->UpdateModeLabel();
-                          },
-                          weak_factory_.GetWeakPtr()));
-  palette_ = std::make_unique<CommandPalette>(
-      desktop_.get(),
-      base::BindRepeating(
-          [](base::WeakPtr<FlyWindowController> window,
-             std::string_view action) {
-            if (!window || window->closing_)
-              return false;
-            if (!window->selected_)
-              return action == "spawn-tab" || IsShellCommand(action) ||
-                     action == "extensions-open-settings";
-            return action == "trigger-hints" || action == "focus-sidebar" ||
-                   action == "new-workspace" || action == "next-workspace" ||
-                   action == "previous-workspace" ||
-                   action.starts_with("extension:") ||
-                   action.starts_with("extension-options:") ||
-                   action.starts_with("extensions-") ||
-                   NativeCommandAvailable(window->selected_, action);
-          },
-          weak_factory_.GetWeakPtr()),
-      base::BindRepeating(
-          [](base::WeakPtr<FlyWindowController> window,
-             content::WebContents* source, std::string action) {
-            if (!window || window->closing_ ||
-                (window->selected_ ? window->selected_->GetTabStripModel()
-                                         ->GetActiveWebContents()
-                                   : nullptr) != source)
-              return;
-            if (action.starts_with("terminal:")) {
-              OpenTerminalWithCommand(action.substr(9));
-              return;
-            }
-            window->preferences_.RecordRecentCommand(action);
-            if (action.starts_with("extension"))
-              window->ChooseExtensionAction(source, std::move(action));
-            else
-              window->RunFromEmptyWorkspace(std::move(action));
-          },
-          weak_factory_.GetWeakPtr()));
-  address_picker_ = std::make_unique<CommandPalette>(
-      desktop_.get(),
-      base::BindRepeating(
-          [](base::WeakPtr<FlyWindowController> window,
-             std::string_view action) {
-            return window && !window->closing_ &&
-                   window->address_choices_.contains(std::string(action));
-          },
-          weak_factory_.GetWeakPtr()),
-      base::BindRepeating(&FlyWindowController::ExecuteAddress,
-                          weak_factory_.GetWeakPtr()));
-  new_tab_history_ = std::make_unique<NewTabHistory>(
-      *g_browser_process->profile_manager(), workspaces_,
-      *g_browser_process->local_state());
-  history_ = std::make_unique<HistoryService>(
-      *g_browser_process->profile_manager(), workspaces_);
-  history_->SetChangedCallback(base::BindRepeating(
-      [](base::WeakPtr<FlyWindowController> window) {
-        if (!window || window->closing_)
-          return;
-        if (window->history_picker_ && window->history_picker_->active())
-          window->LoadHistory(HistorySurface::kHistory);
-        else if (window->address_picker_ && window->address_picker_->active())
-          window->LoadHistory(HistorySurface::kAddress);
-        else {
-          window->history_entries_.clear();
-        }
-      },
-      weak_factory_.GetWeakPtr()));
-  history_clear_service_ = std::make_unique<HistoryService>(
-      *g_browser_process->profile_manager(), workspaces_);
-  history_picker_ = std::make_unique<CommandPalette>(
-      desktop_.get(),
-      base::BindRepeating(
-          [](base::WeakPtr<FlyWindowController> window,
-             std::string_view action) {
-            return window && !window->closing_ &&
-                   window->history_choices_.contains(std::string(action));
-          },
-          weak_factory_.GetWeakPtr()),
-      base::BindRepeating(&FlyWindowController::OpenHistory,
-                          weak_factory_.GetWeakPtr()));
-  bookmark_picker_ = std::make_unique<CommandPalette>(
-      desktop_.get(),
-      base::BindRepeating([](base::WeakPtr<FlyWindowController> window,
-                            std::string_view url) {
-        return window && !window->closing_ &&
-               window->bookmark_urls_.contains(std::string(url));
-      }, weak_factory_.GetWeakPtr()),
-      base::BindRepeating(&FlyWindowController::OpenBookmark,
-                          weak_factory_.GetWeakPtr()),
-      base::BindRepeating(&FlyWindowController::RemoveBookmark,
-                          weak_factory_.GetWeakPtr()));
-  workspace_picker_ = std::make_unique<CommandPalette>(
-      desktop_.get(),
-      base::BindRepeating([](base::WeakPtr<FlyWindowController> window,
-                             std::string_view action) {
-        return window && window->WorkspaceChoiceAvailable(action);
-      }, weak_factory_.GetWeakPtr()),
-      base::BindRepeating(&FlyWindowController::ChooseWorkspace,
-                          weak_factory_.GetWeakPtr()));
-  tab_move_picker_ = std::make_unique<CommandPalette>(
-      desktop_.get(),
-      base::BindRepeating(
-          [](base::WeakPtr<FlyWindowController> window,
-             std::string_view action) {
-            return window && window->TabMoveDestinationAvailable(action);
-          },
-          weak_factory_.GetWeakPtr()),
-      base::BindRepeating(&FlyWindowController::ChooseTabMoveDestination,
-                          weak_factory_.GetWeakPtr()));
-  downloads_picker_ = std::make_unique<CommandPalette>(
-      desktop_.get(),
-      base::BindRepeating(
-          [](base::WeakPtr<FlyWindowController> window,
-             std::string_view action) {
-            return window && !window->closing_ &&
-                   (action == "downloads-page" ||
-                    action.starts_with("download:"));
-          },
-          weak_factory_.GetWeakPtr()),
-      base::BindRepeating(
-          [](base::WeakPtr<FlyWindowController> window, content::WebContents*,
-             std::string action) {
-            if (!window || window->closing_)
-              return;
-            if (action == "downloads-page") {
-              window->OpenInNewTab(GURL("chrome://downloads/"));
-              return;
-            }
-            if (!OpenDownloadEntry(window->WorkspaceProfiles(),
-                                   window->selected_, action))
-              window->ShowStatus(u"That download is no longer available.");
-          },
-          weak_factory_.GetWeakPtr()),
-      base::BindRepeating(
-          [](base::WeakPtr<FlyWindowController> window, content::WebContents*,
-             std::string action) {
-            if (!window || window->closing_)
-              return;
-            RemoveDownloadEntry(window->WorkspaceProfiles(), action);
-            if (window->downloads_picker_->active())
-              window->downloads_picker_->UpdateItems(
-                  DownloadEntries(window->WorkspaceProfiles()), true);
-          },
-          weak_factory_.GetWeakPtr()));
-  extensions_ = std::make_unique<FlyExtensions>(
-      preferences_,
-      base::BindRepeating(&FlyWindowController::ScheduleExtensionRefresh,
-                          weak_factory_.GetWeakPtr()),
-      base::BindRepeating(&FlyWindowController::ShowStatus,
-                          weak_factory_.GetWeakPtr()));
-  user_content_ = std::make_unique<UserContentService>(base::BindRepeating(
-      &FlyWindowController::ShowStatus, weak_factory_.GetWeakPtr()));
-  extensions_picker_ = std::make_unique<CommandPalette>(
-      desktop_.get(),
-      base::BindRepeating(
-          [](base::WeakPtr<FlyWindowController> window,
-             std::string_view action) {
-            return window && !window->closing_ &&
-                   (action.starts_with("extension:") ||
-                    action.starts_with("extensions-"));
-          },
-          weak_factory_.GetWeakPtr()),
-      base::BindRepeating(&FlyWindowController::ChooseExtensionAction,
-                          weak_factory_.GetWeakPtr()));
-  settings_menu_ = std::make_unique<SettingsMenu>(
-      preferences_,
-      base::BindRepeating(
-          [](base::WeakPtr<FlyWindowController> window, std::string action) {
-            base::SingleThreadTaskRunner::GetCurrentDefault()->PostTask(
-                FROM_HERE,
-                base::BindOnce(
-                    [](base::WeakPtr<FlyWindowController> window,
-                       std::string action) {
-                      if (window && !window->closing_)
-                        window->RunFromEmptyWorkspace(std::move(action));
-                    },
-                    window, std::move(action)));
-          },
-          weak_factory_.GetWeakPtr()));
-  using Layout = PaletteStyle::Layout;
-  extensions_picker_->SetStyle({.layout = Layout::kCentre,
-                                .kind = MenuKind::kExtensions,
-                                .title = u"Extensions",
-                                .width = 560,
-                                .enter_label = u"Run",
-                                .empty_text = u"No extension actions in this "
-                                              u"workspace."});
-  downloads_picker_->SetStyle({.layout = Layout::kCentre,
-                               .kind = MenuKind::kDownloads,
-                               .title = u"Downloads",
-                               .width = 640,
-                               .enter_label = u"Open",
-                               .empty_text = u"No downloads yet."});
-  address_picker_->SetStyle({.layout = Layout::kTop,
-                             .kind = MenuKind::kAddress,
-                             .width = 680,
-                             .enter_label = u"Go"});
-  history_picker_->SetStyle({.layout = Layout::kTop,
-                             .kind = MenuKind::kHistory,
-                             .title = u"History",
-                             .width = 680,
-                             .empty_text = u"No history yet."});
-  auto page_insets = base::BindRepeating(
-      [](base::WeakPtr<FlyWindowController> window) {
-        if (!window || !window->sidebar_slot_)
-          return gfx::Insets();
-        return gfx::Insets::TLBR(
-            0, window->sidebar_slot_->width(),
-            window->status_bar_ && window->status_bar_->GetVisible()
-                ? window->status_bar_->height()
-                : 0,
-            0);
-      },
-      weak_factory_.GetWeakPtr());
-  bookmark_picker_->SetStyle({.layout = Layout::kPage,
-                              .kind = MenuKind::kBookmarks,
-                              .title = u"Bookmarks",
-                              .width = 820,
-                              .page_insets = page_insets,
-                              .empty_text = u"No bookmarks yet."});
-  palette_->SetStyle({.layout = Layout::kCentre,
-                      .kind = MenuKind::kCommands,
-                      .title = u"Commands",
-                      .width = 760,
-                      .page_insets = page_insets,
-                      .command_centre = true,
-                      .enter_label = u"Run"});
-  workspace_picker_->SetStyle({.layout = Layout::kPage,
-                               .kind = MenuKind::kWorkspaces,
-                               .title = u"Workspaces",
-                               .width = 820,
-                               .page_insets = page_insets});
-  // The dashboard: drag a tab onto a tab to reorder it (or move it to
-  // that tab's workspace), or onto a workspace to move it there.
-  workspace_picker_->SetDragDrop(
-      base::BindRepeating(
-          [](std::string_view action) { return action.starts_with("tab/"); }),
-      base::BindRepeating(&FlyWindowController::DropDashboardTab,
-                          weak_factory_.GetWeakPtr()));
-  tab_move_picker_->SetStyle({.layout = Layout::kCentre,
-                              .kind = MenuKind::kTabMove,
-                              .title = u"Move tab to workspace",
-                              .width = 560,
-                              .enter_label = u"Move"});
-  keyboard_editor_ =
-      std::make_unique<KeyboardEditor>(desktop_.get(), commands_,
-                                       *g_browser_process->local_state());
-  keyboard_editor_->SetActionRunner(base::BindRepeating(
-      &FlyWindowController::RunPreferencesAction, weak_factory_.GetWeakPtr()));
-  diagnostics_hub_ = std::make_unique<DiagnosticsHub>(
-      desktop_.get(),
-      DiagnosticsHub::Delegate{
-          .session = base::BindRepeating(
-              [](base::WeakPtr<FlyWindowController> window) {
-                return window ? window->CurrentDiagnostics()
-                              : DiagnosticsSession();
-              },
-              weak_factory_.GetWeakPtr()),
-          .set_recording = base::BindRepeating(
-              [](base::WeakPtr<FlyWindowController> window, bool on) {
-                if (!window)
-                  return;
-                window->preferences_.SetBool("enable_diagnostics", on);
-                if (!on)
-                  window->diagnostics_events_.clear();
-              },
-              weak_factory_.GetWeakPtr()),
-          .clear_events = base::BindRepeating(
-              [](base::WeakPtr<FlyWindowController> window) {
-                if (window)
-                  window->diagnostics_events_.clear();
-              },
-              weak_factory_.GetWeakPtr()),
-          .open_url = base::BindRepeating(
-              [](base::WeakPtr<FlyWindowController> window, GURL url) {
-                if (window)
-                  window->OpenInNewTab(url);
-              },
-              weak_factory_.GetWeakPtr()),
-          .page_insets = page_insets});
-  keyboard_editor_->SetExtensions(
-      extensions_.get(),
-      base::BindRepeating(
-          [](base::WeakPtr<FlyWindowController> window)
-              -> BrowserWindowInterface* {
-            return window ? window->selected_.get() : nullptr;
-          },
-          weak_factory_.GetWeakPtr()),
-      base::BindRepeating(
-          [](base::WeakPtr<FlyWindowController> window) -> Profile* {
-            return window ? window->ActiveProfile() : nullptr;
-          },
-          weak_factory_.GetWeakPtr()));
-  desktop_->AddObserver(this);
-  desktop_->GetFocusManager()->AddFocusChangeListener(this);
-  observing_sidebar_focus_ = true;
-  sidebar_focus_client_ = aura::client::GetFocusClient(
-      desktop_->GetNativeWindow()->GetRootWindow());
-  if (sidebar_focus_client_)
-    sidebar_focus_client_->AddObserver(this);
-  preferences_registrar_.Init(g_browser_process->local_state());
-  preferences_registrar_.Add(
-      kPreferencesPref,
-      base::BindRepeating(&FlyWindowController::OnPreferencesChanged,
-                          weak_factory_.GetWeakPtr()));
-  preferences_registrar_.Add(kBookmarksPref,
-      base::BindRepeating(&FlyWindowController::OnBookmarksChanged,
-                          weak_factory_.GetWeakPtr()));
-  preferences_registrar_.Add(kWorkspacesPref,
-      base::BindRepeating(&FlyWindowController::OnWorkspacesChanged,
-                          weak_factory_.GetWeakPtr()));
-  OnPreferencesChanged();
-  desktop_->GetNativeWindow()->AddPreTargetHandler(this);
-  ArmCloseCallback();
-  close_subscription_ = chrome::AddClosingAllBrowsersCallback(
-      base::BindRepeating(&FlyWindowController::OnClosingAllBrowsers,
-                          weak_factory_.GetWeakPtr()));
-  ScheduleWorkspaceRefresh();
-}
-
-FlyWindowController::~FlyWindowController() {
-  browser_collection_.Reset();
-  closing_ = true;
-  StopSidebarFocusObservation();
-  tab_move_.reset();
-  tab_move_picker_.reset();
-  downloads_picker_.reset();
-  extensions_picker_.reset();
-  if (settings_menu_)
-    settings_menu_->Cancel();
-  settings_menu_.reset();
-  if (keyboard_editor_)
-    keyboard_editor_->SetExtensions(nullptr, {}, {});
-  extensions_.reset();
-  user_content_.reset();
-  diagnostics_hub_.reset();
-  workspace_close_.reset();
-  remove_widget_.reset();
-  remove_delegate_.reset();
-  CHECK(entries_.empty());
-  weak_factory_.InvalidateWeakPtrs();
-  clock_timer_.Stop();
-  suspension_timer_.Stop();
-  preferences_registrar_.RemoveAll();
-  rename_widget_.reset();
-  rename_delegate_.reset();
-  offer_widget_.reset();
-  offer_delegate_.reset();
-  keyboard_editor_.reset();
-  workspace_picker_.reset();
-  history_clear_widget_.reset();
-  history_clear_delegate_.reset();
-  new_tab_history_.reset();
-  history_.reset();
-  history_clear_service_.reset();
-  history_picker_.reset();
-  bookmark_picker_.reset();
-  address_picker_.reset();
-  palette_.reset();
-  hints_.reset();
-  // During application quit the native desktop can be destroyed before the
-  // posted controller cleanup, while this client-owned Widget is still alive.
-  if (auto* native_window = desktop_->GetNativeWindow())
-    native_window->RemovePreTargetHandler(this);
-  desktop_->RemoveObserver(this);
-  // Destruction is only posted after all profile-bound BrowserWidgets finish
-  // their own beforeunload and destruction paths.
-  ClearSidebarViews();
-  if (sidebar_host_) {
-    sidebar_targeter_ = nullptr;
-    sidebar_host_->Detach();
-    sidebar_host_ = nullptr;
-  }
-  if (sidebar_widget_) {
-    sidebar_widget_->RemoveObserver(this);
-    sidebar_widget_.reset();
-  }
-  sidebar_slot_ = nullptr;
-  footer_ = nullptr;
-  split_button_ = nullptr;
-  welcome_ = nullptr;
-  welcome_keep_alive_.reset();
-  content_ = nullptr;
-  status_ = nullptr;
-  status_bar_ = nullptr;
-  download_shelf_ = nullptr;
-  clock_ = nullptr;
-  preferences_button_ = nullptr;
-  tab_sidebar_ = nullptr;
-  desktop_.reset();
-}
-
-void FlyWindowController::CancelHistory() {
-  ++history_generation_;
-  history_->Cancel();
-  history_picker_->Cancel();
-  history_entries_.clear();
-  history_choices_.clear();
-}
-std::vector<PaletteEntry> FlyWindowController::HistoryEntries() {
-  history_choices_.clear();
-  std::vector<PaletteEntry> result;
-  for (const auto& item : history_entries_) {
-    const auto action = item.url.spec();
-    if (!history_choices_.insert(action).second)
-      continue;
-    result.push_back(
-        {action,
-         action,
-         item.title.empty() ? action : base::UTF16ToUTF8(item.title),
-         action,
-         {},
-         {}});
-  }
-  if (!history_clear_running_) {
-    history_choices_.insert("clear-history");
-    result.push_back({"clear-history",
-                      "clear-history",
-                      "Clear history…",
-                      "All normal workspaces",
-                      {},
-                      {}});
-  }
-  return result;
-}
-void FlyWindowController::LoadHistory(HistorySurface surface) {
-  auto* contents = selected_ ? selected_->GetTabStripModel()->GetActiveWebContents()
-                             : nullptr;
-  auto* picker = surface == HistorySurface::kAddress ? address_picker_.get()
-                                                    : history_picker_.get();
-  if (!picker->active())
-    return;
-  const auto generation = ++history_generation_;
-  history_->Query(base::BindOnce(
-      [](base::WeakPtr<FlyWindowController> window,
-         base::WeakPtr<content::WebContents> source, bool empty_source,
-         uint64_t generation,
-         HistorySurface surface,
-         std::optional<std::vector<HistoryEntry>> rows) {
-        if (!window || window->closing_ || (!empty_source && !source) ||
-            generation != window->history_generation_ ||
-            (window->selected_ ? window->selected_->GetTabStripModel()
-                                     ->GetActiveWebContents() : nullptr) !=
-                source.get())
-          return;
-        auto* picker = surface == HistorySurface::kAddress
-                           ? window->address_picker_.get()
-                           : window->history_picker_.get();
-        if (!picker->active())
-          return;
-        window->history_entries_ = rows.value_or(std::vector<HistoryEntry>());
-        if (!rows)
-          window->status_->SetText(
-              u"History is unavailable. Saved data has been preserved.");
-        if (surface == HistorySurface::kAddress)
-          picker->RefreshQuery();
-        else
-          picker->UpdateItems(window->HistoryEntries(), false);
-      },
-      weak_factory_.GetWeakPtr(),
-      contents ? contents->GetWeakPtr() : base::WeakPtr<content::WebContents>(),
-      !contents, generation, surface));
-}
-
-void FlyWindowController::ToggleHistory(BrowserWindowInterface* browser) {
-  if (history_picker_->active()) {
-    history_picker_->Cancel(true);
-    return;
-  }
-  hints_->Cancel();
-  palette_->Cancel();
-  address_picker_->Cancel();
-  workspace_picker_->Cancel();
-  tab_move_picker_->Cancel();
-  bookmark_picker_->Cancel();
-  keyboard_editor_->Cancel();
-  CancelHistory();
-  auto* contents = browser ? browser->GetTabStripModel()->GetActiveWebContents()
-                           : nullptr;
-  const auto config = commands_.Read().value_or(DefaultKeyboardConfig());
-  history_picker_->ToggleItems(contents, {},
-                               config.shortcuts.at("toggle-history"),
-                               u"Search history", false, true);
-  LoadHistory(HistorySurface::kHistory);
-}
-void FlyWindowController::OpenHistory(content::WebContents* source,
-                                      std::string action) {
-  if (closing_ ||
-      (selected_ ? selected_->GetTabStripModel()->GetActiveWebContents()
-                 : nullptr) != source ||
-      !history_choices_.contains(action))
-    return;
-  if (action == "clear-history") {
-    ConfirmHistoryClear(source);
-    return;
-  }
-  // Requery the native stores after dismissal, so retired workspaces or deleted
-  // visits cannot execute stale cached rows. Keep the selected destination.
-  history_->Query(base::BindOnce(
-      [](base::WeakPtr<FlyWindowController> window,
-         base::WeakPtr<content::WebContents> source, bool empty_source,
-         std::string url,
-         std::optional<std::vector<HistoryEntry>> rows) {
-        if (!window || window->closing_ || (!empty_source && !source) ||
-            (window->selected_ ? window->selected_->GetTabStripModel()
-                                     ->GetActiveWebContents() : nullptr) !=
-                source.get() ||
-            !rows || !std::ranges::any_of(*rows, [&](const HistoryEntry& item) {
-              return item.url.spec() == url;
-            }))
-          return;
-        if (!window->selected_) {
-          window->OpenInNewTab(GURL(url));
-          return;
-        }
-        NavigateParams params(window->selected_, GURL(url),
-                              ui::PAGE_TRANSITION_TYPED);
-        params.disposition = WindowOpenDisposition::CURRENT_TAB;
-        params.window_action = NavigateParams::WindowAction::kShowWindow;
-        Navigate(&params);
-      },
-      weak_factory_.GetWeakPtr(),
-      source ? source->GetWeakPtr() : base::WeakPtr<content::WebContents>(),
-      !source, std::move(action)));
-}
-
-views::Widget* FlyWindowController::history_clear_dialog_for_testing() const {
-  return history_clear_widget_ && !history_clear_widget_->IsClosed()
-             ? history_clear_widget_.get()
-             : nullptr;
-}
-void FlyWindowController::ConfirmHistoryClear(content::WebContents* source) {
-  if (history_clear_running_)
-    return;
-  CancelWorkspaceRename();
-  history_clear_widget_.reset();
-  history_clear_delegate_ = std::make_unique<views::DialogDelegate>();
-  history_clear_delegate_->SetOwnershipOfNewWidget(
-      views::Widget::InitParams::CLIENT_OWNS_WIDGET);
-  history_clear_delegate_->SetModalType(ui::mojom::ModalType::kWindow);
-  history_clear_delegate_->SetTitle(u"Clear browsing history");
-  history_clear_delegate_->SetButtonLabel(ui::mojom::DialogButton::kOk,
-                                          u"Clear history");
-  history_clear_delegate_->SetDefaultButton(
-      static_cast<int>(ui::mojom::DialogButton::kCancel));
-  auto body = std::make_unique<views::View>();
-  body->SetLayoutManager(std::make_unique<views::BoxLayout>(
-      views::BoxLayout::Orientation::kVertical, gfx::Insets(16), 8));
-  body->SetPreferredSize(gfx::Size(440, 140));
-  auto* message = body->AddChildView(std::make_unique<views::Label>(
-      u"Permanently remove browsing history from all normal workspaces? "
-      u"Cookies, logins and bookmarks are kept. Private visits are never "
-      u"saved."));
-  message->SetMultiLine(true);
-  history_clear_delegate_->SetContentsView(std::move(body));
-  history_clear_delegate_->SetAcceptCallback(base::BindOnce(
-      [](base::WeakPtr<FlyWindowController> window,
-         base::WeakPtr<content::WebContents> source, bool empty_source) {
-        if (!window || window->closing_ || (!empty_source && !source) ||
-            (window->selected_ ? window->selected_->GetTabStripModel()
-                                     ->GetActiveWebContents() : nullptr) !=
-                source.get())
-          return;
-        window->history_entries_.clear();
-        window->history_choices_.clear();
-        ++window->history_generation_;
-        window->status_->SetText(u"Clearing history…");
-        window->history_clear_running_ = true;
-        window->history_clear_service_->Clear(base::BindOnce(
-            [](base::WeakPtr<FlyWindowController> window, bool cleared) {
-              if (!window)
-                return;
-              // A cancelled quit clears `closing_` again; the lock must not
-              // outlive the operation.
-              window->history_clear_running_ = false;
-              if (!window->closing_) {
-                window->status_->SetText(
-                    cleared
-                        ? u"Browsing history cleared."
-                        : u"History could not be cleared in every workspace.");
-                if (window->history_picker_->active())
-                  window->LoadHistory(HistorySurface::kHistory);
-                else if (window->address_picker_->active())
-                  window->LoadHistory(HistorySurface::kAddress);
-              }
-            },
-            window));
-      },
-      weak_factory_.GetWeakPtr(),
-      source ? source->GetWeakPtr() : base::WeakPtr<content::WebContents>(),
-      !source));
-  history_clear_widget_.reset(views::DialogDelegate::CreateDialogWidget(
-      history_clear_delegate_.get(), desktop_->GetNativeWindow(),
-      desktop_->GetNativeView()));
-  history_clear_widget_->Show();
-}
-
-void FlyWindowController::ToggleAddress(BrowserWindowInterface* browser) {
-  if (address_picker_->active()) {
-    address_picker_->Cancel(true);
-    return;
-  }
-  hints_->Cancel();
-  palette_->Cancel();
-  workspace_picker_->Cancel();
-  tab_move_picker_->Cancel();
-  bookmark_picker_->Cancel();
-  CancelHistory();
-  keyboard_editor_->Cancel();
-  auto* contents =
-      browser ? browser->GetTabStripModel()->GetActiveWebContents() : nullptr;
-  const auto config = commands_.Read().value_or(DefaultKeyboardConfig());
-  const auto url = contents ? contents->GetVisibleURL() : GURL(kFlyNewTabURL);
-  address_picker_->ToggleQuery(
-      contents,
-      base::BindRepeating(
-          [](base::WeakPtr<FlyWindowController> window,
-             std::u16string_view query) {
-            return window ? window->AddressEntries(query)
-                          : std::vector<PaletteEntry>();
-          },
-          weak_factory_.GetWeakPtr()),
-      config.shortcuts.at("toggle-address"), u"Address or search",
-      IsFlyNewTabPage(url) ? std::u16string()
-                           : base::UTF8ToUTF16(url.spec()));
-  LoadHistory(HistorySurface::kAddress);
-}
-std::vector<PaletteEntry> FlyWindowController::AddressEntries(
-    std::u16string_view text) {
-  address_choices_.clear();
-  const auto input = base::UTF16ToUTF8(text);
-  std::vector<PaletteEntry> result;
-  auto add = [&](std::string kind, std::string payload, std::string title,
-                 std::string detail) {
-    const auto action = kind + ":" + payload;
-    address_choices_.emplace(action, payload);
-    result.push_back(
-        {action, action, std::move(title), std::move(detail), {}, {}});
-  };
-  if (input.empty())
-    return result;
-  const auto lower = base::ToLowerASCII(input);
-  if (lower.starts_with("ws:") || lower.starts_with("ws ")) {
-    const auto query = base::ToLowerASCII(std::string(
-        base::TrimWhitespaceASCII(input.substr(3), base::TRIM_ALL)));
-    if (const auto catalog = workspaces_.Read())
-      for (const auto& item : catalog->items)
-        if (base::ToLowerASCII(item.name).find(query) != std::string::npos)
-          add("workspace", item.id, "Switch to " + item.name, "Workspace");
-    return result;
-  }
-  if (const auto value = EvaluateAddressExpression(input)) {
-    const auto answer = base::NumberToString(*value);
-    add("calculate", input, "= " + answer, "Copy result");
-  }
-  SearchService search(*g_browser_process->local_state());
-  if (const auto target = search.ResolveNavigation(input))
-    add("navigate", input, target->spec(), "Open in this workspace");
-  // App bookmarks are an explicit shared product service, never workspace
-  // cookies or private history. Results are inert text in native controls.
-  if (const auto bookmarks = bookmarks_->Read())
-    for (const auto& item : *bookmarks)
-      if (result.size() < 12 &&
-          base::ToLowerASCII(item.title + " " + item.url).find(lower) !=
-              std::string::npos)
-        add("bookmark", item.url, item.title, item.url);
-  std::set<std::string> urls;
-  for (const auto& item : history_entries_)
-    if (result.size() < 12 && urls.insert(item.url.spec()).second &&
-        base::ToLowerASCII(base::UTF16ToUTF8(item.title) + " " +
-                           item.url.spec())
-                .find(lower) != std::string::npos)
-      add("history", item.url.spec(),
-          item.title.empty() ? item.url.spec() : base::UTF16ToUTF8(item.title),
-          item.url.spec());
-  return result;
-}
-void FlyWindowController::ExecuteAddress(content::WebContents* source,
-                                         std::string action) {
-  if (closing_ ||
-      (selected_ ? selected_->GetTabStripModel()->GetActiveWebContents()
-                 : nullptr) != source)
-    return;
-  const auto choice = address_choices_.find(action);
-  if (choice == address_choices_.end())
-    return;
-  const auto payload = choice->second;
-  address_choices_.clear();
-  if (action.starts_with("workspace:")) {
-    OpenWorkspace(payload);
-    return;
-  }
-  if (action.starts_with("calculate:")) {
-    if (const auto value = EvaluateAddressExpression(payload)) {
-      ui::ScopedClipboardWriter(ui::ClipboardBuffer::kCopyPaste)
-          .WriteText(base::UTF8ToUTF16(base::NumberToString(*value)));
-    }
-    return;
-  }
-  if (action.starts_with("history:")) {
-    history_choices_.insert(payload);
-    OpenHistory(source, payload);
-    return;
-  }
-  std::optional<GURL> target;
-  if (action.starts_with("bookmark:") && bookmarks_->Contains(payload))
-    target = GURL(payload);
-  else if (action.starts_with("navigate:"))
-    target = SearchService(*g_browser_process->local_state())
-                 .ResolveNavigation(payload);
-  if (!target || !target->is_valid())
-    return;
-  if (!selected_) {
-    OpenInNewTab(*target);
-    return;
-  }
-  NavigateParams params(selected_, *target, ui::PAGE_TRANSITION_TYPED);
-  params.disposition = WindowOpenDisposition::CURRENT_TAB;
-  params.window_action = NavigateParams::WindowAction::kShowWindow;
-  Navigate(&params);
-}
-
-base::DictValue FlyWindowController::NewTabLists(
-    bool off_the_record, const std::vector<HistoryEntry>& history) const {
-  // Only web pages are listed.
-  const auto link = [](const std::string& url, const std::string& title) {
-    const GURL target(url);
-    if (!target.is_valid() || !target.SchemeIsHTTPOrHTTPS())
-      return std::optional<base::DictValue>();
-    return std::optional<base::DictValue>(
-        base::DictValue()
-            .Set("url", target.spec())
-            .Set("title", title.empty() ? target.host() : title));
-  };
-  base::ListValue bookmarks;
-  base::ListValue sites;
-  const bool show_sites =
-      !off_the_record && preferences_.ReadFrequentSitesVisible().value_or(true);
-  if (!off_the_record) {
-    if (const auto saved = bookmarks_->Read()) {
-      for (const auto& bookmark : *saved) {
-        if (auto entry = link(bookmark.url, bookmark.title))
-          bookmarks.Append(std::move(*entry));
-      }
-    }
-  }
-  if (show_sites) {
-    std::vector<SiteVisit> visits;
-    for (const auto& row : history)
-      visits.push_back({row.url.spec(), row.visited});
-    if (const auto frequent = frequent_sites_->Read(visits)) {
-      for (const auto& site : *frequent) {
-        if (auto entry = link(site.url, site.title))
-          sites.Append(std::move(*entry));
-      }
-    }
-  }
-  return base::DictValue()
-      .Set("showBookmarks", !off_the_record)
-      .Set("showSites", show_sites)
-      .Set("bookmarks", std::move(bookmarks))
-      .Set("sites", std::move(sites));
-}
-bool FlyWindowController::HideFrequentSite(const std::string& url) {
-  return !closing_ && frequent_sites_->Hide(url);
-}
-std::vector<PaletteEntry> FlyWindowController::BookmarkEntries() {
-  bookmark_urls_.clear();
-  std::vector<PaletteEntry> entries;
-  if (const auto bookmarks = bookmarks_->Read()) {
-    for (const auto& bookmark : *bookmarks) {
-      bookmark_urls_.insert(bookmark.url);
-      entries.push_back({bookmark.url, bookmark.url, bookmark.title,
-                         bookmark.url, {}, {}});
-    }
-  }
-  return entries;
-}
-void FlyWindowController::OnBookmarksChanged() {
-  const bool readable = bookmarks_->Read().has_value();
-  if (!readable) {
-    if (bookmark_picker_->active())
-      bookmark_picker_->Cancel(true);
-    return;
-  }
-  if (bookmark_picker_->active())
-    bookmark_picker_->UpdateItems(BookmarkEntries(), bookmarks_->CanEdit());
-}
-void FlyWindowController::OpenBookmark(content::WebContents* source,
-                                      std::string url) {
-  if (closing_ ||
-      (selected_ ? selected_->GetTabStripModel()->GetActiveWebContents()
-                 : nullptr) != source ||
-      !bookmark_urls_.contains(url))
-    return;
-  if (!bookmarks_->Contains(url))
-    return;
-  OpenInNewTab(GURL(url));
-}
-void FlyWindowController::RemoveBookmark(content::WebContents* source,
-                                        std::string url) {
-  if (!closing_ &&
-      (selected_ ? selected_->GetTabStripModel()->GetActiveWebContents()
-                 : nullptr) == source) {
-    if (bookmarks_->Contains(url))
-      bookmarks_->Remove(url);
-  }
-}
-
-void FlyWindowController::OnPreferencesChanged() {
-  const auto theme = preferences_.ReadTheme();
-  if (theme && theme != applied_theme_) {
-    applied_theme_ = theme;
-    ApplyFlyPalette();
-    const auto color_mode = theme->mode == "dark"
-                                ? ui::ColorProviderKey::ColorMode::kDark
-                                : ui::ColorProviderKey::ColorMode::kLight;
-    desktop_->SetColorModeOverride(color_mode);
-    sidebar_widget_->SetColorModeOverride(color_mode);
-    // Native WebContents observers recompute actual renderer preferences,
-    // including hidden/split/private/extension pages. No web API is replaced.
-    ui::NativeTheme::GetInstanceForWeb()->NotifyOnNativeThemeUpdated();
-  }
-  ApplyFlyPalette();
-  ApplyProfilePreferencesEverywhere();
-  if (user_content_)
-    user_content_->SetEmailHandler(
-        preferences_.ReadString("email_handler").value_or("system"));
-  UpdateClock();
-  UpdateSidebarMode();
-  UpdateWindowControls();
-  UpdateSuspensionPolicy();
-}
-
-views::ImageButton* FlyWindowController::window_control_for_testing(
-    std::string_view action) const {
-  const auto found = window_control_buttons_.find(std::string(action));
-  return found == window_control_buttons_.end() ? nullptr : found->second.get();
-}
-void FlyWindowController::ClearSidebarViews() {
-  clock_timer_.Stop();
-  window_control_buttons_.clear();
-  window_controls_ = nullptr;
-  workspace_buttons_ = nullptr;
-  clock_ = nullptr;
-  preferences_button_ = nullptr;
-  tab_sidebar_ = nullptr;
-  sidebar_content_ = nullptr;
-  sidebar_pin_button_ = nullptr;
-  reader_button_ = nullptr;
-  split_button_ = nullptr;
-  reader_poll_.Stop();
-  new_tab_button_ = nullptr;
-  workspace_badge_ = nullptr;
-  workspace_label_ = nullptr;
-  workspace_picker_button_ = nullptr;
-  sidebar_panel_ = nullptr;
-  sidebar_root_ = nullptr;
-  tab_numbers_timer_.Stop();
-}
-void FlyWindowController::StopSidebarFocusObservation() {
-  if (sidebar_focus_client_) {
-    sidebar_focus_client_->RemoveObserver(this);
-    sidebar_focus_client_ = nullptr;
-  }
-  if (observing_sidebar_focus_) {
-    desktop_->GetFocusManager()->RemoveFocusChangeListener(this);
-    observing_sidebar_focus_ = false;
-  }
-}
-bool FlyWindowController::SidebarOverlayBlocked() const {
-  return (address_picker_ && address_picker_->active()) ||
-         (palette_ && palette_->active()) ||
-         (workspace_picker_ && workspace_picker_->active()) ||
-         (tab_move_picker_ && tab_move_picker_->active()) ||
-         (downloads_picker_ && downloads_picker_->active()) ||
-         (extensions_picker_ && extensions_picker_->active()) ||
-         (bookmark_picker_ && bookmark_picker_->active()) ||
-         (history_picker_ && history_picker_->active()) ||
-         (keyboard_editor_ && keyboard_editor_->active()) ||
-         (hints_ && hints_->active());
-}
-void FlyWindowController::UpdateSidebarBounds() {
-  if (!sidebar_widget_ || !sidebar_widget_->GetNativeWindow() ||
-      !desktop_->GetNativeWindow())
-    return;
-  auto bounds = desktop_->GetContentsView()->GetLocalBounds();
-  if (bounds.IsEmpty())
-    return;
-  // The host keeps one size in both states: the edge moves on the
-  // compositor, and only the hit area follows it.
-  bounds.set_width(FlyScaled(kSidebarWidth) +
-                   (sidebar_auto_collapse_ ? kSidebarShadowExtent : 0));
-  sidebar_host_->SetBoundsRect(bounds);
-  // This overlay is excluded from BoxLayout; update its native clip explicitly.
-  sidebar_host_->DeprecatedLayoutImmediately();
-  UpdateSidebarHitArea();
-}
-void FlyWindowController::UpdateSidebarHitArea() {
-  if (!sidebar_targeter_ || !sidebar_host_)
-    return;
-  sidebar_targeter_->SetInsets(gfx::Insets::TLBR(
-      0, 0, 0, std::max(0, sidebar_host_->width() - sidebar_hit_width_)));
-}
-float FlyWindowController::SidebarShiftNow() const {
-  if (!sidebar_motion_animating_)
-    return sidebar_shift_to_;
-  const double progress =
-      std::clamp((base::TimeTicks::Now() - sidebar_motion_start_) /
-                     kSidebarMotion,
-                 0.0, 1.0);
-  return gfx::Tween::FloatValueBetween(
-      gfx::Tween::CalculateValue(gfx::Tween::FAST_OUT_SLOW_IN_3, progress),
-      sidebar_shift_from_, sidebar_shift_to_);
-}
-int FlyWindowController::VisibleSidebarWidth() const {
-  return FlyScaled(kSidebarWidth) - static_cast<int>(SidebarShiftNow() + 0.5f);
-}
-void FlyWindowController::OnSidebarMotionEnded() {
-  sidebar_motion_animating_ = false;
-  // A finished collapse gives the page back everything right of the rail.
-  sidebar_hit_width_ = FlyScaled(kSidebarWidth) -
-                       static_cast<int>(sidebar_shift_to_ + 0.5f);
-  UpdateSidebarHitArea();
-}
-void FlyWindowController::UpdateSidebarMode() {
-  if (!sidebar_content_)
-    return;
-  const bool collapse = preferences_.ReadSidebarAutoCollapse().value_or(false);
-  const bool changed = collapse != sidebar_auto_collapse_;
-  sidebar_auto_collapse_ = collapse;
-  // Pinning or unpinning resizes the page once; hovering never does.
-  sidebar_slot_->SetPreferredSize(gfx::Size(
-      FlyScaled(collapse ? kSidebarRailWidth : kSidebarWidth), 0));
-  if (auto* pin = sidebar_pin_button_.get()) {
-    const auto* label = collapse ? u"Pin sidebar" : u"Unpin sidebar";
-    pin->SetVectorIcon(collapse ? views::kKeepIcon : views::kKeepFilledIcon,
-                       12);
-    pin->SetSelected(!collapse);
-    pin->SetAccentText(!collapse);
-    pin->SetTooltipText(label);
-    pin->GetViewAccessibility().SetName(label);
-    pin->SetEnabled(preferences_.CanEditSidebarAutoCollapse());
-  }
-  if (changed && collapse) {
-    sidebar_keyboard_expanded_ = false;
-    sidebar_focus_inside_ = false;
-    if (sidebar_content_->Contains(
-            desktop_->GetFocusManager()->GetFocusedView()))
-      ReturnFocusFromSidebar();
-  }
-  // A mode or scale change applies at once (the slide distance, the shadow
-  // and the details follow the new mode); other preference writes leave a
-  // running slide alone. Fly starts collapsed instead of animating closed.
-  sidebar_motion_ready_ = false;
-  if (changed || sidebar_motion_scale_ != GetFlyInterfaceScale())
-    sidebar_motion_applied_ = false;
-  UpdateSidebarBounds();
-  UpdateSidebarVisibility();
-  sidebar_motion_ready_ = true;
-}
-std::u16string FlyWindowController::workspace_header_for_testing() const {
-  return std::u16string(workspace_label_->GetText());
-}
-bool FlyWindowController::sidebar_expanded_for_testing() const {
-  return sidebar_expanded_;
-}
-void FlyWindowController::UpdateSidebarVisibility() {
-  if (closing_ || !sidebar_content_ || !sidebar_widget_->GetNativeWindow())
-    return;
-  if (desktop_->IsFullscreen()) {
-    sidebar_host_->SetVisible(false);
-    sidebar_widget_->Hide();
-    return;
-  }
-  bool menu_open = tab_sidebar_->context_menu_for_testing() ||
-                   workspace_rename_dialog_for_testing() ||
-                   workspace_remove_dialog_for_testing();
-  for (const auto& child : workspace_buttons_->children()) {
-    auto* button = views::AsViewClass<WorkspaceMenuButton>(child.get());
-    menu_open |= button && button->running_model();
-  }
-  const bool blocked = SidebarOverlayBlocked();
-  const bool expanded =
-      !sidebar_auto_collapse_ ||
-      (!blocked && (sidebar_pointer_inside_ || sidebar_focus_inside_ ||
-                    sidebar_keyboard_expanded_ || menu_open));
-  if (!sidebar_widget_->IsVisible())
-    sidebar_widget_->ShowInactive();
-  // Participate in the same Views layer ordering as the embedded browsers.
-  // Manually stacking an independent Aura window among Views-owned browser
-  // layers can violate WindowReorderer's ordering during tab rebuilds.
-  sidebar_host_->SetVisible(true);
-  if (!blocked) {
-    auto* clip = sidebar_host_->GetNativeViewContainer();
-    if (clip && clip->parent())
-      clip->parent()->StackChildAtTop(clip);
-  }
-  if (expanded != sidebar_expanded_ || !sidebar_motion_applied_) {
-    sidebar_expanded_ = expanded;
-    ApplySidebarMotion(sidebar_motion_ready_ && sidebar_motion_applied_ &&
-                       !gfx::Animation::PrefersReducedMotion());
-  }
-  UpdateClock();
-}
-// The slide: collapsed, the edge sits 224px to the left and the panel 224px
-// back to the right inside it, so the panel's left 36px show. Both transforms
-// run on the compositor; the shadow and the state-specific details fade with
-// them.
-void FlyWindowController::ApplySidebarMotion(bool animate) {
-  auto* panel = sidebar_root_ ? sidebar_root_->panel() : nullptr;
-  auto* edge = sidebar_root_ ? sidebar_root_->edge() : nullptr;
-  if (!panel || !panel->layer() || !edge || !edge->layer())
-    return;
-  sidebar_motion_applied_ = true;
-  sidebar_motion_scale_ = GetFlyInterfaceScale();
-  const bool rail = sidebar_auto_collapse_ && !sidebar_expanded_;
-  const int shift = rail ? FlyScaled(kSidebarWidth - kSidebarRailWidth) : 0;
-  sidebar_shift_from_ = SidebarShiftNow();
-  sidebar_shift_to_ = shift;
-  sidebar_motion_start_ = base::TimeTicks::Now();
-  sidebar_motion_animating_ = animate;
-  // Expanding takes the pointer at once; collapsing keeps the panel's area
-  // until the edge has passed, so the page never gets clicks on a panel
-  // that is still visible.
-  if (!rail || !animate)
-    sidebar_hit_width_ = FlyScaled(kSidebarWidth) - shift;
-  gfx::Transform outer;
-  outer.Translate(-shift, 0);
-  gfx::Transform inner;
-  inner.Translate(shift, 0);
-  const float shadow = sidebar_auto_collapse_ && sidebar_expanded_ ? 1 : 0;
-  UpdateSidebarHitArea();
-  tab_sidebar_->SetRail(rail);
-  if (!animate) {
-    for (auto* layer : {edge->layer(), panel->layer(),
-                        sidebar_root_->shadow()->layer()})
-      layer->GetAnimator()->StopAnimating();
-    edge->layer()->SetTransform(outer);
-    panel->layer()->SetTransform(inner);
-    sidebar_root_->shadow()->layer()->SetOpacity(shadow);
-    sidebar_panel_->SetRail(rail, nullptr);
-    return;
-  }
-  views::AnimationBuilder builder;
-  builder.SetPreemptionStrategy(
-      ui::LayerAnimator::IMMEDIATELY_ANIMATE_TO_NEW_TARGET);
-  builder.OnEnded(base::BindOnce(&FlyWindowController::OnSidebarMotionEnded,
-                                 weak_factory_.GetWeakPtr()));
-  auto& block = builder.Once()
-                    .SetDuration(kSidebarMotion)
-                    .SetTransform(edge->layer(), outer,
-                                  gfx::Tween::FAST_OUT_SLOW_IN_3)
-                    .SetTransform(panel->layer(), inner,
-                                  gfx::Tween::FAST_OUT_SLOW_IN_3)
-                    .SetOpacity(sidebar_root_->shadow()->layer(), shadow,
-                                gfx::Tween::FAST_OUT_SLOW_IN_3);
-  sidebar_panel_->SetRail(rail, &block);
-}
-void FlyWindowController::LoadSidebarArtwork() {
-  base::ThreadPool::PostTaskAndReplyWithResult(
-      FROM_HERE, {base::MayBlock(), base::TaskPriority::USER_VISIBLE},
-      base::BindOnce([]() {
-        std::array<std::string, 3> bytes;
-        base::FilePath assets;
-        if (!base::PathService::Get(base::DIR_ASSETS, &assets))
-          return bytes;
-        const auto identity =
-            assets.AppendASCII("fly_resources").AppendASCII("identity");
-        const std::array<const char*, 3> names = {
-            "engraving-chasis@2x.png", "engraving-papel@2x.png",
-            "paper-grain.png"};
-        for (size_t i = 0; i < names.size(); ++i) {
-          base::ReadFileToStringWithMaxSize(identity.AppendASCII(names.at(i)),
-                                            &bytes.at(i), 1024 * 1024);
-        }
-        return bytes;
-      }),
-      base::BindOnce(
-          [](base::WeakPtr<FlyWindowController> window,
-             std::array<std::string, 3> bytes) {
-            if (!window || !window->sidebar_panel_)
-              return;
-            // The engravings are 2x artwork (512px for a 256px image).
-            const auto decode = [](const std::string& png, float scale) {
-              const auto bitmap =
-                  gfx::PNGCodec::Decode(base::as_byte_span(png));
-              return bitmap.isNull()
-                         ? gfx::ImageSkia()
-                         : gfx::ImageSkia(gfx::ImageSkiaRep(bitmap, scale));
-            };
-            const auto grain = decode(bytes.at(2), 1);
-            window->sidebar_panel_->SetArtwork(decode(bytes.at(0), 2),
-                                               decode(bytes.at(1), 2), grain);
-            if (window->status_bar_)
-              window->status_bar_->SetPaperGrain(grain);
-          },
-          weak_factory_.GetWeakPtr()));
-}
-void FlyWindowController::ToggleSidebarAutoCollapse() {
-  const auto collapse = preferences_.ReadSidebarAutoCollapse();
-  if (collapse)
-    preferences_.SetSidebarAutoCollapse(!*collapse);
-}
-void FlyWindowController::ReturnFocusFromSidebar() {
-  sidebar_keyboard_expanded_ = false;
-  sidebar_focus_inside_ = false;
-  if (sidebar_content_ &&
-      sidebar_content_->Contains(desktop_->GetFocusManager()->GetFocusedView()))
-    desktop_->GetFocusManager()->ClearFocus();
-  if (selected_) {
-    if (auto* contents = selected_->GetTabStripModel()->GetActiveWebContents())
-      contents->Focus();
-  }
-  UpdateSidebarVisibility();
-}
-void FlyWindowController::FocusSidebar() {
-  if (closing_ || !sidebar_content_)
-    return;
-  if (sidebar_focus_inside_) {
-    ReturnFocusFromSidebar();
-    return;
-  }
-  sidebar_keyboard_expanded_ = true;
-  // Activating a row sends Aura focus to the page while the desktop focus
-  // manager still records that row. Requesting the same view again would then
-  // be a no-op, leaving the expanded sidebar without keyboard focus.
-  if (sidebar_content_->Contains(
-          desktop_->GetFocusManager()->GetFocusedView()))
-    desktop_->GetFocusManager()->ClearFocus();
-  UpdateSidebarBounds();
-  UpdateSidebarVisibility();
-  if (selected_ && !selected_->GetTabStripModel()->empty())
-    tab_sidebar_->FocusActiveTab();
-  else
-    workspace_picker_button_->RequestFocus();
-}
-bool FlyWindowController::SidebarHasFocus() const {
-  if (!sidebar_content_ || !sidebar_focus_client_ || !sidebar_widget_)
-    return false;
-  const auto* focused = sidebar_focus_client_->GetFocusedWindow();
-  return focused && (sidebar_widget_->GetNativeWindow()->Contains(focused) ||
-                     (focused == desktop_->GetNativeWindow() &&
-                      sidebar_content_->Contains(
-                          desktop_->GetFocusManager()->GetFocusedView())));
-}
-void FlyWindowController::OnDidChangeFocus(views::View*, views::View* now) {
-  if (closing_ || !sidebar_content_)
-    return;
-  sidebar_focus_inside_ = sidebar_content_->Contains(now);
-  if (sidebar_focus_inside_)
-    sidebar_keyboard_expanded_ = false;
-  UpdateSidebarVisibility();
-}
-void FlyWindowController::OnWindowFocused(aura::Window* gained, aura::Window*) {
-  if (closing_ || !sidebar_content_ || !sidebar_widget_->GetNativeWindow())
-    return;
-  const auto* native = sidebar_widget_->GetNativeWindow();
-  sidebar_focus_inside_ =
-      gained &&
-      (native->Contains(gained) || gained == desktop_->GetNativeWindow()) &&
-      sidebar_content_->Contains(desktop_->GetFocusManager()->GetFocusedView());
-  if (!sidebar_focus_inside_)
-    sidebar_keyboard_expanded_ = false;
-  UpdateSidebarVisibility();
-}
-void FlyWindowController::OnWidgetBoundsChanged(views::Widget* widget,
-                                                const gfx::Rect&) {
-  if (widget == desktop_.get()) {
-    UpdateFullscreenChrome();
-    UpdateSidebarBounds();
-  }
-}
-void FlyWindowController::OnMouseEvent(ui::MouseEvent* event) {
-  if (closing_ || !sidebar_content_ || SidebarOverlayBlocked())
-    return;
-  if (event->type() != ui::EventType::kMouseMoved &&
-      event->type() != ui::EventType::kMouseEntered &&
-      event->type() != ui::EventType::kMouseExited &&
-      event->type() != ui::EventType::kMousePressed)
-    return;
-  // Leaving the window keeps the sidebar as it is: moving
-  // from the page to the screen's left edge opens it, and touching the
-  // window border does not close it. Entering the page closes it.
-  if (event->type() == ui::EventType::kMouseExited)
-    return;
-  auto point = event->root_location();
-  wm::ConvertPointToScreen(desktop_->GetNativeWindow()->GetRootWindow(),
-                           &point);
-  const auto window = desktop_->GetContentsView()->GetBoundsInScreen();
-  if (!window.Contains(point) &&
-      event->type() != ui::EventType::kMousePressed)
-    return;
-  // The edge the user sees, mid-slide included.
-  auto bounds = window;
-  bounds.set_width(VisibleSidebarWidth());
-  const bool was_inside = sidebar_pointer_inside_;
-  sidebar_pointer_inside_ = bounds.Contains(point);
-  const bool pressed = event->type() == ui::EventType::kMousePressed;
-  // Pointer motion only matters when it crosses the sidebar edge.
-  if (!pressed && was_inside == sidebar_pointer_inside_)
-    return;
-  if (!sidebar_pointer_inside_ && pressed) {
-    sidebar_keyboard_expanded_ = false;
-    sidebar_focus_inside_ = false;
-    if (SidebarHasFocus() ||
-        sidebar_content_->Contains(
-            desktop_->GetFocusManager()->GetFocusedView())) {
-      desktop_->GetFocusManager()->ClearFocus();
-      // Desktop and profile BrowserWidget focus managers are distinct. A real
-      // page click crosses that boundary; Chrome toolbar clicks keep their
-      // own native handling.
-      auto* page = selected_
-                       ? selected_->GetTabStripModel()->GetActiveWebContents()
-                       : nullptr;
-      auto* view = page ? page->GetRenderWidgetHostView() : nullptr;
-      if (view && view->GetViewBounds().Contains(point))
-        page->Focus();
-    }
-  }
-  UpdateSidebarVisibility();
-}
-
-void FlyWindowController::UpdateWindowControls() {
-  if (!window_controls_)
-    return;
-  const bool visible = preferences_.ReadWindowControlsVisible().value_or(false);
-  if (!visible &&
-      window_controls_->Contains(
-          desktop_->GetFocusManager()->GetFocusedView()) &&
-      selected_) {
-    desktop_->GetFocusManager()->ClearFocus();
-    if (auto* contents = selected_->GetTabStripModel()->GetActiveWebContents())
-      contents->Focus();
-  }
-  window_controls_->SetVisible(visible);
-  const bool maximized = desktop_->IsMaximized();
-  auto* maximize = window_control_buttons_.at("maximize").get();
-  const auto icon = ui::ImageModel::FromVectorIcon(
-      maximized ? views::kChromeRestoreIcon : views::kChromeMaximizeIcon,
-      ui::kColorIcon, 16);
-  for (auto state : {views::Button::STATE_NORMAL, views::Button::STATE_HOVERED,
-                     views::Button::STATE_PRESSED,
-                     views::Button::STATE_DISABLED})
-    maximize->SetImageModel(state, icon);
-  const auto* title = maximized ? u"Restore Fly" : u"Maximize Fly";
-  maximize->SetTooltipText(title);
-  maximize->GetViewAccessibility().SetName(title);
-}
-void FlyWindowController::RunWindowControl(std::string action) {
-  VLOG(1) << "Fly window control requested: " << action;
-  if (closing_ || !window_controls_->GetVisible())
-    return;
-  // Complete pointer/keyboard button dispatch before native close callbacks can
-  // destroy this control, the selected browser or the entire desktop.
-  base::SingleThreadTaskRunner::GetCurrentDefault()->PostNonNestableTask(
-      FROM_HERE,
-      base::BindOnce(
-          [](base::WeakPtr<FlyWindowController> window, std::string action) {
-            if (!window || window->closing_ ||
-                !window->preferences_.ReadWindowControlsVisible().value_or(
-                    false))
-              return;
-            VLOG(1) << "Fly window control executing: " << action;
-            if (action == "minimize")
-              window->desktop_->Minimize();
-            else if (action == "maximize") {
-              if (window->desktop_->IsMaximized())
-                window->desktop_->Restore();
-              else
-                window->desktop_->Maximize();
-            } else if (action == "close")
-              window->desktop_->Close();
-          },
-          weak_factory_.GetWeakPtr(), std::move(action)));
-}
-void FlyWindowController::OnWidgetShowStateChanged(views::Widget* widget) {
-  if (widget == desktop_.get()) {
-    UpdateFullscreenChrome();
-    UpdateWindowControls();
-    UpdateEmbeddedVisibility();
-    UpdateClock();
-  }
-}
-
-void FlyWindowController::UpdateSuspensionPolicy() {
-  SuspendIdleTabs();
-  const auto minutes = preferences_.ReadSuspendTimeoutMinutes();
-  if (closing_ || !minutes || *minutes == 0) {
-    suspension_timer_.Stop();
-  } else if (!suspension_timer_.IsRunning()) {
-    suspension_timer_.Start(
-        FROM_HERE, base::Seconds(30),
-        base::BindRepeating(&FlyWindowController::SuspendIdleTabs,
-                            weak_factory_.GetWeakPtr()));
-  }
-}
-void FlyWindowController::SuspendIdleTabs() {
-  if (closing_)
-    return;
-  std::vector<base::WeakPtr<content::WebContents>> pages;
-  for (const auto& [browser, entry] : entries_) {
-    if (entry.browser_closed)
-      continue;
-    auto* model = browser->GetTabStripModel();
-    for (int index = 0; index < model->count(); ++index)
-      pages.push_back(model->GetWebContentsAt(index)->GetWeakPtr());
-  }
-  const auto timeout =
-      base::Minutes(preferences_.ReadSuspendTimeoutMinutes().value_or(0));
-  const auto now = base::TimeTicks::Now();
-  for (const auto& page : pages)
-    if (page)
-      MaybeAutoSuspendNativeTab(page.get(), timeout, now);
-}
-void FlyWindowController::ResumeAllTabs() {
-  std::vector<base::WeakPtr<content::WebContents>> pages;
-  for (const auto& [browser, entry] : entries_) {
-    if (entry.browser_closed)
-      continue;
-    auto* model = browser->GetTabStripModel();
-    for (int index = 0; index < model->count(); ++index)
-      pages.push_back(model->GetWebContentsAt(index)->GetWeakPtr());
-  }
-  for (const auto& page : pages)
-    if (page)
-      ResumeNativeTab(page.get());
-}
-
-void FlyWindowController::ApplyFlyPalette() {
-  const auto theme = preferences_.ReadTheme();
-  const bool dark = !theme || theme->mode != "light";
-  auto colors = DefaultFlyColors(dark);
-  const auto custom = [&](std::string_view key, SkColor& target) {
-    const auto hex = preferences_.ReadThemeColor(dark, key);
-    uint32_t rgb = 0;
-    if (hex && hex->size() == 7 && base::HexStringToUInt(hex->substr(1), &rgb))
-      target = SkColorSetRGB(rgb >> 16, (rgb >> 8) & 0xff, rgb & 0xff);
-  };
-  custom("accent", colors.accent);
-  custom("bg_main", colors.bg_main);
-  custom("bg_sidebar", colors.bg_sidebar);
-  custom("text", colors.text);
-  colors.sidebar_opacity = preferences_.ReadThemeOpacity(dark, "sidebar_opacity");
-  colors.overlay_opacity = preferences_.ReadThemeOpacity(dark, "overlay_opacity");
-  const float scale =
-      preferences_.ReadString("interface_scale").value_or("normal") == "large"
-          ? 1.25f
-          : 1.0f;
-  const bool scale_changed = scale != GetFlyInterfaceScale();
-  SetFlyInterfaceScale(scale);
-  if (!SetFlyColors(colors) && !scale_changed)
-    return;
-  for (auto* widget : {desktop_.get(), sidebar_widget_.get()}) {
-    if (widget && widget->GetNativeWindow()) {
-      // Fly's palette and interface scale live outside Chromium's color
-      // provider key. Its theme-change optimization must not skip our font,
-      // geometry and artwork cache updates when that key stays the same.
-      widget->ResetLastColorProviderKey();
-      widget->ThemeChanged();
-      widget->GetRootView()->SchedulePaint();
-    }
-  }
-  if (scale_changed) {
-    // Widths follow the interface scale.
-    if (auto* sidebar = sidebar_content_.get())
-      sidebar->SetPreferredSize(gfx::Size(FlyScaled(260), 0));
-    UpdateSidebarMode();
-    UpdateSidebarBounds();
-    if (desktop_ && desktop_->GetRootView())
-      desktop_->GetRootView()->InvalidateLayout();
-  }
-}
-void FlyWindowController::UpdateWorkspaceHeader() {
-  if (!workspace_picker_button_)
-    return;
-  std::u16string name = u"Workspace";
-  std::u16string badge = u"?";
-  std::u16string compact = u"W";
-  const bool is_private =
-      selected_ && selected_->GetProfile()->IsOffTheRecord();
-  const auto catalog = workspaces_.Read();
-  if (is_private) {
-    name = u"Private";
-    badge = u"P";
-    compact = u"P";
-  } else if (catalog) {
-    // An empty workspace has no selected browser; it is the active one.
-    const std::string& id =
-        selected_ ? entries_.at(selected_).workspace_id : catalog->active_id;
-    for (size_t i = 0; i < catalog->items.size(); ++i) {
-      if (catalog->items[i].id != id)
-        continue;
-      name = base::UTF8ToUTF16(catalog->items[i].name);
-      badge = base::NumberToString16(i + 1);
-      compact = u"W" + badge;
-    }
-  }
-  workspace_badge_->SetText(is_private ? compact : WorkspaceBadgeText(name));
-  workspace_label_->SetText(name);
-  workspace_picker_button_->GetViewAccessibility().SetName(
-      u"Workspace " + name + u": open the workspace dashboard");
-  // The list is only needed to reach other workspaces or windows directly.
-  workspace_buttons_->SetVisible(
-      (catalog && catalog->items.size() > 1) ||
-      workspace_buttons_->children().size() > (catalog ? catalog->items.size()
-                                                       : 0));
-}
-void FlyWindowController::UpdateClock() {
-  if (!clock_)
-    return;
-  const bool footer = preferences_.ReadStatusBarVisible().value_or(false);
-  if (status_bar_)
-    status_bar_->SetVisible(footer);
-  const auto settings = preferences_.ReadClock();
-  const bool visible = settings && settings->visible;
-  if (!visible && clock_->HasFocus() && selected_) {
-    if (auto* contents = selected_->GetTabStripModel()->GetActiveWebContents())
-      contents->Focus();
-  }
-  clock_->SetVisible(visible);
-  clock_->SetEnabled(preferences_.CanEditClock());
-  const bool desktop_shown = desktop_->IsVisible() && !desktop_->IsMinimized();
-  const bool sidebar_shown = sidebar_expanded_;
-  if (!visible || !desktop_shown || (!sidebar_shown && !footer)) {
-    if (status_bar_)
-      status_bar_->SetClockVisible(visible);
-    clock_timer_.Stop();
-    return;
-  }
-  const auto now = base::Time::Now();
-  const auto text = FormatClock(now, settings->format);
-  // The sidebar and the footer draw the date and the time separately (time
-  // in the accent display face).
-  std::u16string date;
-  std::u16string time = text.label;
-  if (settings->format == "datetime") {
-    const auto split = text.label.rfind(u' ');
-    if (split != std::u16string::npos) {
-      date = text.label.substr(0, split);
-      base::TrimWhitespace(date, base::TRIM_TRAILING, &date);
-      time = text.label.substr(split + 1);
-    }
-  }
-  clock_->SetClock(text.label, date, time);
-  if (clock_->GetTooltipText() != text.tooltip)
-    clock_->SetTooltipText(text.tooltip);
-  if (status_bar_) {
-    status_bar_->SetClock(date, time, text.tooltip, true);
-  }
-  // Wake at the next visible change only: the next second for the seconds
-  // format, otherwise the next minute.
-  base::Time::Exploded local;
-  now.LocalExplode(&local);
-  const auto delay =
-      settings->format == "seconds"
-          ? base::Milliseconds(1000 - local.millisecond)
-          : base::Seconds(60 - local.second) - base::Milliseconds(local.millisecond);
-  clock_timer_.Start(FROM_HERE, delay + base::Milliseconds(5),
-                     base::BindOnce(&FlyWindowController::UpdateClock,
-                                    weak_factory_.GetWeakPtr()));
-}
-void FlyWindowController::CycleClockFormat() {
-  preferences_.CycleClockFormat();
-}
-void FlyWindowController::UpdateFullscreenChrome() {
-  if (closing_)
-    return;
-  const bool fullscreen = desktop_->IsFullscreen();
-  sidebar_slot_->SetVisible(!fullscreen);
-  sidebar_host_->SetVisible(!fullscreen);
-  if (fullscreen)
-    sidebar_widget_->Hide();
-  footer_->SetVisible(!fullscreen);
-  if (!fullscreen)
-    UpdateSidebarVisibility();
-  desktop_->GetContentsView()->InvalidateLayout();
-}
-void FlyWindowController::UpdateSplitButton() {
-  if (closing_ || !split_button_)
-    return;
-  auto* model = selected_ ? selected_->GetTabStripModel() : nullptr;
-  split_button_->SetSelected(
-      model && model->active_index() >= 0 &&
-      model->GetSplitForTab(model->active_index()).has_value());
-}
-void FlyWindowController::UpdateEmbeddedVisibility() {
-  if (closing_ || !selected_)
-    return;
-  const auto it = entries_.find(selected_);
-  if (it == entries_.end() || !it->second.host)
-    return;
-  // The profile BrowserWidgets are hosted inside Fly's desktop window.
-  // Minimizing that outer window does not hide a hosted widget by itself.
-  // Hide its NativeViewHost, just as workspace selection does. Calling
-  // ShowInactive on the BrowserWidget here would select the workspace and
-  // recursively show the desktop while it is still notifying observers.
-  // The host propagates visibility through Aura to the native renderers.
-  it->second.host->SetVisible(desktop_->IsVisible() && !desktop_->IsMinimized());
-}
-void FlyWindowController::OnWidgetVisibilityChanged(views::Widget* widget, bool) {
-  if (widget == desktop_.get())
-    UpdateEmbeddedVisibility();
-  UpdateClock();
-}
-
-void FlyWindowController::Prepare(BrowserWindowInterface* browser) {
-  CHECK(!entries_.contains(browser));
-  const auto directory =
-      browser->GetProfile()->GetPath().BaseName().AsUTF8Unsafe();
-  std::string workspace_id;
-  if (!browser->GetProfile()->IsOffTheRecord()) {
-    auto catalog = workspaces_.Read();
-    if (catalog) {
-      auto item = std::ranges::find(catalog->items, directory,
-                                    &Workspace::profile_directory);
-      if (item != catalog->items.end()) {
-        workspace_id = item->id;
-      } else {
-        // Incoming native startup/extension windows keep their real Profile.
-        // Never bind a new display name to an already retired directory.
-        auto added = workspaces_.Add(
-            "Workspace " + base::NumberToString(catalog->items.size() + 1),
-            directory);
-        if (added) {
-          workspace_id = added->id;
-        }
-      }
-    }
-  }
-  auto native_host = std::make_unique<views::NativeViewHost>();
-  native_host->SetLayerManagedByViews(false);
-  auto* host = content_->AddChildView(std::move(native_host));
-  host->SetVisible(false);
-  auto [entry, inserted] =
-      entries_.emplace(browser, Entry{browser, nullptr, host, workspace_id});
-  entry->second.order = next_window_order_++;
-  entry->second.closed_subscription =
-      browser->RegisterBrowserDidClose(base::BindRepeating(
-          &FlyWindowController::OnBrowserDidClose, weak_factory_.GetWeakPtr()));
-  ApplyProfilePreferences(browser->GetProfile(), preferences_);
-  if (download_shelf_)
-    download_shelf_->AddProfile(browser->GetProfile());
-  if (!browser->GetProfile()->IsOffTheRecord()) {
-    extensions_->AddProfile(browser->GetProfile());
-    user_content_->AddProfile(browser->GetProfile());
-    site_zoom_.AddProfile(browser->GetProfile());
-  }
-  ScheduleWorkspaceRefresh();
-}
-
-void FlyWindowController::Attach(BrowserWindowInterface* browser,
-                                 views::Widget* child) {
-  auto& entry = entries_.at(browser);
-  entry.widget = child;
-  child->AddObserver(this);
-  entry.host->Attach(child->GetNativeView());
-  ScheduleWorkspaceRefresh();
-}
-
-bool FlyWindowController::IsSelected(
-    const BrowserWindowInterface* browser) const {
-  return selected_ == browser;
-}
-
-void FlyWindowController::Select(BrowserWindowInterface* browser, bool focus) {
-  auto it = entries_.find(browser);
-  if (it == entries_.end() || it->second.browser_closed || !it->second.widget) {
-    return;
-  }
-  if (selected_ != browser) {
-    CancelWorkspaceRename();
-    if (selected_) {
-      auto& previous = entries_.at(selected_);
-      if (auto* contents =
-              selected_->GetTabStripModel()->GetActiveWebContents())
-        contents->StoreFocus();
-      previous.widget->OnNativeWidgetActivationChanged(false);
-      previous.host->SetVisible(false);
-      previous.widget->Hide();
-    }
-    hints_->Cancel();
-    palette_->Cancel();
-    address_picker_->Cancel();
-    workspace_picker_->Cancel();
-    tab_move_picker_->Cancel();
-    bookmark_picker_->Cancel();
-    downloads_picker_->Cancel();
-    extensions_picker_->Cancel();
-    settings_menu_->Cancel();
-    CancelHistory();
-    keyboard_editor_->Cancel();
-    selected_ = browser;
-    preferences_button_->SetEnabled(true);
-    OnBookmarksChanged();
-    tab_sidebar_->SetBrowser(browser);
-    auto& next = it->second;
-    std::u16string workspace_name;
-    if (const auto catalog = workspaces_.Read()) {
-      auto item =
-          std::ranges::find(catalog->items, next.workspace_id, &Workspace::id);
-      if (item != catalog->items.end())
-        workspace_name = base::UTF8ToUTF16(item->name);
-    }
-    status_bar_->SetBrowser(browser, std::move(workspace_name));
-    UpdateWorkspaceHeader();
-    ScheduleExtensionRefresh();
-    // Browser tests run without network access to the release feed and
-    // assert that starting writes no product preference.
-    if (!update_checked_ &&
-        !base::CommandLine::ForCurrentProcess()->HasSwitch("test-type")) {
-      update_checked_ = true;
-      // Selection happens inside session restore; opening a tab there would
-      // change the active tab under the restorer. Run after it finishes.
-      base::SingleThreadTaskRunner::GetCurrentDefault()->PostTask(
-          FROM_HERE, base::BindOnce(
-                         [](base::WeakPtr<FlyWindowController> window) {
-                           if (!window || window->closing_)
-                             return;
-                           window->MaybeShowWhatsNew();
-                           window->CheckUpdates(false);
-                           window->MaybeOfferDesktopIntegration();
-                         },
-                         weak_factory_.GetWeakPtr()));
-    }
-    next.host->SetVisible(true);
-    next.widget->ShowInactive();
-    if (!next.workspace_id.empty()) {
-      workspaces_.Activate(next.workspace_id);
-      last_windows_[next.workspace_id] = browser->GetWeakPtr();
-    }
-    next.widget->OnNativeWidgetActivationChanged(desktop_->IsActive());
-    welcome_keep_alive_.reset();
-    UpdateWelcome();
-    if (!pending_shell_url_.empty()) {
-      const GURL url(std::exchange(pending_shell_url_, ""));
-      pending_empty_action_.clear();
-      base::SingleThreadTaskRunner::GetCurrentDefault()->PostTask(
-          FROM_HERE,
-          base::BindOnce(
-              [](base::WeakPtr<BrowserWindowInterface> browser, GURL url) {
-                if (!browser)
-                  return;
-                NavigateParams params(browser.get(), url,
-                                      ui::PAGE_TRANSITION_TYPED);
-                params.disposition = WindowOpenDisposition::CURRENT_TAB;
-                Navigate(&params);
-              },
-              browser->GetWeakPtr(), url));
-    }
-    if (!pending_empty_action_.empty()) {
-      // A new tab requested from the empty desktop opens its search field.
-      base::SingleThreadTaskRunner::GetCurrentDefault()->PostTask(
-          FROM_HERE,
-          base::BindOnce(
-              [](base::WeakPtr<BrowserWindowInterface> browser,
-                 std::string action) {
-                if (browser)
-                  InvokeNativeCommand(browser.get(), action);
-              },
-              browser->GetWeakPtr(), std::exchange(pending_empty_action_, "")));
-    }
-  }
-  ScheduleWorkspaceRefresh();
-  UpdateModeLabel();
-  UpdateSplitButton();
-  desktop_->Show();
-  UpdateSidebarBounds();
-  UpdateSidebarVisibility();
-  if (focus) {
-    // Profile BrowserWidgets share one OS activation. Tell the native startup
-    // coordinator which persistent workspace the user actually selected.
-    if (!closing_ && !browser->GetProfile()->IsOffTheRecord())
-      profiles::SetLastUsedProfile(browser->GetProfile()->GetPath().BaseName());
-    desktop_->Activate();
-    if (auto* contents = browser->GetTabStripModel()->GetActiveWebContents()) {
-      auto* view = contents->GetRenderWidgetHostView();
-      if (!view || !view->HasFocus())
-        contents->RestoreFocus();
-    }
-  }
-}
-
-void FlyWindowController::ScheduleWorkspaceRefresh() {
-  if (workspace_refresh_pending_)
-    return;
-  workspace_refresh_pending_ = true;
-  // Profile loading and browser close may finish synchronously inside a button
-  // callback. Never destroy that originating button on its own dispatch stack.
-  base::SingleThreadTaskRunner::GetCurrentDefault()->PostNonNestableTask(
-      FROM_HERE, base::BindOnce(&FlyWindowController::RebuildWorkspaceButtons,
-                                weak_factory_.GetWeakPtr()));
-}
-
-void FlyWindowController::SelectWindow(
-    base::WeakPtr<BrowserWindowInterface> browser) {
-  if (browser)
-    Select(browser.get(), true);
-}
-
-void FlyWindowController::RebuildWorkspaceButtons() {
-  workspace_refresh_pending_ = false;
-  if (!workspace_buttons_)
-    return;
-  if (workspace_picker_->active())
-    workspace_picker_->UpdateItems(WorkspaceEntries(), false);
-  workspace_buttons_->RemoveAllChildViews();
-  const auto catalog = workspaces_.Read();
-  if (!catalog) {
-    workspace_buttons_->AddChildView(std::make_unique<FlyLabel>(
-        u"Workspace data needs recovery", FlyFace::kSans, 12));
-    return;
-  }
-  const bool editable = workspaces_.CanEdit();
-  for (const auto& item : catalog->items) {
-    auto* button =
-        workspace_buttons_->AddChildView(std::make_unique<WorkspaceMenuButton>(
-            base::BindRepeating(&FlyWindowController::OpenWorkspace,
-                                weak_factory_.GetWeakPtr(), item.id),
-            base::UTF8ToUTF16(item.name), item.id,
-            editable && &item != &catalog->items.front(),
-            editable && &item != &catalog->items.back(),
-            base::BindRepeating(&FlyWindowController::ReorderWorkspace,
-                                weak_factory_.GetWeakPtr(), item.id),
-            editable,
-            base::BindRepeating(&FlyWindowController::RenameWorkspace,
-                                weak_factory_.GetWeakPtr(), item.id),
-            editable && catalog->items.size() > 1 && !workspace_close_,
-            base::BindRepeating(&FlyWindowController::RemoveWorkspace,
-                                weak_factory_.GetWeakPtr(), item.id)));
-    const bool active =
-        selected_ && entries_.at(selected_).workspace_id == item.id;
-    button->SetStyle(active ? ui::ButtonStyle::kTonal : ui::ButtonStyle::kText);
-    std::vector<const Entry*> windows;
-    for (const auto& [browser, entry] : entries_)
-      if (!entry.browser_closed && entry.widget &&
-          entry.workspace_id == item.id)
-        windows.push_back(&entry);
-    std::ranges::sort(windows, {}, &Entry::order);
-    if (windows.size() < 2)
-      continue;
-    for (size_t i = 0; i < windows.size(); ++i) {
-      auto* browser = windows[i]->browser.get();
-      auto* contents = browser->GetTabStripModel()->GetActiveWebContents();
-      const auto title = contents && !contents->GetTitle().empty()
-                             ? contents->GetTitle()
-                             : u"New tab";
-      const auto text =
-          u"Window " + base::NumberToString16(i + 1) + u" · " + title;
-      auto* choice = workspace_buttons_->AddChildView(
-          std::make_unique<FlyButton>(
-              base::BindRepeating(&FlyWindowController::SelectWindow,
-                                  weak_factory_.GetWeakPtr(),
-                                  browser->GetWeakPtr()),
-              text));
-      choice->SetStyle(selected_ == browser ? ui::ButtonStyle::kTonal
-                                            : ui::ButtonStyle::kText);
-      choice->GetViewAccessibility().SetName(base::UTF8ToUTF16(item.name) +
-                                             u", " + text);
-    }
-  }
-  for (const auto& [browser, entry] : entries_) {
-    if (!entry.browser_closed && entry.widget && entry.workspace_id.empty()) {
-      std::u16string label = u"Recovery";
-      if (browser->GetProfile()->IsOffTheRecord()) {
-        label = u"Private workspace";
-        const auto directory = browser->GetProfile()
-                                   ->GetOriginalProfile()
-                                   ->GetPath()
-                                   .BaseName()
-                                   .AsUTF8Unsafe();
-        const auto item = std::ranges::find(catalog->items, directory,
-                                            &Workspace::profile_directory);
-        if (item != catalog->items.end())
-          label = u"Private · " + base::UTF8ToUTF16(item->name);
-      }
-      workspace_buttons_->AddChildView(std::make_unique<FlyButton>(
-          base::BindRepeating(&FlyWindowController::SelectWindow,
-                              weak_factory_.GetWeakPtr(),
-                              browser->GetWeakPtr()),
-          label));
-    }
-  }
-  UpdateWorkspaceHeader();
-}
-
-ui::SimpleMenuModel* FlyWindowController::workspace_context_menu_for_testing(
-    std::string_view id) const {
-  for (const auto& child : workspace_buttons_->children()) {
-    auto* button = views::AsViewClass<WorkspaceMenuButton>(child.get());
-    if (button && button->workspace_id() == id)
-      return button->running_model();
-  }
-  return nullptr;
-}
-
-void FlyWindowController::ReorderWorkspace(std::string id, int direction) {
-  if (closing_ || !workspaces_.CanEdit() ||
-      (direction != -1 && direction != 1))
-    return;
-  const auto catalog = workspaces_.Read();
-  if (!catalog)
-    return;
-  const auto item = std::ranges::find(catalog->items, id, &Workspace::id);
-  if (item == catalog->items.end())
-    return;
-  const auto index = item - catalog->items.begin();
-  const auto target = index + direction;
-  if (target < 0 || target >= static_cast<std::ptrdiff_t>(catalog->items.size()))
-    return;
-  std::vector<std::string> order;
-  for (const auto& workspace : catalog->items)
-    order.push_back(workspace.id);
-  std::swap(order[index], order[target]);
-  workspaces_.Reorder(order);
-}
-
-views::Widget* FlyWindowController::workspace_rename_dialog_for_testing() const {
-  return rename_widget_ && !rename_widget_->IsClosed() ? rename_widget_.get()
-                                                     : nullptr;
-}
-
-void FlyWindowController::CancelWorkspaceRename() {
-  if (history_clear_widget_ && !history_clear_widget_->IsClosed())
-    history_clear_widget_->Close();
-  if (rename_widget_ && !rename_widget_->IsClosed())
-    rename_widget_->Close();
-  if (remove_widget_ && !remove_widget_->IsClosed())
-    remove_widget_->Close();
-}
-
-views::Widget* FlyWindowController::workspace_remove_dialog_for_testing()
-    const {
-  return remove_widget_ && !remove_widget_->IsClosed() ? remove_widget_.get()
-                                                       : nullptr;
-}
-
-bool FlyWindowController::CanRemoveWorkspace(std::string_view id,
-                                             const base::FilePath& path) const {
-  if (closing_ || creating_profile_ || tab_move_ || !workspaces_.CanEdit())
-    return false;
-  const auto catalog = workspaces_.Read();
-  if (!catalog || catalog->items.size() < 2)
-    return false;
-  const auto item = std::ranges::find(catalog->items, id, &Workspace::id);
-  return item != catalog->items.end() &&
-         path ==
-             g_browser_process->profile_manager()->user_data_dir().AppendASCII(
-                 item->profile_directory);
-}
-
-void FlyWindowController::RemoveWorkspace(std::string id) {
-  if (workspace_close_)
-    return;
-  const auto catalog = workspaces_.Read();
-  if (!catalog)
-    return;
-  const auto item = std::ranges::find(catalog->items, id, &Workspace::id);
-  if (item == catalog->items.end())
-    return;
-  const auto path =
-      g_browser_process->profile_manager()->user_data_dir().AppendASCII(
-          item->profile_directory);
-  if (!CanRemoveWorkspace(id, path))
-    return;
-  CancelWorkspaceRename();
-  hints_->Cancel();
-  palette_->Cancel();
-  address_picker_->Cancel();
-  workspace_picker_->Cancel();
-  tab_move_picker_->Cancel();
-  bookmark_picker_->Cancel();
-  CancelHistory();
-  keyboard_editor_->Cancel();
-  remove_widget_.reset();
-  remove_delegate_ = std::make_unique<views::DialogDelegate>();
-  remove_delegate_->SetOwnershipOfNewWidget(
-      views::Widget::InitParams::CLIENT_OWNS_WIDGET);
-  remove_delegate_->SetModalType(ui::mojom::ModalType::kWindow);
-  remove_delegate_->SetTitle(u"Remove workspace · " +
-                             base::UTF8ToUTF16(item->name));
-  remove_delegate_->SetButtonLabel(ui::mojom::DialogButton::kOk, u"Remove");
-  remove_delegate_->SetDefaultButton(
-      static_cast<int>(ui::mojom::DialogButton::kCancel));
-  auto body = std::make_unique<views::View>();
-  body->SetLayoutManager(std::make_unique<views::BoxLayout>(
-      views::BoxLayout::Orientation::kVertical, gfx::Insets(16), 8));
-  body->SetPreferredSize(gfx::Size(440, 160));
-  auto* message = body->AddChildView(std::make_unique<views::Label>(
-      u"Close this workspace's tabs and private windows and remove it from "
-      u"Fly? "
-      u"Downloads in its private windows will stop. Its local data is kept for "
-      u"recovery. Recreating the name starts fresh."));
-  message->SetMultiLine(true);
-  auto* error = body->AddChildView(std::make_unique<views::Label>());
-  error->SetID(2);
-  error->SetMultiLine(true);
-  remove_delegate_->SetContentsView(std::move(body));
-  remove_delegate_->SetAcceptCallbackWithClose(base::BindRepeating(
-      [](base::WeakPtr<FlyWindowController> window, std::string id,
-         base::FilePath path, views::Label* error) {
-        if (!window || window->closing_)
-          return true;
-        if (window->workspace_close_ || !window->CanRemoveWorkspace(id, path)) {
-          error->SetText(
-              u"The workspace must still be editable and at least "
-              u"one other workspace must remain.");
-          return false;
-        }
-        base::SingleThreadTaskRunner::GetCurrentDefault()->PostNonNestableTask(
-            FROM_HERE,
-            base::BindOnce(&FlyWindowController::BeginWorkspaceRemoval, window,
-                           std::move(id), std::move(path)));
-        return true;
-      },
-      weak_factory_.GetWeakPtr(), std::move(id), path, error));
-  remove_widget_.reset(views::DialogDelegate::CreateDialogWidget(
-      remove_delegate_.get(), desktop_->GetNativeWindow(),
-      desktop_->GetNativeView()));
-  remove_widget_->Show();
-}
-
-void FlyWindowController::BeginWorkspaceRemoval(std::string id,
-                                                base::FilePath path) {
-  if (workspace_close_ || !CanRemoveWorkspace(id, path))
-    return;
-  workspace_close_ = std::make_unique<WorkspaceCloseTransaction>(
-      path,
-      base::BindRepeating(
-          [](base::WeakPtr<FlyWindowController> window, const std::string& id,
-             const base::FilePath& path) {
-            return window && window->CanRemoveWorkspace(id, path);
-          },
-          weak_factory_.GetWeakPtr(), id, path),
-      base::BindOnce(&FlyWindowController::FinishWorkspaceRemoval,
-                     weak_factory_.GetWeakPtr(), id, path));
-  ScheduleWorkspaceRefresh();
-  workspace_close_->Start();
-}
-
-void FlyWindowController::FinishWorkspaceRemoval(std::string id,
-                                                 base::FilePath path,
-                                                 bool success) {
-  const bool removed =
-      success && CanRemoveWorkspace(id, path) && workspaces_.Remove(id);
-  if (removed) {
-    auto* local_state = g_browser_process->local_state();
-    const auto directory = path.BaseName().AsUTF8Unsafe();
-    auto active = local_state->GetList(prefs::kProfilesLastActive).Clone();
-    active.EraseIf([&](const base::Value& value) {
-      return value.is_string() &&
-             base::EqualsCaseInsensitiveASCII(value.GetString(), directory);
-    });
-    local_state->SetList(prefs::kProfilesLastActive, std::move(active));
-    const auto catalog = workspaces_.Read();
-    for (const auto& item : catalog->items)
-      if (item.id == catalog->active_id &&
-          local_state->GetFilePath(prefs::kProfileLastUsed) == path.BaseName())
-        local_state->SetFilePath(
-            prefs::kProfileLastUsed,
-            base::FilePath::FromUTF8Unsafe(item.profile_directory));
-    // Remove only the profile picker's metadata. ProfileManager retains native
-    // lifetime ownership; neither this operation nor retirement deletes files.
-    g_browser_process->profile_manager()
-        ->GetProfileAttributesStorage()
-        .RemoveProfile(path);
-  }
-  workspace_close_.reset();
-  ScheduleWorkspaceRefresh();
-  if (!removed) {
-    status_->SetText(
-        u"Workspace kept. Closing was cancelled or its data changed.");
-    return;
-  }
-  const auto catalog = workspaces_.Read();
-  if (!closing_ && catalog && !catalog->active_id.empty())
-    OpenWorkspace(catalog->active_id);
-}
-
-void FlyWindowController::RenameWorkspace(std::string id) {
-  if (closing_ || !workspaces_.CanEdit())
-    return;
-  const auto catalog = workspaces_.Read();
-  if (!catalog)
-    return;
-  const auto item = std::ranges::find(catalog->items, id, &Workspace::id);
-  if (item == catalog->items.end())
-    return;
-  hints_->Cancel();
-  palette_->Cancel();
-  address_picker_->Cancel();
-  workspace_picker_->Cancel();
-  tab_move_picker_->Cancel();
-  bookmark_picker_->Cancel();
-  CancelHistory();
-  keyboard_editor_->Cancel();
-  // Both objects are client-owned. Destroy the old widget before its delegate;
-  // no callback retains the workspace row that opened this dialog.
-  rename_widget_.reset();
-  rename_delegate_ = std::make_unique<views::DialogDelegate>();
-  rename_delegate_->SetOwnershipOfNewWidget(
-      views::Widget::InitParams::CLIENT_OWNS_WIDGET);
-  rename_delegate_->SetModalType(ui::mojom::ModalType::kWindow);
-  rename_delegate_->SetTitle(u"Rename workspace");
-  rename_delegate_->SetButtonLabel(ui::mojom::DialogButton::kOk, u"Save");
-  auto body = std::make_unique<views::View>();
-  body->SetLayoutManager(std::make_unique<views::BoxLayout>(
-      views::BoxLayout::Orientation::kVertical, gfx::Insets(16), 8));
-  body->SetPreferredSize(gfx::Size(400, 110));
-  auto* field = body->AddChildView(std::make_unique<views::Textfield>());
-  field->SetID(1);
-  field->SetText(base::UTF8ToUTF16(item->name));
-  field->GetViewAccessibility().SetName(u"Workspace name");
-  auto* error = body->AddChildView(std::make_unique<views::Label>());
-  error->SetID(2);
-  error->SetMultiLine(true);
-  rename_delegate_->SetInitiallyFocusedView(field);
-  rename_delegate_->SetContentsView(std::move(body));
-  rename_delegate_->SetAcceptCallbackWithClose(base::BindRepeating(
-      [](base::WeakPtr<FlyWindowController> window, std::string id,
-         views::Textfield* field, views::Label* error) {
-        if (!window || window->closing_)
-          return true;
-        if (!window->workspaces_.Rename(id, base::UTF16ToUTF8(field->GetText()))) {
-          error->SetText(u"Use a unique, non-empty workspace name. "
-                         u"The workspace must still be editable.");
-          return false;
-        }
-        if (window->selected_ &&
-            window->entries_.at(window->selected_).workspace_id == id)
-          window->status_bar_->SetBrowser(window->selected_, std::u16string(field->GetText()));
-        return true;
-      }, weak_factory_.GetWeakPtr(), std::move(id), field, error));
-  rename_widget_.reset(views::DialogDelegate::CreateDialogWidget(
-      rename_delegate_.get(), desktop_->GetNativeWindow(),
-      desktop_->GetNativeView()));
-  rename_widget_->Show();
-  field->SelectAll(false);
-}
-
-void FlyWindowController::PromptNewWorkspace() {
-  if (closing_ || creating_profile_ || !workspaces_.CanEdit())
-    return;
-  hints_->Cancel();
-  palette_->Cancel();
-  address_picker_->Cancel();
-  workspace_picker_->Cancel();
-  tab_move_picker_->Cancel();
-  bookmark_picker_->Cancel();
-  CancelHistory();
-  keyboard_editor_->Cancel();
-  rename_widget_.reset();
-  rename_delegate_ = std::make_unique<views::DialogDelegate>();
-  rename_delegate_->SetOwnershipOfNewWidget(
-      views::Widget::InitParams::CLIENT_OWNS_WIDGET);
-  rename_delegate_->SetModalType(ui::mojom::ModalType::kWindow);
-  rename_delegate_->SetTitle(u"New workspace");
-  rename_delegate_->SetButtonLabel(ui::mojom::DialogButton::kOk, u"Create");
-  auto body = std::make_unique<views::View>();
-  body->SetLayoutManager(std::make_unique<views::BoxLayout>(
-      views::BoxLayout::Orientation::kVertical, gfx::Insets(16), 8));
-  body->SetPreferredSize(gfx::Size(400, 110));
-  auto* field = body->AddChildView(std::make_unique<views::Textfield>());
-  field->SetText(base::UTF8ToUTF16(NextWorkspaceName()));
-  field->GetViewAccessibility().SetName(u"Workspace name");
-  auto* error = body->AddChildView(std::make_unique<views::Label>());
-  error->SetMultiLine(true);
-  rename_delegate_->SetInitiallyFocusedView(field);
-  rename_delegate_->SetContentsView(std::move(body));
-  rename_delegate_->SetAcceptCallbackWithClose(base::BindRepeating(
-      [](base::WeakPtr<FlyWindowController> window, views::Textfield* field,
-         views::Label* error) {
-        if (!window || window->closing_)
-          return true;
-        const auto name = std::string(base::TrimWhitespaceASCII(
-            base::UTF16ToUTF8(field->GetText()), base::TRIM_ALL));
-        const auto catalog = window->workspaces_.Read();
-        if (name.empty() || !catalog ||
-            std::ranges::any_of(catalog->items, [&](const Workspace& item) {
-              return item.name == name;
-            })) {
-          error->SetText(u"Use a unique, non-empty workspace name.");
-          return false;
-        }
-        window->CreateWorkspace(name);
-        return true;
-      },
-      weak_factory_.GetWeakPtr(), field, error));
-  rename_widget_.reset(views::DialogDelegate::CreateDialogWidget(
-      rename_delegate_.get(), desktop_->GetNativeWindow(),
-      desktop_->GetNativeView()));
-  rename_widget_->Show();
-  field->SelectAll(false);
-}
-
-// The workspace dashboard: every workspace with its tabs (pinned ones
-// marked), rename and delete on each workspace, and a move on each tab.
-std::vector<PaletteEntry> FlyWindowController::WorkspaceEntries() {
-  private_choices_.clear();
-  tab_choices_.clear();
-  std::vector<PaletteEntry> result;
-  const auto catalog = workspaces_.Read();
-  if (!catalog)
-    return result;
-  const std::string active =
-      selected_ && entries_.contains(selected_)
-          ? entries_.at(selected_).workspace_id
-          : std::string();
-  const bool editable = workspaces_.CanEdit();
-  for (const auto& item : catalog->items) {
-    const auto action = "workspace/" + item.id;
-    PaletteEntry row{action, action,
-                     item.name + (item.id == active ? " (Active)" : ""),
-                     item.profile_directory, {}, {}};
-    if (editable) {
-      row.row_actions.emplace_back("rename/" + item.id, "Rename");
-      if (catalog->items.size() > 1)
-        row.row_actions.emplace_back("delete/" + item.id, "Delete");
-    }
-    result.push_back(std::move(row));
-    std::vector<std::pair<BrowserWindowInterface*, const Entry*>> windows;
-    for (const auto& [browser, entry] : entries_)
-      if (!entry.browser_closed && entry.workspace_id == item.id)
-        windows.emplace_back(browser, &entry);
-    std::ranges::sort(windows, {}, [](const auto& window) {
-      return window.second->order;
-    });
-    size_t number = 0;
-    for (const auto& [browser, entry] : windows) {
-      auto* model = browser->GetTabStripModel();
-      for (int index = 0; index < model->count(); ++index) {
-        auto* contents = model->GetWebContentsAt(index);
-        const auto key = item.id + "/" + base::NumberToString(number++);
-        tab_choices_.emplace(key, TabChoice{browser->GetWeakPtr(),
-                                            contents->GetWeakPtr()});
-        const auto title = contents->GetTitle().empty()
-                               ? contents->GetVisibleURL().spec()
-                               : base::UTF16ToUTF8(contents->GetTitle());
-        PaletteEntry tab{"tab/" + key, "tab/" + key,
-                         "- " + title +
-                             (model->IsTabPinned(index) ? " \xF0\x9F\x93\x8C"
-                                                        : ""),
-                         "", {}, {}};
-        tab.indent = 1;
-        tab.row_actions.emplace_back("move/" + key, "Move");
-        result.push_back(std::move(tab));
-      }
-    }
-  }
-  for (const auto& [browser, entry] : entries_) {
-    if (entry.browser_closed || !browser->GetProfile()->IsOffTheRecord())
-      continue;
-    const auto directory = browser->GetProfile()->GetOriginalProfile()
-                               ->GetPath().BaseName().AsUTF8Unsafe();
-    const auto item = std::ranges::find(catalog->items, directory,
-                                       &Workspace::profile_directory);
-    const auto title = item == catalog->items.end()
-                           ? std::string("Private workspace")
-                           : "Private · " + item->name;
-    const auto action = "private/" + base::NumberToString(entry.order);
-    private_choices_.emplace(action, browser->GetWeakPtr());
-    result.push_back({action, action, title, "Private window", {}, {}});
-  }
-  result.push_back({"create", "create", "New workspace", "", {}, {}});
-  return result;
-}
-
-bool FlyWindowController::WorkspaceChoiceAvailable(std::string_view action) const {
-  if (closing_)
-    return false;
-  const auto catalog = workspaces_.Read();
-  if (!catalog)
-    return false;
-  if (action == "create")
-    return !creating_profile_ && workspaces_.CanEdit();
-  if (action.starts_with("workspace/"))
-    return std::ranges::find(catalog->items, action.substr(10), &Workspace::id) !=
-           catalog->items.end();
-  if (action.starts_with("rename/"))
-    return workspaces_.CanEdit() &&
-           std::ranges::find(catalog->items, action.substr(7),
-                             &Workspace::id) != catalog->items.end();
-  if (action.starts_with("delete/")) {
-    const auto item =
-        std::ranges::find(catalog->items, action.substr(7), &Workspace::id);
-    return item != catalog->items.end() && !workspace_close_ &&
-           CanRemoveWorkspace(item->id,
-                              g_browser_process->profile_manager()
-                                  ->user_data_dir()
-                                  .AppendASCII(item->profile_directory));
-  }
-  if (action.starts_with("tab/") || action.starts_with("move/")) {
-    const auto choice = tab_choices_.find(
-        std::string(action.substr(action.find('/') + 1)));
-    if (choice == tab_choices_.end() || !choice->second.browser ||
-        !choice->second.contents)
-      return false;
-    return !action.starts_with("move/") ||
-           TabMoveTransaction::CanMoveUrl(
-               choice->second.contents->GetLastCommittedURL());
-  }
-  const auto found = private_choices_.find(std::string(action));
-  return found != private_choices_.end() && found->second &&
-         !found->second->IsDeleteScheduled();
-}
-
-void FlyWindowController::ChooseWorkspace(content::WebContents* source,
-                                           std::string action) {
-  if (!WorkspaceChoiceAvailable(action) ||
-      (selected_ ? selected_->GetTabStripModel()->GetActiveWebContents() != source
-                 : source != nullptr))
-    return;
-  if (action == "create")
-    PromptNewWorkspace();
-  else if (action.starts_with("workspace/"))
-    OpenWorkspace(action.substr(10));
-  else if (action.starts_with("rename/"))
-    RenameWorkspace(action.substr(7));
-  else if (action.starts_with("delete/"))
-    RemoveWorkspace(action.substr(7));
-  else if (action.starts_with("tab/") || action.starts_with("move/")) {
-    const auto choice = tab_choices_.find(action.substr(action.find('/') + 1));
-    if (choice == tab_choices_.end() || !choice->second.browser ||
-        !choice->second.contents)
-      return;
-    auto* browser = choice->second.browser.get();
-    auto* contents = choice->second.contents.get();
-    const int index = browser->GetTabStripModel()->GetIndexOfWebContents(contents);
-    if (index == TabStripModel::kNoTab)
-      return;
-    Select(browser, true);
-    browser->GetTabStripModel()->ActivateTabAt(index);
-    if (action.starts_with("move/"))
-      ShowTabMovePicker(browser, contents);
-  }
-  else if (const auto choice = private_choices_.find(action);
-           choice != private_choices_.end() && choice->second)
-    Select(choice->second.get(), true);
-}
-
-void FlyWindowController::OnBrowserCreated(BrowserWindowInterface* browser) {
-#if BUILDFLAG(IS_LINUX)
-  if (!browser || ShouldEmbed(browser) ||
-      (browser->GetType() != BrowserWindowInterface::TYPE_POPUP &&
-       browser->GetType() != BrowserWindowInterface::TYPE_APP_POPUP) ||
-      ui::OzonePlatform::GetPlatformNameForTest() != "x11" || !desktop_ ||
-      !desktop_->GetNativeWindow() || !desktop_->GetNativeWindow()->GetHost())
-    return;
-  auto* view = BrowserView::GetBrowserViewForBrowser(browser);
-  auto* popup = view && view->GetWidget() ? view->GetWidget()->GetNativeWindow()
-                                          : nullptr;
-  if (!popup || !popup->GetHost())
-    return;
-  // WM_TRANSIENT_FOR, set before the popup is mapped.
-  x11::Connection::Get()->SetProperty(
-      static_cast<x11::Window>(popup->GetHost()->GetAcceleratedWidget()),
-      x11::Atom::WM_TRANSIENT_FOR, x11::Atom::WINDOW,
-      static_cast<x11::Window>(
-          desktop_->GetNativeWindow()->GetHost()->GetAcceleratedWidget()));
-#endif
-}
-void FlyWindowController::DropDashboardTab(std::string source,
-                                           std::string target) {
-  if (closing_ || !workspace_picker_->active() ||
-      !source.starts_with("tab/"))
-    return;
-  const auto from = tab_choices_.find(source.substr(4));
-  if (from == tab_choices_.end() || !from->second.browser ||
-      !from->second.contents)
-    return;
-  auto* browser = from->second.browser.get();
-  auto* contents = from->second.contents.get();
-  auto* model = browser->GetTabStripModel();
-  const int index = model->GetIndexOfWebContents(contents);
-  if (index == TabStripModel::kNoTab)
-    return;
-  std::string workspace;
-  if (target.starts_with("workspace/")) {
-    workspace = target.substr(10);
-  } else if (target.starts_with("tab/")) {
-    const auto to = tab_choices_.find(target.substr(4));
-    if (to == tab_choices_.end() || !to->second.browser || !to->second.contents)
-      return;
-    if (to->second.browser.get() == browser) {
-      // Same workspace window: reorder.
-      const int destination =
-          model->GetIndexOfWebContents(to->second.contents.get());
-      if (destination != TabStripModel::kNoTab && destination != index)
-        model->MoveWebContentsAt(index, destination, false);
-      workspace_picker_->UpdateItems(WorkspaceEntries(), false);
-      return;
-    }
-    workspace = target.substr(4, target.find('/', 4) - 4);
+// The texts of Preferences → About → Desktop integration.
+void ShowDesktopIntegrationIn(KeyboardEditor& editor,
+                              const DesktopIntegrationStatus& status,
+                              std::u16string error) {
+  std::u16string entry;
+  std::u16string action;
+  if (!status.entry.empty() && status.ours) {
+    entry = u"Listed in Rofi and your desktop menu.";
+    action = u"Remove from menu";
+  } else if (!status.entry.empty()) {
+    entry = u"Listed by the entry your installation provides (" +
+            status.entry.LossyDisplayName() + u").";
+  } else if (status.supported) {
+    entry = u"Not listed yet. Fly can add an entry for this installation to "
+            u"Rofi and your desktop menu.";
+    action = u"Add to menu";
   } else {
-    return;
+    entry = u"No menu entry found. The package's install.sh adds one.";
   }
-  if (!entries_.contains(browser) || entries_.at(browser).workspace_id == workspace)
-    return;
-  // Another workspace: the same transaction as Move, which appends the tab.
-  Select(browser, true);
-  model->ActivateTabAt(index);
-  move_source_browser_ = browser->GetWeakPtr();
-  move_source_ = contents->GetWeakPtr();
-  ChooseTabMoveDestination(contents, "move:" + workspace);
-  workspace_picker_->UpdateItems(WorkspaceEntries(), false);
-}
-void FlyWindowController::ToggleWorkspacePicker() {
-  if (closing_ || !CanShowWorkspacePicker())
-    return;
-  hints_->Cancel();
-  palette_->Cancel();
-  address_picker_->Cancel();
-  tab_move_picker_->Cancel();
-  bookmark_picker_->Cancel();
-  CancelHistory();
-  keyboard_editor_->Cancel();
-  const auto config = commands_.Read().value_or(DefaultKeyboardConfig());
-  workspace_picker_->ToggleItems(
-      selected_ ? selected_->GetTabStripModel()->GetActiveWebContents() : nullptr,
-      WorkspaceEntries(), config.shortcuts.at("toggle-dashboard"),
-      u"Search workspaces", false, true);
-}
-
-bool FlyWindowController::CanMoveTab(BrowserWindowInterface* browser,
-                                     content::WebContents* contents) const {
-  if (!browser || !contents || closing_ || creating_profile_ || tab_move_ ||
-      workspace_close_ || contents->GetController().GetPendingEntry() ||
-      selected_ != browser || !entries_.contains(browser) ||
-      entries_.at(browser).browser_closed ||
-      !TabMoveTransaction::CanMoveUrl(contents->GetLastCommittedURL()))
-    return false;
-  auto* tabs = browser->GetTabStripModel();
-  const auto index = tabs->GetIndexOfWebContents(contents);
-  if (index == TabStripModel::kNoTab ||
-      !tabs->IsContextMenuCommandEnabled(index, TabStripModel::CommandCloseTab))
-    return false;
-  const auto catalog = workspaces_.Read();
-  if (!catalog)
-    return false;
-  const auto original = browser->GetProfile()->GetOriginalProfile()->GetPath();
-  const auto root = g_browser_process->profile_manager()->user_data_dir();
-  const bool mapped =
-      std::ranges::any_of(catalog->items, [&](const Workspace& item) {
-        return root.AppendASCII(item.profile_directory) == original;
-      });
-  return mapped && !IsWorkspaceRetiring(original) &&
-         std::ranges::any_of(catalog->items, [&](const Workspace& item) {
-           const auto path = root.AppendASCII(item.profile_directory);
-           return path != original && !IsWorkspaceRetiring(path);
-         });
-}
-std::vector<PaletteEntry> FlyWindowController::TabMoveEntries() const {
-  std::vector<PaletteEntry> result;
-  if (!move_source_browser_)
-    return result;
-  const auto catalog = workspaces_.Read();
-  if (!catalog)
-    return result;
-  const auto original =
-      move_source_browser_->GetProfile()->GetOriginalProfile()->GetPath();
-  const auto root = g_browser_process->profile_manager()->user_data_dir();
-  for (const auto& item : catalog->items) {
-    const auto path = root.AppendASCII(item.profile_directory);
-    if (path != original && !IsWorkspaceRetiring(path)) {
-      const auto action = "move:" + item.id;
-      const auto label =
-          (move_source_browser_->GetProfile()->IsOffTheRecord() ? "Private · "
-                                                                : "") +
-          item.name;
-      result.push_back({action, action, label, "Workspaces", {}, {}});
-    }
-  }
-  return result;
-}
-bool FlyWindowController::TabMoveDestinationAvailable(
-    std::string_view action) const {
-  if (!CanMoveTab(move_source_browser_.get(), move_source_.get()))
-    return false;
-  return std::ranges::any_of(TabMoveEntries(), [&](const PaletteEntry& entry) {
-    return entry.action == action;
-  });
-}
-bool FlyWindowController::ShowTabMovePicker(BrowserWindowInterface* browser,
-                                            content::WebContents* contents) {
-  if (tab_move_picker_->active()) {
-    tab_move_picker_->Cancel(true);
-    return true;
-  }
-  if (!CanMoveTab(browser, contents))
-    return false;
-  auto* tabs = browser->GetTabStripModel();
-  tabs->ActivateTabAt(tabs->GetIndexOfWebContents(contents));
-  CancelWorkspaceRename();
-  hints_->Cancel();
-  palette_->Cancel();
-  address_picker_->Cancel();
-  bookmark_picker_->Cancel();
-  CancelHistory();
-  workspace_picker_->Cancel();
-  keyboard_editor_->Cancel();
-  move_source_browser_ = browser->GetWeakPtr();
-  move_source_ = contents->GetWeakPtr();
-  const auto config = commands_.Read().value_or(DefaultKeyboardConfig());
-  tab_move_picker_->ToggleItems(contents, TabMoveEntries(),
-                                config.shortcuts.at("move-tab-to-workspace"),
-                                u"Move tab to workspace", false);
-  return true;
-}
-bool FlyWindowController::ValidateTabMove(
-    base::WeakPtr<BrowserWindowInterface> source_browser,
-    base::WeakPtr<content::WebContents> source,
-    const std::string& destination_id,
-    const base::FilePath& destination_path,
-    bool require_selection) const {
-  if (closing_ || workspace_close_ || !source_browser || !source ||
-      !entries_.contains(source_browser.get()) ||
-      entries_.at(source_browser.get()).browser_closed ||
-      source_browser->GetTabStripModel()->GetIndexOfWebContents(source.get()) ==
-          TabStripModel::kNoTab ||
-      (require_selection &&
-       (selected_ != source_browser.get() ||
-        source_browser->GetTabStripModel()->GetActiveWebContents() !=
-            source.get())))
-    return false;
-  const auto catalog = workspaces_.Read();
-  if (!catalog)
-    return false;
-  const auto original =
-      source_browser->GetProfile()->GetOriginalProfile()->GetPath();
-  const auto root = g_browser_process->profile_manager()->user_data_dir();
-  if (IsWorkspaceRetiring(original) || IsWorkspaceRetiring(destination_path) ||
-      destination_path == original ||
-      std::ranges::none_of(catalog->items, [&](const Workspace& item) {
-        return root.AppendASCII(item.profile_directory) == original;
-      }))
-    return false;
-  const auto destination =
-      std::ranges::find(catalog->items, destination_id, &Workspace::id);
-  return destination != catalog->items.end() &&
-         destination_path == root.AppendASCII(destination->profile_directory);
-}
-void FlyWindowController::ChooseTabMoveDestination(content::WebContents* source,
-                                                   std::string action) {
-  if (!source || source != move_source_.get() ||
-      !TabMoveDestinationAvailable(action))
-    return;
-  const auto id = action.substr(5);
-  const auto catalog = workspaces_.Read();
-  const auto item = std::ranges::find(catalog->items, id, &Workspace::id);
-  const auto path =
-      g_browser_process->profile_manager()->user_data_dir().AppendASCII(
-          item->profile_directory);
-  auto source_browser = move_source_browser_;
-  auto contents = move_source_;
-  tab_move_ = std::make_unique<TabMoveTransaction>(
-      source_browser.get(), source, path,
-      base::BindRepeating(
-          [](base::WeakPtr<FlyWindowController> window,
-             base::WeakPtr<BrowserWindowInterface> browser,
-             base::WeakPtr<content::WebContents> contents,
-             const std::string& id, const base::FilePath& path,
-             bool require_selection) {
-            return window && window->ValidateTabMove(browser, contents, id,
-                                                     path, require_selection);
-          },
-          weak_factory_.GetWeakPtr(), source_browser, contents, id, path),
-      base::BindOnce(&FlyWindowController::FinishTabMove,
-                     weak_factory_.GetWeakPtr()));
-  status_->SetText(u"Preparing destination workspace…");
-  tab_move_->Start();
-}
-void FlyWindowController::FinishTabMove(
-    bool success,
-    base::WeakPtr<BrowserWindowInterface> destination,
-    base::WeakPtr<content::WebContents> contents) {
-  tab_move_.reset();
-  move_source_browser_.reset();
-  move_source_.reset();
-  ScheduleWorkspaceRefresh();
-  if (success && !closing_ && destination && contents &&
-      !destination->IsDeleteScheduled()) {
-    auto* tabs = destination->GetTabStripModel();
-    const auto index = tabs->GetIndexOfWebContents(contents.get());
-    if (index != TabStripModel::kNoTab) {
-      tabs->ActivateTabAt(index);
-      Select(destination.get(), true);
-    }
-  } else if (!closing_) {
-    // An unrelated native close can destroy the source while preparation is
-    // pending. Complete its deferred fallback only after releasing the move.
-    if (!selected_) {
-      for (const auto& [browser, entry] : entries_) {
-        if (!entry.browser_closed && entry.widget &&
-            !browser->IsDeleteScheduled()) {
-          Select(browser, true);
-          break;
-        }
-      }
-    }
-    status_->SetText(u"Tab move cancelled. The destination or source changed.");
-  }
-}
-
-void FlyWindowController::OnWorkspacesChanged() {
-  ScheduleWorkspaceRefresh();
-  UpdateWelcome();
-  if (tab_move_picker_->active()) {
-    if (CanMoveTab(move_source_browser_.get(), move_source_.get()))
-      tab_move_picker_->UpdateItems(TabMoveEntries(), false);
-    else
-      tab_move_picker_->Cancel();
-  }
-  if (!workspace_picker_->active())
-    return;
-  if (!CanShowWorkspacePicker())
-    workspace_picker_->Cancel(true);
+  if (!error.empty())
+    entry = error + u". " + entry;
+  const bool can_make_default =
+      status.default_browser.has_value() &&
+      (!status.entry.empty() || status.supported);
+  std::u16string browser;
+  if (!status.default_browser)
+    browser = u"Install xdg-utils to let Fly read and change the default "
+              u"browser.";
+  else if (status.is_default)
+    browser = u"Fly opens links from other applications.";
+  else if (!status.default_browser->empty())
+    browser = u"Links from other applications open in " +
+              base::UTF8ToUTF16(std::string(base::RemoveSuffix(
+                                    *status.default_browser, ".desktop")
+                                    .value_or(*status.default_browser))) +
+              u".";
   else
-    workspace_picker_->UpdateItems(WorkspaceEntries(), false);
+    browser = u"No default browser is set.";
+  if (!status.is_default && can_make_default && status.entry.empty())
+    browser += u" Making Fly the default also adds it to the menu.";
+  editor.SetDesktopIntegration(entry, action, browser,
+                               !status.is_default && can_make_default);
 }
 
-void FlyWindowController::OpenWorkspace(std::string id) {
-  if (closing_ || creating_profile_) {
-    return;
-  }
-  if (auto last = last_windows_.find(id); last != last_windows_.end()) {
-    if (last->second) {
-      const auto entry = entries_.find(last->second.get());
-      if (entry != entries_.end() && !entry->second.browser_closed &&
-          entry->second.widget) {
-        Select(last->second.get(), true);
-        return;
-      }
-    }
-    last_windows_.erase(last);
-  }
-  for (const auto& [browser, entry] : entries_) {
-    if (!entry.browser_closed && entry.widget && entry.workspace_id == id) {
-      Select(browser, true);
-      return;
-    }
-  }
-  const auto catalog = workspaces_.Read();
-  if (!catalog) {
-    return;
-  }
-  auto item = std::ranges::find(catalog->items, id, &Workspace::id);
-  if (item == catalog->items.end()) {
-    return;
-  }
-  auto* manager = g_browser_process->profile_manager();
-  const auto path =
-      manager->user_data_dir().AppendASCII(item->profile_directory);
-  creating_profile_ = true;
-  manager->CreateProfileAsync(
-      path, base::BindOnce(&FlyWindowController::OnProfileReady,
-                           weak_factory_.GetWeakPtr(), std::move(id)));
-}
-
-void FlyWindowController::CreateTab() {
-  if (closing_)
-    return;
-  if (selected_) {
-    OpenNativeBlankTab(selected_);
-    return;
-  }
-  const auto catalog = workspaces_.Read();
-  if (!catalog)
-    return;
-  if (catalog->items.empty())
-    CreateWorkspace();
-  else
-    OpenWorkspace(catalog->active_id);
-}
-
-std::string FlyWindowController::NextWorkspaceName() const {
-  const auto catalog = workspaces_.Read();
-  std::string name;
-  size_t number = catalog ? catalog->items.size() + 1 : 1;
-  do {
-    name = "Workspace " + base::NumberToString(number++);
-  } while (catalog &&
-           std::ranges::any_of(catalog->items, [&](const Workspace& item) {
-             return item.name == name;
-           }));
-  return name;
-}
-
-void FlyWindowController::CreateWorkspace(std::string name) {
-  if (closing_ || creating_profile_ || !workspaces_.CanEdit()) {
-    return;
-  }
-  const auto catalog = workspaces_.Read();
-  if (!catalog) {
-    return;
-  }
-  auto* manager = g_browser_process->profile_manager();
-  const auto path = manager->GenerateNextProfileDirectoryPath();
-  // Reserve a unique directory before asynchronous creation. A failed load
-  // retains the entry for retry; it must not silently attach another Profile.
-  if (name.empty())
-    name = NextWorkspaceName();
-  const auto added = workspaces_.Add(name, path.BaseName().AsUTF8Unsafe());
-  if (!added) {
-    return;
-  }
-  ScheduleWorkspaceRefresh();
-  OpenWorkspace(added->id);
-}
-
-bool FlyWindowController::WorkspaceMatchesProfile(std::string_view id,
-                                                  Profile* profile) const {
-  const auto catalog = workspaces_.Read();
-  if (!profile || profile->IsOffTheRecord() || !catalog ||
-      !profile->AllowsBrowserWindows())
-    return false;
-  const auto item = std::ranges::find(catalog->items, id, &Workspace::id);
-  return item != catalog->items.end() &&
-         profile->GetPath() == g_browser_process->profile_manager()
-                                  ->user_data_dir()
-                                  .AppendASCII(item->profile_directory);
-}
-
-void FlyWindowController::OnProfileReady(std::string id, Profile* profile) {
-  creating_profile_ = false;
-  if (closing_ || !WorkspaceMatchesProfile(id, profile)) {
-    return;
-  }
-  BrowserWindowCreateParams params(*profile, true);
-  params.should_trigger_session_restore = false;
-  CreateBrowserWindow(std::move(params),
-                      base::BindOnce(
-                          [](base::WeakPtr<FlyWindowController> window,
-                             std::string id, BrowserWindowInterface* browser) {
-                            if (!browser)
-                              return;
-                            if (!window || window->closing_ ||
-                                !window->WorkspaceMatchesProfile(
-                                    id, browser->GetProfile())) {
-                              browser->GetWindow()->Close();
-                              return;
-                            }
-                            OpenNativeBlankTab(browser);
-                            window->Select(browser, true);
-                          },
-                          weak_factory_.GetWeakPtr(), std::move(id)));
-}
-
-void FlyWindowController::OnBrowserDidClose(BrowserWindowInterface* browser) {
-  auto it = entries_.find(browser);
-  if (it == entries_.end())
-    return;
-  // This fires before the browser/tab-model teardown. The Widget observer
-  // releases the native host later, without retaining a dead BWI meanwhile.
-  auto* closed_profile = browser->GetProfile();
-  const auto return_it = private_returns_.find(closed_profile);
-  const auto private_return = return_it == private_returns_.end()
-                                  ? base::WeakPtr<BrowserWindowInterface>()
-                                  : return_it->second;
-  it->second.browser_closed = true;
-  it->second.browser = nullptr;
-  auto last = last_windows_.find(it->second.workspace_id);
-  if (last != last_windows_.end() && last->second.get() == browser)
-    last_windows_.erase(last);
-  if (selected_ == browser) {
-    CancelWorkspaceRename();
-    hints_->Cancel();
-    palette_->Cancel();
-    address_picker_->Cancel();
-    workspace_picker_->Cancel();
-    tab_move_picker_->Cancel();
-    bookmark_picker_->Cancel();
-    CancelHistory();
-    keyboard_editor_->Cancel();
-    tab_sidebar_->SetBrowser(nullptr);
-    status_bar_->SetBrowser(nullptr, u"");
-    selected_ = nullptr;
-    preferences_button_->SetEnabled(true);
-    if (it->second.widget) {
-      it->second.host->SetVisible(false);
-      it->second.widget->Hide();
-    }
-    // A committed move selects its prepared destination after native contents
-    // destruction. An intermediate normal-profile fallback would persist a
-    // private move's context into the normal workspace selection.
-    if (!closing_ &&
-        !(tab_move_ && move_source_browser_.get() == browser)) {
-      auto choose = [&](bool same_workspace) {
-        for (const auto& [next, entry] : entries_) {
-          if (!entry.browser_closed && entry.widget &&
-              (!same_workspace ||
-               (entry.workspace_id == it->second.workspace_id &&
-                (!entry.workspace_id.empty() ||
-                 entry.browser->GetProfile() == closed_profile)))) {
-            Select(next, true);
-            return true;
-          }
-        }
-        return false;
-      };
-      // A workspace whose last tab closed stays and shows its empty
-      // workspace view; leaving private mode returns to the window it
-      // came from.
-      if (!choose(true) && private_return &&
-          entries_.contains(private_return.get()) &&
-          !entries_.at(private_return.get()).browser_closed)
-        Select(private_return.get(), true);
-      // The empty view keeps its workspace profile loaded, so reopening it
-      // reuses the profile instead of racing its destruction.
-      if (!selected_ && !workspace_close_)
-        welcome_keep_alive_ = ScopedProfileKeepAlive::TryAcquire(
-            closed_profile->GetOriginalProfile(),
-            ProfileKeepAliveOrigin::kChromeViewsDelegate);
-    }
-    UpdateModeLabel();
-    UpdateWelcome();
-  }
-  if (closed_profile->IsOffTheRecord() &&
-      std::ranges::none_of(entries_, [&](const auto& pair) {
-        return !pair.second.browser_closed && pair.second.browser &&
-               pair.second.browser->GetProfile() == closed_profile;
-      })) {
-    private_returns_.erase(closed_profile);
-  }
-  ScheduleWorkspaceRefresh();
-}
-
-bool FlyWindowController::CanTogglePrivate(
-    BrowserWindowInterface* browser) const {
-  auto* profile = browser ? browser->GetProfile() : ActiveProfile();
-  return profile && profile->AllowsBrowserWindows() &&
-         (profile->IsOffTheRecord() ||
-          (browser ? chrome::IsCommandEnabled(browser, IDC_NEW_INCOGNITO_WINDOW)
-                   : IncognitoModePrefs::IsIncognitoAllowed(profile)));
-}
-
-void FlyWindowController::TogglePrivate(BrowserWindowInterface* browser) {
-  if (!CanTogglePrivate(browser))
-    return;
-  auto* profile = browser ? browser->GetProfile() : ActiveProfile();
-  if (profile->IsOffTheRecord()) {
-    // The native close coordinator resolves all beforeunload decisions before
-    // closing this OTR profile's windows. Cancellation leaves them intact.
-    chrome::CloseAllBrowsersWithIncognitoProfile(profile,
-                                                 /*skip_beforeunload=*/false);
-    return;
-  }
-  auto* private_profile = profile->GetPrimaryOTRProfile(true);
-  if (browser)
-    private_returns_[private_profile] = browser->GetWeakPtr();
-  for (const auto& [model, entry] : entries_) {
-    if (!entry.browser_closed && entry.widget &&
-        model->GetProfile() == private_profile) {
-      Select(model, true);
-      return;
-    }
-  }
-  // Standard Chromium creation owns OTR lifetime, extension incognito access,
-  // permissions, downloads and shutdown. No normal navigation/state is copied.
-  BrowserWindowCreateParams params(*private_profile, true);
-  params.should_trigger_session_restore = false;
-  CreateBrowserWindow(std::move(params), base::BindOnce(
-      [](base::WeakPtr<FlyWindowController> window,
-         BrowserWindowInterface* private_browser) {
-        if (!window || window->closing_ || !private_browser)
-          return;
-        OpenNativeBlankTab(private_browser);
-        window->Select(private_browser, true);
-      }, weak_factory_.GetWeakPtr()));
-}
-
-void FlyWindowController::ArmCloseCallback() {
-  desktop_->MakeCloseSynchronous(base::BindOnce(
-      &FlyWindowController::RequestClose, weak_factory_.GetWeakPtr()));
-}
-void FlyWindowController::RequestClose(views::Widget::ClosedReason reason) {
-  tab_move_.reset();
-  workspace_close_.reset();
-  CancelWorkspaceRename();
-  ArmCloseCallback();
-  if (closing_) {
-    return;
-  }
-  hints_->Cancel();
-  palette_->Cancel();
-  address_picker_->Cancel();
-  workspace_picker_->Cancel();
-  tab_move_picker_->Cancel();
-  bookmark_picker_->Cancel();
-  CancelHistory();
-  keyboard_editor_->Cancel();
-  closing_ = true;
-  suspension_timer_.Stop();
-  ResumeAllTabs();
-  if (entries_.empty()) {
-    base::SingleThreadTaskRunner::GetCurrentDefault()->PostTask(
-        FROM_HERE, base::BindOnce(&FlyWindowController::FinishClose,
-                                  weak_factory_.GetWeakPtr()));
-  } else {
-    // This desktop represents the whole Fly application. Announce quit before
-    // closing profile windows so Chromium preserves its last-opened profiles
-    // and session services. The coordinator still honours unload cancellation.
-    chrome::AttemptExit();
-  }
-}
-void FlyWindowController::OnClosingAllBrowsers(bool closing) {
-  if (closing) {
-    tab_move_.reset();
-    workspace_close_.reset();
-    suspension_timer_.Stop();
-    ResumeAllTabs();
-    CancelWorkspaceRename();
-    hints_->Cancel();
-    palette_->Cancel();
-    address_picker_->Cancel();
-    workspace_picker_->Cancel();
-    tab_move_picker_->Cancel();
-    bookmark_picker_->Cancel();
-    CancelHistory();
-    keyboard_editor_->Cancel();
-  }
-  closing_ = closing;
-  if (!closing)
-    UpdateSuspensionPolicy();
-  if (closing && entries_.empty()) {
-    base::SingleThreadTaskRunner::GetCurrentDefault()->PostTask(
-        FROM_HERE, base::BindOnce(&FlyWindowController::FinishClose,
-                                  weak_factory_.GetWeakPtr()));
-  }
-}
-void FlyWindowController::FinishClose() {
-  if (closing_ && entries_.empty()) {
-    Instance().reset();
-    chrome::ShutdownIfNeeded();
-  }
-}
-
-void FlyWindowController::OnWidgetDestroying(views::Widget* widget) {
-  if (widget == sidebar_widget_.get()) {
-    ClearSidebarViews();
-    return;
-  }
-  if (widget == desktop_.get()) {
-    StopSidebarFocusObservation();
-    clock_timer_.Stop();
-    suspension_timer_.Stop();
-    preferences_registrar_.RemoveAll();
-    return;
-  }
-  auto it = std::ranges::find_if(
-      entries_, [&](const auto& pair) { return pair.second.widget == widget; });
-  if (it == entries_.end()) {
-    return;
-  }
-  widget->RemoveObserver(this);
-  const bool was_selected = selected_ == it->first;
-  if (was_selected) {
-    tab_sidebar_->SetBrowser(nullptr);
-    status_bar_->SetBrowser(nullptr, u"");
-  }
-  it->second.host->Detach();
-  auto removed_host = content_->RemoveChildViewT(it->second.host.get());
-  entries_.erase(it);
-  ScheduleWorkspaceRefresh();
-  if (was_selected) {
-    selected_ = nullptr;
-    if (!closing_ && !entries_.empty()) {
-      Select(entries_.begin()->first, true);
-    }
-  }
-  if (closing_ && entries_.empty()) {
-    base::SingleThreadTaskRunner::GetCurrentDefault()->PostTask(
-        FROM_HERE, base::BindOnce(&FlyWindowController::FinishClose,
-                                  weak_factory_.GetWeakPtr()));
-  }
-}
-void FlyWindowController::OnWidgetActivationChanged(views::Widget* widget,
-                                                    bool active) {
-  // A blurred window can no longer see the modifier's release.
-  if (widget == desktop_.get() && !active)
-    SetTabNumbers(false);
-  if (widget == desktop_.get() && selected_) {
-    auto* child = entries_.at(selected_).widget.get();
-    child->OnNativeWidgetActivationChanged(active);
-  }
-}
-}  // namespace fly
-
-namespace fly {
-bool FlyWindowController::RunCommand(BrowserWindowInterface* browser,
-                                     std::string_view action) {
-  if (closing_ || (browser && !entries_.contains(browser)))
-    return false;
-  if (!browser && !IsShellCommand(action))
-    return false;
-  if (!browser && action == "spawn-tab") {
-    CreateTab();
-    return true;
-  }
-  if (!browser && action == "reopen-closed-tab") {
-    auto* profile = ActiveProfile();
-    if (!profile)
-      return false;
-    chrome::OpenWindowWithRestoredTabs(profile);
-    return true;
-  }
-  if (!browser && action == "toggle-fullscreen") {
-    desktop_->SetFullscreen(!desktop_->IsFullscreen());
-    UpdateFullscreenChrome();
-    return true;
-  }
-  // All pickers share the desktop keyboard owner. Opening a different one
-  // dismisses the previous one, while invoking the same action still toggles.
-  for (auto [picker, command] :
-       {std::pair{palette_.get(), "toggle-palette"},
-        {address_picker_.get(), "toggle-address"},
-        {history_picker_.get(), "toggle-history"},
-        {bookmark_picker_.get(), "toggle-bookmarks"},
-        {downloads_picker_.get(), "toggle-downloads"},
-        {extensions_picker_.get(), "open-extension-actions"}}) {
-    if (action != command)
-      picker->Cancel();
-  }
-  if (action == "toggle-history") {
-    ToggleHistory(browser);
-    return true;
-  }
-  if (action == "toggle-address") {
-    ToggleAddress(browser);
-    return true;
-  }
-  if (!browser && action == "toggle-downloads") {
-    ToggleDownloads(nullptr);
-    return true;
-  }
-  if (action == "open-extension-actions") {
-    ToggleExtensionActions(browser);
-    return true;
-  }
-  if (action == "open-diagnostics") {
-    ShowDiagnostics();
-    return true;
-  }
-  if (RunProductAction(browser, action))
-    return true;
-  if (action == "move-tab-to-workspace")
-    return ShowTabMovePicker(
-        browser, browser->GetTabStripModel()->GetActiveWebContents());
-  if (action == "hibernate-tabs" || action == "wake-all-tabs") {
-    std::vector<base::WeakPtr<content::WebContents>> tabs;
-    const auto catalog = workspaces_.Read();
-    const auto workspace = browser ? entries_.at(browser).workspace_id
-                                  : catalog ? catalog->active_id : std::string();
-    auto* profile = browser ? browser->GetProfile() : ActiveProfile();
-    for (const auto& [window, entry] : entries_) {
-      if (entry.browser_closed ||
-          (action == "wake-all-tabs" &&
-           (workspace.empty() ? window->GetProfile() != profile
-                              : entry.workspace_id != workspace)))
-        continue;
-      auto* model = window->GetTabStripModel();
-      for (int index = 0; index < model->count(); ++index)
-        tabs.push_back(model->GetWebContentsAt(index)->GetWeakPtr());
-    }
-    for (const auto& tab : tabs) {
-      if (!tab)
-        continue;
-      if (action == "hibernate-tabs")
-        RequestNativeTabSuspension(tab.get());
-      else
-        ResumeNativeTab(tab.get());
-    }
-    return true;
-  }
-  if (action == "toggle-global-audio-mute" || action == "toggle-global-media") {
-    // Snapshot identities before notifying native tab observers. Never iterate
-    // the workspace/window map while a tab mutation may reenter its owner.
-    std::vector<base::WeakPtr<content::WebContents>> contents;
-    bool any_unmuted = false;
-    for (const auto& [window, entry] : entries_) {
-      if (entry.browser_closed)
-        continue;
-      auto* model = window->GetTabStripModel();
-      for (int index = 0; index < model->count(); ++index) {
-        auto* tab = model->GetWebContentsAt(index);
-        contents.push_back(tab->GetWeakPtr());
-        any_unmuted |= !tab->IsAudioMuted();
-      }
-    }
-    if (action == "toggle-global-media") {
-      std::vector<std::pair<base::WeakPtr<content::WebContents>, bool>> sessions;
-      for (const auto& tab : contents) {
-        auto* session = tab ? content::MediaSession::GetIfExists(tab.get())
-                            : nullptr;
-        if (!session)
-          continue;
-        const auto info = session->GetMediaSessionInfoSync();
-        if (info && info->is_controllable)
-          sessions.emplace_back(
-              tab, info->playback_state ==
-                       media_session::mojom::MediaPlaybackState::kPaused);
-      }
-      // Decide before dispatch: resuming one session may natively change audio
-      // focus in another. UI requests retain site Media Session handlers and
-      // Chromium's normal player fallback, without injecting media scripts.
-      for (const auto& [tab, resume] : sessions) {
-        auto* session = tab ? content::MediaSession::GetIfExists(tab.get())
-                            : nullptr;
-        if (!session)
-          continue;
-        if (resume) {
-          ResumeNativeTab(tab.get());
-          session->Resume(content::MediaSession::SuspendType::kUI);
-        } else {
-          session->Suspend(content::MediaSession::SuspendType::kUI);
-        }
-      }
-      return true;
-    }
-    for (const auto& tab : contents) {
-      if (tab)
-        SetTabAudioMuted(tab.get(), any_unmuted,
-                         TabMutedReason::kAudioIndicator, std::string());
-    }
-    return !contents.empty();
-  }
-  if (action == "add-bookmark") {
-    auto* contents = browser->GetTabStripModel()->GetActiveWebContents();
-    return contents && bookmarks_->Add(contents->GetLastCommittedURL().spec(),
-                                      base::UTF16ToUTF8(contents->GetTitle()));
-  }
-  if (action == "toggle-bookmarks") {
-    if (!bookmarks_->Read())
-      return false;
-    CancelHistory();
-    hints_->Cancel();
-    palette_->Cancel();
-    address_picker_->Cancel();
-    workspace_picker_->Cancel();
-    tab_move_picker_->Cancel();
-    keyboard_editor_->Cancel();
-    const auto config = commands_.Read().value_or(DefaultKeyboardConfig());
-    bookmark_picker_->ToggleItems(
-        browser ? browser->GetTabStripModel()->GetActiveWebContents() : nullptr,
-        BookmarkEntries(), config.shortcuts.at("toggle-bookmarks"),
-        u"Search bookmarks", bookmarks_->CanEdit(), true);
-    return true;
-  }
-  if (action == "toggle-palette") {
-    address_picker_->Cancel();
-    workspace_picker_->Cancel();
-    tab_move_picker_->Cancel();
-    bookmark_picker_->Cancel();
-    CancelHistory();
-    hints_->Cancel();
-    keyboard_editor_->Cancel();
-    palette_->SetRecent(preferences_.ReadRecentCommands());
-    const auto config = commands_.Read().value_or(DefaultKeyboardConfig());
-    auto items = CommandCentreCatalog(config);
-    for (auto& entry : ExtensionCommandEntries(browser))
-      items.push_back(std::move(entry));
-    palette_->ToggleItems(
-        browser ? browser->GetTabStripModel()->GetActiveWebContents() : nullptr,
-        std::move(items), config.shortcuts.at("toggle-palette"),
-        u"Search commands and shortcuts", false, true);
-    return true;
-  }
-  if (action == "toggle-private-mode") {
-    TogglePrivate(browser);
-    return true;
-  }
-  if (action == "trigger-hints") {
-    address_picker_->Cancel();
-    workspace_picker_->Cancel();
-    tab_move_picker_->Cancel();
-    bookmark_picker_->Cancel();
-    CancelHistory();
-    keyboard_editor_->Cancel();
-    hints_->Toggle(browser ? browser->GetTabStripModel()->GetActiveWebContents()
-                           : nullptr);
-    return true;
-  }
-  if (action == "toggle-theme")
-    return preferences_.ToggleTheme();
-  if (action == "toggle-zen-mode" || action == "toggle-sidebar-pin") {
-    const auto collapse = preferences_.ReadSidebarAutoCollapse();
-    return collapse && preferences_.SetSidebarAutoCollapse(!*collapse);
-  }
-  if (action == "toggle-window-controls") {
-    const auto visible = preferences_.ReadWindowControlsVisible();
-    return visible && preferences_.SetWindowControlsVisible(!*visible);
-  }
-  if (action == "toggle-status-bar") {
-    const auto visible = preferences_.ReadStatusBarVisible();
-    return visible && preferences_.SetStatusBarVisible(!*visible);
-  }
-  if (action == "cycle-clock-format")
-    return preferences_.CycleClockFormat();
-  if (action == "toggle-clock") {
-    const auto clock = preferences_.ReadClock();
-    return clock && preferences_.SetClockVisible(!clock->visible);
-  }
-  if (action == "toggle-help" || action == "open-keyboard-settings") {
-    hints_->Cancel();
-    palette_->Cancel();
-    address_picker_->Cancel();
-    workspace_picker_->Cancel();
-    tab_move_picker_->Cancel();
-    bookmark_picker_->Cancel();
-    CancelHistory();
-    keyboard_editor_->SetPrivateMode(browser &&
-                                     browser->GetProfile()->IsOffTheRecord());
-    if (action == "toggle-help" || !keyboard_editor_->active())
-      keyboard_editor_->Toggle(
-          browser ? browser->GetTabStripModel()->GetActiveWebContents()
-                  : nullptr);
-    RefreshDesktopIntegration();
-    if (action == "open-keyboard-settings")
-      keyboard_editor_->ShowKeyboard();
-    return true;
-  }
-  if (action == "toggle-dashboard") {
-    ToggleWorkspacePicker();
-    return true;
-  }
-  if (action == "new-workspace") {
-    PromptNewWorkspace();
-    return true;
-  }
-  if (action == "focus-sidebar") {
-    FocusSidebar();
-    return true;
-  }
-  if (action == "next-workspace" || action == "previous-workspace") {
-    const auto catalog = workspaces_.Read();
-    if (!catalog || catalog->items.empty())
-      return false;
-    auto current = std::ranges::find(
-        catalog->items, browser ? entries_.at(browser).workspace_id
-                                : catalog->active_id, &Workspace::id);
-    size_t index =
-        current == catalog->items.end() ? 0 : current - catalog->items.begin();
-    const size_t count = catalog->items.size();
-    index = action == "next-workspace" ? (index + 1) % count
-                                       : (index + count - 1) % count;
-    OpenWorkspace(catalog->items[index].id);
-    return true;
-  }
-  const bool handled = ExecuteNativeCommand(browser, action);
-  if (!handled) {
-    status_->SetText(base::UTF8ToUTF16(ActionLabel(action) + ": unavailable"));
-  }
-  return handled;
-}
-}  // namespace fly
-
-namespace fly {
-void FlyWindowController::TrackTabNumbers(bool key_down,
-                                          ui::KeyboardCode code,
-                                          ui::DomCode dom_code,
-                                          int flags,
-                                          bool repeat,
-                                          bool passthrough) {
-  const bool modifier =
-      key_down && (code == ui::VKEY_CONTROL || code == ui::VKEY_MENU ||
-                   code == ui::VKEY_SHIFT || code == ui::VKEY_LWIN ||
-                   code == ui::VKEY_RWIN);
-  // Right Alt is AltGr on many layouts; in passthrough the page receives
-  // every shortcut, so the numbers would point at nothing.
-  if (!modifier || passthrough || dom_code == ui::DomCode::ALT_RIGHT) {
-    SetTabNumbers(false);
-    return;
-  }
-  if (repeat)
-    return;
-  std::vector<std::string> held;
-  const auto add = [&](bool on, const char* name) {
-    if (on)
-      held.push_back(name);
-  };
-  add(code == ui::VKEY_CONTROL || (flags & ui::EF_CONTROL_DOWN), "Ctrl");
-  add(code == ui::VKEY_MENU || (flags & ui::EF_ALT_DOWN), "Alt");
-  add(code == ui::VKEY_SHIFT || (flags & ui::EF_SHIFT_DOWN), "Shift");
-  add(code == ui::VKEY_LWIN || code == ui::VKEY_RWIN ||
-          (flags & ui::EF_COMMAND_DOWN),
-      "Meta");
-  const auto tabs = commands_.Read().value_or(DefaultKeyboardConfig()).tabs;
-  if (tabs.empty() || base::JoinString(held, "+") != tabs) {
-    SetTabNumbers(false);
-    return;
-  }
-  // The delay keeps quick chords such as Alt+S from flashing them.
-  if (!tab_numbers_shown_ && !tab_numbers_timer_.IsRunning()) {
-    tab_numbers_timer_.Start(
-        FROM_HERE, base::Milliseconds(150),
-        base::BindOnce(&FlyWindowController::SetTabNumbers,
-                       base::Unretained(this), true));
-  }
-}
-void FlyWindowController::SetTabNumbers(bool shown) {
-  tab_numbers_timer_.Stop();
-  if (shown == tab_numbers_shown_)
-    return;
-  tab_numbers_shown_ = shown;
-  if (tab_sidebar_)
-    tab_sidebar_->SetNumbersVisible(shown);
-}
-void FlyWindowController::OnKeyEvent(ui::KeyEvent* event) {
-  TrackTabNumbers(event->type() == ui::EventType::kKeyPressed,
-                  event->key_code(), event->code(), event->flags(),
-                  event->is_repeat(), false);
-  if ((rename_widget_ && !rename_widget_->IsClosed()) ||
-      (remove_widget_ && !remove_widget_->IsClosed()) ||
-      (history_clear_widget_ && !history_clear_widget_->IsClosed()))
-    return;
-  if (diagnostics_hub_ && diagnostics_hub_->active()) {
-    if (diagnostics_hub_->HandleOverlayKey(*event)) {
-      event->SetHandled();
-      event->StopPropagation();
-    }
-    return;
-  }
-  for (auto* picker : {downloads_picker_.get(), extensions_picker_.get()}) {
-    if (!picker->active())
-      continue;
-    if (picker->HandleOverlayKey(*event)) {
-      event->SetHandled();
-      event->StopPropagation();
-    }
-    return;
-  }
-  if (address_picker_->active()) {
-    if (address_picker_->HandleOverlayKey(*event)) {
-      event->SetHandled();
-      event->StopPropagation();
-    }
-    return;
-  }
-  if (tab_move_picker_->active()) {
-    if (tab_move_picker_->HandleOverlayKey(*event)) {
-      event->SetHandled();
-      event->StopPropagation();
-    }
-    return;
-  }
-  if (workspace_picker_->active()) {
-    if (workspace_picker_->HandleOverlayKey(*event)) {
-      event->SetHandled();
-      event->StopPropagation();
-    }
-    return;
-  }
-  if (history_picker_->active()) {
-    if (history_picker_->HandleOverlayKey(*event)) {
-      event->SetHandled();
-      event->StopPropagation();
-    }
-    return;
-  }
-  if (bookmark_picker_->active()) {
-    if (bookmark_picker_->HandleOverlayKey(*event)) {
-      event->SetHandled();
-      event->StopPropagation();
-    }
-    return;
-  }
-  if (keyboard_editor_->active()) {
-    if (keyboard_editor_->HandleOverlayKey(*event)) {
-      event->SetHandled();
-      event->StopPropagation();
-    }
-    return;
-  }
-  if (event->type() != ui::EventType::kKeyPressed || event->is_char())
-    return;
-  if (palette_->active()) {
-    if (palette_->HandleOverlayKey(*event)) {
-      event->SetHandled();
-      event->StopPropagation();
-    }
-    return;
-  }
-  if (event->key_code() == ui::VKEY_ESCAPE && sidebar_focus_inside_) {
-    ReturnFocusFromSidebar();
-    event->SetHandled();
-    event->StopPropagation();
-    return;
-  }
-  if (!selected_) {
-    if (closing_)
-      return;
-    if (!empty_router_ || empty_generation_ != commands_.generation()) {
-      empty_router_ = std::make_unique<KeyboardRouter>(
-          commands_.Read().value_or(DefaultKeyboardConfig()));
-      empty_generation_ = commands_.generation();
-    }
-    const input::NativeWebKeyboardEvent native(*event);
-    auto* input = desktop_->GetInputMethod();
-    auto* client = input ? input->GetTextInputClient() : nullptr;
-    const auto key = empty_router_->Route(
-        {.stroke = NativeEventStroke(native),
-         .time = base::TimeTicks::Now(),
-         .repeat = event->is_repeat(),
-         .composing =
-             native.skip_if_unhandled ||
-             bool(native.GetModifiers() & (blink::WebInputEvent::kIsComposing |
-                                           blink::WebInputEvent::kAltGrKey)),
-         .editable =
-             client && client->GetTextInputType() != ui::TEXT_INPUT_TYPE_NONE});
-    UpdateModeLabel();
-    if (key.kind == KeyResultKind::kPass)
-      return;
-    if (key.kind == KeyResultKind::kAction) {
-      const auto catalog = workspaces_.Read();
-      if (key.action == "toggle-passthrough" || key.action == "enter-insert") {
-        UpdateModeLabel();
-      } else if (key.action == "toggle-dashboard") {
-        ToggleWorkspacePicker();
-      } else if (key.action == "new-workspace") {
-        PromptNewWorkspace();
-      } else if (key.action == "spawn-tab" ||
-                 key.action == "toggle-bookmarks" ||
-                 key.action == "toggle-palette") {
-        RunFromEmptyWorkspace(key.action);
-      } else if ((key.action == "next-workspace" ||
-                  key.action == "previous-workspace") &&
-                 catalog && !catalog->items.empty()) {
-        auto current = std::ranges::find(catalog->items, catalog->active_id,
-                                         &Workspace::id);
-        const size_t count = catalog->items.size();
-        const size_t index = current == catalog->items.end()
-                                 ? 0
-                                 : current - catalog->items.begin();
-        OpenWorkspace(catalog
-                          ->items[key.action == "next-workspace"
-                                      ? (index + 1) % count
-                                      : (index + count - 1) % count]
-                          .id);
-      } else if (!RunCommand(nullptr, key.action)) {
-        status_->SetText(
-            base::UTF8ToUTF16(ActionLabel(key.action) + ": unavailable"));
-      }
-    }
-    event->SetHandled();
-    event->StopPropagation();
-    return;
-  }
-  auto* contents = selected_->GetTabStripModel()->GetActiveWebContents();
-  // Page events use BrowserView::PreHandleKeyboardEvent after native IME
-  // processing. Do not dispatch them a second time at the desktop ancestor.
-  if (!contents || (contents->GetRenderWidgetHostView() &&
-                    contents->GetRenderWidgetHostView()->HasFocus()))
-    return;
-  auto* input = desktop_->GetInputMethod();
-  auto* client = input ? input->GetTextInputClient() : nullptr;
-  bool editable =
-      client && client->GetTextInputType() != ui::TEXT_INPUT_TYPE_NONE;
-  const input::NativeWebKeyboardEvent native(*event);
-  const auto handled = RouteNativePageKey(selected_, native, editable);
-  if (handled == content::KeyboardEventProcessingResult::HANDLED) {
-    event->SetHandled();
-    event->StopPropagation();
-  }
-}
-}  // namespace fly
-
-namespace fly {
-void FlyWindowController::UpdateTargetURL(BrowserWindowInterface* browser,
-                                          content::WebContents* source,
-                                          const GURL& url) {
-  if (status_bar_ && selected_ == browser)
-    status_bar_->SetTargetURL(source, url);
-}
-void FlyWindowController::UpdateModeLabel() {
-  if (!status_)
-    return;
-  if (!selected_ && empty_router_) {
-    status_->SetText(
-        empty_router_->mode() == KeyboardMode::kPassthrough ? u"PASSTHROUGH"
-        : empty_router_->mode() == KeyboardMode::kInsert    ? u"INSERT"
-                                                            : u"NORMAL");
-    return;
-  }
-  const std::u16string mode =
-      hints_ && hints_->active()
-          ? (hints_->truncated() ? u"HINTS (target limit)" : u"HINTS")
-          : NativePageModeLabel(selected_);
-  // The workspace badge says when the workspace is private.
-  status_->SetText(mode);
-}
-// The mode badge: a click cancels hints, leaves passthrough, or
-// enters it from NORMAL (INSERT ignores it).
-void FlyWindowController::ClickModeBadge() {
-  if (closing_ || !selected_)
-    return;
-  if (hints_ && hints_->active()) {
-    InvokeNativeCommand(selected_, "trigger-hints");
-    return;
-  }
-  const auto mode = NativePageModeLabel(selected_);
-  if (mode == u"PASSTHROUGH" || mode == u"NORMAL")
-    InvokeNativeCommand(selected_, "toggle-passthrough");
-}
-
-std::u16string FlyWindowController::status_text_for_testing() const {
-  return status_bar_ ? status_bar_->message_for_testing() : std::u16string();
-}
-void FlyWindowController::ShowStatus(std::u16string text) {
-  RecordDiagnostic(
-      text.starts_with(u"Update failed") || text.starts_with(u"Could not")
-          ? "warn"
-          : "info",
-      "status", text);
-  // The status bar's link area, for a while.
-  if (status_bar_)
-    status_bar_->ShowMessage(std::move(text), base::Milliseconds(3500));
-}
-std::vector<Profile*> FlyWindowController::WorkspaceProfiles() const {
-  std::vector<Profile*> profiles;
-  if (const auto catalog = workspaces_.Read()) {
-    auto* manager = g_browser_process->profile_manager();
-    for (const auto& item : catalog->items) {
-      if (auto* profile = manager->GetProfileByPath(
-              manager->user_data_dir().AppendASCII(item.profile_directory)))
-        profiles.push_back(profile);
-    }
-  }
-  for (const auto& [browser, entry] : entries_) {
-    if (entry.browser_closed)
-      continue;
-    auto* profile = browser->GetProfile();
-    if (std::ranges::find(profiles, profile) == profiles.end())
-      profiles.push_back(profile);
-  }
-  return profiles;
-}
-void FlyWindowController::ApplyProfilePreferencesEverywhere() {
-  // Only rewrite per-profile state when the relevant product settings move.
-  const std::string key =
-      (preferences_.ReadBool("web_notifications").value_or(true) ? "1" : "0") +
-      preferences_.ReadString("spellchecker_language").value_or("");
-  if (applied_profile_preferences_ == key)
-    return;
-  applied_profile_preferences_ = key;
-  for (auto* profile : WorkspaceProfiles())
-    ApplyProfilePreferences(profile, preferences_);
-  if (status_bar_)
-    status_bar_->SetNotificationsEnabled(
-        preferences_.ReadBool("web_notifications").value_or(true));
-}
-void FlyWindowController::ToggleDownloads(BrowserWindowInterface* browser) {
-  if (closing_)
-    return;
-  hints_->Cancel();
-  palette_->Cancel();
-  address_picker_->Cancel();
-  workspace_picker_->Cancel();
-  tab_move_picker_->Cancel();
-  bookmark_picker_->Cancel();
-  CancelHistory();
-  keyboard_editor_->Cancel();
-  const auto config = commands_.Read().value_or(DefaultKeyboardConfig());
-  downloads_picker_->ToggleItems(
-      browser ? browser->GetTabStripModel()->GetActiveWebContents() : nullptr,
-      DownloadEntries(WorkspaceProfiles()),
-      config.shortcuts.at("toggle-downloads"), u"Search downloads", true, true);
-}
-void FlyWindowController::ShowDiagnostics() {
-  if (closing_ || !diagnostics_hub_)
-    return;
-  hints_->Cancel();
-  palette_->Cancel();
-  keyboard_editor_->Cancel();
-  diagnostics_hub_->Toggle();
-}
-DiagnosticsSession FlyWindowController::CurrentDiagnostics() {
-  DiagnosticsSession session;
-  if (const auto catalog = workspaces_.Read()) {
-    session.workspaces = catalog->items.size();
-    for (const auto& item : catalog->items)
-      if (item.id == catalog->active_id)
-        session.active_workspace = base::UTF8ToUTF16(item.name);
-  }
-  for (const auto& [browser, entry] : entries_) {
-    if (entry.browser_closed)
-      continue;
-    auto* model = browser->GetTabStripModel();
-    for (int i = 0; i < model->count(); ++i) {
-      auto* contents = model->GetWebContentsAt(i);
-      ++session.tabs;
-      if (NativeTabSuspensionRequested(contents))
-        ++session.suspended;
-      else if (!contents->WasDiscarded())
-        ++session.loaded;
-    }
-  }
-  session.recording =
-      preferences_.ReadBool("enable_diagnostics").value_or(false);
-  session.events = diagnostics_events_;
-  return session;
-}
-void FlyWindowController::RecordDiagnostic(std::string level,
-                                           std::string category,
-                                           std::u16string message) {
-  if (!preferences_.ReadBool("enable_diagnostics").value_or(false))
-    return;
-  diagnostics_events_.push_back(
-      {base::Time::Now(), std::move(level), std::move(category),
-       std::move(message)});
-  if (diagnostics_events_.size() > 500)
-    diagnostics_events_.erase(diagnostics_events_.begin());
-}
-void FlyWindowController::CheckUpdates(bool manual) {
-  if (manual)
-    ShowStatus(u"Checking for updates…");
-  CheckForUpdates(base::BindOnce(
-      [](base::WeakPtr<FlyWindowController> window, bool manual,
-         UpdateCheckResult result) {
-        if (!window || window->closing_)
-          return;
-        if (!result.ok) {
-          window->keyboard_editor_->SetUpdateStatus(
-              u"Could not check for updates.", "");
-          if (manual)
-            window->ShowStatus(u"Could not check for updates.");
-          return;
-        }
-        window->update_ = result;
-        if (!result.newer) {
-          window->keyboard_editor_->SetUpdateStatus(
-              u"Fly " + base::UTF8ToUTF16(std::string_view(kFlyVersion)) +
-                  u" is the latest version.",
-              "");
-          if (manual)
-            window->ShowStatus(u"Fly " + base::UTF8ToUTF16(std::string_view(kFlyVersion)) +
-                               u" is the latest version.");
-          return;
-        }
-        window->keyboard_editor_->SetUpdateStatus(
-            u"Fly " + base::UTF8ToUTF16(result.latest) +
-                (result.package.is_valid()
-                     ? u" is available. Install it here; Fly restarts with "
-                       u"your tabs."
-                     : u" is available as a download."),
-            result.latest);
-        window->ShowStatus(u"Fly " + base::UTF8ToUTF16(result.latest) +
-                           u" is available. Check for Updates opens it.");
-        if (manual)
-          window->OpenInNewTab(result.page);
-      },
-      weak_factory_.GetWeakPtr(), manual));
-}
-void FlyWindowController::MaybeShowWhatsNew() {
-  if (whats_new_checked_ || !selected_ ||
-      selected_->GetProfile()->IsOffTheRecord())
-    return;
-  whats_new_checked_ = true;
-  const auto seen = preferences_.ReadString("last_seen_version");
-  if (!seen || !preferences_.CanEdit() || *seen == kFlyVersion)
-    return;
-  preferences_.SetString("last_seen_version", kFlyVersion);
-  // A new profile has nothing to catch up on; an upgraded one does.
-  if (seen->empty() || base::Version(*seen) >= base::Version(kFlyVersion))
-    return;
-  ResolveWhatsNewURL(*seen, base::BindOnce(&FlyWindowController::OpenInNewTab,
-                                           weak_factory_.GetWeakPtr()));
-}
-Profile* FlyWindowController::ActiveProfile() const {
-  if (selected_)
-    return selected_->GetProfile();
-  const auto catalog = workspaces_.Read();
-  if (!catalog)
-    return nullptr;
-  const auto item = std::ranges::find(catalog->items, catalog->active_id,
-                                     &Workspace::id);
-  auto* manager = g_browser_process->profile_manager();
-  return item == catalog->items.end()
-             ? nullptr
-             : manager->GetProfileByPath(manager->user_data_dir().AppendASCII(
-                   item->profile_directory));
-}
-
-void FlyWindowController::OpenInNewWindow(GURL url) {
-  if (closing_)
-    return;
-  auto* profile = ActiveProfile();
-  if (!profile) {
-    ShowStatus(u"Open a workspace before opening this page.");
-    return;
-  }
-  NavigateParams params(profile, url, ui::PAGE_TRANSITION_AUTO_TOPLEVEL);
-  // A tool window belongs to the workspace profile but lives on the desktop,
-  // outside the embedded normal-window hierarchy.
-  params.disposition = WindowOpenDisposition::NEW_POPUP;
-  params.window_action = NavigateParams::WindowAction::kShowWindow;
-  Navigate(&params);
-}
-
-void FlyWindowController::OpenInNewTab(GURL url) {
-  if (closing_)
-    return;
-  auto* profile = ActiveProfile();
-  if (!profile) {
-    pending_shell_url_ = url.spec();
-    CreateTab();
-    return;
-  }
-  NavigateParams params(profile, url, ui::PAGE_TRANSITION_AUTO_TOPLEVEL);
-  params.browser = selected_;
-  params.disposition = WindowOpenDisposition::NEW_FOREGROUND_TAB;
-  params.window_action = NavigateParams::WindowAction::kShowWindow;
-  Navigate(&params);
-}
-bool FlyWindowController::RunProductAction(BrowserWindowInterface* browser,
-                                           std::string_view action) {
-  auto* contents = browser ? browser->GetTabStripModel()->GetActiveWebContents()
-                           : nullptr;
-  auto* profile = browser ? browser->GetProfile() : ActiveProfile();
-  const auto open = [&](const GURL& url, Profile* profile = nullptr) {
-    auto* target_profile = profile ? profile : ActiveProfile();
-    if (!target_profile)
-      return;
-    NavigateParams params(target_profile, url,
-                          ui::PAGE_TRANSITION_AUTO_TOPLEVEL);
-    if (!profile)
-      params.browser = browser;
-    params.disposition = WindowOpenDisposition::NEW_FOREGROUND_TAB;
-    Navigate(&params);
-  };
-  if (action == "toggle-menu-bar" ||
-      action == "toggle-native-menu-visibility") {
-    auto point = desktop_->GetContentsView()->GetBoundsInScreen().origin();
-    point.Offset(14, 14);
-    settings_menu_->Show(desktop_.get(), point);
-    return true;
-  }
-  if (action == "reload-user-content") {
-    user_content_->Reload();
-    return true;
-  }
-  if (action == "open-extension-actions") {
-    ToggleExtensionActions(browser);
-    return true;
-  }
-  if (action == "open-task-manager") {
-    chrome::OpenTaskManager(browser);
-    return true;
-  }
-  if (action == "toggle-downloads") {
-    // Toggles the download shelf; with nothing on it, Fly lists every
-    // workspace's downloads.
-    if (download_shelf_ && download_shelf_->has_cards())
-      download_shelf_->Toggle();
-    else
-      ToggleDownloads(browser);
-    return true;
-  }
-  if (action == "toggle-reader-view") {
-    ToggleReaderView(
-        contents,
-        base::BindOnce(
-            [](base::WeakPtr<FlyWindowController> window,
-               base::WeakPtr<content::WebContents> contents,
-               ReaderResult result) {
-              if (!window)
-                return;
-              if (!result.error.empty()) {
-                window->ShowStatus(u"Reader View: " + result.error);
-              } else if (result.active) {
-                window->ShowStatus(
-                    u"Reader view active (Escape to exit)" +
-                    (result.title.empty()
-                         ? std::u16string()
-                         : u": " + result.title.substr(0, 45) + u"..."));
-              } else {
-                window->ShowStatus(u"Reader View Closed");
-              }
-              window->SetReaderActive(contents.get(),
-                                      result.active && result.error.empty());
-            },
-            weak_factory_.GetWeakPtr(),
-            contents ? contents->GetWeakPtr()
-                     : base::WeakPtr<content::WebContents>()));
-    return true;
-  }
-  if (action == "open-scripts-dir" || action == "open-styles-dir") {
-    OpenUserContentDirectory(
-        profile, action == "open-scripts-dir" ? "scripts" : "styles");
-    return true;
-  }
-  if (action == "test-google-signin") {
-    // A fresh off-the-record profile: no workspace cookies or tokens.
-    if (!profile)
-      return false;
-    open(GURL("https://accounts.google.com/"),
-         profile->GetOriginalProfile()->GetPrimaryOTRProfile(
-             /*create_if_needed=*/true));
-    return true;
-  }
-  if (action == "check-for-updates") {
-    CheckUpdates(true);
-    return true;
-  }
-  if (action == "show-whats-new") {
-    ResolveWhatsNewURL("", base::BindOnce(&FlyWindowController::OpenInNewTab,
-                                          weak_factory_.GetWeakPtr()));
-    return true;
-  }
-  if (action == "open-diagnostics") {
-    ShowDiagnostics();
-    return true;
-  }
-  if (action == "toggle-diagnostics-recording") {
-    const bool enabled =
-        !preferences_.ReadBool("enable_diagnostics").value_or(false);
-    if (preferences_.SetBool("enable_diagnostics", enabled)) {
-      if (!enabled)
-        diagnostics_events_.clear();
-      ShowStatus(enabled ? u"Diagnostics recording on (memory only)."
-                         : u"Diagnostics recording off; events cleared.");
-    }
-    return true;
-  }
-  if (action == "toggle-notifications") {
-    const bool enabled =
-        !preferences_.ReadBool("web_notifications").value_or(true);
-    if (preferences_.SetBool("web_notifications", enabled))
-      ShowStatus(enabled ? u"Web notifications on." : u"Web notifications off.");
-    return true;
-  }
-  if (action == "focus-nav-buttons") {
-    FocusSidebar();
-    if (new_tab_button_ && sidebar_content_->Contains(
-            desktop_->GetFocusManager()->GetFocusedView()))
-      new_tab_button_->RequestFocus();
-    return true;
-  }
-  return false;
-}
-
-namespace {
 // Footer extension action: icon with the action's badge text.
 class ExtensionActionButton : public FlyButton {
   METADATA_HEADER(ExtensionActionButton, FlyButton)
@@ -4380,7 +305,8 @@ class ExtensionActionButton : public FlyButton {
       return;
     const auto text = base::UTF8ToUTF16(badge_.substr(0, 4));
     const auto font = FlyFont(FlyFace::kMono, 7, gfx::Font::Weight::BOLD);
-    const int width = std::min(this->width(), gfx::GetStringWidth(text, font) + 4);
+    const int width =
+        std::min(this->width(), gfx::GetStringWidth(text, font) + 4);
     const gfx::Rect box(this->width() - width, height() - 9, width, 9);
     cc::PaintFlags flags;
     flags.setAntiAlias(true);
@@ -4397,23 +323,2990 @@ class ExtensionActionButton : public FlyButton {
 };
 BEGIN_METADATA(ExtensionActionButton)
 END_METADATA
+
+// The decorated browser windows in the order they were opened.
+std::vector<BrowserWindowInterface*> DecoratedBrowsers() {
+  std::vector<BrowserWindowInterface*> result;
+  auto* app = FlyApp::GetIfCreated();
+  if (!app)
+    return result;
+  GlobalBrowserCollection::GetInstance()->ForEach(
+      [&](BrowserWindowInterface* browser) {
+        if (app->WindowFor(browser) && !browser->IsDeleteScheduled())
+          result.push_back(browser);
+        return true;
+      },
+      BrowserCollection::Order::kCreation);
+  return result;
+}
 }  // namespace
+
+bool FlyWindowController::ShouldDecorate(
+    const BrowserWindowInterface* browser) {
+  return base::CommandLine::ForCurrentProcess()->HasSwitch("fly-native") &&
+         browser->GetType() == BrowserWindowInterface::Type::TYPE_NORMAL;
+}
+
+FlyWindowController* FlyWindowController::FromBrowser(
+    const BrowserWindowInterface* browser) {
+  auto* app = FlyApp::GetIfCreated();
+  return app && browser ? app->WindowFor(browser) : nullptr;
+}
+
+FlyWindowController* FlyWindowController::FromContents(
+    content::WebContents* contents) {
+  auto* tab = contents ? tabs::TabInterface::MaybeGetFromContents(contents)
+                       : nullptr;
+  return tab ? FromBrowser(tab->GetBrowserWindowInterface()) : nullptr;
+}
+
+FlyWindowController::FlyWindowController(BrowserWindowInterface* browser,
+                                         views::Widget* widget)
+    : browser_(browser), widget_(widget) {
+  auto& app = FlyApp::Get();
+  closed_subscription_ = browser->RegisterBrowserDidClose(base::BindRepeating(
+      &FlyWindowController::OnBrowserDidClose, weak_factory_.GetWeakPtr()));
+  history_ = std::make_unique<HistoryService>(
+      *g_browser_process->profile_manager(), app.workspaces());
+  history_->SetChangedCallback(base::BindRepeating(
+      &FlyWindowController::OnHistoryChanged, weak_factory_.GetWeakPtr()));
+  BuildSidebar();
+  BuildFooter();
+  BuildSurfaces();
+  widget_->AddObserver(this);
+  widget_->GetFocusManager()->AddFocusChangeListener(this);
+  observing_sidebar_focus_ = true;
+  sidebar_focus_client_ =
+      aura::client::GetFocusClient(widget_->GetNativeWindow()->GetRootWindow());
+  if (sidebar_focus_client_)
+    sidebar_focus_client_->AddObserver(this);
+  widget_->GetNativeWindow()->AddPreTargetHandler(this);
+  if (auto* frame = FlyBrowserFrame::FromWidget(widget_))
+    InstallInto(frame);
+  tab_sidebar_->SetBrowser(browser_);
+  const auto workspace = app.WorkspaceFor(browser_->GetProfile());
+  status_workspace_name_ =
+      workspace ? base::UTF8ToUTF16(workspace->name) : std::u16string();
+  status_bar_->SetBrowser(browser_, status_workspace_name_);
+  download_shelf_->AddProfile(browser_->GetProfile());
+  SetNotificationsEnabled(
+      app.preferences().ReadBool("web_notifications").value_or(true));
+  OnPreferencesChanged(true);
+  UpdateWorkspaceHeader();
+  ScheduleWorkspaceRefresh();
+  ScheduleExtensionRefresh();
+  UpdateModeLabel();
+  UpdateSplitButton();
+}
+
+FlyWindowController::~FlyWindowController() {
+  weak_factory_.InvalidateWeakPtrs();
+  CancelSurfaces();
+  StopSidebarFocusObservation();
+  if (widget_) {
+    if (auto* native_window = widget_->GetNativeWindow())
+      native_window->RemovePreTargetHandler(this);
+    widget_->RemoveObserver(this);
+  }
+  if (frame_)
+    frame_->SetController(nullptr);
+  hints_.reset();
+  palette_.reset();
+  bookmark_picker_.reset();
+  address_picker_.reset();
+  history_picker_.reset();
+  workspace_picker_.reset();
+  tab_move_picker_.reset();
+  downloads_picker_.reset();
+  extensions_picker_.reset();
+  settings_menu_.reset();
+  keyboard_editor_.reset();
+  diagnostics_hub_.reset();
+  history_clear_widget_.reset();
+  history_clear_delegate_.reset();
+  rename_widget_.reset();
+  rename_delegate_.reset();
+  remove_widget_.reset();
+  remove_delegate_.reset();
+  ClearSidebarViews();
+  if (sidebar_widget_) {
+    sidebar_widget_->RemoveObserver(this);
+    sidebar_widget_.reset();
+  }
+}
+
+bool FlyWindowController::Closing() const {
+  auto* app = FlyApp::GetIfCreated();
+  return browser_closed_ || !widget_ || !app || app->closing();
+}
+
+content::WebContents* FlyWindowController::ActiveContents() const {
+  return browser_ && !browser_closed_
+             ? browser_->GetTabStripModel()->GetActiveWebContents()
+             : nullptr;
+}
+
+void FlyWindowController::RunAction(std::string action) {
+  if (!Closing())
+    InvokeNativeCommand(browser_, std::move(action));
+}
+
+void FlyWindowController::BuildSidebar() {
+  auto action = [this](std::string name) {
+    return base::BindRepeating(&FlyWindowController::RunAction,
+                               weak_factory_.GetWeakPtr(), std::move(name));
+  };
+  // The sidebar: one 260px panel whose left 36px column is the collapsed
+  // rail.
+  auto panel = std::make_unique<SidebarPanel>();
+  auto* sidebar = panel.get();
+  sidebar_content_ = sidebar;
+  sidebar_panel_ = sidebar;
+  SidebarPanel::Parts parts;
+  window_controls_ = sidebar->AddChildView(std::make_unique<views::View>());
+  // .window-controls: buttons at the right, a rule below.
+  window_controls_->SetBorder(FlyEdgeBorder(FlyRole::kBorder,
+                                            gfx::Insets::TLBR(0, 0, 1, 0),
+                                            gfx::Insets::TLBR(2, 0, 6, 0)));
+  window_controls_->SetLayoutManager(std::make_unique<views::BoxLayout>(
+      views::BoxLayout::Orientation::kHorizontal, gfx::Insets(), 5))
+      ->set_main_axis_alignment(views::BoxLayout::MainAxisAlignment::kEnd);
+  for (const auto& [name, icon, label] :
+       {std::tuple{"minimize", &views::kChromeMinimizeIcon, u"Minimize window"},
+        std::tuple{"maximize", &views::kChromeMaximizeIcon, u"Maximize window"},
+        std::tuple{"close", &views::kCloseIcon, u"Close window"}}) {
+    auto* button =
+        window_controls_->AddChildView(views::ImageButton::CreateIconButton(
+            base::BindRepeating(&FlyWindowController::RunWindowControl,
+                                weak_factory_.GetWeakPtr(), std::string(name)),
+            *icon, label, views::ImageButton::MaterialIconStyle::kSmall));
+    button->SetPreferredSize(gfx::Size(26, 24));
+    window_control_buttons_.emplace(name, button);
+  }
+  parts.window_controls = window_controls_;
+  // The workspace header opens the dashboard; the short badge (rail) and the
+  // full name (expanded) share its slot and crossfade.
+  workspace_picker_button_ = sidebar->AddChildView(std::make_unique<FlyButton>(
+      base::BindRepeating(&FlyWindowController::ToggleWorkspacePicker,
+                          weak_factory_.GetWeakPtr()),
+      u"", FlyFace::kSans, 14));
+  workspace_picker_button_->SetTooltipText(
+      u"Workspace: Click to open Workspace Dashboard");
+  workspace_picker_button_->SetCornerRadius(4);
+  workspace_picker_button_->SetHoverFill(true);
+  workspace_badge_ = sidebar->AddChildView(std::make_unique<FlyLabel>(
+      u"W1", FlyFace::kMono, 12, gfx::Font::Weight::MEDIUM));
+  workspace_badge_->SetHorizontalAlignment(gfx::ALIGN_CENTER);
+  workspace_badge_->SetCanProcessEventsWithinSubtree(false);
+  workspace_label_ = sidebar->AddChildView(std::make_unique<FlyLabel>(
+      u"Workspace", FlyFace::kSans, 14, gfx::Font::Weight::SEMIBOLD));
+  workspace_label_->SetHorizontalAlignment(gfx::ALIGN_LEFT);
+  workspace_label_->SetElideBehavior(gfx::ELIDE_TAIL);
+  workspace_label_->SetCanProcessEventsWithinSubtree(false);
+  new_tab_button_ = sidebar->AddChildView(MakeFlyIconButton(
+      base::BindRepeating(&FlyWindowController::CreateTab,
+                          weak_factory_.GetWeakPtr()),
+      kAddIcon, u"New Tab / Navigation", 28));
+  new_tab_button_->SetOutlined(true);
+  new_tab_button_->SetCornerRadius(4);
+  auto* back = sidebar->AddChildView(MakeFlyIconButton(
+      action("go-back"), vector_icons::kArrowBackIcon, u"Go back", 30));
+  auto* forward = sidebar->AddChildView(MakeFlyIconButton(
+      action("go-forward"), vector_icons::kArrowForwardIcon, u"Go forward",
+      30));
+  // .nav-history-group: one pill, each half with its own border.
+  back->SetPillHalf(FlyButton::PillHalf::kLeft);
+  forward->SetPillHalf(FlyButton::PillHalf::kRight);
+  back->SetPillPartner(forward);
+  forward->SetPillPartner(back);
+  for (FlyButton* button : {new_tab_button_.get(), back, forward}) {
+    button->SetOutlined(true);
+    button->SetIconTone(FlyButton::IconTone::kText);
+  }
+  parts.top = {.header = workspace_picker_button_,
+               .badge = workspace_badge_,
+               .label = workspace_label_,
+               .new_tab = new_tab_button_,
+               .back = back,
+               .forward = forward};
+  workspace_buttons_ = sidebar->AddChildView(std::make_unique<views::View>());
+  workspace_buttons_->SetLayoutManager(std::make_unique<views::BoxLayout>(
+      views::BoxLayout::Orientation::kVertical, gfx::Insets(), 2));
+  parts.workspaces = workspace_buttons_;
+  tab_sidebar_ =
+      sidebar->AddChildView(std::make_unique<TabSidebar>(base::BindRepeating(
+          &FlyWindowController::CreateTab, weak_factory_.GetWeakPtr())));
+  parts.tabs = tab_sidebar_;
+  tab_sidebar_->SetStateChangedCallback(base::BindRepeating(
+      &FlyWindowController::UpdateSplitButton, weak_factory_.GetWeakPtr()));
+  // .sidebar-clock-row with .sidebar-clock: 6px above, 4px below.
+  auto* clock_row = sidebar->AddChildView(std::make_unique<views::View>());
+  clock_row->SetLayoutManager(std::make_unique<views::FillLayout>());
+  clock_row->SetBorder(views::CreateEmptyBorder(gfx::Insets::TLBR(6, 0, 4, 0)));
+  clock_ = clock_row->AddChildView(std::make_unique<SidebarClock>(
+      base::BindRepeating(&FlyWindowController::CycleClockFormat,
+                          weak_factory_.GetWeakPtr())));
+  clock_->SetVectorIcon(kTimerIcon, 11);
+  clock_->SetHorizontalAlignment(gfx::ALIGN_LEFT);
+  clock_->SetIconTone(FlyButton::IconTone::kAccent);
+  parts.clock_row = clock_row;
+  // The bottom row: pin, theme and the other sidebar controls, in order.
+  sidebar_pin_button_ = sidebar->AddChildView(MakeFlyIconButton(
+      base::BindRepeating(&FlyWindowController::ToggleSidebarAutoCollapse,
+                          weak_factory_.GetWeakPtr()),
+      views::kKeepIcon, u"Pin / Auto-Collapse Sidebar", 28));
+  split_button_ = sidebar->AddChildView(MakeFlyIconButton(
+      action("toggle-split"), kSplitSceneIcon, u"Toggle Split View", 28));
+  reader_button_ = sidebar->AddChildView(MakeFlyIconButton(
+      action("toggle-reader-view"), kMenuBookIcon, u"Toggle Reader View", 28));
+  auto* search = sidebar->AddChildView(
+      MakeFlyIconButton(action("toggle-address"), vector_icons::kSearchIcon,
+                        u"Search or enter address", 28));
+  auto* extensions = sidebar->AddChildView(MakeFlyIconButton(
+      action("open-extension-actions"), vector_icons::kExtensionOldIcon,
+      u"Extensions", 28));
+  preferences_button_ = sidebar->AddChildView(MakeFlyIconButton(
+      base::BindRepeating(
+          [](base::WeakPtr<FlyWindowController> window) {
+            if (window && !window->Closing()) {
+              window->RunCommand("toggle-help");
+              window->keyboard_editor_->ShowAppearance(true);
+            }
+          },
+          weak_factory_.GetWeakPtr()),
+      vector_icons::kSettingsIcon, u"Settings", 28));
+  preferences_button_->SetEnabled(true);
+  for (FlyButton* button :
+       {sidebar_pin_button_.get(), split_button_.get(), reader_button_.get(),
+        search, extensions, preferences_button_.get()}) {
+    // Pointer actions must not leave a focused accent after dismissal.
+    // Keyboard traversal can still focus and activate these controls.
+    button->SetRequestFocusOnPress(false);
+    button->SetOutlined(true);
+    button->SetCornerRadius(4);
+    button->SetIconTone(FlyButton::IconTone::kText);
+    button->SetVectorIcon(*button->vector_icon(), 12);
+    parts.footer.push_back(button);
+  }
+  sidebar->SetParts(std::move(parts));
+  // Details that exist only expanded fade with the edge.
+  for (views::View* view :
+       {static_cast<views::View*>(window_controls_.get()),
+        static_cast<views::View*>(workspace_label_.get()),
+        static_cast<views::View*>(new_tab_button_.get()),
+        static_cast<views::View*>(back), static_cast<views::View*>(forward),
+        static_cast<views::View*>(workspace_buttons_.get()),
+        static_cast<views::View*>(clock_row),
+        static_cast<views::View*>(split_button_.get()),
+        static_cast<views::View*>(reader_button_.get()),
+        static_cast<views::View*>(search),
+        static_cast<views::View*>(preferences_button_.get())})
+    sidebar->AddExpandedOnly(view);
+  // The badge sits over the header and never takes its clicks.
+  sidebar->AddRailOnly(workspace_badge_, false);
+  sidebar->AddExpandedOnly(tab_sidebar_->expanded_surfaces(), false);
+  sidebar->AddRailOnly(tab_sidebar_->rail_surfaces(), false);
+  sidebar->AddRailOnly(tab_sidebar_->rail_marks(), false);
+
+  sidebar_widget_ = std::make_unique<SidebarWidget>(base::BindRepeating(
+      [](FlyWindowController* window) { return window->sidebar_hit_width_; },
+      base::Unretained(this)));
+  views::Widget::InitParams sidebar_params(
+      views::Widget::InitParams::CLIENT_OWNS_WIDGET,
+      views::Widget::InitParams::TYPE_CONTROL);
+  sidebar_params.parent = widget_->GetNativeWindow();
+  sidebar_params.child = true;
+  sidebar_params.activatable = views::Widget::InitParams::Activatable::kNo;
+  sidebar_params.native_widget =
+      new views::NativeWidgetAura(sidebar_widget_.get());
+  sidebar_params.name = "FlyNativeSidebar";
+  // The panel's shadow falls on the page beside it.
+  sidebar_params.opacity =
+      views::Widget::InitParams::WindowOpacity::kTranslucent;
+  sidebar_widget_->Init(std::move(sidebar_params));
+  sidebar_root_ = sidebar_widget_->SetContentsView(
+      std::make_unique<SidebarRoot>(std::move(panel)));
+  sidebar_widget_->AddObserver(this);
+  LoadSidebarArtwork();
+  auto host = std::make_unique<views::NativeViewHost>();
+  // The sidebar overlays the page while it slides. A clip window that Aura
+  // stacks above the page's native views keeps it on top; Views-managed layer
+  // reordering would put it below the BrowserView's contents.
+  host->SetLayerManagedByViews(false);
+  host->SetProperty(views::kViewIgnoredByLayoutKey, true);
+  owned_sidebar_host_ = std::move(host);
+  sidebar_host_ = owned_sidebar_host_.get();
+}
+
+void FlyWindowController::BuildFooter() {
+  auto footer = std::make_unique<views::View>();
+  footer->SetLayoutManager(std::make_unique<views::BoxLayout>(
+      views::BoxLayout::Orientation::kVertical));
+  footer->SetBackground(FlyBackground(FlyRole::kMain));
+  // The download shelf, above the status bar; it appears when a
+  // download starts and makes room for itself.
+  download_shelf_ =
+      footer->AddChildView(std::make_unique<DownloadShelf>(base::BindRepeating(
+          [](base::WeakPtr<FlyWindowController> window) {
+            if (window && !window->Closing())
+              window->ToggleDownloads();
+          },
+          weak_factory_.GetWeakPtr())));
+  status_bar_ =
+      footer->AddChildView(std::make_unique<StatusBar>(StatusBar::Actions{
+          .zoom = base::BindRepeating(
+              [](base::WeakPtr<FlyWindowController> window,
+                 std::string action) {
+                if (window && !window->Closing())
+                  InvokeNativeCommand(window->browser_, action);
+              },
+              weak_factory_.GetWeakPtr()),
+          .mode = base::BindRepeating(&FlyWindowController::ClickModeBadge,
+                                      weak_factory_.GetWeakPtr()),
+          .notifications = base::BindRepeating(
+              &FlyWindowController::RunAction, weak_factory_.GetWeakPtr(),
+              std::string("toggle-notifications")),
+          .workspace =
+              base::BindRepeating(&FlyWindowController::ToggleWorkspacePicker,
+                                  weak_factory_.GetWeakPtr()),
+          .clock = base::BindRepeating(&FlyWindowController::CycleClockFormat,
+                                       weak_factory_.GetWeakPtr()),
+          .contents_changed = base::BindRepeating(
+              [](base::WeakPtr<FlyWindowController> window) {
+                if (!window)
+                  return;
+                window->ScheduleExtensionRefresh();
+                window->RefreshReaderState();
+              },
+              weak_factory_.GetWeakPtr()),
+      }));
+  status_ = status_bar_->mode_label();
+  footer_ = footer.get();
+  owned_footer_ = std::move(footer);
+}
+
+void FlyWindowController::BuildSurfaces() {
+  auto& app = FlyApp::Get();
+  hints_ = std::make_unique<HintController>(
+      widget_, base::BindRepeating(
+                   [](base::WeakPtr<FlyWindowController> window, bool) {
+                     if (window)
+                       window->UpdateModeLabel();
+                   },
+                   weak_factory_.GetWeakPtr()));
+  palette_ = std::make_unique<CommandPalette>(
+      widget_,
+      base::BindRepeating(
+          [](base::WeakPtr<FlyWindowController> window,
+             std::string_view action) {
+            if (!window || window->Closing())
+              return false;
+            return action == "trigger-hints" || action == "focus-sidebar" ||
+                   action == "new-workspace" || action == "next-workspace" ||
+                   action == "previous-workspace" ||
+                   action.starts_with("extension:") ||
+                   action.starts_with("extension-options:") ||
+                   action.starts_with("extensions-") ||
+                   NativeCommandAvailable(window->browser_, action);
+          },
+          weak_factory_.GetWeakPtr()),
+      base::BindRepeating(
+          [](base::WeakPtr<FlyWindowController> window,
+             content::WebContents* source, std::string action) {
+            if (!window || window->Closing() ||
+                window->ActiveContents() != source)
+              return;
+            if (action.starts_with("terminal:")) {
+              OpenTerminalWithCommand(action.substr(9));
+              return;
+            }
+            FlyApp::Get().preferences().RecordRecentCommand(action);
+            if (action.starts_with("extension"))
+              window->ChooseExtensionAction(source, std::move(action));
+            else
+              window->RunAction(std::move(action));
+          },
+          weak_factory_.GetWeakPtr()));
+  address_picker_ = std::make_unique<CommandPalette>(
+      widget_,
+      base::BindRepeating(
+          [](base::WeakPtr<FlyWindowController> window,
+             std::string_view action) {
+            return window && !window->Closing() &&
+                   window->address_choices_.contains(std::string(action));
+          },
+          weak_factory_.GetWeakPtr()),
+      base::BindRepeating(&FlyWindowController::ExecuteAddress,
+                          weak_factory_.GetWeakPtr()));
+  history_picker_ = std::make_unique<CommandPalette>(
+      widget_,
+      base::BindRepeating(
+          [](base::WeakPtr<FlyWindowController> window,
+             std::string_view action) {
+            return window && !window->Closing() &&
+                   window->history_choices_.contains(std::string(action));
+          },
+          weak_factory_.GetWeakPtr()),
+      base::BindRepeating(&FlyWindowController::OpenHistory,
+                          weak_factory_.GetWeakPtr()));
+  bookmark_picker_ = std::make_unique<CommandPalette>(
+      widget_,
+      base::BindRepeating(
+          [](base::WeakPtr<FlyWindowController> window, std::string_view url) {
+            return window && !window->Closing() &&
+                   window->bookmark_urls_.contains(std::string(url));
+          },
+          weak_factory_.GetWeakPtr()),
+      base::BindRepeating(&FlyWindowController::OpenBookmark,
+                          weak_factory_.GetWeakPtr()),
+      base::BindRepeating(&FlyWindowController::RemoveBookmark,
+                          weak_factory_.GetWeakPtr()));
+  workspace_picker_ = std::make_unique<CommandPalette>(
+      widget_,
+      base::BindRepeating(
+          [](base::WeakPtr<FlyWindowController> window,
+             std::string_view action) {
+            return window && window->WorkspaceChoiceAvailable(action);
+          },
+          weak_factory_.GetWeakPtr()),
+      base::BindRepeating(&FlyWindowController::ChooseWorkspace,
+                          weak_factory_.GetWeakPtr()));
+  tab_move_picker_ = std::make_unique<CommandPalette>(
+      widget_,
+      base::BindRepeating(
+          [](base::WeakPtr<FlyWindowController> window,
+             std::string_view action) {
+            if (!window || window->Closing())
+              return false;
+            auto& app = FlyApp::Get();
+            auto* source = window->move_source_browser_.get();
+            return app.CanMoveTab(source, window->move_source_.get()) &&
+                   std::ranges::any_of(app.TabMoveEntries(source),
+                                       [&](const PaletteEntry& entry) {
+                                         return entry.action == action;
+                                       });
+          },
+          weak_factory_.GetWeakPtr()),
+      base::BindRepeating(&FlyWindowController::ChooseTabMoveDestination,
+                          weak_factory_.GetWeakPtr()));
+  downloads_picker_ = std::make_unique<CommandPalette>(
+      widget_,
+      base::BindRepeating(
+          [](base::WeakPtr<FlyWindowController> window,
+             std::string_view action) {
+            return window && !window->Closing() &&
+                   (action == "downloads-page" ||
+                    action.starts_with("download:"));
+          },
+          weak_factory_.GetWeakPtr()),
+      base::BindRepeating(
+          [](base::WeakPtr<FlyWindowController> window, content::WebContents*,
+             std::string action) {
+            if (!window || window->Closing())
+              return;
+            if (action == "downloads-page") {
+              FlyApp::Get().OpenInNewTab(GURL("chrome://downloads/"),
+                                         window->browser_);
+              return;
+            }
+            if (!OpenDownloadEntry(FlyApp::Get().WorkspaceProfiles(),
+                                   window->browser_, action))
+              window->ShowStatus(u"That download is no longer available.");
+          },
+          weak_factory_.GetWeakPtr()),
+      base::BindRepeating(
+          [](base::WeakPtr<FlyWindowController> window, content::WebContents*,
+             std::string action) {
+            if (!window || window->Closing())
+              return;
+            const auto profiles = FlyApp::Get().WorkspaceProfiles();
+            RemoveDownloadEntry(profiles, action);
+            if (window->downloads_picker_->active())
+              window->downloads_picker_->UpdateItems(DownloadEntries(profiles),
+                                                     true);
+          },
+          weak_factory_.GetWeakPtr()));
+  extensions_picker_ = std::make_unique<CommandPalette>(
+      widget_,
+      base::BindRepeating(
+          [](base::WeakPtr<FlyWindowController> window,
+             std::string_view action) {
+            return window && !window->Closing() &&
+                   (action.starts_with("extension:") ||
+                    action.starts_with("extensions-"));
+          },
+          weak_factory_.GetWeakPtr()),
+      base::BindRepeating(&FlyWindowController::ChooseExtensionAction,
+                          weak_factory_.GetWeakPtr()));
+  settings_menu_ = std::make_unique<SettingsMenu>(
+      app.preferences(),
+      base::BindRepeating(
+          [](base::WeakPtr<FlyWindowController> window, std::string action) {
+            base::SingleThreadTaskRunner::GetCurrentDefault()->PostTask(
+                FROM_HERE,
+                base::BindOnce(
+                    [](base::WeakPtr<FlyWindowController> window,
+                       std::string action) {
+                      if (window)
+                        window->RunAction(std::move(action));
+                    },
+                    window, std::move(action)));
+          },
+          weak_factory_.GetWeakPtr()));
+  using Layout = PaletteStyle::Layout;
+  extensions_picker_->SetStyle({.layout = Layout::kCentre,
+                                .kind = MenuKind::kExtensions,
+                                .title = u"Extensions",
+                                .width = 560,
+                                .enter_label = u"Run",
+                                .empty_text = u"No extension actions in this "
+                                              u"workspace."});
+  downloads_picker_->SetStyle({.layout = Layout::kCentre,
+                               .kind = MenuKind::kDownloads,
+                               .title = u"Downloads",
+                               .width = 640,
+                               .enter_label = u"Open",
+                               .empty_text = u"No downloads yet."});
+  address_picker_->SetStyle({.layout = Layout::kTop,
+                             .kind = MenuKind::kAddress,
+                             .width = 680,
+                             .enter_label = u"Go"});
+  history_picker_->SetStyle({.layout = Layout::kTop,
+                             .kind = MenuKind::kHistory,
+                             .title = u"History",
+                             .width = 680,
+                             .empty_text = u"No history yet."});
+  auto page_insets = base::BindRepeating(
+      [](base::WeakPtr<FlyWindowController> window) {
+        if (!window)
+          return gfx::Insets();
+        return gfx::Insets::TLBR(0, window->SidebarSlotWidth(),
+                                 window->FooterHeight(), 0);
+      },
+      weak_factory_.GetWeakPtr());
+  bookmark_picker_->SetStyle({.layout = Layout::kPage,
+                              .kind = MenuKind::kBookmarks,
+                              .title = u"Bookmarks",
+                              .width = 820,
+                              .page_insets = page_insets,
+                              .empty_text = u"No bookmarks yet."});
+  palette_->SetStyle({.layout = Layout::kCentre,
+                      .kind = MenuKind::kCommands,
+                      .title = u"Commands",
+                      .width = 760,
+                      .page_insets = page_insets,
+                      .command_centre = true,
+                      .enter_label = u"Run"});
+  workspace_picker_->SetStyle({.layout = Layout::kPage,
+                               .kind = MenuKind::kWorkspaces,
+                               .title = u"Workspaces",
+                               .width = 820,
+                               .page_insets = page_insets});
+  // The dashboard: drag a tab onto a tab to reorder it (or move it to
+  // that tab's workspace), or onto a workspace to move it there.
+  workspace_picker_->SetDragDrop(
+      base::BindRepeating(
+          [](std::string_view action) { return action.starts_with("tab/"); }),
+      base::BindRepeating(&FlyWindowController::DropDashboardTab,
+                          weak_factory_.GetWeakPtr()));
+  tab_move_picker_->SetStyle({.layout = Layout::kCentre,
+                              .kind = MenuKind::kTabMove,
+                              .title = u"Move tab to workspace",
+                              .width = 560,
+                              .enter_label = u"Move"});
+  keyboard_editor_ = std::make_unique<KeyboardEditor>(
+      widget_, app.commands(), *g_browser_process->local_state());
+  keyboard_editor_->SetActionRunner(base::BindRepeating(
+      &FlyWindowController::RunPreferencesAction, weak_factory_.GetWeakPtr()));
+  diagnostics_hub_ = std::make_unique<DiagnosticsHub>(
+      widget_,
+      DiagnosticsHub::Delegate{
+          .session = base::BindRepeating([] {
+            auto* app = FlyApp::GetIfCreated();
+            return app ? app->CurrentDiagnostics() : DiagnosticsSession();
+          }),
+          .set_recording = base::BindRepeating([](bool on) {
+            auto* app = FlyApp::GetIfCreated();
+            if (!app)
+              return;
+            app->preferences().SetBool("enable_diagnostics", on);
+            if (!on)
+              app->ClearDiagnostics();
+          }),
+          .clear_events = base::BindRepeating([] {
+            if (auto* app = FlyApp::GetIfCreated())
+              app->ClearDiagnostics();
+          }),
+          .open_url = base::BindRepeating(
+              [](base::WeakPtr<FlyWindowController> window, GURL url) {
+                if (window && !window->Closing())
+                  FlyApp::Get().OpenInNewTab(url, window->browser_);
+              },
+              weak_factory_.GetWeakPtr()),
+          .page_insets = page_insets});
+  keyboard_editor_->SetExtensions(
+      &app.extensions(),
+      base::BindRepeating(
+          [](base::WeakPtr<FlyWindowController> window)
+              -> BrowserWindowInterface* {
+            return window && !window->Closing() ? window->browser_.get()
+                                                : nullptr;
+          },
+          weak_factory_.GetWeakPtr()),
+      base::BindRepeating(
+          [](base::WeakPtr<FlyWindowController> window) -> Profile* {
+            return window && !window->Closing()
+                       ? window->browser_->GetProfile()
+                       : nullptr;
+          },
+          weak_factory_.GetWeakPtr()));
+}
+
+void FlyWindowController::InstallInto(FlyBrowserFrame* frame) {
+  if (frame_ == frame)
+    return;
+  // A recreated frame takes the views over from its predecessor.
+  if (footer_ && footer_->parent())
+    owned_footer_ = footer_->parent()->RemoveChildViewT(footer_.get());
+  if (sidebar_host_ && sidebar_host_->parent()) {
+    sidebar_targeter_ = nullptr;
+    if (sidebar_host_->native_view())
+      sidebar_host_->Detach();
+    owned_sidebar_host_ =
+        sidebar_host_->parent()->RemoveChildViewT(sidebar_host_.get());
+  }
+  if (frame_)
+    frame_->SetController(nullptr);
+  frame_ = frame;
+  frame_->SetController(weak_factory_.GetWeakPtr());
+  frame_->AddChildView(std::move(owned_footer_));
+  frame_->AddChildView(std::move(owned_sidebar_host_));
+  sidebar_host_->Attach(sidebar_widget_->GetNativeView());
+  // Only the visible panel takes the pointer; the rest of the host (the
+  // panel while collapsed, its shadow) leaves events to the page below.
+  if (auto* clip = sidebar_host_->GetNativeViewContainer()) {
+    // The clip window itself never takes events; the panel's hit mask
+    // decides for points such as drops.
+    clip->SetEventTargetingPolicy(
+        aura::EventTargetingPolicy::kDescendantsOnly);
+    clip->SetEventTargeter(std::make_unique<aura::WindowTargeter>());
+    sidebar_targeter_ = clip->targeter();
+  }
+  sidebar_motion_applied_ = false;
+  UpdateFullscreenChrome();
+  frame_->InvalidateLayout();
+}
+
+void FlyWindowController::FrameDestroying(FlyBrowserFrame* frame) {
+  if (frame_ != frame)
+    return;
+  frame_ = nullptr;
+  // The frame destroys its children with it; a replacement frame installs
+  // them first. Without one the window is closing.
+  sidebar_targeter_ = nullptr;
+  if (sidebar_host_ && sidebar_host_->native_view())
+    sidebar_host_->Detach();
+  sidebar_host_ = nullptr;
+  footer_ = nullptr;
+  download_shelf_ = nullptr;
+  status_bar_ = nullptr;
+  status_ = nullptr;
+}
+
+int FlyWindowController::SidebarSlotWidth() const {
+  if (!widget_ || widget_->IsFullscreen())
+    return 0;
+  return FlyScaled(sidebar_auto_collapse_ ? kSidebarRailWidth : kSidebarWidth);
+}
+
+int FlyWindowController::FooterHeight() const {
+  if (!widget_ || widget_->IsFullscreen() || !footer_ || !footer_->GetVisible())
+    return 0;
+  return footer_->GetPreferredSize().height();
+}
+
+void FlyWindowController::LayoutFrameChrome() {
+  if (!frame_)
+    return;
+  const auto bounds = frame_->GetLocalBounds();
+  if (footer_) {
+    const int slot = SidebarSlotWidth();
+    const int height = FooterHeight();
+    footer_->SetBounds(slot, bounds.height() - height,
+                       std::max(0, bounds.width() - slot), height);
+  }
+  UpdateSidebarBounds();
+}
+
+void FlyWindowController::UpdateFullscreenChrome() {
+  if (Closing() || !sidebar_host_ || !footer_)
+    return;
+  const bool fullscreen = widget_->IsFullscreen();
+  sidebar_host_->SetVisible(!fullscreen);
+  if (fullscreen)
+    sidebar_widget_->Hide();
+  footer_->SetVisible(!fullscreen);
+  if (!fullscreen)
+    UpdateSidebarVisibility();
+  if (frame_)
+    frame_->InvalidateLayout();
+}
+
+views::ImageButton* FlyWindowController::window_control_for_testing(
+    std::string_view action) const {
+  const auto found = window_control_buttons_.find(std::string(action));
+  return found == window_control_buttons_.end() ? nullptr : found->second.get();
+}
+
+void FlyWindowController::CancelSurfaces() {
+  CancelWorkspaceRename();
+  if (hints_)
+    hints_->Cancel();
+  for (auto* picker :
+       {palette_.get(), address_picker_.get(), workspace_picker_.get(),
+        tab_move_picker_.get(), bookmark_picker_.get(),
+        downloads_picker_.get(), extensions_picker_.get()}) {
+    if (picker)
+      picker->Cancel();
+  }
+  if (settings_menu_)
+    settings_menu_->Cancel();
+  if (history_)
+    CancelHistory();
+  if (keyboard_editor_)
+    keyboard_editor_->Cancel();
+}
+
+void FlyWindowController::ClearSidebarViews() {
+  clock_timer_.Stop();
+  window_control_buttons_.clear();
+  window_controls_ = nullptr;
+  workspace_buttons_ = nullptr;
+  clock_ = nullptr;
+  preferences_button_ = nullptr;
+  tab_sidebar_ = nullptr;
+  sidebar_content_ = nullptr;
+  sidebar_pin_button_ = nullptr;
+  reader_button_ = nullptr;
+  split_button_ = nullptr;
+  reader_poll_.Stop();
+  new_tab_button_ = nullptr;
+  workspace_badge_ = nullptr;
+  workspace_label_ = nullptr;
+  workspace_picker_button_ = nullptr;
+  sidebar_panel_ = nullptr;
+  sidebar_root_ = nullptr;
+  tab_numbers_timer_.Stop();
+}
+
+void FlyWindowController::StopSidebarFocusObservation() {
+  if (sidebar_focus_client_) {
+    sidebar_focus_client_->RemoveObserver(this);
+    sidebar_focus_client_ = nullptr;
+  }
+  if (observing_sidebar_focus_ && widget_) {
+    widget_->GetFocusManager()->RemoveFocusChangeListener(this);
+    observing_sidebar_focus_ = false;
+  }
+}
+
+bool FlyWindowController::SidebarOverlayBlocked() const {
+  return (address_picker_ && address_picker_->active()) ||
+         (palette_ && palette_->active()) ||
+         (workspace_picker_ && workspace_picker_->active()) ||
+         (tab_move_picker_ && tab_move_picker_->active()) ||
+         (downloads_picker_ && downloads_picker_->active()) ||
+         (extensions_picker_ && extensions_picker_->active()) ||
+         (bookmark_picker_ && bookmark_picker_->active()) ||
+         (history_picker_ && history_picker_->active()) ||
+         (keyboard_editor_ && keyboard_editor_->active()) ||
+         (hints_ && hints_->active());
+}
+
+void FlyWindowController::UpdateSidebarBounds() {
+  if (!sidebar_widget_ || !sidebar_widget_->GetNativeWindow() || !frame_ ||
+      !sidebar_host_)
+    return;
+  auto bounds = frame_->GetLocalBounds();
+  if (bounds.IsEmpty())
+    return;
+  // The host keeps one size in both states: the edge moves on the
+  // compositor, and only the hit area follows it.
+  bounds.set_width(FlyScaled(kSidebarWidth) +
+                   (sidebar_auto_collapse_ ? kSidebarShadowExtent : 0));
+  sidebar_host_->SetBoundsRect(bounds);
+  // This overlay is excluded from layout; update its native clip explicitly.
+  sidebar_host_->DeprecatedLayoutImmediately();
+  UpdateSidebarHitArea();
+}
+
+void FlyWindowController::UpdateSidebarHitArea() {
+  if (!sidebar_targeter_ || !sidebar_host_)
+    return;
+  sidebar_targeter_->SetInsets(gfx::Insets::TLBR(
+      0, 0, 0, std::max(0, sidebar_host_->width() - sidebar_hit_width_)));
+}
+
+float FlyWindowController::SidebarShiftNow() const {
+  if (!sidebar_motion_animating_)
+    return sidebar_shift_to_;
+  const double progress =
+      std::clamp((base::TimeTicks::Now() - sidebar_motion_start_) /
+                     kSidebarMotion,
+                 0.0, 1.0);
+  return gfx::Tween::FloatValueBetween(
+      gfx::Tween::CalculateValue(gfx::Tween::FAST_OUT_SLOW_IN_3, progress),
+      sidebar_shift_from_, sidebar_shift_to_);
+}
+
+int FlyWindowController::VisibleSidebarWidth() const {
+  return FlyScaled(kSidebarWidth) - static_cast<int>(SidebarShiftNow() + 0.5f);
+}
+
+void FlyWindowController::OnSidebarMotionEnded() {
+  sidebar_motion_animating_ = false;
+  // A finished collapse gives the page back everything right of the rail.
+  sidebar_hit_width_ =
+      FlyScaled(kSidebarWidth) - static_cast<int>(sidebar_shift_to_ + 0.5f);
+  UpdateSidebarHitArea();
+}
+
+void FlyWindowController::UpdateSidebarMode() {
+  if (!sidebar_content_)
+    return;
+  auto& preferences = FlyApp::Get().preferences();
+  const bool collapse = preferences.ReadSidebarAutoCollapse().value_or(false);
+  const bool changed = collapse != sidebar_auto_collapse_;
+  sidebar_auto_collapse_ = collapse;
+  if (auto* pin = sidebar_pin_button_.get()) {
+    const auto* label = collapse ? u"Pin sidebar" : u"Unpin sidebar";
+    pin->SetVectorIcon(collapse ? views::kKeepIcon : views::kKeepFilledIcon,
+                       12);
+    pin->SetSelected(!collapse);
+    pin->SetAccentText(!collapse);
+    pin->SetTooltipText(label);
+    pin->GetViewAccessibility().SetName(label);
+    pin->SetEnabled(preferences.CanEditSidebarAutoCollapse());
+  }
+  if (changed && collapse) {
+    sidebar_keyboard_expanded_ = false;
+    sidebar_focus_inside_ = false;
+    if (sidebar_content_->Contains(widget_->GetFocusManager()->GetFocusedView()))
+      ReturnFocusFromSidebar();
+  }
+  // A mode or scale change applies at once (the slide distance, the shadow
+  // and the details follow the new mode); other preference writes leave a
+  // running slide alone. Fly starts collapsed instead of animating closed.
+  sidebar_motion_ready_ = false;
+  if (changed || sidebar_motion_scale_ != GetFlyInterfaceScale())
+    sidebar_motion_applied_ = false;
+  // Pinning or unpinning resizes the page once; hovering never does.
+  if (frame_)
+    frame_->InvalidateLayout();
+  UpdateSidebarBounds();
+  UpdateSidebarVisibility();
+  sidebar_motion_ready_ = true;
+}
+
+std::u16string FlyWindowController::workspace_header_for_testing() const {
+  return std::u16string(workspace_label_->GetText());
+}
+
+void FlyWindowController::UpdateSidebarVisibility() {
+  if (Closing() || !sidebar_content_ || !sidebar_host_ ||
+      !sidebar_widget_->GetNativeWindow())
+    return;
+  if (widget_->IsFullscreen()) {
+    sidebar_host_->SetVisible(false);
+    sidebar_widget_->Hide();
+    return;
+  }
+  bool menu_open = tab_sidebar_->context_menu_for_testing() ||
+                   workspace_rename_dialog_for_testing() ||
+                   workspace_remove_dialog_for_testing();
+  for (const auto& child : workspace_buttons_->children()) {
+    auto* button = views::AsViewClass<WorkspaceMenuButton>(child.get());
+    menu_open |= button && button->running_model();
+  }
+  const bool blocked = SidebarOverlayBlocked();
+  const bool expanded =
+      !sidebar_auto_collapse_ ||
+      (!blocked && (sidebar_pointer_inside_ || sidebar_focus_inside_ ||
+                    sidebar_keyboard_expanded_ || menu_open));
+  if (!sidebar_widget_->IsVisible())
+    sidebar_widget_->ShowInactive();
+  sidebar_host_->SetVisible(true);
+  // Keep the overlay above the page's native views; a floating surface
+  // stays above the sidebar.
+  if (!blocked) {
+    auto* clip = sidebar_host_->GetNativeViewContainer();
+    if (clip && clip->parent())
+      clip->parent()->StackChildAtTop(clip);
+  }
+  if (expanded != sidebar_expanded_ || !sidebar_motion_applied_) {
+    sidebar_expanded_ = expanded;
+    ApplySidebarMotion(sidebar_motion_ready_ && sidebar_motion_applied_ &&
+                       !gfx::Animation::PrefersReducedMotion());
+  }
+  UpdateClock();
+}
+
+// The slide: collapsed, the edge sits 224px to the left and the panel 224px
+// back to the right inside it, so the panel's left 36px show. Both transforms
+// run on the compositor; the shadow and the state-specific details fade with
+// them.
+void FlyWindowController::ApplySidebarMotion(bool animate) {
+  auto* panel = sidebar_root_ ? sidebar_root_->panel() : nullptr;
+  auto* edge = sidebar_root_ ? sidebar_root_->edge() : nullptr;
+  if (!panel || !panel->layer() || !edge || !edge->layer())
+    return;
+  sidebar_motion_applied_ = true;
+  sidebar_motion_scale_ = GetFlyInterfaceScale();
+  const bool rail = sidebar_auto_collapse_ && !sidebar_expanded_;
+  const int shift = rail ? FlyScaled(kSidebarWidth - kSidebarRailWidth) : 0;
+  sidebar_shift_from_ = SidebarShiftNow();
+  sidebar_shift_to_ = shift;
+  sidebar_motion_start_ = base::TimeTicks::Now();
+  sidebar_motion_animating_ = animate;
+  // Expanding takes the pointer at once; collapsing keeps the panel's area
+  // until the edge has passed, so the page never gets clicks on a panel
+  // that is still visible.
+  if (!rail || !animate)
+    sidebar_hit_width_ = FlyScaled(kSidebarWidth) - shift;
+  gfx::Transform outer;
+  outer.Translate(-shift, 0);
+  gfx::Transform inner;
+  inner.Translate(shift, 0);
+  const float shadow = sidebar_auto_collapse_ && sidebar_expanded_ ? 1 : 0;
+  UpdateSidebarHitArea();
+  tab_sidebar_->SetRail(rail);
+  if (!animate) {
+    for (auto* layer :
+         {edge->layer(), panel->layer(), sidebar_root_->shadow()->layer()})
+      layer->GetAnimator()->StopAnimating();
+    edge->layer()->SetTransform(outer);
+    panel->layer()->SetTransform(inner);
+    sidebar_root_->shadow()->layer()->SetOpacity(shadow);
+    sidebar_panel_->SetRail(rail, nullptr);
+    return;
+  }
+  views::AnimationBuilder builder;
+  builder.SetPreemptionStrategy(
+      ui::LayerAnimator::IMMEDIATELY_ANIMATE_TO_NEW_TARGET);
+  builder.OnEnded(base::BindOnce(&FlyWindowController::OnSidebarMotionEnded,
+                                 weak_factory_.GetWeakPtr()));
+  auto& block = builder.Once()
+                    .SetDuration(kSidebarMotion)
+                    .SetTransform(edge->layer(), outer,
+                                  gfx::Tween::FAST_OUT_SLOW_IN_3)
+                    .SetTransform(panel->layer(), inner,
+                                  gfx::Tween::FAST_OUT_SLOW_IN_3)
+                    .SetOpacity(sidebar_root_->shadow()->layer(), shadow,
+                                gfx::Tween::FAST_OUT_SLOW_IN_3);
+  sidebar_panel_->SetRail(rail, &block);
+}
+
+void FlyWindowController::LoadSidebarArtwork() {
+  base::ThreadPool::PostTaskAndReplyWithResult(
+      FROM_HERE, {base::MayBlock(), base::TaskPriority::USER_VISIBLE},
+      base::BindOnce([]() {
+        std::array<std::string, 3> bytes;
+        base::FilePath assets;
+        if (!base::PathService::Get(base::DIR_ASSETS, &assets))
+          return bytes;
+        const auto identity =
+            assets.AppendASCII("fly_resources").AppendASCII("identity");
+        const std::array<const char*, 3> names = {
+            "engraving-chasis@2x.png", "engraving-papel@2x.png",
+            "paper-grain.png"};
+        for (size_t i = 0; i < names.size(); ++i) {
+          base::ReadFileToStringWithMaxSize(identity.AppendASCII(names.at(i)),
+                                            &bytes.at(i), 1024 * 1024);
+        }
+        return bytes;
+      }),
+      base::BindOnce(
+          [](base::WeakPtr<FlyWindowController> window,
+             std::array<std::string, 3> bytes) {
+            if (!window || !window->sidebar_panel_)
+              return;
+            // The engravings are 2x artwork (512px for a 256px image).
+            const auto decode = [](const std::string& png, float scale) {
+              const auto bitmap =
+                  gfx::PNGCodec::Decode(base::as_byte_span(png));
+              return bitmap.isNull()
+                         ? gfx::ImageSkia()
+                         : gfx::ImageSkia(gfx::ImageSkiaRep(bitmap, scale));
+            };
+            const auto grain = decode(bytes.at(2), 1);
+            window->sidebar_panel_->SetArtwork(decode(bytes.at(0), 2),
+                                               decode(bytes.at(1), 2), grain);
+            if (window->status_bar_)
+              window->status_bar_->SetPaperGrain(grain);
+          },
+          weak_factory_.GetWeakPtr()));
+}
+
+void FlyWindowController::ToggleSidebarAutoCollapse() {
+  auto& preferences = FlyApp::Get().preferences();
+  const auto collapse = preferences.ReadSidebarAutoCollapse();
+  if (collapse)
+    preferences.SetSidebarAutoCollapse(!*collapse);
+}
+
+void FlyWindowController::ReturnFocusFromSidebar() {
+  sidebar_keyboard_expanded_ = false;
+  sidebar_focus_inside_ = false;
+  if (sidebar_content_ &&
+      sidebar_content_->Contains(widget_->GetFocusManager()->GetFocusedView()))
+    widget_->GetFocusManager()->ClearFocus();
+  if (auto* contents = ActiveContents())
+    contents->Focus();
+  UpdateSidebarVisibility();
+}
+
+void FlyWindowController::FocusSidebar() {
+  if (Closing() || !sidebar_content_)
+    return;
+  if (sidebar_focus_inside_) {
+    ReturnFocusFromSidebar();
+    return;
+  }
+  sidebar_keyboard_expanded_ = true;
+  // Activating a row sends Aura focus to the page while the focus manager
+  // still records that row. Requesting the same view again would then be a
+  // no-op, leaving the expanded sidebar without keyboard focus.
+  if (sidebar_content_->Contains(widget_->GetFocusManager()->GetFocusedView()))
+    widget_->GetFocusManager()->ClearFocus();
+  UpdateSidebarBounds();
+  UpdateSidebarVisibility();
+  if (!browser_->GetTabStripModel()->empty())
+    tab_sidebar_->FocusActiveTab();
+  else
+    workspace_picker_button_->RequestFocus();
+}
+
+bool FlyWindowController::SidebarHasFocus() const {
+  if (!sidebar_content_ || !sidebar_focus_client_ || !sidebar_widget_ ||
+      !widget_)
+    return false;
+  const auto* focused = sidebar_focus_client_->GetFocusedWindow();
+  return focused && (sidebar_widget_->GetNativeWindow()->Contains(focused) ||
+                     (focused == widget_->GetNativeWindow() &&
+                      sidebar_content_->Contains(
+                          widget_->GetFocusManager()->GetFocusedView())));
+}
+
+void FlyWindowController::OnDidChangeFocus(views::View*, views::View* now) {
+  if (Closing() || !sidebar_content_)
+    return;
+  sidebar_focus_inside_ = sidebar_content_->Contains(now);
+  if (sidebar_focus_inside_)
+    sidebar_keyboard_expanded_ = false;
+  UpdateSidebarVisibility();
+}
+
+void FlyWindowController::OnWindowFocused(aura::Window* gained,
+                                          aura::Window*) {
+  if (Closing() || !sidebar_content_ || !sidebar_widget_->GetNativeWindow())
+    return;
+  const auto* native = sidebar_widget_->GetNativeWindow();
+  sidebar_focus_inside_ =
+      gained &&
+      (native->Contains(gained) || gained == widget_->GetNativeWindow()) &&
+      sidebar_content_->Contains(widget_->GetFocusManager()->GetFocusedView());
+  if (!sidebar_focus_inside_)
+    sidebar_keyboard_expanded_ = false;
+  UpdateSidebarVisibility();
+}
+
+void FlyWindowController::OnWidgetBoundsChanged(views::Widget* widget,
+                                                const gfx::Rect&) {
+  if (widget == widget_)
+    UpdateSidebarBounds();
+}
+
+void FlyWindowController::OnMouseEvent(ui::MouseEvent* event) {
+  if (Closing() || !sidebar_content_ || SidebarOverlayBlocked())
+    return;
+  if (event->type() != ui::EventType::kMouseMoved &&
+      event->type() != ui::EventType::kMouseEntered &&
+      event->type() != ui::EventType::kMouseExited &&
+      event->type() != ui::EventType::kMousePressed)
+    return;
+  // Leaving the window keeps the sidebar as it is: moving
+  // from the page to the screen's left edge opens it, and touching the
+  // window border does not close it. Entering the page closes it.
+  if (event->type() == ui::EventType::kMouseExited)
+    return;
+  auto point = event->root_location();
+  wm::ConvertPointToScreen(widget_->GetNativeWindow()->GetRootWindow(),
+                           &point);
+  const auto window = widget_->GetRootView()->GetBoundsInScreen();
+  if (!window.Contains(point) && event->type() != ui::EventType::kMousePressed)
+    return;
+  // The edge the user sees, mid-slide included.
+  auto bounds = window;
+  bounds.set_width(VisibleSidebarWidth());
+  const bool was_inside = sidebar_pointer_inside_;
+  sidebar_pointer_inside_ = bounds.Contains(point);
+  const bool pressed = event->type() == ui::EventType::kMousePressed;
+  // Pointer motion only matters when it crosses the sidebar edge.
+  if (!pressed && was_inside == sidebar_pointer_inside_)
+    return;
+  if (!sidebar_pointer_inside_ && pressed) {
+    sidebar_keyboard_expanded_ = false;
+    sidebar_focus_inside_ = false;
+    if (SidebarHasFocus() ||
+        sidebar_content_->Contains(
+            widget_->GetFocusManager()->GetFocusedView())) {
+      widget_->GetFocusManager()->ClearFocus();
+      // A click on the page moves keyboard focus from the sidebar to it.
+      auto* page = ActiveContents();
+      auto* view = page ? page->GetRenderWidgetHostView() : nullptr;
+      if (view && view->GetViewBounds().Contains(point))
+        page->Focus();
+    }
+  }
+  UpdateSidebarVisibility();
+}
+
+void FlyWindowController::UpdateWindowControls() {
+  if (!window_controls_)
+    return;
+  const bool visible = FlyApp::Get()
+                           .preferences()
+                           .ReadWindowControlsVisible()
+                           .value_or(false);
+  if (!visible &&
+      window_controls_->Contains(widget_->GetFocusManager()->GetFocusedView())) {
+    widget_->GetFocusManager()->ClearFocus();
+    if (auto* contents = ActiveContents())
+      contents->Focus();
+  }
+  window_controls_->SetVisible(visible);
+  const bool maximized = widget_->IsMaximized();
+  auto* maximize = window_control_buttons_.at("maximize").get();
+  const auto icon = ui::ImageModel::FromVectorIcon(
+      maximized ? views::kChromeRestoreIcon : views::kChromeMaximizeIcon,
+      ui::kColorIcon, 16);
+  for (auto state : {views::Button::STATE_NORMAL, views::Button::STATE_HOVERED,
+                     views::Button::STATE_PRESSED,
+                     views::Button::STATE_DISABLED})
+    maximize->SetImageModel(state, icon);
+  const auto* title = maximized ? u"Restore window" : u"Maximize window";
+  maximize->SetTooltipText(title);
+  maximize->GetViewAccessibility().SetName(title);
+}
+
+void FlyWindowController::RunWindowControl(std::string action) {
+  if (Closing() || !window_controls_->GetVisible())
+    return;
+  // Complete pointer/keyboard button dispatch before native close callbacks can
+  // destroy this control or the window.
+  base::SingleThreadTaskRunner::GetCurrentDefault()->PostNonNestableTask(
+      FROM_HERE,
+      base::BindOnce(
+          [](base::WeakPtr<FlyWindowController> window, std::string action) {
+            if (!window || window->Closing() ||
+                !FlyApp::Get()
+                     .preferences()
+                     .ReadWindowControlsVisible()
+                     .value_or(false))
+              return;
+            if (action == "minimize")
+              window->widget_->Minimize();
+            else if (action == "maximize") {
+              if (window->widget_->IsMaximized())
+                window->widget_->Restore();
+              else
+                window->widget_->Maximize();
+            } else if (action == "close") {
+              window->browser_->GetWindow()->Close();
+            }
+          },
+          weak_factory_.GetWeakPtr(), std::move(action)));
+}
+
+void FlyWindowController::OnWidgetShowStateChanged(views::Widget* widget) {
+  if (widget != widget_)
+    return;
+  UpdateFullscreenChrome();
+  UpdateWindowControls();
+  UpdateClock();
+}
+
+void FlyWindowController::OnWidgetVisibilityChanged(views::Widget* widget,
+                                                    bool) {
+  if (widget == widget_)
+    UpdateClock();
+}
+
+void FlyWindowController::OnWidgetActivationChanged(views::Widget* widget,
+                                                    bool active) {
+  if (widget != widget_)
+    return;
+  // A blurred window can no longer see the modifier's release.
+  if (!active)
+    SetTabNumbers(false);
+}
+
+void FlyWindowController::OnWidgetDestroying(views::Widget* widget) {
+  if (widget == sidebar_widget_.get()) {
+    ClearSidebarViews();
+    return;
+  }
+  if (widget != widget_)
+    return;
+  // The floating surfaces observe this window themselves and close with it.
+  // Child widgets go with their parent's native window; their Widget objects
+  // are released with this controller, outside this notification.
+  StopSidebarFocusObservation();
+  clock_timer_.Stop();
+  reader_poll_.Stop();
+  tab_numbers_timer_.Stop();
+  if (auto* native_window = widget_->GetNativeWindow())
+    native_window->RemovePreTargetHandler(this);
+  widget_->RemoveObserver(this);
+  if (frame_) {
+    frame_->SetController(nullptr);
+    FrameDestroying(frame_);
+  }
+  widget_ = nullptr;
+  // The Browser is deleted right after its widget.
+  browser_closed_ = true;
+  browser_ = nullptr;
+  if (auto* app = FlyApp::GetIfCreated())
+    app->ReleaseWindow(this);
+}
+
+void FlyWindowController::OnBrowserDidClose(BrowserWindowInterface* browser) {
+  if (browser != browser_)
+    return;
+  CancelSurfaces();
+  browser_closed_ = true;
+  if (tab_sidebar_)
+    tab_sidebar_->SetBrowser(nullptr);
+  if (status_bar_)
+    status_bar_->SetBrowser(nullptr, u"");
+  if (auto* app = FlyApp::GetIfCreated())
+    app->BroadcastWorkspaceRefresh();
+}
+
+void FlyWindowController::ApplyColorMode() {
+  const auto theme = FlyApp::Get().preferences().ReadTheme();
+  if (!theme)
+    return;
+  const auto color_mode = theme->mode == "dark"
+                              ? ui::ColorProviderKey::ColorMode::kDark
+                              : ui::ColorProviderKey::ColorMode::kLight;
+  widget_->SetColorModeOverride(color_mode);
+  sidebar_widget_->SetColorModeOverride(color_mode);
+}
+
+void FlyWindowController::OnPreferencesChanged(bool theme_changed) {
+  if (!widget_)
+    return;
+  if (theme_changed)
+    ApplyColorMode();
+  UpdateClock();
+  UpdateSidebarMode();
+  UpdateWindowControls();
+}
+
+void FlyWindowController::OnPaletteChanged(bool scale_changed) {
+  if (!widget_)
+    return;
+  for (auto* widget : {widget_.get(), sidebar_widget_.get()}) {
+    if (widget && widget->GetNativeWindow()) {
+      // Fly's palette and interface scale live outside Chromium's color
+      // provider key. Its theme-change optimization must not skip our font,
+      // geometry and artwork cache updates when that key stays the same.
+      widget->ResetLastColorProviderKey();
+      widget->ThemeChanged();
+      widget->GetRootView()->SchedulePaint();
+    }
+  }
+  if (scale_changed) {
+    // Widths follow the interface scale.
+    if (auto* sidebar = sidebar_content_.get())
+      sidebar->SetPreferredSize(gfx::Size(FlyScaled(260), 0));
+    UpdateSidebarMode();
+    UpdateSidebarBounds();
+    if (frame_)
+      frame_->InvalidateLayout();
+  }
+}
+
+void FlyWindowController::SetNotificationsEnabled(bool enabled) {
+  if (status_bar_)
+    status_bar_->SetNotificationsEnabled(enabled);
+}
+
+void FlyWindowController::SetUpdateStatus(std::u16string status,
+                                          std::string version) {
+  if (keyboard_editor_)
+    keyboard_editor_->SetUpdateStatus(std::move(status), std::move(version));
+}
+
+void FlyWindowController::RefreshDesktopIntegration() {
+  ReadDesktopIntegration(base::BindOnce(
+      [](base::WeakPtr<FlyWindowController> window,
+         DesktopIntegrationStatus status) {
+        if (window)
+          window->ShowDesktopIntegration(status, u"");
+      },
+      weak_factory_.GetWeakPtr()));
+}
+
+void FlyWindowController::ShowDesktopIntegration(
+    const DesktopIntegrationStatus& status,
+    std::u16string error) {
+  if (keyboard_editor_)
+    ShowDesktopIntegrationIn(*keyboard_editor_, status, std::move(error));
+}
+
+void FlyWindowController::UpdateWorkspaceHeader() {
+  if (!workspace_picker_button_ || browser_closed_)
+    return;
+  std::u16string name = u"Workspace";
+  std::u16string badge = u"?";
+  std::u16string compact = u"W";
+  const bool is_private = browser_->GetProfile()->IsOffTheRecord();
+  auto& app = FlyApp::Get();
+  const auto catalog = app.workspaces().Read();
+  if (is_private) {
+    name = u"Private";
+    badge = u"P";
+    compact = u"P";
+  } else if (catalog) {
+    if (const auto workspace = app.WorkspaceFor(browser_->GetProfile())) {
+      for (size_t i = 0; i < catalog->items.size(); ++i) {
+        if (catalog->items[i].id != workspace->id)
+          continue;
+        name = base::UTF8ToUTF16(catalog->items[i].name);
+        badge = base::NumberToString16(i + 1);
+        compact = u"W" + badge;
+      }
+    }
+  }
+  workspace_badge_->SetText(is_private ? compact : WorkspaceBadgeText(name));
+  workspace_label_->SetText(name);
+  workspace_picker_button_->GetViewAccessibility().SetName(
+      u"Workspace " + name + u": open the workspace dashboard");
+  // The list is only needed to reach other workspaces or windows directly.
+  workspace_buttons_->SetVisible(
+      (catalog && catalog->items.size() > 1) ||
+      workspace_buttons_->children().size() >
+          (catalog ? catalog->items.size() : 0));
+}
+
+void FlyWindowController::UpdateClock() {
+  if (!clock_ || !widget_)
+    return;
+  auto& preferences = FlyApp::Get().preferences();
+  const bool footer = preferences.ReadStatusBarVisible().value_or(false);
+  if (status_bar_)
+    status_bar_->SetVisible(footer);
+  const auto settings = preferences.ReadClock();
+  const bool visible = settings && settings->visible;
+  if (!visible && clock_->HasFocus()) {
+    if (auto* contents = ActiveContents())
+      contents->Focus();
+  }
+  clock_->SetVisible(visible);
+  clock_->SetEnabled(preferences.CanEditClock());
+  if (!visible) {
+    if (status_bar_)
+      status_bar_->SetClockVisible(false);
+    clock_timer_.Stop();
+    return;
+  }
+  // The clock always carries the current time: assistive technology reads it
+  // even while the sidebar is collapsed. Only a shown clock keeps ticking.
+  const auto now = base::Time::Now();
+  const auto text = FormatClock(now, settings->format);
+  // The sidebar and the footer draw the date and the time separately (time
+  // in the accent display face).
+  std::u16string date;
+  std::u16string time = text.label;
+  if (settings->format == "datetime") {
+    const auto split = text.label.rfind(u' ');
+    if (split != std::u16string::npos) {
+      date = text.label.substr(0, split);
+      base::TrimWhitespace(date, base::TRIM_TRAILING, &date);
+      time = text.label.substr(split + 1);
+    }
+  }
+  clock_->SetClock(text.label, date, time);
+  if (clock_->GetTooltipText() != text.tooltip)
+    clock_->SetTooltipText(text.tooltip);
+  const bool window_shown = widget_->IsVisible() && !widget_->IsMinimized();
+  if (!window_shown || (!sidebar_expanded_ && !footer)) {
+    if (status_bar_)
+      status_bar_->SetClockVisible(true);
+    clock_timer_.Stop();
+    return;
+  }
+  if (status_bar_)
+    status_bar_->SetClock(date, time, text.tooltip, true);
+  // Wake at the next visible change only: the next second for the seconds
+  // format, otherwise the next minute.
+  base::Time::Exploded local;
+  now.LocalExplode(&local);
+  const auto delay =
+      settings->format == "seconds"
+          ? base::Milliseconds(1000 - local.millisecond)
+          : base::Seconds(60 - local.second) -
+                base::Milliseconds(local.millisecond);
+  clock_timer_.Start(FROM_HERE, delay + base::Milliseconds(5),
+                     base::BindOnce(&FlyWindowController::UpdateClock,
+                                    weak_factory_.GetWeakPtr()));
+}
+
+void FlyWindowController::CycleClockFormat() {
+  FlyApp::Get().preferences().CycleClockFormat();
+}
+
+void FlyWindowController::UpdateSplitButton() {
+  if (Closing() || !split_button_)
+    return;
+  auto* model = browser_->GetTabStripModel();
+  split_button_->SetSelected(
+      model->active_index() >= 0 &&
+      model->GetSplitForTab(model->active_index()).has_value());
+}
+
+void FlyWindowController::ScheduleWorkspaceRefresh() {
+  if (workspace_refresh_pending_)
+    return;
+  workspace_refresh_pending_ = true;
+  // Profile loading and browser close may finish synchronously inside a button
+  // callback. Never destroy that originating button on its own dispatch stack.
+  base::SingleThreadTaskRunner::GetCurrentDefault()->PostNonNestableTask(
+      FROM_HERE, base::BindOnce(&FlyWindowController::RebuildWorkspaceButtons,
+                                weak_factory_.GetWeakPtr()));
+}
+
+void FlyWindowController::ActivateTab(BrowserWindowInterface* browser,
+                                      content::WebContents* contents) {
+  if (!browser || browser->IsDeleteScheduled())
+    return;
+  auto* model = browser->GetTabStripModel();
+  if (contents) {
+    const int index = model->GetIndexOfWebContents(contents);
+    if (index != TabStripModel::kNoTab)
+      model->ActivateTabAt(index);
+  }
+  auto* window = browser->GetWindow();
+  if (window->IsMinimized())
+    window->Restore();
+  window->Show();
+  window->Activate();
+}
+
+void FlyWindowController::RebuildWorkspaceButtons() {
+  workspace_refresh_pending_ = false;
+  if (!workspace_buttons_ || Closing())
+    return;
+  if (workspace_picker_->active())
+    workspace_picker_->UpdateItems(WorkspaceEntries(), false);
+  workspace_buttons_->RemoveAllChildViews();
+  window_choices_.clear();
+  auto& app = FlyApp::Get();
+  const auto catalog = app.workspaces().Read();
+  if (!catalog) {
+    workspace_buttons_->AddChildView(std::make_unique<FlyLabel>(
+        u"Workspace data needs recovery", FlyFace::kSans, 12));
+    return;
+  }
+  const auto own = app.WorkspaceFor(browser_->GetProfile());
+  const bool is_private = browser_->GetProfile()->IsOffTheRecord();
+  const auto browsers = DecoratedBrowsers();
+  const bool editable = app.workspaces().CanEdit();
+  for (const auto& item : catalog->items) {
+    auto* button =
+        workspace_buttons_->AddChildView(std::make_unique<WorkspaceMenuButton>(
+            base::BindRepeating(
+                [](std::string id) {
+                  if (auto* app = FlyApp::GetIfCreated())
+                    app->OpenWorkspace(id);
+                },
+                item.id),
+            base::UTF8ToUTF16(item.name), item.id,
+            editable && &item != &catalog->items.front(),
+            editable && &item != &catalog->items.back(),
+            base::BindRepeating(
+                [](std::string id, int direction) {
+                  if (auto* app = FlyApp::GetIfCreated())
+                    app->ReorderWorkspace(id, direction);
+                },
+                item.id),
+            editable,
+            base::BindRepeating(&FlyWindowController::RenameWorkspace,
+                                weak_factory_.GetWeakPtr(), item.id),
+            editable && catalog->items.size() > 1 &&
+                !app.workspace_removal_pending(),
+            base::BindRepeating(&FlyWindowController::RemoveWorkspace,
+                                weak_factory_.GetWeakPtr(), item.id)));
+    const bool active = !is_private && own && own->id == item.id;
+    button->SetStyle(active ? ui::ButtonStyle::kTonal : ui::ButtonStyle::kText);
+    // A workspace with several windows lists them, so each can be reached.
+    std::vector<BrowserWindowInterface*> windows;
+    for (auto* browser : browsers) {
+      const auto workspace = app.WorkspaceFor(browser->GetProfile());
+      if (!browser->GetProfile()->IsOffTheRecord() && workspace &&
+          workspace->id == item.id)
+        windows.push_back(browser);
+    }
+    if (windows.size() < 2)
+      continue;
+    for (size_t i = 0; i < windows.size(); ++i) {
+      auto* browser = windows[i];
+      auto* contents = browser->GetTabStripModel()->GetActiveWebContents();
+      const auto title = contents && !contents->GetTitle().empty()
+                             ? contents->GetTitle()
+                             : u"New tab";
+      const auto text =
+          u"Window " + base::NumberToString16(i + 1) + u" · " + title;
+      auto* choice =
+          workspace_buttons_->AddChildView(std::make_unique<FlyButton>(
+              base::BindRepeating(
+                  [](base::WeakPtr<FlyWindowController> window,
+                     base::WeakPtr<BrowserWindowInterface> browser) {
+                    if (window && browser)
+                      window->ActivateTab(browser.get(), nullptr);
+                  },
+                  weak_factory_.GetWeakPtr(), browser->GetWeakPtr()),
+              text));
+      choice->SetStyle(browser == browser_.get() ? ui::ButtonStyle::kTonal
+                                                 : ui::ButtonStyle::kText);
+      choice->GetViewAccessibility().SetName(base::UTF8ToUTF16(item.name) +
+                                             u", " + text);
+    }
+  }
+  // Private windows and windows of profiles outside the catalogue.
+  for (auto* browser : browsers) {
+    const auto workspace = app.WorkspaceFor(browser->GetProfile());
+    const bool otr = browser->GetProfile()->IsOffTheRecord();
+    if (!otr && workspace)
+      continue;
+    std::u16string label = u"Recovery";
+    if (otr) {
+      label = workspace ? u"Private · " + base::UTF8ToUTF16(workspace->name)
+                        : u"Private workspace";
+    }
+    auto* choice = workspace_buttons_->AddChildView(std::make_unique<FlyButton>(
+        base::BindRepeating(
+            [](base::WeakPtr<FlyWindowController> window,
+               base::WeakPtr<BrowserWindowInterface> browser) {
+              if (window && browser)
+                window->ActivateTab(browser.get(), nullptr);
+            },
+            weak_factory_.GetWeakPtr(), browser->GetWeakPtr()),
+        label));
+    choice->SetStyle(browser == browser_.get() ? ui::ButtonStyle::kTonal
+                                               : ui::ButtonStyle::kText);
+  }
+  UpdateWorkspaceHeader();
+}
+
+ui::SimpleMenuModel* FlyWindowController::workspace_context_menu_for_testing(
+    std::string_view id) const {
+  for (const auto& child : workspace_buttons_->children()) {
+    auto* button = views::AsViewClass<WorkspaceMenuButton>(child.get());
+    if (button && button->workspace_id() == id)
+      return button->running_model();
+  }
+  return nullptr;
+}
+
+views::Widget* FlyWindowController::workspace_rename_dialog_for_testing()
+    const {
+  return rename_widget_ && !rename_widget_->IsClosed() ? rename_widget_.get()
+                                                       : nullptr;
+}
+
+views::Widget* FlyWindowController::workspace_remove_dialog_for_testing()
+    const {
+  return remove_widget_ && !remove_widget_->IsClosed() ? remove_widget_.get()
+                                                       : nullptr;
+}
+
+views::Widget* FlyWindowController::history_clear_dialog_for_testing() const {
+  return history_clear_widget_ && !history_clear_widget_->IsClosed()
+             ? history_clear_widget_.get()
+             : nullptr;
+}
+
+void FlyWindowController::CancelWorkspaceRename() {
+  if (history_clear_widget_ && !history_clear_widget_->IsClosed())
+    history_clear_widget_->Close();
+  if (rename_widget_ && !rename_widget_->IsClosed())
+    rename_widget_->Close();
+  if (remove_widget_ && !remove_widget_->IsClosed())
+    remove_widget_->Close();
+}
+
+void FlyWindowController::RemoveWorkspace(std::string id) {
+  auto& app = FlyApp::Get();
+  if (Closing() || app.workspace_removal_pending())
+    return;
+  const auto catalog = app.workspaces().Read();
+  if (!catalog)
+    return;
+  const auto item = std::ranges::find(catalog->items, id, &Workspace::id);
+  if (item == catalog->items.end())
+    return;
+  const auto path =
+      g_browser_process->profile_manager()->user_data_dir().AppendASCII(
+          item->profile_directory);
+  if (!app.CanRemoveWorkspace(id, path))
+    return;
+  CancelSurfaces();
+  remove_widget_.reset();
+  remove_delegate_ = std::make_unique<views::DialogDelegate>();
+  remove_delegate_->SetOwnershipOfNewWidget(
+      views::Widget::InitParams::CLIENT_OWNS_WIDGET);
+  remove_delegate_->SetModalType(ui::mojom::ModalType::kWindow);
+  remove_delegate_->SetTitle(u"Remove workspace · " +
+                             base::UTF8ToUTF16(item->name));
+  remove_delegate_->SetButtonLabel(ui::mojom::DialogButton::kOk, u"Remove");
+  remove_delegate_->SetDefaultButton(
+      static_cast<int>(ui::mojom::DialogButton::kCancel));
+  auto body = std::make_unique<views::View>();
+  body->SetLayoutManager(std::make_unique<views::BoxLayout>(
+      views::BoxLayout::Orientation::kVertical, gfx::Insets(16), 8));
+  body->SetPreferredSize(gfx::Size(440, 160));
+  auto* message = body->AddChildView(std::make_unique<views::Label>(
+      u"Close this workspace's windows, including its private windows, and "
+      u"remove it from Fly? Downloads in its private windows will stop. Its "
+      u"local data is kept for recovery. Recreating the name starts fresh."));
+  message->SetMultiLine(true);
+  auto* error = body->AddChildView(std::make_unique<views::Label>());
+  error->SetID(2);
+  error->SetMultiLine(true);
+  remove_delegate_->SetContentsView(std::move(body));
+  remove_delegate_->SetAcceptCallbackWithClose(base::BindRepeating(
+      [](std::string id, base::FilePath path, views::Label* error) {
+        auto* app = FlyApp::GetIfCreated();
+        if (!app || app->closing())
+          return true;
+        if (app->workspace_removal_pending() ||
+            !app->CanRemoveWorkspace(id, path)) {
+          error->SetText(
+              u"The workspace must still be editable and at least "
+              u"one other workspace must remain.");
+          return false;
+        }
+        base::SingleThreadTaskRunner::GetCurrentDefault()->PostNonNestableTask(
+            FROM_HERE, base::BindOnce(
+                           [](std::string id, base::FilePath path) {
+                             if (auto* app = FlyApp::GetIfCreated())
+                               app->BeginWorkspaceRemoval(std::move(id),
+                                                          std::move(path));
+                           },
+                           std::move(id), std::move(path)));
+        return true;
+      },
+      std::move(id), path, error));
+  remove_widget_.reset(views::DialogDelegate::CreateDialogWidget(
+      remove_delegate_.get(), widget_->GetNativeWindow(),
+      widget_->GetNativeView()));
+  remove_widget_->Show();
+}
+
+void FlyWindowController::RenameWorkspace(std::string id) {
+  auto& app = FlyApp::Get();
+  if (Closing() || !app.workspaces().CanEdit())
+    return;
+  const auto catalog = app.workspaces().Read();
+  if (!catalog)
+    return;
+  const auto item = std::ranges::find(catalog->items, id, &Workspace::id);
+  if (item == catalog->items.end())
+    return;
+  CancelSurfaces();
+  // Both objects are client-owned. Destroy the old widget before its delegate;
+  // no callback retains the workspace row that opened this dialog.
+  rename_widget_.reset();
+  rename_delegate_ = std::make_unique<views::DialogDelegate>();
+  rename_delegate_->SetOwnershipOfNewWidget(
+      views::Widget::InitParams::CLIENT_OWNS_WIDGET);
+  rename_delegate_->SetModalType(ui::mojom::ModalType::kWindow);
+  rename_delegate_->SetTitle(u"Rename workspace");
+  rename_delegate_->SetButtonLabel(ui::mojom::DialogButton::kOk, u"Save");
+  auto body = std::make_unique<views::View>();
+  body->SetLayoutManager(std::make_unique<views::BoxLayout>(
+      views::BoxLayout::Orientation::kVertical, gfx::Insets(16), 8));
+  body->SetPreferredSize(gfx::Size(400, 110));
+  auto* field = body->AddChildView(std::make_unique<views::Textfield>());
+  field->SetID(1);
+  field->SetText(base::UTF8ToUTF16(item->name));
+  field->GetViewAccessibility().SetName(u"Workspace name");
+  auto* error = body->AddChildView(std::make_unique<views::Label>());
+  error->SetID(2);
+  error->SetMultiLine(true);
+  rename_delegate_->SetInitiallyFocusedView(field);
+  rename_delegate_->SetContentsView(std::move(body));
+  rename_delegate_->SetAcceptCallbackWithClose(base::BindRepeating(
+      [](std::string id, views::Textfield* field, views::Label* error) {
+        auto* app = FlyApp::GetIfCreated();
+        if (!app || app->closing())
+          return true;
+        if (!app->workspaces().Rename(id,
+                                      base::UTF16ToUTF8(field->GetText()))) {
+          error->SetText(u"Use a unique, non-empty workspace name. "
+                         u"The workspace must still be editable.");
+          return false;
+        }
+        return true;
+      },
+      std::move(id), field, error));
+  rename_widget_.reset(views::DialogDelegate::CreateDialogWidget(
+      rename_delegate_.get(), widget_->GetNativeWindow(),
+      widget_->GetNativeView()));
+  rename_widget_->Show();
+  field->SelectAll(false);
+}
+
+void FlyWindowController::PromptNewWorkspace() {
+  auto& app = FlyApp::Get();
+  if (Closing() || app.creating_profile() || !app.workspaces().CanEdit())
+    return;
+  CancelSurfaces();
+  rename_widget_.reset();
+  rename_delegate_ = std::make_unique<views::DialogDelegate>();
+  rename_delegate_->SetOwnershipOfNewWidget(
+      views::Widget::InitParams::CLIENT_OWNS_WIDGET);
+  rename_delegate_->SetModalType(ui::mojom::ModalType::kWindow);
+  rename_delegate_->SetTitle(u"New workspace");
+  rename_delegate_->SetButtonLabel(ui::mojom::DialogButton::kOk, u"Create");
+  auto body = std::make_unique<views::View>();
+  body->SetLayoutManager(std::make_unique<views::BoxLayout>(
+      views::BoxLayout::Orientation::kVertical, gfx::Insets(16), 8));
+  body->SetPreferredSize(gfx::Size(400, 110));
+  auto* field = body->AddChildView(std::make_unique<views::Textfield>());
+  field->SetText(base::UTF8ToUTF16(app.NextWorkspaceName()));
+  field->GetViewAccessibility().SetName(u"Workspace name");
+  auto* error = body->AddChildView(std::make_unique<views::Label>());
+  error->SetMultiLine(true);
+  rename_delegate_->SetInitiallyFocusedView(field);
+  rename_delegate_->SetContentsView(std::move(body));
+  rename_delegate_->SetAcceptCallbackWithClose(base::BindRepeating(
+      [](views::Textfield* field, views::Label* error) {
+        auto* app = FlyApp::GetIfCreated();
+        if (!app || app->closing())
+          return true;
+        const auto name = std::string(base::TrimWhitespaceASCII(
+            base::UTF16ToUTF8(field->GetText()), base::TRIM_ALL));
+        const auto catalog = app->workspaces().Read();
+        if (name.empty() || !catalog ||
+            std::ranges::any_of(catalog->items, [&](const Workspace& item) {
+              return item.name == name;
+            })) {
+          error->SetText(u"Use a unique, non-empty workspace name.");
+          return false;
+        }
+        app->CreateWorkspace(name);
+        return true;
+      },
+      field, error));
+  rename_widget_.reset(views::DialogDelegate::CreateDialogWidget(
+      rename_delegate_.get(), widget_->GetNativeWindow(),
+      widget_->GetNativeView()));
+  rename_widget_->Show();
+  field->SelectAll(false);
+}
+
+// The workspace dashboard: every workspace with the tabs of its windows
+// (pinned ones marked), rename and delete on each workspace, and a move on
+// each tab.
+std::vector<PaletteEntry> FlyWindowController::WorkspaceEntries() {
+  window_choices_.clear();
+  tab_choices_.clear();
+  std::vector<PaletteEntry> result;
+  auto& app = FlyApp::Get();
+  const auto catalog = app.workspaces().Read();
+  if (!catalog || browser_closed_)
+    return result;
+  const auto own = app.WorkspaceFor(browser_->GetProfile());
+  const std::string active =
+      own && !browser_->GetProfile()->IsOffTheRecord() ? own->id : "";
+  const bool editable = app.workspaces().CanEdit();
+  const auto browsers = DecoratedBrowsers();
+  for (const auto& item : catalog->items) {
+    const auto action = "workspace/" + item.id;
+    PaletteEntry row{action, action,
+                     item.name + (item.id == active ? " (Active)" : ""),
+                     item.profile_directory, {}, {}};
+    if (editable) {
+      row.row_actions.emplace_back("rename/" + item.id, "Rename");
+      if (catalog->items.size() > 1)
+        row.row_actions.emplace_back("delete/" + item.id, "Delete");
+    }
+    result.push_back(std::move(row));
+    size_t number = 0;
+    for (auto* browser : browsers) {
+      const auto workspace = app.WorkspaceFor(browser->GetProfile());
+      if (browser->GetProfile()->IsOffTheRecord() || !workspace ||
+          workspace->id != item.id)
+        continue;
+      auto* model = browser->GetTabStripModel();
+      for (int index = 0; index < model->count(); ++index) {
+        auto* contents = model->GetWebContentsAt(index);
+        const auto key = item.id + "/" + base::NumberToString(number++);
+        tab_choices_.emplace(
+            key, TabChoice{browser->GetWeakPtr(), contents->GetWeakPtr()});
+        const auto title = contents->GetTitle().empty()
+                               ? contents->GetVisibleURL().spec()
+                               : base::UTF16ToUTF8(contents->GetTitle());
+        PaletteEntry tab{"tab/" + key,
+                         "tab/" + key,
+                         "- " + title +
+                             (model->IsTabPinned(index) ? " \xF0\x9F\x93\x8C"
+                                                        : ""),
+                         "",
+                         {},
+                         {}};
+        tab.indent = 1;
+        tab.row_actions.emplace_back("move/" + key, "Move");
+        result.push_back(std::move(tab));
+      }
+    }
+  }
+  size_t number = 0;
+  for (auto* browser : browsers) {
+    if (!browser->GetProfile()->IsOffTheRecord())
+      continue;
+    const auto workspace = app.WorkspaceFor(browser->GetProfile());
+    const auto title = workspace ? "Private · " + workspace->name
+                                 : std::string("Private workspace");
+    const auto action = "private/" + base::NumberToString(number++);
+    window_choices_.emplace(action, browser->GetWeakPtr());
+    result.push_back({action, action, title, "Private window", {}, {}});
+  }
+  result.push_back({"create", "create", "New workspace", "", {}, {}});
+  return result;
+}
+
+bool FlyWindowController::WorkspaceChoiceAvailable(
+    std::string_view action) const {
+  auto* app = FlyApp::GetIfCreated();
+  if (Closing() || !app)
+    return false;
+  const auto catalog = app->workspaces().Read();
+  if (!catalog)
+    return false;
+  if (action == "create")
+    return !app->creating_profile() && app->workspaces().CanEdit();
+  if (action.starts_with("workspace/"))
+    return std::ranges::find(catalog->items, action.substr(10),
+                             &Workspace::id) != catalog->items.end();
+  if (action.starts_with("rename/"))
+    return app->workspaces().CanEdit() &&
+           std::ranges::find(catalog->items, action.substr(7),
+                             &Workspace::id) != catalog->items.end();
+  if (action.starts_with("delete/")) {
+    const auto item =
+        std::ranges::find(catalog->items, action.substr(7), &Workspace::id);
+    return item != catalog->items.end() && !app->workspace_removal_pending() &&
+           app->CanRemoveWorkspace(item->id,
+                                   g_browser_process->profile_manager()
+                                       ->user_data_dir()
+                                       .AppendASCII(item->profile_directory));
+  }
+  if (action.starts_with("tab/") || action.starts_with("move/")) {
+    const auto choice =
+        tab_choices_.find(std::string(action.substr(action.find('/') + 1)));
+    if (choice == tab_choices_.end() || !choice->second.browser ||
+        !choice->second.contents)
+      return false;
+    return !action.starts_with("move/") ||
+           TabMoveTransaction::CanMoveUrl(
+               choice->second.contents->GetLastCommittedURL());
+  }
+  const auto found = window_choices_.find(std::string(action));
+  return found != window_choices_.end() && found->second &&
+         !found->second->IsDeleteScheduled();
+}
+
+void FlyWindowController::ChooseWorkspace(content::WebContents* source,
+                                          std::string action) {
+  if (!WorkspaceChoiceAvailable(action) || ActiveContents() != source)
+    return;
+  auto& app = FlyApp::Get();
+  if (action == "create") {
+    PromptNewWorkspace();
+  } else if (action.starts_with("workspace/")) {
+    app.OpenWorkspace(action.substr(10));
+  } else if (action.starts_with("rename/")) {
+    RenameWorkspace(action.substr(7));
+  } else if (action.starts_with("delete/")) {
+    RemoveWorkspace(action.substr(7));
+  } else if (action.starts_with("tab/") || action.starts_with("move/")) {
+    const auto choice = tab_choices_.find(action.substr(action.find('/') + 1));
+    if (choice == tab_choices_.end() || !choice->second.browser ||
+        !choice->second.contents)
+      return;
+    auto* browser = choice->second.browser.get();
+    auto* contents = choice->second.contents.get();
+    if (browser->GetTabStripModel()->GetIndexOfWebContents(contents) ==
+        TabStripModel::kNoTab)
+      return;
+    ActivateTab(browser, contents);
+    if (action.starts_with("move/")) {
+      if (auto* window = app.WindowFor(browser))
+        window->ShowTabMovePicker(contents);
+    }
+  } else if (const auto choice = window_choices_.find(action);
+             choice != window_choices_.end() && choice->second) {
+    ActivateTab(choice->second.get(), nullptr);
+  }
+}
+
+void FlyWindowController::DropDashboardTab(std::string source,
+                                           std::string target) {
+  if (Closing() || !workspace_picker_->active() || !source.starts_with("tab/"))
+    return;
+  const auto from = tab_choices_.find(source.substr(4));
+  if (from == tab_choices_.end() || !from->second.browser ||
+      !from->second.contents)
+    return;
+  auto* browser = from->second.browser.get();
+  auto* contents = from->second.contents.get();
+  auto* model = browser->GetTabStripModel();
+  const int index = model->GetIndexOfWebContents(contents);
+  if (index == TabStripModel::kNoTab)
+    return;
+  std::string workspace;
+  if (target.starts_with("workspace/")) {
+    workspace = target.substr(10);
+  } else if (target.starts_with("tab/")) {
+    const auto to = tab_choices_.find(target.substr(4));
+    if (to == tab_choices_.end() || !to->second.browser || !to->second.contents)
+      return;
+    if (to->second.browser.get() == browser) {
+      // Same window: reorder.
+      const int destination =
+          model->GetIndexOfWebContents(to->second.contents.get());
+      if (destination != TabStripModel::kNoTab && destination != index)
+        model->MoveWebContentsAt(index, destination, false);
+      workspace_picker_->UpdateItems(WorkspaceEntries(), false);
+      return;
+    }
+    workspace = target.substr(4, target.find('/', 4) - 4);
+  } else {
+    return;
+  }
+  auto& app = FlyApp::Get();
+  const auto current = app.WorkspaceFor(browser->GetProfile());
+  if (!current || current->id == workspace)
+    return;
+  // Another workspace: the same transaction as Move, which appends the tab.
+  model->ActivateTabAt(index);
+  app.MoveTab(browser, contents, "move:" + workspace);
+  workspace_picker_->UpdateItems(WorkspaceEntries(), false);
+}
+
+void FlyWindowController::ToggleWorkspacePicker() {
+  if (Closing() || !CanShowHistory())
+    return;
+  hints_->Cancel();
+  palette_->Cancel();
+  address_picker_->Cancel();
+  tab_move_picker_->Cancel();
+  bookmark_picker_->Cancel();
+  CancelHistory();
+  keyboard_editor_->Cancel();
+  const auto config =
+      FlyApp::Get().commands().Read().value_or(DefaultKeyboardConfig());
+  workspace_picker_->ToggleItems(ActiveContents(), WorkspaceEntries(),
+                                 config.shortcuts.at("toggle-dashboard"),
+                                 u"Search workspaces", false, true);
+}
+
+void FlyWindowController::choose_workspace_for_testing(std::string action) {
+  ChooseWorkspace(ActiveContents(), std::move(action));
+}
+
+bool FlyWindowController::ShowTabMovePicker(content::WebContents* contents) {
+  if (tab_move_picker_->active()) {
+    tab_move_picker_->Cancel(true);
+    return true;
+  }
+  auto& app = FlyApp::Get();
+  if (Closing() || !app.CanMoveTab(browser_, contents))
+    return false;
+  auto* tabs = browser_->GetTabStripModel();
+  tabs->ActivateTabAt(tabs->GetIndexOfWebContents(contents));
+  CancelWorkspaceRename();
+  hints_->Cancel();
+  palette_->Cancel();
+  address_picker_->Cancel();
+  bookmark_picker_->Cancel();
+  CancelHistory();
+  workspace_picker_->Cancel();
+  keyboard_editor_->Cancel();
+  move_source_browser_ = browser_->GetWeakPtr();
+  move_source_ = contents->GetWeakPtr();
+  const auto config = app.commands().Read().value_or(DefaultKeyboardConfig());
+  tab_move_picker_->ToggleItems(contents, app.TabMoveEntries(browser_),
+                                config.shortcuts.at("move-tab-to-workspace"),
+                                u"Move tab to workspace", false);
+  return true;
+}
+
+void FlyWindowController::ChooseTabMoveDestination(
+    content::WebContents* source,
+    std::string action) {
+  if (!source || source != move_source_.get() || !move_source_browser_)
+    return;
+  auto* browser = move_source_browser_.get();
+  move_source_browser_.reset();
+  move_source_.reset();
+  FlyApp::Get().MoveTab(browser, source, action);
+}
+
+void FlyWindowController::OnWorkspacesChanged() {
+  if (Closing())
+    return;
+  ScheduleWorkspaceRefresh();
+  UpdateWorkspaceHeader();
+  auto& app = FlyApp::Get();
+  // A rename shows in the status bar; other catalogue writes (the active
+  // workspace changes with every window activation) leave it alone.
+  if (status_bar_) {
+    const auto workspace = app.WorkspaceFor(browser_->GetProfile());
+    const auto name =
+        workspace ? base::UTF8ToUTF16(workspace->name) : std::u16string();
+    if (name != status_workspace_name_) {
+      status_workspace_name_ = name;
+      status_bar_->SetBrowser(browser_, name);
+    }
+  }
+  if (tab_move_picker_->active()) {
+    if (app.CanMoveTab(move_source_browser_.get(), move_source_.get()))
+      tab_move_picker_->UpdateItems(
+          app.TabMoveEntries(move_source_browser_.get()), false);
+    else
+      tab_move_picker_->Cancel();
+  }
+  if (!workspace_picker_->active())
+    return;
+  if (!CanShowHistory())
+    workspace_picker_->Cancel(true);
+  else
+    workspace_picker_->UpdateItems(WorkspaceEntries(), false);
+}
+
+void FlyWindowController::CreateTab() {
+  if (!Closing())
+    OpenNativeBlankTab(browser_);
+}
+
+bool FlyWindowController::CanShowHistory() const {
+  auto* app = FlyApp::GetIfCreated();
+  return app && app->workspaces().Read().has_value();
+}
+
+void FlyWindowController::OnHistoryChanged() {
+  if (Closing())
+    return;
+  if (history_picker_ && history_picker_->active())
+    LoadHistory(HistorySurface::kHistory);
+  else if (address_picker_ && address_picker_->active())
+    LoadHistory(HistorySurface::kAddress);
+  else
+    history_entries_.clear();
+}
+
+void FlyWindowController::CancelHistory() {
+  ++history_generation_;
+  history_->Cancel();
+  if (history_picker_)
+    history_picker_->Cancel();
+  history_entries_.clear();
+  history_choices_.clear();
+}
+
+std::vector<PaletteEntry> FlyWindowController::HistoryEntries() {
+  history_choices_.clear();
+  std::vector<PaletteEntry> result;
+  for (const auto& item : history_entries_) {
+    const auto action = item.url.spec();
+    if (!history_choices_.insert(action).second)
+      continue;
+    result.push_back(
+        {action,
+         action,
+         item.title.empty() ? action : base::UTF16ToUTF8(item.title),
+         action,
+         {},
+         {}});
+  }
+  if (!FlyApp::Get().history_clear_running()) {
+    history_choices_.insert("clear-history");
+    result.push_back({"clear-history",
+                      "clear-history",
+                      "Clear history…",
+                      "All normal workspaces",
+                      {},
+                      {}});
+  }
+  return result;
+}
+
+void FlyWindowController::LoadHistory(HistorySurface surface) {
+  auto* contents = ActiveContents();
+  auto* picker = surface == HistorySurface::kAddress ? address_picker_.get()
+                                                     : history_picker_.get();
+  if (!picker->active())
+    return;
+  const auto generation = ++history_generation_;
+  history_->Query(base::BindOnce(
+      [](base::WeakPtr<FlyWindowController> window,
+         base::WeakPtr<content::WebContents> source, bool empty_source,
+         uint64_t generation, HistorySurface surface,
+         std::optional<std::vector<HistoryEntry>> rows) {
+        if (!window || window->Closing() || (!empty_source && !source) ||
+            generation != window->history_generation_ ||
+            window->ActiveContents() != source.get())
+          return;
+        auto* picker = surface == HistorySurface::kAddress
+                           ? window->address_picker_.get()
+                           : window->history_picker_.get();
+        if (!picker->active())
+          return;
+        window->history_entries_ = rows.value_or(std::vector<HistoryEntry>());
+        if (!rows && window->status_)
+          window->status_->SetText(
+              u"History is unavailable. Saved data has been preserved.");
+        if (surface == HistorySurface::kAddress)
+          picker->RefreshQuery();
+        else
+          picker->UpdateItems(window->HistoryEntries(), false);
+      },
+      weak_factory_.GetWeakPtr(),
+      contents ? contents->GetWeakPtr() : base::WeakPtr<content::WebContents>(),
+      !contents, generation, surface));
+}
+
+void FlyWindowController::ToggleHistory() {
+  if (history_picker_->active()) {
+    history_picker_->Cancel(true);
+    return;
+  }
+  hints_->Cancel();
+  palette_->Cancel();
+  address_picker_->Cancel();
+  workspace_picker_->Cancel();
+  tab_move_picker_->Cancel();
+  bookmark_picker_->Cancel();
+  keyboard_editor_->Cancel();
+  CancelHistory();
+  const auto config =
+      FlyApp::Get().commands().Read().value_or(DefaultKeyboardConfig());
+  history_picker_->ToggleItems(ActiveContents(), {},
+                               config.shortcuts.at("toggle-history"),
+                               u"Search history", false, true);
+  LoadHistory(HistorySurface::kHistory);
+}
+
+void FlyWindowController::OpenHistory(content::WebContents* source,
+                                      std::string action) {
+  if (Closing() || ActiveContents() != source ||
+      !history_choices_.contains(action))
+    return;
+  if (action == "clear-history") {
+    ConfirmHistoryClear(source);
+    return;
+  }
+  // Requery the native stores after dismissal, so retired workspaces or deleted
+  // visits cannot execute stale cached rows. Keep the selected destination.
+  history_->Query(base::BindOnce(
+      [](base::WeakPtr<FlyWindowController> window,
+         base::WeakPtr<content::WebContents> source, bool empty_source,
+         std::string url, std::optional<std::vector<HistoryEntry>> rows) {
+        if (!window || window->Closing() || (!empty_source && !source) ||
+            window->ActiveContents() != source.get() || !rows ||
+            !std::ranges::any_of(*rows, [&](const HistoryEntry& item) {
+              return item.url.spec() == url;
+            }))
+          return;
+        NavigateParams params(window->browser_, GURL(url),
+                              ui::PAGE_TRANSITION_TYPED);
+        params.disposition = WindowOpenDisposition::CURRENT_TAB;
+        params.window_action = NavigateParams::WindowAction::kShowWindow;
+        Navigate(&params);
+      },
+      weak_factory_.GetWeakPtr(),
+      source ? source->GetWeakPtr() : base::WeakPtr<content::WebContents>(),
+      !source, std::move(action)));
+}
+
+void FlyWindowController::ConfirmHistoryClear(content::WebContents* source) {
+  if (FlyApp::Get().history_clear_running())
+    return;
+  CancelWorkspaceRename();
+  history_clear_widget_.reset();
+  history_clear_delegate_ = std::make_unique<views::DialogDelegate>();
+  history_clear_delegate_->SetOwnershipOfNewWidget(
+      views::Widget::InitParams::CLIENT_OWNS_WIDGET);
+  history_clear_delegate_->SetModalType(ui::mojom::ModalType::kWindow);
+  history_clear_delegate_->SetTitle(u"Clear browsing history");
+  history_clear_delegate_->SetButtonLabel(ui::mojom::DialogButton::kOk,
+                                          u"Clear history");
+  history_clear_delegate_->SetDefaultButton(
+      static_cast<int>(ui::mojom::DialogButton::kCancel));
+  auto body = std::make_unique<views::View>();
+  body->SetLayoutManager(std::make_unique<views::BoxLayout>(
+      views::BoxLayout::Orientation::kVertical, gfx::Insets(16), 8));
+  body->SetPreferredSize(gfx::Size(440, 140));
+  auto* message = body->AddChildView(std::make_unique<views::Label>(
+      u"Permanently remove browsing history from all normal workspaces? "
+      u"Cookies, logins and bookmarks are kept. Private visits are never "
+      u"saved."));
+  message->SetMultiLine(true);
+  history_clear_delegate_->SetContentsView(std::move(body));
+  history_clear_delegate_->SetAcceptCallback(base::BindOnce(
+      [](base::WeakPtr<FlyWindowController> window,
+         base::WeakPtr<content::WebContents> source, bool empty_source) {
+        if (!window || window->Closing() || (!empty_source && !source) ||
+            window->ActiveContents() != source.get())
+          return;
+        window->history_entries_.clear();
+        window->history_choices_.clear();
+        ++window->history_generation_;
+        window->ShowStatus(u"Clearing history…");
+        FlyApp::Get().ClearHistory();
+      },
+      weak_factory_.GetWeakPtr(),
+      source ? source->GetWeakPtr() : base::WeakPtr<content::WebContents>(),
+      !source));
+  history_clear_widget_.reset(views::DialogDelegate::CreateDialogWidget(
+      history_clear_delegate_.get(), widget_->GetNativeWindow(),
+      widget_->GetNativeView()));
+  history_clear_widget_->Show();
+}
+
+void FlyWindowController::ToggleAddress() {
+  if (address_picker_->active()) {
+    address_picker_->Cancel(true);
+    return;
+  }
+  hints_->Cancel();
+  palette_->Cancel();
+  workspace_picker_->Cancel();
+  tab_move_picker_->Cancel();
+  bookmark_picker_->Cancel();
+  CancelHistory();
+  keyboard_editor_->Cancel();
+  auto* contents = ActiveContents();
+  const auto config =
+      FlyApp::Get().commands().Read().value_or(DefaultKeyboardConfig());
+  const auto url = contents ? contents->GetVisibleURL() : GURL(kFlyNewTabURL);
+  address_picker_->ToggleQuery(
+      contents,
+      base::BindRepeating(
+          [](base::WeakPtr<FlyWindowController> window,
+             std::u16string_view query) {
+            return window ? window->AddressEntries(query)
+                          : std::vector<PaletteEntry>();
+          },
+          weak_factory_.GetWeakPtr()),
+      config.shortcuts.at("toggle-address"), u"Address or search",
+      IsFlyNewTabPage(url) ? std::u16string()
+                           : base::UTF8ToUTF16(url.spec()));
+  LoadHistory(HistorySurface::kAddress);
+}
+
+std::vector<PaletteEntry> FlyWindowController::AddressEntries(
+    std::u16string_view text) {
+  address_choices_.clear();
+  const auto input = base::UTF16ToUTF8(text);
+  std::vector<PaletteEntry> result;
+  auto add = [&](std::string kind, std::string payload, std::string title,
+                 std::string detail) {
+    const auto action = kind + ":" + payload;
+    address_choices_.emplace(action, payload);
+    result.push_back(
+        {action, action, std::move(title), std::move(detail), {}, {}});
+  };
+  if (input.empty())
+    return result;
+  auto& app = FlyApp::Get();
+  const auto lower = base::ToLowerASCII(input);
+  if (lower.starts_with("ws:") || lower.starts_with("ws ")) {
+    const auto query = base::ToLowerASCII(std::string(
+        base::TrimWhitespaceASCII(input.substr(3), base::TRIM_ALL)));
+    if (const auto catalog = app.workspaces().Read())
+      for (const auto& item : catalog->items)
+        if (base::ToLowerASCII(item.name).find(query) != std::string::npos)
+          add("workspace", item.id, "Switch to " + item.name, "Workspace");
+    return result;
+  }
+  if (const auto value = EvaluateAddressExpression(input)) {
+    const auto answer = base::NumberToString(*value);
+    add("calculate", input, "= " + answer, "Copy result");
+  }
+  SearchService search(*g_browser_process->local_state());
+  if (const auto target = search.ResolveNavigation(input))
+    add("navigate", input, target->spec(), "Open in this workspace");
+  // App bookmarks are an explicit shared product service, never workspace
+  // cookies or private history. Results are inert text in native controls.
+  if (const auto bookmarks = app.bookmarks().Read())
+    for (const auto& item : *bookmarks)
+      if (result.size() < 12 &&
+          base::ToLowerASCII(item.title + " " + item.url).find(lower) !=
+              std::string::npos)
+        add("bookmark", item.url, item.title, item.url);
+  std::set<std::string> urls;
+  for (const auto& item : history_entries_)
+    if (result.size() < 12 && urls.insert(item.url.spec()).second &&
+        base::ToLowerASCII(base::UTF16ToUTF8(item.title) + " " +
+                           item.url.spec())
+                .find(lower) != std::string::npos)
+      add("history", item.url.spec(),
+          item.title.empty() ? item.url.spec() : base::UTF16ToUTF8(item.title),
+          item.url.spec());
+  return result;
+}
+
+void FlyWindowController::ExecuteAddress(content::WebContents* source,
+                                         std::string action) {
+  if (Closing() || ActiveContents() != source)
+    return;
+  const auto choice = address_choices_.find(action);
+  if (choice == address_choices_.end())
+    return;
+  const auto payload = choice->second;
+  address_choices_.clear();
+  auto& app = FlyApp::Get();
+  if (action.starts_with("workspace:")) {
+    app.OpenWorkspace(payload);
+    return;
+  }
+  if (action.starts_with("calculate:")) {
+    if (const auto value = EvaluateAddressExpression(payload)) {
+      ui::ScopedClipboardWriter(ui::ClipboardBuffer::kCopyPaste)
+          .WriteText(base::UTF8ToUTF16(base::NumberToString(*value)));
+    }
+    return;
+  }
+  if (action.starts_with("history:")) {
+    history_choices_.insert(payload);
+    OpenHistory(source, payload);
+    return;
+  }
+  std::optional<GURL> target;
+  if (action.starts_with("bookmark:") && app.bookmarks().Contains(payload))
+    target = GURL(payload);
+  else if (action.starts_with("navigate:"))
+    target = SearchService(*g_browser_process->local_state())
+                 .ResolveNavigation(payload);
+  if (!target || !target->is_valid())
+    return;
+  NavigateParams params(browser_, *target, ui::PAGE_TRANSITION_TYPED);
+  params.disposition = WindowOpenDisposition::CURRENT_TAB;
+  params.window_action = NavigateParams::WindowAction::kShowWindow;
+  Navigate(&params);
+}
+
+std::vector<PaletteEntry> FlyWindowController::BookmarkEntries() {
+  bookmark_urls_.clear();
+  std::vector<PaletteEntry> entries;
+  if (const auto bookmarks = FlyApp::Get().bookmarks().Read()) {
+    for (const auto& bookmark : *bookmarks) {
+      bookmark_urls_.insert(bookmark.url);
+      entries.push_back({bookmark.url, bookmark.url, bookmark.title,
+                         bookmark.url, {}, {}});
+    }
+  }
+  return entries;
+}
+
+void FlyWindowController::OnBookmarksChanged() {
+  if (Closing())
+    return;
+  auto& bookmarks = FlyApp::Get().bookmarks();
+  if (!bookmarks.Read().has_value()) {
+    if (bookmark_picker_->active())
+      bookmark_picker_->Cancel(true);
+    return;
+  }
+  if (bookmark_picker_->active())
+    bookmark_picker_->UpdateItems(BookmarkEntries(), bookmarks.CanEdit());
+}
+
+void FlyWindowController::OpenBookmark(content::WebContents* source,
+                                       std::string url) {
+  if (Closing() || ActiveContents() != source || !bookmark_urls_.contains(url))
+    return;
+  auto& app = FlyApp::Get();
+  if (!app.bookmarks().Contains(url))
+    return;
+  app.OpenInNewTab(GURL(url), browser_);
+}
+
+void FlyWindowController::RemoveBookmark(content::WebContents* source,
+                                         std::string url) {
+  if (Closing() || ActiveContents() != source)
+    return;
+  auto& bookmarks = FlyApp::Get().bookmarks();
+  if (bookmarks.Contains(url))
+    bookmarks.Remove(url);
+}
+
+bool FlyWindowController::RunCommand(std::string_view action) {
+  if (Closing())
+    return false;
+  auto& app = FlyApp::Get();
+  // All pickers share the window's keyboard owner. Opening a different one
+  // dismisses the previous one, while invoking the same action still toggles.
+  for (auto [picker, command] :
+       {std::pair{palette_.get(), "toggle-palette"},
+        {address_picker_.get(), "toggle-address"},
+        {history_picker_.get(), "toggle-history"},
+        {bookmark_picker_.get(), "toggle-bookmarks"},
+        {downloads_picker_.get(), "toggle-downloads"},
+        {extensions_picker_.get(), "open-extension-actions"}}) {
+    if (action != command)
+      picker->Cancel();
+  }
+  if (action == "toggle-history") {
+    ToggleHistory();
+    return true;
+  }
+  if (action == "toggle-address") {
+    ToggleAddress();
+    return true;
+  }
+  if (action == "open-extension-actions") {
+    ToggleExtensionActions();
+    return true;
+  }
+  if (action == "open-diagnostics") {
+    ShowDiagnostics();
+    return true;
+  }
+  if (RunProductAction(action))
+    return true;
+  if (action == "move-tab-to-workspace")
+    return ShowTabMovePicker(ActiveContents());
+  if (action == "hibernate-tabs" || action == "wake-all-tabs") {
+    // Suspending covers every window; waking, this window's workspace.
+    std::vector<base::WeakPtr<content::WebContents>> tabs;
+    for (auto* browser : app.BrowsersByActivation()) {
+      if (action == "wake-all-tabs" &&
+          browser->GetProfile() != browser_->GetProfile())
+        continue;
+      auto* model = browser->GetTabStripModel();
+      for (int index = 0; index < model->count(); ++index)
+        tabs.push_back(model->GetWebContentsAt(index)->GetWeakPtr());
+    }
+    for (const auto& tab : tabs) {
+      if (!tab)
+        continue;
+      if (action == "hibernate-tabs")
+        RequestNativeTabSuspension(tab.get());
+      else
+        ResumeNativeTab(tab.get());
+    }
+    return true;
+  }
+  if (action == "toggle-global-audio-mute" || action == "toggle-global-media") {
+    // Snapshot identities before notifying native tab observers. Never iterate
+    // the window list while a tab mutation may reenter its owner.
+    std::vector<base::WeakPtr<content::WebContents>> contents;
+    bool any_unmuted = false;
+    for (auto* browser : app.BrowsersByActivation()) {
+      auto* model = browser->GetTabStripModel();
+      for (int index = 0; index < model->count(); ++index) {
+        auto* tab = model->GetWebContentsAt(index);
+        contents.push_back(tab->GetWeakPtr());
+        any_unmuted |= !tab->IsAudioMuted();
+      }
+    }
+    if (action == "toggle-global-media") {
+      std::vector<std::pair<base::WeakPtr<content::WebContents>, bool>>
+          sessions;
+      for (const auto& tab : contents) {
+        auto* session =
+            tab ? content::MediaSession::GetIfExists(tab.get()) : nullptr;
+        if (!session)
+          continue;
+        const auto info = session->GetMediaSessionInfoSync();
+        if (info && info->is_controllable)
+          sessions.emplace_back(
+              tab, info->playback_state ==
+                       media_session::mojom::MediaPlaybackState::kPaused);
+      }
+      // Decide before dispatch: resuming one session may natively change audio
+      // focus in another. UI requests retain site Media Session handlers and
+      // Chromium's normal player fallback, without injecting media scripts.
+      for (const auto& [tab, resume] : sessions) {
+        auto* session =
+            tab ? content::MediaSession::GetIfExists(tab.get()) : nullptr;
+        if (!session)
+          continue;
+        if (resume) {
+          ResumeNativeTab(tab.get());
+          session->Resume(content::MediaSession::SuspendType::kUI);
+        } else {
+          session->Suspend(content::MediaSession::SuspendType::kUI);
+        }
+      }
+      return true;
+    }
+    for (const auto& tab : contents) {
+      if (tab)
+        SetTabAudioMuted(tab.get(), any_unmuted,
+                         TabMutedReason::kAudioIndicator, std::string());
+    }
+    return !contents.empty();
+  }
+  if (action == "add-bookmark") {
+    auto* contents = ActiveContents();
+    return contents &&
+           app.bookmarks().Add(contents->GetLastCommittedURL().spec(),
+                               base::UTF16ToUTF8(contents->GetTitle()));
+  }
+  if (action == "toggle-bookmarks") {
+    if (!app.bookmarks().Read())
+      return false;
+    CancelHistory();
+    hints_->Cancel();
+    palette_->Cancel();
+    address_picker_->Cancel();
+    workspace_picker_->Cancel();
+    tab_move_picker_->Cancel();
+    keyboard_editor_->Cancel();
+    const auto config = app.commands().Read().value_or(DefaultKeyboardConfig());
+    bookmark_picker_->ToggleItems(
+        ActiveContents(), BookmarkEntries(),
+        config.shortcuts.at("toggle-bookmarks"), u"Search bookmarks",
+        app.bookmarks().CanEdit(), true);
+    return true;
+  }
+  if (action == "toggle-palette") {
+    address_picker_->Cancel();
+    workspace_picker_->Cancel();
+    tab_move_picker_->Cancel();
+    bookmark_picker_->Cancel();
+    CancelHistory();
+    hints_->Cancel();
+    keyboard_editor_->Cancel();
+    palette_->SetRecent(app.preferences().ReadRecentCommands());
+    const auto config = app.commands().Read().value_or(DefaultKeyboardConfig());
+    auto items = CommandCentreCatalog(config);
+    for (auto& entry : ExtensionCommandEntries())
+      items.push_back(std::move(entry));
+    palette_->ToggleItems(ActiveContents(), std::move(items),
+                          config.shortcuts.at("toggle-palette"),
+                          u"Search commands and shortcuts", false, true);
+    return true;
+  }
+  if (action == "toggle-private-mode") {
+    app.TogglePrivate(browser_);
+    return true;
+  }
+  if (action == "trigger-hints") {
+    address_picker_->Cancel();
+    workspace_picker_->Cancel();
+    tab_move_picker_->Cancel();
+    bookmark_picker_->Cancel();
+    CancelHistory();
+    keyboard_editor_->Cancel();
+    hints_->Toggle(ActiveContents());
+    return true;
+  }
+  auto& preferences = app.preferences();
+  if (action == "toggle-theme")
+    return preferences.ToggleTheme();
+  if (action == "toggle-zen-mode" || action == "toggle-sidebar-pin") {
+    const auto collapse = preferences.ReadSidebarAutoCollapse();
+    return collapse && preferences.SetSidebarAutoCollapse(!*collapse);
+  }
+  if (action == "toggle-window-controls") {
+    const auto visible = preferences.ReadWindowControlsVisible();
+    return visible && preferences.SetWindowControlsVisible(!*visible);
+  }
+  if (action == "toggle-status-bar") {
+    const auto visible = preferences.ReadStatusBarVisible();
+    return visible && preferences.SetStatusBarVisible(!*visible);
+  }
+  if (action == "cycle-clock-format")
+    return preferences.CycleClockFormat();
+  if (action == "toggle-clock") {
+    const auto clock = preferences.ReadClock();
+    return clock && preferences.SetClockVisible(!clock->visible);
+  }
+  if (action == "toggle-help" || action == "open-keyboard-settings") {
+    hints_->Cancel();
+    palette_->Cancel();
+    address_picker_->Cancel();
+    workspace_picker_->Cancel();
+    tab_move_picker_->Cancel();
+    bookmark_picker_->Cancel();
+    CancelHistory();
+    keyboard_editor_->SetPrivateMode(browser_->GetProfile()->IsOffTheRecord());
+    if (action == "toggle-help" || !keyboard_editor_->active())
+      keyboard_editor_->Toggle(ActiveContents());
+    RefreshDesktopIntegration();
+    if (action == "open-keyboard-settings")
+      keyboard_editor_->ShowKeyboard();
+    return true;
+  }
+  if (action == "toggle-dashboard") {
+    ToggleWorkspacePicker();
+    return true;
+  }
+  if (action == "new-workspace") {
+    PromptNewWorkspace();
+    return true;
+  }
+  if (action == "focus-sidebar") {
+    FocusSidebar();
+    return true;
+  }
+  if (action == "next-workspace" || action == "previous-workspace") {
+    app.OpenAdjacentWorkspace(browser_, action == "next-workspace" ? 1 : -1);
+    return true;
+  }
+  const bool handled = ExecuteNativeCommand(browser_, action);
+  if (!handled && status_)
+    status_->SetText(base::UTF8ToUTF16(ActionLabel(action) + ": unavailable"));
+  return handled;
+}
+
+void FlyWindowController::TrackTabNumbers(bool key_down,
+                                          ui::KeyboardCode code,
+                                          ui::DomCode dom_code,
+                                          int flags,
+                                          bool repeat,
+                                          bool passthrough) {
+  const bool modifier =
+      key_down && (code == ui::VKEY_CONTROL || code == ui::VKEY_MENU ||
+                   code == ui::VKEY_SHIFT || code == ui::VKEY_LWIN ||
+                   code == ui::VKEY_RWIN);
+  // Right Alt is AltGr on many layouts; in passthrough the page receives
+  // every shortcut, so the numbers would point at nothing.
+  if (!modifier || passthrough || dom_code == ui::DomCode::ALT_RIGHT) {
+    SetTabNumbers(false);
+    return;
+  }
+  if (repeat)
+    return;
+  std::vector<std::string> held;
+  const auto add = [&](bool on, const char* name) {
+    if (on)
+      held.push_back(name);
+  };
+  add(code == ui::VKEY_CONTROL || (flags & ui::EF_CONTROL_DOWN), "Ctrl");
+  add(code == ui::VKEY_MENU || (flags & ui::EF_ALT_DOWN), "Alt");
+  add(code == ui::VKEY_SHIFT || (flags & ui::EF_SHIFT_DOWN), "Shift");
+  add(code == ui::VKEY_LWIN || code == ui::VKEY_RWIN ||
+          (flags & ui::EF_COMMAND_DOWN),
+      "Meta");
+  const auto tabs =
+      FlyApp::Get().commands().Read().value_or(DefaultKeyboardConfig()).tabs;
+  if (tabs.empty() || base::JoinString(held, "+") != tabs) {
+    SetTabNumbers(false);
+    return;
+  }
+  // The delay keeps quick chords such as Alt+S from flashing them.
+  if (!tab_numbers_shown_ && !tab_numbers_timer_.IsRunning()) {
+    tab_numbers_timer_.Start(
+        FROM_HERE, base::Milliseconds(150),
+        base::BindOnce(&FlyWindowController::SetTabNumbers,
+                       base::Unretained(this), true));
+  }
+}
+
+void FlyWindowController::SetTabNumbers(bool shown) {
+  tab_numbers_timer_.Stop();
+  if (shown == tab_numbers_shown_)
+    return;
+  tab_numbers_shown_ = shown;
+  if (tab_sidebar_)
+    tab_sidebar_->SetNumbersVisible(shown);
+}
+
+void FlyWindowController::OnKeyEvent(ui::KeyEvent* event) {
+  TrackTabNumbers(event->type() == ui::EventType::kKeyPressed,
+                  event->key_code(), event->code(), event->flags(),
+                  event->is_repeat(), false);
+  if (Closing())
+    return;
+  if ((rename_widget_ && !rename_widget_->IsClosed()) ||
+      (remove_widget_ && !remove_widget_->IsClosed()) ||
+      (history_clear_widget_ && !history_clear_widget_->IsClosed()))
+    return;
+  const auto consume = [&](bool handled) {
+    if (handled) {
+      event->SetHandled();
+      event->StopPropagation();
+    }
+  };
+  if (diagnostics_hub_ && diagnostics_hub_->active()) {
+    consume(diagnostics_hub_->HandleOverlayKey(*event));
+    return;
+  }
+  for (auto* picker :
+       {downloads_picker_.get(), extensions_picker_.get(),
+        address_picker_.get(), tab_move_picker_.get(), workspace_picker_.get(),
+        history_picker_.get(), bookmark_picker_.get()}) {
+    if (!picker->active())
+      continue;
+    consume(picker->HandleOverlayKey(*event));
+    return;
+  }
+  if (keyboard_editor_->active()) {
+    consume(keyboard_editor_->HandleOverlayKey(*event));
+    return;
+  }
+  if (event->type() != ui::EventType::kKeyPressed || event->is_char())
+    return;
+  if (palette_->active()) {
+    consume(palette_->HandleOverlayKey(*event));
+    return;
+  }
+  if (event->key_code() == ui::VKEY_ESCAPE && sidebar_focus_inside_) {
+    ReturnFocusFromSidebar();
+    consume(true);
+    return;
+  }
+  auto* contents = ActiveContents();
+  // Page events use BrowserView::PreHandleKeyboardEvent after native IME
+  // processing. Do not dispatch them a second time at the window.
+  if (!contents || (contents->GetRenderWidgetHostView() &&
+                    contents->GetRenderWidgetHostView()->HasFocus()))
+    return;
+  auto* input = widget_->GetInputMethod();
+  auto* client = input ? input->GetTextInputClient() : nullptr;
+  const bool editable =
+      client && client->GetTextInputType() != ui::TEXT_INPUT_TYPE_NONE;
+  const input::NativeWebKeyboardEvent native(*event);
+  consume(RouteNativePageKey(browser_, native, editable) ==
+          content::KeyboardEventProcessingResult::HANDLED);
+}
+
+void FlyWindowController::UpdateTargetURL(content::WebContents* source,
+                                          const GURL& url) {
+  if (status_bar_ && !Closing())
+    status_bar_->SetTargetURL(source, url);
+}
+
+void FlyWindowController::UpdateModeLabel() {
+  if (!status_ || Closing())
+    return;
+  const std::u16string mode =
+      hints_ && hints_->active()
+          ? (hints_->truncated() ? u"HINTS (target limit)" : u"HINTS")
+          : NativePageModeLabel(browser_);
+  // The workspace badge says when the workspace is private.
+  status_->SetText(mode);
+}
+
+// The mode badge: a click cancels hints, leaves passthrough, or
+// enters it from NORMAL (INSERT ignores it).
+void FlyWindowController::ClickModeBadge() {
+  if (Closing())
+    return;
+  if (hints_ && hints_->active()) {
+    InvokeNativeCommand(browser_, "trigger-hints");
+    return;
+  }
+  const auto mode = NativePageModeLabel(browser_);
+  if (mode == u"PASSTHROUGH" || mode == u"NORMAL")
+    InvokeNativeCommand(browser_, "toggle-passthrough");
+}
+
+std::u16string FlyWindowController::status_text_for_testing() const {
+  return status_bar_ ? status_bar_->message_for_testing() : std::u16string();
+}
+
+void FlyWindowController::ShowStatus(std::u16string text) {
+  if (auto* app = FlyApp::GetIfCreated()) {
+    app->RecordDiagnostic(
+        text.starts_with(u"Update failed") || text.starts_with(u"Could not")
+            ? "warn"
+            : "info",
+        "status", text);
+  }
+  // The status bar's link area, for a while.
+  if (status_bar_)
+    status_bar_->ShowMessage(std::move(text), base::Milliseconds(3500));
+}
+
+void FlyWindowController::ToggleDownloads() {
+  if (Closing())
+    return;
+  hints_->Cancel();
+  palette_->Cancel();
+  address_picker_->Cancel();
+  workspace_picker_->Cancel();
+  tab_move_picker_->Cancel();
+  bookmark_picker_->Cancel();
+  CancelHistory();
+  keyboard_editor_->Cancel();
+  auto& app = FlyApp::Get();
+  const auto config = app.commands().Read().value_or(DefaultKeyboardConfig());
+  downloads_picker_->ToggleItems(
+      ActiveContents(), DownloadEntries(app.WorkspaceProfiles()),
+      config.shortcuts.at("toggle-downloads"), u"Search downloads", true, true);
+}
+
+void FlyWindowController::ShowDiagnostics() {
+  if (Closing() || !diagnostics_hub_)
+    return;
+  hints_->Cancel();
+  palette_->Cancel();
+  keyboard_editor_->Cancel();
+  diagnostics_hub_->Toggle();
+}
+
+bool FlyWindowController::RunProductAction(std::string_view action) {
+  auto* contents = ActiveContents();
+  auto* profile = browser_->GetProfile();
+  auto& app = FlyApp::Get();
+  if (action == "toggle-menu-bar" ||
+      action == "toggle-native-menu-visibility") {
+    auto point = widget_->GetRootView()->GetBoundsInScreen().origin();
+    point.Offset(14, 14);
+    settings_menu_->Show(widget_, point);
+    return true;
+  }
+  if (action == "reload-user-content") {
+    app.user_content().Reload();
+    return true;
+  }
+  if (action == "open-extension-actions") {
+    ToggleExtensionActions();
+    return true;
+  }
+  if (action == "open-task-manager") {
+    chrome::OpenTaskManager(browser_);
+    return true;
+  }
+  if (action == "toggle-downloads") {
+    // Toggles the download shelf; with nothing on it, Fly lists every
+    // workspace's downloads.
+    if (download_shelf_ && download_shelf_->has_cards())
+      download_shelf_->Toggle();
+    else
+      ToggleDownloads();
+    return true;
+  }
+  if (action == "toggle-reader-view") {
+    ToggleReaderView(
+        contents,
+        base::BindOnce(
+            [](base::WeakPtr<FlyWindowController> window,
+               base::WeakPtr<content::WebContents> contents,
+               ReaderResult result) {
+              if (!window)
+                return;
+              if (!result.error.empty()) {
+                window->ShowStatus(u"Reader View: " + result.error);
+              } else if (result.active) {
+                window->ShowStatus(
+                    u"Reader view active (Escape to exit)" +
+                    (result.title.empty()
+                         ? std::u16string()
+                         : u": " + result.title.substr(0, 45) + u"..."));
+              } else {
+                window->ShowStatus(u"Reader View Closed");
+              }
+              window->SetReaderActive(contents.get(),
+                                      result.active && result.error.empty());
+            },
+            weak_factory_.GetWeakPtr(),
+            contents ? contents->GetWeakPtr()
+                     : base::WeakPtr<content::WebContents>()));
+    return true;
+  }
+  if (action == "open-scripts-dir" || action == "open-styles-dir") {
+    OpenUserContentDirectory(
+        profile, action == "open-scripts-dir" ? "scripts" : "styles");
+    return true;
+  }
+  if (action == "test-google-signin") {
+    // A fresh off-the-record profile: no workspace cookies or tokens.
+    NavigateParams params(
+        profile->GetOriginalProfile()->GetPrimaryOTRProfile(
+            /*create_if_needed=*/true),
+        GURL("https://accounts.google.com/"),
+        ui::PAGE_TRANSITION_AUTO_TOPLEVEL);
+    params.disposition = WindowOpenDisposition::NEW_FOREGROUND_TAB;
+    Navigate(&params);
+    return true;
+  }
+  if (action == "check-for-updates") {
+    app.CheckUpdates(true, browser_);
+    return true;
+  }
+  if (action == "show-whats-new") {
+    ResolveWhatsNewURL(
+        "", base::BindOnce(
+                [](base::WeakPtr<FlyWindowController> window, GURL url) {
+                  if (window && !window->Closing())
+                    FlyApp::Get().OpenInNewTab(url, window->browser_);
+                },
+                weak_factory_.GetWeakPtr()));
+    return true;
+  }
+  if (action == "open-diagnostics") {
+    ShowDiagnostics();
+    return true;
+  }
+  auto& preferences = app.preferences();
+  if (action == "toggle-diagnostics-recording") {
+    const bool enabled =
+        !preferences.ReadBool("enable_diagnostics").value_or(false);
+    if (preferences.SetBool("enable_diagnostics", enabled)) {
+      if (!enabled)
+        app.ClearDiagnostics();
+      ShowStatus(enabled ? u"Diagnostics recording on (memory only)."
+                         : u"Diagnostics recording off; events cleared.");
+    }
+    return true;
+  }
+  if (action == "toggle-notifications") {
+    const bool enabled =
+        !preferences.ReadBool("web_notifications").value_or(true);
+    if (preferences.SetBool("web_notifications", enabled))
+      ShowStatus(enabled ? u"Web notifications on."
+                         : u"Web notifications off.");
+    return true;
+  }
+  if (action == "focus-nav-buttons") {
+    FocusSidebar();
+    if (new_tab_button_ && sidebar_content_->Contains(
+                               widget_->GetFocusManager()->GetFocusedView()))
+      new_tab_button_->RequestFocus();
+    return true;
+  }
+  return false;
+}
 
 views::View* FlyWindowController::extension_actions_for_testing() const {
   return status_bar_ ? status_bar_->extensions_container() : nullptr;
 }
+
 std::string FlyWindowController::extension_badge_for_testing(
     size_t index) const {
   auto* container = extension_actions_for_testing();
-  auto* button =
-      container && index < container->children().size()
-          ? views::AsViewClass<ExtensionActionButton>(
-                container->children()[index])
-          : nullptr;
+  auto* button = container && index < container->children().size()
+                     ? views::AsViewClass<ExtensionActionButton>(
+                           container->children()[index])
+                     : nullptr;
   return button ? button->badge() : std::string();
 }
+
 void FlyWindowController::ScheduleExtensionRefresh() {
-  if (extension_refresh_pending_ || closing_)
+  if (extension_refresh_pending_ || Closing())
     return;
   extension_refresh_pending_ = true;
   base::SingleThreadTaskRunner::GetCurrentDefault()->PostTask(
@@ -4426,64 +3319,67 @@ void FlyWindowController::ScheduleExtensionRefresh() {
                      },
                      weak_factory_.GetWeakPtr()));
 }
+
 void FlyWindowController::RefreshExtensionActions() {
-  if (closing_ || !status_bar_ || !extensions_)
+  if (Closing() || !status_bar_)
     return;
+  auto& extensions = FlyApp::Get().extensions();
   auto* container = status_bar_->extensions_container();
-  if (!selected_) {
+  auto* contents = ActiveContents();
+  // A new window has no tab until its first one is added.
+  if (!contents) {
     container->RemoveAllChildViews();
     return;
   }
-  auto* contents = selected_->GetTabStripModel()->GetActiveWebContents();
-  const auto extensions = extensions_->ActionExtensions(selected_->GetProfile());
+  const auto actions = extensions.ActionExtensions(browser_->GetProfile());
   // The same extensions in the same order update in place.
-  bool same = container->children().size() == extensions.size();
-  for (size_t i = 0; same && i < extensions.size(); ++i) {
+  bool same = container->children().size() == actions.size();
+  for (size_t i = 0; same && i < actions.size(); ++i) {
     auto* button =
         views::AsViewClass<ExtensionActionButton>(container->children()[i]);
-    same = button && button->id() == extensions[i]->id();
+    same = button && button->id() == actions[i]->id();
   }
   if (same) {
-    for (size_t i = 0; i < extensions.size(); ++i) {
+    for (size_t i = 0; i < actions.size(); ++i) {
       views::AsViewClass<ExtensionActionButton>(container->children()[i])
-          ->Update(extensions_->ActionIcon(contents, *extensions[i]),
-                   extensions_->ActionTitle(contents, *extensions[i]),
-                   extensions_->ActionBadge(contents, *extensions[i]));
+          ->Update(extensions.ActionIcon(contents, *actions[i]),
+                   extensions.ActionTitle(contents, *actions[i]),
+                   extensions.ActionBadge(contents, *actions[i]));
     }
     return;
   }
   // Buttons may be the target of the click that led here: rebuild only after
   // the input has been dispatched (this runs from a posted task).
   container->RemoveAllChildViews();
-  for (const auto* extension : extensions) {
+  for (const auto* extension : actions) {
     const std::string id = extension->id();
     container->AddChildView(std::make_unique<ExtensionActionButton>(
         base::BindRepeating(
             [](base::WeakPtr<FlyWindowController> window, std::string id) {
-              if (!window || !window->selected_ || window->closing_)
+              if (!window || window->Closing() || !window->status_bar_)
                 return;
               for (const auto& child :
                    window->status_bar_->extensions_container()->children()) {
                 auto* button =
                     views::AsViewClass<ExtensionActionButton>(child.get());
                 if (button && button->id() == id) {
-                  window->extensions_->RunAction(window->selected_, id,
-                                                 button);
+                  FlyApp::Get().extensions().RunAction(window->browser_, id,
+                                                       button);
                   return;
                 }
               }
             },
             weak_factory_.GetWeakPtr(), id),
-        id, extensions_->ActionIcon(contents, *extension),
-        extensions_->ActionTitle(contents, *extension),
-        extensions_->ActionBadge(contents, *extension)));
+        id, extensions.ActionIcon(contents, *extension),
+        extensions.ActionTitle(contents, *extension),
+        extensions.ActionBadge(contents, *extension)));
   }
   container->InvalidateLayout();
   status_bar_->InvalidateLayout();
 }
-void FlyWindowController::ToggleExtensionActions(
-    BrowserWindowInterface* browser) {
-  if (closing_)
+
+void FlyWindowController::ToggleExtensionActions() {
+  if (Closing())
     return;
   hints_->Cancel();
   palette_->Cancel();
@@ -4494,42 +3390,43 @@ void FlyWindowController::ToggleExtensionActions(
   downloads_picker_->Cancel();
   CancelHistory();
   keyboard_editor_->Cancel();
-  const auto config = commands_.Read().value_or(DefaultKeyboardConfig());
+  auto& app = FlyApp::Get();
+  const auto config = app.commands().Read().value_or(DefaultKeyboardConfig());
   extensions_picker_->ToggleItems(
-      browser ? browser->GetTabStripModel()->GetActiveWebContents() : nullptr,
-      extensions_->ActionEntries(browser ? browser->GetProfile() : nullptr),
+      ActiveContents(), app.extensions().ActionEntries(browser_->GetProfile()),
       config.shortcuts.at("open-extension-actions"), u"Search extensions",
       false, true);
 }
+
 void FlyWindowController::ChooseExtensionAction(content::WebContents*,
                                                 std::string action) {
-  if (closing_)
+  if (Closing())
     return;
+  auto& app = FlyApp::Get();
   if (action == "extensions-settings" || action == "extensions-open-settings") {
-    RunCommand(selected_, "toggle-help");
+    RunCommand("toggle-help");
     keyboard_editor_->ShowExtensions();
     return;
   }
   if (action.starts_with("extension-options:")) {
-    extensions_->OpenOptions(
-        selected_, action.substr(std::string_view("extension-options:").size()),
-        ActiveProfile());
+    app.extensions().OpenOptions(
+        browser_, action.substr(std::string_view("extension-options:").size()),
+        browser_->GetProfile());
     return;
   }
   if (action == "extensions-reload") {
     ShowStatus(base::UTF8ToUTF16(
         "Extensions reloaded." +
-        std::string(extensions_->ReloadUnpacked() ? "" : " None to reload.")));
+        std::string(app.extensions().ReloadUnpacked() ? "" : " None to reload.")));
     return;
   }
   if (action == "extensions-page" || action == "extensions-store") {
-    OpenInNewWindow(GURL(action == "extensions-page"
-                          ? "chrome://extensions/"
-                          : "https://chromewebstore.google.com/"));
+    app.OpenInNewWindow(GURL(action == "extensions-page"
+                                 ? "chrome://extensions/"
+                                 : "https://chromewebstore.google.com/"),
+                        browser_->GetProfile());
     return;
   }
-  if (!selected_)
-    return;
   const std::string id = action.substr(std::string_view("extension:").size());
   views::View* anchor = status_bar_;
   if (status_bar_ && status_bar_->GetVisible()) {
@@ -4538,9 +3435,9 @@ void FlyWindowController::ChooseExtensionAction(content::WebContents*,
           button && button->id() == id)
         anchor = button;
   } else {
-    anchor = desktop_->GetContentsView();
+    anchor = widget_->GetRootView();
   }
-  extensions_->RunAction(selected_, id, anchor);
+  app.extensions().RunAction(browser_, id, anchor);
 }
 
 // The reader button is highlighted while the active tab shows the reader.
@@ -4556,10 +3453,9 @@ void FlyWindowController::SetReaderActive(content::WebContents* contents,
     reader_contents_ = nullptr;
   UpdateReaderButton();
 }
+
 void FlyWindowController::RefreshReaderState() {
-  content::WebContents* active =
-      selected_ ? selected_->GetTabStripModel()->GetActiveWebContents()
-                : nullptr;
+  content::WebContents* active = ActiveContents();
   reader_contents_ = nullptr;
   UpdateReaderButton();
   if (!active)
@@ -4573,10 +3469,9 @@ void FlyWindowController::RefreshReaderState() {
                   },
                   weak_factory_.GetWeakPtr(), active->GetWeakPtr()));
 }
+
 void FlyWindowController::UpdateReaderButton() {
-  content::WebContents* active =
-      selected_ ? selected_->GetTabStripModel()->GetActiveWebContents()
-                : nullptr;
+  content::WebContents* active = ActiveContents();
   // Another tab became active: its own reader state is checked below.
   if (reader_contents_.get() != active)
     reader_contents_ = nullptr;
@@ -4595,10 +3490,9 @@ void FlyWindowController::UpdateReaderButton() {
         FROM_HERE, base::Seconds(1),
         base::BindRepeating(
             [](base::WeakPtr<FlyWindowController> window) {
-              if (!window || !window->selected_)
+              if (!window || window->Closing())
                 return;
-              auto* contents =
-                  window->selected_->GetTabStripModel()->GetActiveWebContents();
+              auto* contents = window->ActiveContents();
               QueryReaderView(
                   contents,
                   base::BindOnce(
@@ -4608,84 +3502,16 @@ void FlyWindowController::UpdateReaderButton() {
                         if (window && contents && !open)
                           window->SetReaderActive(contents.get(), false);
                       },
-                      window, contents ? contents->GetWeakPtr()
-                                       : base::WeakPtr<content::WebContents>()));
+                      window,
+                      contents ? contents->GetWeakPtr()
+                               : base::WeakPtr<content::WebContents>()));
             },
             weak_factory_.GetWeakPtr()));
   }
 }
 
-void FlyWindowController::UpdateWelcome() {
-  if (!welcome_)
-    return;
-  const bool show = !selected_ && !closing_;
-  welcome_->SetVisible(show);
-  if (!show)
-    return;
-  const auto catalog = workspaces_.Read();
-  std::u16string name = u"Workspace";
-  if (catalog)
-    for (const auto& item : catalog->items)
-      if (item.id == catalog->active_id)
-        name = base::UTF8ToUTF16(item.name);
-  // The sidebar header and the status bar name the empty workspace too.
-  if (status_bar_)
-    status_bar_->SetBrowser(nullptr, name);
-  UpdateWorkspaceHeader();
-  const auto config = commands_.Read().value_or(DefaultKeyboardConfig());
-  // Bindings are written as "Ctrl + T".
-  const auto keys = [&](const char* action) {
-    const auto found = config.shortcuts.find(action);
-    if (found == config.shortcuts.end() || found->second.empty())
-      return std::u16string();
-    std::u16string text = base::UTF8ToUTF16(found->second.front());
-    base::ReplaceSubstringsAfterOffset(&text, 0, u"+", u" + ");
-    return text;
-  };
-  const auto run = [&](const char* action) {
-    return base::BindRepeating(&FlyWindowController::RunFromEmptyWorkspace,
-                               weak_factory_.GetWeakPtr(), std::string(action));
-  };
-  welcome_->Update(
-      name, {{keys("spawn-tab"), u"Open New Tab", run("spawn-tab")},
-             {keys("toggle-bookmarks"), u"Open Bookmarks",
-              run("toggle-bookmarks")},
-             {keys("toggle-palette"), u"Command Centre", run("toggle-palette")},
-             {keys("toggle-dashboard"), u"Workspace Dashboard",
-              run("toggle-dashboard")}});
-}
-
-// Shell commands do not create placeholder tabs. Only a browsing action needs
-// to reopen the workspace's native browser.
-void FlyWindowController::RunFromEmptyWorkspace(std::string action) {
-  if (closing_)
-    return;
-  if (selected_) {
-    InvokeNativeCommand(selected_, action);
-    return;
-  }
-  if (action == "toggle-dashboard") {
-    ToggleWorkspacePicker();
-    return;
-  }
-  if (RunCommand(nullptr, action))
-    return;
-  if (action == "spawn-tab") {
-    pending_empty_action_ = "toggle-address";
-    CreateTab();
-  }
-}
-
-void FlyWindowController::choose_workspace_for_testing(std::string action) {
-  ChooseWorkspace(
-      selected_ ? selected_->GetTabStripModel()->GetActiveWebContents()
-                : nullptr,
-      std::move(action));
-}
-
 // Command Centre entries for the extensions' commands.
-std::vector<PaletteEntry> FlyWindowController::ExtensionCommandEntries(
-    BrowserWindowInterface* browser) {
+std::vector<PaletteEntry> FlyWindowController::ExtensionCommandEntries() {
   std::vector<PaletteEntry> entries;
   const auto add = [&](std::string action, std::string title, std::string desc,
                        std::string details, std::string tip,
@@ -4705,7 +3531,8 @@ std::vector<PaletteEntry> FlyWindowController::ExtensionCommandEntries(
       "Install from Chrome Web Store, a ZIP or CRX package, or an unpacked "
       "folder.",
       {"extensions", "addons", "chrome", "plugins", "settings"});
-  if (!extensions_->Enabled() || !browser)
+  auto& extensions = FlyApp::Get().extensions();
+  if (!extensions.Enabled() || Closing())
     return entries;
   add("extensions-reload", "Reload Extensions",
       "Re-read extension code from disk in every workspace using it",
@@ -4713,14 +3540,14 @@ std::vector<PaletteEntry> FlyWindowController::ExtensionCommandEntries(
       "the old content scripts need a reload.",
       "Use this after replacing an extension folder with a newer version.",
       {"extensions", "reload", "refresh", "update"});
-  auto* profile = browser->GetProfile();
-  for (const auto* extension : extensions_->ActionExtensions(profile))
+  auto* profile = browser_->GetProfile();
+  for (const auto* extension : extensions.ActionExtensions(profile))
     add("extension:" + extension->id(), extension->name() + ": Open Popup",
         "Open the extension popup for the active tab",
         extension->name() + " " + extension->VersionString(),
         "Press Esc or click outside the popup to close it.",
         {"extension", "popup", base::ToLowerASCII(extension->name())});
-  for (const auto& info : extensions_->List(profile)) {
+  for (const auto& info : extensions.List(profile)) {
     if (!info.enabled || !info.has_options)
       continue;
     const auto name = base::UTF16ToUTF8(info.name);
@@ -4736,16 +3563,15 @@ std::vector<PaletteEntry> FlyWindowController::ExtensionCommandEntries(
 
 // Buttons of Preferences that act on the browser.
 void FlyWindowController::RunPreferencesAction(std::string action) {
-  if (closing_)
+  if (Closing())
     return;
+  auto& app = FlyApp::Get();
   if (action.starts_with("open-window:")) {
-    OpenInNewWindow(GURL(action.substr(12)));
+    app.OpenInNewWindow(GURL(action.substr(12)), browser_->GetProfile());
     return;
   }
-  auto* browser = selected_.get();
-  auto* profile = ActiveProfile();
-  auto* contents = browser ? browser->GetTabStripModel()->GetActiveWebContents()
-                           : nullptr;
+  auto* profile = browser_->GetProfile();
+  auto* contents = ActiveContents();
   auto status = base::BindOnce(
       [](base::WeakPtr<FlyWindowController> window, std::u16string text) {
         if (window)
@@ -4754,7 +3580,7 @@ void FlyWindowController::RunPreferencesAction(std::string action) {
       weak_factory_.GetWeakPtr());
   if (action == "toggle-private-mode") {
     keyboard_editor_->Cancel();
-    TogglePrivate(browser);
+    app.TogglePrivate(browser_);
   } else if (action == "clear-site-cookies") {
     ClearSiteCookies(profile,
                      contents ? contents->GetLastCommittedURL() : GURL(),
@@ -4763,16 +3589,16 @@ void FlyWindowController::RunPreferencesAction(std::string action) {
     ClearWorkspaceCache(profile, std::move(status));
   } else if (action == "open-diagnostics" || action == "show-whats-new") {
     keyboard_editor_->Cancel();
-    InvokeNativeCommand(browser, action);
+    InvokeNativeCommand(browser_, action);
   } else if (action == "check-for-updates") {
     keyboard_editor_->SetUpdateStatus(u"Checking for updates…", "");
-    CheckUpdates(false);
+    app.CheckUpdates(false, browser_);
   } else if (action == "install-update") {
-    InstallUpdate();
+    app.InstallUpdate();
   } else if (action == "restart") {
     chrome::AttemptRestart();
   } else if (action == "desktop-entry" || action == "desktop-default") {
-    ChangeDesktopIntegration(action == "desktop-default");
+    app.UpdateDesktopIntegration(action == "desktop-default");
   } else if (action == "extensions-open-dir") {
     base::ThreadPool::PostTaskAndReplyWithResult(
         FROM_HERE, {base::MayBlock(), base::TaskPriority::USER_VISIBLE},
@@ -4786,185 +3612,7 @@ void FlyWindowController::RunPreferencesAction(std::string action) {
                 platform_util::OpenItem(profile.get(), dir,
                                         platform_util::OPEN_FOLDER, {});
             },
-            profile ? profile->GetWeakPtr() : base::WeakPtr<Profile>()));
+            profile->GetWeakPtr()));
   }
-}
-
-void FlyWindowController::InstallUpdate() {
-  if (update_installing_ || closing_)
-    return;
-  if (!update_.newer) {
-    keyboard_editor_->SetUpdateStatus(u"Check for updates first.", "");
-    return;
-  }
-  if (!update_.package.is_valid()) {
-    // No package for this system in the release: open its page.
-    keyboard_editor_->Cancel();
-    OpenInNewTab(update_.page);
-    return;
-  }
-  update_installing_ = true;
-  keyboard_editor_->SetUpdateStatus(
-      u"Downloading Fly " + base::UTF8ToUTF16(update_.latest) + u"…", "");
-  InstallNativeUpdate(
-      update_,
-      base::BindOnce(
-          [](base::WeakPtr<FlyWindowController> window, std::u16string error) {
-            if (!window)
-              return;
-            window->update_installing_ = false;
-            if (!error.empty()) {
-              window->RecordDiagnostic("error", "update", error);
-              window->keyboard_editor_->SetUpdateStatus(
-                  u"Update failed: " + error, window->update_.latest);
-              window->ShowStatus(u"Update failed: " + error);
-              return;
-            }
-            window->keyboard_editor_->SetUpdateStatus(
-                u"Fly " + base::UTF8ToUTF16(window->update_.latest) +
-                    u" is installed. Restarting…",
-                "");
-            chrome::AttemptRestart();
-          },
-          weak_factory_.GetWeakPtr()));
-}
-
-namespace {
-// The texts of Preferences → About → Desktop integration.
-void ShowDesktopIntegration(KeyboardEditor& editor,
-                            const DesktopIntegrationStatus& status,
-                            std::u16string error) {
-  std::u16string entry;
-  std::u16string action;
-  if (!status.entry.empty() && status.ours) {
-    entry = u"Listed in Rofi and your desktop menu.";
-    action = u"Remove from menu";
-  } else if (!status.entry.empty()) {
-    entry = u"Listed by the entry your installation provides (" +
-            status.entry.LossyDisplayName() + u").";
-  } else if (status.supported) {
-    entry = u"Not listed yet. Fly can add an entry for this installation to "
-            u"Rofi and your desktop menu.";
-    action = u"Add to menu";
-  } else {
-    entry = u"No menu entry found. The package's install.sh adds one.";
-  }
-  if (!error.empty())
-    entry = error + u". " + entry;
-  const bool can_make_default =
-      status.default_browser.has_value() &&
-      (!status.entry.empty() || status.supported);
-  std::u16string browser;
-  if (!status.default_browser)
-    browser = u"Install xdg-utils to let Fly read and change the default "
-              u"browser.";
-  else if (status.is_default)
-    browser = u"Fly opens links from other applications.";
-  else if (!status.default_browser->empty())
-    browser = u"Links from other applications open in " +
-              base::UTF8ToUTF16(std::string(base::RemoveSuffix(
-                                    *status.default_browser, ".desktop")
-                                    .value_or(*status.default_browser))) +
-              u".";
-  else
-    browser = u"No default browser is set.";
-  if (!status.is_default && can_make_default && status.entry.empty())
-    browser += u" Making Fly the default also adds it to the menu.";
-  editor.SetDesktopIntegration(entry, action, browser,
-                               !status.is_default && can_make_default);
-}
-}  // namespace
-
-void FlyWindowController::RefreshDesktopIntegration() {
-  ReadDesktopIntegration(base::BindOnce(
-      [](base::WeakPtr<FlyWindowController> window,
-         DesktopIntegrationStatus status) {
-        if (window && window->keyboard_editor_)
-          ShowDesktopIntegration(*window->keyboard_editor_, status, u"");
-      },
-      weak_factory_.GetWeakPtr()));
-}
-
-void FlyWindowController::ChangeDesktopIntegration(bool make_default) {
-  ReadDesktopIntegration(base::BindOnce(
-      [](base::WeakPtr<FlyWindowController> window, bool make_default,
-         DesktopIntegrationStatus status) {
-        if (!window)
-          return;
-        fly::ChangeDesktopIntegration(
-            make_default ? DesktopIntegrationChange::kMakeDefault
-            : status.ours ? DesktopIntegrationChange::kRemoveEntry
-                          : DesktopIntegrationChange::kAddEntry,
-            base::BindOnce(
-                [](base::WeakPtr<FlyWindowController> window,
-                   std::u16string error, DesktopIntegrationStatus status) {
-                  if (window && window->keyboard_editor_)
-                    ShowDesktopIntegration(*window->keyboard_editor_, status,
-                                           error);
-                },
-                window));
-      },
-      weak_factory_.GetWeakPtr(), make_default));
-}
-
-// Offers desktop integration once, on the first start of a package
-// that no menu entry lists yet.
-void FlyWindowController::MaybeOfferDesktopIntegration() {
-  if (closing_ || !preferences_.CanEdit() ||
-      preferences_.ReadBool("desktop_integration_offered").value_or(false))
-    return;
-  ReadDesktopIntegration(base::BindOnce(
-      [](base::WeakPtr<FlyWindowController> window,
-         DesktopIntegrationStatus status) {
-        if (!window || window->closing_ || !status.supported ||
-            !status.entry.empty())
-          return;
-        window->preferences_.SetBool("desktop_integration_offered", true);
-        auto delegate = std::make_unique<views::DialogDelegate>();
-        delegate->SetOwnershipOfNewWidget(
-            views::Widget::InitParams::CLIENT_OWNS_WIDGET);
-        delegate->SetModalType(ui::mojom::ModalType::kWindow);
-        delegate->SetTitle(u"Add Fly to your applications");
-        delegate->SetButtonLabel(ui::mojom::DialogButton::kOk, u"Add to menu");
-        delegate->SetButtonLabel(ui::mojom::DialogButton::kCancel, u"Not now");
-        auto body = std::make_unique<views::View>();
-        body->SetLayoutManager(std::make_unique<views::BoxLayout>(
-            views::BoxLayout::Orientation::kVertical, gfx::Insets(16), 10));
-        auto* message = body->AddChildView(std::make_unique<views::Label>(
-            u"Add Fly to your applications menu?\n\nFly is running from its "
-            u"package folder, so Rofi and your desktop menu do not list it "
-            u"yet. Fly can add an entry that starts this installation.\n\nYou "
-            u"can change this later in Preferences → About."));
-        message->SetMultiLine(true);
-        message->SetMaximumWidth(420);
-        message->SetHorizontalAlignment(gfx::ALIGN_LEFT);
-        auto* make_default = body->AddChildView(std::make_unique<views::Checkbox>(
-            u"Also make Fly the default browser"));
-        delegate->SetContentsView(std::move(body));
-        delegate->SetAcceptCallback(base::BindOnce(
-            [](base::WeakPtr<FlyWindowController> window,
-               views::Checkbox* make_default) {
-              if (!window)
-                return;
-              fly::ChangeDesktopIntegration(
-                  make_default->GetChecked()
-                      ? DesktopIntegrationChange::kMakeDefault
-                      : DesktopIntegrationChange::kAddEntry,
-                  base::BindOnce(
-                      [](base::WeakPtr<FlyWindowController> window,
-                         std::u16string error, DesktopIntegrationStatus) {
-                        if (window && !error.empty())
-                          window->ShowStatus(error);
-                      },
-                      window));
-            },
-            window, make_default));
-        window->offer_widget_.reset(views::DialogDelegate::CreateDialogWidget(
-            delegate.get(), window->desktop_->GetNativeWindow(),
-            window->desktop_->GetNativeView()));
-        window->offer_delegate_ = std::move(delegate);
-        window->offer_widget_->Show();
-      },
-      weak_factory_.GetWeakPtr()));
 }
 }  // namespace fly

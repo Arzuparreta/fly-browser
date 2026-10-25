@@ -242,13 +242,11 @@ copy("reader_resources") {
   outputs = [ "$root_out_dir/fly_resources/reader/{{source_file_part}}" ]
 }
 
-# The product logo of the empty workspace view and the sidebar's engravings
-# and paper grain.
+# The sidebar's engravings and paper grain.
 copy("identity_resources") {
   sources = [
     "resources/identity/engraving-chasis@2x.png",
     "resources/identity/engraving-papel@2x.png",
-    "resources/identity/icon-128.png",
     "resources/identity/paper-grain.png",
   ]
   outputs = [ "$root_out_dir/fly_resources/identity/{{source_file_part}}" ]

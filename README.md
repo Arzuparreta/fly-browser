@@ -29,7 +29,7 @@ Releases are built for Linux x86_64 only.
 ## Features
 
 - Keyboard commands, link hints, floating address bar and editable shortcuts.
-- Isolated workspace profiles, split view and private browsing.
+- Isolated workspace profiles, each in its own window; split view and private browsing.
 - Bookmarks, shared history, frequent sites and state-preserving tab suspension.
 - Chrome Web Store extensions and bundled uBlock Origin Lite.
 - Local user scripts and styles through a generated component extension.

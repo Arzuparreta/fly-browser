@@ -27,9 +27,9 @@
  #endif
  
 +#if BUILDFLAG(IS_LINUX) || BUILDFLAG(IS_WIN)
-+  // Fly's desktop owns navigation, address and extension surfaces. Its
-+  // embedded profile windows keep the native toolbar model without showing it.
-+  if (fly::FlyWindowController::ShouldEmbed(browser())) {
++  // Fly's sidebar and floating surfaces own navigation, address and extension
++  // controls. Its windows keep the native toolbar model without showing it.
++  if (fly::FlyWindowController::ShouldDecorate(browser())) {
 +    return false;
 +  }
 +#endif

@@ -12,26 +12,13 @@
  
  #include <stdint.h>
  
-@@ -1798,6 +1803,12 @@
- }
- 
- bool BrowserView::IsVisibleOnScreen() const {
-+#if BUILDFLAG(IS_LINUX) || BUILDFLAG(IS_WIN)
-+  if (fly::FlyWindowController::ShouldEmbed(browser_)) {
-+    return fly::FlyWindowController::Get().IsSelected(browser_) &&
-+           browser_widget_->IsVisibleOnScreen();
-+  }
-+#endif
- #if BUILDFLAG(IS_MAC) || BUILDFLAG(IS_WIN)
-   // TODO(crbug.com/405283740): currently only works for mac and windows. See
-   // comments around Widget::IsVisibleOnScreen() for more details. Eventually
 @@ -3219,6 +3230,12 @@
    if (focus_manager->shortcut_handling_suspended()) {
      return content::KeyboardEventProcessingResult::NOT_HANDLED;
    }
 +
 +#if BUILDFLAG(IS_LINUX) || BUILDFLAG(IS_WIN)
-+  if (fly::FlyWindowController::ShouldEmbed(browser_)) {
++  if (fly::FlyWindowController::ShouldDecorate(browser_)) {
 +    return fly::RouteNativePageKey(browser_, event);
 +  }
 +#endif
@@ -45,7 +32,7 @@
 +#if BUILDFLAG(IS_LINUX) || BUILDFLAG(IS_WIN)
 +    // Fly's validated catalogue owns its shortcuts. Unbound/disabled choices
 +    // must not fall back to an unrelated stock Chromium accelerator.
-+    if (fly::FlyWindowController::ShouldEmbed(browser_)) {
++    if (fly::FlyWindowController::ShouldDecorate(browser_)) {
 +      continue;
 +    }
 +#endif
@@ -55,7 +42,7 @@
 --- a/chrome/browser/ui/BUILD.gn
 +++ b/chrome/browser/ui/BUILD.gn
 @@ -793,6 +793,8 @@
-       "//fly/ui/embedded_browser_frame.h",
+       "//fly/ui/fly_browser_frame.h",
        "//fly/ui/fly_window_controller.cc",
        "//fly/ui/fly_window_controller.h",
 +      "//fly/ui/native_commands.cc",

@@ -3,6 +3,7 @@
 // Fly repository.
 #include "fly/ui/tab_sidebar.h"
 #include "fly/ui/new_tab_ui.h"
+#include "fly/ui/fly_app.h"
 #include "fly/ui/fly_window_controller.h"
 #include "fly/ui/native_commands.h"
 #include "fly/ui/fly_theme.h"
@@ -640,8 +641,8 @@ class SidebarTabMenu : public ui::SimpleMenuModel::Delegate {
       case kMute:
         return true;
       case kMoveWorkspace: {
-        const auto* window = FlyWindowController::GetIfCreated();
-        return window && window->CanMoveTab(browser, contents);
+        const auto* app = FlyApp::GetIfCreated();
+        return app && app->CanMoveTab(browser, contents);
       }
       case kClose:
         return !tabs->IsTabPinned(index) &&
@@ -684,7 +685,8 @@ class SidebarTabMenu : public ui::SimpleMenuModel::Delegate {
                          TabMutedReason::kAudioIndicator, std::string());
         return;
       case kMoveWorkspace:
-        FlyWindowController::Get().ShowTabMovePicker(browser, contents);
+        if (auto* window = FlyWindowController::FromBrowser(browser))
+          window->ShowTabMovePicker(contents);
         return;
       case kClose:
         tabs->CloseWebContentsAt(

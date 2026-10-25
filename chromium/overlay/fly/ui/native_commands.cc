@@ -42,6 +42,7 @@
 #include "content/public/browser/web_contents_observer.h"
 #include "content/public/browser/web_contents_user_data.h"
 #include "fly/commands/keyboard_router.h"
+#include "fly/ui/fly_app.h"
 #include "fly/ui/fly_window_controller.h"
 #include "fly/ui/hint_controller.h"
 #include "ui/base/clipboard/clipboard_buffer.h"
@@ -271,7 +272,7 @@ class PageKeyboardState
  public:
   ~PageKeyboardState() override = default;
   KeyboardRouter& router() {
-    auto& service = FlyWindowController::Get().commands();
+    auto& service = FlyApp::Get().commands();
     if (generation_ != service.generation()) {
       router_.Configure(service.Read().value_or(DefaultKeyboardConfig()));
       generation_ = service.generation();
@@ -452,7 +453,7 @@ bool ShouldRestoreNativePageFocus(content::WebContents* contents) {
   if (!contents)
     return false;
   auto* view = contents->GetRenderWidgetHostView();
-  auto* window = FlyWindowController::GetIfCreated();
+  auto* window = FlyWindowController::FromContents(contents);
   return (view && view->HasFocus()) || (window && window->SidebarHasFocus());
 }
 
@@ -466,7 +467,10 @@ content::KeyboardEventProcessingResult RouteNativePageKey(
     bool browser_ui_editable) {
   using Result = content::KeyboardEventProcessingResult;
   auto* contents = browser->GetTabStripModel()->GetActiveWebContents();
-  auto& window = FlyWindowController::Get();
+  auto* fly_window = FlyWindowController::FromBrowser(browser);
+  if (!fly_window)
+    return Result::NOT_HANDLED;
+  auto& window = *fly_window;
   if (contents && (event.GetType() == blink::WebInputEvent::Type::kRawKeyDown ||
                    event.GetType() == blink::WebInputEvent::Type::kKeyUp)) {
     PageKeyboardState::CreateForWebContents(contents);
@@ -507,7 +511,7 @@ content::KeyboardEventProcessingResult RouteNativePageKey(
     contents->Focus();
   } else if (key.kind == KeyResultKind::kAction) {
     // Native commands can close the BrowserView; never read it afterwards.
-    FlyWindowController::Get().RunCommand(browser, key.action);
+    window.RunCommand(key.action);
   }
   return Result::HANDLED;
 }
@@ -529,24 +533,6 @@ std::u16string NativePageModeLabel(BrowserWindowInterface* browser) {
   return u"NORMAL";
 }
 
-bool IsShellCommand(std::string_view action) {
-  constexpr std::string_view actions[] = {
-      "toggle-help", "open-keyboard-settings", "toggle-palette",
-      "toggle-bookmarks", "toggle-history", "toggle-address", "toggle-downloads",
-      "open-extension-actions", "open-diagnostics", "toggle-dashboard",
-      "new-workspace", "focus-sidebar", "toggle-theme", "toggle-zen-mode",
-      "toggle-sidebar-pin", "toggle-window-controls", "toggle-status-bar",
-      "cycle-clock-format", "toggle-clock", "toggle-menu-bar",
-      "toggle-native-menu-visibility", "focus-nav-buttons", "reload-user-content",
-      "open-task-manager", "check-for-updates", "show-whats-new",
-      "toggle-diagnostics-recording", "toggle-notifications", "open-scripts-dir",
-      "open-styles-dir", "test-google-signin",
-      "toggle-private-mode", "next-workspace", "previous-workspace",
-      "toggle-global-audio-mute", "toggle-global-media", "hibernate-tabs",
-      "wake-all-tabs", "spawn-tab", "reopen-closed-tab", "toggle-fullscreen"};
-  return std::ranges::find(actions, action) != std::end(actions);
-}
-
 bool InvokeNativeCommand(BrowserWindowInterface* browser, std::string action) {
   if (!IsKnownAction(action))
     return false;
@@ -556,67 +542,52 @@ bool InvokeNativeCommand(BrowserWindowInterface* browser, std::string action) {
     PageKeyboardState::CreateForWebContents(contents);
     PageKeyboardState::FromWebContents(contents)->router().Invoke(action);
   }
-  auto& window = FlyWindowController::Get();
-  const bool handled = window.RunCommand(browser, action);
-  window.UpdateModeLabel();
+  auto* window = FlyWindowController::FromBrowser(browser);
+  if (!window)
+    return false;
+  const auto weak = window->weak_ptr();
+  const bool handled = window->RunCommand(action);
+  if (weak)
+    weak->UpdateModeLabel();
   return handled;
 }
 
 bool NativeCommandAvailable(BrowserWindowInterface* browser,
                             std::string_view action) {
-  if (!browser)
-    return IsShellCommand(action) && FlyWindowController::GetIfCreated();
-  if (action == "move-tab-to-workspace") {
-    const auto* window = FlyWindowController::GetIfCreated();
-    return window &&
-           window->CanMoveTab(
-               browser, browser->GetTabStripModel()->GetActiveWebContents());
-  }
-  if (action == "toggle-dashboard") {
-    const auto* window = FlyWindowController::GetIfCreated();
-    return window && window->IsSelected(browser) &&
-           window->CanShowWorkspacePicker();
-  }
+  auto* app = FlyApp::GetIfCreated();
+  auto* window = FlyWindowController::FromBrowser(browser);
+  if (!browser || !app || !window)
+    return false;
+  if (action == "move-tab-to-workspace")
+    return app->CanMoveTab(browser,
+                           browser->GetTabStripModel()->GetActiveWebContents());
+  if (action == "toggle-dashboard")
+    return window->CanShowHistory();
   if (action == "toggle-global-audio-mute" || action == "toggle-global-media" ||
-      action == "hibernate-tabs" || action == "wake-all-tabs") {
-    const auto* window = FlyWindowController::GetIfCreated();
-    return window && window->IsSelected(browser) &&
-           !browser->GetTabStripModel()->empty();
-  }
-  if (action == "toggle-history") {
-    const auto* window = FlyWindowController::GetIfCreated();
-    return window && window->IsSelected(browser) && window->CanShowHistory() &&
-           !browser->GetTabStripModel()->empty();
-  }
+      action == "hibernate-tabs" || action == "wake-all-tabs")
+    return !browser->GetTabStripModel()->empty();
+  if (action == "toggle-history")
+    return window->CanShowHistory() && !browser->GetTabStripModel()->empty();
   if (action == "toggle-bookmarks" || action == "add-bookmark") {
-    auto* window = FlyWindowController::GetIfCreated();
     auto* contents = browser->GetTabStripModel()->GetActiveWebContents();
-    return window && (action == "toggle-bookmarks"
-        ? window->bookmarks().Read().has_value()
-        : contents && window->bookmarks().CanAdd(contents->GetLastCommittedURL().spec()));
+    return action == "toggle-bookmarks"
+               ? app->bookmarks().Read().has_value()
+               : contents && app->bookmarks().CanAdd(
+                                 contents->GetLastCommittedURL().spec());
   }
-  if (action == "toggle-theme") {
-    auto* window = FlyWindowController::GetIfCreated();
-    return window && window->preferences().CanEditTheme();
-  }
-  if (action == "toggle-zen-mode" || action == "toggle-sidebar-pin") {
-    auto* window = FlyWindowController::GetIfCreated();
-    return window && window->preferences().CanEditSidebarAutoCollapse();
-  }
-  if (action == "toggle-window-controls") {
-    auto* window = FlyWindowController::GetIfCreated();
-    return window && window->preferences().CanEditWindowControls();
-  }
-  if (action == "toggle-status-bar") {
-    auto* window = FlyWindowController::GetIfCreated();
-    return window && window->preferences().CanEditStatusBar();
-  }
-  if (action == "toggle-clock" || action == "cycle-clock-format") {
-    auto* window = FlyWindowController::GetIfCreated();
-    return window && window->preferences().CanEditClock();
-  }
+  auto& preferences = app->preferences();
+  if (action == "toggle-theme")
+    return preferences.CanEditTheme();
+  if (action == "toggle-zen-mode" || action == "toggle-sidebar-pin")
+    return preferences.CanEditSidebarAutoCollapse();
+  if (action == "toggle-window-controls")
+    return preferences.CanEditWindowControls();
+  if (action == "toggle-status-bar")
+    return preferences.CanEditStatusBar();
+  if (action == "toggle-clock" || action == "cycle-clock-format")
+    return preferences.CanEditClock();
   if (action == "toggle-help" || action == "open-keyboard-settings")
-    return FlyWindowController::GetIfCreated() != nullptr;
+    return true;
   // Fly-owned surfaces (the Chromium toolbar and app menu are hidden).
   constexpr std::string_view kProductActions[] = {
       "toggle-menu-bar",        "toggle-native-menu-visibility",
@@ -629,11 +600,9 @@ bool NativeCommandAvailable(BrowserWindowInterface* browser,
       "reload-user-content",    "open-extension-actions"};
   if (std::ranges::find(kProductActions, action) !=
       std::end(kProductActions))
-    return FlyWindowController::GetIfCreated() != nullptr;
-  if (action == "toggle-private-mode") {
-    const auto* window = FlyWindowController::GetIfCreated();
-    return window && window->CanTogglePrivate(browser);
-  }
+    return true;
+  if (action == "toggle-private-mode")
+    return app->CanTogglePrivate(browser);
   for (const auto& [name, command] : kNativeMappings) {
     if (action == name) {
       auto* tabs = browser->GetTabStripModel();

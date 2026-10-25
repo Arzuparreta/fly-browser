@@ -30,8 +30,8 @@
 +  bool respect_trigger = base::FeatureList::IsEnabled(
 +      features::kRespectShouldTriggerSessionRestoreOnDesktop);
 +#if BUILDFLAG(IS_LINUX) || BUILDFLAG(IS_WIN)
-+  // Explicit empty workspace/new-window requests must stay empty during this
-+  // process. The native startup path remains responsible for restart.
++  // Fly opens a workspace's new window with one new tab, without restoring the
++  // profile's session again. Startup restores sessions on restart.
 +  respect_trigger =
 +      respect_trigger ||
 +      base::CommandLine::ForCurrentProcess()->HasSwitch("fly-native");

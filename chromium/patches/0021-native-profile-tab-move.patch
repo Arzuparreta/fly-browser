@@ -92,10 +92,12 @@
    source_set("tabs") {
 --- a/chrome/browser/ui/BUILD.gn
 +++ b/chrome/browser/ui/BUILD.gn
-@@ -792,6 +792,8 @@
+@@ -792,8 +792,10 @@
      sources += [
-       "//fly/ui/embedded_browser_frame.cc",
-       "//fly/ui/embedded_browser_frame.h",
+       "//fly/ui/fly_app.cc",
+       "//fly/ui/fly_app.h",
+       "//fly/ui/fly_browser_frame.cc",
+       "//fly/ui/fly_browser_frame.h",
 +      "//fly/ui/tab_move_transaction.cc",
 +      "//fly/ui/tab_move_transaction.h",
        "//fly/ui/workspace_close_transaction.cc",

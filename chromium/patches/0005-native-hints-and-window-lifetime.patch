@@ -25,7 +25,7 @@
    // c/b/loader
    FETCH_KEEPALIVE_REQUEST,
 +
-+  // Fly desktop: remains usable when its last profile-bound browser closes.
++  // Fly: keeps running while a workspace window replaces the last one.
 +  FLY_WINDOW,
  };
  
