@@ -4246,6 +4246,9 @@ IN_PROC_BROWSER_TEST_F(FlyWorkspaceBrowserTest,
   while (second->GetTabStripModel()->count() > 1)
     second->GetTabStripModel()->CloseWebContentsAt(
         0, TabCloseTypes::CLOSE_USER_GESTURE);
+  // A lone new tab page is not worth reopening; a visited page is.
+  const auto visited = embedded_test_server()->GetURL("/title1.html");
+  ASSERT_TRUE(ui_test_utils::NavigateToURL(second, visited));
   auto second_lifetime = second->GetWeakPtr();
   ASSERT_TRUE(ExecuteNativeCommand(second, "remove-tab"));
   ASSERT_TRUE(base::test::RunUntil([&] { return !second_lifetime; }));
@@ -4265,6 +4268,18 @@ IN_PROC_BROWSER_TEST_F(FlyWorkspaceBrowserTest,
   // A closed tab of the closed window can be reopened from the new one.
   ASSERT_TRUE(base::test::RunUntil(
       [&] { return NativeCommandAvailable(reopened, "reopen-closed-tab"); }));
+  ASSERT_TRUE(InvokeNativeCommand(reopened, "reopen-closed-tab"));
+  ASSERT_TRUE(base::test::RunUntil([&] {
+    bool found = false;
+    GlobalBrowserCollection::GetInstance()->ForEach(
+        [&](BrowserWindowInterface* model) {
+          auto* tab = model->GetTabStripModel()->GetActiveWebContents();
+          found |= model->GetProfile()->GetPath() == path && tab &&
+                   tab->GetVisibleURL() == visited;
+          return true;
+        });
+    return found;
+  }));
 }
 
 // Settings tools share the profile but never enter the embedded hierarchy.

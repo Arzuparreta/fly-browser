@@ -125,11 +125,11 @@ FlyApp::FlyApp()
   close_subscription_ = chrome::AddClosingAllBrowsersCallback(
       base::BindRepeating(&FlyApp::OnClosingAllBrowsers,
                           weak_factory_.GetWeakPtr()));
-  // Release Local State and profile observers before Chromium tears them
-  // down; the controllers of the last windows are already gone or going.
   session_restored_subscription_ =
       SessionRestore::RegisterOnSessionRestoredCallback(base::BindRepeating(
           &FlyApp::OnSessionRestored, base::Unretained(this)));
+  // Release Local State and profile observers before Chromium tears them
+  // down; the controllers of the last windows are already gone or going.
   terminating_subscription_ =
       browser_shutdown::AddAppTerminatingCallback(base::BindOnce(
           [](base::WeakPtr<FlyApp> app) {
