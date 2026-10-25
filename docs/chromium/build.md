@@ -19,6 +19,11 @@ python3 scripts/chromium/native.py test-browser --root /path/to/fly-chromium
 FLY_ENGINE_ROOT=/path/to/fly-chromium FLY_ENGINE_OUTPUT=out/FlyNative npm start
 ```
 
+Local builds have no Google API key, so Safe Browsing and page translation do
+not work in them. To try them, start the build with `GOOGLE_API_KEY` set to a
+key with the Safe Browsing API enabled; releases compile one in (see
+[releasing](../releasing.md)).
+
 Browser tests require a graphical session or owned virtual display. Use only
 disposable profiles. For a static release build and tarball:
 
