@@ -36,9 +36,9 @@
  void BrowserWebContentsDelegate::UpdateTargetURL(content::WebContents* source,
                                                   const GURL& url) {
 +#if BUILDFLAG(IS_LINUX) || BUILDFLAG(IS_WIN)
-+  if (fly::FlyWindowController::ShouldEmbed(&browser_.get())) {
-+    if (auto* window = fly::FlyWindowController::GetIfCreated())
-+      window->UpdateTargetURL(&browser_.get(), source, url);
++  if (fly::FlyWindowController::ShouldDecorate(&browser_.get())) {
++    if (auto* window = fly::FlyWindowController::FromBrowser(&browser_.get()))
++      window->UpdateTargetURL(source, url);
 +    return;
 +  }
 +#endif
@@ -50,9 +50,9 @@
    const ui::EventType type = event.type();
    const bool exited = type == ui::EventType::kMouseExited;
 +#if BUILDFLAG(IS_LINUX) || BUILDFLAG(IS_WIN)
-+  if (exited && fly::FlyWindowController::ShouldEmbed(&browser_.get())) {
-+    if (auto* window = fly::FlyWindowController::GetIfCreated())
-+      window->UpdateTargetURL(&browser_.get(), source, GURL());
++  if (exited && fly::FlyWindowController::ShouldDecorate(&browser_.get())) {
++    if (auto* window = fly::FlyWindowController::FromBrowser(&browser_.get()))
++      window->UpdateTargetURL(source, GURL());
 +  }
 +#endif
    // Disregard synthesized events, and mouse enter and exit, which may occur

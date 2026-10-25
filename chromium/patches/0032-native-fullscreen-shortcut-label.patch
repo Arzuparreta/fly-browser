@@ -6,7 +6,7 @@
  #include "chrome/browser/ui/views/exclusive_access/exclusive_access_bubble_views.h"
 +
 +#if BUILDFLAG(IS_LINUX) || BUILDFLAG(IS_WIN)
-+#include "fly/ui/fly_window_controller.h"
++#include "fly/ui/fly_app.h"
 +#include "base/strings/string_util.h"
 +#include "base/strings/utf_string_conversions.h"
 +#endif
@@ -20,10 +20,10 @@
 -  DCHECK(got_accelerator);
 -  browser_fullscreen_exit_accelerator_ = accelerator.GetShortcutText();
 +#if BUILDFLAG(IS_LINUX) || BUILDFLAG(IS_WIN)
-+  // Embedded Fly browsers deliberately do not register stock accelerators.
-+  // Keep Chromium's security bubble, displaying Fly's actual configured keys.
-+  if (!got_accelerator && fly::FlyWindowController::GetIfCreated()) {
-+    const auto config = fly::FlyWindowController::Get().commands().Read()
++  // Fly windows deliberately do not register stock accelerators. Keep
++  // Chromium's security bubble, displaying Fly's actual configured keys.
++  if (!got_accelerator && fly::FlyApp::GetIfCreated()) {
++    const auto config = fly::FlyApp::Get().commands().Read()
 +                            .value_or(fly::DefaultKeyboardConfig());
 +    const auto& bindings = config.shortcuts.at("toggle-fullscreen");
 +    browser_fullscreen_exit_accelerator_ = bindings.empty()

@@ -5,7 +5,7 @@
  
  bool BrowserView::ShouldDrawTabStrip() const {
 +#if BUILDFLAG(IS_LINUX) || BUILDFLAG(IS_WIN)
-+  if (fly::FlyWindowController::ShouldEmbed(browser_)) {
++  if (fly::FlyWindowController::ShouldDecorate(browser_)) {
 +    // Fly's native sidebar projects this same profile-bound tab model.
 +    return false;
 +  }

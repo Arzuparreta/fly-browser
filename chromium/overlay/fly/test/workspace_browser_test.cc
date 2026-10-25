@@ -10,6 +10,7 @@
 #include "chrome/browser/bookmarks/bookmark_model_factory.h"
 #include "chrome/browser/content_settings/host_content_settings_map_factory.h"
 #include "chrome/browser/history/history_service_factory.h"
+#include "chrome/browser/lifetime/application_lifetime_desktop.h"
 #include "chrome/browser/ssl/chrome_security_state_util.h"
 #include "chrome/browser/ui/browser_window/public/browser_window_interface_iterator.h"
 #include "chrome/browser/sessions/exit_type_service.h"
@@ -41,6 +42,7 @@
 #include "fly/ui/fly_actions.h"
 #include "fly/ui/fly_extensions.h"
 #include "fly/ui/fly_theme.h"
+#include "fly/ui/fly_app.h"
 #include "fly/ui/fly_window_controller.h"
 #include "fly/ui/hint_controller.h"
 #include "fly/ui/history_service.h"
@@ -51,7 +53,6 @@
 #include "fly/ui/status_bar.h"
 #include "fly/ui/tab_sidebar.h"
 #include "fly/ui/user_content.h"
-#include "fly/ui/welcome_view.h"
 #include "third_party/zlib/google/zip.h"
 #include "ui/aura/window_tree_host.h"
 #include "ui/compositor/layer.h"
@@ -182,15 +183,42 @@ class FlyWorkspaceBrowserTest : public InProcessBrowserTest {
                         .Set("values", base::DictValue().Set(
                                            "sidebar_auto_collapse", false))));
   }
-  void TearDownOnMainThread() override {
-    if (auto* window = FlyWindowController::GetIfCreated()) {
-      window->desktop_widget()->Close();
-      ASSERT_TRUE(base::test::RunUntil(
-          [] { return FlyWindowController::GetIfCreated() == nullptr; }));
-    }
-  }
-
  protected:
+  FlyApp& App() { return FlyApp::Get(); }
+  // The Fly interface of a browser window (the test's own by default).
+  FlyWindowController& Window(BrowserWindowInterface* model = nullptr) {
+    auto* window = FlyWindowController::FromBrowser(model ? model : browser());
+    CHECK(window);
+    return *window;
+  }
+  bool IsActive(BrowserWindowInterface* model) { return LastActive() == model; }
+  // The Fly window used last.
+  BrowserWindowInterface* LastActive() {
+    const auto browsers = FlyApp::Get().BrowsersByActivation();
+    return browsers.empty() ? nullptr : browsers.front();
+  }
+  // The Fly window opened last.
+  BrowserWindowInterface* Newest() {
+    BrowserWindowInterface* newest = nullptr;
+    GlobalBrowserCollection::GetInstance()->ForEach(
+        [&](BrowserWindowInterface* model) {
+          if (FlyWindowController::FromBrowser(model) &&
+              !model->IsDeleteScheduled())
+            newest = model;
+          return true;
+        },
+        BrowserCollection::Order::kCreation);
+    return newest;
+  }
+  // Activates a window as the window manager would, and waits until it has
+  // the keyboard.
+  void Activate(BrowserWindowInterface* model) {
+    model->GetWindow()->Show();
+    model->GetWindow()->Activate();
+    ASSERT_TRUE(base::test::RunUntil([&] {
+      return LastActive() == model && model->GetWindow()->IsActive();
+    }));
+  }
   BrowserWindowInterface* SecondWorkspace() {
     auto* manager = g_browser_process->profile_manager();
     auto& profile = profiles::testing::CreateProfileSync(
@@ -202,15 +230,15 @@ class FlyWorkspaceBrowserTest : public InProcessBrowserTest {
     auto* second = future.Get();
     if (second) {
       chrome::NewTab(second, NewTabTypes::kNewTabCommand);
-      FlyWindowController::Get().Select(second, true);
+      Activate(second);
     }
     return second;
   }
   void ChooseMoveDestination(BrowserWindowInterface* source,
                              const std::string& name,
                              bool pointer = false) {
-    auto& window = FlyWindowController::Get();
-    window.Select(source, true);
+    auto& window = Window(source);
+    Activate(source);
     if (pointer) {
       auto* contents = Active(source);
       ASSERT_TRUE(base::test::RunUntil([&] {
@@ -242,7 +270,7 @@ class FlyWorkspaceBrowserTest : public InProcessBrowserTest {
             window.tab_sidebar_for_testing()->CloseContextMenu();
           }));
       ui::test::EventGenerator mouse(
-          window.desktop_widget()->GetNativeWindow()->GetRootWindow());
+          window.widget()->GetNativeWindow()->GetRootWindow());
       auto point = control->GetVisibleBounds().CenterPoint();
       views::View::ConvertPointToScreen(control, &point);
       mouse.MoveMouseTo(point);
@@ -260,12 +288,12 @@ class FlyWorkspaceBrowserTest : public InProcessBrowserTest {
     picker.ContentsChanged(search, std::u16string(search->GetText()));
     ASSERT_EQ(1u, picker.result_count_for_testing());
     ui::test::EventGenerator keys(
-        window.desktop_widget()->GetNativeWindow()->GetRootWindow());
+        window.widget()->GetNativeWindow()->GetRootWindow());
     keys.PressKey(ui::VKEY_RETURN, ui::EF_NONE);
     keys.ReleaseKey(ui::VKEY_RETURN, ui::EF_NONE);
   }
   void OpenWorkspaceRemoval(const Workspace& item) {
-    auto& window = FlyWindowController::Get();
+    auto& window = Window();
     views::View* row = nullptr;
     ASSERT_TRUE(base::test::RunUntil([&] {
       for (const auto& child :
@@ -292,7 +320,7 @@ class FlyWorkspaceBrowserTest : public InProcessBrowserTest {
           menu_selected = true;
         }));
     ui::test::EventGenerator mouse(
-        window.desktop_widget()->GetNativeWindow()->GetRootWindow());
+        window.widget()->GetNativeWindow()->GetRootWindow());
     // A catalog notification can replace the row before its first layout.
     // Target its visible hit area rather than an unlaid-out preferred rect.
     auto point = row->GetVisibleBounds().CenterPoint();
@@ -309,7 +337,7 @@ class FlyWorkspaceBrowserTest : public InProcessBrowserTest {
   // Preferences builds one section at a time: look in the shown section,
   // then in each of the others.
   void ClickPreferencesButton(std::u16string_view text) {
-    auto& editor = FlyWindowController::Get().keyboard_editor();
+    auto& editor = Window().keyboard_editor();
     auto find = [&](auto&& self, views::View* view) -> views::MdTextButton* {
       if (auto* button = views::AsViewClass<views::MdTextButton>(view);
           button && button->GetText() == text)
@@ -340,7 +368,7 @@ class FlyWorkspaceBrowserTest : public InProcessBrowserTest {
     base::ListValue windows;
     GlobalBrowserCollection::GetInstance()->ForEach(
         [&](BrowserWindowInterface* model) {
-          if (!FlyWindowController::ShouldEmbed(model) ||
+          if (!FlyWindowController::ShouldDecorate(model) ||
               model->GetProfile()->IsOffTheRecord())
             return true;
           base::ListValue tabs;
@@ -446,26 +474,31 @@ IN_PROC_BROWSER_TEST_F(FlyWorkspaceBrowserTest,
   EXPECT_TRUE(net::NetworkAnonymizationKey::IsPartitioningEnabled());
 }
 
+// Every workspace opens its own OS window with its own Fly interface; native
+// window and tab IDs stay Chromium's.
 IN_PROC_BROWSER_TEST_F(FlyWorkspaceBrowserTest,
-                       OneDesktopTwoProfilesAndNativeIds) {
+                       EachWorkspaceHasItsOwnWindowAndNativeIds) {
   auto* first = browser();
   auto* second = SecondWorkspace();
   ASSERT_TRUE(second);
-  auto* desktop = FlyWindowController::Get().desktop_widget();
   EXPECT_NE(first->GetProfile(), second->GetProfile());
   EXPECT_NE(first->GetSessionID(), second->GetSessionID());
   EXPECT_NE(extensions::ExtensionTabUtil::GetWindowId(first),
             extensions::ExtensionTabUtil::GetWindowId(second));
-  EXPECT_EQ(desktop->GetNativeWindow()->GetHost(),
-            first->GetWindow()->GetNativeWindow()->GetHost());
-  EXPECT_EQ(desktop->GetNativeWindow()->GetHost(),
+  EXPECT_NE(first->GetWindow()->GetNativeWindow()->GetHost(),
             second->GetWindow()->GetNativeWindow()->GetHost());
-  EXPECT_NE(first->GetWindow()->GetNativeWindow(),
-            second->GetWindow()->GetNativeWindow());
-  EXPECT_EQ(extensions::ExtensionTabUtil::GetWindowId(first),
-            extensions::ExtensionTabUtil::GetWindowIdOfTab(Active(first)));
-  EXPECT_EQ(extensions::ExtensionTabUtil::GetWindowId(second),
-            extensions::ExtensionTabUtil::GetWindowIdOfTab(Active(second)));
+  auto& first_window = Window(first);
+  auto& second_window = Window(second);
+  EXPECT_NE(&first_window, &second_window);
+  for (auto* model : {first, second}) {
+    auto& window = Window(model);
+    EXPECT_EQ(model->GetWindow()->GetNativeWindow(),
+              window.widget()->GetNativeWindow());
+    EXPECT_TRUE(window.widget()->GetNativeWindow()->Contains(
+        window.sidebar_widget_for_testing()->GetNativeWindow()));
+    EXPECT_EQ(extensions::ExtensionTabUtil::GetWindowId(model),
+              extensions::ExtensionTabUtil::GetWindowIdOfTab(Active(model)));
+  }
 }
 
 IN_PROC_BROWSER_TEST_F(FlyWorkspaceBrowserTest,
@@ -486,7 +519,7 @@ IN_PROC_BROWSER_TEST_F(FlyWorkspaceBrowserTest,
   ASSERT_TRUE(content::ExecJs(Active(second),
                               "document.cookie='workspace=second;path=/"
                               "';localStorage.setItem('workspace','second')"));
-  FlyWindowController::Get().Select(first, true);
+  Activate(first);
   EXPECT_EQ("workspace=first",
             content::EvalJs(Active(first), "document.cookie"));
   EXPECT_EQ("first", content::EvalJs(Active(first),
@@ -521,25 +554,27 @@ IN_PROC_BROWSER_TEST_F(FlyWorkspaceBrowserTest,
   auto* first = browser();
   auto* second = SecondWorkspace();
   ASSERT_TRUE(second);
-  auto& window = FlyWindowController::Get();
   const auto url = embedded_test_server()->GetURL("/title1.html");
-  window.Select(first, true);
+  Activate(first);
   ASSERT_TRUE(ui_test_utils::NavigateToURL(first, url));
   ASSERT_TRUE(content::ExecJs(Active(first),
                               "document.cookie='normal=first;path=/'"));
   const auto catalog =
       g_browser_process->local_state()->GetDict(kWorkspacesPref).Clone();
+  const auto private_of = [&](BrowserWindowInterface* normal) {
+    auto* newest = Newest();
+    return newest && newest->GetProfile()->IsOffTheRecord() &&
+                   newest->GetProfile()->GetOriginalProfile() ==
+                       normal->GetProfile()
+               ? newest
+               : nullptr;
+  };
   ASSERT_TRUE(NativeCommandAvailable(first, "toggle-private-mode"));
-  ASSERT_TRUE(window.RunCommand(first, "toggle-private-mode"));
-  ASSERT_TRUE(base::test::RunUntil([&] {
-    return window.selected_browser_for_testing() != first;
-  }));
-  auto* private_first = window.selected_browser_for_testing();
-  ASSERT_TRUE(private_first);
-  ASSERT_TRUE(private_first->GetProfile()->IsOffTheRecord());
-  EXPECT_EQ(first->GetProfile(),
-            private_first->GetProfile()->GetOriginalProfile());
-  EXPECT_EQ(window.desktop_widget()->GetNativeWindow()->GetHost(),
+  ASSERT_TRUE(Window(first).RunCommand("toggle-private-mode"));
+  ASSERT_TRUE(base::test::RunUntil([&] { return private_of(first); }));
+  auto* private_first = private_of(first);
+  // A private workspace is its own window too.
+  EXPECT_NE(first->GetWindow()->GetNativeWindow()->GetHost(),
             private_first->GetWindow()->GetNativeWindow()->GetHost());
   EXPECT_EQ(catalog, g_browser_process->local_state()->GetDict(kWorkspacesPref));
   ASSERT_TRUE(ui_test_utils::NavigateToURL(private_first, url));
@@ -550,42 +585,37 @@ IN_PROC_BROWSER_TEST_F(FlyWorkspaceBrowserTest,
   std::map<std::string, std::string> extra;
   TabIdentity::Populate(Active(private_first), &extra);
   EXPECT_TRUE(extra.empty());
-  ExpectVisible(Active(first), false);
-  window.Select(second, true);
-  ASSERT_TRUE(window.RunCommand(second, "toggle-private-mode"));
-  ASSERT_TRUE(base::test::RunUntil([&] {
-    return window.selected_browser_for_testing() != second;
-  }));
-  auto* private_second = window.selected_browser_for_testing();
-  ASSERT_TRUE(private_second);
-  ASSERT_TRUE(private_second->GetProfile()->IsOffTheRecord());
+  // Toggling again from the normal window returns to the existing private one.
+  Activate(first);
+  ASSERT_TRUE(Window(first).RunCommand("toggle-private-mode"));
+  ASSERT_TRUE(base::test::RunUntil([&] { return IsActive(private_first); }));
+  Activate(second);
+  ASSERT_TRUE(Window(second).RunCommand("toggle-private-mode"));
+  ASSERT_TRUE(base::test::RunUntil([&] { return private_of(second); }));
+  auto* private_second = private_of(second);
   EXPECT_NE(private_first->GetProfile(), private_second->GetProfile());
   ASSERT_TRUE(ui_test_utils::NavigateToURL(private_second, url));
   EXPECT_EQ("", content::EvalJs(Active(private_second), "document.cookie"));
   EXPECT_EQ(true, content::EvalJs(Active(private_second),
-                                 "localStorage.getItem('private') === null"));
-  ASSERT_TRUE(window.RunCommand(private_second, "toggle-private-mode"));
+                                  "localStorage.getItem('private') === null"));
+  ASSERT_TRUE(Window(private_second).RunCommand("toggle-private-mode"));
   ASSERT_TRUE(base::test::RunUntil([&] {
     return !second->GetProfile()->HasPrimaryOTRProfile();
   }));
-  EXPECT_EQ(second, window.selected_browser_for_testing());
-  window.Select(private_first, true);
-  ASSERT_TRUE(window.RunCommand(private_first, "toggle-private-mode"));
+  Activate(private_first);
+  ASSERT_TRUE(Window(private_first).RunCommand("toggle-private-mode"));
   ASSERT_TRUE(base::test::RunUntil([&] {
     return !first->GetProfile()->HasPrimaryOTRProfile();
   }));
-  EXPECT_EQ(first, window.selected_browser_for_testing());
   EXPECT_EQ("normal=first", content::EvalJs(Active(first), "document.cookie"));
-  ASSERT_TRUE(window.RunCommand(first, "toggle-private-mode"));
-  ASSERT_TRUE(base::test::RunUntil([&] {
-    return window.selected_browser_for_testing() != first;
-  }));
-  auto* fresh = window.selected_browser_for_testing();
-  ASSERT_TRUE(fresh);
+  Activate(first);
+  ASSERT_TRUE(Window(first).RunCommand("toggle-private-mode"));
+  ASSERT_TRUE(base::test::RunUntil([&] { return private_of(first); }));
+  auto* fresh = private_of(first);
   ASSERT_TRUE(ui_test_utils::NavigateToURL(fresh, url));
   EXPECT_EQ("", content::EvalJs(Active(fresh), "document.cookie"));
   EXPECT_EQ(true, content::EvalJs(Active(fresh),
-                                 "localStorage.getItem('private') === null"));
+                                  "localStorage.getItem('private') === null"));
 }
 
 IN_PROC_BROWSER_TEST_F(FlyWorkspaceBrowserTest,
@@ -593,7 +623,7 @@ IN_PROC_BROWSER_TEST_F(FlyWorkspaceBrowserTest,
   auto* original = browser();
   ASSERT_TRUE(ui_test_utils::NavigateToURL(
       original, embedded_test_server()->GetURL("/title1.html")));
-  auto& window = FlyWindowController::Get();
+  auto& window = Window();
   const int count = original->GetTabStripModel()->count();
   ASSERT_TRUE(InvokeNativeCommand(original, "spawn-tab"));
   ASSERT_EQ(count + 1, original->GetTabStripModel()->count());
@@ -617,38 +647,38 @@ IN_PROC_BROWSER_TEST_F(FlyWorkspaceBrowserTest,
   EXPECT_FALSE(window.address_picker().active());
   EXPECT_EQ(GURL(kFlyNewTabURL), inserted->GetLastCommittedURL());
 
-  ASSERT_TRUE(window.RunCommand(original, "toggle-private-mode"));
+  ASSERT_TRUE(Window(original).RunCommand("toggle-private-mode"));
   ASSERT_TRUE(base::test::RunUntil([&] {
-    return window.selected_browser_for_testing() != original;
+    return LastActive() != original;
   }));
-  auto* private_browser = window.selected_browser_for_testing();
+  auto* private_browser = LastActive();
   ASSERT_TRUE(private_browser);
   ASSERT_TRUE(private_browser->GetProfile()->IsOffTheRecord());
   ASSERT_TRUE(content::WaitForLoadStop(Active(private_browser)));
   base::RunLoop().RunUntilIdle();
-  EXPECT_FALSE(window.address_picker().active());
+  EXPECT_FALSE(Window(private_browser).address_picker().active());
   EXPECT_EQ(GURL(kFlyNewTabURL), Active(private_browser)->GetLastCommittedURL());
   ASSERT_TRUE(InvokeNativeCommand(private_browser, "spawn-tab"));
   ASSERT_TRUE(content::WaitForLoadStop(Active(private_browser)));
   base::RunLoop().RunUntilIdle();
-  EXPECT_FALSE(window.address_picker().active());
+  EXPECT_FALSE(Window(private_browser).address_picker().active());
   EXPECT_EQ(GURL(kFlyNewTabURL), Active(private_browser)->GetLastCommittedURL());
   EXPECT_EQ(private_browser->GetProfile(),
             Active(private_browser)->GetBrowserContext());
 
-  window.Select(original, true);
-  window.CreateWorkspace();
+  Activate(original);
+  App().CreateWorkspace();
   ASSERT_TRUE(base::test::RunUntil([&] {
-    auto* selected = window.selected_browser_for_testing();
+    auto* selected = LastActive();
     return selected && selected != original && selected != private_browser &&
            selected->GetTabStripModel()->count() == 1;
   }));
-  auto* created = window.selected_browser_for_testing();
+  auto* created = LastActive();
   ASSERT_FALSE(created->GetProfile()->IsOffTheRecord());
   EXPECT_NE(original->GetProfile(), created->GetProfile());
   ASSERT_TRUE(content::WaitForLoadStop(Active(created)));
   base::RunLoop().RunUntilIdle();
-  EXPECT_FALSE(window.address_picker().active());
+  EXPECT_FALSE(Window(created).address_picker().active());
   EXPECT_EQ(GURL(kFlyNewTabURL), Active(created)->GetLastCommittedURL());
 
   // Splitting a one-tab workspace must create the second pane through the
@@ -661,7 +691,7 @@ IN_PROC_BROWSER_TEST_F(FlyWorkspaceBrowserTest,
     auto* pane = split_model->GetWebContentsAt(index);
     ASSERT_TRUE(content::WaitForLoadStop(pane));
     base::RunLoop().RunUntilIdle();
-    EXPECT_FALSE(window.address_picker().active());
+    EXPECT_FALSE(Window(created).address_picker().active());
     EXPECT_EQ(GURL(kFlyNewTabURL), pane->GetLastCommittedURL());
     EXPECT_EQ(created->GetProfile(), pane->GetBrowserContext());
     ExpectVisible(pane, true);
@@ -671,12 +701,11 @@ IN_PROC_BROWSER_TEST_F(FlyWorkspaceBrowserTest,
 IN_PROC_BROWSER_TEST_F(FlyWorkspaceBrowserTest,
                        PrivateExitHonoursBeforeUnloadCancellation) {
   auto* normal = browser();
-  auto& window = FlyWindowController::Get();
-  ASSERT_TRUE(window.RunCommand(normal, "toggle-private-mode"));
+  ASSERT_TRUE(Window(normal).RunCommand("toggle-private-mode"));
   ASSERT_TRUE(base::test::RunUntil([&] {
-    return window.selected_browser_for_testing() != normal;
+    return LastActive() != normal;
   }));
-  auto* private_model = window.selected_browser_for_testing();
+  auto* private_model = LastActive();
   ASSERT_TRUE(private_model);
   ASSERT_TRUE(ui_test_utils::NavigateToURL(
       private_model, embedded_test_server()->GetURL("/title1.html")));
@@ -691,21 +720,25 @@ IN_PROC_BROWSER_TEST_F(FlyWorkspaceBrowserTest,
     void BeforeUnloadDialogCancelled() override { cancelled = true; }
     bool cancelled = false;
   } cancellation(contents);
-  ASSERT_TRUE(window.RunCommand(private_model, "toggle-private-mode"));
+  ASSERT_TRUE(Window(private_model).RunCommand("toggle-private-mode"));
   auto* dialog = ui_test_utils::WaitForAppModalDialog();
   ASSERT_TRUE(dialog);
   ASSERT_TRUE(dialog->is_before_unload_dialog());
   dialog->view()->CancelAppModalDialog();
   ASSERT_TRUE(base::test::RunUntil([&] { return cancellation.cancelled; }));
-  EXPECT_EQ(private_model, window.selected_browser_for_testing());
+  EXPECT_EQ(private_model, LastActive());
   EXPECT_TRUE(normal->GetProfile()->HasPrimaryOTRProfile());
   ExpectVisible(contents, true);
   ASSERT_TRUE(content::ExecJs(contents, "window.onbeforeunload = null"));
-  ASSERT_TRUE(window.RunCommand(private_model, "toggle-private-mode"));
+  // Leaving brings the workspace's own window back, even from minimised.
+  normal->GetWindow()->Minimize();
+  ASSERT_TRUE(
+      base::test::RunUntil([&] { return normal->GetWindow()->IsMinimized(); }));
+  ASSERT_TRUE(Window(private_model).RunCommand("toggle-private-mode"));
   ASSERT_TRUE(base::test::RunUntil([&] {
-    return !normal->GetProfile()->HasPrimaryOTRProfile();
+    return !normal->GetProfile()->HasPrimaryOTRProfile() &&
+           LastActive() == normal && !normal->GetWindow()->IsMinimized();
   }));
-  EXPECT_EQ(normal, window.selected_browser_for_testing());
 }
 
 class FlySidebarBrowserTest : public FlyWorkspaceBrowserTest {
@@ -713,31 +746,30 @@ class FlySidebarBrowserTest : public FlyWorkspaceBrowserTest {
   void SetUpOnMainThread() override {
     FlyWorkspaceBrowserTest::SetUpOnMainThread();
     ASSERT_TRUE(
-        FlyWindowController::Get().preferences().SetSidebarAutoCollapse(true));
+        FlyApp::Get().preferences().SetSidebarAutoCollapse(true));
     // The footer clock ticks independently; these cases observe the sidebar's.
     ASSERT_TRUE(
-        FlyWindowController::Get().preferences().SetStatusBarVisible(false));
+        FlyApp::Get().preferences().SetStatusBarVisible(false));
   }
 
  protected:
   void MovePointer(gfx::Point point) {
-    ui::test::EventGenerator mouse(FlyWindowController::Get()
-                                       .desktop_widget()
+    ui::test::EventGenerator mouse(Window().widget()
                                        ->GetNativeWindow()
                                        ->GetRootWindow());
     mouse.MoveMouseTo(point);
   }
   void OpenByPointer() {
-    auto& window = FlyWindowController::Get();
+    auto& window = Window();
     const auto bounds =
-        window.desktop_widget()->GetContentsView()->GetBoundsInScreen();
+        window.widget()->GetContentsView()->GetBoundsInScreen();
     MovePointer(gfx::Point(bounds.x() + 18, bounds.y() + 200));
     ASSERT_TRUE(base::test::RunUntil(
         [&] { return window.sidebar_expanded_for_testing(); }));
   }
   void MoveToPage() {
-    auto& window = FlyWindowController::Get();
-    auto* contents = Active(window.selected_browser_for_testing());
+    auto& window = Window();
+    auto* contents = Active(LastActive());
     contents->Focus();
     MovePointer(
         contents->GetRenderWidgetHostView()->GetViewBounds().CenterPoint());
@@ -746,7 +778,7 @@ class FlySidebarBrowserTest : public FlyWorkspaceBrowserTest {
   }
   // Waits for the slide to end: until then the visible panel takes clicks.
   void WaitForSidebarMotion() {
-    auto* root = FlyWindowController::Get().sidebar_root_for_testing();
+    auto* root = Window().sidebar_root_for_testing();
     ASSERT_TRUE(base::test::RunUntil([&] {
       return !root->edge()->layer()->GetAnimator()->is_animating() &&
              !root->panel()->layer()->GetAnimator()->is_animating();
@@ -767,7 +799,7 @@ IN_PROC_BROWSER_TEST_F(FlySidebarBrowserTest,
     onresize=()=>window.resizes++;
     document.addEventListener('visibilitychange',()=>visibilityEvents.push(document.visibilityState));
   )js"));
-  auto& window = FlyWindowController::Get();
+  auto& window = Window();
   MoveToPage();
   EXPECT_FALSE(window.clock_timer_running_for_testing());
   const int width = content::EvalJs(page, "innerWidth").ExtractInt();
@@ -781,7 +813,7 @@ IN_PROC_BROWSER_TEST_F(FlySidebarBrowserTest,
   ExpectVisible(page, true);
   const auto covered = page_bounds.origin() + gfx::Vector2d(100, 416);
   auto native_point = covered;
-  auto* root = window.desktop_widget()->GetNativeWindow()->GetRootWindow();
+  auto* root = window.widget()->GetNativeWindow()->GetRootWindow();
   wm::ConvertPointFromScreen(root, &native_point);
   auto* hit = root->GetEventHandlerForPoint(native_point);
   ASSERT_TRUE(
@@ -812,7 +844,7 @@ IN_PROC_BROWSER_TEST_F(FlySidebarBrowserTest, SlideUpdatesOnlyTheHoveredRow) {
   ASSERT_TRUE(AddTabAtIndex(1, embedded_test_server()->GetURL("/title2.html"),
                             ui::PAGE_TRANSITION_TYPED));
   auto* second = Active(browser());
-  auto& window = FlyWindowController::Get();
+  auto& window = Window();
   auto* list = window.tab_sidebar_for_testing();
   ASSERT_TRUE(base::test::RunUntil([&] {
     return list->row_for_testing(first) && list->row_for_testing(second);
@@ -845,7 +877,7 @@ IN_PROC_BROWSER_TEST_F(FlySidebarBrowserTest, SlideUpdatesOnlyTheHoveredRow) {
 // Rows and badges are refreshed with unchanged text often (titles, loading,
 // hovered links); an unchanged text must not repaint them.
 IN_PROC_BROWSER_TEST_F(FlySidebarBrowserTest, UnchangedButtonTextKeepsBorder) {
-  auto* list = FlyWindowController::Get().tab_sidebar_for_testing();
+  auto* list = Window().tab_sidebar_for_testing();
   auto* contents = Active(browser());
   ASSERT_TRUE(base::test::RunUntil(
       [&] { return list->row_for_testing(contents); }));
@@ -864,7 +896,7 @@ IN_PROC_BROWSER_TEST_F(FlySidebarBrowserTest, UnchangedButtonTextKeepsBorder) {
 // and favicons never move.
 IN_PROC_BROWSER_TEST_F(FlySidebarBrowserTest,
                        CollapsedRailIsThePanelsLeftColumn) {
-  auto& window = FlyWindowController::Get();
+  auto& window = Window();
   auto* root = window.sidebar_root_for_testing();
   auto* list = window.tab_sidebar_for_testing();
   ASSERT_TRUE(root);
@@ -888,7 +920,7 @@ IN_PROC_BROWSER_TEST_F(FlySidebarBrowserTest,
   ASSERT_TRUE(row);
   const auto collapsed = row->GetBoundsInScreen();
   const auto origin =
-      window.desktop_widget()->GetContentsView()->GetBoundsInScreen().origin();
+      window.widget()->GetContentsView()->GetBoundsInScreen().origin();
   // Rows are 40px tall, 4px into the list, the favicon centred at 18px.
   EXPECT_EQ(FlyScaled(40), collapsed.height());
   EXPECT_EQ(origin.x() + FlyScaled(4), collapsed.x());
@@ -903,7 +935,7 @@ IN_PROC_BROWSER_TEST_F(FlySidebarBrowserTest,
   EXPECT_EQ(collapsed, row->GetBoundsInScreen());
   // Drops find their target by point: only the visible panel is hit, never
   // its shadow or the hidden part of the collapsed panel.
-  auto* host_root = window.desktop_widget()->GetNativeWindow()->GetRootWindow();
+  auto* host_root = window.widget()->GetNativeWindow()->GetRootWindow();
   auto* sidebar = window.sidebar_widget_for_testing()->GetNativeWindow();
   auto* clip = sidebar->parent();
   auto sidebar_at = [&](int x) {
@@ -922,7 +954,7 @@ IN_PROC_BROWSER_TEST_F(FlySidebarBrowserTest,
   EXPECT_TRUE(sidebar_at(18));
   EXPECT_FALSE(sidebar_at(100));
   // A larger interface while collapsed moves the edge by the larger width.
-  ASSERT_TRUE(window.preferences().SetString("interface_scale", "large"));
+  ASSERT_TRUE(App().preferences().SetString("interface_scale", "large"));
   ASSERT_TRUE(base::test::RunUntil([&] {
     return root->edge()->layer()->transform().To2dTranslation().x() ==
            -static_cast<float>(FlyScaled(224));
@@ -930,7 +962,7 @@ IN_PROC_BROWSER_TEST_F(FlySidebarBrowserTest,
   EXPECT_GT(FlyScaled(224), 224);
   EXPECT_EQ(static_cast<float>(FlyScaled(224)),
             root->panel()->layer()->transform().To2dTranslation().x());
-  ASSERT_TRUE(window.preferences().SetString("interface_scale", "normal"));
+  ASSERT_TRUE(App().preferences().SetString("interface_scale", "normal"));
   ASSERT_TRUE(base::test::RunUntil([&] {
     return root->edge()->layer()->transform().To2dTranslation().x() == -shift;
   }));
@@ -939,10 +971,10 @@ IN_PROC_BROWSER_TEST_F(FlySidebarBrowserTest,
 // Leaving the window (the screen's left edge, the window border) keeps the
 // sidebar open; entering the page closes it.
 IN_PROC_BROWSER_TEST_F(FlySidebarBrowserTest, LeavingTheWindowKeepsTheSidebar) {
-  auto& window = FlyWindowController::Get();
+  auto& window = Window();
   OpenByPointer();
   const auto bounds =
-      window.desktop_widget()->GetContentsView()->GetBoundsInScreen();
+      window.widget()->GetContentsView()->GetBoundsInScreen();
   ui::MouseEvent exited(ui::EventType::kMouseExited,
                         gfx::PointF(bounds.x() - 2, bounds.y() + 200),
                         gfx::PointF(bounds.x() - 2, bounds.y() + 200),
@@ -958,7 +990,7 @@ IN_PROC_BROWSER_TEST_F(FlySidebarBrowserTest, LeavingTheWindowKeepsTheSidebar) {
 // its own shows the tab numbers, any other key hides them.
 IN_PROC_BROWSER_TEST_F(FlySidebarBrowserTest,
                        MiddleClickClosesAndModifierShowsTabNumbers) {
-  auto& window = FlyWindowController::Get();
+  auto& window = Window();
   auto* model = browser()->GetTabStripModel();
   ASSERT_TRUE(ExecuteNativeCommand(browser(), "spawn-tab"));
   auto* target = Active(browser());
@@ -972,7 +1004,7 @@ IN_PROC_BROWSER_TEST_F(FlySidebarBrowserTest,
   OpenByPointer();
   views::test::RunScheduledLayout(list->GetWidget());
   ui::test::EventGenerator mouse(
-      window.desktop_widget()->GetNativeWindow()->GetRootWindow());
+      window.widget()->GetNativeWindow()->GetRootWindow());
   mouse.MoveMouseTo(
       list->row_for_testing(target)->GetBoundsInScreen().CenterPoint());
   mouse.PressButton(ui::EF_MIDDLE_MOUSE_BUTTON);
@@ -1010,13 +1042,13 @@ IN_PROC_BROWSER_TEST_F(FlySidebarBrowserTest,
     document.body.innerHTML='<input id="edit" style="position:fixed;left:400px;top:40px"><div style="height:6000px"></div>';
     document.querySelector('#edit').focus();
   )js"));
-  auto& window = FlyWindowController::Get();
+  auto& window = Window();
   MoveToPage();
   ASSERT_TRUE(base::test::RunUntil([&] {
     return content::EvalJs(page, "document.hasFocus()").ExtractBool();
   }));
   ui::test::EventGenerator keys(
-      window.desktop_widget()->GetNativeWindow()->GetRootWindow());
+      window.widget()->GetNativeWindow()->GetRootWindow());
   keys.PressKey(ui::VKEY_J, ui::EF_NONE);
   keys.ReleaseKey(ui::VKEY_J, ui::EF_NONE);
   ASSERT_TRUE(base::test::RunUntil([&] {
@@ -1056,10 +1088,10 @@ IN_PROC_BROWSER_TEST_F(FlySidebarBrowserTest,
     document.body.innerHTML='<input id="edit" style="position:fixed;left:400px;top:40px">';
     document.querySelector('#edit').focus();
   )js"));
-  auto& window = FlyWindowController::Get();
+  auto& window = Window();
   MoveToPage();
   ui::test::EventGenerator keys(
-      window.desktop_widget()->GetNativeWindow()->GetRootWindow());
+      window.widget()->GetNativeWindow()->GetRootWindow());
   auto row_focused = [&] {
     auto* row = window.tab_sidebar_for_testing()->row_for_testing(page);
     return window.sidebar_expanded_for_testing() && row &&
@@ -1087,18 +1119,18 @@ IN_PROC_BROWSER_TEST_F(FlySidebarBrowserTest,
   ASSERT_TRUE(ui_test_utils::NavigateToURL(
       browser(), embedded_test_server()->GetURL("/title1.html")));
   auto* page = Active(browser());
-  auto& window = FlyWindowController::Get();
+  auto& window = Window();
   MoveToPage();
   const auto width = page->GetRenderWidgetHostView()->GetViewBounds().width();
   OpenByPointer();
   auto* pin = window.sidebar_pin_for_testing();
   views::test::RunScheduledLayout(pin->GetWidget());
   ui::test::EventGenerator mouse(
-      window.desktop_widget()->GetNativeWindow()->GetRootWindow());
+      window.widget()->GetNativeWindow()->GetRootWindow());
   mouse.MoveMouseTo(pin->GetBoundsInScreen().CenterPoint());
   mouse.ClickLeftButton();
   ASSERT_TRUE(base::test::RunUntil(
-      [&] { return window.preferences().ReadSidebarAutoCollapse() == false; }));
+      [&] { return App().preferences().ReadSidebarAutoCollapse() == false; }));
   ASSERT_TRUE(base::test::RunUntil([&] {
     return page->GetRenderWidgetHostView()->GetViewBounds().width() ==
            width - 224;
@@ -1112,7 +1144,7 @@ IN_PROC_BROWSER_TEST_F(FlySidebarBrowserTest,
   auto* checkbox = editor.appearance_for_testing("sidebar_auto_collapse");
   ASSERT_TRUE(checkbox && !checkbox->GetChecked());
   views::test::ButtonTestApi(checkbox).NotifyDefaultMouseClick();
-  EXPECT_EQ(true, window.preferences().ReadSidebarAutoCollapse());
+  EXPECT_EQ(true, App().preferences().ReadSidebarAutoCollapse());
   editor.Cancel(true);
   ASSERT_TRUE(base::test::RunUntil([&] {
     return !editor.active() &&
@@ -1125,7 +1157,7 @@ IN_PROC_BROWSER_TEST_F(FlySidebarBrowserTest,
       base::DictValue().Set("schema", 2).Set("values", base::DictValue());
   g_browser_process->local_state()->SetDict(kPreferencesPref, future.Clone());
   EXPECT_FALSE(NativeCommandAvailable(browser(), "toggle-sidebar-pin"));
-  EXPECT_FALSE(window.RunCommand(browser(), "toggle-sidebar-pin"));
+  EXPECT_FALSE(Window(browser()).RunCommand("toggle-sidebar-pin"));
   EXPECT_FALSE(window.sidebar_pin_for_testing()->GetEnabled());
   EXPECT_EQ(future,
             g_browser_process->local_state()->GetDict(kPreferencesPref));
@@ -1140,13 +1172,15 @@ IN_PROC_BROWSER_TEST_F(FlySidebarBrowserTest,
   const auto id = TabIdentity::Get(target);
   auto* second = SecondWorkspace();
   ASSERT_TRUE(second);
-  auto& window = FlyWindowController::Get();
-  auto* list = window.tab_sidebar_for_testing();
+  // Each window lists its own tabs.
+  auto* second_list = Window(second).tab_sidebar_for_testing();
   ASSERT_TRUE(base::test::RunUntil([&] {
-    return list->row_count_for_testing() == 1 &&
-           list->row_for_testing(Active(second));
+    return second_list->row_count_for_testing() == 1 &&
+           second_list->row_for_testing(Active(second));
   }));
-  window.Select(first, true);
+  Activate(first);
+  auto& window = Window(first);
+  auto* list = window.tab_sidebar_for_testing();
   ASSERT_TRUE(base::test::RunUntil([&] {
     return list->row_count_for_testing() == 2 && list->row_for_testing(target);
   }));
@@ -1178,7 +1212,7 @@ IN_PROC_BROWSER_TEST_F(FlySidebarBrowserTest,
   views::test::RunScheduledLayout(row->GetWidget());
   // The favicon is on the rail's centre line, 18px from the sidebar's edge.
   const auto origin =
-      window.desktop_widget()->GetContentsView()->GetBoundsInScreen().origin();
+      window.widget()->GetContentsView()->GetBoundsInScreen().origin();
   const gfx::Point point(origin.x() + 18,
                          row->GetBoundsInScreen().CenterPoint().y());
   bool inspected = false;
@@ -1200,18 +1234,18 @@ IN_PROC_BROWSER_TEST_F(FlySidebarBrowserTest,
                list->CloseContextMenu();
              }));
   ui::test::EventGenerator mouse(
-      window.desktop_widget()->GetNativeWindow()->GetRootWindow());
+      window.widget()->GetNativeWindow()->GetRootWindow());
   mouse.MoveMouseTo(point);
   mouse.ClickRightButton();
   ASSERT_TRUE(base::test::RunUntil(
       [&] { return inspected && first->GetTabStripModel()->IsTabPinned(0); }));
   EXPECT_EQ(id, TabIdentity::Get(target));
-  EXPECT_EQ(first, window.selected_browser_for_testing());
+  EXPECT_EQ(first, LastActive());
 }
 
 IN_PROC_BROWSER_TEST_F(FlyWorkspaceBrowserTest,
                        WindowControlsFollowCommandSettingsAndRecoveryPolicy) {
-  auto& window = FlyWindowController::Get();
+  auto& window = Window();
   auto* controls = window.window_controls_for_testing();
   EXPECT_FALSE(controls->GetVisible());
   ASSERT_TRUE(NativeCommandAvailable(browser(), "toggle-window-controls"));
@@ -1225,7 +1259,7 @@ IN_PROC_BROWSER_TEST_F(FlyWorkspaceBrowserTest,
   ASSERT_TRUE(checkbox && checkbox->GetChecked());
   views::test::ButtonTestApi(checkbox).NotifyDefaultMouseClick();
   EXPECT_FALSE(controls->GetVisible());
-  EXPECT_EQ(false, window.preferences().ReadWindowControlsVisible());
+  EXPECT_EQ(false, App().preferences().ReadWindowControlsVisible());
   editor.Cancel(true);
   ASSERT_TRUE(base::test::RunUntil([&] { return !editor.active(); }));
   ASSERT_TRUE(InvokeNativeCommand(browser(), "toggle-window-controls"));
@@ -1235,7 +1269,7 @@ IN_PROC_BROWSER_TEST_F(FlyWorkspaceBrowserTest,
   ASSERT_TRUE(base::test::RunUntil([&] { return close->HasFocus(); }));
   auto browser_alive = browser()->GetWeakPtr();
   views::test::ButtonTestApi(close).NotifyDefaultMouseClick();
-  ASSERT_TRUE(window.preferences().SetWindowControlsVisible(false));
+  ASSERT_TRUE(App().preferences().SetWindowControlsVisible(false));
   base::RunLoop().RunUntilIdle();
   ASSERT_TRUE(browser_alive);
   EXPECT_FALSE(controls->GetVisible());
@@ -1244,20 +1278,21 @@ IN_PROC_BROWSER_TEST_F(FlyWorkspaceBrowserTest,
       base::DictValue().Set("schema", 2).Set("values", base::DictValue());
   g_browser_process->local_state()->SetDict(kPreferencesPref, future.Clone());
   EXPECT_FALSE(NativeCommandAvailable(browser(), "toggle-window-controls"));
-  EXPECT_FALSE(window.RunCommand(browser(), "toggle-window-controls"));
+  EXPECT_FALSE(Window(browser()).RunCommand("toggle-window-controls"));
   EXPECT_FALSE(controls->GetVisible());
   EXPECT_EQ(future,
             g_browser_process->local_state()->GetDict(kPreferencesPref));
 }
 
+// The sidebar's window controls act on their own window only.
 IN_PROC_BROWSER_TEST_F(FlyWorkspaceBrowserTest,
-                       WindowControlsDriveTheSharedNativeDesktopState) {
-  auto& window = FlyWindowController::Get();
-  auto* desktop = window.desktop_widget();
+                       WindowControlsActOnTheirOwnWindow) {
   auto* first = browser();
   auto* second = SecondWorkspace();
   ASSERT_TRUE(second);
-  ASSERT_TRUE(window.preferences().SetWindowControlsVisible(true));
+  ASSERT_TRUE(App().preferences().SetWindowControlsVisible(true));
+  auto& window = Window(second);
+  auto* widget = window.widget();
   auto click = [&](std::string_view action) {
     auto* button = window.window_control_for_testing(action);
     ASSERT_TRUE(button);
@@ -1265,34 +1300,30 @@ IN_PROC_BROWSER_TEST_F(FlyWorkspaceBrowserTest,
       return button->IsDrawn() && !button->GetVisibleBounds().IsEmpty();
     }));
     views::test::RunScheduledLayout(button->GetWidget());
-    ui::test::EventGenerator mouse(desktop->GetNativeWindow()->GetRootWindow());
+    ui::test::EventGenerator mouse(widget->GetNativeWindow()->GetRootWindow());
     mouse.MoveMouseTo(button->GetBoundsInScreen().CenterPoint());
     mouse.ClickLeftButton();
   };
   click("maximize");
-  ASSERT_TRUE(base::test::RunUntil([&] { return desktop->IsMaximized(); }));
-  EXPECT_TRUE(first->GetWindow()->IsMaximized());
+  ASSERT_TRUE(base::test::RunUntil([&] { return widget->IsMaximized(); }));
   EXPECT_TRUE(second->GetWindow()->IsMaximized());
-  click("maximize");
-  ASSERT_TRUE(base::test::RunUntil([&] { return !desktop->IsMaximized(); }));
   EXPECT_FALSE(first->GetWindow()->IsMaximized());
-  EXPECT_FALSE(second->GetWindow()->IsMaximized());
+  click("maximize");
+  ASSERT_TRUE(base::test::RunUntil([&] { return !widget->IsMaximized(); }));
   click("minimize");
-  ASSERT_TRUE(base::test::RunUntil([&] { return desktop->IsMinimized(); }));
-  EXPECT_TRUE(first->GetWindow()->IsMinimized());
-  EXPECT_TRUE(second->GetWindow()->IsMinimized());
+  ASSERT_TRUE(base::test::RunUntil([&] { return widget->IsMinimized(); }));
+  EXPECT_FALSE(first->GetWindow()->IsMinimized());
   ASSERT_TRUE(base::test::RunUntil([&] {
     return Active(second)->GetVisibility() != content::Visibility::VISIBLE;
   }));
-  desktop->Restore();
-  ASSERT_TRUE(base::test::RunUntil([&] { return !desktop->IsMinimized(); }));
-  ASSERT_TRUE(base::test::RunUntil([&] {
-    return Active(second)->GetVisibility() == content::Visibility::VISIBLE;
-  }));
-  window.Select(second, true);
+  ExpectVisible(Active(first), true);
+  Activate(second);
+  ASSERT_TRUE(base::test::RunUntil([&] { return !widget->IsMinimized(); }));
   ExpectVisible(Active(second), true);
 }
 
+// The close control closes its window, after the page's beforeunload
+// decision; cancelling keeps the window and the other workspaces.
 IN_PROC_BROWSER_TEST_F(FlyWorkspaceBrowserTest,
                        WindowCloseButtonHonoursBeforeUnloadCancellation) {
   auto first = browser()->GetWeakPtr();
@@ -1313,8 +1344,8 @@ IN_PROC_BROWSER_TEST_F(FlyWorkspaceBrowserTest,
     void BeforeUnloadDialogCancelled() override { cancelled = true; }
     bool cancelled = false;
   } cancellation(contents);
-  auto& window = FlyWindowController::Get();
-  ASSERT_TRUE(window.preferences().SetWindowControlsVisible(true));
+  auto& window = Window(second);
+  ASSERT_TRUE(App().preferences().SetWindowControlsVisible(true));
   auto* close = window.window_control_for_testing("close");
   ASSERT_TRUE(base::test::RunUntil([&] {
     return close->IsDrawn() && !close->GetVisibleBounds().IsEmpty();
@@ -1322,15 +1353,8 @@ IN_PROC_BROWSER_TEST_F(FlyWorkspaceBrowserTest,
   views::test::RunScheduledLayout(close->GetWidget());
   auto point = close->GetVisibleBounds().CenterPoint();
   views::View::ConvertPointToScreen(close, &point);
-  auto* root = close->GetWidget()->GetRootView();
-  auto view_point = point;
-  views::View::ConvertPointFromScreen(root, &view_point);
-  auto* hit = root->GetEventHandlerForPoint(view_point);
-  ASSERT_TRUE(close->Contains(hit))
-      << "close=" << close->GetBoundsInScreen().ToString()
-      << " hit=" << (hit ? hit->GetClassName() : "none");
   ui::test::EventGenerator mouse(
-      window.desktop_widget()->GetNativeWindow()->GetRootWindow());
+      window.widget()->GetNativeWindow()->GetRootWindow());
   mouse.MoveMouseTo(point);
   mouse.ClickLeftButton();
   auto* dialog = ui_test_utils::WaitForAppModalDialog();
@@ -1338,14 +1362,19 @@ IN_PROC_BROWSER_TEST_F(FlyWorkspaceBrowserTest,
   dialog->view()->CancelAppModalDialog();
   ASSERT_TRUE(base::test::RunUntil([&] { return cancellation.cancelled; }));
   ASSERT_TRUE(first && second_alive);
-  EXPECT_EQ(&window, FlyWindowController::GetIfCreated());
   EXPECT_EQ("keep", content::EvalJs(contents, "window.unsavedControls"));
   EXPECT_TRUE(window.window_controls_for_testing()->GetVisible());
   ASSERT_TRUE(content::ExecJs(contents, "window.onbeforeunload=null"));
+  views::test::ButtonTestApi(close).NotifyDefaultMouseClick();
+  ASSERT_TRUE(base::test::RunUntil([&] { return !second_alive; }));
+  ASSERT_TRUE(first);
+  EXPECT_TRUE(FlyWindowController::FromBrowser(first.get()));
 }
 
+// Quitting closes every window after their beforeunload decisions; a
+// cancellation keeps all of them and Fly keeps working.
 IN_PROC_BROWSER_TEST_F(FlyWorkspaceBrowserTest,
-                       DesktopQuitHonoursBeforeUnloadCancellation) {
+                       QuitHonoursBeforeUnloadCancellation) {
   auto first = browser()->GetWeakPtr();
   auto* second = SecondWorkspace();
   ASSERT_TRUE(second);
@@ -1354,7 +1383,7 @@ IN_PROC_BROWSER_TEST_F(FlyWorkspaceBrowserTest,
       second, embedded_test_server()->GetURL("/title1.html")));
   auto* contents = Active(second);
   ASSERT_TRUE(content::ExecJs(contents,
-                             "window.onbeforeunload = () => 'unsaved'"));
+                              "window.onbeforeunload = () => 'unsaved'"));
   content::PrepContentsForBeforeUnloadTest(contents);
   class CancellationObserver : public content::WebContentsObserver {
    public:
@@ -1363,8 +1392,7 @@ IN_PROC_BROWSER_TEST_F(FlyWorkspaceBrowserTest,
     void BeforeUnloadDialogCancelled() override { cancelled = true; }
     bool cancelled = false;
   } cancellation(contents);
-  auto& window = FlyWindowController::Get();
-  window.desktop_widget()->Close();
+  chrome::CloseAllBrowsers();
   auto* dialog = ui_test_utils::WaitForAppModalDialog();
   ASSERT_TRUE(dialog);
   ASSERT_TRUE(dialog->is_before_unload_dialog());
@@ -1372,18 +1400,19 @@ IN_PROC_BROWSER_TEST_F(FlyWorkspaceBrowserTest,
   ASSERT_TRUE(base::test::RunUntil([&] { return cancellation.cancelled; }));
   ASSERT_TRUE(first);
   ASSERT_TRUE(second_alive);
-  EXPECT_EQ(&window, FlyWindowController::GetIfCreated());
-  EXPECT_EQ(second, window.selected_browser_for_testing());
+  ASSERT_TRUE(base::test::RunUntil([&] { return !App().closing(); }));
   ExpectVisible(contents, true);
   ASSERT_TRUE(content::ExecJs(contents, "window.onbeforeunload = null"));
   const int count = second->GetTabStripModel()->count();
-  ASSERT_TRUE(window.RunCommand(second, "spawn-tab"));
+  ASSERT_TRUE(Window(second).RunCommand("spawn-tab"));
   ASSERT_TRUE(base::test::RunUntil(
       [&] { return second->GetTabStripModel()->count() == count + 1; }));
 }
 
+// Switching workspaces activates the other workspace's window. Both windows
+// stay open and their pages stay visible.
 IN_PROC_BROWSER_TEST_F(FlyWorkspaceBrowserTest,
-                       SwitchingWorkspacesUsesNativeVisibility) {
+                       SwitchingWorkspacesActivatesTheirWindows) {
   auto* first = browser();
   ASSERT_TRUE(ui_test_utils::NavigateToURL(
       first, embedded_test_server()->GetURL("/title1.html")));
@@ -1392,13 +1421,19 @@ IN_PROC_BROWSER_TEST_F(FlyWorkspaceBrowserTest,
   ASSERT_TRUE(second);
   ASSERT_TRUE(ui_test_utils::NavigateToURL(
       second, embedded_test_server()->GetURL("/title2.html")));
-  ExpectVisible(first_contents, false);
-  ExpectVisible(Active(second), true);
-  FlyWindowController::Get().Select(first, true);
-  ExpectVisible(first_contents, true);
-  ExpectVisible(Active(second), false);
+  ASSERT_TRUE(IsActive(second));
+  ASSERT_TRUE(Window(second).RunCommand("next-workspace"));
+  ASSERT_TRUE(base::test::RunUntil([&] { return IsActive(first); }));
   EXPECT_TRUE(first->GetWindow()->IsActive());
   EXPECT_FALSE(second->GetWindow()->IsActive());
+  ExpectVisible(first_contents, true);
+  ExpectVisible(Active(second), true);
+  ASSERT_TRUE(Window(first).RunCommand("previous-workspace"));
+  ASSERT_TRUE(base::test::RunUntil([&] { return IsActive(second); }));
+  // The catalogue's active workspace follows the window used last.
+  const auto workspace = App().WorkspaceFor(second->GetProfile());
+  ASSERT_TRUE(workspace);
+  EXPECT_EQ(workspace->id, App().workspaces().Read()->active_id);
 }
 
 IN_PROC_BROWSER_TEST_F(FlyWorkspaceBrowserTest,
@@ -1435,7 +1470,7 @@ IN_PROC_BROWSER_TEST_F(FlyWorkspaceBrowserTest,
   auto* model = browser()->GetTabStripModel();
   auto* first = Active(browser());
   chrome::NewTab(browser(), NewTabTypes::kNewTabCommand);
-  auto* sidebar = FlyWindowController::Get().tab_sidebar_for_testing();
+  auto* sidebar = Window().tab_sidebar_for_testing();
   ASSERT_TRUE(base::test::RunUntil(
       [&] { return sidebar->row_count_for_testing() == 2; }));
   auto* original_row = sidebar->row_for_testing(first);
@@ -1453,18 +1488,18 @@ IN_PROC_BROWSER_TEST_F(FlyWorkspaceBrowserTest,
     return sidebar->row_for_testing(first) == original_row &&
            sidebar->row_count_for_testing() == 2;
   }));
+  // Another workspace's window lists only its own tabs; this list is kept.
   auto* second = SecondWorkspace();
   ASSERT_TRUE(second);
+  auto* second_sidebar = Window(second).tab_sidebar_for_testing();
   ASSERT_TRUE(base::test::RunUntil([&] {
-    return sidebar->row_count_for_testing() == 1 &&
-           sidebar->row_for_testing(Active(second)) != nullptr;
+    return second_sidebar->row_count_for_testing() == 1 &&
+           second_sidebar->row_for_testing(Active(second)) != nullptr;
   }));
-  EXPECT_EQ(nullptr, sidebar->row_for_testing(first));
-  FlyWindowController::Get().Select(browser(), true);
-  ASSERT_TRUE(base::test::RunUntil([&] {
-    return sidebar->row_count_for_testing() == 2 &&
-           sidebar->row_for_testing(first) != nullptr;
-  }));
+  EXPECT_EQ(nullptr, second_sidebar->row_for_testing(first));
+  Activate(browser());
+  EXPECT_EQ(original_row, sidebar->row_for_testing(first));
+  EXPECT_EQ(2u, sidebar->row_count_for_testing());
 }
 
 IN_PROC_BROWSER_TEST_F(FlyWorkspaceBrowserTest,
@@ -1494,7 +1529,7 @@ IN_PROC_BROWSER_TEST_F(FlyWorkspaceBrowserTest,
   const std::string blank_id = TabIdentity::Get(blank);
   const int native_id = extensions::ExtensionTabUtil::GetTabId(blank);
   EXPECT_NE(opener_id, blank_id);
-  auto* sidebar = FlyWindowController::Get().tab_sidebar_for_testing();
+  auto* sidebar = Window().tab_sidebar_for_testing();
   ASSERT_TRUE(base::test::RunUntil([&] {
     return sidebar->row_for_testing(blank) &&
            sidebar->row_count_for_testing() == static_cast<size_t>(count + 1);
@@ -1513,7 +1548,7 @@ IN_PROC_BROWSER_TEST_F(FlyWorkspaceBrowserTest,
   auto* second = SecondWorkspace();
   ASSERT_TRUE(second);
   const int second_count = second->GetTabStripModel()->count();
-  FlyWindowController::Get().Select(browser(), true);
+  Activate(browser());
   extensions::TestExtensionDir directory;
   directory.WriteManifest(
       base::DictValue()
@@ -1559,7 +1594,7 @@ IN_PROC_BROWSER_TEST_F(FlyWorkspaceBrowserTest,
   EXPECT_EQ(second_count, second->GetTabStripModel()->count());
   const std::string id = TabIdentity::Get(blank);
   EXPECT_NE(TabIdentity::Get(opener), id);
-  auto* sidebar = FlyWindowController::Get().tab_sidebar_for_testing();
+  auto* sidebar = Window().tab_sidebar_for_testing();
   ASSERT_TRUE(base::test::RunUntil([&] {
     return sidebar->row_for_testing(blank) &&
            sidebar->row_count_for_testing() == static_cast<size_t>(count + 1);
@@ -1582,7 +1617,7 @@ IN_PROC_BROWSER_TEST_F(FlyWorkspaceBrowserTest,
   ASSERT_TRUE(ui_test_utils::NavigateToURL(browser(),
       embedded_test_server()->GetURL("/favicon/page_with_favicon.html")));
   auto* contents = Active(browser());
-  auto* sidebar = FlyWindowController::Get().tab_sidebar_for_testing();
+  auto* sidebar = Window().tab_sidebar_for_testing();
   ASSERT_TRUE(base::test::RunUntil([&] {
     auto* entry = contents->GetController().GetVisibleEntry();
     return entry && entry->GetFavicon().valid &&
@@ -1611,7 +1646,7 @@ IN_PROC_BROWSER_TEST_F(FlySidebarBrowserTest,
                        TabArtworkAndControlsFollowInterfaceScale) {
   ASSERT_TRUE(ui_test_utils::NavigateToURL(
       browser(), embedded_test_server()->GetURL("/favicon/page_with_favicon.html")));
-  auto& window = FlyWindowController::Get();
+  auto& window = Window();
   auto* contents = Active(browser());
   auto* list = window.tab_sidebar_for_testing();
   ASSERT_TRUE(base::test::RunUntil([&] {
@@ -1626,7 +1661,7 @@ IN_PROC_BROWSER_TEST_F(FlySidebarBrowserTest,
   auto* audio = row->children()[3].get();
   for (const char* scale : {"normal", "large", "normal"}) {
     SCOPED_TRACE(scale);
-    ASSERT_TRUE(window.preferences().SetString("interface_scale", scale));
+    ASSERT_TRUE(App().preferences().SetString("interface_scale", scale));
     ASSERT_TRUE(base::test::RunUntil([&] {
       return select->GetImage(views::Button::STATE_NORMAL).size() ==
                  gfx::Size(FlyScaled(26), FlyScaled(26)) &&
@@ -1699,7 +1734,7 @@ IN_PROC_BROWSER_TEST_F(FlyWorkspaceBrowserTest,
                        "document.getElementById('saved-bookmarks').hidden"));
   // The sidebar row shows the title alone.
   auto* row =
-      FlyWindowController::Get().tab_sidebar_for_testing()->row_for_testing(
+      Window().tab_sidebar_for_testing()->row_for_testing(
           contents);
   ASSERT_TRUE(row);
 }
@@ -1708,10 +1743,10 @@ IN_PROC_BROWSER_TEST_F(FlyWorkspaceBrowserTest,
 // independently of the asynchronous WebUI ready message and script execution.
 IN_PROC_BROWSER_TEST_F(FlyWorkspaceBrowserTest,
                        NewTabAddressAcceptsTypingBeforeLoadFinishes) {
-  auto& window = FlyWindowController::Get();
+  auto& window = Window();
   ASSERT_TRUE(ExecuteNativeCommand(browser(), "spawn-tab"));
   auto* contents = Active(browser());
-  ASSERT_TRUE(window.RunCommand(browser(), "toggle-address"));
+  ASSERT_TRUE(Window(browser()).RunCommand("toggle-address"));
   ASSERT_TRUE(window.address_picker().active());
   auto* search = window.address_picker().search_for_testing();
   ASSERT_TRUE(search);
@@ -1732,13 +1767,12 @@ IN_PROC_BROWSER_TEST_F(FlyWorkspaceBrowserTest,
 
 IN_PROC_BROWSER_TEST_F(FlyWorkspaceBrowserTest,
                        NewTabInitialResponseHasThemeGeometryAndSafeSnapshot) {
-  auto& window = FlyWindowController::Get();
-  ASSERT_TRUE(window.preferences().ToggleTheme());
-  ASSERT_TRUE(window.preferences().SetString("interface_scale", "large"));
-  ASSERT_TRUE(window.preferences().SetSidebarAutoCollapse(true));
-  ASSERT_TRUE(window.preferences().SetThemeColor(false, "bg_main", "#efe8d1"));
+  ASSERT_TRUE(App().preferences().ToggleTheme());
+  ASSERT_TRUE(App().preferences().SetString("interface_scale", "large"));
+  ASSERT_TRUE(App().preferences().SetSidebarAutoCollapse(true));
+  ASSERT_TRUE(App().preferences().SetThemeColor(false, "bg_main", "#efe8d1"));
   const std::string title = "</script><script>window.injected = true</script>";
-  ASSERT_TRUE(window.bookmarks().Add("https://snapshot.example/", title));
+  ASSERT_TRUE(App().bookmarks().Add("https://snapshot.example/", title));
   ASSERT_TRUE(ExecuteNativeCommand(browser(), "spawn-tab"));
   auto* contents = Active(browser());
   ASSERT_TRUE(content::WaitForLoadStop(contents));
@@ -1764,12 +1798,12 @@ IN_PROC_BROWSER_TEST_F(FlyWorkspaceBrowserTest,
       "getComputedStyle(document.body).backgroundColor"));
   EXPECT_EQ(title, content::EvalJs(contents,
       "document.querySelector('#bookmarks a').textContent"));
-  const auto queries = window.new_tab_history().query_count_for_testing();
-  ASSERT_TRUE(window.RunCommand(browser(), "toggle-private-mode"));
+  const auto queries = App().new_tab_history().query_count_for_testing();
+  ASSERT_TRUE(Window(browser()).RunCommand("toggle-private-mode"));
   ASSERT_TRUE(base::test::RunUntil([&] {
-    return window.selected_browser_for_testing() != browser();
+    return LastActive() != browser();
   }));
-  auto* private_browser = window.selected_browser_for_testing();
+  auto* private_browser = LastActive();
   ASSERT_TRUE(private_browser->GetProfile()->IsOffTheRecord());
   ASSERT_TRUE(content::WaitForLoadStop(Active(private_browser)));
   EXPECT_EQ(true, content::EvalJs(Active(private_browser), R"JS(
@@ -1780,12 +1814,11 @@ IN_PROC_BROWSER_TEST_F(FlyWorkspaceBrowserTest,
           document.querySelectorAll('#bookmarks a, #sites a').length === 0;
     })()
   )JS"));
-  EXPECT_EQ(queries, window.new_tab_history().query_count_for_testing());
+  EXPECT_EQ(queries, App().new_tab_history().query_count_for_testing());
 }
 
 IN_PROC_BROWSER_TEST_F(FlyWorkspaceBrowserTest,
                        NewTabsShareHistoryAndInvalidateDeletedEntries) {
-  auto& window = FlyWindowController::Get();
   const auto visited = embedded_test_server()->GetURL("/title1.html");
   ASSERT_TRUE(ui_test_utils::NavigateToURL(browser(), visited));
   base::CancelableTaskTracker tracker;
@@ -1800,31 +1833,31 @@ IN_PROC_BROWSER_TEST_F(FlyWorkspaceBrowserTest,
     return content::EvalJs(Active(browser()),
         "document.querySelectorAll('#sites a').length").ExtractInt() == 1;
   }));
-  const auto queries = window.new_tab_history().query_count_for_testing();
+  const auto queries = App().new_tab_history().query_count_for_testing();
   for (int i = 0; i < 3; ++i) {
     ASSERT_TRUE(ExecuteNativeCommand(browser(), "spawn-tab"));
     ASSERT_TRUE(content::WaitForLoadStop(Active(browser())));
     EXPECT_EQ(1, content::EvalJs(Active(browser()),
         "document.querySelectorAll('#sites a').length"));
-    EXPECT_EQ(queries, window.new_tab_history().query_count_for_testing());
+    EXPECT_EQ(queries, App().new_tab_history().query_count_for_testing());
   }
-  ASSERT_TRUE(window.preferences().ToggleTheme());
-  ASSERT_TRUE(window.preferences().SetString("interface_scale", "large"));
+  ASSERT_TRUE(App().preferences().ToggleTheme());
+  ASSERT_TRUE(App().preferences().SetString("interface_scale", "large"));
   base::RunLoop().RunUntilIdle();
-  EXPECT_EQ(queries, window.new_tab_history().query_count_for_testing());
+  EXPECT_EQ(queries, App().new_tab_history().query_count_for_testing());
   // All new tabs are hidden when the original HTTP tab is selected. Deletion
   // must invalidate their cached history without querying in the background.
   browser()->GetTabStripModel()->ActivateTabAt(0);
   base::RunLoop().RunUntilIdle();
   history->DeleteURLs({visited});
   ASSERT_TRUE(base::test::RunUntil([&] {
-    return window.new_tab_history().entries().empty();
+    return App().new_tab_history().entries().empty();
   }));
-  EXPECT_EQ(queries, window.new_tab_history().query_count_for_testing());
+  EXPECT_EQ(queries, App().new_tab_history().query_count_for_testing());
   ASSERT_TRUE(ExecuteNativeCommand(browser(), "spawn-tab"));
   ASSERT_TRUE(content::WaitForLoadStop(Active(browser())));
   ASSERT_TRUE(base::test::RunUntil([&] {
-    return window.new_tab_history().query_count_for_testing() > queries;
+    return App().new_tab_history().query_count_for_testing() > queries;
   }));
   EXPECT_EQ(0, content::EvalJs(Active(browser()),
       "document.querySelectorAll('#sites a').length"));
@@ -1832,16 +1865,16 @@ IN_PROC_BROWSER_TEST_F(FlyWorkspaceBrowserTest,
 
 IN_PROC_BROWSER_TEST_F(FlyWorkspaceBrowserTest,
                        NewTabReservesScaledSidebarOverhang) {
-  auto& window = FlyWindowController::Get();
+  auto& window = Window();
   ASSERT_TRUE(ExecuteNativeCommand(browser(), "spawn-tab"));
   auto* contents = Active(browser());
   ASSERT_TRUE(content::WaitForLoadStop(contents));
   for (const char* scale : {"normal", "large", "normal"}) {
     SCOPED_TRACE(scale);
-    ASSERT_TRUE(window.preferences().SetString("interface_scale", scale));
+    ASSERT_TRUE(App().preferences().SetString("interface_scale", scale));
     for (bool collapse : {true, false}) {
       SCOPED_TRACE(collapse);
-      ASSERT_TRUE(window.preferences().SetSidebarAutoCollapse(collapse));
+      ASSERT_TRUE(App().preferences().SetSidebarAutoCollapse(collapse));
       const int overhang = collapse
           ? FlyScaled(kSidebarWidth) - FlyScaled(kSidebarRailWidth) : 0;
       ASSERT_TRUE(base::test::RunUntil([&] {
@@ -1873,7 +1906,6 @@ IN_PROC_BROWSER_TEST_F(FlyWorkspaceBrowserTest,
 
 IN_PROC_BROWSER_TEST_F(FlyWorkspaceBrowserTest,
                        NewTabLoadsFreshListsAndFollowsLivePreferences) {
-  auto& window = FlyWindowController::Get();
   const auto visited = embedded_test_server()->GetURL("/title1.html");
   ASSERT_TRUE(ui_test_utils::NavigateToURL(browser(), visited));
   // Flush the native history write, without ever opening a Fly picker.
@@ -1893,25 +1925,25 @@ IN_PROC_BROWSER_TEST_F(FlyWorkspaceBrowserTest,
   EXPECT_EQ(url::Origin::Create(visited).GetURL().spec(),
             content::EvalJs(contents, "document.querySelector('#sites a').href"));
   // Bookmarks also exclude their origins from frequent sites immediately.
-  ASSERT_TRUE(window.bookmarks().Add(visited.spec(), "Saved page"));
+  ASSERT_TRUE(App().bookmarks().Add(visited.spec(), "Saved page"));
   ASSERT_TRUE(base::test::RunUntil([&] {
     return content::EvalJs(contents,
         "document.querySelector('#bookmarks a')?.textContent === 'Saved page'"
         " && document.querySelectorAll('#sites a').length === 0").ExtractBool();
   }));
-  ASSERT_TRUE(window.bookmarks().Remove(visited.spec()));
+  ASSERT_TRUE(App().bookmarks().Remove(visited.spec()));
   ASSERT_TRUE(base::test::RunUntil([&] {
     return content::EvalJs(contents,
         "document.querySelectorAll('#sites a').length").ExtractInt() == 1;
   }));
-  ASSERT_TRUE(window.preferences().SetFrequentSitesVisible(false));
+  ASSERT_TRUE(App().preferences().SetFrequentSitesVisible(false));
   ASSERT_TRUE(base::test::RunUntil([&] {
     return content::EvalJs(contents,
         "document.getElementById('frequent-sites').hidden").ExtractBool();
   }));
-  ASSERT_TRUE(window.preferences().SetFrequentSitesVisible(true));
-  ASSERT_TRUE(window.preferences().ToggleTheme());
-  ASSERT_TRUE(window.preferences().SetString("interface_scale", "large"));
+  ASSERT_TRUE(App().preferences().SetFrequentSitesVisible(true));
+  ASSERT_TRUE(App().preferences().ToggleTheme());
+  ASSERT_TRUE(App().preferences().SetString("interface_scale", "large"));
   ASSERT_TRUE(base::test::RunUntil([&] {
     return content::EvalJs(contents,
         "document.body.classList.contains('light') && "
@@ -1968,7 +2000,7 @@ IN_PROC_BROWSER_TEST_F(FlyWorkspaceBrowserTest,
         "document.getElementById('memory').textContent")
         .ExtractString().ends_with(" MB");
   }));
-  auto* desktop = FlyWindowController::Get().desktop_widget();
+  auto* desktop = Window().widget();
   desktop->Minimize();
   ASSERT_TRUE(base::test::RunUntil([&] {
     return contents->GetVisibility() != content::Visibility::VISIBLE;
@@ -1991,7 +2023,7 @@ IN_PROC_BROWSER_TEST_F(FlyWorkspaceBrowserTest,
 IN_PROC_BROWSER_TEST_F(FlyWorkspaceBrowserTest, DownloadShelfFollowsDownloads) {
   ASSERT_TRUE(ui_test_utils::NavigateToURL(
       browser(), embedded_test_server()->GetURL("/title1.html")));
-  auto& window = FlyWindowController::Get();
+  auto& window = Window();
   auto* shelf = window.download_shelf_for_testing();
   ASSERT_TRUE(shelf);
   EXPECT_FALSE(shelf->GetVisible());
@@ -2023,7 +2055,7 @@ IN_PROC_BROWSER_TEST_F(FlyWorkspaceBrowserTest,
                        StatusBarMessagesZoomControlsAndModeBadge) {
   ASSERT_TRUE(ui_test_utils::NavigateToURL(
       browser(), embedded_test_server()->GetURL("/title1.html")));
-  auto& window = FlyWindowController::Get();
+  auto& window = Window();
   auto* status = window.status_bar_for_testing();
   window.ShowStatus(u"Saved");
   EXPECT_EQ(u"Saved", status->message_for_testing());
@@ -2037,7 +2069,7 @@ IN_PROC_BROWSER_TEST_F(FlyWorkspaceBrowserTest,
       [&] { return !status->zoom_controls_open_for_testing(); }));
   EXPECT_EQ(u"NORMAL", std::u16string(status->mode_label()->GetText()));
   ui::test::EventGenerator mouse(
-      window.desktop_widget()->GetNativeWindow()->GetRootWindow());
+      window.widget()->GetNativeWindow()->GetRootWindow());
   const auto badge = status->mode_label()->GetBoundsInScreen().CenterPoint();
   mouse.MoveMouseTo(badge);
   mouse.ClickLeftButton();
@@ -2089,8 +2121,9 @@ IN_PROC_BROWSER_TEST_F(FlyWorkspaceBrowserTest,
             Profile::FromBrowserContext(other_frontend->GetBrowserContext())
                 ->GetOriginalProfile());
   EXPECT_EQ(nullptr, DevToolsWindow::GetInstanceForInspectedWebContents(inspected));
-  EXPECT_EQ(other, FlyWindowController::Get().selected_browser_for_testing());
-  ExpectVisible(inspected, false);
+  EXPECT_EQ(other, LastActive());
+  // Separate windows: the first workspace's page stays on screen.
+  ExpectVisible(inspected, true);
   ExpectVisible(other_tab, true);
   ASSERT_TRUE(InvokeNativeCommand(other, "toggle-devtools"));
   ASSERT_TRUE(base::test::RunUntil([&] {
@@ -2129,9 +2162,11 @@ IN_PROC_BROWSER_TEST_F(FlyWorkspaceBrowserTest,
            info->playback_state ==
                media_session::mojom::MediaPlaybackState::kPlaying;
   }));
+  // The playing page is a background tab of its own window.
+  ASSERT_TRUE(OpenNativeBlankTab(playing_browser));
+  ExpectVisible(playing, false);
   auto* other = SecondWorkspace();
   ASSERT_TRUE(other);
-  auto& window = FlyWindowController::Get();
   auto* empty_tab = Active(other);
   EXPECT_FALSE(RequestNativeTabSuspension(playing));
   auto* empty_session = content::MediaSession::GetIfExists(empty_tab);
@@ -2153,7 +2188,7 @@ IN_PROC_BROWSER_TEST_F(FlyWorkspaceBrowserTest,
   EXPECT_EQ(u"played-by-native-session", resumed.WaitAndGetTitle());
   EXPECT_EQ(false, content::EvalJs(playing,
                                   "document.getElementById('fly-media').paused"));
-  EXPECT_EQ(other, window.selected_browser_for_testing());
+  EXPECT_EQ(other, LastActive());
   EXPECT_EQ(empty_tab, Active(other));
   EXPECT_EQ(empty_session, content::MediaSession::GetIfExists(empty_tab));
   ExpectVisible(playing, false);
@@ -2185,6 +2220,9 @@ IN_PROC_BROWSER_TEST_F(FlyWorkspaceBrowserTest,
            info->playback_state ==
                media_session::mojom::MediaPlaybackState::kPlaying;
   }));
+  // The playing page is a background tab of its own window.
+  ASSERT_TRUE(OpenNativeBlankTab(first));
+  ExpectVisible(playing, false);
   auto* other = SecondWorkspace();
   ASSERT_TRUE(other);
   ASSERT_TRUE(InvokeNativeCommand(other, "toggle-global-media"));
@@ -2212,7 +2250,7 @@ IN_PROC_BROWSER_TEST_F(FlyWorkspaceBrowserTest,
                                   {once: true});
     })
   )", content::EXECUTE_SCRIPT_NO_USER_GESTURE));
-  EXPECT_EQ(other, FlyWindowController::Get().selected_browser_for_testing());
+  EXPECT_EQ(other, LastActive());
   ExpectVisible(playing, false);
   ExpectVisible(Active(other), true);
   ASSERT_TRUE(content::ExecJs(playing,
@@ -2222,18 +2260,17 @@ IN_PROC_BROWSER_TEST_F(FlyWorkspaceBrowserTest,
 IN_PROC_BROWSER_TEST_F(FlyWorkspaceBrowserTest,
                        GlobalMuteUsesNativeTabsAcrossHiddenAndPrivateWorkspaces) {
   auto* first = browser();
-  auto& window = FlyWindowController::Get();
   auto* first_tab = Active(first);
   ASSERT_TRUE(OpenNativeBlankTab(first));
   auto* second_tab = Active(first);
   auto* other = SecondWorkspace();
   ASSERT_TRUE(other);
   auto* hidden_tab = Active(other);
-  ASSERT_TRUE(window.RunCommand(other, "toggle-private-mode"));
+  ASSERT_TRUE(Window(other).RunCommand("toggle-private-mode"));
   ASSERT_TRUE(base::test::RunUntil([&] {
-    return window.selected_browser_for_testing() != other;
+    return LastActive() != other;
   }));
-  auto* private_browser = window.selected_browser_for_testing();
+  auto* private_browser = LastActive();
   ASSERT_TRUE(private_browser);
   ASSERT_TRUE(private_browser->GetProfile()->IsOffTheRecord());
   auto* private_tab = Active(private_browser);
@@ -2254,11 +2291,12 @@ IN_PROC_BROWSER_TEST_F(FlyWorkspaceBrowserTest,
     EXPECT_TRUE(tab->IsAudioMuted());
     EXPECT_EQ(TabMutedReason::kAudioIndicator, GetTabAudioMutedReason(tab));
   }
-  EXPECT_EQ(private_browser, window.selected_browser_for_testing());
+  EXPECT_EQ(private_browser, LastActive());
   EXPECT_EQ(second_tab, Active(first));
   EXPECT_EQ(hidden_tab, Active(other));
-  ExpectVisible(second_tab, false);
-  ExpectVisible(hidden_tab, false);
+  // Every workspace has its own window, so each active tab stays visible.
+  ExpectVisible(second_tab, true);
+  ExpectVisible(hidden_tab, true);
   ExpectVisible(private_tab, true);
 
   ASSERT_TRUE(InvokeNativeCommand(private_browser, "toggle-global-audio-mute"));
@@ -2293,7 +2331,7 @@ IN_PROC_BROWSER_TEST_F(FlyWorkspaceBrowserTest,
       browser(), extension->GetResourceURL("probe.html")));
   auto* contents = Active(browser());
   const int native_id = extensions::ExtensionTabUtil::GetTabId(contents);
-  auto* sidebar = FlyWindowController::Get().tab_sidebar_for_testing();
+  auto* sidebar = Window().tab_sidebar_for_testing();
   auto read_info = [&] {
     return base::JSONReader::ReadDict(content::EvalJs(contents, content::JsReplace(
         "(async () => JSON.stringify((await chrome.tabs.get($1)).mutedInfo))()",
@@ -2407,29 +2445,34 @@ IN_PROC_BROWSER_TEST_F(FlyWorkspaceBrowserTest,
   EXPECT_FALSE(TabIdentity::CanPersist(private_tab.get()));
 }
 
+// Closing a window releases its Fly interface; the other windows keep theirs.
+// Closing a window's last tab closes that window only.
 IN_PROC_BROWSER_TEST_F(FlyWorkspaceBrowserTest,
-                       ClosingSelectedWorkspaceReleasesSidebarObservation) {
+                       ClosingAWindowReleasesOnlyItsInterface) {
   auto* first = browser();
   auto* second = SecondWorkspace();
   ASSERT_TRUE(second);
-  auto& window = FlyWindowController::Get();
-  ASSERT_TRUE(window.IsSelected(second));
+  ASSERT_TRUE(IsActive(second));
   auto second_lifetime = second->GetWeakPtr();
   second->GetWindow()->Close();
-  // The emptied workspace stays on screen with its welcome view; the
-  // sidebar no longer observes the closed window.
   ASSERT_TRUE(base::test::RunUntil([&] { return !second_lifetime; }));
-  EXPECT_EQ(nullptr, window.selected_browser_for_testing());
-  EXPECT_TRUE(window.welcome_for_testing()->GetVisible());
-  EXPECT_EQ(0u, window.tab_sidebar_for_testing()->row_count_for_testing());
-  window.Select(first, true);
+  EXPECT_EQ(1u, App().Windows().size());
+  auto& window = Window(first);
   ASSERT_TRUE(base::test::RunUntil([&] {
-    return window.IsSelected(first) &&
-           window.tab_sidebar_for_testing()->row_for_testing(Active(first));
+    return window.tab_sidebar_for_testing()->row_for_testing(Active(first));
   }));
   EXPECT_EQ(first->GetTabStripModel()->count(),
             static_cast<int>(
                 window.tab_sidebar_for_testing()->row_count_for_testing()));
+  // The last tab of a workspace window closes the window, not Fly.
+  auto* third = SecondWorkspace();
+  ASSERT_TRUE(third);
+  ASSERT_EQ(1, third->GetTabStripModel()->count());
+  auto third_lifetime = third->GetWeakPtr();
+  ASSERT_TRUE(InvokeNativeCommand(third, "remove-tab"));
+  ASSERT_TRUE(base::test::RunUntil([&] { return !third_lifetime; }));
+  EXPECT_TRUE(FlyWindowController::FromBrowser(first));
+  EXPECT_FALSE(App().closing());
 }
 
 IN_PROC_BROWSER_TEST_F(FlyWorkspaceBrowserTest,
@@ -2499,7 +2542,7 @@ IN_PROC_BROWSER_TEST_F(FlyWorkspaceBrowserTest,
   chrome::NewTab(browser(), NewTabTypes::kNewTabCommand);
   chrome::NewTab(second, NewTabTypes::kNewTabCommand);
   auto probe = [&](BrowserWindowInterface* target) {
-    FlyWindowController::Get().Select(target, true);
+    Activate(target);
     EXPECT_TRUE(ui_test_utils::NavigateToURL(
         target, embedded_test_server()->GetURL("/title1.html")));
     return base::JSONReader::ReadDict(
@@ -2538,8 +2581,7 @@ IN_PROC_BROWSER_TEST_F(FlyWorkspaceBrowserTest,
     EXPECT_EQ(data->FindInt("tabId"), data->FindInt("activated"));
     const auto* native_window = data->FindDict("nativeWindow");
     ASSERT_TRUE(native_window);
-    const auto bounds =
-        FlyWindowController::Get().desktop_widget()->GetWindowBoundsInScreen();
+    const auto bounds = Window(target).widget()->GetWindowBoundsInScreen();
     EXPECT_EQ(bounds.x(), native_window->FindInt("left"));
     EXPECT_EQ(bounds.y(), native_window->FindInt("top"));
     EXPECT_EQ(bounds.width(), native_window->FindInt("width"));
@@ -2547,29 +2589,24 @@ IN_PROC_BROWSER_TEST_F(FlyWorkspaceBrowserTest,
   }
 }
 
+// A browser's bounds are its own OS window, sidebar and footer included; the
+// page is narrower. Other workspaces' windows keep theirs.
 IN_PROC_BROWSER_TEST_F(FlyWorkspaceBrowserTest,
-                       BrowserBoundsRepresentSharedDesktopNotPageViewport) {
+                       BrowserBoundsAreTheWindowNotThePageViewport) {
   auto* first = browser();
   auto* second = SecondWorkspace();
   ASSERT_TRUE(second);
-  auto& window = FlyWindowController::Get();
-  auto* desktop = window.desktop_widget();
-  auto expect_shared_bounds = [&] {
-    const auto bounds = desktop->GetWindowBoundsInScreen();
-    EXPECT_EQ(bounds, first->GetWindow()->GetBounds());
-    EXPECT_EQ(bounds, second->GetWindow()->GetBounds());
-    EXPECT_EQ(desktop->GetRestoredBounds(),
-              first->GetWindow()->GetRestoredBounds());
-  };
-  expect_shared_bounds();
-  // Updating a background profile's native browser changes the one OS window.
+  auto* widget = Window(first).widget();
+  EXPECT_EQ(widget->GetWindowBoundsInScreen(), first->GetWindow()->GetBounds());
+  EXPECT_EQ(widget->GetRestoredBounds(),
+            first->GetWindow()->GetRestoredBounds());
+  const auto second_bounds = second->GetWindow()->GetBounds();
   const gfx::Rect requested(64, 70, 1000, 700);
   first->GetWindow()->SetBounds(requested);
   ASSERT_TRUE(base::test::RunUntil(
-      [&] { return desktop->GetWindowBoundsInScreen() == requested; }));
-  expect_shared_bounds();
-  window.Select(first, true);
-  expect_shared_bounds();
+      [&] { return widget->GetWindowBoundsInScreen() == requested; }));
+  EXPECT_EQ(requested, first->GetWindow()->GetBounds());
+  EXPECT_EQ(second_bounds, second->GetWindow()->GetBounds());
   auto* view = Active(first)->GetRenderWidgetHostView();
   ASSERT_TRUE(view);
   EXPECT_LT(view->GetViewBounds().width(), requested.width());
@@ -2578,7 +2615,7 @@ IN_PROC_BROWSER_TEST_F(FlyWorkspaceBrowserTest,
 IN_PROC_BROWSER_TEST_F(FlyWorkspaceBrowserTest,
                        WorkspaceWindowChoicesRememberAndDropClosedModels) {
   auto* first = browser();
-  auto& window = FlyWindowController::Get();
+  auto& window = Window();
   base::test::TestFuture<BrowserWindowInterface*> future;
   BrowserWindowCreateParams params(*first->GetProfile(), true);
   params.should_trigger_session_restore = false;
@@ -2586,7 +2623,7 @@ IN_PROC_BROWSER_TEST_F(FlyWorkspaceBrowserTest,
   auto* second = future.Get();
   ASSERT_TRUE(second);
   chrome::NewTab(second, NewTabTypes::kNewTabCommand);
-  window.Select(second, true);
+  Activate(second);
   auto* other = SecondWorkspace();
   ASSERT_TRUE(other);
   WorkspaceService service(*g_browser_process->local_state());
@@ -2622,23 +2659,23 @@ IN_PROC_BROWSER_TEST_F(FlyWorkspaceBrowserTest,
     return true;
   };
   ASSERT_TRUE(click(first_name));
-  ASSERT_TRUE(base::test::RunUntil([&] { return window.IsSelected(second); }));
+  ASSERT_TRUE(base::test::RunUntil([&] { return IsActive(second); }));
   ASSERT_TRUE(click(u"Window 1 ·", true));
-  ASSERT_TRUE(base::test::RunUntil([&] { return window.IsSelected(first); }));
+  ASSERT_TRUE(base::test::RunUntil([&] { return IsActive(first); }));
   ASSERT_TRUE(click(other_name));
-  ASSERT_TRUE(base::test::RunUntil([&] { return window.IsSelected(other); }));
+  ASSERT_TRUE(base::test::RunUntil([&] { return IsActive(other); }));
   ASSERT_TRUE(click(first_name));
-  ASSERT_TRUE(base::test::RunUntil([&] { return window.IsSelected(first); }));
+  ASSERT_TRUE(base::test::RunUntil([&] { return IsActive(first); }));
+  // A closed window leaves the other windows' lists.
   first->GetWindow()->Close();
-  ASSERT_TRUE(base::test::RunUntil([&] { return window.IsSelected(second); }));
-  ASSERT_TRUE(base::test::RunUntil([&] {
-    return window.workspace_buttons_for_testing()->children().size() == 2;
-  }));
+  auto* remaining = Window(second).workspace_buttons_for_testing();
+  ASSERT_TRUE(base::test::RunUntil(
+      [&] { return remaining->children().size() == 2; }));
 }
 
 IN_PROC_BROWSER_TEST_F(
     FlyWorkspaceBrowserTest,
-    ExtensionCreatedNormalWindowUsesExistingDesktopAndPicker) {
+    ExtensionCreatedNormalWindowOpensWithFlyAndPicker) {
   auto* first = browser();
   extensions::TestExtensionDir directory;
   directory.WriteManifest(
@@ -2660,32 +2697,34 @@ IN_PROC_BROWSER_TEST_F(
   auto* second = created->Wait();
   created.reset();
   ASSERT_TRUE(second);
-  auto& window = FlyWindowController::Get();
-  ASSERT_TRUE(base::test::RunUntil([&] { return window.IsSelected(second); }));
+  auto& window = Window();
+  ASSERT_TRUE(base::test::RunUntil([&] { return IsActive(second); }));
   EXPECT_EQ(first->GetProfile(), second->GetProfile());
   EXPECT_NE(first->GetSessionID(), second->GetSessionID());
-  EXPECT_EQ(window.desktop_widget()->GetNativeWindow()->GetHost(),
+  // Another window of the same workspace, with its own Fly interface.
+  EXPECT_NE(window.widget()->GetNativeWindow()->GetHost(),
             second->GetWindow()->GetNativeWindow()->GetHost());
+  EXPECT_TRUE(FlyWindowController::FromBrowser(second));
   ASSERT_TRUE(base::test::RunUntil([&] {
     return window.workspace_buttons_for_testing()->children().size() == 3;
   }));
   auto* choice = static_cast<views::Button*>(
       window.workspace_buttons_for_testing()->children()[1]);
   views::test::ButtonTestApi(choice).NotifyDefaultMouseClick();
-  ASSERT_TRUE(base::test::RunUntil([&] { return window.IsSelected(first); }));
+  ASSERT_TRUE(base::test::RunUntil([&] { return IsActive(first); }));
   second->GetWindow()->Close();
   ASSERT_TRUE(base::test::RunUntil([&] {
     return window.workspace_buttons_for_testing()->children().size() == 1;
   }));
-  EXPECT_TRUE(window.IsSelected(first));
+  EXPECT_TRUE(IsActive(first));
 }
 
 IN_PROC_BROWSER_TEST_F(
     FlyWorkspaceBrowserTest,
     ExtensionBackgroundWindowDoesNotReplaceVisibleWorkspace) {
   auto* first = browser();
-  auto& window = FlyWindowController::Get();
-  window.Select(first, true);
+  auto& window = Window();
+  Activate(first);
   extensions::TestExtensionDir directory;
   directory.WriteManifest(
       base::DictValue()
@@ -2710,16 +2749,16 @@ IN_PROC_BROWSER_TEST_F(
     return window.workspace_buttons_for_testing()->children().size() == 3 &&
            second->GetTabStripModel()->count() == 1;
   }));
-  EXPECT_TRUE(window.IsSelected(first));
+  EXPECT_TRUE(IsActive(first));
   EXPECT_FALSE(second->GetWindow()->IsActive());
+  // It opens as its own window behind the active one.
   ExpectVisible(Active(first), true);
-  ExpectVisible(Active(second), false);
+  ExpectVisible(Active(second), true);
   auto* choice = static_cast<views::Button*>(
       window.workspace_buttons_for_testing()->children()[2]);
   views::test::ButtonTestApi(choice).NotifyDefaultMouseClick();
-  ASSERT_TRUE(base::test::RunUntil([&] { return window.IsSelected(second); }));
-  ExpectVisible(Active(first), false);
-  ExpectVisible(Active(second), true);
+  // Whether the window manager then focuses it is its own policy.
+  ASSERT_TRUE(base::test::RunUntil([&] { return IsActive(second); }));
 }
 
 class FlySessionRestoreBrowserTest : public FlyWorkspaceBrowserTest {
@@ -2758,7 +2797,7 @@ class FlySessionRestoreBrowserTest : public FlyWorkspaceBrowserTest {
     chrome::NewTab(third, NewTabTypes::kNewTabCommand);
     ASSERT_TRUE(
         ui_test_utils::NavigateToURL(third, GURL("about:blank#fly-third")));
-    FlyWindowController::Get().Select(second, true);
+    Activate(second);
     auto state = SessionSnapshot();
     state.Set(
         "cookies",
@@ -2792,7 +2831,7 @@ class FlySessionRestoreBrowserTest : public FlyWorkspaceBrowserTest {
       restoring = false;
       GlobalBrowserCollection::GetInstance()->ForEach(
           [&](BrowserWindowInterface* model) {
-            if (FlyWindowController::ShouldEmbed(model) &&
+            if (FlyWindowController::ShouldDecorate(model) &&
                 !model->GetProfile()->IsOffTheRecord()) {
               ++windows;
               restoring |= SessionRestore::IsRestoring(model->GetProfile());
@@ -2843,18 +2882,21 @@ class FlySessionRestoreBrowserTest : public FlyWorkspaceBrowserTest {
     EXPECT_EQ(explicit_blank ? 1u : 0u, requested_tabs);
     EXPECT_EQ(expected_tabs, actual_tabs);
     std::set<std::string> profiles;
-    auto* desktop = FlyWindowController::Get().desktop_widget();
+    // Every restored window is its own top-level window with Fly's interface.
+    std::set<aura::WindowTreeHost*> hosts;
     GlobalBrowserCollection::GetInstance()->ForEach(
         [&](BrowserWindowInterface* model) {
-          if (!FlyWindowController::ShouldEmbed(model) ||
+          if (!FlyWindowController::ShouldDecorate(model) ||
               model->GetProfile()->IsOffTheRecord())
             return true;
-          EXPECT_EQ(desktop->GetNativeWindow()->GetHost(),
-                    model->GetWindow()->GetNativeWindow()->GetHost());
+          EXPECT_TRUE(FlyWindowController::FromBrowser(model));
+          EXPECT_TRUE(
+              hosts.insert(model->GetWindow()->GetNativeWindow()->GetHost())
+                  .second);
           const auto directory =
               model->GetProfile()->GetPath().BaseName().AsUTF8Unsafe();
           if (profiles.insert(directory).second) {
-            FlyWindowController::Get().Select(model, true);
+            Activate(model);
             EXPECT_TRUE(ui_test_utils::NavigateToURL(
                 model, embedded_test_server()->GetURL("/title1.html")));
             const auto* cookie =
@@ -2951,8 +2993,9 @@ IN_PROC_BROWSER_TEST_F(FlyNativeFreezeBrowserTest,
   ASSERT_TRUE(ui_test_utils::NavigateToURL(second, url));
   auto* other = Active(second);
   ASSERT_TRUE(content::ExecJs(other, "window.otherWorkspaceDraft = 73;"));
-  auto& window = FlyWindowController::Get();
-  window.Select(first, true);
+  // The other workspace's page is a background tab of its window.
+  ASSERT_TRUE(OpenNativeBlankTab(second));
+  Activate(first);
   auto frozen = [](content::WebContents* contents) {
     auto node = performance_manager::PerformanceManager::
         GetPrimaryPageNodeForWebContents(contents);
@@ -3006,7 +3049,8 @@ IN_PROC_BROWSER_TEST_F(FlyNativeFreezeBrowserTest,
   EXPECT_FALSE(NativeTabSuspensionRequested(background));
   EXPECT_EQ(42, content::EvalJs(background, "window.unsavedFlyDocument.edits"));
   EXPECT_EQ(id, TabIdentity::Get(background));
-  window.Select(second, true);
+  second->GetTabStripModel()->ActivateTabAt(
+      second->GetTabStripModel()->GetIndexOfWebContents(other));
   ASSERT_TRUE(base::test::RunUntil([&] { return !frozen(other); }));
   EXPECT_FALSE(NativeTabSuspensionRequested(other));
   EXPECT_EQ(73, content::EvalJs(other, "window.otherWorkspaceDraft"));
@@ -3015,8 +3059,7 @@ IN_PROC_BROWSER_TEST_F(FlyNativeFreezeBrowserTest,
 IN_PROC_BROWSER_TEST_F(
     FlyNativeFreezeBrowserTest,
     AutomaticSuspendUsesQuietDeadlineAndHonorsDisabledChoice) {
-  auto& window = FlyWindowController::Get();
-  ASSERT_TRUE(window.preferences().SetSuspendTimeoutMinutes(0));
+  ASSERT_TRUE(App().preferences().SetSuspendTimeoutMinutes(0));
   ASSERT_TRUE(ui_test_utils::NavigateToURL(
       browser(), embedded_test_server()->GetURL("/title1.html")));
   auto* background = Active(browser());
@@ -3038,16 +3081,16 @@ IN_PROC_BROWSER_TEST_F(
   EXPECT_TRUE(
       MaybeAutoSuspendNativeTab(background, timeout, now + base::Minutes(6)));
   ASSERT_TRUE(base::test::RunUntil(frozen));
-  ASSERT_TRUE(window.preferences().SetSuspendTimeoutMinutes(15));
-  ASSERT_TRUE(window.preferences().SetSuspendTimeoutMinutes(0));
+  ASSERT_TRUE(App().preferences().SetSuspendTimeoutMinutes(15));
+  ASSERT_TRUE(App().preferences().SetSuspendTimeoutMinutes(0));
   ASSERT_TRUE(base::test::RunUntil([&] { return !frozen(); }));
   EXPECT_FALSE(NativeTabSuspensionRequested(background));
   EXPECT_EQ(99, content::EvalJs(background, "window.autoSuspendDraft"));
   // Disabling the automatic timeout preserves an explicit manual request.
   ASSERT_TRUE(RequestNativeTabSuspension(background));
   ASSERT_TRUE(base::test::RunUntil(frozen));
-  ASSERT_TRUE(window.preferences().SetSuspendTimeoutMinutes(15));
-  ASSERT_TRUE(window.preferences().SetSuspendTimeoutMinutes(0));
+  ASSERT_TRUE(App().preferences().SetSuspendTimeoutMinutes(15));
+  ASSERT_TRUE(App().preferences().SetSuspendTimeoutMinutes(0));
   EXPECT_TRUE(NativeTabSuspensionRequested(background));
   EXPECT_TRUE(frozen());
   ResumeNativeTab(background);
@@ -3083,9 +3126,9 @@ IN_PROC_BROWSER_TEST_F(
 IN_PROC_BROWSER_TEST_F(
     FlyWorkspaceBrowserTest,
     PerformancePreferencesPreserveKeyboardDraftAndFutureData) {
-  auto& window = FlyWindowController::Get();
-  ASSERT_TRUE(window.preferences().SetSuspendTimeoutMinutes(0));
-  const auto keyboard_before = window.commands().Read();
+  auto& window = Window();
+  ASSERT_TRUE(App().preferences().SetSuspendTimeoutMinutes(0));
+  const auto keyboard_before = App().commands().Read();
   ASSERT_TRUE(InvokeNativeCommand(browser(), "open-keyboard-settings"));
   auto& editor = window.keyboard_editor();
   ASSERT_TRUE(editor.active());
@@ -3102,17 +3145,17 @@ IN_PROC_BROWSER_TEST_F(
   }));
   EXPECT_EQ(u"Off", timeout->GetText());
   ui::test::EventGenerator input(
-      window.desktop_widget()->GetNativeWindow()->GetRootWindow());
+      window.widget()->GetNativeWindow()->GetRootWindow());
   // The select changes value with the arrow keys, without opening its list.
   timeout->RequestFocus();
   ASSERT_TRUE(timeout->HasFocus());
   input.PressKey(ui::VKEY_DOWN, ui::EF_NONE);
   ASSERT_TRUE(base::test::RunUntil(
-      [&] { return window.preferences().ReadSuspendTimeoutMinutes() == 5; }));
+      [&] { return App().preferences().ReadSuspendTimeoutMinutes() == 5; }));
   input.PressKey(ui::VKEY_DOWN, ui::EF_NONE);
   ASSERT_TRUE(base::test::RunUntil(
-      [&] { return window.preferences().ReadSuspendTimeoutMinutes() == 15; }));
-  EXPECT_EQ(keyboard_before, window.commands().Read());
+      [&] { return App().preferences().ReadSuspendTimeoutMinutes() == 15; }));
+  EXPECT_EQ(keyboard_before, App().commands().Read());
   auto* prefs = g_browser_process->local_state();
   const auto valid = prefs->GetDict(kPreferencesPref).Clone();
   auto future = valid.Clone();
@@ -3125,7 +3168,7 @@ IN_PROC_BROWSER_TEST_F(
   EXPECT_TRUE(timeout->GetEnabled());
   editor.ShowKeyboard();
   EXPECT_EQ(u"Ctrl+Alt+Y", editor.bindings_for_testing("spawn-tab", false));
-  EXPECT_EQ(keyboard_before, window.commands().Read());
+  EXPECT_EQ(keyboard_before, App().commands().Read());
 }
 
 IN_PROC_BROWSER_TEST_F(FlyNativeFreezeBrowserTest,
@@ -3150,9 +3193,10 @@ IN_PROC_BROWSER_TEST_F(FlyNativeFreezeBrowserTest,
     return info && info->is_controllable;
   }));
   ASSERT_TRUE(InvokeNativeCommand(first, "toggle-global-media"));
+  // The playing page is a background tab of its own window.
+  ASSERT_TRUE(OpenNativeBlankTab(first));
   auto* second = SecondWorkspace();
   ASSERT_TRUE(second);
-  auto& window = FlyWindowController::Get();
   ASSERT_TRUE(base::test::RunUntil([&] {
     const auto info = content::MediaSession::GetIfExists(playing)
                           ->GetMediaSessionInfoSync();
@@ -3178,7 +3222,7 @@ IN_PROC_BROWSER_TEST_F(FlyNativeFreezeBrowserTest,
       "if (!audio.paused) resolve(audio.paused); "
       "else audio.addEventListener('playing', () => resolve(audio.paused), {once:true}); })",
       content::EXECUTE_SCRIPT_NO_USER_GESTURE));
-  EXPECT_EQ(second, window.selected_browser_for_testing());
+  EXPECT_EQ(second, LastActive());
   ExpectVisible(playing, false);
 }
 
@@ -3268,15 +3312,15 @@ IN_PROC_BROWSER_TEST_F(FlyWorkspaceBrowserTest,
     window.visibilityEvents = 0;
     document.addEventListener('visibilitychange', () => visibilityEvents++);
   )js"));
-  auto& window = FlyWindowController::Get();
-  window.Select(browser(), true);
+  auto& window = Window();
+  Activate(browser());
   contents->Focus();
   ASSERT_TRUE(base::test::RunUntil([&] {
     return contents->GetRenderWidgetHostView()->HasFocus() &&
            content::EvalJs(contents, "document.hasFocus()") == true;
   }));
   ui::test::EventGenerator keys(
-      window.desktop_widget()->GetNativeWindow()->GetRootWindow());
+      window.widget()->GetNativeWindow()->GetRootWindow());
   keys.PressKey(ui::VKEY_F, ui::EF_ALT_DOWN);
   bool was_active = false;
   bool had_ax_root = false;
@@ -3322,13 +3366,13 @@ IN_PROC_BROWSER_TEST_F(FlyWorkspaceBrowserTest,
   ASSERT_TRUE(content::ExecJs(original_page, "document.cookie='order=first'"));
   auto* second = SecondWorkspace();
   ASSERT_TRUE(second);
-  auto& window = FlyWindowController::Get();
-  window.CreateWorkspace();
+  auto& window = Window();
+  App().CreateWorkspace();
   ASSERT_TRUE(base::test::RunUntil([&] {
-    auto* selected = window.selected_browser_for_testing();
+    auto* selected = LastActive();
     return selected && selected != first && selected != second;
   }));
-  auto* third = window.selected_browser_for_testing();
+  auto* third = LastActive();
   WorkspaceService service(*g_browser_process->local_state());
   const auto before = service.Read();
   ASSERT_TRUE(before);
@@ -3336,7 +3380,7 @@ IN_PROC_BROWSER_TEST_F(FlyWorkspaceBrowserTest,
   const auto third_item = before->items.back();
   ASSERT_EQ(third->GetProfile()->GetPath().BaseName().AsUTF8Unsafe(),
             third_item.profile_directory);
-  window.Select(first, true);
+  Activate(first);
   auto menu = [&](bool expect_down, base::OnceCallback<void(ui::SimpleMenuModel*)> choose) {
     views::View* control = nullptr;
     ASSERT_TRUE(base::test::RunUntil([&] {
@@ -3364,7 +3408,7 @@ IN_PROC_BROWSER_TEST_F(FlyWorkspaceBrowserTest,
           inspected = true;
         }));
     ui::test::EventGenerator mouse(
-        window.desktop_widget()->GetNativeWindow()->GetRootWindow());
+        window.widget()->GetNativeWindow()->GetRootWindow());
     mouse.MoveMouseTo(control->GetBoundsInScreen().CenterPoint());
     mouse.ClickRightButton();
     ASSERT_TRUE(base::test::RunUntil([&] { return inspected; }));
@@ -3376,15 +3420,15 @@ IN_PROC_BROWSER_TEST_F(FlyWorkspaceBrowserTest,
     const auto current = service.Read();
     return current && current->items[1].id == third_item.id;
   }));
-  EXPECT_EQ(first, window.selected_browser_for_testing());
+  EXPECT_EQ(first, LastActive());
   EXPECT_EQ(before->items[0], service.Read()->items[0]);
   EXPECT_EQ(third_item, service.Read()->items[1]);
   EXPECT_EQ(before->items[1], service.Read()->items[2]);
   EXPECT_EQ(original_page, Active(first));
   EXPECT_EQ("order=first", content::EvalJs(original_page, "document.cookie"));
-  ASSERT_TRUE(window.RunCommand(first, "next-workspace"));
-  EXPECT_EQ(third, window.selected_browser_for_testing());
-  window.Select(first, true);
+  ASSERT_TRUE(Window(first).RunCommand("next-workspace"));
+  ASSERT_TRUE(base::test::RunUntil([&] { return IsActive(third); }));
+  Activate(first);
   menu(true, base::BindOnce([](ui::SimpleMenuModel* model) {
     model->ActivatedAt(1);
   }));
@@ -3408,7 +3452,7 @@ IN_PROC_BROWSER_TEST_F(FlyWorkspaceBrowserTest,
   base::RunLoop().RunUntilIdle();
   EXPECT_EQ(future, prefs->GetDict(kWorkspacesPref));
   prefs->SetDict(kWorkspacesPref, valid.Clone());
-  EXPECT_EQ(first, window.selected_browser_for_testing());
+  EXPECT_EQ(first, LastActive());
   EXPECT_EQ(original_page, Active(first));
 }
 
@@ -3421,8 +3465,8 @@ IN_PROC_BROWSER_TEST_F(FlyWorkspaceBrowserTest,
   ASSERT_TRUE(content::ExecJs(page, "document.cookie='rename=first'"));
   auto* second = SecondWorkspace();
   ASSERT_TRUE(second);
-  auto& window = FlyWindowController::Get();
-  window.Select(first, true);
+  auto& window = Window();
+  Activate(first);
   WorkspaceService service(*g_browser_process->local_state());
   const auto before = service.Read();
   ASSERT_TRUE(before);
@@ -3454,7 +3498,7 @@ IN_PROC_BROWSER_TEST_F(FlyWorkspaceBrowserTest,
           model->ActivatedAt(3);
         }));
     ui::test::EventGenerator mouse(
-        window.desktop_widget()->GetNativeWindow()->GetRootWindow());
+        window.widget()->GetNativeWindow()->GetRootWindow());
     mouse.MoveMouseTo(row->GetBoundsInScreen().CenterPoint());
     mouse.ClickRightButton();
     ASSERT_TRUE(base::test::RunUntil([&] {
@@ -3469,7 +3513,7 @@ IN_PROC_BROWSER_TEST_F(FlyWorkspaceBrowserTest,
   ASSERT_TRUE(field);
   ASSERT_TRUE(base::test::RunUntil([&] { return field->HasFocus(); }));
   ExpectVisible(page, true);
-  EXPECT_EQ(first, window.selected_browser_for_testing());
+  EXPECT_EQ(first, LastActive());
   auto* delegate = dialog->widget_delegate()->AsDialogDelegate();
   ASSERT_TRUE(delegate);
   field->SetText(base::UTF8ToUTF16(before->items.front().name));
@@ -3493,7 +3537,7 @@ IN_PROC_BROWSER_TEST_F(FlyWorkspaceBrowserTest,
   EXPECT_EQ(item.profile_directory, service.Read()->items.back().profile_directory);
   EXPECT_EQ(directory, second->GetProfile()->GetPath());
   EXPECT_EQ(tab_id, TabIdentity::Get(Active(second)));
-  EXPECT_EQ(first, window.selected_browser_for_testing());
+  EXPECT_EQ(first, LastActive());
   EXPECT_EQ("rename=first", content::EvalJs(page, "document.cookie"));
 
   open();
@@ -3518,12 +3562,14 @@ IN_PROC_BROWSER_TEST_F(FlyWorkspaceBrowserTest,
   EXPECT_FALSE(dialog->IsClosed());
   EXPECT_EQ(future, prefs->GetDict(kWorkspacesPref));
   prefs->SetDict(kWorkspacesPref, valid.Clone());
-  window.Select(second, true);
+  dialog->Close();
   ASSERT_TRUE(base::test::RunUntil([&] {
     return !window.workspace_rename_dialog_for_testing();
   }));
   EXPECT_EQ(*valid.FindList("items"),
             *prefs->GetDict(kWorkspacesPref).FindList("items"));
+  // Using the workspace's window makes it the active workspace.
+  Activate(second);
   EXPECT_EQ(item.id, service.Read()->active_id);
 }
 
@@ -3554,11 +3600,11 @@ IN_PROC_BROWSER_TEST_F(FlyWorkspaceBrowserTest,
   WorkspaceService service(*g_browser_process->local_state());
   const auto catalog = service.Read();
   ASSERT_TRUE(catalog && catalog->items.size() == 2);
-  auto& window = FlyWindowController::Get();
-  ASSERT_TRUE(window.ShowTabMovePicker(source, contents));
+  auto& window = Window(source);
+  ASSERT_TRUE(window.ShowTabMovePicker(contents));
   ASSERT_TRUE(
       base::test::RunUntil([&] { return window.tab_move_picker().active(); }));
-  window.ToggleWorkspacePicker();
+  window.RunCommand("toggle-dashboard");
   ASSERT_TRUE(base::test::RunUntil([&] {
     return !window.tab_move_picker().active() &&
            window.workspace_picker().active();
@@ -3566,8 +3612,8 @@ IN_PROC_BROWSER_TEST_F(FlyWorkspaceBrowserTest,
   window.workspace_picker().Cancel();
   ChooseMoveDestination(source, catalog->items.front().name, true);
   ASSERT_TRUE(base::test::RunUntil([&] {
-    return !source_weak && !window.tab_move_pending_for_testing() &&
-           window.selected_browser_for_testing() == destination;
+    return !source_weak && !App().tab_move_pending() &&
+           LastActive() == destination;
   }));
   auto* moved = Active(destination);
   ASSERT_TRUE(moved);
@@ -3623,16 +3669,15 @@ IN_PROC_BROWSER_TEST_F(FlyWorkspaceBrowserTest,
   const auto catalog = service.Read();
   ASSERT_TRUE(catalog && catalog->items.size() == 3);
   const auto destination_name = catalog->items.back().name;
-  FlyWindowController::Get().Select(source, true);
+  Activate(source);
   const int destination_count = destination->GetTabStripModel()->count();
   ChooseMoveDestination(source, destination_name);
   auto* dialog = ui_test_utils::WaitForAppModalDialog();
   ASSERT_TRUE(dialog && dialog->is_before_unload_dialog());
   EXPECT_EQ(destination_count, destination->GetTabStripModel()->count());
   dialog->view()->CancelAppModalDialog();
-  auto& window = FlyWindowController::Get();
   ASSERT_TRUE(base::test::RunUntil(
-      [&] { return !window.tab_move_pending_for_testing(); }));
+      [&] { return !App().tab_move_pending(); }));
   EXPECT_TRUE(source_weak);
   EXPECT_EQ("kept", content::EvalJs(contents, "window.unsavedMove"));
   EXPECT_EQ(id, TabIdentity::Get(contents));
@@ -3645,9 +3690,9 @@ IN_PROC_BROWSER_TEST_F(FlyWorkspaceBrowserTest,
   // User consent cannot close the source when its prepared destination is gone.
   dialog->view()->AcceptAppModalDialog();
   ASSERT_TRUE(base::test::RunUntil(
-      [&] { return !window.tab_move_pending_for_testing(); }));
+      [&] { return !App().tab_move_pending(); }));
   ASSERT_TRUE(source_weak);
-  EXPECT_EQ(source, window.selected_browser_for_testing());
+  EXPECT_EQ(source, LastActive());
   EXPECT_EQ("kept", content::EvalJs(contents, "window.unsavedMove"));
   EXPECT_EQ("move=kept", content::EvalJs(contents, "document.cookie"));
   EXPECT_EQ(id, TabIdentity::Get(contents));
@@ -3664,11 +3709,10 @@ IN_PROC_BROWSER_TEST_F(
       normal_source, embedded_test_server()->GetURL("/title1.html")));
   ASSERT_TRUE(content::ExecJs(Active(normal_source),
                               "document.cookie='move=normal-source'"));
-  auto& window = FlyWindowController::Get();
-  ASSERT_TRUE(window.RunCommand(normal_source, "toggle-private-mode"));
+  ASSERT_TRUE(Window(normal_source).RunCommand("toggle-private-mode"));
   ASSERT_TRUE(base::test::RunUntil(
-      [&] { return window.selected_browser_for_testing() != normal_source; }));
-  auto* private_source = window.selected_browser_for_testing();
+      [&] { return LastActive() != normal_source; }));
+  auto* private_source = LastActive();
   ASSERT_TRUE(private_source && private_source->GetProfile()->IsOffTheRecord());
   ASSERT_TRUE(ui_test_utils::NavigateToURL(
       private_source, embedded_test_server()->GetURL("/title1.html")));
@@ -3676,15 +3720,15 @@ IN_PROC_BROWSER_TEST_F(
   auto source_weak = source->GetWeakPtr();
   const auto id = TabIdentity::Get(source);
   ASSERT_TRUE(content::ExecJs(source, "document.cookie='move=private-source'"));
-  window.Select(browser(), true);
+  Activate(browser());
   ASSERT_TRUE(ui_test_utils::NavigateToURL(
       browser(), embedded_test_server()->GetURL("/title1.html")));
   ASSERT_TRUE(content::ExecJs(Active(browser()),
                               "document.cookie='move=normal-destination'"));
-  ASSERT_TRUE(window.RunCommand(browser(), "toggle-private-mode"));
+  ASSERT_TRUE(Window(browser()).RunCommand("toggle-private-mode"));
   ASSERT_TRUE(base::test::RunUntil(
-      [&] { return window.selected_browser_for_testing() != browser(); }));
-  auto* destination = window.selected_browser_for_testing();
+      [&] { return LastActive() != browser(); }));
+  auto* destination = LastActive();
   ASSERT_TRUE(destination && destination->GetProfile()->IsOffTheRecord());
   ASSERT_TRUE(ui_test_utils::NavigateToURL(
       destination, embedded_test_server()->GetURL("/title1.html")));
@@ -3693,12 +3737,12 @@ IN_PROC_BROWSER_TEST_F(
   WorkspaceService service(*g_browser_process->local_state());
   const auto catalog = service.Read();
   ASSERT_TRUE(catalog);
-  window.Select(private_source, true);
+  Activate(private_source);
   ChooseMoveDestination(private_source,
                         "Private · " + catalog->items.front().name);
   ASSERT_TRUE(base::test::RunUntil([&] {
-    return !source_weak && !window.tab_move_pending_for_testing() &&
-           window.selected_browser_for_testing() == destination;
+    return !source_weak && !App().tab_move_pending() &&
+           LastActive() == destination;
   }));
   auto* moved = Active(destination);
   ASSERT_TRUE(content::WaitForLoadStop(moved));
@@ -3716,7 +3760,6 @@ IN_PROC_BROWSER_TEST_F(
   EXPECT_TRUE(extra.empty());
   EXPECT_FALSE(TabIdentity::CanPersist(moved));
   EXPECT_EQ(catalog->items, service.Read()->items);
-  EXPECT_EQ(catalog->active_id, service.Read()->active_id);
 }
 
 IN_PROC_BROWSER_TEST_F(FlyWorkspaceBrowserTest,
@@ -3737,10 +3780,9 @@ IN_PROC_BROWSER_TEST_F(FlyWorkspaceBrowserTest,
   EXPECT_EQ(nullptr, manager->GetProfileByPath(path));
   const auto before = service.Read();
   ChooseMoveDestination(source, destination->name);
-  auto& window = FlyWindowController::Get();
   ASSERT_TRUE(base::test::RunUntil(
-      [&] { return !source_weak && !window.tab_move_pending_for_testing(); }));
-  auto* target = window.selected_browser_for_testing();
+      [&] { return !source_weak && !App().tab_move_pending(); }));
+  auto* target = LastActive();
   ASSERT_TRUE(target);
   EXPECT_EQ(path, target->GetProfile()->GetPath());
   auto* moved = Active(target);
@@ -3757,11 +3799,10 @@ IN_PROC_BROWSER_TEST_F(
     NativePrivateTabMoveLoadsDestinationWithoutPersistingItsUrl) {
   auto* normal_source = SecondWorkspace();
   ASSERT_TRUE(normal_source);
-  auto& window = FlyWindowController::Get();
-  ASSERT_TRUE(window.RunCommand(normal_source, "toggle-private-mode"));
+  ASSERT_TRUE(Window(normal_source).RunCommand("toggle-private-mode"));
   ASSERT_TRUE(base::test::RunUntil(
-      [&] { return window.selected_browser_for_testing() != normal_source; }));
-  auto* source = window.selected_browser_for_testing();
+      [&] { return LastActive() != normal_source; }));
+  auto* source = LastActive();
   ASSERT_TRUE(source && source->GetProfile()->IsOffTheRecord());
   ASSERT_TRUE(ui_test_utils::NavigateToURL(
       source, embedded_test_server()->GetURL("/title1.html")));
@@ -3779,8 +3820,8 @@ IN_PROC_BROWSER_TEST_F(
   EXPECT_EQ(nullptr, manager->GetProfileByPath(path));
   ChooseMoveDestination(source, "Private · " + target->name);
   ASSERT_TRUE(base::test::RunUntil(
-      [&] { return !source_weak && !window.tab_move_pending_for_testing(); }));
-  auto* destination = window.selected_browser_for_testing();
+      [&] { return !source_weak && !App().tab_move_pending(); }));
+  auto* destination = LastActive();
   ASSERT_TRUE(destination && destination->GetProfile()->IsOffTheRecord());
   EXPECT_EQ(path, destination->GetProfile()->GetOriginalProfile()->GetPath());
   auto* moved = Active(destination);
@@ -3790,7 +3831,8 @@ IN_PROC_BROWSER_TEST_F(
   EXPECT_EQ("", content::EvalJs(moved, "document.cookie"));
   EXPECT_FALSE(TabIdentity::CanPersist(moved));
   EXPECT_EQ(before->items, service.Read()->items);
-  EXPECT_EQ(before->active_id, service.Read()->active_id);
+  // A private window never becomes the active workspace.
+  EXPECT_NE(target->id, service.Read()->active_id);
 }
 
 IN_PROC_BROWSER_TEST_F(
@@ -3816,11 +3858,11 @@ IN_PROC_BROWSER_TEST_F(
   ASSERT_EQ(2u, before->items.size());
   const auto item = before->items.back();
   const auto path = profile->GetPath();
-  auto& window = FlyWindowController::Get();
-  ASSERT_TRUE(window.RunCommand(second, "toggle-private-mode"));
+  auto& window = Window();
+  ASSERT_TRUE(Window(second).RunCommand("toggle-private-mode"));
   ASSERT_TRUE(base::test::RunUntil(
-      [&] { return window.selected_browser_for_testing() != second; }));
-  auto* private_browser = window.selected_browser_for_testing();
+      [&] { return LastActive() != second; }));
+  auto* private_browser = LastActive();
   ASSERT_TRUE(private_browser &&
               private_browser->GetProfile()->IsOffTheRecord());
   auto private_weak = private_browser->GetWeakPtr();
@@ -3860,7 +3902,7 @@ IN_PROC_BROWSER_TEST_F(
                            include_tabs),
         extensions::BackgroundScriptExecutor::ResultCapture::kSendScriptResult);
   };
-  window.Select(first, true);
+  Activate(first);
   OpenWorkspaceRemoval(item);
   auto* confirmation = window.workspace_remove_dialog_for_testing();
   ASSERT_TRUE(confirmation);
@@ -3878,7 +3920,7 @@ IN_PROC_BROWSER_TEST_F(
   }
   dialog->view()->CancelAppModalDialog();
   ASSERT_TRUE(base::test::RunUntil(
-      [&] { return !window.workspace_removal_pending_for_testing(); }));
+      [&] { return !App().workspace_removal_pending(); }));
   EXPECT_TRUE(second_weak && private_weak);
   EXPECT_TRUE(profile->AllowsBrowserWindows());
   EXPECT_FALSE(IsWorkspaceRetiring(path));
@@ -3891,10 +3933,10 @@ IN_PROC_BROWSER_TEST_F(
   ASSERT_TRUE(confirmation);
   confirmation->widget_delegate()->AsDialogDelegate()->AcceptDialog();
   ASSERT_TRUE(base::test::RunUntil([&] {
-    return !window.workspace_removal_pending_for_testing() &&
+    return !App().workspace_removal_pending() &&
            service.Read()->items.size() == 1 && !second_weak && !private_weak;
   }));
-  EXPECT_EQ(first, window.selected_browser_for_testing());
+  EXPECT_EQ(first, LastActive());
   EXPECT_FALSE(IsWorkspaceRetiring(path));
   EXPECT_EQ(true, service.IsProfileRetired(item.profile_directory));
   EXPECT_FALSE(profile->AllowsBrowserWindows());
@@ -3937,7 +3979,7 @@ IN_PROC_BROWSER_TEST_F(
   auto* second = SecondWorkspace();
   ASSERT_TRUE(second);
   auto second_weak = second->GetWeakPtr();
-  auto& window = FlyWindowController::Get();
+  auto& window = Window();
   WorkspaceService service(*g_browser_process->local_state());
   const auto catalog = service.Read();
   ASSERT_TRUE(catalog && catalog->items.size() == 2);
@@ -3962,9 +4004,9 @@ IN_PROC_BROWSER_TEST_F(
   EXPECT_FALSE(dialog->IsClosed());
   EXPECT_EQ(future, prefs->GetDict(kWorkspacesPref));
   EXPECT_TRUE(second_weak);
-  EXPECT_FALSE(window.workspace_removal_pending_for_testing());
+  EXPECT_FALSE(App().workspace_removal_pending());
   prefs->SetDict(kWorkspacesPref, valid.Clone());
-  window.Select(browser(), true);
+  dialog->Close();
   ASSERT_TRUE(base::test::RunUntil(
       [&] { return !window.workspace_remove_dialog_for_testing(); }));
   // The UI keeps the rule that the last workspace cannot be removed.
@@ -3990,11 +4032,11 @@ IN_PROC_BROWSER_TEST_F(
         check.Stop();
         EXPECT_FALSE(menu->IsEnabledAt(4));
         ui::test::EventGenerator escape(
-            window.desktop_widget()->GetNativeWindow()->GetRootWindow());
+            window.widget()->GetNativeWindow()->GetRootWindow());
         escape.PressKey(ui::VKEY_ESCAPE, ui::EF_NONE);
       }));
   ui::test::EventGenerator mouse(
-      window.desktop_widget()->GetNativeWindow()->GetRootWindow());
+      window.widget()->GetNativeWindow()->GetRootWindow());
   mouse.MoveMouseTo(row->GetBoundsInScreen().CenterPoint());
   mouse.ClickRightButton();
   EXPECT_EQ(1u, service.Read()->items.size());
@@ -4003,7 +4045,6 @@ IN_PROC_BROWSER_TEST_F(
 IN_PROC_BROWSER_TEST_F(FlyWorkspaceBrowserTest,
                        WorkspaceProfileCompletionRejectsRetiredAndFutureCatalogs) {
   auto* first = browser();
-  auto& window = FlyWindowController::Get();
   auto* manager = g_browser_process->profile_manager();
   auto* prefs = g_browser_process->local_state();
   WorkspaceService service(*prefs);
@@ -4019,7 +4060,7 @@ IN_PROC_BROWSER_TEST_F(FlyWorkspaceBrowserTest,
         });
     return found;
   };
-  window.CreateWorkspace();
+  App().CreateWorkspace();
   const auto created = service.Read();
   ASSERT_TRUE(created);
   ASSERT_EQ(2u, created->items.size());
@@ -4035,12 +4076,12 @@ IN_PROC_BROWSER_TEST_F(FlyWorkspaceBrowserTest,
   ASSERT_TRUE(retired_profile);
   base::RunLoop().RunUntilIdle();
   EXPECT_FALSE(has_browser(retired_profile));
-  EXPECT_EQ(first, window.selected_browser_for_testing());
+  EXPECT_EQ(first, LastActive());
   ASSERT_TRUE(service.Read());
   EXPECT_EQ(before->items, service.Read()->items);
   EXPECT_FALSE(service.Add(retired.name, retired.profile_directory));
 
-  window.CreateWorkspace();
+  App().CreateWorkspace();
   const auto pending = service.Read();
   ASSERT_TRUE(pending);
   ASSERT_EQ(2u, pending->items.size());
@@ -4056,7 +4097,7 @@ IN_PROC_BROWSER_TEST_F(FlyWorkspaceBrowserTest,
   ASSERT_TRUE(future_profile);
   base::RunLoop().RunUntilIdle();
   EXPECT_FALSE(has_browser(future_profile));
-  EXPECT_EQ(first, window.selected_browser_for_testing());
+  EXPECT_EQ(first, LastActive());
   EXPECT_EQ(future, prefs->GetDict(kWorkspacesPref));
   prefs->SetDict(kWorkspacesPref, valid.Clone());
 }
@@ -4069,7 +4110,7 @@ IN_PROC_BROWSER_TEST_F(FlyWorkspaceBrowserTest,
   auto* original_page = Active(first);
   auto* second = SecondWorkspace();
   ASSERT_TRUE(second);
-  auto& window = FlyWindowController::Get();
+  auto& window = Window();
   WorkspaceService service(*g_browser_process->local_state());
   const auto catalog = service.Read();
   ASSERT_TRUE(catalog);
@@ -4078,7 +4119,7 @@ IN_PROC_BROWSER_TEST_F(FlyWorkspaceBrowserTest,
       &Workspace::profile_directory);
   ASSERT_NE(item, catalog->items.end());
   ASSERT_TRUE(service.Rename(item->id, "Trabajo"));
-  window.Select(first, true);
+  Activate(first);
   original_page->Focus();
   ASSERT_TRUE(base::test::RunUntil([&] {
     return original_page->GetRenderWidgetHostView()->HasFocus() &&
@@ -4086,13 +4127,13 @@ IN_PROC_BROWSER_TEST_F(FlyWorkspaceBrowserTest,
                            content::EXECUTE_SCRIPT_NO_USER_GESTURE) == true;
   }));
   ui::test::EventGenerator keys(
-      window.desktop_widget()->GetNativeWindow()->GetRootWindow());
+      window.widget()->GetNativeWindow()->GetRootWindow());
   keys.PressKey(ui::VKEY_W, ui::EF_CONTROL_DOWN | ui::EF_SHIFT_DOWN);
   auto& picker = window.workspace_picker();
   ASSERT_TRUE(base::test::RunUntil([&] { return picker.active(); }));
   ExpectVisible(original_page, true);
   EXPECT_TRUE(picker.search_for_testing()->HasFocus());
-  auto* root = window.desktop_widget()->GetNativeWindow()->GetRootWindow();
+  auto* root = window.widget()->GetNativeWindow()->GetRootWindow();
   auto* activation = wm::GetActivationClient(root);
   auto* focus = aura::client::GetFocusClient(root);
   auto* active_window = activation ? activation->GetActiveWindow() : nullptr;
@@ -4118,58 +4159,64 @@ IN_PROC_BROWSER_TEST_F(FlyWorkspaceBrowserTest,
   keys.PressKey(ui::VKEY_RETURN, ui::EF_NONE);
   ASSERT_TRUE(base::test::RunUntil([&] {
     return !picker.search_for_testing() &&
-           window.selected_browser_for_testing() == second;
+           LastActive() == second;
   }));
-  ExpectVisible(original_page, false);
+  // The other workspace has its own window; this one keeps its page.
   EXPECT_EQ(original_page, Active(first));
 
-  window.Select(first, true);
-  window.ToggleWorkspacePicker();
+  Activate(first);
+  window.RunCommand("toggle-dashboard");
   ASSERT_TRUE(picker.active());
   picker.search_for_testing()->SetText(u"Trabajo");
   picker.ContentsChanged(picker.search_for_testing(), u"Trabajo");
   ASSERT_EQ(1u, picker.result_count_for_testing());
   ui::KeyEvent enter(ui::EventType::kKeyPressed, ui::VKEY_RETURN, ui::EF_NONE);
   ASSERT_TRUE(picker.HandleOverlayKey(enter));
-  window.Select(second, true);
-  window.Select(first, true);
+  Activate(second);
+  Activate(first);
   ASSERT_TRUE(base::test::RunUntil([&] { return !picker.search_for_testing(); }));
-  EXPECT_EQ(first, window.selected_browser_for_testing());
+  EXPECT_EQ(first, LastActive());
 
-  ASSERT_TRUE(window.RunCommand(first, "toggle-private-mode"));
+  ASSERT_TRUE(Window(first).RunCommand("toggle-private-mode"));
   ASSERT_TRUE(base::test::RunUntil([&] {
-    return window.selected_browser_for_testing() != first;
+    return LastActive() != first;
   }));
-  auto* private_browser = window.selected_browser_for_testing();
+  auto* private_browser = LastActive();
   ASSERT_TRUE(private_browser->GetProfile()->IsOffTheRecord());
-  window.Select(second, true);
-  window.ToggleWorkspacePicker();
-  ASSERT_TRUE(picker.active());
-  picker.search_for_testing()->SetText(u"Private");
-  picker.ContentsChanged(picker.search_for_testing(), u"Private");
-  ASSERT_EQ(1u, picker.result_count_for_testing());
-  keys.PressKey(ui::VKEY_RETURN, ui::EF_NONE);
+  Activate(second);
+  auto& second_window = Window(second);
+  auto& second_picker = second_window.workspace_picker();
+  second_window.RunCommand("toggle-dashboard");
+  ASSERT_TRUE(second_picker.active());
+  second_picker.search_for_testing()->SetText(u"Private");
+  second_picker.ContentsChanged(second_picker.search_for_testing(), u"Private");
+  ASSERT_EQ(1u, second_picker.result_count_for_testing());
+  // A sidebar refresh while the dashboard is open keeps its window rows.
+  App().BroadcastWorkspaceRefresh();
+  base::RunLoop().RunUntilIdle();
+  ASSERT_EQ(1u, second_picker.result_count_for_testing());
+  ui::test::EventGenerator second_keys(
+      second_window.widget()->GetNativeWindow()->GetRootWindow());
+  second_keys.PressKey(ui::VKEY_RETURN, ui::EF_NONE);
   ASSERT_TRUE(base::test::RunUntil([&] {
-    return !picker.search_for_testing() &&
-           window.selected_browser_for_testing() == private_browser;
+    return !second_picker.search_for_testing() &&
+           LastActive() == private_browser;
   }));
   EXPECT_EQ(catalog->items.size(), service.Read()->items.size());
 }
 
+// The dashboard creates a workspace in a window of its own, with one new tab
+// and no placeholder tab in the window it was opened from.
 IN_PROC_BROWSER_TEST_F(FlyWorkspaceBrowserTest,
-                       EmptyDesktopWorkspacePickerCreatesWithoutPlaceholderTabs) {
-  auto& window = FlyWindowController::Get();
-  auto original = browser()->GetWeakPtr();
+                       WorkspacePickerCreatesWorkspaceInItsOwnWindow) {
+  auto& window = Window();
   const auto original_directory = browser()->GetProfile()->GetPath();
-  ASSERT_TRUE(ExecuteNativeCommand(browser(), "remove-tab"));
-  ASSERT_TRUE(base::test::RunUntil([&] { return !original; }));
-  ASSERT_EQ(nullptr, window.selected_browser_for_testing());
+  const int original_count = browser()->GetTabStripModel()->count();
   ui::test::EventGenerator keys(
-      window.desktop_widget()->GetNativeWindow()->GetRootWindow());
+      window.widget()->GetNativeWindow()->GetRootWindow());
   keys.PressKey(ui::VKEY_W, ui::EF_CONTROL_DOWN | ui::EF_SHIFT_DOWN);
   auto& picker = window.workspace_picker();
   ASSERT_TRUE(base::test::RunUntil([&] { return picker.active(); }));
-  EXPECT_EQ(nullptr, window.selected_browser_for_testing());
   picker.search_for_testing()->SetText(u"New workspace");
   picker.ContentsChanged(picker.search_for_testing(), u"New workspace");
   ASSERT_EQ(1u, picker.result_count_for_testing());
@@ -4179,72 +4226,74 @@ IN_PROC_BROWSER_TEST_F(FlyWorkspaceBrowserTest,
       [&] { return window.workspace_name_dialog_for_testing() != nullptr; }));
   window.workspace_name_dialog_for_testing()->AcceptDialog();
   ASSERT_TRUE(base::test::RunUntil([&] {
-    return !picker.search_for_testing() &&
-           window.selected_browser_for_testing() != nullptr;
+    auto* active = LastActive();
+    return !picker.search_for_testing() && active && active != browser();
   }));
-  auto* created = window.selected_browser_for_testing();
+  auto* created = LastActive();
   EXPECT_NE(original_directory, created->GetProfile()->GetPath());
+  EXPECT_NE(browser()->GetWindow()->GetNativeWindow()->GetHost(),
+            created->GetWindow()->GetNativeWindow()->GetHost());
   ASSERT_EQ(1, created->GetTabStripModel()->count());
   ASSERT_TRUE(content::WaitForLoadStop(Active(created)));
   EXPECT_EQ(GURL(kFlyNewTabURL), Active(created)->GetLastCommittedURL());
   EXPECT_EQ(created->GetProfile(), Active(created)->GetBrowserContext());
+  EXPECT_EQ(original_count, browser()->GetTabStripModel()->count());
 }
 
+// Closing a workspace's last tab closes its window; opening the workspace
+// again opens a new window with one new tab in the same profile.
 IN_PROC_BROWSER_TEST_F(FlyWorkspaceBrowserTest,
-                       EmptyDesktopSurvivesAndNewTabKeyReopensWorkspace) {
-  auto& window = FlyWindowController::Get();
-  auto original = browser()->GetWeakPtr();
-  ASSERT_TRUE(ExecuteNativeCommand(browser(), "remove-tab"));
-  ASSERT_TRUE(base::test::RunUntil([&] { return !original; }));
-  ASSERT_EQ(&window, FlyWindowController::GetIfCreated());
-  EXPECT_EQ(nullptr, window.selected_browser_for_testing());
-  EXPECT_TRUE(window.desktop_widget()->IsVisible());
-  ui::test::EventGenerator keys(
-      window.desktop_widget()->GetNativeWindow()->GetRootWindow());
-  keys.PressKey(ui::VKEY_H, ui::EF_CONTROL_DOWN);
-  ASSERT_TRUE(
-      base::test::RunUntil([&] { return window.keyboard_editor().active(); }));
-  EXPECT_EQ(nullptr, window.selected_browser_for_testing());
-  auto* preferences = window.keyboard_editor().root_for_testing();
-  ASSERT_TRUE(preferences);
-  views::test::RunScheduledLayout(preferences->GetWidget());
-  keys.PressKey(ui::VKEY_ESCAPE, ui::EF_NONE);
-  ASSERT_FALSE(window.keyboard_editor().active());
-  keys.PressKey(ui::VKEY_P, ui::EF_CONTROL_DOWN);
-  ASSERT_TRUE(base::test::RunUntil([&] { return window.palette().active(); }));
-  EXPECT_EQ(nullptr, window.selected_browser_for_testing());
-  keys.PressKey(ui::VKEY_ESCAPE, ui::EF_NONE);
-  ASSERT_FALSE(window.palette().active());
-  views::test::ButtonTestApi(window.preferences_button_for_testing())
-      .NotifyDefaultMouseClick();
-  ASSERT_TRUE(window.keyboard_editor().active());
-  keys.PressKey(ui::VKEY_ESCAPE, ui::EF_NONE);
-  keys.PressKey(ui::VKEY_T, ui::EF_CONTROL_DOWN);
+                       ReopeningAClosedWorkspaceOpensANewWindow) {
+  auto* first = browser();
+  auto* second = SecondWorkspace();
+  ASSERT_TRUE(second);
+  // The profile can unload with its last window; keep only its path.
+  const auto path = second->GetProfile()->GetPath();
+  const auto workspace = App().WorkspaceFor(second->GetProfile());
+  ASSERT_TRUE(workspace);
+  while (second->GetTabStripModel()->count() > 1)
+    second->GetTabStripModel()->CloseWebContentsAt(
+        0, TabCloseTypes::CLOSE_USER_GESTURE);
+  // A lone new tab page is not worth reopening; a visited page is.
+  const auto visited = embedded_test_server()->GetURL("/title1.html");
+  ASSERT_TRUE(ui_test_utils::NavigateToURL(second, visited));
+  auto second_lifetime = second->GetWeakPtr();
+  ASSERT_TRUE(ExecuteNativeCommand(second, "remove-tab"));
+  ASSERT_TRUE(base::test::RunUntil([&] { return !second_lifetime; }));
+  ASSERT_TRUE(base::test::RunUntil([&] { return IsActive(first); }));
+  EXPECT_FALSE(App().closing());
+  // The sidebar's workspace list reopens it.
+  ASSERT_TRUE(Window(first).RunCommand("next-workspace"));
+  ASSERT_TRUE(base::test::RunUntil([&] {
+    auto* active = LastActive();
+    return active && active != first &&
+           active->GetProfile()->GetPath() == path;
+  }));
+  auto* reopened = LastActive();
+  ASSERT_EQ(1, reopened->GetTabStripModel()->count());
+  ASSERT_TRUE(content::WaitForLoadStop(Active(reopened)));
+  EXPECT_EQ(GURL(kFlyNewTabURL), Active(reopened)->GetLastCommittedURL());
+  // A closed tab of the closed window can be reopened from the new one.
   ASSERT_TRUE(base::test::RunUntil(
-      [&] { return window.selected_browser_for_testing() != nullptr; }));
-  EXPECT_EQ(1,
-            window.selected_browser_for_testing()->GetTabStripModel()->count());
-  ASSERT_TRUE(
-      content::WaitForLoadStop(Active(window.selected_browser_for_testing())));
-  base::RunLoop().RunUntilIdle();
-  EXPECT_FALSE(window.address_picker().active());
-  keys.PressKey(ui::VKEY_ESCAPE, ui::EF_NONE);
-  auto* reopened = window.selected_browser_for_testing();
-  auto reopened_lifetime = reopened->GetWeakPtr();
-  ASSERT_TRUE(ExecuteNativeCommand(reopened, "remove-tab"));
-  ASSERT_TRUE(base::test::RunUntil([&] { return !reopened_lifetime; }));
-  views::test::ButtonTestApi(window.new_tab_button_for_testing())
-      .NotifyDefaultMouseClick();
-  ASSERT_TRUE(base::test::RunUntil(
-      [&] { return window.selected_browser_for_testing() != nullptr; }));
-  EXPECT_EQ(1,
-            window.selected_browser_for_testing()->GetTabStripModel()->count());
+      [&] { return NativeCommandAvailable(reopened, "reopen-closed-tab"); }));
+  ASSERT_TRUE(InvokeNativeCommand(reopened, "reopen-closed-tab"));
+  ASSERT_TRUE(base::test::RunUntil([&] {
+    bool found = false;
+    GlobalBrowserCollection::GetInstance()->ForEach(
+        [&](BrowserWindowInterface* model) {
+          auto* tab = model->GetTabStripModel()->GetActiveWebContents();
+          found |= model->GetProfile()->GetPath() == path && tab &&
+                   tab->GetVisibleURL() == visited;
+          return true;
+        });
+    return found;
+  }));
 }
 
 // Settings tools share the profile but never enter the embedded hierarchy.
 IN_PROC_BROWSER_TEST_F(FlyWorkspaceBrowserTest,
                        StoreSettingsLinksAlwaysOpenAnotherWindow) {
-  auto& window = FlyWindowController::Get();
+  auto& window = Window();
   auto* original = browser();
   const auto page = embedded_test_server()->GetURL("/title1.html");
   ASSERT_TRUE(ui_test_utils::NavigateToURL(original, page));
@@ -4252,17 +4301,17 @@ IN_PROC_BROWSER_TEST_F(FlyWorkspaceBrowserTest,
        {std::pair{u"Browse Chrome Web Store",
                   "https://chromewebstore.google.com/"},
         std::pair{u"Manage in chrome://extensions", "chrome://extensions/"}}) {
-    ASSERT_TRUE(window.RunCommand(original, "toggle-help"));
+    ASSERT_TRUE(Window(original).RunCommand("toggle-help"));
     window.keyboard_editor().ShowExtensions();
     auto created = std::make_unique<BrowserCreatedWaiter>();
     ClickPreferencesButton(label);
     auto* tool = created->Wait();
     created.reset();
     ASSERT_TRUE(tool);
-    EXPECT_EQ(original, window.selected_browser_for_testing());
+    EXPECT_EQ(original, LastActive());
     EXPECT_EQ(original->GetProfile(), tool->GetProfile());
-    EXPECT_FALSE(FlyWindowController::ShouldEmbed(tool));
-    EXPECT_NE(window.desktop_widget()->GetNativeWindow()->GetHost(),
+    EXPECT_FALSE(FlyWindowController::ShouldDecorate(tool));
+    EXPECT_NE(window.widget()->GetNativeWindow()->GetHost(),
               tool->GetWindow()->GetNativeWindow()->GetHost());
     EXPECT_EQ(GURL(url), Active(tool)->GetVisibleURL());
     EXPECT_EQ(1, original->GetTabStripModel()->count());
@@ -4271,174 +4320,6 @@ IN_PROC_BROWSER_TEST_F(FlyWorkspaceBrowserTest,
     tool->GetWindow()->Close();
     ASSERT_TRUE(base::test::RunUntil([&] { return !lifetime; }));
   }
-}
-
-IN_PROC_BROWSER_TEST_F(FlyWorkspaceBrowserTest,
-                       EmptyDesktopReopensLastClosedTabWithoutPlaceholder) {
-  auto& window = FlyWindowController::Get();
-  const auto page = embedded_test_server()->GetURL("/title1.html?reopen-last");
-  ASSERT_TRUE(ui_test_utils::NavigateToURL(browser(), page));
-  auto original = browser()->GetWeakPtr();
-  auto* profile = browser()->GetProfile();
-  ASSERT_TRUE(ExecuteNativeCommand(browser(), "remove-tab"));
-  ASSERT_TRUE(base::test::RunUntil([&] { return !original; }));
-  ASSERT_EQ(nullptr, window.selected_browser_for_testing());
-  ASSERT_TRUE(NativeCommandAvailable(nullptr, "reopen-closed-tab"));
-  ASSERT_TRUE(InvokeNativeCommand(nullptr, "reopen-closed-tab"));
-  ASSERT_TRUE(base::test::RunUntil([&] {
-    auto* selected = window.selected_browser_for_testing();
-    return selected && Active(selected)->GetLastCommittedURL() == page;
-  }));
-  auto* restored = window.selected_browser_for_testing();
-  EXPECT_EQ(profile, restored->GetProfile());
-  EXPECT_EQ(1, restored->GetTabStripModel()->count());
-}
-
-IN_PROC_BROWSER_TEST_F(FlyWorkspaceBrowserTest,
-                       EmptyDesktopFullscreenDoesNotCreateTabs) {
-  auto& window = FlyWindowController::Get();
-  auto original = browser()->GetWeakPtr();
-  ASSERT_TRUE(ExecuteNativeCommand(browser(), "remove-tab"));
-  ASSERT_TRUE(base::test::RunUntil([&] { return !original; }));
-  auto* desktop = window.desktop_widget();
-  ASSERT_FALSE(desktop->IsFullscreen());
-  ASSERT_TRUE(InvokeNativeCommand(nullptr, "toggle-fullscreen"));
-  ASSERT_TRUE(base::test::RunUntil([&] { return desktop->IsFullscreen(); }));
-  EXPECT_EQ(nullptr, window.selected_browser_for_testing());
-  ASSERT_TRUE(InvokeNativeCommand(nullptr, "toggle-fullscreen"));
-  ASSERT_TRUE(base::test::RunUntil([&] { return !desktop->IsFullscreen(); }));
-  EXPECT_EQ(nullptr, window.selected_browser_for_testing());
-}
-
-IN_PROC_BROWSER_TEST_F(FlyWorkspaceBrowserTest,
-                       EmptyDesktopSettingsStoreUsesWorkspaceProfile) {
-  auto& window = FlyWindowController::Get();
-  auto original = browser()->GetWeakPtr();
-  auto* profile = browser()->GetProfile();
-  ASSERT_TRUE(ExecuteNativeCommand(browser(), "remove-tab"));
-  ASSERT_TRUE(base::test::RunUntil([&] { return !original; }));
-  ASSERT_EQ(nullptr, window.selected_browser_for_testing());
-  ASSERT_EQ(profile, window.ActiveProfile());
-  ASSERT_TRUE(InvokeNativeCommand(nullptr, "toggle-help"));
-  window.keyboard_editor().ShowExtensions();
-  ClickPreferencesButton(u"Refresh usage");
-  EXPECT_EQ(nullptr, window.selected_browser_for_testing());
-  BrowserCreatedWaiter created;
-  ClickPreferencesButton(u"Browse Chrome Web Store");
-  auto* store = created.Wait();
-  ASSERT_TRUE(store);
-  EXPECT_EQ(nullptr, window.selected_browser_for_testing());
-  EXPECT_EQ(profile, store->GetProfile());
-  EXPECT_FALSE(FlyWindowController::ShouldEmbed(store));
-  EXPECT_EQ(GURL("https://chromewebstore.google.com/"),
-            Active(store)->GetVisibleURL());
-  EXPECT_FALSE(window.keyboard_editor().active());
-  EXPECT_FALSE(window.address_picker().active());
-  store->GetWindow()->Close();
-}
-
-IN_PROC_BROWSER_TEST_F(FlyWorkspaceBrowserTest,
-                       EmptyDesktopGlobalActionsAndSettingsStillWork) {
-  auto& window = FlyWindowController::Get();
-  auto original = browser()->GetWeakPtr();
-  ASSERT_TRUE(ExecuteNativeCommand(browser(), "remove-tab"));
-  ASSERT_TRUE(base::test::RunUntil([&] { return !original; }));
-  ASSERT_TRUE(NativeCommandAvailable(nullptr, "toggle-notifications"));
-  auto before = window.preferences().ReadBool("web_notifications").value_or(true);
-  ASSERT_TRUE(InvokeNativeCommand(nullptr, "toggle-notifications"));
-  EXPECT_EQ(!before, window.preferences().ReadBool("web_notifications"));
-  ASSERT_TRUE(InvokeNativeCommand(nullptr, "toggle-diagnostics-recording"));
-  EXPECT_TRUE(window.preferences().ReadBool("enable_diagnostics").value_or(false));
-  ASSERT_TRUE(InvokeNativeCommand(nullptr, "reload-user-content"));
-  ASSERT_TRUE(InvokeNativeCommand(nullptr, "toggle-help"));
-  ClickPreferencesButton(u"Clear cache");
-  EXPECT_EQ(nullptr, window.selected_browser_for_testing());
-  ClickPreferencesButton(u"What's new");
-  ASSERT_TRUE(base::test::RunUntil([&] {
-    auto* selected = window.selected_browser_for_testing();
-    if (!selected)
-      return false;
-    const auto& url = Active(selected)->GetVisibleURL();
-    return url.SchemeIsFile() ||
-           url == GURL("https://github.com/Arzuparreta/fly-browser/releases");
-  }));
-  EXPECT_EQ(1, window.selected_browser_for_testing()->GetTabStripModel()->count());
-}
-
-IN_PROC_BROWSER_TEST_F(FlyWorkspaceBrowserTest,
-                       EmptyDesktopHistoryLoadsAndOpensVisitedPage) {
-  const auto page = embedded_test_server()->GetURL("/title1.html?empty-history");
-  ASSERT_TRUE(ui_test_utils::NavigateToURL(browser(), page));
-  auto& window = FlyWindowController::Get();
-  auto original = browser()->GetWeakPtr();
-  auto* profile = browser()->GetProfile();
-  ASSERT_TRUE(ExecuteNativeCommand(browser(), "remove-tab"));
-  ASSERT_TRUE(base::test::RunUntil([&] { return !original; }));
-  ASSERT_TRUE(InvokeNativeCommand(nullptr, "toggle-history"));
-  auto& picker = window.history_picker();
-  ASSERT_TRUE(base::test::RunUntil([&] {
-    return picker.active() && picker.result_count_for_testing() >= 2;
-  }));
-  picker.search_for_testing()->SetText(u"empty-history");
-  picker.ContentsChanged(picker.search_for_testing(), u"empty-history");
-  ASSERT_EQ(1u, picker.result_count_for_testing());
-  ui::test::EventGenerator keys(
-      window.desktop_widget()->GetNativeWindow()->GetRootWindow());
-  keys.PressKey(ui::VKEY_RETURN, ui::EF_NONE);
-  ASSERT_TRUE(base::test::RunUntil([&] {
-    auto* selected = window.selected_browser_for_testing();
-    return selected && Active(selected)->GetLastCommittedURL() == page;
-  }));
-  EXPECT_EQ(profile, window.selected_browser_for_testing()->GetProfile());
-}
-
-IN_PROC_BROWSER_TEST_F(FlyWorkspaceBrowserTest,
-                       EmptyDesktopDownloadsPageAndPrivateModeOpen) {
-  auto& window = FlyWindowController::Get();
-  auto original = browser()->GetWeakPtr();
-  auto* profile = browser()->GetProfile();
-  ASSERT_TRUE(ExecuteNativeCommand(browser(), "remove-tab"));
-  ASSERT_TRUE(base::test::RunUntil([&] { return !original; }));
-  ASSERT_TRUE(InvokeNativeCommand(nullptr, "toggle-downloads"));
-  auto& picker = window.downloads_picker_for_testing();
-  ASSERT_TRUE(base::test::RunUntil([&] {
-    return picker.active() && picker.search_for_testing()->HasFocus();
-  }));
-  picker.search_for_testing()->SetText(u"Open full downloads page");
-  picker.ContentsChanged(picker.search_for_testing(), u"Open full downloads page");
-  ASSERT_EQ(1u, picker.result_count_for_testing());
-  ui::test::EventGenerator keys(
-      window.desktop_widget()->GetNativeWindow()->GetRootWindow());
-  keys.PressKey(ui::VKEY_RETURN, ui::EF_NONE);
-  ASSERT_TRUE(base::test::RunUntil([&] {
-    auto* selected = window.selected_browser_for_testing();
-    return selected && Active(selected)->GetVisibleURL() == GURL("chrome://downloads/");
-  }));
-  auto downloads = window.selected_browser_for_testing()->GetWeakPtr();
-  EXPECT_EQ(profile, downloads->GetProfile());
-  ASSERT_TRUE(ExecuteNativeCommand(downloads.get(), "remove-tab"));
-  ASSERT_TRUE(base::test::RunUntil([&] { return !downloads; }));
-  ASSERT_TRUE(InvokeNativeCommand(nullptr, "toggle-private-mode"));
-  ASSERT_TRUE(base::test::RunUntil([&] {
-    auto* selected = window.selected_browser_for_testing();
-    return selected && selected->GetProfile()->IsOffTheRecord();
-  }));
-  EXPECT_EQ(profile, window.selected_browser_for_testing()->GetProfile()->GetOriginalProfile());
-  auto private_browser = window.selected_browser_for_testing()->GetWeakPtr();
-  ASSERT_TRUE(ExecuteNativeCommand(private_browser.get(), "remove-tab"));
-  ASSERT_TRUE(base::test::RunUntil([&] { return !private_browser; }));
-  EXPECT_EQ(profile, window.ActiveProfile());
-  ASSERT_TRUE(InvokeNativeCommand(nullptr, "toggle-help"));
-  window.keyboard_editor().ShowExtensions();
-  BrowserCreatedWaiter created;
-  ClickPreferencesButton(u"Browse Chrome Web Store");
-  auto* store = created.Wait();
-  ASSERT_TRUE(store);
-  EXPECT_EQ(profile, store->GetProfile());
-  EXPECT_FALSE(store->GetProfile()->IsOffTheRecord());
-  EXPECT_FALSE(FlyWindowController::ShouldEmbed(store));
-  EXPECT_EQ(nullptr, window.selected_browser_for_testing());
-  store->GetWindow()->Close();
 }
 
 IN_PROC_BROWSER_TEST_F(
@@ -4457,13 +4338,12 @@ IN_PROC_BROWSER_TEST_F(
   ASSERT_TRUE(second);
   ASSERT_TRUE(ui_test_utils::NavigateToURL(second, second_url));
   ASSERT_TRUE(InvokeNativeCommand(second, "toggle-private-mode"));
-  auto& window = FlyWindowController::Get();
   ASSERT_TRUE(base::test::RunUntil([&] {
-    return window.selected_browser_for_testing()
+    return LastActive()
         ->GetProfile()
         ->IsOffTheRecord();
   }));
-  auto* private_browser = window.selected_browser_for_testing();
+  auto* private_browser = LastActive();
   ASSERT_TRUE(ui_test_utils::NavigateToURL(private_browser, private_url));
   WorkspaceService workspaces(*g_browser_process->local_state());
   HistoryService history(*g_browser_process->profile_manager(), workspaces);
@@ -4529,7 +4409,7 @@ IN_PROC_BROWSER_TEST_F(
       second, embedded_test_server()->GetURL("/title2.html?history=second")));
   auto* page = Active(second);
   ASSERT_TRUE(content::ExecJs(page, "document.cookie='history=destination';"));
-  auto& window = FlyWindowController::Get();
+  auto& window = Window(second);
   ASSERT_TRUE(NativeCommandAvailable(second, "toggle-history"));
   ASSERT_TRUE(InvokeNativeCommand(second, "toggle-history"));
   auto& picker = window.history_picker();
@@ -4541,13 +4421,13 @@ IN_PROC_BROWSER_TEST_F(
   picker.ContentsChanged(picker.search_for_testing(), u"history=first");
   ASSERT_EQ(1u, picker.result_count_for_testing());
   ui::test::EventGenerator keys(
-      window.desktop_widget()->GetNativeWindow()->GetRootWindow());
+      window.widget()->GetNativeWindow()->GetRootWindow());
   keys.PressKey(ui::VKEY_RETURN, ui::EF_NONE);
   ASSERT_TRUE(base::test::RunUntil([&] {
     return !picker.search_for_testing() &&
            page->GetLastCommittedURL() == first_url;
   }));
-  EXPECT_EQ(second, window.selected_browser_for_testing());
+  EXPECT_EQ(second, LastActive());
   EXPECT_EQ("history=destination", content::EvalJs(page, "document.cookie"));
   auto open_clear = [&] {
     ASSERT_TRUE(InvokeNativeCommand(second, "toggle-history"));
@@ -4593,7 +4473,7 @@ IN_PROC_BROWSER_TEST_F(FlyWorkspaceBrowserTest,
   ASSERT_TRUE(second);
   ASSERT_TRUE(ui_test_utils::NavigateToURL(
       second, embedded_test_server()->GetURL("/title2.html?history=retained")));
-  auto& window = FlyWindowController::Get();
+  auto& window = Window(second);
   ASSERT_TRUE(InvokeNativeCommand(second, "toggle-history"));
   auto& picker = window.history_picker();
   ASSERT_TRUE(base::test::RunUntil([&] {
@@ -4621,19 +4501,19 @@ IN_PROC_BROWSER_TEST_F(FlyWorkspaceBrowserTest,
                                        ServiceAccessType::EXPLICIT_ACCESS)
       ->QueryHistory({}, history::QueryOptions(), flushed.GetCallback(), &tracker);
   ASSERT_FALSE(flushed.Get().empty());
-  auto& window = FlyWindowController::Get();
-  ASSERT_TRUE(window.preferences().SetFrequentSitesVisible(true));
+  auto& window = Window();
+  ASSERT_TRUE(App().preferences().SetFrequentSitesVisible(true));
   auto& picker = window.bookmark_picker();
   ASSERT_TRUE(InvokeNativeCommand(browser(), "toggle-bookmarks"));
   ASSERT_TRUE(base::test::RunUntil([&] {
     return picker.active() && picker.search_for_testing()->HasFocus();
   }));
   EXPECT_EQ(0u, picker.result_count_for_testing());
-  ASSERT_TRUE(window.preferences().SetFrequentSitesVisible(false));
+  ASSERT_TRUE(App().preferences().SetFrequentSitesVisible(false));
   EXPECT_EQ(0u, picker.result_count_for_testing());
-  ASSERT_TRUE(window.preferences().SetFrequentSitesVisible(true));
+  ASSERT_TRUE(App().preferences().SetFrequentSitesVisible(true));
   EXPECT_EQ(0u, picker.result_count_for_testing());
-  ASSERT_TRUE(window.bookmarks().Add(url.spec(), "Saved visit"));
+  ASSERT_TRUE(App().bookmarks().Add(url.spec(), "Saved visit"));
   ASSERT_EQ(1u, picker.result_count_for_testing());
   picker.search_for_testing()->SetText(u"Frequent site");
   picker.ContentsChanged(picker.search_for_testing(), u"Frequent site");
@@ -4643,7 +4523,7 @@ IN_PROC_BROWSER_TEST_F(FlyWorkspaceBrowserTest,
   ASSERT_EQ(1u, picker.result_count_for_testing());
   const int count = browser()->tab_strip_model()->count();
   ui::test::EventGenerator keys(
-      window.desktop_widget()->GetNativeWindow()->GetRootWindow());
+      window.widget()->GetNativeWindow()->GetRootWindow());
   keys.PressKey(ui::VKEY_RETURN, ui::EF_NONE);
   ASSERT_TRUE(base::test::RunUntil([&] {
     return !picker.search_for_testing() &&
@@ -4661,7 +4541,7 @@ IN_PROC_BROWSER_TEST_F(FlyWorkspaceBrowserTest,
   ASSERT_TRUE(base::test::RunUntil([&] {
     return picker.active() && picker.result_count_for_testing() == 0;
   }));
-  EXPECT_TRUE(window.bookmarks().Read()->empty());
+  EXPECT_TRUE(App().bookmarks().Read()->empty());
   // Removing a bookmark must not hide the origin from frequent sites.
   FrequentSitesService sites(*g_browser_process->local_state());
   const auto frequent = sites.Read({{url.spec(), base::Time::Now()}});
@@ -4672,19 +4552,19 @@ IN_PROC_BROWSER_TEST_F(FlyWorkspaceBrowserTest,
 
 IN_PROC_BROWSER_TEST_F(FlyWorkspaceBrowserTest,
                        NativeSettingsMenuEditsStartupAndSidebarSettings) {
-  auto& window = FlyWindowController::Get();
+  auto& window = Window();
   ASSERT_TRUE(InvokeNativeCommand(browser(), "toggle-menu-bar"));
   auto* menu = window.settings_menu().model_for_testing();
   ASSERT_TRUE(menu);
   EXPECT_GT(menu->GetItemCount(), 15u);
   EXPECT_FALSE(window.settings_menu().IsCommandIdChecked(1));
   window.settings_menu().ExecuteCommand(1, 0);
-  EXPECT_EQ(true, window.preferences().ReadBool("disable_gpu"));
+  EXPECT_EQ(true, App().preferences().ReadBool("disable_gpu"));
   window.settings_menu().ExecuteCommand(102, 0);
-  EXPECT_EQ(2, window.preferences().ReadInt("process_limit"));
+  EXPECT_EQ(2, App().preferences().ReadInt("process_limit"));
   EXPECT_TRUE(window.settings_menu().IsCommandIdChecked(102));
   window.settings_menu().ExecuteCommand(230, 0);
-  EXPECT_EQ(30, window.preferences().ReadSuspendTimeoutMinutes());
+  EXPECT_EQ(30, App().preferences().ReadSuspendTimeoutMinutes());
   window.settings_menu().Cancel();
 }
 
@@ -4698,7 +4578,7 @@ IN_PROC_BROWSER_TEST_F(FlyWorkspaceBrowserTest,
   };
   EXPECT_EQ(CONTENT_SETTING_ASK, setting(browser()));
   ASSERT_TRUE(InvokeNativeCommand(browser(), "toggle-notifications"));
-  EXPECT_EQ(false, FlyWindowController::Get().preferences().ReadBool(
+  EXPECT_EQ(false, FlyApp::Get().preferences().ReadBool(
                        "web_notifications"));
   EXPECT_EQ(CONTENT_SETTING_BLOCK, setting(browser()));
   EXPECT_EQ(CONTENT_SETTING_BLOCK, setting(second));
@@ -4711,7 +4591,7 @@ IN_PROC_BROWSER_TEST_F(FlyWorkspaceBrowserTest,
                        NativeDownloadsAndDiagnosticsSurfacesOpenAndClose) {
   ASSERT_TRUE(ui_test_utils::NavigateToURL(
       browser(), embedded_test_server()->GetURL("/title1.html")));
-  auto& window = FlyWindowController::Get();
+  auto& window = Window();
   ASSERT_TRUE(InvokeNativeCommand(browser(), "toggle-downloads"));
   auto& picker = window.downloads_picker();
   ASSERT_TRUE(base::test::RunUntil([&] { return picker.active(); }));
@@ -4767,8 +4647,7 @@ IN_PROC_BROWSER_TEST_F(FlyWorkspaceBrowserTest, PopupsAreTransientForFly) {
       static_cast<x11::Window>(
           widget->GetNativeWindow()->GetHost()->GetAcceleratedWidget()),
       x11::Atom::WM_TRANSIENT_FOR, &owner));
-  EXPECT_EQ(static_cast<x11::Window>(FlyWindowController::Get()
-                                         .desktop_widget()
+  EXPECT_EQ(static_cast<x11::Window>(Window().widget()
                                          ->GetNativeWindow()
                                          ->GetHost()
                                          ->GetAcceleratedWidget()),
@@ -4776,7 +4655,7 @@ IN_PROC_BROWSER_TEST_F(FlyWorkspaceBrowserTest, PopupsAreTransientForFly) {
 }
 
 IN_PROC_BROWSER_TEST_F(FlyWorkspaceBrowserTest, DashboardDragReordersTabs) {
-  auto& window = FlyWindowController::Get();
+  auto& window = Window();
   ASSERT_TRUE(ui_test_utils::NavigateToURL(
       browser(), embedded_test_server()->GetURL("/title1.html")));
   ASSERT_TRUE(ui_test_utils::NavigateToURLWithDisposition(
@@ -4795,7 +4674,7 @@ IN_PROC_BROWSER_TEST_F(FlyWorkspaceBrowserTest, DashboardDragReordersTabs) {
   ASSERT_TRUE(from && to);
   views::test::RunScheduledLayout(from->GetWidget());
   ui::test::EventGenerator mouse(
-      window.desktop_widget()->GetNativeWindow()->GetRootWindow());
+      window.widget()->GetNativeWindow()->GetRootWindow());
   mouse.MoveMouseTo(from->GetBoundsInScreen().CenterPoint());
   mouse.PressLeftButton();
   mouse.MoveMouseBy(0, -10);
@@ -4810,7 +4689,7 @@ IN_PROC_BROWSER_TEST_F(FlyWorkspaceBrowserTest, DashboardDragReordersTabs) {
 
 IN_PROC_BROWSER_TEST_F(FlyWorkspaceBrowserTest,
                        DashboardListsWorkspaceTabsAndOpensThem) {
-  auto& window = FlyWindowController::Get();
+  auto& window = Window();
   auto* original = browser();
   ASSERT_TRUE(ui_test_utils::NavigateToURL(
       original, embedded_test_server()->GetURL("/title1.html")));
@@ -4819,9 +4698,9 @@ IN_PROC_BROWSER_TEST_F(FlyWorkspaceBrowserTest,
       WindowOpenDisposition::NEW_FOREGROUND_TAB,
       ui_test_utils::BROWSER_TEST_WAIT_FOR_LOAD_STOP));
   original->GetTabStripModel()->SetTabPinned(1, true);
-  window.CreateWorkspace("Second");
+  App().CreateWorkspace("Second");
   ASSERT_TRUE(base::test::RunUntil([&] {
-    auto* selected = window.selected_browser_for_testing();
+    auto* selected = LastActive();
     return selected && selected != original &&
            selected->GetTabStripModel()->count() == 1;
   }));
@@ -4840,55 +4719,21 @@ IN_PROC_BROWSER_TEST_F(FlyWorkspaceBrowserTest,
   EXPECT_TRUE(titles[2].starts_with("- ") &&
               titles[2].find("title1.html") != std::string::npos)
       << titles[2];
-  EXPECT_EQ("Second (Active)", titles[3]);
+  // The other workspace is listed; this window's own one is marked active.
+  EXPECT_EQ("Second", titles[3]);
   EXPECT_EQ(entries[1].action, pinned_action);
   EXPECT_EQ(2u, entries[0].row_actions.size());
   EXPECT_EQ(1, entries[2].indent);
   window.choose_workspace_for_testing(entries[2].action);
   ASSERT_TRUE(base::test::RunUntil(
-      [&] { return window.selected_browser_for_testing() == original; }));
+      [&] { return LastActive() == original; }));
   EXPECT_EQ(1, original->GetTabStripModel()->active_index());
-}
-
-// A workspace whose last tab closed stays and shows its empty view; the view's
-// New Tab card reopens that workspace.
-IN_PROC_BROWSER_TEST_F(FlyWorkspaceBrowserTest,
-                       LastTabClosedShowsTheWorkspaceWelcomeView) {
-  auto& window = FlyWindowController::Get();
-  auto* original = browser();
-  window.CreateWorkspace("Empty soon");
-  ASSERT_TRUE(base::test::RunUntil([&] {
-    auto* selected = window.selected_browser_for_testing();
-    return selected && selected != original &&
-           selected->GetTabStripModel()->count() == 1;
-  }));
-  auto second = window.selected_browser_for_testing()->GetWeakPtr();
-  auto* second_profile = second->GetProfile();
-  ASSERT_TRUE(ExecuteNativeCommand(second.get(), "remove-tab"));
-  ASSERT_TRUE(base::test::RunUntil([&] { return !second; }));
-  EXPECT_EQ(nullptr, window.selected_browser_for_testing());
-  auto* welcome = window.welcome_for_testing();
-  ASSERT_TRUE(welcome);
-  EXPECT_TRUE(welcome->GetVisible());
-  EXPECT_EQ(u"EMPTY SOON", welcome->workspace_for_testing());
-  EXPECT_EQ(u"Empty soon", window.workspace_header_for_testing());
-  EXPECT_EQ(u"EMPTY SOON",
-            window.status_bar_for_testing()->workspace_for_testing()->GetText());
-  auto* new_tab = static_cast<views::Button*>(welcome->card_for_testing(0));
-  ASSERT_TRUE(new_tab);
-  views::test::ButtonTestApi(new_tab).NotifyDefaultMouseClick();
-  ASSERT_TRUE(base::test::RunUntil([&] {
-    auto* selected = window.selected_browser_for_testing();
-    return selected && selected->GetProfile() == second_profile;
-  }));
-  EXPECT_FALSE(welcome->GetVisible());
 }
 
 // Site zoom changes by 0.5 levels per step and one level per hostname is shared
 // by every normal workspace, whatever path changed it.
 IN_PROC_BROWSER_TEST_F(FlyWorkspaceBrowserTest,
                        SiteZoomUsesHalfLevelStepsAndIsSharedByWorkspaces) {
-  auto& window = FlyWindowController::Get();
   auto* original = browser();
   const GURL page = embedded_test_server()->GetURL("/title1.html");
   ASSERT_TRUE(ui_test_utils::NavigateToURL(original, page));
@@ -4902,13 +4747,13 @@ IN_PROC_BROWSER_TEST_F(FlyWorkspaceBrowserTest,
   EXPECT_DOUBLE_EQ(0.5, level(original));
   ASSERT_TRUE(InvokeNativeCommand(original, "zoom-in"));
   EXPECT_DOUBLE_EQ(1.0, level(original));
-  window.CreateWorkspace();
+  App().CreateWorkspace();
   ASSERT_TRUE(base::test::RunUntil([&] {
-    auto* selected = window.selected_browser_for_testing();
+    auto* selected = LastActive();
     return selected && selected != original &&
            selected->GetTabStripModel()->count() == 1;
   }));
-  auto* second = window.selected_browser_for_testing();
+  auto* second = LastActive();
   // A workspace created later takes the shared levels.
   EXPECT_DOUBLE_EQ(1.0, level(second));
   ASSERT_TRUE(ui_test_utils::NavigateToURL(second, page));
@@ -4935,7 +4780,7 @@ IN_PROC_BROWSER_TEST_F(FlyWorkspaceBrowserTest,
   ASSERT_TRUE(InvokeNativeCommand(browser(), "toggle-reader-view"));
   ASSERT_TRUE(base::test::RunUntil(open));
   EXPECT_EQ(article, contents->GetLastCommittedURL());
-  auto& window = FlyWindowController::Get();
+  auto& window = Window();
   ASSERT_TRUE(base::test::RunUntil(
       [&] { return window.reader_button_for_testing()->selected(); }));
   ASSERT_TRUE(InvokeNativeCommand(browser(), "toggle-reader-view"));
@@ -4962,8 +4807,7 @@ IN_PROC_BROWSER_TEST_F(FlyWorkspaceBrowserTest,
     if (!base::PathExists(assets.AppendASCII("fly_extensions").AppendASCII(kId)))
       GTEST_SKIP() << "bundled extensions are not staged in this build";
   }
-  auto& window = FlyWindowController::Get();
-  auto& extensions = window.extensions();
+  auto& extensions = App().extensions();
   auto loaded = [&](BrowserWindowInterface* browser) {
     return extensions::ExtensionRegistry::Get(browser->GetProfile())
                ->enabled_extensions()
@@ -4973,6 +4817,7 @@ IN_PROC_BROWSER_TEST_F(FlyWorkspaceBrowserTest,
   auto* second = SecondWorkspace();
   ASSERT_TRUE(second);
   ASSERT_TRUE(base::test::RunUntil([&] { return loaded(second); }));
+  auto& window = Window(second);
   ASSERT_TRUE(base::test::RunUntil([&] {
     return window.extension_actions_for_testing()->children().size() == 1u;
   }));
@@ -5016,7 +4861,7 @@ IN_PROC_BROWSER_TEST_F(FlyWorkspaceBrowserTest,
 
 IN_PROC_BROWSER_TEST_F(FlyWorkspaceBrowserTest,
                        LocalExtensionsLandInTheExtensionsFolderAndReplace) {
-  auto& extensions = FlyWindowController::Get().extensions();
+  auto& extensions = FlyApp::Get().extensions();
   auto* profile = browser()->GetProfile();
   // Outlives `sources`, whose destructor deletes files.
   base::ScopedAllowBlockingForTesting allow_temp_dir;
@@ -5075,7 +4920,7 @@ IN_PROC_BROWSER_TEST_F(FlyWorkspaceBrowserTest,
   write(folder, "Fly Local Folder", "not-a-version");
   extensions.LoadUnpacked(profile, folder);
   ASSERT_TRUE(base::test::RunUntil([&] {
-    return FlyWindowController::Get().status_text_for_testing().starts_with(
+    return Window().status_text_for_testing().starts_with(
         u"The extension could not be loaded");
   }));
   EXPECT_EQ(local_folders(), names);
@@ -5097,10 +4942,10 @@ IN_PROC_BROWSER_TEST_F(FlyWorkspaceBrowserTest,
         "{\"name\":\"Fly Local Folder\",\"version\":\"3\","
         "\"manifest_version\":3,\"key\":\"not base64!\"}"));
   }
-  FlyWindowController::Get().ShowStatus(u"");
+  Window().ShowStatus(u"");
   extensions.LoadUnpacked(profile, folder);
   ASSERT_TRUE(base::test::RunUntil([&] {
-    return FlyWindowController::Get().status_text_for_testing().starts_with(
+    return Window().status_text_for_testing().starts_with(
         u"The extension could not be loaded");
   }));
   EXPECT_EQ(local_folders(), names);
@@ -5182,12 +5027,11 @@ IN_PROC_BROWSER_TEST_F(FlyWorkspaceBrowserTest,
         "@-moz-document domain(\"127.0.0.1\") {\n"
         "body { color: rgb(1, 2, 3) !important; }\n}\n"));
   }
-  auto& window = FlyWindowController::Get();
-  window.user_content().Reload();
+  App().user_content().Reload();
   // A generation that started before both files existed can finish first.
   ASSERT_TRUE(base::test::RunUntil([&] {
-    return window.user_content().script_count() == 1u &&
-           window.user_content().style_count() == 1u;
+    return App().user_content().script_count() == 1u &&
+           App().user_content().style_count() == 1u;
   }));
   const auto url = embedded_test_server()->GetURL("/title1.html");
   auto visits = [&] {
@@ -5274,10 +5118,9 @@ IN_PROC_BROWSER_TEST_F(FlyGmRequestBrowserTest, RedirectHopsAreCheckedBeforeSend
                "  send('local', base + '/server-redirect?http://127.0.0.1:' + "
                "location.port + '/echo?local');\n")));
   }
-  auto& window = FlyWindowController::Get();
-  window.user_content().Reload();
+  App().user_content().Reload();
   ASSERT_TRUE(base::test::RunUntil(
-      [&] { return window.user_content().script_count() == 2u; }));
+      [&] { return App().user_content().script_count() == 2u; }));
   const auto url = embedded_test_server()->GetURL("page.test", "/title1.html");
   const auto result = [&](std::string_view key) {
     return content::EvalJs(Active(browser()),
@@ -5354,7 +5197,7 @@ IN_PROC_BROWSER_TEST_F(FlyHistoryRestoreBrowserTest,
   }));
   // Querying history does not open a browser or change the selected workspace.
   EXPECT_EQ(browser(),
-            FlyWindowController::Get().selected_browser_for_testing());
+            LastActive());
 }
 
 IN_PROC_BROWSER_TEST_F(FlyWorkspaceBrowserTest,
@@ -5382,7 +5225,7 @@ IN_PROC_BROWSER_TEST_F(FlyWorkspaceBrowserTest,
 IN_PROC_BROWSER_TEST_F(
     FlyWorkspaceBrowserTest,
     NativeSearchPreferencesSaveWithoutChangingKeyboardDraft) {
-  auto& window = FlyWindowController::Get();
+  auto& window = Window();
   ASSERT_TRUE(InvokeNativeCommand(browser(), "toggle-help"));
   auto& editor = window.keyboard_editor();
   ASSERT_TRUE(editor.active());
@@ -5442,7 +5285,7 @@ IN_PROC_BROWSER_TEST_F(FlyWorkspaceBrowserTest,
                        NativeAddressAliasesNavigateWithinSelectedProfile) {
   auto* second = SecondWorkspace();
   ASSERT_TRUE(second);
-  auto& window = FlyWindowController::Get();
+  auto& window = Window(second);
   ASSERT_TRUE(ui_test_utils::NavigateToURL(
       second, embedded_test_server()->GetURL("/title1.html")));
   auto* page = Active(second);
@@ -5463,7 +5306,7 @@ IN_PROC_BROWSER_TEST_F(FlyWorkspaceBrowserTest,
   address.ContentsChanged(address.search_for_testing(), u"fixture c++ & rust");
   ASSERT_EQ(1u, address.result_count_for_testing());
   ui::test::EventGenerator keys(
-      window.desktop_widget()->GetNativeWindow()->GetRootWindow());
+      window.widget()->GetNativeWindow()->GetRootWindow());
   keys.PressKey(ui::VKEY_RETURN, ui::EF_NONE);
   ASSERT_TRUE(base::test::RunUntil([&] {
     return page->GetLastCommittedURL() ==
@@ -5474,13 +5317,12 @@ IN_PROC_BROWSER_TEST_F(FlyWorkspaceBrowserTest,
   EXPECT_EQ(id, TabIdentity::Get(page));
   EXPECT_EQ("address=destination", content::EvalJs(page, "document.cookie"));
   EXPECT_EQ(saved, g_browser_process->local_state()->GetDict(kPreferencesPref));
-  EXPECT_EQ(second, window.selected_browser_for_testing());
+  EXPECT_EQ(second, LastActive());
 }
 
 IN_PROC_BROWSER_TEST_F(
     FlyWorkspaceBrowserTest,
     NativeAddressPrivateNavigationKeepsNormalStateUntouched) {
-  auto& window = FlyWindowController::Get();
   const auto url = embedded_test_server()->GetURL("/title1.html");
   ASSERT_TRUE(ui_test_utils::NavigateToURL(browser(), url));
   auto* normal = Active(browser());
@@ -5490,11 +5332,12 @@ IN_PROC_BROWSER_TEST_F(
       g_browser_process->local_state()->GetDict(kPreferencesPref).Clone();
   ASSERT_TRUE(InvokeNativeCommand(browser(), "toggle-private-mode"));
   ASSERT_TRUE(base::test::RunUntil(
-      [&] { return window.selected_browser_for_testing() != browser(); }));
-  auto* private_browser = window.selected_browser_for_testing();
+      [&] { return LastActive() != browser(); }));
+  auto* private_browser = LastActive();
   ASSERT_TRUE(private_browser->GetProfile()->IsOffTheRecord());
   auto* page = Active(private_browser);
   ASSERT_TRUE(content::WaitForLoadStop(page));
+  auto& window = Window(private_browser);
   auto& address = window.address_picker();
   if (!address.active())
     ASSERT_TRUE(InvokeNativeCommand(private_browser, "toggle-address"));
@@ -5503,7 +5346,7 @@ IN_PROC_BROWSER_TEST_F(
   address.search_for_testing()->SetText(input);
   address.ContentsChanged(address.search_for_testing(), input);
   ui::test::EventGenerator keys(
-      window.desktop_widget()->GetNativeWindow()->GetRootWindow());
+      window.widget()->GetNativeWindow()->GetRootWindow());
   keys.PressKey(ui::VKEY_RETURN, ui::EF_NONE);
   ASSERT_TRUE(
       base::test::RunUntil([&] { return page->GetLastCommittedURL() == url; }));
@@ -5536,26 +5379,32 @@ IN_PROC_BROWSER_TEST_F(FlyWorkspaceBrowserTest,
                                       &Workspace::profile_directory);
   ASSERT_NE(item, catalog->items.end());
   ASSERT_TRUE(service.Rename(item->id, "Address workspace fixture"));
-  auto& window = FlyWindowController::Get();
-  auto& address = window.address_picker();
+  auto& second_window = Window(second);
+  auto& second_address = second_window.address_picker();
   ASSERT_TRUE(InvokeNativeCommand(second, "toggle-address"));
   ASSERT_TRUE(base::test::RunUntil([&] {
-    return address.active() && address.search_for_testing()->HasFocus();
+    return second_address.active() &&
+           second_address.search_for_testing()->HasFocus();
   }));
-  address.search_for_testing()->SetText(u"ws:Address workspace fixture");
-  address.ContentsChanged(address.search_for_testing(),
-                          u"ws:Address workspace fixture");
-  ASSERT_EQ(1u, address.result_count_for_testing());
-  ui::test::EventGenerator keys(
-      window.desktop_widget()->GetNativeWindow()->GetRootWindow());
-  keys.PressKey(ui::VKEY_RETURN, ui::EF_NONE);
+  second_address.search_for_testing()->SetText(
+      u"ws:Address workspace fixture");
+  second_address.ContentsChanged(second_address.search_for_testing(),
+                                 u"ws:Address workspace fixture");
+  ASSERT_EQ(1u, second_address.result_count_for_testing());
+  ui::test::EventGenerator second_keys(
+      second_window.widget()->GetNativeWindow()->GetRootWindow());
+  second_keys.PressKey(ui::VKEY_RETURN, ui::EF_NONE);
   ASSERT_TRUE(base::test::RunUntil([&] {
-    return window.selected_browser_for_testing() == browser() &&
-           !address.search_for_testing();
+    return LastActive() == browser() &&
+           !second_address.search_for_testing();
   }));
+  auto& window = Window();
+  auto& address = window.address_picker();
+  ui::test::EventGenerator keys(
+      window.widget()->GetNativeWindow()->GetRootWindow());
   const auto target = embedded_test_server()->GetURL("/title2.html");
   ASSERT_TRUE(
-      window.bookmarks().Add(target.spec(), "Address bookmark fixture"));
+      App().bookmarks().Add(target.spec(), "Address bookmark fixture"));
   ASSERT_TRUE(InvokeNativeCommand(browser(), "toggle-address"));
   ASSERT_TRUE(base::test::RunUntil([&] {
     return address.active() && address.search_for_testing()->HasFocus();
@@ -5582,7 +5431,7 @@ IN_PROC_BROWSER_TEST_F(FlyWorkspaceBrowserTest,
       content::ExecJs(page,
                       "document.body.innerHTML='<input "
                       "id=entry>';document.querySelector('#entry').focus();"));
-  auto& window = FlyWindowController::Get();
+  auto& window = Window();
   const auto original = page->GetLastCommittedURL();
   ASSERT_TRUE(InvokeNativeCommand(browser(), "toggle-address"));
   auto& address = window.address_picker();
@@ -5591,7 +5440,7 @@ IN_PROC_BROWSER_TEST_F(FlyWorkspaceBrowserTest,
   address.ContentsChanged(address.search_for_testing(),
                           u"never-persist-this-query");
   ui::test::EventGenerator keys(
-      window.desktop_widget()->GetNativeWindow()->GetRootWindow());
+      window.widget()->GetNativeWindow()->GetRootWindow());
   keys.PressKey(ui::VKEY_ESCAPE, ui::EF_NONE);
   ASSERT_TRUE(base::test::RunUntil([&] {
     return !address.search_for_testing() &&
@@ -5617,7 +5466,7 @@ IN_PROC_BROWSER_TEST_F(FlyWorkspaceBrowserTest,
 
 IN_PROC_BROWSER_TEST_F(FlyWorkspaceBrowserTest,
                        NativeClockUsesLiveAppPreferencesWithoutTickWrites) {
-  auto& window = FlyWindowController::Get();
+  auto& window = Window();
   auto* clock = window.clock_for_testing();
   ASSERT_TRUE(clock);
   ASSERT_TRUE(base::test::RunUntil([&] {
@@ -5626,23 +5475,23 @@ IN_PROC_BROWSER_TEST_F(FlyWorkspaceBrowserTest,
   auto* state = g_browser_process->local_state();
   EXPECT_EQ(nullptr, state->GetUserPrefValue(kPreferencesPref));
   views::test::ButtonTestApi(clock).NotifyDefaultMouseClick();
-  ASSERT_TRUE(window.preferences().ReadClock());
-  EXPECT_EQ("time", window.preferences().ReadClock()->format);
+  ASSERT_TRUE(App().preferences().ReadClock());
+  EXPECT_EQ("time", App().preferences().ReadClock()->format);
   ASSERT_TRUE(NativeCommandAvailable(browser(), "cycle-clock-format"));
   ASSERT_TRUE(InvokeNativeCommand(browser(), "cycle-clock-format"));
-  EXPECT_EQ("seconds", window.preferences().ReadClock()->format);
+  EXPECT_EQ("seconds", App().preferences().ReadClock()->format);
   ASSERT_TRUE(NativeCommandAvailable(browser(), "toggle-clock"));
-  ASSERT_TRUE(window.RunCommand(browser(), "toggle-clock"));
+  ASSERT_TRUE(Window(browser()).RunCommand("toggle-clock"));
   EXPECT_FALSE(clock->GetVisible());
-  EXPECT_FALSE(window.preferences().ReadClock()->visible);
-  ASSERT_TRUE(window.RunCommand(browser(), "toggle-clock"));
+  EXPECT_FALSE(App().preferences().ReadClock()->visible);
+  ASSERT_TRUE(Window(browser()).RunCommand("toggle-clock"));
   EXPECT_TRUE(clock->GetVisible());
   const auto future = base::DictValue().Set("schema", 2)
       .Set("values", base::DictValue().Set("show_clock", true));
   state->SetDict(kPreferencesPref, future.Clone());
   EXPECT_FALSE(clock->GetVisible());
   EXPECT_FALSE(NativeCommandAvailable(browser(), "toggle-clock"));
-  EXPECT_FALSE(window.RunCommand(browser(), "toggle-clock"));
+  EXPECT_FALSE(Window(browser()).RunCommand("toggle-clock"));
   EXPECT_EQ(future, state->GetDict(kPreferencesPref));
 }
 
@@ -5656,14 +5505,14 @@ IN_PROC_BROWSER_TEST_F(FlyWorkspaceBrowserTest,
       "document.querySelector('#entry').focus();"
       "window.visibilityEvents=0;"
       "document.addEventListener('visibilitychange',()=>visibilityEvents++)"));
-  auto& window = FlyWindowController::Get();
-  window.Select(browser(), true);
-  const auto keyboard = window.commands().Read();
+  auto& window = Window();
+  Activate(browser());
+  const auto keyboard = App().commands().Read();
   ASSERT_TRUE(keyboard);
   auto* pointer = window.preferences_button_for_testing();
   ASSERT_TRUE(pointer && pointer->GetEnabled());
   ui::test::EventGenerator keys(
-      window.desktop_widget()->GetNativeWindow()->GetRootWindow());
+      window.widget()->GetNativeWindow()->GetRootWindow());
   keys.MoveMouseTo(pointer->GetBoundsInScreen().CenterPoint());
   keys.ClickLeftButton();
   auto& editor = window.keyboard_editor();
@@ -5682,14 +5531,14 @@ IN_PROC_BROWSER_TEST_F(FlyWorkspaceBrowserTest,
     views::test::ButtonTestApi(checkbox).NotifyDefaultMouseClick();
     EXPECT_FALSE(checkbox->GetChecked());
   }
-  EXPECT_EQ("light", window.preferences().ReadTheme()->mode);
-  EXPECT_FALSE(window.preferences().ReadTheme()->sync_websites);
+  EXPECT_EQ("light", App().preferences().ReadTheme()->mode);
+  EXPECT_FALSE(App().preferences().ReadTheme()->sync_websites);
   EXPECT_FALSE(window.clock_for_testing()->GetVisible());
   EXPECT_FALSE(window.status_bar_for_testing()->GetVisible());
   editor.clock_format_for_testing()->Choose(1);
-  EXPECT_EQ("time", window.preferences().ReadClock()->format);
+  EXPECT_EQ("time", App().preferences().ReadClock()->format);
   EXPECT_EQ(u"Ctrl+Y", editor.bindings_for_testing("spawn-tab", false));
-  ASSERT_TRUE(window.preferences().ToggleTheme());
+  ASSERT_TRUE(App().preferences().ToggleTheme());
   EXPECT_TRUE(editor.appearance_for_testing("theme")->GetChecked());
   EXPECT_EQ(u"Ctrl+Y", editor.bindings_for_testing("spawn-tab", false));
   ASSERT_TRUE(NativeCommandAvailable(browser(), "open-keyboard-settings"));
@@ -5708,8 +5557,8 @@ IN_PROC_BROWSER_TEST_F(FlyWorkspaceBrowserTest,
   keys.PressKey(ui::VKEY_ESCAPE, ui::EF_NONE);
   ASSERT_TRUE(base::test::RunUntil([&] { return !editor.root_for_testing(); }));
   EXPECT_EQ(appearance, state->GetDict(kPreferencesPref));
-  ASSERT_TRUE(window.commands().Read());
-  EXPECT_EQ(keyboard->shortcuts, window.commands().Read()->shortcuts);
+  ASSERT_TRUE(App().commands().Read());
+  EXPECT_EQ(keyboard->shortcuts, App().commands().Read()->shortcuts);
   ASSERT_TRUE(base::test::RunUntil([&] {
     return content::EvalJs(contents, "document.hasFocus()").ExtractBool();
   }));
@@ -5723,12 +5572,12 @@ IN_PROC_BROWSER_TEST_F(FlyWorkspaceBrowserTest,
 
 IN_PROC_BROWSER_TEST_F(FlyWorkspaceBrowserTest,
                        PreferencesRefuseFutureDataAndIgnoreCancelledCallbacks) {
-  auto& window = FlyWindowController::Get();
+  auto& window = Window();
   auto* state = g_browser_process->local_state();
   const auto future = base::DictValue().Set("schema", 2)
       .Set("values", base::DictValue().Set("show_clock", true));
   state->SetDict(kPreferencesPref, future.Clone());
-  ASSERT_TRUE(window.RunCommand(browser(), "toggle-help"));
+  ASSERT_TRUE(Window(browser()).RunCommand("toggle-help"));
   auto& editor = window.keyboard_editor();
   ASSERT_TRUE(editor.active());
   editor.ShowAppearance();
@@ -5766,14 +5615,14 @@ IN_PROC_BROWSER_TEST_F(FlyWorkspaceBrowserTest,
   ASSERT_TRUE(content::ExecJs(contents,
                               "document.body.innerHTML='<input id=editable>';"
                               "document.querySelector('#editable').focus()"));
-  auto& window = FlyWindowController::Get();
-  ASSERT_TRUE(window.RunCommand(browser(), "toggle-help"));
+  auto& window = Window();
+  ASSERT_TRUE(Window(browser()).RunCommand("toggle-help"));
   auto& editor = window.keyboard_editor();
   ASSERT_TRUE(editor.active());
   // Preferences opens on General.
   editor.ShowKeyboard();
   ui::test::EventGenerator keys(
-      window.desktop_widget()->GetNativeWindow()->GetRootWindow());
+      window.widget()->GetNativeWindow()->GetRootWindow());
   for (auto key : {ui::VKEY_S, ui::VKEY_P, ui::VKEY_A, ui::VKEY_W, ui::VKEY_N})
     keys.PressKey(key, ui::EF_NONE);
   ASSERT_TRUE(base::test::RunUntil([&] {
@@ -5797,9 +5646,9 @@ IN_PROC_BROWSER_TEST_F(FlyWorkspaceBrowserTest,
   EXPECT_TRUE(editor.active());
   keys.PressKey(ui::VKEY_ESCAPE, ui::EF_NONE);
   ASSERT_TRUE(base::test::RunUntil([&] { return !editor.root_for_testing(); }));
-  ASSERT_TRUE(window.commands().Read());
+  ASSERT_TRUE(App().commands().Read());
   EXPECT_EQ(std::vector<std::string>({"Ctrl+Y"}),
-            window.commands().Read()->shortcuts.at("spawn-tab"));
+            App().commands().Read()->shortcuts.at("spawn-tab"));
   keys.PressKey(ui::VKEY_J, ui::EF_NONE);
   ASSERT_TRUE(base::test::RunUntil([&] {
     return content::EvalJs(contents,
@@ -5824,14 +5673,14 @@ IN_PROC_BROWSER_TEST_F(FlyWorkspaceBrowserTest,
                               "document.body.innerHTML='<button id=focus>Page</button>';"
                               "document.body.style.height='5000px';"
                               "document.querySelector('#focus').focus()"));
-  auto& window = FlyWindowController::Get();
-  ASSERT_TRUE(window.RunCommand(browser(), "toggle-help"));
+  auto& window = Window();
+  ASSERT_TRUE(Window(browser()).RunCommand("toggle-help"));
   auto& editor = window.keyboard_editor();
   auto* record = editor.record_for_testing("scroll-down", true);
   ASSERT_TRUE(record);
   views::test::ButtonTestApi(record).NotifyDefaultMouseClick();
   ui::test::EventGenerator keys(
-      window.desktop_widget()->GetNativeWindow()->GetRootWindow());
+      window.widget()->GetNativeWindow()->GetRootWindow());
   keys.PressKey(ui::VKEY_Q, ui::EF_NONE);
   EXPECT_TRUE(editor.recording());
   keys.PressKey(ui::VKEY_Q, ui::EF_NONE);
@@ -5850,50 +5699,50 @@ IN_PROC_BROWSER_TEST_F(FlyWorkspaceBrowserTest,
 
 IN_PROC_BROWSER_TEST_F(FlyWorkspaceBrowserTest,
                        NativeKeyboardRecorderRetainsSemicolonBindings) {
-  auto& window = FlyWindowController::Get();
-  ASSERT_TRUE(window.RunCommand(browser(), "toggle-help"));
+  auto& window = Window();
+  ASSERT_TRUE(Window(browser()).RunCommand("toggle-help"));
   auto& editor = window.keyboard_editor();
   auto* record = editor.record_for_testing("scroll-down", true);
   ASSERT_TRUE(record);
   views::test::ButtonTestApi(record).NotifyDefaultMouseClick();
   ui::test::EventGenerator keys(
-      window.desktop_widget()->GetNativeWindow()->GetRootWindow());
+      window.widget()->GetNativeWindow()->GetRootWindow());
   keys.PressKey(ui::VKEY_OEM_1, ui::EF_NONE);
   ASSERT_TRUE(base::test::RunUntil([&] { return !editor.recording(); }));
   EXPECT_EQ(u"J\n;", editor.bindings_for_testing("scroll-down", true));
   views::test::ButtonTestApi(editor.save_for_testing()).NotifyDefaultMouseClick();
   keys.PressKey(ui::VKEY_ESCAPE, ui::EF_NONE);
   ASSERT_TRUE(base::test::RunUntil([&] { return !editor.root_for_testing(); }));
-  const auto config = window.commands().Read();
+  const auto config = App().commands().Read();
   ASSERT_TRUE(config);
   EXPECT_EQ((std::vector<std::string>{"J", ";"}), config->normal.at("scroll-down"));
 }
 
 IN_PROC_BROWSER_TEST_F(FlyWorkspaceBrowserTest,
                        NativeKeyboardEditorPreservesConflictsAndConcurrentEdits) {
-  auto& window = FlyWindowController::Get();
-  const auto before = window.commands().Read();
+  auto& window = Window();
+  const auto before = App().commands().Read();
   ASSERT_TRUE(before);
-  ASSERT_TRUE(window.RunCommand(browser(), "toggle-help"));
+  ASSERT_TRUE(Window(browser()).RunCommand("toggle-help"));
   auto& editor = window.keyboard_editor();
   auto* record = editor.record_for_testing("go-back", false);
   ASSERT_TRUE(record);
   views::test::ButtonTestApi(record).NotifyDefaultMouseClick();
   ui::test::EventGenerator keys(
-      window.desktop_widget()->GetNativeWindow()->GetRootWindow());
+      window.widget()->GetNativeWindow()->GetRootWindow());
   keys.PressKey(ui::VKEY_T, ui::EF_CONTROL_DOWN);
   views::test::ButtonTestApi(editor.save_for_testing()).NotifyDefaultMouseClick();
   EXPECT_TRUE(editor.active());
   EXPECT_NE(std::u16string::npos, editor.error_for_testing().find(u"Conflicting"));
-  EXPECT_EQ(before, window.commands().Read());
+  EXPECT_EQ(before, App().commands().Read());
   auto external = before->ToValue();
   external.FindDict("shortcuts")->Set("spawn-tab", base::ListValue().Append("Ctrl+Y"));
-  ASSERT_TRUE(window.commands().Save(external).config);
-  const auto newer = window.commands().Read();
+  ASSERT_TRUE(App().commands().Save(external).config);
+  const auto newer = App().commands().Read();
   views::test::ButtonTestApi(editor.save_for_testing()).NotifyDefaultMouseClick();
   EXPECT_TRUE(editor.active());
   EXPECT_NE(std::u16string::npos, editor.error_for_testing().find(u"changed"));
-  EXPECT_EQ(newer, window.commands().Read());
+  EXPECT_EQ(newer, App().commands().Read());
   keys.PressKey(ui::VKEY_ESCAPE, ui::EF_NONE);
   EXPECT_TRUE(editor.active());
   keys.PressKey(ui::VKEY_ESCAPE, ui::EF_NONE);
@@ -5902,15 +5751,15 @@ IN_PROC_BROWSER_TEST_F(FlyWorkspaceBrowserTest,
 
 IN_PROC_BROWSER_TEST_F(FlyWorkspaceBrowserTest,
                        NativeKeyboardRecordingCancelsAcrossWorkspaceChanges) {
-  auto& window = FlyWindowController::Get();
-  const auto before = window.commands().Read();
-  ASSERT_TRUE(window.RunCommand(browser(), "toggle-help"));
+  auto& window = Window();
+  const auto before = App().commands().Read();
+  ASSERT_TRUE(Window(browser()).RunCommand("toggle-help"));
   auto& editor = window.keyboard_editor();
   auto* record = editor.record_for_testing("scroll-down", true);
   ASSERT_TRUE(record);
   views::test::ButtonTestApi(record).NotifyDefaultMouseClick();
   ui::test::EventGenerator keys(
-      window.desktop_widget()->GetNativeWindow()->GetRootWindow());
+      window.widget()->GetNativeWindow()->GetRootWindow());
   keys.PressKey(ui::VKEY_Q, ui::EF_NONE);
   keys.PressKey(ui::VKEY_ESCAPE, ui::EF_NONE);
   EXPECT_FALSE(editor.recording());
@@ -5921,21 +5770,22 @@ IN_PROC_BROWSER_TEST_F(FlyWorkspaceBrowserTest,
   ASSERT_TRUE(second);
   ASSERT_TRUE(base::test::RunUntil([&] { return !editor.root_for_testing(); }));
   EXPECT_FALSE(editor.recording());
-  ASSERT_TRUE(window.RunCommand(second, "toggle-help"));
-  EXPECT_EQ(u"J", editor.bindings_for_testing("scroll-down", true));
-  EXPECT_EQ(before, window.commands().Read());
+  ASSERT_TRUE(Window(second).RunCommand("toggle-help"));
+  EXPECT_EQ(u"J", Window(second).keyboard_editor().bindings_for_testing(
+                      "scroll-down", true));
+  EXPECT_EQ(before, App().commands().Read());
 }
 
 // Enter applies a text field in any section, also while other sections' and
 // hidden rows' fields do not exist.
 IN_PROC_BROWSER_TEST_F(FlyWorkspaceBrowserTest,
                        PreferencesTextFieldsApplyWithEnterInAnySection) {
-  auto& window = FlyWindowController::Get();
-  ASSERT_TRUE(window.RunCommand(browser(), "toggle-help"));
+  auto& window = Window();
+  ASSERT_TRUE(Window(browser()).RunCommand("toggle-help"));
   auto& editor = window.keyboard_editor();
   ASSERT_TRUE(editor.active());
   ui::test::EventGenerator keys(
-      window.desktop_widget()->GetNativeWindow()->GetRootWindow());
+      window.widget()->GetNativeWindow()->GetRootWindow());
   editor.ShowAppearance();
   auto* accent = editor.color_field_for_testing("accent");
   ASSERT_TRUE(accent);
@@ -5944,12 +5794,12 @@ IN_PROC_BROWSER_TEST_F(FlyWorkspaceBrowserTest,
   keys.PressKey(ui::VKEY_RETURN, ui::EF_NONE);
   base::RunLoop().RunUntilIdle();
   ASSERT_TRUE(editor.active());
-  const bool dark = window.preferences().ReadTheme()->mode == "dark";
+  const bool dark = App().preferences().ReadTheme()->mode == "dark";
   EXPECT_EQ("#123456",
-            window.preferences().ReadThemeColor(dark, "accent").value_or(""));
+            App().preferences().ReadThemeColor(dark, "accent").value_or(""));
   // Every preference change refreshes the controls that are built.
-  ASSERT_TRUE(window.preferences().SetStatusBarVisible(false));
-  ASSERT_TRUE(window.preferences().SetStatusBarVisible(true));
+  ASSERT_TRUE(App().preferences().SetStatusBarVisible(false));
+  ASSERT_TRUE(App().preferences().SetStatusBarVisible(true));
   EXPECT_TRUE(editor.active());
   // A search that hides the search URL row still saves an alias with Enter.
   auto* search = editor.settings_search_for_testing();
@@ -5974,12 +5824,12 @@ IN_PROC_BROWSER_TEST_F(FlyWorkspaceBrowserTest,
 // In the shortcut table, typing filters and Space records.
 IN_PROC_BROWSER_TEST_F(FlyWorkspaceBrowserTest,
                        KeyboardTableTypingFiltersAndSpaceRecords) {
-  auto& window = FlyWindowController::Get();
-  ASSERT_TRUE(window.RunCommand(browser(), "toggle-help"));
+  auto& window = Window();
+  ASSERT_TRUE(Window(browser()).RunCommand("toggle-help"));
   auto& editor = window.keyboard_editor();
   ASSERT_TRUE(editor.record_for_testing("spawn-tab", false));
   ui::test::EventGenerator keys(
-      window.desktop_widget()->GetNativeWindow()->GetRootWindow());
+      window.widget()->GetNativeWindow()->GetRootWindow());
   keys.PressKey(ui::VKEY_T, ui::EF_NONE);
   EXPECT_EQ(u"t", editor.search_for_testing()->GetText());
   EXPECT_TRUE(editor.search_for_testing()->HasFocus());
@@ -5997,7 +5847,7 @@ IN_PROC_BROWSER_TEST_F(FlyWorkspaceBrowserTest,
 // jumps to the one with matches.
 IN_PROC_BROWSER_TEST_F(FlyWorkspaceBrowserTest,
                        PreferencesOpenOnGeneralAndSearchEverySection) {
-  auto& window = FlyWindowController::Get();
+  auto& window = Window();
   ASSERT_TRUE(InvokeNativeCommand(browser(), "toggle-help"));
   auto& editor = window.keyboard_editor();
   ASSERT_TRUE(base::test::RunUntil([&] { return editor.active(); }));
@@ -6032,7 +5882,7 @@ IN_PROC_BROWSER_TEST_F(FlyWorkspaceBrowserTest,
 // the rest as it reaches them, so typing does not rebuild every result.
 IN_PROC_BROWSER_TEST_F(FlyWorkspaceBrowserTest,
                        CommandCentreBuildsRowsAsSelectionReachesThem) {
-  auto& palette = FlyWindowController::Get().palette();
+  auto& palette = Window().palette();
   ASSERT_TRUE(InvokeNativeCommand(browser(), "toggle-palette"));
   ASSERT_TRUE(base::test::RunUntil([&] { return palette.active(); }));
   const size_t total = palette.result_count_for_testing();
@@ -6072,8 +5922,8 @@ IN_PROC_BROWSER_TEST_F(FlyWorkspaceBrowserTest,
                        CommandCentreFiltersInspectsAndRemembersCommands) {
   ASSERT_TRUE(ui_test_utils::NavigateToURL(
       browser(), embedded_test_server()->GetURL("/title1.html")));
-  auto& window = FlyWindowController::Get();
-  window.Select(browser(), true);
+  auto& window = Window();
+  Activate(browser());
   auto& palette = window.palette();
   ASSERT_TRUE(InvokeNativeCommand(browser(), "toggle-palette"));
   ASSERT_TRUE(base::test::RunUntil([&] { return palette.active(); }));
@@ -6090,7 +5940,7 @@ IN_PROC_BROWSER_TEST_F(FlyWorkspaceBrowserTest,
   row->OnMouseEntered(resting);
   EXPECT_EQ(u"New Blank Tab", palette.inspector_title_for_testing());
   ui::test::EventGenerator pointer(
-      window.desktop_widget()->GetNativeWindow()->GetRootWindow());
+      window.widget()->GetNativeWindow()->GetRootWindow());
   pointer.MoveMouseTo(row_centre);
   EXPECT_NE(u"New Blank Tab", palette.inspector_title_for_testing());
   // Hover and keyboard navigation must leave exactly one selected row.
@@ -6124,11 +5974,11 @@ IN_PROC_BROWSER_TEST_F(FlyWorkspaceBrowserTest,
   palette.ContentsChanged(palette.search_for_testing(), u"reader");
   ASSERT_EQ("toggle-reader-view", palette.selected_action_for_testing());
   ui::test::EventGenerator keys(
-      window.desktop_widget()->GetNativeWindow()->GetRootWindow());
+      window.widget()->GetNativeWindow()->GetRootWindow());
   keys.PressKey(ui::VKEY_RETURN, ui::EF_NONE);
   ASSERT_TRUE(base::test::RunUntil([&] { return !palette.active(); }));
   EXPECT_EQ(std::vector<std::string>{"toggle-reader-view"},
-            window.preferences().ReadRecentCommands());
+            App().preferences().ReadRecentCommands());
   ASSERT_TRUE(InvokeNativeCommand(browser(), "toggle-palette"));
   ASSERT_TRUE(base::test::RunUntil([&] { return palette.active(); }));
   // Recently used commands come first.
@@ -6143,10 +5993,10 @@ IN_PROC_BROWSER_TEST_F(FlyWorkspaceBrowserTest,
   ASSERT_TRUE(content::ExecJs(contents,
                               "document.body.innerHTML = '<input id=editable>';"
                               "document.querySelector('#editable').focus()"));
-  auto& window = FlyWindowController::Get();
-  window.Select(browser(), true);
+  auto& window = Window();
+  Activate(browser());
   ui::test::EventGenerator keys(
-      window.desktop_widget()->GetNativeWindow()->GetRootWindow());
+      window.widget()->GetNativeWindow()->GetRootWindow());
   keys.PressKey(ui::VKEY_P, ui::EF_CONTROL_DOWN);
   ASSERT_TRUE(base::test::RunUntil([&] { return window.palette().active(); }));
   // The Command Centre lists New Blank Tab (not Duplicate Tab).
@@ -6164,7 +6014,7 @@ IN_PROC_BROWSER_TEST_F(FlyWorkspaceBrowserTest,
   ASSERT_TRUE(base::test::RunUntil(
       [&] { return browser()->GetTabStripModel()->count() == before + 1; }));
   EXPECT_FALSE(window.palette().active());
-  EXPECT_EQ(browser(), window.selected_browser_for_testing());
+  EXPECT_EQ(browser(), LastActive());
 }
 
 IN_PROC_BROWSER_TEST_F(FlyWorkspaceBrowserTest,
@@ -6175,14 +6025,14 @@ IN_PROC_BROWSER_TEST_F(FlyWorkspaceBrowserTest,
   ASSERT_TRUE(content::ExecJs(contents,
                               "document.body.innerHTML = '<input id=editable>';"
                               "document.querySelector('#editable').focus()"));
-  auto& window = FlyWindowController::Get();
-  window.Select(browser(), true);
+  auto& window = Window();
+  Activate(browser());
   auto config = DefaultKeyboardConfig().ToValue();
   config.FindDict("shortcuts")
       ->Set("toggle-palette", base::ListValue().Append("Alt+P"));
-  ASSERT_TRUE(window.commands().Save(config).config);
+  ASSERT_TRUE(App().commands().Save(config).config);
   ui::test::EventGenerator keys(
-      window.desktop_widget()->GetNativeWindow()->GetRootWindow());
+      window.widget()->GetNativeWindow()->GetRootWindow());
   keys.PressKey(ui::VKEY_P, ui::EF_ALT_DOWN);
   ASSERT_TRUE(base::test::RunUntil([&] { return window.palette().active(); }));
   keys.PressKey(ui::VKEY_P, ui::EF_ALT_DOWN);
@@ -6202,7 +6052,7 @@ IN_PROC_BROWSER_TEST_F(FlyWorkspaceBrowserTest,
   ASSERT_TRUE(base::test::RunUntil([&] { return window.palette().active(); }));
   ASSERT_TRUE(SecondWorkspace());
   ASSERT_TRUE(base::test::RunUntil([&] { return !window.palette().active(); }));
-  EXPECT_NE(browser(), window.selected_browser_for_testing());
+  EXPECT_NE(browser(), LastActive());
 }
 
 IN_PROC_BROWSER_TEST_F(FlyWorkspaceBrowserTest,
@@ -6210,22 +6060,22 @@ IN_PROC_BROWSER_TEST_F(FlyWorkspaceBrowserTest,
   ASSERT_TRUE(ui_test_utils::NavigateToURL(
       browser(), embedded_test_server()->GetURL("/title1.html")));
   auto* contents = Active(browser());
-  auto& window = FlyWindowController::Get();
+  auto& window = Window();
   ASSERT_TRUE(content::ExecJs(contents, R"js(
     document.body.innerHTML = '<input id="native-edit" '
       + 'style="position:fixed;left:40px;top:40px;width:250px;height:24px">';
   )js"));
-  window.Select(browser(), true);
+  Activate(browser());
   window.clock_for_testing()->RequestFocus();
   ASSERT_TRUE(base::test::RunUntil([&] {
     return window.clock_for_testing()->HasFocus();
   }));
   ui::test::EventGenerator input(
-      window.desktop_widget()->GetNativeWindow()->GetRootWindow());
+      window.widget()->GetNativeWindow()->GetRootWindow());
   const auto bounds = contents->GetRenderWidgetHostView()->GetViewBounds();
   const auto click_point = bounds.origin() + gfx::Vector2d(70, 52);
   auto native_point = click_point;
-  auto* root = window.desktop_widget()->GetNativeWindow()->GetRootWindow();
+  auto* root = window.widget()->GetNativeWindow()->GetRootWindow();
   wm::ConvertPointFromScreen(root, &native_point);
   auto* hit = root->GetEventHandlerForPoint(native_point);
   EXPECT_TRUE(contents->GetNativeView()->Contains(hit))
@@ -6241,7 +6091,7 @@ IN_PROC_BROWSER_TEST_F(FlyWorkspaceBrowserTest,
                "document.hasFocus() && document.activeElement.id === 'native-edit'",
                content::EXECUTE_SCRIPT_NO_USER_GESTURE) == true;
   })) << "render_view=" << bounds.ToString()
-      << " desktop=" << window.desktop_widget()->GetWindowBoundsInScreen().ToString();
+      << " desktop=" << window.widget()->GetWindowBoundsInScreen().ToString();
   input.PressKey(ui::VKEY_A, ui::EF_NONE);
   ASSERT_TRUE(base::test::RunUntil([&] {
     return content::EvalJs(contents,
@@ -6275,8 +6125,8 @@ IN_PROC_BROWSER_TEST_F(FlyWorkspaceBrowserTest,
   ASSERT_TRUE(ui_test_utils::NavigateToURL(
       browser(), embedded_test_server()->GetURL("/title1.html")));
   auto* contents = Active(browser());
-  auto& window = FlyWindowController::Get();
-  window.Select(browser(), true);
+  auto& window = Window();
+  Activate(browser());
   auto* status = window.status_bar_for_testing();
   ASSERT_TRUE(status->GetVisible());
   EXPECT_EQ(nullptr, g_browser_process->local_state()->GetUserPrefValue(kPreferencesPref));
@@ -6285,7 +6135,7 @@ IN_PROC_BROWSER_TEST_F(FlyWorkspaceBrowserTest,
       + 'style="position:fixed;left:20px;top:20px;width:180px;height:40px;display:block">Link</a>';
   )js"));
   ui::test::EventGenerator pointer(
-      window.desktop_widget()->GetNativeWindow()->GetRootWindow());
+      window.widget()->GetNativeWindow()->GetRootWindow());
   const auto bounds = contents->GetRenderWidgetHostView()->GetViewBounds();
   pointer.MoveMouseTo(bounds.origin() + gfx::Vector2d(40, 35));
   ASSERT_TRUE(base::test::RunUntil([&] {
@@ -6298,17 +6148,20 @@ IN_PROC_BROWSER_TEST_F(FlyWorkspaceBrowserTest,
   }));
   ASSERT_TRUE(InvokeNativeCommand(browser(), "toggle-status-bar"));
   EXPECT_FALSE(status->GetVisible());
-  EXPECT_EQ(false, window.preferences().ReadStatusBarVisible());
+  EXPECT_EQ(false, App().preferences().ReadStatusBarVisible());
   ASSERT_TRUE(InvokeNativeCommand(browser(), "toggle-status-bar"));
   EXPECT_TRUE(status->GetVisible());
   ASSERT_TRUE(ExecuteNativeCommand(browser(), "spawn-tab"));
-  window.UpdateTargetURL(browser(), contents, GURL("https://hidden.invalid/"));
+  Window(browser()).UpdateTargetURL(contents, GURL("https://hidden.invalid/"));
   EXPECT_EQ(std::u16string::npos, status->location_for_testing()->GetText().find(u"hidden.invalid"));
   auto* second = SecondWorkspace();
   ASSERT_TRUE(second);
-  const std::u16string before(status->location_for_testing()->GetText());
-  window.UpdateTargetURL(browser(), Active(browser()), GURL("https://other-profile.invalid/"));
-  EXPECT_EQ(before, status->location_for_testing()->GetText());
+  // Another window's page never reaches this window's status bar.
+  auto* second_status = Window(second).status_bar_for_testing();
+  const std::u16string before(second_status->location_for_testing()->GetText());
+  Window(second).UpdateTargetURL(Active(browser()),
+                                 GURL("https://other-profile.invalid/"));
+  EXPECT_EQ(before, second_status->location_for_testing()->GetText());
 }
 
 IN_PROC_BROWSER_TEST_F(FlyWorkspaceBrowserTest,
@@ -6318,7 +6171,7 @@ IN_PROC_BROWSER_TEST_F(FlyWorkspaceBrowserTest,
   ASSERT_TRUE(https.Start());
   ASSERT_TRUE(ui_test_utils::NavigateToURL(browser(), https.GetURL("/title1.html")));
   auto* contents = Active(browser());
-  auto& window = FlyWindowController::Get();
+  auto& window = Window();
   auto* status = window.status_bar_for_testing();
   ASSERT_EQ(security_state::SECURE, chrome_security_state::GetSecurityLevel(contents));
   ASSERT_TRUE(base::test::RunUntil([&] {
@@ -6338,14 +6191,17 @@ IN_PROC_BROWSER_TEST_F(FlyWorkspaceBrowserTest,
       u"Page secure"));
   ASSERT_TRUE(ui_test_utils::NavigateToURL(browser(), GURL("about:blank")));
   EXPECT_EQ(u"BLANK", status->security_for_testing()->GetText());
-  ASSERT_TRUE(window.RunCommand(browser(), "toggle-private-mode"));
+  ASSERT_TRUE(Window(browser()).RunCommand("toggle-private-mode"));
   ASSERT_TRUE(base::test::RunUntil([&] {
-    auto* selected = window.selected_browser_for_testing();
+    auto* selected = LastActive();
     return selected && selected->GetProfile()->IsOffTheRecord();
   }));
-  EXPECT_EQ(u"PRIVATE PROFILE", status->workspace_for_testing()->GetText());
-  EXPECT_FALSE(status->security_for_testing()->GetTooltipText().starts_with(
-      u"Page secure"));
+  auto* private_status = Window(LastActive()).status_bar_for_testing();
+  EXPECT_EQ(u"PRIVATE PROFILE",
+            private_status->workspace_for_testing()->GetText());
+  EXPECT_FALSE(
+      private_status->security_for_testing()->GetTooltipText().starts_with(
+          u"Page secure"));
 }
 
 IN_PROC_BROWSER_TEST_F(FlyWorkspaceBrowserTest,
@@ -6359,10 +6215,10 @@ IN_PROC_BROWSER_TEST_F(FlyWorkspaceBrowserTest,
     window.visibilityEvents = 0;
     document.addEventListener('visibilitychange', () => visibilityEvents++);
   )js"));
-  auto& window = FlyWindowController::Get();
+  auto& window = Window();
   const auto mode = [&] {
     const auto desktop_mode =
-        window.desktop_widget()->GetColorProviderKeyForTesting().color_mode;
+        window.widget()->GetColorProviderKeyForTesting().color_mode;
     EXPECT_EQ(desktop_mode, window.sidebar_widget_for_testing()
                                 ->GetColorProviderKeyForTesting()
                                 .color_mode);
@@ -6371,7 +6227,7 @@ IN_PROC_BROWSER_TEST_F(FlyWorkspaceBrowserTest,
   const auto dark = [](content::WebContents* contents) {
     return content::EvalJs(contents, "matchMedia('(prefers-color-scheme: dark)').matches").ExtractBool();
   };
-  window.Select(browser(), true);
+  Activate(browser());
   ASSERT_TRUE(base::test::RunUntil([&] {
     return content::EvalJs(first, "document.hasFocus()").ExtractBool();
   }));
@@ -6383,7 +6239,7 @@ IN_PROC_BROWSER_TEST_F(FlyWorkspaceBrowserTest,
   EXPECT_EQ("entry", content::EvalJs(first, "document.activeElement.id"));
   EXPECT_EQ(true, content::EvalJs(first, "document.hasFocus()"));
   ui::test::EventGenerator keys(
-      window.desktop_widget()->GetNativeWindow()->GetRootWindow());
+      window.widget()->GetNativeWindow()->GetRootWindow());
   keys.PressKey(ui::VKEY_J, ui::EF_NONE);
   ASSERT_TRUE(base::test::RunUntil([&] {
     return content::EvalJs(first, "document.querySelector('#entry').value")
@@ -6395,23 +6251,23 @@ IN_PROC_BROWSER_TEST_F(FlyWorkspaceBrowserTest,
   ASSERT_TRUE(ui_test_utils::NavigateToURL(second,
       embedded_test_server()->GetURL("/title1.html")));
   auto* second_contents = Active(second);
-  ASSERT_TRUE(window.preferences().SetWebsiteThemeSync(false));
+  ASSERT_TRUE(App().preferences().SetWebsiteThemeSync(false));
   ASSERT_TRUE(InvokeNativeCommand(second, "toggle-theme"));
   EXPECT_EQ(ui::ColorProviderKey::ColorMode::kDark, mode());
   ASSERT_TRUE(base::test::RunUntil([&] { return !dark(first) && !dark(second_contents); }));
-  ASSERT_TRUE(window.preferences().SetWebsiteThemeSync(true));
+  ASSERT_TRUE(App().preferences().SetWebsiteThemeSync(true));
   ASSERT_TRUE(base::test::RunUntil([&] { return dark(first) && dark(second_contents); }));
-  ASSERT_TRUE(window.RunCommand(second, "toggle-private-mode"));
+  ASSERT_TRUE(Window(second).RunCommand("toggle-private-mode"));
   ASSERT_TRUE(base::test::RunUntil([&] {
-    auto* selected = window.selected_browser_for_testing();
+    auto* selected = LastActive();
     return selected && selected->GetProfile()->IsOffTheRecord();
   }));
-  auto* private_browser = window.selected_browser_for_testing();
+  auto* private_browser = LastActive();
   ASSERT_TRUE(ui_test_utils::NavigateToURL(private_browser,
       embedded_test_server()->GetURL("/title1.html")));
   auto* private_contents = Active(private_browser);
   ASSERT_TRUE(base::test::RunUntil([&] { return dark(private_contents); }));
-  ASSERT_TRUE(window.preferences().SetWebsiteThemeSync(false));
+  ASSERT_TRUE(App().preferences().SetWebsiteThemeSync(false));
   ASSERT_TRUE(base::test::RunUntil([&] { return !dark(private_contents); }));
   EXPECT_EQ(ui::ColorProviderKey::ColorMode::kDark, mode());
   const auto before = g_browser_process->local_state()->GetDict(kPreferencesPref).Clone();
@@ -6425,9 +6281,8 @@ IN_PROC_BROWSER_TEST_F(FlyWorkspaceBrowserTest,
   ASSERT_TRUE(ui_test_utils::NavigateToURL(browser(), url));
   auto* original = Active(browser());
   ASSERT_TRUE(content::ExecJs(original, "document.cookie='identity=first'"));
-  auto& window = FlyWindowController::Get();
   ASSERT_TRUE(InvokeNativeCommand(browser(), "add-bookmark"));
-  ASSERT_EQ(1u, window.bookmarks().Read()->size());
+  ASSERT_EQ(1u, App().bookmarks().Read()->size());
   const auto stored = g_browser_process->local_state()->GetDict(kBookmarksPref).Clone();
   ASSERT_TRUE(InvokeNativeCommand(browser(), "add-bookmark"));
   EXPECT_EQ(stored, g_browser_process->local_state()->GetDict(kBookmarksPref));
@@ -6437,7 +6292,7 @@ IN_PROC_BROWSER_TEST_F(FlyWorkspaceBrowserTest,
   EXPECT_FALSE(first_model->IsBookmarked(url));
   const auto profile_only = embedded_test_server()->GetURL("/profile-only");
   ASSERT_TRUE(first_model->AddURL(first_model->other_node(), 0, u"Profile only", profile_only));
-  EXPECT_FALSE(window.bookmarks().Contains(profile_only.spec()));
+  EXPECT_FALSE(App().bookmarks().Contains(profile_only.spec()));
   auto* second = SecondWorkspace();
   ASSERT_TRUE(second);
   ASSERT_TRUE(ui_test_utils::NavigateToURL(second, url));
@@ -6447,10 +6302,11 @@ IN_PROC_BROWSER_TEST_F(FlyWorkspaceBrowserTest,
   ASSERT_TRUE(second_model);
   ASSERT_TRUE(base::test::RunUntil([&] { return second_model->loaded(); }));
   EXPECT_FALSE(second_model->IsBookmarked(profile_only));
-  ASSERT_EQ(1u, window.bookmarks().Read()->size());
+  ASSERT_EQ(1u, App().bookmarks().Read()->size());
   const int count = second->GetTabStripModel()->count();
+  auto& window = Window(second);
   ui::test::EventGenerator keys(
-      window.desktop_widget()->GetNativeWindow()->GetRootWindow());
+      window.widget()->GetNativeWindow()->GetRootWindow());
   ASSERT_TRUE(InvokeNativeCommand(second, "toggle-bookmarks"));
   auto& picker = window.bookmark_picker();
   ASSERT_TRUE(base::test::RunUntil([&] { return picker.active(); }));
@@ -6465,14 +6321,14 @@ IN_PROC_BROWSER_TEST_F(FlyWorkspaceBrowserTest,
   EXPECT_EQ(second->GetProfile(), opened->GetBrowserContext());
   EXPECT_EQ("identity=second", content::EvalJs(opened, "document.cookie"));
   EXPECT_EQ("identity=first", content::EvalJs(original, "document.cookie"));
-  EXPECT_EQ(1u, window.bookmarks().Read()->size());
+  EXPECT_EQ(1u, App().bookmarks().Read()->size());
   const auto before_private = g_browser_process->local_state()->GetDict(kBookmarksPref).Clone();
-  ASSERT_TRUE(window.RunCommand(second, "toggle-private-mode"));
+  ASSERT_TRUE(Window(second).RunCommand("toggle-private-mode"));
   ASSERT_TRUE(base::test::RunUntil([&] {
-    auto* selected = window.selected_browser_for_testing();
+    auto* selected = LastActive();
     return selected && selected->GetProfile()->IsOffTheRecord();
   }));
-  ASSERT_TRUE(ui_test_utils::NavigateToURL(window.selected_browser_for_testing(), url));
+  ASSERT_TRUE(ui_test_utils::NavigateToURL(LastActive(), url));
   EXPECT_EQ(before_private, g_browser_process->local_state()->GetDict(kBookmarksPref));
 }
 
@@ -6486,9 +6342,9 @@ IN_PROC_BROWSER_TEST_F(FlyWorkspaceBrowserTest,
       "document.querySelector('#entry').focus();"
       "window.visibilityEvents=0;"
       "document.addEventListener('visibilitychange',()=>visibilityEvents++)"));
-  auto& window = FlyWindowController::Get();
-  ASSERT_TRUE(window.bookmarks().Add("https://one.test/", "alpha one"));
-  ASSERT_TRUE(window.bookmarks().Add("https://two.test/", "alpha two"));
+  auto& window = Window();
+  ASSERT_TRUE(App().bookmarks().Add("https://one.test/", "alpha one"));
+  ASSERT_TRUE(App().bookmarks().Add("https://two.test/", "alpha two"));
   ASSERT_TRUE(InvokeNativeCommand(browser(), "toggle-bookmarks"));
   auto& picker = window.bookmark_picker();
   ASSERT_TRUE(picker.active());
@@ -6497,17 +6353,17 @@ IN_PROC_BROWSER_TEST_F(FlyWorkspaceBrowserTest,
   picker.ContentsChanged(search, std::u16string(search->GetText()));
   search->SetSelectedRange(gfx::Range(0));
   ui::test::EventGenerator keys(
-      window.desktop_widget()->GetNativeWindow()->GetRootWindow());
+      window.widget()->GetNativeWindow()->GetRootWindow());
   keys.PressKey(ui::VKEY_DELETE, ui::EF_NONE);
   ASSERT_TRUE(base::test::RunUntil([&] { return search->GetText() == u"lphaX"; }));
-  EXPECT_EQ(2u, window.bookmarks().Read()->size());
+  EXPECT_EQ(2u, App().bookmarks().Read()->size());
   search->SetText(u"alpha");
   picker.ContentsChanged(search, std::u16string(search->GetText()));
   search->SetSelectedRange(gfx::Range(5));
   ASSERT_EQ(2u, picker.result_count_for_testing());
   keys.PressKey(ui::VKEY_DELETE, ui::EF_NONE);
   ASSERT_TRUE(base::test::RunUntil([&] {
-    return window.bookmarks().Read()->size() == 1 && picker.result_count_for_testing() == 1;
+    return App().bookmarks().Read()->size() == 1 && picker.result_count_for_testing() == 1;
   }));
   EXPECT_EQ(u"alpha", search->GetText());
   auto* remove = picker.remove_for_testing(0);
@@ -6515,7 +6371,7 @@ IN_PROC_BROWSER_TEST_F(FlyWorkspaceBrowserTest,
   views::test::ButtonTestApi(remove).NotifyDefaultMouseClick();
   picker.Cancel(true);
   ASSERT_TRUE(base::test::RunUntil([&] { return !picker.search_for_testing(); }));
-  EXPECT_EQ(1u, window.bookmarks().Read()->size());
+  EXPECT_EQ(1u, App().bookmarks().Read()->size());
   ASSERT_TRUE(base::test::RunUntil([&] {
     return content::EvalJs(contents, "document.hasFocus()").ExtractBool();
   }));
@@ -6537,13 +6393,13 @@ class FlyTabMenuBrowserTest : public FlyWorkspaceBrowserTest {
  protected:
   void Menu(content::WebContents* contents,
             base::OnceCallback<void(ui::SimpleMenuModel*)> inspect) {
-    auto& window = FlyWindowController::Get();
-    auto* active = Active(window.selected_browser_for_testing());
+    auto& window = Window();
+    auto* active = Active(LastActive());
     ASSERT_TRUE(content::WaitForLoadStop(active));
     base::RunLoop().RunUntilIdle();
     if (window.address_picker().active()) {
       ui::test::EventGenerator keys(
-          window.desktop_widget()->GetNativeWindow()->GetRootWindow());
+          window.widget()->GetNativeWindow()->GetRootWindow());
       keys.PressKey(ui::VKEY_ESCAPE, ui::EF_NONE);
       ASSERT_TRUE(base::test::RunUntil([&] { return !window.address_picker().active(); }));
     }
@@ -6572,11 +6428,10 @@ class FlyTabMenuBrowserTest : public FlyWorkspaceBrowserTest {
           inspected = true;
         }));
     ui::test::EventGenerator mouse(
-        FlyWindowController::Get().desktop_widget()->GetNativeWindow()->GetRootWindow());
+        Window().widget()->GetNativeWindow()->GetRootWindow());
     auto point = control->GetVisibleBounds().CenterPoint();
     views::View::ConvertPointToScreen(control, &point);
-    auto* root_window = FlyWindowController::Get()
-                            .desktop_widget()->GetNativeWindow()->GetRootWindow();
+    auto* root_window = Window().widget()->GetNativeWindow()->GetRootWindow();
     auto native_point = point;
     wm::ConvertPointFromScreen(root_window, &native_point);
     auto* native_target = root_window->GetEventHandlerForPoint(native_point);
@@ -6646,17 +6501,17 @@ IN_PROC_BROWSER_TEST_F(FlyTabMenuBrowserTest,
   EXPECT_FALSE(NativeCommandAvailable(browser(), "remove-tab"));
   ASSERT_TRUE(ExecuteNativeCommand(browser(), "remove-tab"));
   EXPECT_EQ(2, model->count());
-  auto* row = FlyWindowController::Get().tab_sidebar_for_testing()->row_for_testing(target);
+  auto* row = Window().tab_sidebar_for_testing()->row_for_testing(target);
   ASSERT_TRUE(base::test::RunUntil([&] { return !row->children()[2]->GetEnabled(); }));
 }
 
 IN_PROC_BROWSER_TEST_F(FlyTabMenuBrowserTest,
-                       MenuTracksReordersAndRejectsClosedOrOtherProfileTargets) {
+                       MenuTracksReordersAndRejectsClosedTargets) {
   // Profile creation posts non-nestable work. Prepare it before MenuRunner's
   // nested loop; the menu callback still switches the workspace synchronously.
   auto* other_workspace = SecondWorkspace();
   ASSERT_TRUE(other_workspace);
-  FlyWindowController::Get().Select(browser(), true);
+  Activate(browser());
   auto* model = browser()->GetTabStripModel();
   auto* target = Active(browser());
   ASSERT_TRUE(ExecuteNativeCommand(browser(), "spawn-tab"));
@@ -6681,12 +6536,12 @@ IN_PROC_BROWSER_TEST_F(FlyTabMenuBrowserTest,
   auto lifetime = target->GetWeakPtr();
   Menu(target, base::BindLambdaForTesting([&](ui::SimpleMenuModel* menu) {
     menu->ActivatedAt(Item(menu, u"Close"));
-    FlyWindowController::Get().Select(other_workspace, true);
+    Activate(other_workspace);
   }));
-  // The queued command must not cross a workspace generation boundary.
-  base::RunLoop().RunUntilIdle();
-  EXPECT_TRUE(lifetime);
-  EXPECT_EQ(2, model->count());
+  // The command belongs to this window's tab, whichever window is active.
+  ASSERT_TRUE(base::test::RunUntil([&] { return !lifetime; }));
+  EXPECT_EQ(1, model->count());
+  EXPECT_EQ(1, other_workspace->GetTabStripModel()->count());
 }
 
 IN_PROC_BROWSER_TEST_F(FlyTabMenuBrowserTest,
@@ -6762,14 +6617,14 @@ IN_PROC_BROWSER_TEST_F(FlyPageScrollBrowserTest,
         if (entries[0].isIntersecting) resolve(true);
       }).observe(document.querySelector('#deep')));
     )js"));
-    auto& window = FlyWindowController::Get();
-    window.Select(browser(), true);
+    auto& window = Window();
+    Activate(browser());
     contents->Focus();
     ASSERT_TRUE(base::test::RunUntil([&] {
       return contents->GetRenderWidgetHostView()->HasFocus();
     }));
     ui::test::EventGenerator keys(
-        window.desktop_widget()->GetNativeWindow()->GetRootWindow());
+        window.widget()->GetNativeWindow()->GetRootWindow());
     keys.PressKey(ui::VKEY_F, ui::EF_ALT_DOWN);
     ASSERT_TRUE(base::test::RunUntil([&] {
       return window.hints().active() &&
@@ -6791,9 +6646,9 @@ IN_PROC_BROWSER_TEST_F(FlyPageScrollBrowserTest,
   auto screen_reader = content::BrowserAccessibilityState::GetInstance()
                            ->CreateScopedModeForWebContents(
                                contents, ui::kAXModeComplete);
-  auto& window = FlyWindowController::Get();
+  auto& window = Window();
   ui::test::EventGenerator keys(
-      window.desktop_widget()->GetNativeWindow()->GetRootWindow());
+      window.widget()->GetNativeWindow()->GetRootWindow());
   keys.PressKey(ui::VKEY_F, ui::EF_ALT_DOWN);
   ASSERT_TRUE(base::test::RunUntil([&] {
     return window.hints().active() &&
@@ -6825,10 +6680,10 @@ IN_PROC_BROWSER_TEST_F(FlyPageScrollBrowserTest,
     box.scrollBy = () => { throw new Error('Page scroll override called'); };
     box.scrollTo = box.scrollBy;
   )js"));
-  auto& window = FlyWindowController::Get();
-  window.Select(browser(), true);
+  auto& window = Window();
+  Activate(browser());
   ui::test::EventGenerator keys(
-      window.desktop_widget()->GetNativeWindow()->GetRootWindow());
+      window.widget()->GetNativeWindow()->GetRootWindow());
   // A zoom step (factor 1.095) leaves fractional device pixels, so
   // offsets may round one pixel either way.
   auto wait_offset = [&](const char* axis, int offset) {
@@ -6905,16 +6760,16 @@ IN_PROC_BROWSER_TEST_F(FlyPageScrollBrowserTest,
     document.body.style.height = '5000px';
     document.querySelector('#focus').focus();
   )js"));
-  auto& window = FlyWindowController::Get();
-  window.Select(browser(), true);
+  auto& window = Window();
+  Activate(browser());
   ASSERT_TRUE(base::test::RunUntil(
       [&] { return contents->GetFocusedFrame() == child; }));
   ASSERT_TRUE(SecondWorkspace());
-  window.Select(browser(), true);
+  Activate(browser());
   ASSERT_TRUE(base::test::RunUntil(
       [&] { return contents->GetFocusedFrame() == child; }));
   ui::test::EventGenerator keys(
-      window.desktop_widget()->GetNativeWindow()->GetRootWindow());
+      window.widget()->GetNativeWindow()->GetRootWindow());
   keys.PressKey(ui::VKEY_J, ui::EF_NONE);
   ASSERT_TRUE(base::test::RunUntil([&] {
     return content::EvalJs(child, "Math.round(scrollY)").ExtractInt() == 80;
@@ -6924,15 +6779,15 @@ IN_PROC_BROWSER_TEST_F(FlyPageScrollBrowserTest,
 
 IN_PROC_BROWSER_TEST_F(FlyWorkspaceBrowserTest,
                        ExtensionAndDownloadPickersDismissWithEscape) {
-  auto& window = FlyWindowController::Get();
-  window.Select(browser(), true);
+  auto& window = Window();
+  Activate(browser());
   ui::test::EventGenerator keys(
-      window.desktop_widget()->GetNativeWindow()->GetRootWindow());
+      window.widget()->GetNativeWindow()->GetRootWindow());
   for (auto [action, picker] :
        {std::pair{"open-extension-actions",
                   &window.extensions_picker_for_testing()},
         {"toggle-downloads", &window.downloads_picker_for_testing()}}) {
-    ASSERT_TRUE(window.RunCommand(browser(), action));
+    ASSERT_TRUE(window.RunCommand(action));
     ASSERT_TRUE(picker->active());
     keys.PressKey(ui::VKEY_ESCAPE, ui::EF_NONE);
     ASSERT_TRUE(base::test::RunUntil([&] { return !picker->active(); }));
@@ -6978,9 +6833,9 @@ IN_PROC_BROWSER_TEST_F(FlyPageScrollBrowserTest,
 // opening and repeated openings. These surfaces must not block input for
 // seconds.
 IN_PROC_BROWSER_TEST_F(FlyWorkspaceBrowserTest, SurfaceOpeningLatency) {
-  auto& window = FlyWindowController::Get();
+  auto& window = Window();
   for (const char* scale : {"normal", "large"}) {
-    ASSERT_TRUE(window.preferences().SetString("interface_scale", scale));
+    ASSERT_TRUE(App().preferences().SetString("interface_scale", scale));
     for (int pass = 0; pass < 3; ++pass) {
       for (const std::string action :
            {"toggle-help", "toggle-palette", "toggle-address",
@@ -6988,8 +6843,8 @@ IN_PROC_BROWSER_TEST_F(FlyWorkspaceBrowserTest, SurfaceOpeningLatency) {
             "toggle-downloads", "open-extension-actions", "open-diagnostics"}) {
         SCOPED_TRACE(action + " / " + scale);
         const auto start = base::TimeTicks::Now();
-        ASSERT_TRUE(window.RunCommand(browser(), action));
-        window.desktop_widget()->LayoutRootViewIfNecessary();
+        ASSERT_TRUE(window.RunCommand(action));
+        window.widget()->LayoutRootViewIfNecessary();
         const auto elapsed = base::TimeTicks::Now() - start;
         LOG(INFO) << "SURFACE_LATENCY " << action << " scale=" << scale
                   << " pass=" << pass << " ms=" << elapsed.InMillisecondsF();
@@ -7014,7 +6869,7 @@ IN_PROC_BROWSER_TEST_F(FlyWorkspaceBrowserTest, SurfaceOpeningLatency) {
           EXPECT_LT(base::TimeTicks::Now() - filter_start,
                     base::Milliseconds(200));
         }
-        ASSERT_TRUE(window.RunCommand(browser(), action));
+        ASSERT_TRUE(window.RunCommand(action));
         base::RunLoop().RunUntilIdle();
       }
     }
@@ -7022,31 +6877,31 @@ IN_PROC_BROWSER_TEST_F(FlyWorkspaceBrowserTest, SurfaceOpeningLatency) {
 }
 
 IN_PROC_BROWSER_TEST_F(FlyWorkspaceBrowserTest, PageFullscreenHidesFlyChrome) {
-  auto& window = FlyWindowController::Get();
+  auto& window = Window();
   ASSERT_TRUE(ui_test_utils::NavigateToURL(
       browser(), embedded_test_server()->GetURL("/title1.html")));
   auto* contents = Active(browser());
   const bool footer_visible = window.status_bar_for_testing()->IsDrawn();
   ASSERT_TRUE(content::ExecJs(contents, "document.body.requestFullscreen()"));
   ASSERT_TRUE(base::test::RunUntil(
-      [&] { return window.desktop_widget()->IsFullscreen(); }));
-  window.desktop_widget()->LayoutRootViewIfNecessary();
+      [&] { return window.widget()->IsFullscreen(); }));
+  window.widget()->LayoutRootViewIfNecessary();
   EXPECT_FALSE(window.sidebar_widget_for_testing()->IsVisible());
   EXPECT_FALSE(window.status_bar_for_testing()->IsDrawn());
   ASSERT_TRUE(base::test::RunUntil([&] {
-    return window.desktop_widget()->GetContentsView()->GetBoundsInScreen() ==
+    return window.widget()->GetContentsView()->GetBoundsInScreen() ==
            contents->GetRenderWidgetHostView()->GetViewBounds();
   }));
   ASSERT_TRUE(content::ExecJs(contents, "document.exitFullscreen()"));
   ASSERT_TRUE(base::test::RunUntil(
-      [&] { return !window.desktop_widget()->IsFullscreen(); }));
+      [&] { return !window.widget()->IsFullscreen(); }));
   EXPECT_TRUE(window.sidebar_widget_for_testing()->IsVisible());
   EXPECT_EQ(footer_visible, window.status_bar_for_testing()->IsDrawn());
 }
 
 IN_PROC_BROWSER_TEST_F(FlyWorkspaceBrowserTest,
                        SplitButtonTracksActiveTabState) {
-  auto& window = FlyWindowController::Get();
+  auto& window = Window();
   auto* split = window.split_button_for_testing();
   EXPECT_FALSE(split->selected());
   ASSERT_TRUE(InvokeNativeCommand(browser(), "toggle-split"));
@@ -7063,11 +6918,11 @@ void CheckSidebarPointerState(BrowserWindowInterface* browser,
                               const GURL& url,
                               bool collapse,
                               bool leave_before_close) {
-  auto& window = FlyWindowController::Get();
+  auto& window = *FlyWindowController::FromBrowser(browser);
   ASSERT_TRUE(ui_test_utils::NavigateToURL(browser, url));
   ui::test::EventGenerator pointer(
-      window.desktop_widget()->GetNativeWindow()->GetRootWindow());
-  ASSERT_TRUE(window.preferences().SetSidebarAutoCollapse(collapse));
+      window.widget()->GetNativeWindow()->GetRootWindow());
+  ASSERT_TRUE(FlyApp::Get().preferences().SetSidebarAutoCollapse(collapse));
   for (const std::u16string label : {u"Settings", u"Search or enter address"}) {
     SCOPED_TRACE(base::UTF16ToUTF8(label) +
                  " collapse=" + base::NumberToString(collapse) +
@@ -7081,7 +6936,7 @@ void CheckSidebarPointerState(BrowserWindowInterface* browser,
     }
     ASSERT_TRUE(target);
     const auto desktop =
-        window.desktop_widget()->GetContentsView()->GetBoundsInScreen();
+        window.widget()->GetContentsView()->GetBoundsInScreen();
     const auto rail = desktop.origin() + gfx::Vector2d(12, 180);
     pointer.MoveMouseTo(rail);
     ASSERT_TRUE(base::test::RunUntil(
@@ -7150,7 +7005,7 @@ IN_PROC_BROWSER_TEST_F(FlyWorkspaceBrowserTest,
 
 IN_PROC_BROWSER_TEST_F(FlyWorkspaceBrowserTest,
                        SidebarCollapseClearsTransientHover) {
-  auto& window = FlyWindowController::Get();
+  auto& window = Window();
   auto* panel = window.sidebar_root_for_testing()->panel();
   for (const auto& child : panel->children()) {
     auto* button = views::AsViewClass<FlyButton>(child.get());

@@ -45,7 +45,7 @@
 #include "content/public/common/url_constants.h"
 #include "fly/bookmarks/bookmark_service.h"
 #include "fly/ui/fly_theme.h"
-#include "fly/ui/fly_window_controller.h"
+#include "fly/ui/fly_app.h"
 #include "fly/ui/sidebar_panel.h"
 #include "services/network/public/mojom/content_security_policy.mojom.h"
 
@@ -165,7 +165,7 @@ base::DictValue PageData(bool private_page, bool include_lists = true) {
                            ? 1.25
                            : 1.0;
   base::DictValue data;
-  if (auto* window = FlyWindowController::GetIfCreated()) {
+  if (auto* window = FlyApp::GetIfCreated()) {
     if (include_lists)
       data = window->NewTabLists(
           private_page, private_page ? std::vector<HistoryEntry>()
@@ -320,7 +320,7 @@ class NewTabHandler : public content::WebUIMessageHandler,
     if (!show_sites) {
       history_subscription_ = {};
     } else if (!history_subscription_) {
-      if (auto* window = FlyWindowController::GetIfCreated())
+      if (auto* window = FlyApp::GetIfCreated())
         history_subscription_ =
             window->new_tab_history().Subscribe(base::BindRepeating(
                 &NewTabHandler::SendPage, weak_factory_.GetWeakPtr()));
@@ -328,7 +328,7 @@ class NewTabHandler : public content::WebUIMessageHandler,
   }
 
   void OnHideSite(const base::ListValue& args) {
-    auto* window = FlyWindowController::GetIfCreated();
+    auto* window = FlyApp::GetIfCreated();
     if (window && !OffTheRecord() && !args.empty() && args[0].is_string())
       window->HideFrequentSite(args[0].GetString());
     SendPage();

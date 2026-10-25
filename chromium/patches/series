@@ -6,7 +6,6 @@
 0005-native-hints-and-window-lifetime.patch
 0006-native-focused-page-scroll.patch
 0007-native-command-palette.patch
-0008-native-window-geometry.patch
 0009-native-session-startup.patch
 0010-native-private-product-defaults.patch
 0011-native-keyboard-settings.patch
@@ -15,8 +14,6 @@
 0014-native-status-bar.patch
 0015-native-interface-and-website-theme.patch
 0016-native-app-bookmarks.patch
-0017-native-initial-tab-visibility.patch
-0018-native-profile-focus-restoration.patch
 0019-native-workspace-profile-startup.patch
 0020-native-workspace-retirement.patch
 0021-native-profile-tab-move.patch
@@ -35,3 +32,4 @@
 0035-native-no-chromium-first-run.patch
 0036-native-app-menu-anchor.patch
 0037-native-feature-defaults.patch
+0038-native-window-title.patch

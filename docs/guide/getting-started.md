@@ -32,9 +32,9 @@ Fly uses the full Chromium browser layer with native Views UI:
 
 ## First Steps
 
-Once launched, Fly presents a clean, distraction-free window:
+Once launched, Fly opens a window for your first workspace with a new tab:
 
-![Fly Browser Workspace Welcome Screen](/screenshots/new-workspace.webp)
+![Fly Browser New Tab](/screenshots/new-tab.webp)
 
 - Press **Ctrl + L** to open the floating address bar and navigate to any site.
 - Press **Ctrl + T** to open a new tab.

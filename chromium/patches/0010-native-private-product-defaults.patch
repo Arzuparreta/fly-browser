@@ -1,6 +1,6 @@
 --- a/chrome/browser/profiles/pref_service_builder_utils.cc
 +++ b/chrome/browser/profiles/pref_service_builder_utils.cc
-@@ -9,12 +9,14 @@
+@@ -9,15 +9,18 @@
  #include <memory>
  #include <utility>
  
@@ -15,6 +15,10 @@
  #include "build/chromeos_buildflags.h"
  #include "chrome/browser/browser_process.h"
  #include "chrome/browser/policy/chrome_browser_policy_connector.h"
++#include "chrome/common/pref_names.h"
+ #include "chrome/browser/prefs/browser_prefs.h"
+ #include "chrome/browser/prefs/chrome_pref_service_factory.h"
+ #include "chrome/browser/prefs/profile_pref_store_manager.h"
 @@ -29,9 +31,11 @@
  #include "components/keyed_service/content/browser_context_dependency_manager.h"
  #include "components/keyed_service/core/simple_dependency_manager.h"
@@ -27,7 +31,7 @@
  #include "components/supervised_user/core/browser/family_link_settings_service.h"
  #include "components/sync_preferences/pref_service_syncable.h"
  #include "components/variations/service/variations_service.h"
-@@ -77,6 +81,24 @@
+@@ -77,6 +81,29 @@
        pref_registry);
    BrowserContextDependencyManager::GetInstance()
        ->RegisterProfilePrefsForServices(pref_registry);
@@ -47,6 +51,11 @@
 +             password_manager::prefs::kAutomaticPasskeyUpgrades}) {
 +      pref_registry->SetDefaultPrefValue(name, base::Value(false));
 +    }
++#if BUILDFLAG(IS_LINUX)
++    // Fly windows keep the window manager's title bar and borders.
++    pref_registry->SetDefaultPrefValue(prefs::kUseCustomChromeFrame,
++                                       base::Value(false));
++#endif
 +  }
 +#endif
  }
