@@ -290,7 +290,13 @@ class FlyWindowController : public views::WidgetObserver,
   void LoadHistory(HistorySurface surface);
   void CancelHistory();
   std::vector<PaletteEntry> HistoryEntries();
+  // A row of the History panel, which covers every workspace.
   void OpenHistory(content::WebContents* source, std::string action);
+  // `loaded_only`: the row came from address suggestions, which never load a
+  // closed workspace's profile.
+  void OpenHistoryRow(content::WebContents* source,
+                      std::string action,
+                      bool loaded_only);
   void ConfirmHistoryClear(content::WebContents* source);
   std::vector<PaletteEntry> BookmarkEntries();
   void OpenBookmark(content::WebContents* source, std::string url);

@@ -2551,6 +2551,12 @@ void FlyWindowController::ToggleHistory() {
 
 void FlyWindowController::OpenHistory(content::WebContents* source,
                                       std::string action) {
+  OpenHistoryRow(source, std::move(action), /*loaded_only=*/false);
+}
+
+void FlyWindowController::OpenHistoryRow(content::WebContents* source,
+                                         std::string action,
+                                         bool loaded_only) {
   if (Closing() || ActiveContents() != source ||
       !history_choices_.contains(action))
     return;
@@ -2585,7 +2591,7 @@ void FlyWindowController::OpenHistory(content::WebContents* source,
       weak_factory_.GetWeakPtr(),
       source ? source->GetWeakPtr() : base::WeakPtr<content::WebContents>(),
       !source, std::move(action)),
-      /*loaded_only=*/true);
+      loaded_only);
 }
 
 void FlyWindowController::ConfirmHistoryClear(content::WebContents* source) {
@@ -2741,7 +2747,7 @@ void FlyWindowController::ExecuteAddress(content::WebContents* source,
   }
   if (action.starts_with("history:")) {
     history_choices_.insert(payload);
-    OpenHistory(source, payload);
+    OpenHistoryRow(source, payload, /*loaded_only=*/true);
     return;
   }
   std::optional<GURL> target;
