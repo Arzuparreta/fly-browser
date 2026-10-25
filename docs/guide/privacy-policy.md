@@ -12,7 +12,14 @@ expose normal connection information such as your IP to the service provider.
 Websites, search engines, installed extensions, the bundled blocker and Chromium
 services make requests needed for their features. Chromium's component updater
 downloads data and modules from Google, including the Widevine module that
-protected video services such as Netflix and Spotify need. Zero Fly telemetry is not a
+protected video services such as Netflix and Spotify need.
+Google Safe Browsing downloads lists of dangerous sites from Google. When an
+address matches one, it sends Google a partial hash of it; for suspicious pages
+and some downloads, Chromium sends Google the address and details of the page
+or file. Google sees your IP for these requests. Turn it off in
+`chrome://settings/security`.
+Translating a page sends its text to Google Translate; Fly only offers it, and
+detects the page language locally. Zero Fly telemetry is not a
 promise of zero network activity.
 
 ## Isolation and blocking

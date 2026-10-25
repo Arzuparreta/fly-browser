@@ -94,6 +94,14 @@ from merged pull requests. The archive is `Fly-<version>-native-linux-x64.tar.gz
 It contains `fly-browser/app/` plus `install.sh`. The in-app updater uses
 the same archive name and its `.sha256`; `fly-install` checks `SHA256SUMS.txt`.
 
+The build compiles in the Google API key from the repository secret
+`FLY_GOOGLE_API_KEY` (`google_api_key` in `out/FlyRelease/args.gn`, never in
+the repository). Google Safe Browsing and page translation need it; `release.py
+--require-google-api-key` fails the release when the secret is missing. The key
+belongs to the owner's Google Cloud project with only the Safe Browsing API
+enabled; it is non-commercial and has a daily request quota, visible in that
+project's console.
+
 ### Build host
 
 Chromium cannot be built within standard hosted runner resource limits. The
@@ -165,7 +173,8 @@ It builds and packages the branch exactly as a release does and publishes the
 package as the GitHub pre-release `test-pr-N` (N is the pull request number),
 replacing an earlier test build of that pull request. Anywhere else,
 `./launch.sh --pr N` downloads it, checks its SHA-256 and starts it with the
-development profile.
+development profile. Export `FLY_GOOGLE_API_KEY` first for a test build with
+Safe Browsing; without it the build works but does not check sites.
 
 Test builds never reach users: their tags do not start with `v`, so neither the
 release workflow nor the AUR publication runs, and Fly's update check and
