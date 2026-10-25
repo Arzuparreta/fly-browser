@@ -50,6 +50,9 @@ FlyColors DefaultFlyColors(bool dark);
 const FlyColors& GetFlyColors();
 // Returns true when the palette changed.
 bool SetFlyColors(const FlyColors& colors);
+// New native windows take Fly's main background as their window colour, so
+// none shows Chromium's grey before its first frame. Registered once.
+void RegisterFlyWindowColors();
 
 enum class FlyFace { kSans, kMono, kDisplay };
 gfx::FontList FlyFont(FlyFace face,

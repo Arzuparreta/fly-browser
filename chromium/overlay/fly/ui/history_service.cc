@@ -40,10 +40,12 @@ void HistoryService::OnURLsModified(history::HistoryService*,
 }
 void HistoryService::OnHistoryDeletions(history::HistoryService*,
                                         const history::DeletionInfo&) {
+  ++deletion_count_;
   ScheduleChanged();
 }
 void HistoryService::HistoryServiceBeingDeleted(
     history::HistoryService* service) {
+  ++deletion_count_;
   observations_.RemoveObservation(service);
   ScheduleChanged();
 }
@@ -74,14 +76,16 @@ void HistoryService::Cancel() {
   entries_.clear();
   pending_ = 0;
 }
-void HistoryService::Query(QueryCallback callback) {
+void HistoryService::Query(QueryCallback callback, bool loaded_only) {
   Cancel();
   query_callback_ = std::move(callback);
+  loaded_only_ = loaded_only;
   Start(false);
 }
 void HistoryService::Clear(base::OnceCallback<void(bool)> callback) {
   Cancel();
   clear_callback_ = std::move(callback);
+  loaded_only_ = false;
   Start(true);
 }
 void HistoryService::Start(bool clear) {
@@ -117,6 +121,10 @@ void HistoryService::Start(bool clear) {
     }
     if (auto* profile = manager_->GetProfileByPath(path)) {
       Loaded(i, profile);
+    } else if (loaded_only_) {
+      sources_[i].skipped = true;
+      if (!--pending_)
+        Run();
     } else {
       auto callback = base::BindOnce(&HistoryService::Loaded, token, i);
       if (!manager_->LoadProfileByPath(path, false, std::move(callback)) &&
@@ -175,6 +183,8 @@ void HistoryService::Run() {
   // Earlier loads can finish long before the final profile. Check all current
   // lifetimes and policies again before dispatching the first deletion.
   for (const auto& source : sources_) {
+    if (source.skipped)
+      continue;
     if (!source.profile ||
         (clear_ && !source.profile->GetPrefs()->GetBoolean(
                        prefs::kAllowDeletingBrowserHistory))) {
@@ -182,8 +192,14 @@ void HistoryService::Run() {
       return;
     }
   }
-  pending_ = sources_.size();
+  pending_ = std::ranges::count(sources_, false, &Source::skipped);
+  if (!pending_) {
+    Finish(true);
+    return;
+  }
   for (size_t i = 0; i < sources_.size(); ++i) {
+    if (sources_[i].skipped)
+      continue;
     auto* history = HistoryServiceFactory::GetForProfile(
         sources_[i].profile.get(), ServiceAccessType::EXPLICIT_ACCESS);
     if (!clear_ && !observations_.IsObservingSource(history))

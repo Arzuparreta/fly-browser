@@ -33,3 +33,5 @@
 0036-native-app-menu-anchor.patch
 0037-native-feature-defaults.patch
 0038-native-window-title.patch
+0039-native-address-bar-paint-holding.patch
+0040-native-new-tab-background.patch

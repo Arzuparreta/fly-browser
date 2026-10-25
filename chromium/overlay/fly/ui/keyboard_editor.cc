@@ -1359,6 +1359,14 @@ void KeyboardEditor::BuildPerformance() {
                std::move(select)))
       suspension_timeout_ = choice;
   }
+  BeginGroup(u"Page loading");
+  AddRow(u"Preload the address bar's result",
+         u"Loads the page an address or a history or bookmark result opens "
+         u"while you choose it. Pages open faster; the site sees the visit "
+         u"even if you do not open it. Searches are never preloaded.",
+         u"prerender preload prefetch speed faster",
+         MakeToggle("preload_address_results",
+                    u"Preload the address bar's result"));
   BeginGroup(u"Engine · restart required");
   AddRow(u"Turn off GPU acceleration",
          u"Use it when the graphics driver misbehaves.",
@@ -2395,8 +2403,9 @@ void KeyboardEditor::RefreshAppearance() {
       preferences_.CanEditWindowControls());
   set("sidebar_auto_collapse", collapse.value_or(true),
       preferences_.CanEditSidebarAutoCollapse());
-  for (const char* key : {"web_notifications", "disable_gpu",
-                          "background_throttling", "enable_diagnostics"})
+  for (const char* key :
+       {"web_notifications", "disable_gpu", "background_throttling",
+        "enable_diagnostics", "preload_address_results"})
     set(key, preferences_.ReadBool(key).value_or(false), editable);
   if (suspension_timeout_) {
     std::optional<size_t> index;

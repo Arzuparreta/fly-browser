@@ -400,6 +400,7 @@ TEST_F(PreferencesServiceTest, RemainingSettingsHaveDefaultsAndValidate) {
   EXPECT_EQ(false, service_.ReadBool("disable_gpu"));
   EXPECT_EQ(true, service_.ReadBool("background_throttling"));
   EXPECT_EQ(true, service_.ReadBool("web_notifications"));
+  EXPECT_EQ(false, service_.ReadBool("preload_address_results"));
   EXPECT_EQ(4, service_.ReadInt("process_limit"));
   EXPECT_EQ("en-GB", service_.ReadString("spellchecker_language"));
   EXPECT_EQ("normal", service_.ReadString("interface_scale"));

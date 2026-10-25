@@ -10,6 +10,11 @@
 #include "chrome/browser/bookmarks/bookmark_model_factory.h"
 #include "chrome/browser/content_settings/host_content_settings_map_factory.h"
 #include "chrome/browser/history/history_service_factory.h"
+#include "components/history/core/test/history_service_test_util.h"
+#include "content/public/test/prerender_test_util.h"
+#include "ui/base/page_transition_types.h"
+#include "ui/color/color_id.h"
+#include "ui/color/color_provider.h"
 #include "chrome/browser/lifetime/application_lifetime_desktop.h"
 #include "chrome/browser/ssl/chrome_security_state_util.h"
 #include "chrome/browser/ui/browser_window/public/browser_window_interface_iterator.h"
@@ -625,11 +630,13 @@ IN_PROC_BROWSER_TEST_F(FlyWorkspaceBrowserTest,
       original, embedded_test_server()->GetURL("/title1.html")));
   auto& window = Window();
   const int count = original->GetTabStripModel()->count();
+  // Like Chrome, a new tab opens with the address bar ready for typing.
   ASSERT_TRUE(InvokeNativeCommand(original, "spawn-tab"));
   ASSERT_EQ(count + 1, original->GetTabStripModel()->count());
   ASSERT_TRUE(content::WaitForLoadStop(Active(original)));
   base::RunLoop().RunUntilIdle();
-  EXPECT_FALSE(window.address_picker().active());
+  EXPECT_TRUE(window.address_picker().active());
+  EXPECT_TRUE(window.address_picker().search_for_testing()->HasFocus());
   EXPECT_EQ(GURL(kFlyNewTabURL), Active(original)->GetLastCommittedURL());
   EXPECT_EQ(original->GetProfile(), Active(original)->GetBrowserContext());
 
@@ -637,7 +644,7 @@ IN_PROC_BROWSER_TEST_F(FlyWorkspaceBrowserTest,
   ASSERT_EQ(count + 2, original->GetTabStripModel()->count());
   ASSERT_TRUE(content::WaitForLoadStop(Active(original)));
   base::RunLoop().RunUntilIdle();
-  EXPECT_FALSE(window.address_picker().active());
+  EXPECT_TRUE(window.address_picker().active());
   EXPECT_EQ(GURL(kFlyNewTabURL), Active(original)->GetLastCommittedURL());
   ASSERT_TRUE(OpenNativeBlankTab(original, 1));
   auto* inserted = original->GetTabStripModel()->GetWebContentsAt(1);
@@ -661,7 +668,7 @@ IN_PROC_BROWSER_TEST_F(FlyWorkspaceBrowserTest,
   ASSERT_TRUE(InvokeNativeCommand(private_browser, "spawn-tab"));
   ASSERT_TRUE(content::WaitForLoadStop(Active(private_browser)));
   base::RunLoop().RunUntilIdle();
-  EXPECT_FALSE(Window(private_browser).address_picker().active());
+  EXPECT_TRUE(Window(private_browser).address_picker().active());
   EXPECT_EQ(GURL(kFlyNewTabURL), Active(private_browser)->GetLastCommittedURL());
   EXPECT_EQ(private_browser->GetProfile(),
             Active(private_browser)->GetBrowserContext());
@@ -7020,6 +7027,140 @@ IN_PROC_BROWSER_TEST_F(FlyWorkspaceBrowserTest,
     panel->SetRail(false, nullptr);
     EXPECT_EQ(views::Button::STATE_NORMAL, button->GetVisualState());
   }
+}
+
+// A new window starts in Fly's background colour, not Chromium's grey, also
+// after the background changes.
+IN_PROC_BROWSER_TEST_F(FlyWorkspaceBrowserTest, WindowsStartInFlysBackground) {
+  EXPECT_EQ(GetFlyColors().bg_main,
+            Window().widget()->GetColorProvider()->GetColor(
+                ui::kColorWindowBackground));
+  const SkColor chosen = SkColorSetRGB(0x10, 0x20, 0x30);
+  ASSERT_TRUE(App().preferences().SetThemeColor(GetFlyColors().dark,
+                                                "bg_main", "#102030"));
+  ASSERT_TRUE(
+      base::test::RunUntil([&] { return GetFlyColors().bg_main == chosen; }));
+  auto* second = SecondWorkspace();
+  ASSERT_TRUE(second);
+  EXPECT_EQ(chosen, Window(second).widget()->GetColorProvider()->GetColor(
+                        ui::kColorWindowBackground));
+}
+
+// Clicking a tab's close button fades its row at once, even while the page
+// holds the close with a leave dialog; cancelling restores the row.
+IN_PROC_BROWSER_TEST_F(FlyWorkspaceBrowserTest,
+                       TabRowFadesWhileItsPageHoldsTheClose) {
+  ASSERT_TRUE(ui_test_utils::NavigateToURL(
+      browser(), embedded_test_server()->GetURL("/title1.html")));
+  auto* page = Active(browser());
+  ASSERT_TRUE(ExecuteNativeCommand(browser(), "spawn-tab"));
+  browser()->GetTabStripModel()->ActivateTabAt(0);
+  ASSERT_TRUE(
+      content::ExecJs(page, "window.onbeforeunload = () => 'unsaved';"));
+  content::PrepContentsForBeforeUnloadTest(page);
+  auto* sidebar = Window().tab_sidebar_for_testing();
+  views::View* row = nullptr;
+  ASSERT_TRUE(base::test::RunUntil([&] {
+    row = sidebar->row_for_testing(page);
+    return row && row->children()[2]->GetVisible();
+  }));
+  auto* close = static_cast<views::Button*>(row->children()[2].get());
+  views::test::ButtonTestApi(close).NotifyDefaultMouseClick();
+  auto* dialog = ui_test_utils::WaitForAppModalDialog();
+  ASSERT_TRUE(dialog && dialog->is_before_unload_dialog());
+  ASSERT_TRUE(base::test::RunUntil([&] {
+    return row->layer() && row->layer()->opacity() < 1.f &&
+           !close->GetVisible();
+  }));
+  dialog->view()->CancelAppModalDialog();
+  ASSERT_TRUE(base::test::RunUntil(
+      [&] { return !row->layer() && close->GetVisible(); }));
+  EXPECT_EQ(page, Active(browser()));
+  EXPECT_EQ(2, browser()->GetTabStripModel()->count());
+  ASSERT_TRUE(content::ExecJs(page, "window.onbeforeunload = null;"));
+}
+
+// The address bar suggests pages from open workspaces only and never loads
+// the profile of a closed one. The History panel covers every workspace.
+IN_PROC_BROWSER_TEST_F(FlyWorkspaceBrowserTest,
+                       AddressSuggestionsLeaveClosedWorkspacesUnloaded) {
+  auto* second = SecondWorkspace();
+  ASSERT_TRUE(second);
+  const auto path = second->GetProfile()->GetPath();
+  const auto visited =
+      embedded_test_server()->GetURL("/title2.html?closed=workspace");
+  ASSERT_TRUE(ui_test_utils::NavigateToURL(second, visited));
+  history::BlockUntilHistoryProcessesPendingRequests(
+      HistoryServiceFactory::GetForProfile(second->GetProfile(),
+                                           ServiceAccessType::EXPLICIT_ACCESS));
+  auto second_lifetime = second->GetWeakPtr();
+  second->GetWindow()->Close();
+  auto* manager = g_browser_process->profile_manager();
+  ASSERT_TRUE(base::test::RunUntil(
+      [&] { return !second_lifetime && !manager->GetProfileByPath(path); }));
+  Activate(browser());
+  auto& window = Window();
+  auto& address = window.address_picker();
+  ASSERT_TRUE(InvokeNativeCommand(browser(), "toggle-address"));
+  ASSERT_TRUE(base::test::RunUntil([&] { return address.active(); }));
+  address.search_for_testing()->SetText(u"closed=workspace");
+  address.ContentsChanged(address.search_for_testing(), u"closed=workspace");
+  base::RunLoop().RunUntilIdle();
+  // Only the typed search itself.
+  EXPECT_EQ(1u, address.result_count_for_testing());
+  EXPECT_FALSE(manager->GetProfileByPath(path));
+  address.Cancel();
+  ASSERT_TRUE(base::test::RunUntil([&] { return !address.showing(); }));
+  ASSERT_TRUE(InvokeNativeCommand(browser(), "toggle-history"));
+  auto& history = window.history_picker();
+  ASSERT_TRUE(base::test::RunUntil([&] { return history.active(); }));
+  history.search_for_testing()->SetText(u"closed=workspace");
+  history.ContentsChanged(history.search_for_testing(), u"closed=workspace");
+  ASSERT_TRUE(base::test::RunUntil(
+      [&] { return history.result_count_for_testing() >= 1u; }));
+}
+
+// The address bar marks its navigations as typed in the address bar, and,
+// when the user allows it, preloads the highlighted result so it opens from
+// memory.
+IN_PROC_BROWSER_TEST_F(FlyWorkspaceBrowserTest,
+                       AddressBarPreloadsTheHighlightedResultWhenAllowed) {
+  ASSERT_TRUE(ui_test_utils::NavigateToURL(
+      browser(), embedded_test_server()->GetURL("/title1.html")));
+  auto* contents = Active(browser());
+  auto& window = Window();
+  auto& address = window.address_picker();
+  const auto target = embedded_test_server()->GetURL("/title2.html");
+  const auto open = [&] {
+    ASSERT_TRUE(InvokeNativeCommand(browser(), "toggle-address"));
+    ASSERT_TRUE(base::test::RunUntil([&] { return address.active(); }));
+    const auto input = base::UTF8ToUTF16(target.spec());
+    address.search_for_testing()->SetText(input);
+    address.ContentsChanged(address.search_for_testing(), input);
+  };
+  open();
+  base::RunLoop().RunUntilIdle();
+  EXPECT_TRUE(
+      content::test::PrerenderTestHelper::GetHostForUrl(*contents, target)
+          .is_null());
+  address.Cancel();
+  ASSERT_TRUE(base::test::RunUntil([&] { return !address.showing(); }));
+  ASSERT_TRUE(App().preferences().SetBool("preload_address_results", true));
+  content::test::PrerenderHostObserver preloaded(*contents, target);
+  open();
+  content::test::PrerenderTestHelper::WaitForPrerenderLoadCompletion(*contents,
+                                                                     target);
+  ui::test::EventGenerator keys(
+      window.widget()->GetNativeWindow()->GetRootWindow());
+  keys.PressKey(ui::VKEY_RETURN, ui::EF_NONE);
+  preloaded.WaitForActivation();
+  EXPECT_EQ(target, contents->GetLastCommittedURL());
+  const auto transition =
+      contents->GetController().GetLastCommittedEntry()->GetTransitionType();
+  EXPECT_TRUE(
+      ui::PageTransitionCoreTypeIs(transition, ui::PAGE_TRANSITION_TYPED));
+  EXPECT_TRUE(ui::PageTransitionGetQualifier(transition) &
+              ui::PAGE_TRANSITION_FROM_ADDRESS_BAR);
 }
 
 }  // namespace

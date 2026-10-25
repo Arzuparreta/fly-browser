@@ -82,14 +82,17 @@ class TabSidebar : public views::View,
   void OnTabChangedAt(tabs::TabInterface* tab, TabChangeType type) override;
   void OnTabPinnedStateChanged(tabs::TabInterface* tab, int index) override;
   void OnTabStripModelDestroyed(TabStripModel* model) override;
+  // Rereads the tabs soon, e.g. after a close request that a page's unload
+  // handlers may hold back.
+  void ScheduleRefresh();
 
  private:
   class Surfaces;
   class RailMarks;
   class Numbers;
   enum class RowAction { kSelect, kClose, kPin, kMute };
+  class CloseWatch;
   base::RepeatingClosure state_changed_;
-  void ScheduleRefresh();
   void Refresh();
   void Invoke(base::WeakPtr<content::WebContents> contents, RowAction action);
   void ShowContextMenuForViewImpl(
@@ -107,6 +110,9 @@ class TabSidebar : public views::View,
     gfx::ImageSkia favicon;
     bool favicon_initialized = false;
     base::CallbackListSubscription audible_subscription;
+    // Watches a tab whose close waits for its page; a cancelled close
+    // restores the row.
+    std::unique_ptr<CloseWatch> close_watch;
   };
   std::map<content::WebContents*, Row> tab_rows_;
   std::unique_ptr<SidebarTabMenu> context_menu_;

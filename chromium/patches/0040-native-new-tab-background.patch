@@ -1,0 +1,30 @@
+--- a/chrome/browser/ui/browser.cc
++++ b/chrome/browser/ui/browser.cc
+@@ -3,6 +3,10 @@
+ // found in the LICENSE file.
+ 
+ #include "chrome/browser/ui/browser.h"
++
++#if BUILDFLAG(IS_LINUX) || BUILDFLAG(IS_WIN)
++#include "fly/ui/new_tab_ui.h"
++#endif
+ 
+ #include <stddef.h>
+ 
+@@ -777,7 +781,15 @@
+         selection.old_contents->GetPrimaryMainFrame()->GetView();
+     RenderWidgetHostView* new_view =
+         selection.new_contents->GetPrimaryMainFrame()->GetView();
+-    if (old_view && new_view) {
++    bool copy_background = old_view && new_view;
++#if BUILDFLAG(IS_LINUX) || BUILDFLAG(IS_WIN)
++    // Fly's new tab page paints its own background straight away; the
++    // previous page's colour would show first.
++    copy_background =
++        copy_background &&
++        !fly::IsFlyNewTabPage(selection.new_contents->GetVisibleURL());
++#endif
++    if (copy_background) {
+       new_view->CopyBackgroundColorIfPresentFrom(*old_view);
+     }
+   }

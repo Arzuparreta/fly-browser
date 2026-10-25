@@ -685,13 +685,16 @@ void CommandPalette::SetRowSelected(int index, bool selected) {
   auto* row = buttons_[index].get();
   row->SetSelected(selected);
   row->GetViewAccessibility().SetIsSelected(selected);
-  if (!search_)
-    return;
-  if (selected)
-    search_->GetViewAccessibility().SetActiveDescendant(*row);
-  else if (search_->GetViewAccessibility().GetActiveDescendantView() ==
-           &row->GetViewAccessibility())
-    search_->GetViewAccessibility().ClearActiveDescendant();
+  if (search_) {
+    if (selected)
+      search_->GetViewAccessibility().SetActiveDescendant(*row);
+    else if (search_->GetViewAccessibility().GetActiveDescendantView() ==
+             &row->GetViewAccessibility())
+      search_->GetViewAccessibility().ClearActiveDescendant();
+  }
+  if (selected && selection_callback_ &&
+      index < static_cast<int>(filtered_.size()))
+    selection_callback_.Run(filtered_[index].action);
 }
 void CommandPalette::RefreshQuery() {
   if (active() && query_provider_)

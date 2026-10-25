@@ -148,7 +148,7 @@ class FlyWindowController : public views::WidgetObserver,
                        int flags,
                        bool repeat,
                        bool passthrough);
-  void CreateTab();
+  bool CreateTab();
 
   CommandPalette& palette() { return *palette_; }
   CommandPalette& address_picker() { return *address_picker_; }
@@ -281,6 +281,11 @@ class FlyWindowController : public views::WidgetObserver,
   void ToggleAddress();
   std::vector<PaletteEntry> AddressEntries(std::u16string_view query);
   void ExecuteAddress(content::WebContents* source, std::string action);
+  // The address bar's highlighted row: connect to its site early and, when
+  // the preference allows, load the page it opens in the background.
+  void PrepareAddressChoice(std::string_view action);
+  // Opens `url` in the active tab as a navigation from the address bar.
+  void NavigateFromAddressBar(const GURL& url);
   void ToggleHistory();
   void LoadHistory(HistorySurface surface);
   void CancelHistory();
@@ -390,6 +395,12 @@ class FlyWindowController : public views::WidgetObserver,
   std::vector<HistoryEntry> history_entries_;
   std::set<std::string> history_choices_;
   uint64_t history_generation_ = 0;
+  // What the loaded rows were read against: a deletion or a catalogue change
+  // since then sends a chosen row through a fresh query.
+  uint64_t history_rows_deletions_ = 0;
+  std::vector<Workspace> history_rows_workspaces_;
+  std::string prepared_origin_;
+  GURL prerendered_url_;
   std::set<std::string> bookmark_urls_;
   std::map<std::string, std::string> address_choices_;
 

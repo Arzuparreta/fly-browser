@@ -37,7 +37,7 @@ Once launched, Fly opens a window for your first workspace with a new tab:
 ![Fly Browser New Tab](/screenshots/new-tab.webp)
 
 - Press **Ctrl + L** to open the floating address bar and navigate to any site.
-- Press **Ctrl + T** to open a new tab.
+- Press **Ctrl + T** to open a new tab with the address bar ready for typing.
 - Press **Alt + F** (or **f** in NORMAL mode) to activate the Link Hints overlay and navigate links using your keyboard.
 - Press **Ctrl + P** to bring up the Command Palette for quick access to all browser functions.
 - Press **Ctrl + ,** to open Preferences. Use the section index on the left, or ↑/↓ once it has focus, to move between sections. Press **/** or **Ctrl + F** to search every setting.

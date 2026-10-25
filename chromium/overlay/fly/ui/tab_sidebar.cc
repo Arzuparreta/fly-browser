@@ -31,6 +31,7 @@
 #include "content/public/browser/navigation_controller.h"
 #include "content/public/browser/navigation_entry.h"
 #include "content/public/browser/web_contents.h"
+#include "content/public/browser/web_contents_observer.h"
 #include "cc/paint/path_effect.h"
 #include "skia/ext/image_operations.h"
 #include "ui/base/metadata/metadata_impl_macros.h"
@@ -80,6 +81,8 @@ struct RowState {
   bool audible = false;
   bool muted = false;
   int split_pane = 0;  // 1 or 2 inside a split view.
+  // Closing, while the page's unload handlers run or its leave dialog shows.
+  bool closing = false;
   bool HasSurface() const { return selected || pinned || split_pane; }
   bool operator==(const RowState&) const = default;
 };
@@ -308,6 +311,17 @@ class TabRowView : public views::View {
     audio_->SetMuted(state.muted);
     // Pinned tabs cannot be closed from the row.
     close_->SetEnabled(!state.pinned);
+    // A closing row fades at once, so the click is answered even while the
+    // page delays the close.
+    if (state.closing) {
+      if (!layer()) {
+        SetPaintToLayer();
+        layer()->SetFillsBoundsOpaquely(false);
+      }
+      layer()->SetOpacity(0.45f);
+    } else if (layer()) {
+      DestroyLayer();
+    }
     UpdateClose();
     InvalidateLayout();
     SchedulePaint();
@@ -315,8 +329,8 @@ class TabRowView : public views::View {
   }
   void UpdateClose() {
     // .tab-close-btn keeps its space and shows on the hovered or selected
-    // row; pinned rows have none.
-    close_->SetVisible(!state_.pinned &&
+    // row; pinned and closing rows have none.
+    close_->SetVisible(!state_.pinned && !state_.closing &&
                        (state_.selected || (hovered_ && !list_->rail())));
   }
   void OnMouseEntered(const ui::MouseEvent&) override {
@@ -840,6 +854,22 @@ void TabSidebar::SetBrowser(BrowserWindowInterface* browser) {
   // tab. Deleting the originating button during its own callback is unsafe.
   ScheduleRefresh();
 }
+class TabSidebar::CloseWatch : public content::WebContentsObserver {
+ public:
+  CloseWatch(content::WebContents* contents, base::RepeatingClosure cancelled)
+      : content::WebContentsObserver(contents),
+        cancelled_(std::move(cancelled)) {}
+  // The page answered "stay": Chromium clears the close mark in the same
+  // call, before the posted refresh runs.
+  void BeforeUnloadFired(bool proceed) override {
+    if (!proceed)
+      cancelled_.Run();
+  }
+
+ private:
+  base::RepeatingClosure cancelled_;
+};
+
 void TabSidebar::ScheduleRefresh() {
   if (refresh_pending_)
     return;
@@ -950,6 +980,16 @@ void TabSidebar::Refresh() {
     state.audible = audible_helper ? audible_helper->WasRecentlyAudible()
                                    : contents->IsCurrentlyAudible();
     state.muted = contents->IsAudioMuted();
+    // Chromium marks a tab closed by the user until it goes away, and clears
+    // the mark when its page cancels the close.
+    state.closing = contents->GetClosedByUserGesture();
+    if (state.closing && !row.close_watch) {
+      row.close_watch = std::make_unique<CloseWatch>(
+          contents, base::BindRepeating(&TabSidebar::ScheduleRefresh,
+                                        weak_factory_.GetWeakPtr()));
+    } else if (!state.closing) {
+      row.close_watch.reset();
+    }
     if (const auto split = model_->GetSplitForTab(i)) {
       const auto tabs = model_->GetSplitData(*split)->ListTabs();
       for (size_t pane = 0; pane < tabs.size(); ++pane) {
@@ -1008,6 +1048,12 @@ void TabSidebar::Refresh() {
   if (changed) {
     rows_->InvalidateLayout();
     RepaintSurfaces();
+    // Rows moved under a still pointer. Lay them out now and update hover, so
+    // the close button under the pointer belongs to the row now there.
+    if (auto* widget = GetWidget(); widget && widget->IsVisible()) {
+      widget->LayoutRootViewIfNecessary();
+      widget->SynthesizeMouseMoveEvent();
+    }
   }
 }
 void TabSidebar::Invoke(base::WeakPtr<content::WebContents> contents,
@@ -1032,6 +1078,7 @@ void TabSidebar::Invoke(base::WeakPtr<content::WebContents> contents,
       model_->CloseWebContentsAt(
           index, TabCloseTypes::CLOSE_USER_GESTURE |
                      TabCloseTypes::CLOSE_CREATE_HISTORICAL_TAB);
+      ScheduleRefresh();
       break;
     case RowAction::kPin:
       model_->SetTabPinned(index, !model_->IsTabPinned(index));
@@ -1064,6 +1111,7 @@ void TabSidebar::ExecuteMenuAction(uint64_t generation,
   if (generation != context_generation_ || !browser_ || !contents)
     return;
   SidebarTabMenu::Execute(browser_, contents.get(), action);
+  ScheduleRefresh();
 }
 ui::SimpleMenuModel* TabSidebar::context_menu_for_testing() const {
   return context_menu_ ? context_menu_->model() : nullptr;

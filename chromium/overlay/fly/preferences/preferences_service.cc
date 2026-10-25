@@ -32,6 +32,7 @@ constexpr auto kBoolDefaults = base::MakeFixedFlatMap<std::string_view, bool>({
     {"disable_gpu", false},
     {"enable_diagnostics", false},
     {"extensions_enabled", true},
+    {"preload_address_results", false},
     {"web_notifications", true},
 });
 constexpr auto kStringDefaults =
