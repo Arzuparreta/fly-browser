@@ -5,15 +5,17 @@
       [--output out/FlyRelease] [--dist dist]
 
 Produces dist/Fly-<version>-native-linux-x64.tar.gz (and .sha256) holding a
-fly-browser/ directory: the browser and its runtime files, Fly's fonts,
-What's New page, user content worker and bundled extensions, a launcher and an
-install.sh that installs it for the current user as "Fly".
-Fly keeps its data in $XDG_CONFIG_HOME/fly-browser (default ~/.config/fly-browser).
+fly-browser/ directory: the browser (app/fly-browser) and its runtime files,
+Fly's fonts, What's New page, user content worker and bundled extensions, and
+an install.sh that installs it for the current user as "Fly".
+The release build starts Fly by itself (fly_native_by_default) and keeps its
+data in $XDG_CONFIG_HOME/fly-browser (default ~/.config/fly-browser).
 """
 import argparse
 import hashlib
 import json
 import platform
+import re
 import shutil
 import subprocess
 import sys
@@ -38,12 +40,16 @@ REQUIRED = ['chrome', 'resources.pak', 'icudtl.dat', 'locales', 'fly_fonts',
             'fly_resources/icons/fly-logo128.png',
             'fly_resources/icons/fly-logo256.png', 'chrome_sandbox']
 
-LAUNCHER = '''#!/bin/sh
-# Fly launcher. Respect the XDG configuration directory.
-HERE=$(dirname "$(readlink -f "$0")")
-CONFIG="${XDG_CONFIG_HOME:-$HOME/.config}"
-exec "$HERE/fly" --fly-native --class=fly-browser \\
-  --user-data-dir="$CONFIG/fly-browser" "$@"
+# Build outputs that the package names after Fly. The engine looks for
+# fly-crashpad next to the browser (0041-native-desktop-identity.patch).
+PACKAGED_NAMES = {'chrome': 'fly-browser', 'chrome_crashpad_handler': 'fly-crashpad'}
+
+# Earlier releases ran app/fly through a launcher script. Their in-app update
+# refuses a package without app/fly, a browser of theirs restarts through that
+# path after an update or a package upgrade, and launch.sh starts it.
+COMPAT_FLY = '''#!/bin/sh
+# Starts fly-browser where earlier releases started this file.
+exec "$(dirname "$(readlink -f "$0")")/fly-browser" "$@"
 '''
 
 INSTALL = r'''#!/bin/sh
@@ -103,13 +109,23 @@ Terminal=false
 Type=Application
 Categories=Network;WebBrowser;
 MimeType=text/html;text/xml;application/xhtml+xml;x-scheme-handler/http;x-scheme-handler/https;
-StartupWMClass=fly-browser
+StartupWMClass=Fly
 '''
 
 
 def fail(message):
     print(f'package-linux: {message}', file=sys.stderr)
     raise SystemExit(1)
+
+
+def check_release_build(args_gn):
+    """Packages hold a static build that starts Fly without a launcher."""
+    if re.search(r'^\s*is_component_build\s*=\s*true\s*$', args_gn, re.M):
+        fail('this is a component build; package a release build '
+             '(chromium/gn/release.gnargs)')
+    if not re.search(r'^\s*fly_native_by_default\s*=\s*true\s*$', args_gn, re.M):
+        fail('this build does not start Fly by itself; package a release build '
+             '(chromium/gn/release.gnargs)')
 
 
 def normalize_package_permissions(root):
@@ -137,10 +153,7 @@ def main():
     for name in REQUIRED:
         if not (build / name).exists():
             fail(f'{build / name} is missing; build the chrome target first')
-    args_gn = (build / 'args.gn').read_text(encoding='utf-8')
-    if 'is_component_build = true' in args_gn:
-        fail('this is a component build; package a release build '
-             '(chromium/gn/release.gnargs)')
+    check_release_build((build / 'args.gn').read_text(encoding='utf-8'))
     version = json.loads((REPO / 'package.json').read_text())['version']
     engine = json.loads((REPO / 'chromium' / 'upstream.lock.json').read_text())['engine_version']
     name = f'Fly-{version}-native-linux-x64'
@@ -151,14 +164,14 @@ def main():
         app.mkdir(parents=True)
         for file in RUNTIME_FILES:
             if (build / file).is_file():
-                shutil.copy2(build / file, app / ('fly' if file == 'chrome' else file))
+                shutil.copy2(build / file, app / PACKAGED_NAMES.get(file, file))
         if (build / 'chrome_sandbox').is_file():
             shutil.copy2(build / 'chrome_sandbox', app / 'chrome-sandbox')
         # Release builds keep the symbol table (about a third of the browser
         # binary); packages do not need it.
         strip = shutil.which('strip')
         if strip:
-            for binary in ('fly', 'chrome_crashpad_handler', 'chrome-sandbox'):
+            for binary in ('fly-browser', 'fly-crashpad', 'chrome-sandbox'):
                 if (app / binary).is_file():
                     subprocess.run([strip, str(app / binary)], check=True)
         for directory in RUNTIME_DIRS:
@@ -175,12 +188,12 @@ def main():
             'engine': json.loads((REPO / 'chromium/upstream.lock.json').read_text()),
             'repository_commit': subprocess.check_output(['git', 'rev-parse', 'HEAD'], cwd=REPO, text=True).strip(),
             'repository_dirty': bool(subprocess.check_output(['git', 'status', '--porcelain', '--untracked-files=no'], cwd=REPO, text=True).strip()),
-            'binary_sha256': hashlib.sha256((app / 'fly').read_bytes()).hexdigest(),
+            'binary_sha256': hashlib.sha256((app / 'fly-browser').read_bytes()).hexdigest(),
         }
         (app / 'provenance.json').write_text(json.dumps(provenance, indent=2) + '\n')
-        launcher = app / 'fly-browser'
-        launcher.write_text(LAUNCHER, encoding='utf-8')
-        launcher.chmod(0o755)
+        compat = app / 'fly'
+        compat.write_text(COMPAT_FLY, encoding='utf-8')
+        compat.chmod(0o755)
         (app / 'fly-browser.desktop').write_text(DESKTOP, encoding='utf-8')
         (app / 'VERSION').write_text(f'Fly {version}\nEngine Chromium {engine}\n',
                                      encoding='utf-8')

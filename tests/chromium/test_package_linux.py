@@ -31,6 +31,37 @@ class PackageInstallerTest(unittest.TestCase):
             package.normalize_package_permissions(root)
             self.assertEqual(binary.stat().st_mode & 0o7777, 0o755)
 
+    def test_packages_only_release_builds_that_start_fly(self):
+        release = (Path(__file__).resolve().parents[2] / 'chromium/gn/release.gnargs').read_text()
+        package.check_release_build(release)
+        with self.assertRaises(SystemExit):
+            package.check_release_build(release.replace('fly_native_by_default = true', ''))
+        with self.assertRaises(SystemExit):
+            package.check_release_build(release.replace('is_component_build = false',
+                                                        'is_component_build = true'))
+
+    def test_browser_and_desktop_entry_carry_fly_names(self):
+        self.assertEqual(package.PACKAGED_NAMES['chrome'], 'fly-browser')
+        self.assertEqual(package.PACKAGED_NAMES['chrome_crashpad_handler'], 'fly-crashpad')
+        # X11 window class; Wayland matches the app_id with the entry's name.
+        self.assertIn('\nStartupWMClass=Fly\n', package.DESKTOP)
+        self.assertIn('\nIcon=fly-browser\n', package.DESKTOP)
+
+    def test_earlier_releases_start_fly_browser_through_app_fly(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            app = Path(tmp) / 'app dir'
+            app.mkdir()
+            (app / 'fly-browser').write_text('#!/bin/sh\nprintf "%s|" "$0" "$@"\n')
+            (app / 'fly-browser').chmod(0o755)
+            (app / 'fly').write_text(package.COMPAT_FLY)
+            (app / 'fly').chmod(0o755)
+            # Through a symlink, as an earlier install's restart may be.
+            link = Path(tmp) / 'link'
+            link.symlink_to(app / 'fly')
+            result = subprocess.run([str(link), '--fly-native', '--user-data-dir=/a b'],
+                                    capture_output=True, text=True, check=True)
+            self.assertEqual(result.stdout, f'{app}/fly-browser|--fly-native|--user-data-dir=/a b|')
+
     def test_install_update_remove_keeps_profile(self):
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)

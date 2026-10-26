@@ -7,8 +7,9 @@
 // Nothing here is edited by hand per release; the AUR workflow runs this and
 // pushes the result.
 //
-// The native tarball carries app/fly-browser.desktop and app/icons/.
-// The package installs that launcher and profile-separated Chromium runtime.
+// The native tarball carries the browser (app/fly-browser), its desktop entry
+// (app/fly-browser.desktop) and app/icons/. The package installs them, with
+// /usr/bin/fly-browser starting the browser.
 //
 // `.SRCINFO` is written here rather than by `makepkg --printsrcinfo` so that
 // it can be produced on any runner. The test compares the two where makepkg

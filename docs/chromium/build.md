@@ -45,8 +45,8 @@ the published release, with or without a local build; see
 Local launches use a persistent `fly-browser-dev` profile under
 `${XDG_CONFIG_HOME:-$HOME/.config}`. They do not share the installed browser's
 profile, so both can run simultaneously. Arguments are preserved, including an
-explicit `--user-data-dir` override. The installed launcher keeps
-its existing profile. Downloaded builds use the same development profile.
+explicit `--user-data-dir` override. The installed Fly keeps
+its own profile. Downloaded builds use the same development profile.
 Release hosting prerequisites are in [releasing](../releasing.md).
 
 ## Source and prerequisites
@@ -190,7 +190,9 @@ python3 scripts/chromium/native.py build --root /path/to/fly-chromium
 ```
 
 The native output is `src/out/FlyNative`. During development, its native desktop
-window requires `--fly-native`, supplied by the default launcher. Native
+window requires `--fly-native`, supplied by the default launcher. Release builds
+set `fly_native_by_default = true` (`chromium/gn/release.gnargs`), so the packaged
+`fly-browser` starts Fly without it. Native
 source changes and input fingerprints are recorded in `evidence/native-overlay.json`.
 `verify` rejects edits outside that manifest as well as changed managed files.
 To install a changed overlay, first `revert` the previous managed copy, then
@@ -341,10 +343,12 @@ autoninja -C out/FlyRelease chrome chrome_sandbox
 python3 /path/to/fly/scripts/chromium/package-linux.py --root /path/to/engine
 ```
 
-The package is `dist/Fly-<version>-native-linux-x64.tar.gz` (with `.sha256`). It
-contains `install.sh`, which installs "Fly" for the current user in
-`$XDG_DATA_HOME/fly-browser` with a menu entry and
-`~/.local/bin/fly-browser` plus the `fly-browser` alias (`install.sh --remove`
-uninstalls and keeps data). Fly's data lives in `$XDG_CONFIG_HOME/fly-browser`
+The package is `dist/Fly-<version>-native-linux-x64.tar.gz` (with `.sha256`). Its
+`app/` holds the browser as `fly-browser` (the build's `chrome`) and the crash
+handler as `fly-crashpad`; `app/fly` only starts `fly-browser`, for
+installations of earlier releases that update in place. It contains
+`install.sh`, which installs "Fly" for the current user in
+`$XDG_DATA_HOME/fly-browser` with a menu entry and `~/.local/bin/fly-browser`
+(`install.sh --remove` uninstalls and keeps data). Fly's data lives in `$XDG_CONFIG_HOME/fly-browser`
 (default `~/.config/fly-browser`). A full static build does not fit the hosted
 CI runners, so the release workflow uses a provisioned self-hosted engine runner.

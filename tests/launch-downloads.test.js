@@ -57,13 +57,18 @@ code 200
         result.requests = fs.existsSync(requests) ? fs.readFileSync(requests, 'utf8') : '';
         return result;
     };
-    // Publishes a package whose browser prints its name and arguments.
-    const publish = (tag, label, {corrupt = false} = {}) => {
+    // The app/fly that newer packages carry (scripts/chromium/package-linux.py).
+    const compatFly = /^COMPAT_FLY = '\'\'([\s\S]*?)'\'\'$/m.exec(
+        fs.readFileSync(path.join(root, 'scripts/chromium/package-linux.py'), 'utf8'))[1];
+    // Publishes a package whose browser prints its name and arguments: app/fly
+    // as in older packages, or app/fly-browser started by app/fly.
+    const publish = (tag, label, {corrupt = false, renamed = false} = {}) => {
         const stage = path.join(temp, 'stage', tag);
         fs.rmSync(stage, {recursive:true, force:true});
         fs.mkdirSync(path.join(stage, 'fly-browser/app'), {recursive:true});
-        fs.writeFileSync(path.join(stage, 'fly-browser/app/fly'),
+        fs.writeFileSync(path.join(stage, renamed ? 'fly-browser/app/fly-browser' : 'fly-browser/app/fly'),
             `#!/bin/sh\necho "${label}"\nprintf "%s\\n" "$@"\nexit 23\n`, {mode:0o755});
+        if (renamed) fs.writeFileSync(path.join(stage, 'fly-browser/app/fly'), compatFly, {mode:0o755});
         const dir = path.join(github, 'Arzuparreta/fly-browser/releases/download', tag);
         fs.mkdirSync(dir, {recursive:true});
         const name = 'Fly-9.9.9-native-linux-x64.tar.gz';
@@ -164,6 +169,29 @@ code 200
     assert.match(closed.stderr, /There is no test build of pull request #153/);
     assert.equal(fs.existsSync(channel), false);
     console.log('Running builds are kept, other builds are refused while one holds the profile, failed downloads fall back and closed pull requests are cleaned up.');
+
+    // Newer packages start app/fly-browser through app/fly. A Fly already
+    // running from the same build does not block the start: Chromium hands it
+    // the new window.
+    publish('test-pr-160', 'pr 160 renamed', {renamed:true});
+    const renamed = launch(['--pr', '160', '--new-window']);
+    assert.equal(renamed.status, 23, renamed.stderr);
+    assert.equal(renamed.stdout, `pr 160 renamed\n${flags}--new-window\n`);
+    const [build160] = fs.readdirSync(path.join(env.XDG_CACHE_HOME, 'fly-browser-launch/pr-160'));
+    const sameBuild = path.join(env.XDG_CACHE_HOME, 'fly-browser-launch/pr-160', build160, 'fly-browser/app/sh');
+    fs.copyFileSync('/bin/sh', sameBuild);
+    fs.chmodSync(sameBuild, 0o755);
+    const sameHolder = spawn(sameBuild, ['-c', 'sleep 30; :', 'sh', `--user-data-dir=${profileDir}`], {stdio:'ignore'});
+    try {
+        fs.symlinkSync(`${os.hostname()}-${sameHolder.pid}`, path.join(profileDir, 'SingletonLock'));
+        const joining = launch(['--pr', '160']);
+        assert.equal(joining.status, 23, joining.stderr);
+        assert.doesNotMatch(joining.stderr, /another build is running/);
+    } finally {
+        fs.unlinkSync(path.join(profileDir, 'SingletonLock'));
+        sameHolder.kill();
+    }
+    console.log('Newer packages start app/fly-browser through app/fly, also beside a Fly of the same build.');
 
     // Missing builds, bad checksums and bad numbers start nothing.
     const missing = launch(['--pr', '7']);

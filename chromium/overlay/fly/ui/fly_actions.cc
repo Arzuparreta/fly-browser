@@ -705,7 +705,7 @@ std::u16string ReplaceInstallation(base::FilePath package,
     return u"The package could not be unpacked.";
   const auto app =
       unpacked.GetPath().AppendASCII("fly-browser").AppendASCII("app");
-  if (!base::PathExists(app.AppendASCII("fly")))
+  if (!base::PathExists(app.AppendASCII("fly-browser")))
     return u"The package does not contain native Fly.";
   // One rename each way, as install.sh: the running browser keeps its open
   // files and restarts into the new copy.
@@ -816,7 +816,9 @@ base::FilePath DataHome() {
     return base::FilePath(*value);
   return base::GetHomeDir().AppendASCII(".local").AppendASCII("share");
 }
-base::FilePath Launcher() {
+// The packaged browser, which starts Fly by itself. Development builds
+// (chrome) have none.
+base::FilePath PackagedBrowser() {
   base::FilePath exe;
   if (!base::PathService::Get(base::DIR_EXE, &exe))
     return base::FilePath();
@@ -841,7 +843,7 @@ base::FilePath FindEntry() {
 }
 DesktopIntegrationStatus ReadStatusBlocking() {
   DesktopIntegrationStatus status;
-  status.supported = base::PathExists(Launcher());
+  status.supported = base::PathExists(PackagedBrowser());
   status.entry = FindEntry();
   std::string content;
   status.ours = !status.entry.empty() &&
@@ -897,10 +899,10 @@ std::string DesktopExecArgument(const std::string& value) {
   return entry;
 }
 std::u16string AddEntryBlocking() {
-  const auto launcher = Launcher();
-  if (!base::PathExists(launcher))
+  const auto browser = PackagedBrowser();
+  if (!base::PathExists(browser))
     return u"Only the installed package can add its menu entry";
-  base::FilePath exe = launcher.DirName();
+  base::FilePath exe = browser.DirName();
   for (const int size : kIconSizes) {
     const auto source = exe.AppendASCII("icons").AppendASCII(
         "fly-logo" + base::NumberToString(size) + ".png");
@@ -918,12 +920,12 @@ std::u16string AddEntryBlocking() {
       {"[Desktop Entry]\nName=Fly (native)\nGenericName=Web Browser\n"
        "Comment=Fly on the Chromium engine\nKeywords=browser;web;internet;\n"
        "Exec=",
-       DesktopExecArgument(launcher.value()),
+       DesktopExecArgument(browser.value()),
        " %U\nIcon=fly-browser\nTerminal=false\nType=Application\n"
        "Categories=Network;WebBrowser;\n"
        "MimeType=text/html;text/xml;application/xhtml+xml;"
        "x-scheme-handler/http;x-scheme-handler/https;\n"
-       "StartupWMClass=fly-browser\n",
+       "StartupWMClass=Fly\n",
        kDesktopMarker, "\n"});
   const auto entry = UserEntry();
   if (!base::CreateDirectory(entry.DirName()) ||
