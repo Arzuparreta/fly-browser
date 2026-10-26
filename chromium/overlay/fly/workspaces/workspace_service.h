@@ -13,6 +13,7 @@
 #include "base/memory/raw_ref.h"
 #include "base/sequence_checker.h"
 #include "base/values.h"
+#include "components/prefs/pref_change_registrar.h"
 
 class PrefRegistrySimple;
 class PrefService;
@@ -82,10 +83,17 @@ class WorkspaceService {
   bool Reorder(const std::vector<std::string>& ids);
 
  private:
-  std::optional<base::DictValue> ReadValidated(bool for_write = false) const;
+  const base::DictValue* ReadValidated() const;
+  std::optional<base::DictValue> ValidateCatalog() const;
+  std::optional<base::DictValue> ReadForWrite() const;
+  void InvalidateCache() const;
   void Commit(base::DictValue catalog);
 
   const raw_ref<PrefService> local_state_;
+  mutable PrefChangeRegistrar registrar_;
+  mutable bool cache_initialized_ = false;
+  mutable std::optional<base::DictValue> validated_;
+  mutable std::optional<WorkspaceCatalog> snapshot_;
   SEQUENCE_CHECKER(sequence_checker_);
 };
 

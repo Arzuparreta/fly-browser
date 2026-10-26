@@ -16,12 +16,14 @@
 #include "base/files/file_util.h"
 #include "base/functional/bind.h"
 #include "base/logging.h"
+#include "base/no_destructor.h"
 #include "base/path_service.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/strings/string_util.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/task/single_thread_task_runner.h"
 #include "base/task/thread_pool.h"
+#include "base/trace_event/trace_event.h"
 #include "build/build_config.h"
 #include "cc/paint/paint_flags.h"
 #include "chrome/app/chrome_command_ids.h"
@@ -50,7 +52,6 @@
 #include "content/public/browser/navigation_controller.h"
 #include "content/public/browser/render_widget_host_view.h"
 #include "content/public/browser/web_contents.h"
-#include "services/network/public/cpp/constants.h"
 #include "extensions/common/extension.h"
 #include "fly/bookmarks/bookmark_service.h"
 #include "fly/commands/calculator.h"
@@ -72,6 +73,7 @@
 #include "fly/ui/tab_move_transaction.h"
 #include "fly/ui/tab_sidebar.h"
 #include "fly/ui/user_content.h"
+#include "services/network/public/cpp/constants.h"
 #include "skia/ext/image_operations.h"
 #include "ui/aura/client/focus_client.h"
 #include "ui/aura/window.h"
@@ -1317,45 +1319,79 @@ void FlyWindowController::ApplySidebarMotion(bool animate) {
   sidebar_panel_->SetRail(rail, &block);
 }
 
+namespace {
+// Product artwork only: immutable bitmaps cross the worker/UI boundary;
+// ImageSkia objects are created and shared exclusively on the UI sequence.
+class SidebarArtwork {
+ public:
+  using Images = std::array<gfx::ImageSkia, 3>;
+  using Callback = base::OnceCallback<void(const Images&)>;
+  static SidebarArtwork& Get() {
+    static base::NoDestructor<SidebarArtwork> cache;
+    return *cache;
+  }
+  void Read(Callback done) {
+    if (images_) {
+      std::move(done).Run(*images_);
+      return;
+    }
+    pending_.push_back(std::move(done));
+    if (loading_)
+      return;
+    loading_ = true;
+    base::ThreadPool::PostTaskAndReplyWithResult(
+        FROM_HERE, {base::MayBlock(), base::TaskPriority::USER_VISIBLE},
+        base::BindOnce([] {
+          TRACE_EVENT("browser", "Fly.SidebarArtwork.ReadAndDecode");
+          std::array<SkBitmap, 3> bitmaps;
+          base::FilePath assets;
+          if (!base::PathService::Get(base::DIR_ASSETS, &assets))
+            return bitmaps;
+          const auto identity =
+              assets.AppendASCII("fly_resources").AppendASCII("identity");
+          const std::array<const char*, 3> names = {"engraving-chasis@2x.png",
+                                                    "engraving-papel@2x.png",
+                                                    "paper-grain.png"};
+          for (size_t i = 0; i < names.size(); ++i) {
+            std::string bytes;
+            if (base::ReadFileToStringWithMaxSize(
+                    identity.AppendASCII(names[i]), &bytes, 1024 * 1024)) {
+              bitmaps[i] = gfx::PNGCodec::Decode(base::as_byte_span(bytes));
+              bitmaps[i].setImmutable();
+            }
+          }
+          return bitmaps;
+        }),
+        base::BindOnce(&SidebarArtwork::Loaded, base::Unretained(this)));
+  }
+
+ private:
+  void Loaded(std::array<SkBitmap, 3> bitmaps) {
+    images_.emplace();
+    for (size_t i = 0; i < bitmaps.size(); ++i)
+      (*images_)[i] =
+          gfx::ImageSkia::CreateFromBitmap(bitmaps[i], i == 2 ? 1 : 2);
+    auto pending = std::move(pending_);
+    for (auto& done : pending)
+      std::move(done).Run(*images_);
+  }
+  bool loading_ = false;
+  std::optional<Images> images_;
+  std::vector<Callback> pending_;
+};
+}  // namespace
+
 void FlyWindowController::LoadSidebarArtwork() {
-  base::ThreadPool::PostTaskAndReplyWithResult(
-      FROM_HERE, {base::MayBlock(), base::TaskPriority::USER_VISIBLE},
-      base::BindOnce([]() {
-        std::array<std::string, 3> bytes;
-        base::FilePath assets;
-        if (!base::PathService::Get(base::DIR_ASSETS, &assets))
-          return bytes;
-        const auto identity =
-            assets.AppendASCII("fly_resources").AppendASCII("identity");
-        const std::array<const char*, 3> names = {
-            "engraving-chasis@2x.png", "engraving-papel@2x.png",
-            "paper-grain.png"};
-        for (size_t i = 0; i < names.size(); ++i) {
-          base::ReadFileToStringWithMaxSize(identity.AppendASCII(names.at(i)),
-                                            &bytes.at(i), 1024 * 1024);
-        }
-        return bytes;
-      }),
-      base::BindOnce(
-          [](base::WeakPtr<FlyWindowController> window,
-             std::array<std::string, 3> bytes) {
-            if (!window || !window->sidebar_panel_)
-              return;
-            // The engravings are 2x artwork (512px for a 256px image).
-            const auto decode = [](const std::string& png, float scale) {
-              const auto bitmap =
-                  gfx::PNGCodec::Decode(base::as_byte_span(png));
-              return bitmap.isNull()
-                         ? gfx::ImageSkia()
-                         : gfx::ImageSkia(gfx::ImageSkiaRep(bitmap, scale));
-            };
-            const auto grain = decode(bytes.at(2), 1);
-            window->sidebar_panel_->SetArtwork(decode(bytes.at(0), 2),
-                                               decode(bytes.at(1), 2), grain);
-            if (window->status_bar_)
-              window->status_bar_->SetPaperGrain(grain);
-          },
-          weak_factory_.GetWeakPtr()));
+  SidebarArtwork::Get().Read(base::BindOnce(
+      [](base::WeakPtr<FlyWindowController> window,
+         const SidebarArtwork::Images& images) {
+        if (!window || !window->sidebar_panel_)
+          return;
+        window->sidebar_panel_->SetArtwork(images[0], images[1], images[2]);
+        if (window->status_bar_)
+          window->status_bar_->SetPaperGrain(images[2]);
+      },
+      weak_factory_.GetWeakPtr()));
 }
 
 void FlyWindowController::ToggleSidebarAutoCollapse() {

@@ -13,6 +13,7 @@
 #include "base/strings/string_util.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/task/single_thread_task_runner.h"
+#include "base/trace_event/trace_event.h"
 #include "base/version.h"
 #include "build/build_config.h"
 #include "chrome/app/chrome_command_ids.h"
@@ -171,6 +172,7 @@ FlyApp::~FlyApp() {
 }
 
 void FlyApp::PrepareProfile(Profile* profile) {
+  TRACE_EVENT("browser", "Fly.PrepareProfile");
   if (!profile->IsOffTheRecord()) {
     // Incoming native startup and extension windows keep their real Profile.
     // Never bind a new display name to an already retired directory.
@@ -1022,6 +1024,7 @@ void FlyApp::UpdateDesktopIntegration(bool make_default) {
 }
 
 void FlyApp::RunFirstWindowTasks() {
+  TRACE_EVENT("browser", "Fly.FirstWindowTasks");
   if (closing_)
     return;
   MaybeShowWhatsNew();
@@ -1116,7 +1119,6 @@ void FlyApp::OnPreferencesChanged() {
   const bool theme_changed = theme && theme != applied_theme_;
   if (theme_changed) {
     applied_theme_ = theme;
-    ApplyFlyPalette();
   }
   ApplyFlyPalette();
   ApplyProfilePreferencesEverywhere();

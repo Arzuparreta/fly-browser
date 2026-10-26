@@ -7,6 +7,7 @@
 #include <cstdint>
 #include <map>
 #include <memory>
+#include <set>
 
 #include "base/callback_list.h"
 #include "base/functional/callback_forward.h"
@@ -68,6 +69,7 @@ class TabSidebar : public views::View,
   void OnThemeChanged() override;
   void FocusActiveTab();
   size_t row_count_for_testing() const;
+  size_t row_updates_for_testing() const { return row_updates_; }
   views::View* row_for_testing(content::WebContents* contents) const;
   views::Button* audio_for_testing(content::WebContents* contents) const;
   // The site favicon a row shows (null while it shows the globe).
@@ -94,6 +96,10 @@ class TabSidebar : public views::View,
   class CloseWatch;
   base::RepeatingClosure state_changed_;
   void Refresh();
+  void PostRefresh();
+  void ScheduleRowRefresh(content::WebContents* contents);
+  bool UpdateRow(content::WebContents* contents, int index);
+  void FinishRefresh(bool changed);
   void Invoke(base::WeakPtr<content::WebContents> contents, RowAction action);
   void ShowContextMenuForViewImpl(
       views::View* source,
@@ -109,6 +115,7 @@ class TabSidebar : public views::View,
     raw_ptr<TabRowView> view;
     gfx::ImageSkia favicon;
     bool favicon_initialized = false;
+    int index = -1;
     base::CallbackListSubscription audible_subscription;
     // Watches a tab whose close waits for its page; a cancelled close
     // restores the row.
@@ -129,6 +136,9 @@ class TabSidebar : public views::View,
   base::RepeatingClosure new_tab_;
   bool rail_ = false;
   bool refresh_pending_ = false;
+  bool full_refresh_pending_ = false;
+  std::set<content::WebContents*> dirty_rows_;
+  size_t row_updates_ = 0;
   base::WeakPtrFactory<TabSidebar> weak_factory_{this};
 };
 }  // namespace fly

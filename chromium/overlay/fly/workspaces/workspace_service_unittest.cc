@@ -11,9 +11,11 @@ namespace fly {
 namespace {
 class WorkspaceServiceTest : public testing::Test {
  protected:
-  WorkspaceServiceTest() : service_(prefs_) {
-    WorkspaceService::RegisterLocalStatePrefs(prefs_.registry());
+  static PrefService& Register(TestingPrefServiceSimple& prefs) {
+    WorkspaceService::RegisterLocalStatePrefs(prefs.registry());
+    return prefs;
   }
+  WorkspaceServiceTest() : service_(Register(prefs_)) {}
   base::SingleThreadTaskExecutor task_executor_;
   TestingPrefServiceSimple prefs_;
   WorkspaceService service_;
@@ -25,6 +27,36 @@ TEST_F(WorkspaceServiceTest, EmptyReadDoesNotWriteBeforeMigration) {
   EXPECT_TRUE(catalog->items.empty());
   EXPECT_TRUE(catalog->active_id.empty());
   EXPECT_EQ(nullptr, prefs_.GetUserPref(kWorkspacesPref));
+}
+
+TEST_F(WorkspaceServiceTest, CachedReadsFollowOtherWritersAndPolicyRecovery) {
+  WorkspaceService writer(prefs_);
+  ASSERT_TRUE(service_.Read()->items.empty());
+  auto first = writer.Add("work", "Default");
+  ASSERT_TRUE(first);
+  EXPECT_EQ("work", service_.Read()->items[0].name);
+  ASSERT_TRUE(writer.Rename(first->id, "renamed"));
+  auto snapshot = service_.Read();
+  EXPECT_EQ("renamed", snapshot->items[0].name);
+  snapshot->items.clear();
+  EXPECT_EQ(1u, service_.Read()->items.size());
+  const auto valid = prefs_.GetDict(kWorkspacesPref).Clone();
+  auto future = valid.Clone();
+  future.Set("schema", 999);
+  prefs_.SetManagedPref(kWorkspacesPref, base::Value(std::move(future)));
+  EXPECT_FALSE(service_.Read());
+  EXPECT_FALSE(service_.CanEdit());
+  prefs_.SetManagedPref(kWorkspacesPref, base::Value(valid.Clone()));
+  EXPECT_EQ(1u, service_.Read()->items.size());
+  EXPECT_FALSE(service_.CanEdit());
+  prefs_.RemoveManagedPref(kWorkspacesPref);
+  EXPECT_TRUE(service_.CanEdit());
+  prefs_.ClearPref(kWorkspacesPref);
+  EXPECT_TRUE(service_.Read()->items.empty());
+  prefs_.SetUserPref(kWorkspacesPref, base::Value("damaged"));
+  EXPECT_FALSE(service_.Read());
+  prefs_.ClearPref(kWorkspacesPref);
+  EXPECT_TRUE(service_.Read()->items.empty());
 }
 
 TEST_F(WorkspaceServiceTest, RenameAndRestartKeepStorageIdentity) {

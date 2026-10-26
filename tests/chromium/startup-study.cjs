@@ -11,6 +11,8 @@ const assert = require('node:assert/strict');
 const args = process.argv.slice(2);
 const option = (name, fallback) => args.includes(name) ? args[args.indexOf(name) + 1] : fallback;
 const binary = option('--binary', process.env.FLY_NATIVE_BINARY);
+const comparisonBinary = option('--compare-binary');
+let activeBinary = binary;
 const output = path.resolve(option('--output', '/tmp/fly-startup-results'));
 const root = option('--profile-root', os.tmpdir());
 const repeats = Number(option('--repeat', '5'));
@@ -22,6 +24,8 @@ const knownScenarios = ['fresh-ntp','fresh-url','reopen-ntp','restore-1','restor
     'streaming-active','restore-12-visited','restore-60-visited'];
 const scenarios = option('--scenarios', knownScenarios.join(',')).split(',');
 assert(binary && fs.existsSync(binary), 'Pass --binary /path/to/fly-browser');
+assert(!comparisonBinary || fs.existsSync(comparisonBinary), 'Comparison binary must exist');
+assert(!comparisonBinary || !args.includes('--compare-unused-omnibox'), 'Choose one comparison');
 assert(process.env.DISPLAY, 'Run on an owned X11 display');
 assert.equal(process.env.FLY_STARTUP_OWNED_DISPLAY, '1', 'Use startup-desktop.py to own the display');
 assert(Number.isInteger(repeats) && repeats > 0 && repeats <= 50);
@@ -30,9 +34,9 @@ assert(scenarios.every(s=>knownScenarios.includes(s)), 'Unknown scenario');
 fs.mkdirSync(output, {recursive:true});
 fs.mkdirSync(root, {recursive:true});
 const wait = ms => new Promise(resolve => setTimeout(resolve, ms));
-async function binaryHash() {
+async function binaryHash(file = binary) {
     const hash=createHash('sha256');
-    for await (const bytes of fs.createReadStream(binary)) hash.update(bytes);
+    for await (const bytes of fs.createReadStream(file)) hash.update(bytes);
     return hash.digest('hex');
 }
 const version = require('../../package.json').version;
@@ -110,7 +114,7 @@ async function launch(profile, suffix, urls=[], flags=[], trace=false) {
     const traceArgs = trace ? ['--trace-startup=startup,browser,toplevel,loading,blink.user_timing,devtools.timeline,extensions',
         '--trace-startup-duration=5', '--trace-startup-format=json',
         `--trace-startup-file=${path.join(output,suffix+'.trace.json')}`] : [];
-    const child = spawn(binary, ['--fly-native', `--user-data-dir=${profile}`,
+    const child = spawn(activeBinary, ['--fly-native', `--user-data-dir=${profile}`,
         '--ozone-platform=x11', '--password-store=basic', '--remote-debugging-port=0',
         ...extra,...traceArgs,...flags,...urls], {
         env:{...process.env, HOME:path.dirname(profile), XDG_CONFIG_HOME:path.dirname(profile),
@@ -185,7 +189,7 @@ async function seed(profile, scenario, suffix) {
                 if (scenario!=='restore-4-windows') {
                     const directory='Profile '+i;
                     fs.mkdirSync(path.join(profile,directory),{recursive:true});
-                    const child=spawn(binary,['--fly-native',`--user-data-dir=${profile}`,
+                    const child=spawn(activeBinary,['--fly-native',`--user-data-dir=${profile}`,
                         `--profile-directory=${directory}`,'--new-window',pageURL(i)],{stdio:'ignore'});
                     await new Promise((resolve,reject)=>{child.once('error',reject);child.once('exit',resolve);});
                 } else await run.cdp.send('Target.createTarget',{url:pageURL(i),newWindow:true});
@@ -226,7 +230,7 @@ async function measure(scenario,iteration,configuration) {
         if (scenario==='handoff-url') {
             await wait(settleMs);
             requests=[];run.startEpochMs=Date.now();run.portMs=null;
-            const secondary=spawn(binary,['--fly-native',`--user-data-dir=${profile}`,
+            const secondary=spawn(activeBinary,['--fly-native',`--user-data-dir=${profile}`,
                 '--ozone-platform=x11','--password-store=basic',active],{stdio:'ignore'});
             await new Promise((resolve,reject)=>{secondary.once('error',reject);secondary.once('exit',resolve);});
             secondaryExitMs=Date.now()-run.startEpochMs;
@@ -260,7 +264,7 @@ async function measure(scenario,iteration,configuration) {
         const windows=[];
         for(const page of targets) windows.push(await run.cdp.send('Browser.getWindowForTarget',{targetId:page.targetId}));
         const result={scenario,iteration,configuration,experimentFlags:[...extra],
-            backgroundTabsVisited:scenario.endsWith('-visited'),binary:path.resolve(binary),pid:run.child.pid,
+            backgroundTabsVisited:scenario.endsWith('-visited'),binary:path.resolve(activeBinary),pid:run.child.pid,
             startEpochMs:run.startEpochMs,portMs:run.portMs,
             secondaryExitMs,processStats,windows,hostStart:run.hostStart,
             navigationStartMs:final.epochMs-run.startEpochMs,
@@ -304,7 +308,9 @@ async function measure(scenario,iteration,configuration) {
     const results=[];
     try {
         // Round-robin reduces confounding by warm-up and changing host load.
-        const configurations=args.includes('--compare-unused-omnibox') ? [
+        const configurations=comparisonBinary ? [
+            {name:'baseline',flags:[],binary:comparisonBinary},
+            {name:'optimized',flags:[],binary}] : args.includes('--compare-unused-omnibox') ? [
             {name:'standard',flags:[]}, {name:'without-unused-omnibox',flags:[
                 '--disable-features=WebUIOmniboxPopup,WebUIOmniboxAimPopup,PreloadTopChromeWebUI']}]
             : [{name:undefined,flags:[]}];
@@ -313,6 +319,7 @@ async function measure(scenario,iteration,configuration) {
             for (const config of order) {
                 const count=extra.length;
                 try {
+                    activeBinary=config.binary || binary;
                     extra.push(...config.flags);
                     results.push(await measure(scenario,i,config.name));
                 } finally {extra.length=count;}
@@ -322,6 +329,7 @@ async function measure(scenario,iteration,configuration) {
             created:new Date().toISOString(),platform:os.platform(),kernel:os.release(),
             cpu:os.cpus()[0].model,totalMemory:os.totalmem(),profileRoot:root,settleMs,
             binarySHA256:await binaryHash(),
+            comparisonBinarySHA256:comparisonBinary ? await binaryHash(comparisonBinary) : undefined,
             extraArgs:extra,trace:args.includes('--trace'),results},null,2)+'\n');
     } finally {server.closeAllConnections();await new Promise(resolve=>server.close(resolve));}
 })().catch(error=>{console.error(error);process.exitCode=1;});

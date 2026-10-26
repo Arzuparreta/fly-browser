@@ -26,6 +26,7 @@
 #include "base/strings/stringprintf.h"
 #include "base/task/thread_pool.h"
 #include "base/timer/timer.h"
+#include "base/trace_event/trace_event.h"
 #include "base/values.h"
 #include "chrome/browser/browser_process.h"
 #include "chrome/browser/profiles/profile.h"
@@ -44,8 +45,8 @@
 #include "content/public/browser/webui_config_map.h"
 #include "content/public/common/url_constants.h"
 #include "fly/bookmarks/bookmark_service.h"
-#include "fly/ui/fly_theme.h"
 #include "fly/ui/fly_app.h"
+#include "fly/ui/fly_theme.h"
 #include "fly/ui/sidebar_panel.h"
 #include "services/network/public/mojom/content_security_policy.mojom.h"
 
@@ -75,7 +76,7 @@ std::string PagePath(const std::string& request) {
   return path.empty() ? "new-tab.html" : path;
 }
 // Immutable, bounded product assets are read once per browser process, off the
-// UI thread. Startup warms them; concurrent tabs share the same pending load.
+// UI thread on first demand; concurrent tabs share the same pending load.
 // No profile data enters this cache.
 class NewTabResources {
  public:
@@ -92,6 +93,7 @@ class NewTabResources {
     base::ThreadPool::PostTaskAndReplyWithResult(
         FROM_HERE, {base::MayBlock(), base::TaskPriority::USER_BLOCKING},
         base::BindOnce([] {
+          TRACE_EVENT("browser", "Fly.NewTabResources.ReadBundle");
           Bundle bundle;
           base::FilePath assets;
           if (!base::PathService::Get(base::DIR_ASSETS, &assets))
@@ -482,7 +484,6 @@ void RegisterFlyNewTabPage() {
   if (registered)
     return;
   registered = true;
-  NewTabResources::Get().Warm();
   content::WebUIConfigMap::GetInstance().AddWebUIConfig(
       std::make_unique<NewTabConfig>());
 }
