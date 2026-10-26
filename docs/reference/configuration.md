@@ -1,8 +1,26 @@
 # Configuration and storage
 
-Fly's launcher uses `$XDG_CONFIG_HOME/fly-browser`, defaulting to
-`~/.config/fly-browser`. A direct engine invocation must include
-`--fly-native` and the intended `--user-data-dir`.
+Fly keeps its data in `$XDG_CONFIG_HOME/fly-browser`, defaulting to
+`~/.config/fly-browser`. `--user-data-dir` selects another directory;
+Chromium's `CHROME_CONFIG_HOME` and `CHROME_USER_DATA_DIR` do not move it.
+The installed `fly-browser` starts Fly by itself. A development build
+(`out/FlyNative/chrome`) needs `--fly-native`, which `launch.sh` passes.
+
+## Window manager rules
+
+Fly's windows identify themselves as follows, so rules can match them:
+
+| Session | Property | Value |
+| --- | --- | --- |
+| X11 | `WM_CLASS` instance | `fly-browser` |
+| X11 | `WM_CLASS` class | `Fly` |
+| Wayland | `app_id` | `fly-browser` |
+
+For example, `for_window [class="Fly"] ...` in i3 and
+`for_window [app_id="fly-browser"] ...` in sway. On X11, web app windows keep
+their own instance name and share the class. `--class=<name>` replaces the class on X11
+and the `app_id` on Wayland. Notifications name the app `Fly` and point to
+`fly-browser.desktop`.
 
 ## Preferences
 

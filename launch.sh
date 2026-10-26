@@ -76,6 +76,8 @@ prune_channel() {
 }
 
 # Downloads (or reuses) the package of a GitHub release and sets `binary`.
+# app/fly is the browser in older packages and, in newer ones, a script that
+# starts app/fly-browser with the same arguments; it is started in both.
 download_build() {
     local channel=$1 root cache what tag sums name expected actual dir partial old
     [ "$(uname -s)-$(uname -m)" = Linux-x86_64 ] || die 'Downloaded builds exist for Linux x86_64 only.'
@@ -214,8 +216,10 @@ if lock=$(readlink "$profile/SingletonLock" 2>/dev/null) && [ "${lock%-*}" = "$(
     if [[ $pid =~ ^[0-9]+$ ]] && running=$(readlink "/proc/$pid/exe" 2>/dev/null); then
         command=$( (tr '\0' ' ' < "/proc/$pid/cmdline") 2>/dev/null || true)
     fi
+    # Newer packages start app/fly-browser through app/fly, so builds are
+    # compared by the directory of the running file.
     if [[ " $command " == *" --user-data-dir=$profile "* ]] &&
-        [ "$running" != "$(readlink -f "$binary")" ]; then
+        [ "$(dirname "$running")" != "$(dirname "$(readlink -f "$binary")")" ]; then
         die "A development Fly from another build is running (${running}). Close it, then start this one."
     fi
 fi

@@ -1,0 +1,165 @@
+--- a/chrome/app/chrome_main_delegate.cc
++++ b/chrome/app/chrome_main_delegate.cc
+@@ -612,21 +612,10 @@ void InitializeUserDataDir(base::CommandLine* command_line) {
+   std::string process_type =
+       command_line->GetSwitchValueASCII(switches::kProcessType);
+ 
+-#if BUILDFLAG(IS_LINUX) || BUILDFLAG(IS_CHROMEOS)
+-  // On Linux, Chrome does not support running multiple copies under different
+-  // DISPLAYs, so the profile directory can be specified in the environment to
+-  // support the virtual desktop use-case.
+-  if (user_data_dir.empty()) {
+-    std::unique_ptr<base::Environment> environment(base::Environment::Create());
+-    std::optional<std::string> user_data_dir_string =
+-        environment->GetVar("CHROME_USER_DATA_DIR");
+-    if (user_data_dir_string.has_value() &&
+-        base::IsStringUTF8(user_data_dir_string.value())) {
+-      user_data_dir =
+-          base::FilePath::FromUTF8Unsafe(user_data_dir_string.value());
+-    }
+-  }
+-#endif  // BUILDFLAG(IS_LINUX) || BUILDFLAG(IS_CHROMEOS)
++  // Fly: Chromium reads the profile directory from $CHROME_USER_DATA_DIR
++  // here when --user-data-dir is absent. Fly keeps its profile in
++  // $XDG_CONFIG_HOME/fly-browser (chrome_paths_linux.cc); only --user-data-dir
++  // moves it.
+ #if BUILDFLAG(IS_MAC)
+   policy::path_parser::CheckUserDataDirPolicy(&user_data_dir);
+ #endif  // BUILDFLAG(IS_MAC)
+@@ -1131,6 +1120,14 @@ std::optional<int> ChromeMainDelegate::BasicStartupComplete() {
+ #endif  // !defined(BUILDING_CHROME_RENDERER)
+ 
+ #if !defined(BUILDING_CHROME_RENDERER)
++#if BUILDFLAG(FLY_NATIVE_BY_DEFAULT)
++  // Fly: a packaged build is started directly, without a launcher script
++  // passing --fly-native.
++  if (!command_line.HasSwitch(switches::kProcessType) &&
++      !command_line.HasSwitch("fly-native")) {
++    base::CommandLine::ForCurrentProcess()->AppendSwitch("fly-native");
++  }
++#endif  // BUILDFLAG(FLY_NATIVE_BY_DEFAULT)
+   // Fly: native Fly runs Chromium's default features; the browser process
+   // sets them up before it creates its feature list.
+   if (command_line.HasSwitch("fly-native") &&
+--- a/chrome/browser/BUILD.gn
++++ b/chrome/browser/BUILD.gn
+@@ -69,6 +69,11 @@ declare_args() {
+   # was explicitly set to true, i.e. they always use official keys,
+   # and will fail to build if the internal file is missing.
+   use_official_enterprise_connectors_api_keys = false
++
++  # Fly: packaged builds start Fly without a launcher script, as if
++  # --fly-native was given. Development builds leave it off, so the same build
++  # can still run Chromium's own interface and tests.
++  fly_native_by_default = false
+ }
+ 
+ if (is_win) {
+@@ -96,6 +101,7 @@ buildflag_header("buildflags") {
+     "ENABLE_UPDATE_NOTIFICATIONS=$enable_update_notifications",
+     "USE_MINIKIN_HYPHENATION=$use_minikin_hyphenation",
+     "USE_THIN_LTO=$use_thin_lto",
++    "FLY_NATIVE_BY_DEFAULT=$fly_native_by_default",
+   ]
+ 
+   if (is_win) {
+--- a/chrome/browser/notifications/notification_platform_bridge_linux.cc
++++ b/chrome/browser/notifications/notification_platform_bridge_linux.cc
+@@ -884,7 +884,8 @@ class NotificationPlatformBridgeLinuxImpl : public NotificationPlatformBridge {
+       return;
+     }
+ 
+-    std::string app_name(l10n_util::GetStringUTF8(IDS_PRODUCT_NAME));
++    // Fly: notification servers show this name and match rules against it.
++    std::string app_name("Fly");
+ 
+     std::string app_icon(
+         data->files.has_logo
+--- a/chrome/browser/shell_integration_linux.cc
++++ b/chrome/browser/shell_integration_linux.cc
+@@ -471,7 +471,8 @@ std::string GetIconName() {
+ #if BUILDFLAG(GOOGLE_CHROME_BRANDING)
+   return "google-chrome";
+ #else  // BUILDFLAG(CHROMIUM_BRANDING)
+-  return "chromium-browser";
++  // Fly: the icon Fly's packages install.
++  return "fly-browser";
+ #endif
+ }
+ 
+--- a/chrome/common/channel_info_posix.cc
++++ b/chrome/common/channel_info_posix.cc
+@@ -148,7 +148,8 @@ std::string GetDesktopName(base::Environment* env) {
+   if (name.has_value() && !name.value().empty()) {
+     return name.value();
+   }
+-  return "chromium-browser.desktop";
++  // Fly: the desktop entry Fly's packages install.
++  return "fly-browser.desktop";
+ #endif
+ }
+ #endif  // BUILDFLAG(IS_LINUX)
+--- a/chrome/common/chrome_paths_linux.cc
++++ b/chrome/common/chrome_paths_linux.cc
+@@ -79,6 +79,15 @@ bool GetUserMediaDirectory(const std::string& xdg_name,
+ // issues with other apps grabbing ~/.chromium .
+ bool GetDefaultUserDataDirectory(base::FilePath* result) {
+   std::unique_ptr<base::Environment> env(base::Environment::Create());
++#if !BUILDFLAG(GOOGLE_CHROME_BRANDING) && \
++    !BUILDFLAG(GOOGLE_CHROME_FOR_TESTING_BRANDING)
++  // Fly: $XDG_CONFIG_HOME/fly-browser (default ~/.config/fly-browser), the
++  // directory Fly's launcher always passed. Chromium's CHROME_CONFIG_HOME and
++  // channel suffixes do not move it.
++  *result = GetXDGDirectory(env.get(), kXdgConfigHomeEnvVar, kDotConfigDir)
++                .Append("fly-browser");
++  return true;
++#else
+   base::FilePath config_dir;
+   std::optional<std::string> chrome_config_home_str =
+       env->GetVar("CHROME_CONFIG_HOME");
+@@ -99,6 +108,7 @@ bool GetDefaultUserDataDirectory(base::FilePath* result) {
+ #endif
+   *result = config_dir.Append(data_dir_basename + GetChannelSuffixForDataDir());
+   return true;
++#endif
+ }
+ 
+ void GetUserCacheDirectory(const base::FilePath& profile_dir,
+--- a/components/crash/core/app/crashpad_linux.cc
++++ b/components/crash/core/app/crashpad_linux.cc
+@@ -15,6 +15,7 @@
+ 
+ #include "base/base_switches.h"
+ #include "base/command_line.h"
++#include "base/files/file_util.h"
+ #include "base/linux_util.h"
+ #include "base/logging.h"
+ #include "base/path_service.h"
+@@ -173,7 +174,12 @@ bool PlatformCrashpadInitialization(
+     if (!base::PathService::Get(base::DIR_EXE, &handler_path)) {
+       return false;
+     }
+-    handler_path = handler_path.Append("chrome_crashpad_handler");
++    // Fly: packages ship the handler as fly-crashpad; development builds keep
++    // Chromium's name for it.
++    const base::FilePath fly_handler = handler_path.Append("fly-crashpad");
++    handler_path = base::PathExists(fly_handler)
++                       ? fly_handler
++                       : handler_path.Append("chrome_crashpad_handler");
+ 
+     // When --use-cros-crash-reporter is set (below), the handler passes dumps
+     // to ChromeOS's /sbin/crash_reporter which in turn passes the dump to
+--- a/ui/ozone/platform/x11/x11_utils.cc
++++ b/ui/ozone/platform/x11/x11_utils.cc
+@@ -18,6 +18,11 @@ gfx::ImageSkia X11Utils::GetNativeWindowIcon(intptr_t target_window_id) {
+ }
+ 
+ std::string X11Utils::GetWmWindowClass(const std::string& desktop_base_name) {
++  // Fly: window managers show the class as the program's name. Wayland keeps
++  // the desktop entry's name (fly-browser) as the app_id.
++  if (desktop_base_name == "fly-browser") {
++    return "Fly";
++  }
+   std::string window_class = desktop_base_name;
+   if (!window_class.empty()) {
+     // Capitalize the first character like gtk does.

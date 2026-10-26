@@ -16,3 +16,6 @@ ffmpeg_branding = "Chrome"
 enable_widevine = true
 # No profile-guided optimisation data is fetched for this checkout.
 chrome_pgo_phase = 0
+# Packages start the browser directly (fly-browser), without a launcher script
+# passing --fly-native.
+fly_native_by_default = true
