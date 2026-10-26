@@ -64,7 +64,7 @@ void FadeTo(views::View* view,
 }
 }  // namespace
 
-// The engraving, 230px wide and centred, ends 47px above the footer rule:
+// The engraving, 230px wide and centred, ends 41px above the footer rule:
 // the same clearance it had above the clock badge. Resizing never recentres it.
 class SidebarPanel::Engraving : public views::View {
   METADATA_HEADER(Engraving, views::View)
@@ -83,7 +83,7 @@ class SidebarPanel::Engraving : public views::View {
     const int size = FlyScaled(230);
     canvas->DrawImageInt(image, 0, 0, image.width(), image.height(),
                          (width() - size) / 2,
-                         height() - FlyScaled(47) - size, size, size, true);
+                         height() - FlyScaled(41) - size, size, size, true);
   }
 
  private:
