@@ -13,6 +13,9 @@ assert(args.includes('--binary') && args.includes('--output'));
 assert.equal(process.env.FLY_STARTUP_OWNED_DISPLAY, '1');
 const binary = path.resolve(option('--binary'));
 const output = path.resolve(option('--output'));
+const knownCases = ['fast','streaming','deadline','upgrade','integration','multiple-windows','early-quit'];
+const cases = args.includes('--cases') ? option('--cases').split(',') : knownCases;
+assert(cases.length && cases.every(name=>knownCases.includes(name)), 'Unknown startup acceptance case');
 const version = require('../../package.json').version;
 const previous = version.split('-')[0].split('.').map(Number);
 for (let i = previous.length - 1; i >= 0; i--) {
@@ -75,7 +78,7 @@ async function runCase(name) {
     const log = fs.openSync(path.join(output, name + '.log'), 'w');
     const url = `http://127.0.0.1:${server.address().port}/${name}`;
     const started = Date.now();
-    const child = spawn(binary, [`--user-data-dir=${profile}`, '--ozone-platform=x11',
+    const child = spawn(binary, ['--fly-native', `--user-data-dir=${profile}`, '--ozone-platform=x11',
         '--password-store=basic', '--remote-debugging-port=0',
         '--trace-startup=browser,loading,devtools.timeline', '--trace-startup-format=json',
         '--trace-startup-duration=9', `--trace-startup-file=${trace}`, url],
@@ -103,7 +106,9 @@ async function runCase(name) {
             const pages = (await cdp.send('Target.getTargets')).targetInfos.filter(t=>t.type === 'page');
             const original = pages.find(t=>t.url === url);
             assert(original, 'The original startup page must survive');
-            const metrics = await cdp.evaluate(original.targetId, `({visibility:document.visibilityState,
+            const measured = name === 'multiple-windows' ? pages.find(p=>p.url.endsWith('/second-window')) : original;
+            assert(measured, 'The selected startup page must survive');
+            const metrics = await cdp.evaluate(measured.targetId, `({visibility:document.visibilityState,
                 paints:performance.getEntriesByType('paint').map(p=>p.toJSON()),readyState:document.readyState})`);
             assert(metrics.paints.some(p=>p.name === 'first-contentful-paint'));
             if (name === 'upgrade') assert(pages.some(p=>/whats.new/i.test(p.url)), 'Upgrade still shows What’s New');
@@ -164,7 +169,7 @@ async function runCase(name) {
 (async()=>{
     await new Promise(resolve=>server.listen(0, '127.0.0.1', resolve));
     try {
-        for (const name of ['fast','streaming','deadline','upgrade','integration','multiple-windows','early-quit']) await runCase(name);
+        for (const name of cases) await runCase(name);
         const hash = createHash('sha256');
         for await (const chunk of fs.createReadStream(binary)) hash.update(chunk);
         fs.writeFileSync(path.join(output, 'results.json'), JSON.stringify({
