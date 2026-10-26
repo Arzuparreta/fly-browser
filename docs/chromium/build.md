@@ -32,6 +32,38 @@ python3 scripts/chromium/release.py --root /path/to/fly-chromium
 FLY_ENGINE_ROOT=/path/to/fly-chromium FLY_ENGINE_OUTPUT=out/FlyRelease npm start
 ```
 
+The Linux release preset uses PGO and optimised ThinLTO with LLVM's linker.
+`release.py` downloads the official Linux profile named by the **pinned**
+checkout's `chrome/build/linux.pgo.txt` before configuring GN. A missing profile
+fails the build; it never silently produces an unoptimised release. Development
+and service-test presets keep their existing options. The profile trains the
+Chromium engine, not Fly's added interface code.
+
+`out/FlyRelease/fly-build.json` records the profile filename, SHA-256, selector,
+size, overlay fingerprint and unstripped executable hash. Packages copy this record into
+`provenance.json`; packaging rejects a record from a different executable.
+The API key is not included in this record. No Google account or remote build
+service is needed to fetch the public profile.
+
+For a controlled comparison, keep source, API key, runtime assets and host
+conditions identical and select separate outputs:
+
+```sh
+python3 scripts/chromium/release.py --root /path/to/fly-chromium \
+  --optimization none --output out/FlyNoPGO --dist /path/to/baseline-package
+python3 scripts/chromium/release.py --root /path/to/fly-chromium \
+  --optimization pgo --output out/FlyPGO --dist /path/to/pgo-package
+python3 scripts/chromium/release.py --root /path/to/fly-chromium \
+  --output out/FlyRelease --dist /path/to/release-package
+```
+
+The first two are explicit comparison modes, not the default release. PGO
+changes compilation across the engine, and ThinLTO also optimises across object
+files at link time; the first build can take considerably longer and use more
+memory than an incremental development build. See Chromium's
+[PGO documentation](https://chromium.googlesource.com/chromium/src/+/main/docs/pgo.md)
+and LLVM's [ThinLTO documentation](https://clang.llvm.org/docs/ThinLTO.html).
+
 Run `./launch.sh` (or `npm start`) to open the existing local build. The launcher
 looks for `fly-chromium` beside this repository, beside its parent directory,
 then in `~/.cache/fly-chromium`. It prefers `out/FlyNative` over `out/FlyRelease`.

@@ -1,0 +1,10 @@
+--- a/chrome/browser/ui/BUILD.gn
++++ b/chrome/browser/ui/BUILD.gn
+@@ -793,5 +793,7 @@
+       "//fly/ui/fly_app.cc",
+       "//fly/ui/fly_app.h",
++      "//fly/ui/startup_maintenance.cc",
++      "//fly/ui/startup_maintenance.h",
+       "//fly/ui/fly_browser_frame.cc",
+       "//fly/ui/fly_browser_frame.h",
+       "//fly/ui/tab_move_transaction.cc",

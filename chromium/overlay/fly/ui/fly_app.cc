@@ -47,6 +47,7 @@
 #include "fly/ui/fly_window_controller.h"
 #include "fly/ui/native_commands.h"
 #include "fly/ui/new_tab_ui.h"
+#include "fly/ui/startup_maintenance.h"
 #include "fly/ui/tab_move_transaction.h"
 #include "fly/ui/user_content.h"
 #include "fly/ui/workspace_close_transaction.h"
@@ -139,6 +140,7 @@ FlyApp::FlyApp()
               return;
             app->closing_ = true;
             app->terminating_ = true;
+            app->startup_maintenance_.reset();
             app->suspension_timer_.Stop();
             app->preferences_registrar_.RemoveAll();
             app->tab_move_.reset();
@@ -155,6 +157,7 @@ FlyApp::FlyApp()
 
 FlyApp::~FlyApp() {
   closing_ = true;
+  startup_maintenance_.reset();
   browser_collection_.Reset();
   weak_factory_.InvalidateWeakPtrs();
   tab_move_.reset();
@@ -202,14 +205,12 @@ FlyWindowController* FlyApp::AttachWindow(BrowserWindowInterface* browser,
   auto* raw = window.get();
   windows_.emplace(browser, std::move(window));
   BroadcastWorkspaceRefresh();
-  // Session restore is still running; act once it has finished.
-  if (!update_checked_ &&
+  if (!startup_maintenance_ &&
       !base::CommandLine::ForCurrentProcess()->HasSwitch("test-type")) {
-    update_checked_ = true;
-    base::SingleThreadTaskRunner::GetCurrentDefault()->PostTask(
-        FROM_HERE, base::BindOnce(&FlyApp::RunFirstWindowTasks,
-                                  weak_factory_.GetWeakPtr()));
+    startup_maintenance_ = std::make_unique<StartupMaintenance>(base::BindOnce(
+        &FlyApp::RunFirstWindowTasks, weak_factory_.GetWeakPtr()));
   }
+  ObserveStartupWindow();
   return raw;
 }
 
@@ -224,6 +225,7 @@ void FlyApp::ReleaseWindow(FlyWindowController* window) {
     windows_.erase(it);
     break;
   }
+  ObserveStartupWindow();
   BroadcastWorkspaceRefresh();
   if ((closing_ || terminating_) && windows_.empty()) {
     base::SingleThreadTaskRunner::GetCurrentDefault()->PostTask(
@@ -262,6 +264,7 @@ FlyWindowController* FlyApp::LastActiveWindow() const {
 }
 
 void FlyApp::OnBrowserActivated(BrowserWindowInterface* browser) {
+  ObserveStartupWindow();
   if (closing_ || !windows_.contains(browser) ||
       browser->GetProfile()->IsOffTheRecord() ||
       std::ranges::any_of(windows_, [](const auto& entry) {
@@ -1032,6 +1035,25 @@ void FlyApp::RunFirstWindowTasks() {
   MaybeOfferDesktopIntegration();
 }
 
+void FlyApp::ObserveStartupWindow() {
+  if (!startup_maintenance_ || !startup_maintenance_->pending())
+    return;
+  auto* window = LastActiveWindow();
+  // Attach can precede registration/activation in GlobalBrowserCollection,
+  // including a window opened minimised. Still arm its bounded fallback.
+  if (!window) {
+    for (const auto& [browser, candidate] : windows_) {
+      if (!browser->IsDeleteScheduled()) {
+        window = candidate.get();
+        break;
+      }
+    }
+  }
+  startup_maintenance_->SetWindow(
+      window ? window->browser()->GetTabStripModel() : nullptr,
+      window ? window->widget() : nullptr);
+}
+
 void FlyApp::MaybeShowWhatsNew() {
   auto* window = LastActiveWindow();
   if (whats_new_checked_ || !window || !window->browser() ||
@@ -1234,6 +1256,8 @@ void FlyApp::ResumeAllTabs() {
 
 void FlyApp::OnClosingAllBrowsers(bool closing) {
   closing_ = closing;
+  if (startup_maintenance_)
+    startup_maintenance_->SetPaused(closing);
   if (closing) {
     tab_move_.reset();
     workspace_close_.reset();

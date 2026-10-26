@@ -136,6 +136,23 @@ def normalize_package_permissions(root):
         file.chmod(0o755 if file.is_dir() or file.stat().st_mode & 0o111 else 0o644)
 
 
+def read_build_optimizations(build):
+    record = build / 'fly-build.json'
+    if not record.exists():
+        return None
+    optimization = json.loads(record.read_text())
+    digest = hashlib.sha256()
+    with (build / 'chrome').open('rb') as stream:
+        for chunk in iter(lambda: stream.read(1024 * 1024), b''):
+            digest.update(chunk)
+    if optimization.get('binary_sha256') != digest.hexdigest():
+        fail('build optimization record does not match this executable; rebuild it')
+    if optimization.get('args_sha256') != hashlib.sha256(
+            (build / 'args.gn').read_bytes()).hexdigest():
+        fail('build optimization record does not match these arguments; rebuild it')
+    return optimization
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__,
                                      formatter_class=argparse.RawDescriptionHelpFormatter)
@@ -154,6 +171,7 @@ def main():
         if not (build / name).exists():
             fail(f'{build / name} is missing; build the chrome target first')
     check_release_build((build / 'args.gn').read_text(encoding='utf-8'))
+    optimization = read_build_optimizations(build)
     version = json.loads((REPO / 'package.json').read_text())['version']
     engine = json.loads((REPO / 'chromium' / 'upstream.lock.json').read_text())['engine_version']
     name = f'Fly-{version}-native-linux-x64'
@@ -189,6 +207,7 @@ def main():
             'repository_commit': subprocess.check_output(['git', 'rev-parse', 'HEAD'], cwd=REPO, text=True).strip(),
             'repository_dirty': bool(subprocess.check_output(['git', 'status', '--porcelain', '--untracked-files=no'], cwd=REPO, text=True).strip()),
             'binary_sha256': hashlib.sha256((app / 'fly-browser').read_bytes()).hexdigest(),
+            'build_optimizations': optimization,
         }
         (app / 'provenance.json').write_text(json.dumps(provenance, indent=2) + '\n')
         compat = app / 'fly'

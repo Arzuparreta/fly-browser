@@ -46,6 +46,7 @@ class BookmarkService;
 class FlyExtensions;
 class FlyWindowController;
 class FrequentSitesService;
+class StartupMaintenance;
 class NewTabHistory;
 class TabMoveTransaction;
 class UserContentService;
@@ -185,6 +186,7 @@ class FlyApp : public BrowserCollectionObserver {
                      base::WeakPtr<content::WebContents> contents);
   void OnClosingAllBrowsers(bool closing);
   void RunFirstWindowTasks();
+  void ObserveStartupWindow();
   void MaybeShowWhatsNew();
   void MaybeOfferDesktopIntegration();
   // Keeps the application running while windows are replaced.
@@ -209,7 +211,7 @@ class FlyApp : public BrowserCollectionObserver {
   UpdateCheckResult update_;
   bool update_installing_ = false;
   bool history_clear_running_ = false;
-  bool update_checked_ = false;
+  std::unique_ptr<StartupMaintenance> startup_maintenance_;
   bool whats_new_checked_ = false;
   std::unique_ptr<views::DialogDelegate> offer_delegate_;
   std::unique_ptr<views::Widget> offer_widget_;
