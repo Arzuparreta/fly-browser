@@ -1628,8 +1628,12 @@ IN_PROC_BROWSER_TEST_F(FlyWorkspaceBrowserTest,
   ASSERT_TRUE(location->GetOmniboxPopupView());
   EXPECT_EQ(nullptr, location->GetOmniboxPopupUI());
   EXPECT_EQ(nullptr, location->GetOmniboxPopupAimPresenter());
-  ASSERT_TRUE(ExecuteNativeCommand(browser(), "toggle-address"));
-  ASSERT_TRUE(Window().address_picker().active());
+  Activate(browser());
+  ASSERT_TRUE(InvokeNativeCommand(browser(), "toggle-address"));
+  ASSERT_TRUE(base::test::RunUntil([&] {
+    return Window().address_picker().active() &&
+           Window().address_picker().search_for_testing()->HasFocus();
+  }));
   Window().address_picker().Cancel();
 }
 
