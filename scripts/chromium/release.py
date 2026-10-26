@@ -20,6 +20,10 @@ import native
 def release_config(api_key='', optimization='pgo-thinlto'):
     config = (engine.REPO / 'chromium/gn/release.gnargs').read_text()
     if optimization != 'pgo-thinlto':
+        # Preserve the previous release linker in controls and PGO-only builds.
+        # ThinLTO selects LLD; comparing that complete preset includes the linker.
+        config = config.replace('use_mold = false', 'use_mold = true')
+        config = config.replace('use_lld = true', 'use_lld = false')
         config = config.replace('use_thin_lto = true', 'use_thin_lto = false')
         config = config.replace('thin_lto_enable_optimizations = true',
                                 'thin_lto_enable_optimizations = false')

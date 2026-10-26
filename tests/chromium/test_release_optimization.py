@@ -30,10 +30,13 @@ class ReleaseOptimizationTest(unittest.TestCase):
             self.assertNotIn('is_official_build = true', config)
         self.assertIn('chrome_pgo_phase = 0', configs['none'])
         self.assertIn('use_thin_lto = false', configs['none'])
+        self.assertIn('use_mold = true', configs['none'])
         self.assertIn('chrome_pgo_phase = 2', configs['pgo'])
         self.assertIn('use_thin_lto = false', configs['pgo'])
+        self.assertIn('use_mold = true', configs['pgo'])
         self.assertIn('chrome_pgo_phase = 2', configs['pgo-thinlto'])
         self.assertIn('use_thin_lto = true', configs['pgo-thinlto'])
+        self.assertIn('use_lld = true', configs['pgo-thinlto'])
 
     def test_uses_pinned_selector_and_records_actual_profile_content(self):
         with tempfile.TemporaryDirectory() as tmp:

@@ -57,8 +57,9 @@ python3 scripts/chromium/release.py --root /path/to/fly-chromium \
   --output out/FlyRelease --dist /path/to/release-package
 ```
 
-The first two are explicit comparison modes, not the default release. PGO
-changes compilation across the engine, and ThinLTO also optimises across object
+The first two modes retain the previous mold linker. The default ThinLTO
+preset uses LLD, so its comparison measures the complete compiler/linker
+change. PGO changes compilation across the engine, and ThinLTO optimises across object
 files at link time; the first build can take considerably longer and use more
 memory than an incremental development build. See Chromium's
 [PGO documentation](https://chromium.googlesource.com/chromium/src/+/main/docs/pgo.md)
