@@ -7,6 +7,10 @@ Este trabajo añade medición y documentación; no cambia el comportamiento del 
 El registro compacto contiene 118 muestras de apertura, incluidas ocho con
 trazas, además del microbenchmark separado de los launchers.
 
+El seguimiento de implementación y validación está en
+[Mejoras tras el estudio](./startup-improvements.md). Las cifras de este
+documento corresponden a la base estudiada, anterior a esas mejoras.
+
 ## Resultado principal
 
 Hay trabajo prescindible alrededor de la página activa. La oportunidad más

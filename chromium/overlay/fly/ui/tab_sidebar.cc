@@ -2,11 +2,11 @@
 // Use of this source code is governed by the GPL-3.0-or-later license in the
 // Fly repository.
 #include "fly/ui/tab_sidebar.h"
-#include "fly/ui/new_tab_ui.h"
 #include "fly/ui/fly_app.h"
+#include "fly/ui/fly_theme.h"
 #include "fly/ui/fly_window_controller.h"
 #include "fly/ui/native_commands.h"
-#include "fly/ui/fly_theme.h"
+#include "fly/ui/new_tab_ui.h"
 
 #include <algorithm>
 #include <limits>
@@ -18,6 +18,8 @@
 #include "base/strings/string_number_conversions.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/task/single_thread_task_runner.h"
+#include "base/trace_event/trace_event.h"
+#include "cc/paint/path_effect.h"
 #include "chrome/app/chrome_command_ids.h"
 #include "chrome/browser/ui/browser_commands.h"
 #include "chrome/browser/ui/browser_window/public/browser_window_interface.h"
@@ -32,7 +34,6 @@
 #include "content/public/browser/navigation_entry.h"
 #include "content/public/browser/web_contents.h"
 #include "content/public/browser/web_contents_observer.h"
-#include "cc/paint/path_effect.h"
 #include "skia/ext/image_operations.h"
 #include "ui/base/metadata/metadata_impl_macros.h"
 #include "ui/base/models/image_model.h"
@@ -871,6 +872,21 @@ class TabSidebar::CloseWatch : public content::WebContentsObserver {
 };
 
 void TabSidebar::ScheduleRefresh() {
+  full_refresh_pending_ = true;
+  dirty_rows_.clear();
+  PostRefresh();
+}
+void TabSidebar::ScheduleRowRefresh(content::WebContents* contents) {
+  if (!contents || full_refresh_pending_)
+    return;
+  if (!tab_rows_.contains(contents)) {
+    ScheduleRefresh();
+    return;
+  }
+  dirty_rows_.insert(contents);
+  PostRefresh();
+}
+void TabSidebar::PostRefresh() {
   if (refresh_pending_)
     return;
   refresh_pending_ = true;
@@ -879,9 +895,29 @@ void TabSidebar::ScheduleRefresh() {
       base::BindOnce(&TabSidebar::Refresh, weak_factory_.GetWeakPtr()));
 }
 void TabSidebar::Refresh() {
+  if (!refresh_pending_)
+    return;
+  TRACE_EVENT("browser", "Fly.Sidebar.Refresh", "full", full_refresh_pending_);
   refresh_pending_ = false;
   if (state_changed_)
     state_changed_.Run();
+  if (!std::exchange(full_refresh_pending_, false)) {
+    auto dirty = std::move(dirty_rows_);
+    dirty_rows_.clear();
+    bool changed = false;
+    for (auto* contents : dirty) {
+      auto it = tab_rows_.find(contents);
+      if (model_ && it != tab_rows_.end() && it->second.contents) {
+        const int index = it->second.index;
+        if (index >= 0 && index < model_->count() &&
+            model_->GetWebContentsAt(index) == contents)
+          changed |= UpdateRow(contents, index);
+      }
+    }
+    FinishRefresh(changed);
+    return;
+  }
+  dirty_rows_.clear();
   std::set<content::WebContents*> live;
   if (model_) {
     for (int i = 0; i < model_->count(); ++i)
@@ -951,11 +987,12 @@ void TabSidebar::Refresh() {
       if (auto* audible = RecentlyAudibleHelper::FromWebContents(contents)) {
         data.audible_subscription =
             audible->RegisterRecentlyAudibleChangedCallback(base::BindRepeating(
-                [](base::WeakPtr<TabSidebar> sidebar, bool) {
-                  if (sidebar)
-                    sidebar->ScheduleRefresh();
+                [](base::WeakPtr<TabSidebar> sidebar,
+                   base::WeakPtr<content::WebContents> contents, bool) {
+                  if (sidebar && contents)
+                    sidebar->ScheduleRowRefresh(contents.get());
                 },
-                weak_factory_.GetWeakPtr()));
+                weak_factory_.GetWeakPtr(), contents->GetWeakPtr()));
       }
     }
     auto& row = tab_rows_.at(contents);
@@ -964,87 +1001,94 @@ void TabSidebar::Refresh() {
       rows_->ReorderChildView(view, i);
       changed = true;
     }
-    std::u16string title = contents->GetTitle();
-    if (title.empty())
-      title = base::UTF8ToUTF16(contents->GetVisibleURL().spec());
-    if (title.empty())
-      title = u"New tab";
-    const GURL& url = contents->GetVisibleURL();
-    view->select()->SetText(RowTitle(title));
-    view->select()->SetDomain(RowDomain(url));
-    const auto* audible_helper =
-        RecentlyAudibleHelper::FromWebContents(contents);
-    RowState state;
-    state.selected = i == model_->active_index();
-    state.pinned = model_->IsTabPinned(i);
-    state.audible = audible_helper ? audible_helper->WasRecentlyAudible()
-                                   : contents->IsCurrentlyAudible();
-    state.muted = contents->IsAudioMuted();
-    // Chromium marks a tab closed by the user until it goes away, and clears
-    // the mark when its page cancels the close.
-    state.closing = contents->GetClosedByUserGesture();
-    if (state.closing && !row.close_watch) {
-      row.close_watch = std::make_unique<CloseWatch>(
-          contents, base::BindRepeating(&TabSidebar::ScheduleRefresh,
-                                        weak_factory_.GetWeakPtr()));
-    } else if (!state.closing) {
-      row.close_watch.reset();
-    }
-    if (const auto split = model_->GetSplitForTab(i)) {
-      const auto tabs = model_->GetSplitData(*split)->ListTabs();
-      for (size_t pane = 0; pane < tabs.size(); ++pane) {
-        if (tabs[pane]->GetContents() == contents)
-          state.split_pane = static_cast<int>(pane) + 1;
-      }
-    }
-    const int previous_split = view->state().split_pane;
-    changed |= view->SetState(state);
-    const auto* audio_status = state.muted     ? u", muted"
-                               : state.audible ? u", playing audio"
-                                               : u"";
-    // The row's tooltip: the page title and its address.
-    view->select()->SetTooltipText(title + u"\n" +
-                                   base::UTF8ToUTF16(url.spec()));
-    view->select()->GetViewAccessibility().SetName(
-        base::NumberToString16(i + 1) + u". " + title +
-        (state.selected ? u", selected" : u"") +
-        (state.pinned ? u", pinned" : u"") + audio_status);
-    auto* navigation = contents->GetController().GetVisibleEntry();
-    const gfx::ImageSkia icon =
-        navigation && navigation->GetFavicon().valid &&
-                !navigation->GetFavicon().image.IsEmpty()
-            ? navigation->GetFavicon().image.AsImageSkia()
-            : gfx::ImageSkia();
-    if (!row.favicon_initialized || !icon.BackedBySameObjectAs(row.favicon) ||
-        previous_split != state.split_pane) {
-      row.favicon = icon;
-      row.favicon_initialized = true;
-      // .tab-fallback-icon: a 12px globe in the accent colour.
-      const auto favicon =
-          icon.isNull()
-              ? gfx::CreateVectorIcon(vector_icons::kGlobeIcon, S(12),
-                                      GetFlyColors().accent)
-              : gfx::ImageSkiaOperations::CreateImageWithRoundRectClip(
-                    S(2), gfx::ImageSkiaOperations::CreateResizedImage(
-                              icon, skia::ImageOperations::RESIZE_BEST,
-                              gfx::Size(S(16), S(16))));
-      view->select()->SetImageModel(
-          views::Button::STATE_NORMAL,
-          ui::ImageModel::FromImageSkia(
-              gfx::CanvasImageSource::MakeImageSkia<RowIcon>(
-                  favicon, state.split_pane)));
-    }
-    const auto pin_label = u"Unpin " + title;
-    view->pin()->GetViewAccessibility().SetName(pin_label);
-    view->pin()->SetTooltipText(u"Pinned tab (click to unpin)");
-    view->close()->GetViewAccessibility().SetName(u"Close " + title);
-    view->close()->SetTooltipText(u"Close tab");
-    const auto audio_label = (state.muted ? u"Unmute " : u"Mute ") + title;
-    view->audio()->SetTooltipText(state.muted
-                                      ? u"Tab audio muted (click to unmute)"
-                                      : u"Tab playing audio (click to mute)");
-    view->audio()->GetViewAccessibility().SetName(audio_label);
+    changed |= UpdateRow(contents, i);
   }
+  FinishRefresh(changed);
+}
+bool TabSidebar::UpdateRow(content::WebContents* contents, int i) {
+  ++row_updates_;
+  auto& row = tab_rows_.at(contents);
+  row.index = i;
+  auto* view = row.view.get();
+  std::u16string title = contents->GetTitle();
+  if (title.empty())
+    title = base::UTF8ToUTF16(contents->GetVisibleURL().spec());
+  if (title.empty())
+    title = u"New tab";
+  const GURL& url = contents->GetVisibleURL();
+  view->select()->SetText(RowTitle(title));
+  view->select()->SetDomain(RowDomain(url));
+  const auto* audible_helper = RecentlyAudibleHelper::FromWebContents(contents);
+  RowState state;
+  state.selected = i == model_->active_index();
+  state.pinned = model_->IsTabPinned(i);
+  state.audible = audible_helper ? audible_helper->WasRecentlyAudible()
+                                 : contents->IsCurrentlyAudible();
+  state.muted = contents->IsAudioMuted();
+  // Chromium marks a tab closed by the user until it goes away, and clears
+  // the mark when its page cancels the close.
+  state.closing = contents->GetClosedByUserGesture();
+  if (state.closing && !row.close_watch) {
+    row.close_watch = std::make_unique<CloseWatch>(
+        contents, base::BindRepeating(&TabSidebar::ScheduleRowRefresh,
+                                      weak_factory_.GetWeakPtr(), contents));
+  } else if (!state.closing) {
+    row.close_watch.reset();
+  }
+  if (const auto split = model_->GetSplitForTab(i)) {
+    const auto tabs = model_->GetSplitData(*split)->ListTabs();
+    for (size_t pane = 0; pane < tabs.size(); ++pane) {
+      if (tabs[pane]->GetContents() == contents)
+        state.split_pane = static_cast<int>(pane) + 1;
+    }
+  }
+  const int previous_split = view->state().split_pane;
+  const bool changed = view->SetState(state);
+  const auto* audio_status = state.muted     ? u", muted"
+                             : state.audible ? u", playing audio"
+                                             : u"";
+  // The row's tooltip: the page title and its address.
+  view->select()->SetTooltipText(title + u"\n" + base::UTF8ToUTF16(url.spec()));
+  view->select()->GetViewAccessibility().SetName(
+      base::NumberToString16(i + 1) + u". " + title +
+      (state.selected ? u", selected" : u"") +
+      (state.pinned ? u", pinned" : u"") + audio_status);
+  auto* navigation = contents->GetController().GetVisibleEntry();
+  const gfx::ImageSkia icon = navigation && navigation->GetFavicon().valid &&
+                                      !navigation->GetFavicon().image.IsEmpty()
+                                  ? navigation->GetFavicon().image.AsImageSkia()
+                                  : gfx::ImageSkia();
+  if (!row.favicon_initialized || !icon.BackedBySameObjectAs(row.favicon) ||
+      previous_split != state.split_pane) {
+    row.favicon = icon;
+    row.favicon_initialized = true;
+    // .tab-fallback-icon: a 12px globe in the accent colour.
+    const auto favicon =
+        icon.isNull() ? gfx::CreateVectorIcon(vector_icons::kGlobeIcon, S(12),
+                                              GetFlyColors().accent)
+                      : gfx::ImageSkiaOperations::CreateImageWithRoundRectClip(
+                            S(2), gfx::ImageSkiaOperations::CreateResizedImage(
+                                      icon, skia::ImageOperations::RESIZE_BEST,
+                                      gfx::Size(S(16), S(16))));
+    view->select()->SetImageModel(
+        views::Button::STATE_NORMAL,
+        ui::ImageModel::FromImageSkia(
+            gfx::CanvasImageSource::MakeImageSkia<RowIcon>(favicon,
+                                                           state.split_pane)));
+  }
+  const auto pin_label = u"Unpin " + title;
+  view->pin()->GetViewAccessibility().SetName(pin_label);
+  view->pin()->SetTooltipText(u"Pinned tab (click to unpin)");
+  view->close()->GetViewAccessibility().SetName(u"Close " + title);
+  view->close()->SetTooltipText(u"Close tab");
+  const auto audio_label = (state.muted ? u"Unmute " : u"Mute ") + title;
+  view->audio()->SetTooltipText(state.muted
+                                    ? u"Tab audio muted (click to unmute)"
+                                    : u"Tab playing audio (click to mute)");
+  view->audio()->GetViewAccessibility().SetName(audio_label);
+  return changed;
+}
+void TabSidebar::FinishRefresh(bool changed) {
   if (changed) {
     rows_->InvalidateLayout();
     RepaintSurfaces();
@@ -1148,13 +1192,19 @@ gfx::ImageSkia TabSidebar::favicon_for_testing(
 void TabSidebar::OnSplitTabChanged(const SplitTabChange&) {
   ScheduleRefresh();
 }
-void TabSidebar::OnTabStripModelChanged(TabStripModel*,
-                                        const TabStripModelChange&,
-                                        const TabStripSelectionChange&) {
-  ScheduleRefresh();
+void TabSidebar::OnTabStripModelChanged(
+    TabStripModel*,
+    const TabStripModelChange& change,
+    const TabStripSelectionChange& selection) {
+  if (change.type() == TabStripModelChange::kSelectionOnly) {
+    ScheduleRowRefresh(selection.old_contents);
+    ScheduleRowRefresh(selection.new_contents);
+  } else {
+    ScheduleRefresh();
+  }
 }
-void TabSidebar::OnTabChangedAt(tabs::TabInterface*, TabChangeType) {
-  ScheduleRefresh();
+void TabSidebar::OnTabChangedAt(tabs::TabInterface* tab, TabChangeType) {
+  ScheduleRowRefresh(tab->GetContents());
 }
 void TabSidebar::OnTabPinnedStateChanged(tabs::TabInterface*, int) {
   ScheduleRefresh();

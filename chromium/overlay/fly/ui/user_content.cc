@@ -11,7 +11,6 @@
 #include "base/files/file_path_watcher.h"
 #include "base/files/file_util.h"
 #include "base/files/important_file_writer.h"
-#include "base/task/single_thread_task_runner.h"
 #include "base/hash/sha1.h"
 #include "base/json/json_reader.h"
 #include "base/json/json_writer.h"
@@ -19,8 +18,10 @@
 #include "base/strings/string_number_conversions.h"
 #include "base/strings/string_util.h"
 #include "base/strings/stringprintf.h"
+#include "base/task/single_thread_task_runner.h"
 #include "base/task/thread_pool.h"
 #include "base/timer/timer.h"
+#include "base/trace_event/trace_event.h"
 #include "chrome/browser/extensions/component_loader.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/common/chrome_paths.h"
@@ -112,6 +113,7 @@ UserContentService::~UserContentService() = default;
 // static
 UserContentService::Generated UserContentService::Generate(
     std::string email_handler) {
+  TRACE_EVENT("browser", "Fly.UserContent.Generate");
   Generated result;
   const auto user_data = UserData();
   base::FilePath assets;
@@ -168,18 +170,30 @@ UserContentService::Generated UserContentService::Generate(
   const std::string data = "self.FLY_USER_CONTENT = " + json +
                            ";\nself.FLY_USER_CONTENT.version = \"" +
                            result.version + "\";\n";
-  if (!base::CreateDirectory(target) ||
-      !base::ImportantFileWriter::WriteFileAtomically(
-          target.AppendASCII("background.js"), worker) ||
-      !base::ImportantFileWriter::WriteFileAtomically(
-          target.AppendASCII("manifest.json"), manifest_text) ||
-      !base::ImportantFileWriter::WriteFileAtomically(
-          target.AppendASCII("offscreen.html"), offscreen_page) ||
-      !base::ImportantFileWriter::WriteFileAtomically(
-          target.AppendASCII("offscreen.js"), offscreen_script) ||
-      !base::ImportantFileWriter::WriteFileAtomically(
-          target.AppendASCII("content.js"), data))
+  if (!base::CreateDirectory(target))
     return result;
+  // Validate every byte, including missing/truncated/corrupt files. A digest
+  // marker alone would accept a damaged generation. Keep document-start
+  // registration on the existing path; only avoid redundant atomic writes.
+  const std::pair<const char*, const std::string*> files[] = {
+      {"background.js", &worker},
+      {"manifest.json", &manifest_text},
+      {"offscreen.html", &offscreen_page},
+      {"offscreen.js", &offscreen_script},
+      {"content.js", &data}};
+  for (const auto& [name, expected] : files) {
+    const auto file = target.AppendASCII(name);
+    std::string existing;
+    if (!base::IsLink(file) &&
+        base::ReadFileToStringWithMaxSize(file, &existing, expected->size()) &&
+        existing == *expected)
+      continue;
+    if (!base::ImportantFileWriter::WriteFileAtomically(file, *expected))
+      return result;
+    ++result.files_written;
+  }
+  TRACE_EVENT_INSTANT("browser", "Fly.UserContent.FilesWritten", "count",
+                      result.files_written);
   result.ok = true;
   result.directory = target;
   result.manifest = std::move(*manifest);
@@ -219,7 +233,8 @@ void UserContentService::OnGenerated(Announce announce, Generated generated) {
   if (!generated.ok)
     return;
   const bool first = !current_;
-  const bool changed = first || current_->version != generated.version;
+  const bool changed = first || current_->version != generated.version ||
+                       generated.files_written != 0;
   scripts_ = generated.scripts;
   styles_ = generated.styles;
   current_ = std::move(generated);

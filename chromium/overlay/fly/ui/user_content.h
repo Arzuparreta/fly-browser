@@ -26,8 +26,8 @@ namespace fly {
 // Fly generates the "Fly User Content" extension in
 // <user data>/fly-user-content: its fixed worker (fly_resources/user_content)
 // plus content.js holding the current files. The worker parses metadata,
-// registers chrome.userScripts and serves the GM_* bridge. Edits in the folders regenerate content.js and
-// reload the extension in every workspace.
+// registers chrome.userScripts and serves the GM_* bridge. Edits in the folders
+// regenerate content.js and reload the extension in every workspace.
 class UserContentService : public ProfileObserver {
  public:
   inline static constexpr char kExtensionId[] =
@@ -46,6 +46,7 @@ class UserContentService : public ProfileObserver {
   void SetEmailHandler(std::string handler);
   size_t script_count() const { return scripts_; }
   size_t style_count() const { return styles_; }
+  bool generating_for_testing() const { return generating_; }
 
   // ProfileObserver:
   void OnProfileWillBeDestroyed(Profile* profile) override;
@@ -59,6 +60,7 @@ class UserContentService : public ProfileObserver {
     base::FilePath directory;
     base::DictValue manifest;
     std::string version;
+    size_t files_written = 0;
     size_t scripts = 0;
     size_t styles = 0;
   };

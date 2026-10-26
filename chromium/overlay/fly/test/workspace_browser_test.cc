@@ -23,6 +23,8 @@
 #include "chrome/browser/sessions/session_service_factory.h"
 #include "chrome/browser/extensions/extension_action_dispatcher.h"
 #include "chrome/browser/ui/views/frame/browser_view.h"
+#include "chrome/browser/ui/views/location_bar/location_bar_view.h"
+#include "chrome/browser/ui/views/toolbar/toolbar_view.h"
 #include "extensions/browser/extension_action_manager.h"
 #include "extensions/browser/extension_action.h"
 #include "chrome/browser/ui/views/session_crashed_bubble_view.h"
@@ -1617,6 +1619,44 @@ IN_PROC_BROWSER_TEST_F(FlyWorkspaceBrowserTest,
   EXPECT_EQ(GURL("about:blank"), Active(browser())->GetVisibleURL());
   EXPECT_EQ(id, TabIdentity::Get(Active(browser())));
   EXPECT_EQ(second_count, second->GetTabStripModel()->count());
+}
+
+IN_PROC_BROWSER_TEST_F(FlyWorkspaceBrowserTest,
+                       HiddenChromiumOmniboxKeepsOnlyNativeFallback) {
+  auto* location = BrowserView::GetBrowserViewForBrowser(browser())
+                       ->toolbar()->location_bar_view();
+  ASSERT_TRUE(location->GetOmniboxPopupView());
+  EXPECT_EQ(nullptr, location->GetOmniboxPopupUI());
+  EXPECT_EQ(nullptr, location->GetOmniboxPopupAimPresenter());
+  ASSERT_TRUE(ExecuteNativeCommand(browser(), "toggle-address"));
+  ASSERT_TRUE(Window().address_picker().active());
+  Window().address_picker().Cancel();
+}
+
+IN_PROC_BROWSER_TEST_F(FlyWorkspaceBrowserTest,
+                       SidebarTitleChangesTouchOnlyTheirRow) {
+  for (int i = 1; i < 24; ++i)
+    ASSERT_TRUE(AddTabAtIndex(i, GURL("about:blank"), ui::PAGE_TRANSITION_TYPED));
+  auto* strip = browser()->GetTabStripModel();
+  auto* list = Window().tab_sidebar_for_testing();
+  base::RunLoop().RunUntilIdle();
+  ASSERT_EQ(24u, list->row_count_for_testing());
+  auto* contents = Active(browser());
+  auto* row = list->row_for_testing(contents);
+  auto* select = static_cast<views::MdTextButton*>(row->children()[0]);
+  select->RequestFocus();
+  const auto before = list->row_updates_for_testing();
+  ASSERT_TRUE(content::ExecJs(contents, "document.title = 'Updated title'"));
+  ASSERT_TRUE(base::test::RunUntil([&] {
+    return select->GetTooltipText().find(u"Updated title") != std::u16string::npos;
+  }));
+  EXPECT_EQ(before + 1, list->row_updates_for_testing());
+  EXPECT_EQ(row, list->row_for_testing(contents));
+  EXPECT_EQ(select, select->GetFocusManager()->GetFocusedView());
+  const auto selected_before = list->row_updates_for_testing();
+  strip->ActivateTabAt(0);
+  base::RunLoop().RunUntilIdle();
+  EXPECT_EQ(selected_before + 2, list->row_updates_for_testing());
 }
 
 IN_PROC_BROWSER_TEST_F(FlyWorkspaceBrowserTest,
@@ -5012,6 +5052,51 @@ IN_PROC_BROWSER_TEST_F(FlyWorkspaceBrowserTest,
     return extension && extension->version().GetString() == "2";
   }));
   EXPECT_EQ(local_folders().size(), 3u);
+}
+
+IN_PROC_BROWSER_TEST_F(FlyWorkspaceBrowserTest,
+                       UserContentReusesFilesAndRepairsDamagedGeneration) {
+  auto& service = App().user_content();
+  ASSERT_TRUE(base::test::RunUntil([&] { return !service.generating_for_testing(); }));
+  base::FilePath user_data;
+  ASSERT_TRUE(base::PathService::Get(chrome::DIR_USER_DATA, &user_data));
+  const auto directory = user_data.AppendASCII("fly-user-content");
+  const std::vector<std::string> names = {"background.js", "manifest.json",
+      "offscreen.html", "offscreen.js", "content.js"};
+  std::map<std::string, std::string> expected;
+  const auto stamp = base::Time::Now() - base::Days(1);
+  {
+    base::ScopedAllowBlockingForTesting allow;
+    for (const auto& name : names) {
+      const auto file = directory.AppendASCII(name);
+      ASSERT_TRUE(base::ReadFileToString(file, &expected[name]));
+      ASSERT_TRUE(base::TouchFile(file, stamp, stamp));
+    }
+  }
+  service.Reload();
+  ASSERT_TRUE(base::test::RunUntil([&] { return !service.generating_for_testing(); }));
+  {
+    base::ScopedAllowBlockingForTesting allow;
+    for (const auto& name : names) {
+      base::File::Info info;
+      ASSERT_TRUE(base::GetFileInfo(directory.AppendASCII(name), &info));
+      EXPECT_EQ(stamp, info.last_modified) << name;
+    }
+    ASSERT_TRUE(base::WriteFile(directory.AppendASCII("content.js"), "corrupt"));
+    ASSERT_TRUE(base::DeleteFile(directory.AppendASCII("offscreen.js")));
+    ASSERT_TRUE(base::WriteFile(directory.AppendASCII("background.js"),
+                               expected["background.js"] + "extra bytes"));
+  }
+  service.Reload();
+  ASSERT_TRUE(base::test::RunUntil([&] { return !service.generating_for_testing(); }));
+  {
+    base::ScopedAllowBlockingForTesting allow;
+    for (const auto& name : names) {
+      std::string actual;
+      ASSERT_TRUE(base::ReadFileToString(directory.AppendASCII(name), &actual));
+      EXPECT_EQ(expected[name], actual) << name;
+    }
+  }
 }
 
 IN_PROC_BROWSER_TEST_F(FlyWorkspaceBrowserTest,

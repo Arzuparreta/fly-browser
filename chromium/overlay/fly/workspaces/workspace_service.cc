@@ -11,7 +11,9 @@
 #include <utility>
 
 #include "base/check.h"
+#include "base/functional/bind.h"
 #include "base/strings/string_util.h"
+#include "base/trace_event/trace_event.h"
 #include "base/uuid.h"
 #include "components/prefs/pref_registry_simple.h"
 #include "components/prefs/pref_service.h"
@@ -88,14 +90,45 @@ void WorkspaceService::RegisterLocalStatePrefs(PrefRegistrySimple* registry) {
 }
 
 WorkspaceService::WorkspaceService(PrefService& local_state)
-    : local_state_(local_state) {}
+    : local_state_(local_state) {
+  registrar_.Init(&local_state);
+  registrar_.Add(kWorkspacesPref,
+                 base::BindRepeating(&WorkspaceService::InvalidateCache,
+                                     base::Unretained(this)));
+}
 WorkspaceService::~WorkspaceService() = default;
 
-std::optional<base::DictValue> WorkspaceService::ReadValidated(bool for_write) const {
+void WorkspaceService::InvalidateCache() const {
+  cache_initialized_ = false;
+  validated_.reset();
+  snapshot_.reset();
+}
+
+const base::DictValue* WorkspaceService::ReadValidated() const {
+  DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
+  // Recheck provenance even if a wrong-typed user value falls back to the
+  // same effective default and consequently produces no change notification.
+  if (!ReadDictionaryStore(*local_state_, kWorkspacesPref))
+    return nullptr;
+  if (!cache_initialized_) {
+    validated_ = ValidateCatalog();
+    cache_initialized_ = true;
+  }
+  return validated_ ? &*validated_ : nullptr;
+}
+
+std::optional<base::DictValue> WorkspaceService::ReadForWrite() const {
+  if (!local_state_->FindPreference(kWorkspacesPref)->IsUserModifiable())
+    return std::nullopt;
+  const auto* catalog = ReadValidated();
+  return catalog ? std::make_optional(catalog->Clone()) : std::nullopt;
+}
+
+std::optional<base::DictValue> WorkspaceService::ValidateCatalog() const {
+  TRACE_EVENT("browser", "Fly.Workspaces.Validate");
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
   const auto* readable = ReadDictionaryStore(*local_state_, kWorkspacesPref);
-  if (!readable || (for_write &&
-      !local_state_->FindPreference(kWorkspacesPref)->IsUserModifiable()))
+  if (!readable)
     return std::nullopt;
   auto catalog = readable->Clone();
   if (catalog.empty()) {
@@ -144,10 +177,12 @@ std::optional<base::DictValue> WorkspaceService::ReadValidated(bool for_write) c
 }
 
 std::optional<WorkspaceCatalog> WorkspaceService::Read() const {
-  auto catalog = ReadValidated();
+  const auto* catalog = ReadValidated();
   if (!catalog) {
     return std::nullopt;
   }
+  if (snapshot_)
+    return snapshot_;
   WorkspaceCatalog result;
   result.active_id = *catalog->FindString("active_id");
   for (const auto& value : *catalog->FindList("items")) {
@@ -155,17 +190,19 @@ std::optional<WorkspaceCatalog> WorkspaceService::Read() const {
     result.items.push_back({*row.FindString("id"), *row.FindString("name"),
                             *row.FindString("profile_directory")});
   }
-  return result;
+  snapshot_ = std::move(result);
+  return snapshot_;
 }
 
 bool WorkspaceService::CanEdit() const {
-  return ReadValidated(true).has_value();
+  return local_state_->FindPreference(kWorkspacesPref)->IsUserModifiable() &&
+         ReadValidated();
 }
 std::optional<bool> WorkspaceService::IsProfileRetired(
     std::string_view profile_directory) const {
   if (!ValidProfileDirectory(profile_directory))
     return std::nullopt;
-  const auto catalog = ReadValidated();
+  const auto* catalog = ReadValidated();
   if (!catalog)
     return std::nullopt;
   return std::ranges::any_of(*catalog->FindList("retired_profiles"),
@@ -176,13 +213,14 @@ std::optional<bool> WorkspaceService::IsProfileRetired(
 }
 void WorkspaceService::Commit(base::DictValue catalog) {
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
+  InvalidateCache();
   local_state_->SetDict(kWorkspacesPref, std::move(catalog));
 }
 
 std::optional<Workspace> WorkspaceService::Add(
     std::string_view name,
     std::string_view profile_directory) {
-  auto catalog = ReadValidated(true);
+  auto catalog = ReadForWrite();
   if (!catalog || !ValidName(name) ||
       !ValidProfileDirectory(profile_directory) || NameUsed(*catalog, name)) {
     return std::nullopt;
@@ -212,7 +250,7 @@ std::optional<Workspace> WorkspaceService::Add(
 }
 
 bool WorkspaceService::Rename(std::string_view id, std::string_view name) {
-  auto catalog = ReadValidated(true);
+  auto catalog = ReadForWrite();
   if (!catalog || !ValidName(name) || NameUsed(*catalog, name, id)) {
     return false;
   }
@@ -226,7 +264,7 @@ bool WorkspaceService::Rename(std::string_view id, std::string_view name) {
 }
 
 bool WorkspaceService::Activate(std::string_view id) {
-  auto catalog = ReadValidated(true);
+  auto catalog = ReadForWrite();
   if (!catalog || !FindRow(*catalog, id)) {
     return false;
   }
@@ -236,7 +274,7 @@ bool WorkspaceService::Activate(std::string_view id) {
 }
 
 bool WorkspaceService::Remove(std::string_view id) {
-  auto catalog = ReadValidated(true);
+  auto catalog = ReadForWrite();
   if (!catalog) {
     return false;
   }
@@ -260,7 +298,7 @@ bool WorkspaceService::Remove(std::string_view id) {
 }
 
 bool WorkspaceService::Reorder(const std::vector<std::string>& ids) {
-  auto catalog = ReadValidated(true);
+  auto catalog = ReadForWrite();
   if (!catalog || ids.size() != catalog->FindList("items")->size()) {
     return false;
   }
