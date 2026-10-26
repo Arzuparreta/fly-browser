@@ -49,6 +49,10 @@ explicit `--user-data-dir` override. The installed Fly keeps
 its own profile. Downloaded builds use the same development profile.
 Release hosting prerequisites are in [releasing](../releasing.md).
 
+For process-start and session-restore measurements, see the
+[startup performance study](./startup-study.md). Its opt-in harness uses
+synthetic pages and disposable profiles on an owned virtual desktop.
+
 ## Source and prerequisites
 
 Use a dedicated external checkout, Python 3.9+, Git and upstream-supported
