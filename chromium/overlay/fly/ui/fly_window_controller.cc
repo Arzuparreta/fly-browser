@@ -549,17 +549,6 @@ void FlyWindowController::BuildSidebar() {
   parts.tabs = tab_sidebar_;
   tab_sidebar_->SetStateChangedCallback(base::BindRepeating(
       &FlyWindowController::UpdateSplitButton, weak_factory_.GetWeakPtr()));
-  // .sidebar-clock-row with .sidebar-clock: 6px above, 4px below.
-  auto* clock_row = sidebar->AddChildView(std::make_unique<views::View>());
-  clock_row->SetLayoutManager(std::make_unique<views::FillLayout>());
-  clock_row->SetBorder(views::CreateEmptyBorder(gfx::Insets::TLBR(6, 0, 4, 0)));
-  clock_ = clock_row->AddChildView(std::make_unique<SidebarClock>(
-      base::BindRepeating(&FlyWindowController::CycleClockFormat,
-                          weak_factory_.GetWeakPtr())));
-  clock_->SetVectorIcon(kTimerIcon, 11);
-  clock_->SetHorizontalAlignment(gfx::ALIGN_LEFT);
-  clock_->SetIconTone(FlyButton::IconTone::kAccent);
-  parts.clock_row = clock_row;
   // The bottom row: pin, theme and the other sidebar controls, in order.
   sidebar_pin_button_ = sidebar->AddChildView(MakeFlyIconButton(
       base::BindRepeating(&FlyWindowController::ToggleSidebarAutoCollapse,
@@ -606,7 +595,6 @@ void FlyWindowController::BuildSidebar() {
         static_cast<views::View*>(new_tab_button_.get()),
         static_cast<views::View*>(back), static_cast<views::View*>(forward),
         static_cast<views::View*>(workspace_buttons_.get()),
-        static_cast<views::View*>(clock_row),
         static_cast<views::View*>(split_button_.get()),
         static_cast<views::View*>(reader_button_.get()),
         static_cast<views::View*>(search),
@@ -1095,7 +1083,6 @@ void FlyWindowController::ClearSidebarViews() {
   window_control_buttons_.clear();
   window_controls_ = nullptr;
   workspace_buttons_ = nullptr;
-  clock_ = nullptr;
   preferences_button_ = nullptr;
   tab_sidebar_ = nullptr;
   sidebar_content_ = nullptr;
@@ -1749,54 +1736,27 @@ void FlyWindowController::UpdateWorkspaceHeader() {
 }
 
 void FlyWindowController::UpdateClock() {
-  if (!clock_ || !widget_)
+  if (!status_bar_ || !widget_)
     return;
   auto& preferences = FlyApp::Get().preferences();
   const bool footer = preferences.ReadStatusBarVisible().value_or(false);
-  if (status_bar_)
-    status_bar_->SetVisible(footer);
+  status_bar_->SetVisible(footer);
   const auto settings = preferences.ReadClock();
   const bool visible = settings && settings->visible;
-  if (!visible && clock_->HasFocus()) {
-    if (auto* contents = ActiveContents())
-      contents->Focus();
-  }
-  clock_->SetVisible(visible);
-  clock_->SetEnabled(preferences.CanEditClock());
   if (!visible) {
-    if (status_bar_)
-      status_bar_->SetClockVisible(false);
+    status_bar_->SetClockVisible(false);
     clock_timer_.Stop();
     return;
   }
-  // The clock always carries the current time: assistive technology reads it
-  // even while the sidebar is collapsed. Only a shown clock keeps ticking.
   const auto now = base::Time::Now();
   const auto text = FormatClock(now, settings->format);
-  // The sidebar and the footer draw the date and the time separately (time
-  // in the accent display face).
-  std::u16string date;
-  std::u16string time = text.label;
-  if (settings->format == "datetime") {
-    const auto split = text.label.rfind(u' ');
-    if (split != std::u16string::npos) {
-      date = text.label.substr(0, split);
-      base::TrimWhitespace(date, base::TRIM_TRAILING, &date);
-      time = text.label.substr(split + 1);
-    }
-  }
-  clock_->SetClock(text.label, date, time);
-  if (clock_->GetTooltipText() != text.tooltip)
-    clock_->SetTooltipText(text.tooltip);
-  const bool window_shown = widget_->IsVisible() && !widget_->IsMinimized();
-  if (!window_shown || (!sidebar_expanded_ && !footer)) {
-    if (status_bar_)
-      status_bar_->SetClockVisible(true);
+  status_bar_->SetClock(text.label, text.tooltip, true);
+  // Only the footer displays the clock. Expanding the sidebar must not wake
+  // a timer while the footer or window is hidden.
+  if (!footer || !widget_->IsVisible() || widget_->IsMinimized()) {
     clock_timer_.Stop();
     return;
   }
-  if (status_bar_)
-    status_bar_->SetClock(date, time, text.tooltip, true);
   // Wake at the next visible change only: the next second for the seconds
   // format, otherwise the next minute.
   base::Time::Exploded local;

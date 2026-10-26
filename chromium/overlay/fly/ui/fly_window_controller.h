@@ -62,7 +62,6 @@ class FlyLabel;
 class HintController;
 class KeyboardEditor;
 class SettingsMenu;
-class SidebarClock;
 class SidebarPanel;
 class SidebarRoot;
 class StatusBar;
@@ -168,7 +167,6 @@ class FlyWindowController : public views::WidgetObserver,
   DownloadShelf* download_shelf_for_testing() { return download_shelf_; }
   SidebarRoot* sidebar_root_for_testing() { return sidebar_root_; }
   views::Widget* sidebar_widget_for_testing() { return sidebar_widget_.get(); }
-  FlyButton* clock_for_testing() { return clock_; }
   FlyButton* preferences_button_for_testing() { return preferences_button_; }
   FlyButton* split_button_for_testing() { return split_button_; }
   FlyButton* sidebar_pin_for_testing() { return sidebar_pin_button_; }
@@ -355,7 +353,6 @@ class FlyWindowController : public views::WidgetObserver,
   raw_ptr<FlyButton> new_tab_button_ = nullptr;
   raw_ptr<views::View> workspace_buttons_ = nullptr;
   raw_ptr<TabSidebar> tab_sidebar_ = nullptr;
-  raw_ptr<SidebarClock> clock_ = nullptr;
   raw_ptr<FlyButton> sidebar_pin_button_ = nullptr;
   raw_ptr<FlyButton> split_button_ = nullptr;
   raw_ptr<FlyButton> reader_button_ = nullptr;

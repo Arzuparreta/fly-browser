@@ -756,7 +756,7 @@ class FlySidebarBrowserTest : public FlyWorkspaceBrowserTest {
     FlyWorkspaceBrowserTest::SetUpOnMainThread();
     ASSERT_TRUE(
         FlyApp::Get().preferences().SetSidebarAutoCollapse(true));
-    // The footer clock ticks independently; these cases observe the sidebar's.
+    // Sidebar expansion never starts the clock when the footer is hidden.
     ASSERT_TRUE(
         FlyApp::Get().preferences().SetStatusBarVisible(false));
   }
@@ -816,7 +816,7 @@ IN_PROC_BROWSER_TEST_F(FlySidebarBrowserTest,
   EXPECT_EQ(true, content::EvalJs(page, "document.hasFocus()"));
   OpenByPointer();
   EXPECT_EQ(true, content::EvalJs(page, "document.hasFocus()"));
-  EXPECT_TRUE(window.clock_timer_running_for_testing());
+  EXPECT_FALSE(window.clock_timer_running_for_testing());
   EXPECT_EQ(width, content::EvalJs(page, "innerWidth"));
   EXPECT_EQ(page_bounds, page->GetRenderWidgetHostView()->GetViewBounds());
   ExpectVisible(page, true);
@@ -5571,7 +5571,7 @@ IN_PROC_BROWSER_TEST_F(FlyWorkspaceBrowserTest,
 IN_PROC_BROWSER_TEST_F(FlyWorkspaceBrowserTest,
                        NativeClockUsesLiveAppPreferencesWithoutTickWrites) {
   auto& window = Window();
-  auto* clock = window.clock_for_testing();
+  auto* clock = window.status_bar_for_testing()->clock_for_testing();
   ASSERT_TRUE(clock);
   ASSERT_TRUE(base::test::RunUntil([&] {
     return clock->GetVisible() && !clock->GetText().empty();
@@ -5590,6 +5590,11 @@ IN_PROC_BROWSER_TEST_F(FlyWorkspaceBrowserTest,
   EXPECT_FALSE(App().preferences().ReadClock()->visible);
   ASSERT_TRUE(Window(browser()).RunCommand("toggle-clock"));
   EXPECT_TRUE(clock->GetVisible());
+  EXPECT_TRUE(window.clock_timer_running_for_testing());
+  ASSERT_TRUE(App().preferences().SetStatusBarVisible(false));
+  EXPECT_FALSE(window.clock_timer_running_for_testing());
+  ASSERT_TRUE(App().preferences().SetStatusBarVisible(true));
+  EXPECT_TRUE(window.clock_timer_running_for_testing());
   const auto future = base::DictValue().Set("schema", 2)
       .Set("values", base::DictValue().Set("show_clock", true));
   state->SetDict(kPreferencesPref, future.Clone());
@@ -5637,7 +5642,8 @@ IN_PROC_BROWSER_TEST_F(FlyWorkspaceBrowserTest,
   }
   EXPECT_EQ("light", App().preferences().ReadTheme()->mode);
   EXPECT_FALSE(App().preferences().ReadTheme()->sync_websites);
-  EXPECT_FALSE(window.clock_for_testing()->GetVisible());
+  EXPECT_FALSE(
+      window.status_bar_for_testing()->clock_for_testing()->GetVisible());
   EXPECT_FALSE(window.status_bar_for_testing()->GetVisible());
   editor.clock_format_for_testing()->Choose(1);
   EXPECT_EQ("time", App().preferences().ReadClock()->format);
@@ -6170,9 +6176,9 @@ IN_PROC_BROWSER_TEST_F(FlyWorkspaceBrowserTest,
       + 'style="position:fixed;left:40px;top:40px;width:250px;height:24px">';
   )js"));
   Activate(browser());
-  window.clock_for_testing()->RequestFocus();
+  window.new_tab_button_for_testing()->RequestFocus();
   ASSERT_TRUE(base::test::RunUntil([&] {
-    return window.clock_for_testing()->HasFocus();
+    return window.new_tab_button_for_testing()->HasFocus();
   }));
   ui::test::EventGenerator input(
       window.widget()->GetNativeWindow()->GetRootWindow());

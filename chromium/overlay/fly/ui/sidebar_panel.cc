@@ -64,9 +64,8 @@ void FadeTo(views::View* view,
 }
 }  // namespace
 
-// The engraving, 230px wide, centred, its bottom anchored to the bottom. The
-// panel gives it another 24px of clearance above the bottom controls; resizing
-// never recentres it.
+// The engraving, 230px wide and centred, ends 41px above the footer rule:
+// the same clearance it had above the clock badge. Resizing never recentres it.
 class SidebarPanel::Engraving : public views::View {
   METADATA_HEADER(Engraving, views::View)
 
@@ -84,7 +83,7 @@ class SidebarPanel::Engraving : public views::View {
     const int size = FlyScaled(230);
     canvas->DrawImageInt(image, 0, 0, image.width(), image.height(),
                          (width() - size) / 2,
-                         height() - FlyScaled(124) - size, size, size, true);
+                         height() - FlyScaled(41) - size, size, size, true);
   }
 
  private:
@@ -162,7 +161,8 @@ void SidebarPanel::Layout(PassKey) {
   const int x = s(4);
   const int row = s(245);
   int y = s(8);
-  engraving_->SetBoundsRect(GetLocalBounds());
+  const int footer_y = height() - s(6) - s(34);
+  engraving_->SetBounds(0, 0, content, std::max(0, footer_y));
   if (parts_.window_controls && parts_.window_controls->GetVisible()) {
     const int height = parts_.window_controls->GetPreferredSize().height();
     parts_.window_controls->SetBounds(x, y, row, height);
@@ -195,19 +195,12 @@ void SidebarPanel::Layout(PassKey) {
     parts_.workspaces->SetBounds(x, y, row, height);
     y += height + s(4);
   }
-  // The tab list fills the free height above the clock row; the content keeps
-  // 42px at the bottom for the footer.
+  // The tab list fills the free height above the footer rule.
   y += s(4);
-  const int clock_height =
-      parts_.clock_row ? parts_.clock_row->GetPreferredSize().height() : 0;
-  const int clock_y = std::max(y, height() - s(42) - clock_height);
   if (parts_.tabs)
-    parts_.tabs->SetBounds(0, y, content, clock_y - y);
-  if (parts_.clock_row)
-    parts_.clock_row->SetBounds(x, clock_y, row, clock_height);
+    parts_.tabs->SetBounds(0, y, content, std::max(0, footer_y - y));
   // .bottom-theme-layout: 6px above the bottom, 8px 4px 0 padding, buttons
   // spread across the row with the pin first, centred on the rail.
-  const int footer_y = height() - s(6) - s(34);
   footer_line_->SetBounds(0, footer_y, content, 1);
   const int count = static_cast<int>(parts_.footer.size());
   if (!count)
@@ -238,68 +231,6 @@ void SidebarPanel::OnThemeChanged() {
   engraving_->SchedulePaint();
 }
 BEGIN_METADATA(SidebarPanel)
-END_METADATA
-
-SidebarClock::SidebarClock(PressedCallback callback)
-    : FlyButton(std::move(callback), u"", FlyFace::kMono, 13) {
-  SetCustomPadding(gfx::Insets::VH(6, 10));
-  SetOutlined(true);
-  SetCornerRadius(6);
-  SetRestingFill(SkColorSetARGB(8, 255, 255, 255));
-  label()->SetVisible(false);
-  date_ = AddChildView(std::make_unique<FlyLabel>(u"", FlyFace::kMono, 13));
-  date_->SetHorizontalAlignment(gfx::ALIGN_LEFT);
-  date_->SetElideBehavior(gfx::ELIDE_TAIL);
-  time_ = AddChildView(std::make_unique<FlyLabel>(
-      u"", FlyFace::kDisplay, 13, gfx::Font::Weight::EXTRA_BOLD,
-      FlyLabel::Tone::kAccent));
-  time_->SetHorizontalAlignment(gfx::ALIGN_RIGHT);
-  for (views::Label* label : {date_.get(), time_.get()}) {
-    label->SetCanProcessEventsWithinSubtree(false);
-    label->SetSubpixelRenderingEnabled(false);
-  }
-}
-SidebarClock::~SidebarClock() = default;
-void SidebarClock::SetClock(const std::u16string& text,
-                            const std::u16string& date,
-                            const std::u16string& time) {
-  // Every sidebar state change refreshes the clock; an unchanged one needs
-  // no layout.
-  if (GetText() == text && date_->GetText() == date &&
-      time_->GetText() == time)
-    return;
-  if (GetText() != text)
-    SetText(text);
-  label()->SetVisible(false);
-  date_->SetText(date);
-  time_->SetText(time);
-  InvalidateLayout();
-}
-gfx::Size SidebarClock::CalculatePreferredSize(
-    const views::SizeBounds&) const {
-  // 6px padding, a 13px monospace line, 1px border on each side.
-  return gfx::Size(FlyScaled(245),
-                   FlyScaled(12) + std::max(date_->GetPreferredSize().height(),
-                                            FlyScaled(17)) + 2);
-}
-void SidebarClock::Layout(PassKey) {
-  LayoutSuperclass<FlyButton>(this);
-  // The icon keeps FlyButton's place; the date follows it after 8px and the
-  // time takes the right end.
-  const int right = width() - FlyScaled(10);
-  const int left = image_container_view()->bounds().right() + FlyScaled(8);
-  const int time_width = time_->GetPreferredSize().width();
-  time_->SetBounds(right - time_width, 0, time_width, height());
-  date_->SetBounds(left, 0, std::max(0, right - time_width - FlyScaled(8) - left),
-                   height());
-}
-void SidebarClock::OnThemeChanged() {
-  FlyButton::OnThemeChanged();
-  // .sidebar-clock-date: opacity 0.8.
-  date_->SetEnabledColor(
-      SkColorSetA(GetFlyColors().text, static_cast<U8CPU>(0.8f * 255)));
-}
-BEGIN_METADATA(SidebarClock)
 END_METADATA
 
 // The shadow: 6px to the right, 28px blur, black at 65%, outside the panel

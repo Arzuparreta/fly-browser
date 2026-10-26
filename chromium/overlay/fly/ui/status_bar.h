@@ -57,8 +57,7 @@ class StatusBar : public views::View,
   ~StatusBar() override;
   void SetBrowser(BrowserWindowInterface* browser, std::u16string workspace);
   void SetTargetURL(content::WebContents* source, const GURL& url);
-  void SetClock(const std::u16string& date,
-                const std::u16string& time,
+  void SetClock(const std::u16string& text,
                 const std::u16string& tooltip,
                 bool visible);
   void SetClockVisible(bool visible);
@@ -74,6 +73,7 @@ class StatusBar : public views::View,
   FlyButton* security_for_testing() const;
   FlyButton* workspace_for_testing() const;
   FlyButton* zoom_for_testing() const;
+  FlyButton* clock_for_testing() const;
 
   void OnTabStripModelChanged(TabStripModel*,
                               const TabStripModelChange&,
@@ -113,7 +113,6 @@ class StatusBar : public views::View,
   raw_ptr<StatusBadge> security_;
   raw_ptr<StatusBadge> workspace_;
   raw_ptr<StatusBadge> clock_;
-  raw_ptr<FlyLabel> clock_time_;
   base::RepeatingClosure contents_changed_;
   bool private_ = false;
   GURL target_;
