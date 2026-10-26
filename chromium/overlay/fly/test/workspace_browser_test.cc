@@ -4297,7 +4297,7 @@ IN_PROC_BROWSER_TEST_F(FlyWorkspaceBrowserTest,
   }));
 }
 
-// Settings tools share the profile but never enter the embedded hierarchy.
+// Settings tools open in another Fly window of the same workspace.
 IN_PROC_BROWSER_TEST_F(FlyWorkspaceBrowserTest,
                        StoreSettingsLinksAlwaysOpenAnotherWindow) {
   auto& window = Window();
@@ -4315,9 +4315,9 @@ IN_PROC_BROWSER_TEST_F(FlyWorkspaceBrowserTest,
     auto* tool = created->Wait();
     created.reset();
     ASSERT_TRUE(tool);
-    EXPECT_EQ(original, LastActive());
     EXPECT_EQ(original->GetProfile(), tool->GetProfile());
-    EXPECT_FALSE(FlyWindowController::ShouldDecorate(tool));
+    EXPECT_EQ(BrowserWindowInterface::TYPE_NORMAL, tool->GetType());
+    EXPECT_TRUE(FlyWindowController::FromBrowser(tool));
     EXPECT_NE(window.widget()->GetNativeWindow()->GetHost(),
               tool->GetWindow()->GetNativeWindow()->GetHost());
     EXPECT_EQ(GURL(url), Active(tool)->GetVisibleURL());
