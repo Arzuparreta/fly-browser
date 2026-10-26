@@ -47,8 +47,6 @@ class StatusBadge : public FlyButton {
     SetVectorIcon(icon, 10);
     SetCustomPadding(gfx::Insets::VH(1, 6));
     SetImageLabelSpacing(5);
-    // MdTextButton centres its text; the clock's time follows at the right,
-    // so a centred date would be cut.
     SetHorizontalAlignment(gfx::ALIGN_LEFT);
     SetMinSize(gfx::Size(0, 16));
     if (!callback_set_)
@@ -60,31 +58,6 @@ class StatusBadge : public FlyButton {
     tone_ = tone;
     SetAccentText(tone == Tone::kInsecure || tone == Tone::kPrivate);
     SchedulePaint();
-  }
-  // A second label drawn after the text (the clock's accent time).
-  FlyLabel* SetTrailing(std::unique_ptr<FlyLabel> label) {
-    trailing_ = AddChildView(std::move(label));
-    trailing_->SetCanProcessEventsWithinSubtree(false);
-    return trailing_;
-  }
-  gfx::Size CalculatePreferredSize(
-      const views::SizeBounds& available) const override {
-    auto size = FlyButton::CalculatePreferredSize(available);
-    if (trailing_ && !trailing_->GetText().empty())
-      size.Enlarge(trailing_->GetPreferredSize().width() + 6, 0);
-    return size;
-  }
-  void Layout(PassKey) override {
-    LayoutSuperclass<FlyButton>(this);
-    if (!trailing_)
-      return;
-    const auto size = trailing_->GetPreferredSize();
-    trailing_->SetBounds(width() - size.width() - 6,
-                         (height() - size.height()) / 2, size.width(),
-                         size.height());
-    auto text = label()->bounds();
-    text.set_width(std::max(0, trailing_->x() - 6 - text.x()));
-    label()->SetBoundsRect(text);
   }
   void set_has_action(bool action) {
     callback_set_ = action;
@@ -132,7 +105,6 @@ class StatusBadge : public FlyButton {
  private:
   Tone tone_ = Tone::kNeutral;
   bool callback_set_ = false;
-  raw_ptr<FlyLabel> trailing_ = nullptr;
 };
 BEGIN_METADATA(StatusBadge)
 END_METADATA
@@ -277,9 +249,6 @@ StatusBar::StatusBar(Actions actions)
   clock_->set_has_action(true);
   clock_->GetViewAccessibility().SetName(u"Clock");
   clock_->SetFlyFont(FlyFace::kMono, 10, gfx::Font::Weight::MEDIUM);
-  clock_time_ = clock_->SetTrailing(std::make_unique<FlyLabel>(
-      u"", FlyFace::kDisplay, 11, gfx::Font::Weight::EXTRA_BOLD,
-      FlyLabel::Tone::kAccent));
   clock_->SetVisible(false);
 }
 StatusBar::~StatusBar() {
@@ -329,25 +298,20 @@ void StatusBar::SetBrowser(BrowserWindowInterface* browser,
   Observe(nullptr);
   SelectContents();
 }
-void StatusBar::SetClock(const std::u16string& date,
-                         const std::u16string& time,
+FlyButton* StatusBar::clock_for_testing() const {
+  return clock_;
+}
+void StatusBar::SetClock(const std::u16string& text,
                          const std::u16string& tooltip,
                          bool visible) {
   clock_->SetVisible(visible);
-  // The date uses the badge label; the time is drawn in the display face and
-  // accent colour.
-  clock_->SetText(date);
+  clock_->SetText(text);
   clock_->SetTooltipText(tooltip);
   clock_->GetViewAccessibility().SetName(tooltip);
-  if (clock_time_->GetText() != time) {
-    clock_time_->SetText(time);
-    clock_->InvalidateLayout();
-    InvalidateLayout();
-  }
 }
 void StatusBar::SetClockVisible(bool visible) {
   // A hidden or paused clock keeps its last text and accessible name.
-  clock_->SetVisible(visible && !clock_time_->GetText().empty());
+  clock_->SetVisible(visible && !clock_->GetText().empty());
 }
 void StatusBar::SetNotificationsEnabled(bool enabled) {
   notifications_->SetVectorIcon(enabled ? vector_icons::kNotificationsIcon

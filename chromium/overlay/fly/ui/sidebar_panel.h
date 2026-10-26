@@ -50,7 +50,6 @@ class SidebarPanel : public views::View {
     TopRow top;
     raw_ptr<views::View> workspaces = nullptr;
     raw_ptr<views::View> tabs = nullptr;
-    raw_ptr<views::View> clock_row = nullptr;
     // .bottom-theme-layout buttons, left to right.
     std::vector<raw_ptr<views::View>> footer;
   };
@@ -99,28 +98,6 @@ class SidebarPanel : public views::View {
   std::vector<Faded> expanded_only_;
   std::vector<Faded> rail_only_;
   bool rail_ = false;
-};
-
-// .sidebar-clock: the accent clock icon, the date at 80% and the time in the
-// display face and the accent colour at the right. GetText() keeps the
-// whole label.
-class SidebarClock : public FlyButton {
-  METADATA_HEADER(SidebarClock, FlyButton)
-
- public:
-  explicit SidebarClock(PressedCallback callback);
-  ~SidebarClock() override;
-  void SetClock(const std::u16string& text,
-                const std::u16string& date,
-                const std::u16string& time);
-  gfx::Size CalculatePreferredSize(
-      const views::SizeBounds& available) const override;
-  void Layout(PassKey) override;
-  void OnThemeChanged() override;
-
- private:
-  raw_ptr<views::Label> date_ = nullptr;
-  raw_ptr<views::Label> time_ = nullptr;
 };
 
 // The sidebar widget's contents: the shadow and the viewport that clips the
