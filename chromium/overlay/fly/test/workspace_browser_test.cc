@@ -3526,6 +3526,11 @@ IN_PROC_BROWSER_TEST_F(FlyWorkspaceBrowserTest,
   const auto directory = second->GetProfile()->GetPath();
   const auto tab_id = TabIdentity::Get(Active(second));
   auto open = [&] {
+    // Dialog closure and workspace refresh post widget/layout work. Drain it
+    // before finding the current row and injecting a pointer event at it.
+    Activate(first);
+    base::RunLoop().RunUntilIdle();
+    window.widget()->LayoutRootViewIfNecessary();
     views::View* row = nullptr;
     ASSERT_TRUE(base::test::RunUntil([&] {
       for (const auto& child : window.workspace_buttons_for_testing()->children()) {
@@ -3538,6 +3543,9 @@ IN_PROC_BROWSER_TEST_F(FlyWorkspaceBrowserTest,
       }
       return false;
     }));
+    // The sidebar is a separate control widget embedded in the frame.
+    ASSERT_TRUE(row->GetWidget());
+    row->GetWidget()->LayoutRootViewIfNecessary();
     base::RepeatingTimer choose;
     choose.Start(FROM_HERE, base::Milliseconds(1),
         base::BindLambdaForTesting([&] {
