@@ -2,7 +2,9 @@
 
 Fly uses Chromium's extension system. Install extensions through the Chrome
 Web Store and its permission prompt. Manage extensions in
-**Preferences → Extensions** or `chrome://extensions`. Each normal workspace
+**Preferences → Extensions** or `chrome://extensions`. The Web Store and
+`chrome://extensions` buttons there open a new Fly window of the current
+workspace. Each normal workspace
 has its own profile, extension storage and enabled choices. Toolbar actions
 appear in the Fly footer and open their popups above it.
 

@@ -791,8 +791,9 @@ void FlyApp::OpenInNewWindow(GURL url, Profile* profile) {
     return;
   }
   NavigateParams params(profile, url, ui::PAGE_TRANSITION_AUTO_TOPLEVEL);
-  // Tool pages open in a popup window of the workspace profile.
-  params.disposition = WindowOpenDisposition::NEW_POPUP;
+  // A normal window, so Fly decorates it like any other window of the
+  // workspace.
+  params.disposition = WindowOpenDisposition::NEW_WINDOW;
   params.window_action = NavigateParams::WindowAction::kShowWindow;
   Navigate(&params);
 }
