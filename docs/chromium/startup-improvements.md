@@ -1,8 +1,10 @@
 # Mejoras tras el estudio de arranque
 
-Seguimiento del [estudio de arranque](./startup-study.md). Se elimina trabajo
-repetido conservando el modelo de sesión, la prioridad de pestañas, los perfiles
-y las reglas de seguridad de Chromium.
+Primera tanda de implementación del [estudio de arranque](./startup-study.md).
+El seguimiento de los otros dos puntos está en
+[Mantenimiento inicial y optimización de la distribución](./startup-maintenance-pgo.md).
+Se elimina trabajo repetido conservando el modelo de sesión, la prioridad de
+pestañas, los perfiles y las reglas de seguridad de Chromium.
 
 ## Cambios
 
@@ -44,14 +46,14 @@ No incluyen URLs ni títulos.
 No se cambia la restauración progresiva ni se aplazan conexiones de fondo,
 ventanas, espacios o scripts. No se introduce un proceso residente ni capturas
 persistidas. El historial de nueva pestaña conserva los espacios cerrados;
-limitarlo a perfiles cargados cambiaría su contenido. El mantenimiento inicial
-mantiene su calendario: aplazar una oferta que cambia el primer plano requiere
-validar esa experiencia por separado.
+limitarlo a perfiles cargados cambiaría su contenido. En esta primera tanda,
+el mantenimiento inicial mantiene su calendario: aplazar una oferta que cambia
+el primer plano requiere validar esa experiencia por separado.
 
-PGO queda pendiente de una compilación con perfiles compatibles y una comparación
-controlada. Activarlo en la configuración sin producir y verificar esa entrega
-no demostraría una mejora. El estudio tampoco justifica sustituir fuentes ya
-cacheadas o rediseñar el almacenamiento de sesiones.
+PGO quedó pendiente en esta primera tanda de una compilación con perfiles
+compatibles y una comparación controlada. Activarlo en la configuración sin
+producir y verificar esa entrega no demostraría una mejora. El estudio tampoco
+justifica sustituir fuentes ya cacheadas o rediseñar el almacenamiento de sesiones.
 
 ## Resultado medido
 
