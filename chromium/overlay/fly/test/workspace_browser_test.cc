@@ -58,6 +58,7 @@
 #include "fly/ui/new_tab_ui.h"
 #include "fly/ui/sidebar_panel.h"
 #include "fly/ui/status_bar.h"
+#include "fly/ui/startup_maintenance.h"
 #include "fly/ui/tab_sidebar.h"
 #include "fly/ui/user_content.h"
 #include "third_party/zlib/google/zip.h"
@@ -152,6 +153,7 @@
 #include "extensions/test/test_extension_dir.h"
 #include "net/dns/mock_host_resolver.h"
 #include "net/test/embedded_test_server/embedded_test_server.h"
+#include "net/test/embedded_test_server/controllable_http_response.h"
 #include "net/test/embedded_test_server/http_request.h"
 #include "ui/accessibility/ax_mode.h"
 #include "ui/aura/client/focus_client.h"
@@ -422,6 +424,129 @@ class FlyWorkspaceBrowserTest : public InProcessBrowserTest {
               content::EvalJs(contents, "document.visibilityState"));
   }
 };
+
+class FlyStartupMaintenanceBrowserTest : public FlyWorkspaceBrowserTest {
+ public:
+  FlyStartupMaintenanceBrowserTest() {
+    EnablePixelOutput();
+    UseSoftwareCompositing();
+  }
+  void SetUpOnMainThread() override {
+    FlyWorkspaceBrowserTest::SetUpOnMainThread();
+    response_ = std::make_unique<net::test_server::ControllableHttpResponse>(
+        &server_, "/waiting");
+    ASSERT_TRUE(server_.Start());
+    Activate(browser());
+  }
+
+ protected:
+  void NavigateUnpainted() {
+    auto* contents = browser()->GetTabStripModel()->GetActiveWebContents();
+    const auto url = server_.GetURL("/waiting");
+    contents->GetController().LoadURL(url, content::Referrer(),
+                                      ui::PAGE_TRANSITION_TYPED, "");
+    response_->WaitForRequest();
+    response_->Send(
+        "HTTP/1.1 200 OK\r\nContent-Type: text/html\r\n\r\n"
+        "<!doctype html><body>" +
+        std::string(4096, ' '));
+    ASSERT_TRUE(base::test::RunUntil(
+        [&] { return contents->GetLastCommittedURL() == url; }));
+    ASSERT_FALSE(contents->CompletedFirstVisuallyNonEmptyPaint());
+  }
+  void SelectWindow(StartupMaintenance& maintenance) {
+    maintenance.SetWindow(browser()->GetTabStripModel(), Window().widget());
+  }
+  void Wait(base::TimeDelta delay) {
+    base::RunLoop loop;
+    base::OneShotTimer timer;
+    timer.Start(FROM_HERE, delay, loop.QuitClosure());
+    loop.Run();
+  }
+  net::EmbeddedTestServer server_;
+  std::unique_ptr<net::test_server::ControllableHttpResponse> response_;
+};
+
+IN_PROC_BROWSER_TEST_F(FlyStartupMaintenanceBrowserTest,
+                       RunsAfterPresentedContentWithoutWaitingForLoad) {
+  NavigateUnpainted();
+  base::test::TestFuture<void> tasks;
+  StartupMaintenance maintenance(tasks.GetCallback(), base::Seconds(30));
+  SelectWindow(maintenance);
+  base::RunLoop().RunUntilIdle();
+  EXPECT_FALSE(tasks.IsReady());
+  const auto painted_at = base::TimeTicks::Now();
+  response_->Send("<h1>The page is visible</h1>");
+  ASSERT_TRUE(tasks.Wait());
+  EXPECT_LT(base::TimeTicks::Now() - painted_at, base::Seconds(5));
+  EXPECT_TRUE(
+      browser()->GetTabStripModel()->GetActiveWebContents()->IsLoading());
+  // Further window/tab notifications cannot run the once-only work again.
+  SelectWindow(maintenance);
+  response_->Done();
+}
+
+IN_PROC_BROWSER_TEST_F(FlyStartupMaintenanceBrowserTest,
+                       UnpaintedPageHasBoundedFallback) {
+  NavigateUnpainted();
+  base::test::TestFuture<void> tasks;
+  StartupMaintenance maintenance(tasks.GetCallback(), base::Milliseconds(100));
+  SelectWindow(maintenance);
+  ASSERT_TRUE(tasks.Wait());
+  EXPECT_FALSE(browser()
+                   ->GetTabStripModel()
+                   ->GetActiveWebContents()
+                   ->CompletedFirstVisuallyNonEmptyPaint());
+  response_->Done();
+}
+
+IN_PROC_BROWSER_TEST_F(FlyStartupMaintenanceBrowserTest,
+                       SwitchingToAlreadyPaintedTabReleasesWork) {
+  ASSERT_TRUE(ui_test_utils::NavigateToURL(
+      browser(), embedded_test_server()->GetURL("/title1.html")));
+  auto* painted = browser()->GetTabStripModel()->GetActiveWebContents();
+  ASSERT_TRUE(base::test::RunUntil(
+      [&] { return painted->CompletedFirstVisuallyNonEmptyPaint(); }));
+  chrome::NewTab(browser(), NewTabTypes::kNewTabCommand);
+  NavigateUnpainted();
+  base::test::TestFuture<void> tasks;
+  StartupMaintenance maintenance(tasks.GetCallback(), base::Seconds(30));
+  SelectWindow(maintenance);
+  base::RunLoop().RunUntilIdle();
+  EXPECT_FALSE(tasks.IsReady());
+  browser()->GetTabStripModel()->ActivateTabAt(0);
+  ASSERT_TRUE(tasks.Wait());
+  EXPECT_EQ(painted, browser()->GetTabStripModel()->GetActiveWebContents());
+  response_->Done();
+}
+
+IN_PROC_BROWSER_TEST_F(FlyStartupMaintenanceBrowserTest,
+                       CancelledQuitResumesExpiredWork) {
+  NavigateUnpainted();
+  base::test::TestFuture<void> tasks;
+  StartupMaintenance maintenance(tasks.GetCallback(), base::Milliseconds(100));
+  SelectWindow(maintenance);
+  maintenance.SetPaused(true);
+  Wait(base::Milliseconds(200));
+  EXPECT_FALSE(tasks.IsReady());
+  maintenance.SetPaused(false);
+  EXPECT_TRUE(tasks.IsReady());
+  response_->Done();
+}
+
+IN_PROC_BROWSER_TEST_F(FlyStartupMaintenanceBrowserTest,
+                       DestructionCancelsDeadlineAndObservers) {
+  NavigateUnpainted();
+  base::test::TestFuture<void> tasks;
+  auto maintenance = std::make_unique<StartupMaintenance>(
+      tasks.GetCallback(), base::Milliseconds(100));
+  SelectWindow(*maintenance);
+  maintenance.reset();
+  response_->Send("<h1>Paint after cancellation</h1>");
+  response_->Done();
+  Wait(base::Milliseconds(200));
+  EXPECT_FALSE(tasks.IsReady());
+}
 
 // After a crash or forced exit Chromium anchored its restore bubble to the
 // app menu, which a Fly window never draws, and ended the browser process on
@@ -1934,8 +2059,16 @@ IN_PROC_BROWSER_TEST_F(FlyWorkspaceBrowserTest,
             "'--sidebar-overhang') === $1", std::to_string(overhang) + "px"))
             .ExtractBool();
       }));
+      // Native viewport resizing and the WebUI preference update arrive
+      // separately. Measure after both, before checking hover's invariant.
+      window.widget()->LayoutRootViewIfNecessary();
+      ASSERT_TRUE(base::test::RunUntil([&] {
+        return content::EvalJs(contents, "innerWidth").ExtractInt() ==
+               contents->GetRenderWidgetHostView()->GetViewBounds().width();
+      }));
       ASSERT_TRUE(content::ExecJs(contents,
           "(async () => { await document.fonts.ready; "
+          "await new Promise(requestAnimationFrame); "
           "await new Promise(requestAnimationFrame); })()"));
       const auto clock_left = content::EvalJs(contents,
           "document.getElementById('clock').getBoundingClientRect().left")

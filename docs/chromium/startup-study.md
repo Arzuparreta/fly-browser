@@ -10,6 +10,8 @@ trazas, además del microbenchmark separado de los launchers.
 El seguimiento de implementación y validación está en
 [Mejoras tras el estudio](./startup-improvements.md). Las cifras de este
 documento corresponden a la base estudiada, anterior a esas mejoras.
+Los puntos 6 y 7 tienen su seguimiento en
+[Mantenimiento inicial y optimización de la distribución](./startup-maintenance-pgo.md).
 
 ## Resultado principal
 

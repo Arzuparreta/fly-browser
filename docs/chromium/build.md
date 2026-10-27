@@ -32,6 +32,55 @@ python3 scripts/chromium/release.py --root /path/to/fly-chromium
 FLY_ENGINE_ROOT=/path/to/fly-chromium FLY_ENGINE_OUTPUT=out/FlyRelease npm start
 ```
 
+The Linux release preset uses PGO and optimised ThinLTO with LLVM's linker.
+`release.py` downloads the official Linux profile named by the **pinned**
+checkout's `chrome/build/linux.pgo.txt` before configuring GN. A missing profile
+fails the build; it never silently produces an unoptimised release. Phase 2
+also enables V8 builtins optimisation: the recipe downloads its version-selected
+profiles and checks their revision against the pinned Chromium `DEPS`.
+Development and service-test presets keep their existing options. These profiles
+train Chromium and V8 rather than Fly's added interface code.
+
+`out/FlyRelease/fly-build.json` records the profile filename, SHA-256, selector,
+size, overlay fingerprint and unstripped executable hash. It also records the
+V8 profile and metadata hashes and pinned V8 revision. Packages copy this record
+into `provenance.json`; packaging rejects a record from a different executable
+or build arguments.
+The API key is not included in this record. No Google account or remote build
+service is needed to fetch the public profile.
+
+The recipe validates the entire Ninja dependency graph before compiling.
+To prepare and check the optimised variant before starting a long comparison:
+
+```sh
+python3 scripts/chromium/release.py --root /path/to/fly-chromium --prepare-only
+```
+
+This fetches both profile families and configures GN, then performs a dry run
+of the complete browser/sandbox build. It produces no browser or package.
+
+For a controlled comparison, keep the source revision, API-key setting,
+extension versions and host conditions identical and select separate outputs.
+Generated V8 snapshots and code caches belong to each variant; keep them with
+their matching executable:
+
+```sh
+python3 scripts/chromium/release.py --root /path/to/fly-chromium \
+  --optimization none --output out/FlyNoPGO --dist /path/to/baseline-package
+python3 scripts/chromium/release.py --root /path/to/fly-chromium \
+  --optimization pgo --output out/FlyPGO --dist /path/to/pgo-package
+python3 scripts/chromium/release.py --root /path/to/fly-chromium \
+  --output out/FlyRelease --dist /path/to/release-package
+```
+
+The first two modes retain the previous mold linker. The default ThinLTO
+preset uses LLD, so its comparison measures the complete compiler/linker
+change. PGO changes compilation across the engine, and ThinLTO optimises across
+object files at link time; the first build can take considerably longer and use more
+memory than an incremental development build. See Chromium's
+[PGO documentation](https://chromium.googlesource.com/chromium/src/+/main/docs/pgo.md)
+and LLVM's [ThinLTO documentation](https://clang.llvm.org/docs/ThinLTO.html).
+
 Run `./launch.sh` (or `npm start`) to open the existing local build. The launcher
 looks for `fly-chromium` beside this repository, beside its parent directory,
 then in `~/.cache/fly-chromium`. It prefers `out/FlyNative` over `out/FlyRelease`.
