@@ -19,6 +19,56 @@ SPEC.loader.exec_module(package)
 
 
 class ReleaseOptimizationTest(unittest.TestCase):
+    def v8_fixture(self, root):
+        source = root / 'src'
+        directory = source / 'v8/tools/builtins-pgo/profiles'
+        directory.mkdir(parents=True)
+        revision = 'a' * 40
+        (source / 'DEPS').write_text("'v8_revision': '" + revision + "',\n")
+        header = source / 'v8/include/v8-version.h'
+        header.parent.mkdir()
+        header.write_text('fixture selected by the pinned downloader\n')
+        return directory, revision
+
+    def test_v8_builtins_profiles_are_prepared_and_revision_checked(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            directory, revision = self.v8_fixture(root)
+            def download(*args):
+                (directory / 'x64.profile').write_bytes(b'V8 builtins profile')
+                (directory / 'meta.json').write_text(json.dumps(
+                    {'revision':revision, 'version':'fixture'}))
+            with patch.object(release.engine, 'run', side_effect=download) as run:
+                record = release.prepare_v8_pgo(root, {})
+            self.assertIn('--check-v8-revision', run.call_args.args[0])
+            self.assertIn(root / 'depot_tools', run.call_args.args[0])
+            self.assertEqual(record['v8_revision'], revision)
+            self.assertEqual(record['sha256'], hashlib.sha256(b'V8 builtins profile').hexdigest())
+
+    def test_v8_missing_empty_mismatched_and_symlinked_inputs_are_rejected(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            directory, revision = self.v8_fixture(root)
+            profile = directory / 'x64.profile'
+            metadata = directory / 'meta.json'
+            with patch.object(release.engine, 'run') as run:
+                with self.assertRaisesRegex(RuntimeError, 'missing or empty'):
+                    release.prepare_v8_pgo(root, {})
+                profile.touch()
+                metadata.write_text(json.dumps({'revision':revision, 'version':'fixture'}))
+                with self.assertRaisesRegex(RuntimeError, 'missing or empty'):
+                    release.prepare_v8_pgo(root, {})
+                self.assertIn('--force', run.call_args.args[0])
+                profile.write_bytes(b'profile')
+                metadata.write_text(json.dumps({'revision':'b'*40, 'version':'fixture'}))
+                with self.assertRaisesRegex(RuntimeError, 'pinned V8 revision'):
+                    release.prepare_v8_pgo(root, {})
+                if sys.platform != 'win32':
+                    profile.unlink()
+                    profile.symlink_to(metadata)
+                    with self.assertRaisesRegex(RuntimeError, 'Symlinked'):
+                        release.prepare_v8_pgo(root, {})
+
     def test_comparison_modes_keep_security_and_native_release_options(self):
         configs = {mode: release.release_config(optimization=mode)
                    for mode in ('none', 'pgo', 'pgo-thinlto')}

@@ -6,6 +6,7 @@ This command verifies the overlay belongs to this repository checkout before
 building; it never packages a stale binary left by another commit.
 """
 import argparse
+import json
 import os
 import platform
 from pathlib import Path
@@ -55,6 +56,36 @@ def prepare_pgo(root, env):
             'source': 'https://storage.googleapis.com/chromium-optimization-profiles/pgo_profiles/' + name}
 
 
+def prepare_v8_pgo(root, env):
+    """Phase 2 also enables V8 builtins PGO in Chromium's pinned GN defaults."""
+    source = root / 'src'
+    directory = source / 'v8/tools/builtins-pgo/profiles'
+    profile = directory / 'x64.profile'
+    metadata = directory / 'meta.json'
+    for file in (directory, profile, metadata):
+        if file.is_symlink():
+            engine.fail('Symlinked V8 PGO input; preserve and inspect it')
+    directory.mkdir(parents=True, exist_ok=True)
+    command = [sys.executable, 'v8/tools/builtins-pgo/download_profiles.py',
+               'download', '--depot-tools', root / 'depot_tools',
+               '--check-v8-revision']
+    if metadata.is_file() and (not profile.is_file() or not profile.stat().st_size):
+        command.append('--force')
+    engine.run(command, source, env)
+    if not profile.is_file() or not profile.stat().st_size or not metadata.is_file():
+        engine.fail('Pinned V8 PGO profile or metadata is missing or empty')
+    info = json.loads(metadata.read_text())
+    revision = re.search(r"'v8_revision':\s*'([0-9a-f]{40})'",
+                         (source / 'DEPS').read_text())
+    if not revision or info.get('revision') != revision.group(1):
+        engine.fail('V8 PGO profile does not match the pinned V8 revision')
+    return {'filename': profile.name, 'sha256': engine.digest(profile),
+            'size_bytes': profile.stat().st_size,
+            'metadata_sha256': engine.digest(metadata),
+            'v8_revision': info['revision'], 'version': info['version'],
+            'version_header_sha256': engine.digest(source / 'v8/include/v8-version.h')}
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--root', required=True, type=Path)
@@ -65,6 +96,8 @@ def main():
     parser.add_argument('--optimization', choices=('none', 'pgo', 'pgo-thinlto'),
                         default='pgo-thinlto',
                         help='release optimizations; none/pgo are comparison builds')
+    parser.add_argument('--prepare-only', action='store_true',
+                        help='fetch profiles, configure and validate the complete build graph, without compiling')
     parser.add_argument('--require-google-api-key', action='store_true',
                         help='fail unless FLY_GOOGLE_API_KEY is set (releases)')
     args = parser.parse_args()
@@ -92,18 +125,32 @@ def main():
         output = root / 'src' / str(output_name)
         output.mkdir(parents=True, exist_ok=True)
         profile = prepare_pgo(root, env) if args.optimization != 'none' else None
+        v8_profile = prepare_v8_pgo(root, env) if args.optimization != 'none' else None
         config = release_config(api_key, args.optimization)
         (output / 'args.gn').write_text(config)
         engine.run(['gn', 'gen', str(output_name)], root / 'src', env)
+        # Check the full graph before spending hours compiling it. In particular,
+        # GN can succeed while the V8 snapshot's selected PGO input is missing.
+        engine.run(['autoninja', '-C', str(output_name), '-n',
+                    'chrome', 'chrome_sandbox'], root / 'src', env)
+        if args.prepare_only:
+            print('Release inputs and build graph are ready; no compilation requested.')
+            return
         engine.run(['autoninja', '-C', str(output_name), '-j', str(args.jobs),
                     'chrome', 'chrome_sandbox'], root / 'src', env)
         native.verify_source(root, lock)
         if profile and engine.digest(root / 'src/chrome/build/pgo_profiles' /
                                      profile['filename']) != profile['sha256']:
             engine.fail('PGO profile changed during the build; preserve the evidence and rebuild')
+        if v8_profile:
+            directory = root / 'src/v8/tools/builtins-pgo/profiles'
+            if (engine.digest(directory / v8_profile['filename']) != v8_profile['sha256'] or
+                    engine.digest(directory / 'meta.json') != v8_profile['metadata_sha256']):
+                engine.fail('V8 PGO inputs changed during the build; preserve the evidence and rebuild')
         engine.atomic_json(output / 'fly-build.json', {
             'schema': 1, 'optimization': args.optimization,
             'pgo_profile': profile, 'overlay_fingerprint': native.fingerprint(),
+            'v8_pgo_profile': v8_profile,
             'binary_sha256': engine.digest(output / 'chrome'),
             'args_sha256': engine.digest(output / 'args.gn')})
         subprocess.run([sys.executable, str(engine.REPO / 'scripts/chromium/package-linux.py'),

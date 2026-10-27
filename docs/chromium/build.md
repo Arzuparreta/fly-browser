@@ -35,7 +35,10 @@ FLY_ENGINE_ROOT=/path/to/fly-chromium FLY_ENGINE_OUTPUT=out/FlyRelease npm start
 The Linux release preset uses PGO and optimised ThinLTO with LLVM's linker.
 `release.py` downloads the official Linux profile named by the **pinned**
 checkout's `chrome/build/linux.pgo.txt` before configuring GN. A missing profile
-fails the build; it never silently produces an unoptimised release. Development
+fails the build; it never silently produces an unoptimised release. Phase 2
+also enables V8 builtins optimisation: the recipe downloads its version-selected
+profiles and checks their revision against the pinned Chromium `DEPS`.
+Development
 and service-test presets keep their existing options. The profile trains the
 Chromium engine, not Fly's added interface code.
 
@@ -44,6 +47,16 @@ size, overlay fingerprint and unstripped executable hash. Packages copy this rec
 `provenance.json`; packaging rejects a record from a different executable.
 The API key is not included in this record. No Google account or remote build
 service is needed to fetch the public profile.
+
+The recipe validates the entire Ninja dependency graph before compiling.
+To prepare and check the optimised variant before starting a long comparison:
+
+```sh
+python3 scripts/chromium/release.py --root /path/to/fly-chromium --prepare-only
+```
+
+This fetches both profile families and configures GN, then performs a dry run
+of the complete browser/sandbox build. It produces no browser or package.
 
 For a controlled comparison, keep source, API key, runtime assets and host
 conditions identical and select separate outputs:
