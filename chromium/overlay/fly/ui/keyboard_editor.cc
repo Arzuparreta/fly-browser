@@ -840,22 +840,27 @@ views::View* KeyboardEditor::AddRow(std::u16string label,
   layout->set_cross_axis_alignment(
       views::BoxLayout::CrossAxisAlignment::kCenter);
   layout->set_minimum_cross_axis_size(S(kMenuControlHeight + 6));
-  auto* info = row->AddChildView(std::make_unique<views::View>());
-  auto* info_layout = info->SetLayoutManager(std::make_unique<views::BoxLayout>(
-      views::BoxLayout::Orientation::kVertical, gfx::Insets(), S(1)));
-  info_layout->set_cross_axis_alignment(
-      views::BoxLayout::CrossAxisAlignment::kStretch);
-  auto* name = info->AddChildView(Text(label));
-  name->SetElideBehavior(gfx::ELIDE_TAIL);
-  if (!description.empty()) {
-    auto* detail = info->AddChildView(
-        Text(description, kMenuSmallTextSize, FlyLabel::Tone::kDim));
-    detail->SetElideBehavior(gfx::ELIDE_TAIL);
-    detail->SetTooltipText(description);
+  // A row without a label gives its control the whole width.
+  views::View* info = nullptr;
+  if (!label.empty()) {
+    info = row->AddChildView(std::make_unique<views::View>());
+    auto* info_layout =
+        info->SetLayoutManager(std::make_unique<views::BoxLayout>(
+            views::BoxLayout::Orientation::kVertical, gfx::Insets(), S(1)));
+    info_layout->set_cross_axis_alignment(
+        views::BoxLayout::CrossAxisAlignment::kStretch);
+    auto* name = info->AddChildView(Text(label));
+    name->SetElideBehavior(gfx::ELIDE_TAIL);
+    if (!description.empty()) {
+      auto* detail = info->AddChildView(
+          Text(description, kMenuSmallTextSize, FlyLabel::Tone::kDim));
+      detail->SetElideBehavior(gfx::ELIDE_TAIL);
+      detail->SetTooltipText(description);
+    }
   }
   if (control) {
     auto* added = row->AddChildView(std::move(control));
-    if (wide) {
+    if (wide || !info) {
       layout->SetFlexForView(added, 1);
       // Text fields of a wide row take its spare width.
       if (auto* box = views::AsViewClass<views::View>(added);
@@ -869,16 +874,16 @@ views::View* KeyboardEditor::AddRow(std::u16string label,
     }
     // Unnamed controls take the row's name.
     auto& accessibility = added->GetViewAccessibility();
-    if (accessibility.GetCachedName().empty()) {
+    if (accessibility.GetCachedName().empty() && !label.empty()) {
       if (accessibility.GetCachedRole() == ax::mojom::Role::kNone ||
           accessibility.GetCachedRole() == ax::mojom::Role::kUnknown)
         accessibility.SetRole(ax::mojom::Role::kGroup);
       accessibility.SetName(label);
     }
-  } else {
+  } else if (info) {
     layout->SetFlexForView(info, 1);
   }
-  if (wide)
+  if (wide && info)
     info->SetPreferredSize(gfx::Size(S(150), info->GetPreferredSize().height()));
   rows_.push_back({building_pane_, base::ToLowerASCII(label), row});
   ++matches_per_pane_[building_pane_];
@@ -1027,9 +1032,12 @@ void KeyboardEditor::BuildAliases() {
         views::BoxLayout::Orientation::kVertical, gfx::Insets(), S(4)));
     layout->set_cross_axis_alignment(
         views::BoxLayout::CrossAxisAlignment::kStretch);
+    // The group's caption names the list, so the row has no label.
+    list->GetViewAccessibility().SetRole(ax::mojom::Role::kGroup);
+    list->GetViewAccessibility().SetName(u"Your aliases");
     auto* list_ptr = list.get();
-    if (AddRow(u"Your aliases", u"", u"alias shortcut keyword", std::move(list),
-               true))
+    if (AddRow(u"", u"", u"your aliases alias shortcut keyword",
+               std::move(list), true))
       aliases_box_ = list_ptr;
   }
   {
@@ -2140,7 +2148,7 @@ void KeyboardEditor::RefreshSearchSection() {
     aliases_box_->AddChildView(Text(
         !settings ? u"Search settings need recovery. Saved choices have been "
                     u"preserved."
-                  : u"None yet.",
+                  : u"No aliases of your own yet.",
         kMenuSmallTextSize, FlyLabel::Tone::kDim));
   } else {
     for (const auto& [key, alias] : settings->aliases) {
