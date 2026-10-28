@@ -178,8 +178,9 @@ void SidebarPanel::Layout(PassKey) {
     parts_.top.header->SetBounds(x, y, header, top);
   if (parts_.top.badge)
     parts_.top.badge->SetBounds(x, y + (top - s(28)) / 2, s(28), s(28));
+  // The name starts on the tab titles' column, past the badge.
   if (parts_.top.label)
-    parts_.top.label->SetBounds(x + s(5), y, header - s(10), top);
+    parts_.top.label->SetBounds(x + s(33), y, header - s(38), top);
   int nav_x = x + header + s(8);
   if (parts_.top.new_tab)
     parts_.top.new_tab->SetBounds(nav_x, y + (top - s(28)) / 2, s(28), s(28));

@@ -493,8 +493,9 @@ void FlyWindowController::BuildSidebar() {
     window_control_buttons_.emplace(name, button);
   }
   parts.window_controls = window_controls_;
-  // The workspace header opens the dashboard; the short badge (rail) and the
-  // full name (expanded) share its slot and crossfade.
+  // The workspace header opens the dashboard. Its short badge stays in the
+  // favicon column in both states; the full name appears beside it, in the
+  // tab titles' column, when the sidebar expands.
   workspace_picker_button_ = sidebar->AddChildView(std::make_unique<FlyButton>(
       base::BindRepeating(&FlyWindowController::ToggleWorkspacePicker,
                           weak_factory_.GetWeakPtr()),
@@ -508,7 +509,7 @@ void FlyWindowController::BuildSidebar() {
   workspace_badge_->SetHorizontalAlignment(gfx::ALIGN_CENTER);
   workspace_badge_->SetCanProcessEventsWithinSubtree(false);
   workspace_label_ = sidebar->AddChildView(std::make_unique<FlyLabel>(
-      u"Workspace", FlyFace::kSans, 14, gfx::Font::Weight::SEMIBOLD));
+      u"Workspace", FlyFace::kSans, 13, gfx::Font::Weight::MEDIUM));
   workspace_label_->SetHorizontalAlignment(gfx::ALIGN_LEFT);
   workspace_label_->SetElideBehavior(gfx::ELIDE_TAIL);
   workspace_label_->SetCanProcessEventsWithinSubtree(false);
@@ -601,7 +602,7 @@ void FlyWindowController::BuildSidebar() {
         static_cast<views::View*>(preferences_button_.get())})
     sidebar->AddExpandedOnly(view);
   // The badge sits over the header and never takes its clicks.
-  sidebar->AddRailOnly(workspace_badge_, false);
+  DisableSubpixelText(workspace_badge_);
   sidebar->AddExpandedOnly(tab_sidebar_->expanded_surfaces(), false);
   sidebar->AddRailOnly(tab_sidebar_->rail_surfaces(), false);
   sidebar->AddRailOnly(tab_sidebar_->rail_marks(), false);
