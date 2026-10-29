@@ -5660,7 +5660,7 @@ IN_PROC_BROWSER_TEST_F(FlyWorkspaceBrowserTest,
 }
 
 IN_PROC_BROWSER_TEST_F(FlyWorkspaceBrowserTest,
-                       NativeAddressCancelAndWorkspaceChangeDiscardInput) {
+                       NativeAddressCancelDiscardsInput) {
   ASSERT_TRUE(ui_test_utils::NavigateToURL(
       browser(), embedded_test_server()->GetURL("/title1.html")));
   auto* page = Active(browser());
@@ -5695,10 +5695,73 @@ IN_PROC_BROWSER_TEST_F(FlyWorkspaceBrowserTest,
   ASSERT_TRUE(
       base::test::RunUntil([&] { return !address.search_for_testing(); }));
   EXPECT_EQ(original, page->GetLastCommittedURL());
+}
+
+// A surface belongs to its window and its tab. Another window or application
+// taking the keyboard, or the window being resized, leaves it open with its
+// text, section and focus; switching to another tab closes it.
+IN_PROC_BROWSER_TEST_F(FlyWorkspaceBrowserTest,
+                       SurfacesKeepTheirStateWhileTheirWindowIsInactive) {
+  ASSERT_TRUE(ui_test_utils::NavigateToURL(
+      browser(), embedded_test_server()->GetURL("/title1.html")));
+  ASSERT_TRUE(AddTabAtIndex(1, embedded_test_server()->GetURL("/title2.html"),
+                            ui::PAGE_TRANSITION_TYPED));
+  auto* model = browser()->GetTabStripModel();
+  model->ActivateTabAt(0);
+  auto* page = Active(browser());
+  const auto original = page->GetLastCommittedURL();
+  auto& window = Window();
+  auto& address = window.address_picker();
   ASSERT_TRUE(InvokeNativeCommand(browser(), "toggle-address"));
-  ASSERT_TRUE(SecondWorkspace());
-  ASSERT_TRUE(base::test::RunUntil([&] { return !address.active(); }));
+  ASSERT_TRUE(address.active());
+  address.search_for_testing()->SetText(u"half-typed");
+  address.ContentsChanged(address.search_for_testing(), u"half-typed");
+
+  auto* second = SecondWorkspace();
+  ASSERT_TRUE(second);
+  ASSERT_FALSE(browser()->GetWindow()->IsActive());
+  EXPECT_TRUE(address.active());
+  EXPECT_EQ(u"half-typed", address.search_for_testing()->GetText());
+
+  // A tiling window manager resizes a window when another opens beside it.
+  const gfx::Rect requested(64, 70, 900, 640);
+  browser()->GetWindow()->SetBounds(requested);
+  ASSERT_TRUE(base::test::RunUntil([&] {
+    return window.widget()->GetWindowBoundsInScreen() == requested;
+  }));
+  ASSERT_TRUE(address.active());
+  EXPECT_EQ(window.widget()->GetContentsView()->GetBoundsInScreen(),
+            address.search_for_testing()->GetWidget()->GetWindowBoundsInScreen());
+
+  Activate(browser());
+  ASSERT_TRUE(base::test::RunUntil(
+      [&] { return address.search_for_testing()->HasFocus(); }));
+  ui::test::EventGenerator keys(
+      window.widget()->GetNativeWindow()->GetRootWindow());
+  keys.PressKey(ui::VKEY_END, ui::EF_NONE);
+  keys.PressKey(ui::VKEY_X, ui::EF_NONE);
+  EXPECT_EQ(u"half-typedx", address.search_for_testing()->GetText());
   EXPECT_EQ(original, page->GetLastCommittedURL());
+
+  // Switching tabs still closes it.
+  model->ActivateTabAt(1);
+  ASSERT_TRUE(base::test::RunUntil([&] { return !address.active(); }));
+  model->ActivateTabAt(0);
+
+  // Preferences keeps its section and focus.
+  ASSERT_TRUE(window.RunCommand("toggle-help"));
+  auto& editor = window.keyboard_editor();
+  ASSERT_TRUE(editor.active());
+  editor.ShowPane(KeyboardEditor::kAppearancePane);
+  editor.settings_search_for_testing()->RequestFocus();
+  Activate(second);
+  EXPECT_TRUE(editor.active());
+  Activate(browser());
+  ASSERT_TRUE(editor.active());
+  EXPECT_EQ(KeyboardEditor::kAppearancePane,
+            editor.selected_pane_for_testing());
+  ASSERT_TRUE(base::test::RunUntil(
+      [&] { return editor.settings_search_for_testing()->HasFocus(); }));
 }
 
 IN_PROC_BROWSER_TEST_F(FlyWorkspaceBrowserTest,
@@ -5992,8 +6055,33 @@ IN_PROC_BROWSER_TEST_F(FlyWorkspaceBrowserTest,
   ASSERT_TRUE(base::test::RunUntil([&] { return !editor.root_for_testing(); }));
 }
 
+// A list opened in a short window builds the rows a taller window shows when
+// the window grows.
 IN_PROC_BROWSER_TEST_F(FlyWorkspaceBrowserTest,
-                       NativeKeyboardRecordingCancelsAcrossWorkspaceChanges) {
+                       ResizedListBuildsTheRowsItNowShows) {
+  for (int i = 0; i < 30; ++i)
+    ASSERT_TRUE(AddTabAtIndex(0, GURL("about:blank"),
+                              ui::PAGE_TRANSITION_TYPED));
+  auto& window = Window();
+  browser()->GetWindow()->SetBounds(gfx::Rect(40, 40, 1000, 360));
+  ASSERT_TRUE(base::test::RunUntil([&] {
+    return window.widget()->GetWindowBoundsInScreen().height() == 360;
+  }));
+  ASSERT_TRUE(window.RunCommand("toggle-dashboard"));
+  auto& dashboard = window.workspace_picker();
+  ASSERT_TRUE(dashboard.active());
+  const size_t before = dashboard.built_rows_for_testing();
+  ASSERT_LT(before, dashboard.result_count_for_testing());
+  browser()->GetWindow()->SetBounds(gfx::Rect(40, 40, 1000, 1000));
+  ASSERT_TRUE(base::test::RunUntil([&] {
+    return window.widget()->GetWindowBoundsInScreen().height() == 1000;
+  }));
+  ASSERT_TRUE(dashboard.active());
+  EXPECT_GT(dashboard.built_rows_for_testing(), before);
+}
+
+IN_PROC_BROWSER_TEST_F(FlyWorkspaceBrowserTest,
+                       NativeKeyboardRecordingStopsWhenItsWindowIsInactive) {
   auto& window = Window();
   const auto before = App().commands().Read();
   ASSERT_TRUE(Window(browser()).RunCommand("toggle-help"));
@@ -6011,8 +6099,9 @@ IN_PROC_BROWSER_TEST_F(FlyWorkspaceBrowserTest,
   keys.PressKey(ui::VKEY_Q, ui::EF_NONE);
   auto* second = SecondWorkspace();
   ASSERT_TRUE(second);
-  ASSERT_TRUE(base::test::RunUntil([&] { return !editor.root_for_testing(); }));
-  EXPECT_FALSE(editor.recording());
+  ASSERT_TRUE(base::test::RunUntil([&] { return !editor.recording(); }));
+  EXPECT_TRUE(editor.active());
+  EXPECT_EQ(u"J", editor.bindings_for_testing("scroll-down", true));
   ASSERT_TRUE(Window(second).RunCommand("toggle-help"));
   EXPECT_EQ(u"J", Window(second).keyboard_editor().bindings_for_testing(
                       "scroll-down", true));
@@ -6261,7 +6350,7 @@ IN_PROC_BROWSER_TEST_F(FlyWorkspaceBrowserTest,
 }
 
 IN_PROC_BROWSER_TEST_F(FlyWorkspaceBrowserTest,
-                       NativePaletteCustomBindingCancelAndWorkspaceSwitch) {
+                       NativePaletteCustomBindingCancelAndWindowSwitch) {
   ASSERT_TRUE(ui_test_utils::NavigateToURL(
       browser(), embedded_test_server()->GetURL("/title1.html")));
   auto* contents = Active(browser());
@@ -6294,8 +6383,17 @@ IN_PROC_BROWSER_TEST_F(FlyWorkspaceBrowserTest,
   keys.PressKey(ui::VKEY_P, ui::EF_ALT_DOWN);
   ASSERT_TRUE(base::test::RunUntil([&] { return window.palette().active(); }));
   ASSERT_TRUE(SecondWorkspace());
-  ASSERT_TRUE(base::test::RunUntil([&] { return !window.palette().active(); }));
   EXPECT_NE(browser(), LastActive());
+  EXPECT_TRUE(window.palette().active());
+  Activate(browser());
+  ASSERT_TRUE(base::test::RunUntil(
+      [&] { return window.palette().search_for_testing()->HasFocus(); }));
+  keys.PressKey(ui::VKEY_P, ui::EF_ALT_DOWN);
+  ASSERT_TRUE(base::test::RunUntil(
+      [&] { return window.palette().search_for_testing() == nullptr; }));
+  ASSERT_TRUE(base::test::RunUntil([&] {
+    return contents->GetRenderWidgetHostView()->HasFocus();
+  }));
 }
 
 IN_PROC_BROWSER_TEST_F(FlyWorkspaceBrowserTest,

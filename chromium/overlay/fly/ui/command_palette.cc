@@ -34,7 +34,6 @@
 #include "ui/views/controls/textfield/textfield.h"
 #include "ui/views/layout/box_layout.h"
 #include "ui/views/widget/widget.h"
-#include "ui/wm/core/coordinate_conversion.h"
 
 namespace fly {
 namespace {
@@ -262,6 +261,8 @@ CommandPalette::~CommandPalette() {
   search_ = nullptr;
   results_ = nullptr;
   results_scroll_ = nullptr;
+  scrim_ = nullptr;
+  source_tab_.clear();
   overlay_.reset();
   if (desktop_)
     desktop_->RemoveObserver(this);
@@ -288,6 +289,9 @@ void CommandPalette::ToggleItems(content::WebContents* contents,
     return;
   restore_page_focus_ = ShouldRestoreNativePageFocus(contents);
   Observe(contents);
+  source_tab_ = WatchMenuSourceTab(
+      contents, base::BindRepeating(&CommandPalette::Cancel,
+                                    weak_factory_.GetWeakPtr(), false));
   empty_source_ = !contents;
   if (contents)
     contents->StoreFocus();
@@ -298,29 +302,16 @@ void CommandPalette::ToggleItems(content::WebContents* contents,
   cancelled_ = false;
   pointer_at_open_ = aura::Env::GetInstance()->last_mouse_location();
   pointer_moved_ = false;
-  gfx::Rect bounds = desktop_->GetContentsView()->GetBoundsInScreen();
-  if (style_.layout == PaletteStyle::Layout::kPage && style_.page_insets)
-    bounds.Inset(style_.page_insets.Run());
-  wm::ConvertRectFromScreen(desktop_->GetNativeWindow(), &bounds);
+  const gfx::Rect bounds = SurfaceBounds();
   overlay_ = CreateMenuWidget(desktop_, bounds, "FlyCommandPalette");
   const auto& colors = GetFlyColors();
   const bool top = style_.layout == PaletteStyle::Layout::kTop;
-  const bool page = style_.layout == PaletteStyle::Layout::kPage;
   auto root = std::make_unique<MenuScrim>(
       top ? SkColorSetARGB(1, 0, 0, 0)
           : SkColorSetA(colors.dark ? SK_ColorBLACK : colors.text,
                         colors.dark ? 120 : 60),
       base::BindRepeating(&CommandPalette::Cancel, weak_factory_.GetWeakPtr(),
                           true));
-  // Panel geometry: compact cards grow with their results, managers and the
-  // Command Centre keep one size so the list does not jump while filtering.
-  const int width = std::min(S(style_.width), bounds.width() - S(24));
-  const int x = (bounds.width() - width) / 2;
-  const int top_margin = top ? S(12) : page ? S(20) : std::max(S(24), bounds.height() / 9);
-  const int max_height = std::max(
-      S(120), (page ? bounds.height() - 2 * top_margin
-                    : std::min(bounds.height() - top_margin - S(24),
-                               S(style_.command_centre ? 600 : 520))));
   auto panel = std::make_unique<MenuPanel>();
   auto* layout = panel->SetLayoutManager(std::make_unique<views::BoxLayout>(
       views::BoxLayout::Orientation::kVertical, gfx::Insets(S(10)), S(8)));
@@ -339,14 +330,10 @@ void CommandPalette::ToggleItems(content::WebContents* contents,
   auto* scroll = panel->AddChildView(std::make_unique<views::ScrollView>());
   scroll->SetHorizontalScrollBarMode(
       views::ScrollView::ScrollBarMode::kDisabled);
-  scroll->ClipHeightTo(0, max_height);
   scroll->SetBackgroundColor(std::nullopt);
   scroll->SetDrawOverflowIndicator(false);
   results_scroll_ = scroll;
   results_ = scroll->SetContents(std::make_unique<views::View>());
-  // Rows are built for what the panel can show and a margin; scrolling and
-  // keyboard selection build the rest as they reach it.
-  initial_rows_ = static_cast<size_t>(max_height / S(kMenuRowHeight)) + 4;
   scroll_subscription_ = scroll->AddContentsScrolledCallback(
       base::BindRepeating(&CommandPalette::OnResultsScrolled,
                           weak_factory_.GetWeakPtr()));
@@ -368,21 +355,47 @@ void CommandPalette::ToggleItems(content::WebContents* contents,
   hints_->SetBorder(views::CreateEmptyBorder(gfx::Insets::TLBR(0, S(2), 0, 0)));
   UpdateHints();
   root->SetPanel(std::move(panel));
-  if (top || !(page || style_.command_centre))
-    root->SetPanelGrowsTo(gfx::Rect(x, top_margin, width,
-                                    max_height + S(140)));
-  else
-    root->SetPanelBounds(gfx::Rect(
-        x, top_margin, width,
-        page ? bounds.height() - 2 * top_margin
-             : std::min(bounds.height() - top_margin - S(24),
-                        max_height + S(150))));
+  scrim_ = root.get();
+  PlacePanel(bounds);
   DisableSubpixelText(root.get());
   Refresh();
   overlay_->SetContentsView(std::move(root));
   overlay_->ShowInactive();
   desktop_->GetNativeWindow()->StackChildAtTop(overlay_->GetNativeWindow());
   search_->RequestFocus();
+}
+gfx::Rect CommandPalette::SurfaceBounds() const {
+  return MenuWidgetBounds(
+      desktop_, style_.layout == PaletteStyle::Layout::kPage &&
+                        style_.page_insets
+                    ? style_.page_insets.Run()
+                    : gfx::Insets());
+}
+// Panel geometry: compact cards grow with their results, managers and the
+// Command Centre keep one size so the list does not jump while filtering.
+void CommandPalette::PlacePanel(const gfx::Rect& bounds) {
+  const bool top = style_.layout == PaletteStyle::Layout::kTop;
+  const bool page = style_.layout == PaletteStyle::Layout::kPage;
+  const int width = std::min(S(style_.width), bounds.width() - S(24));
+  const int x = (bounds.width() - width) / 2;
+  const int top_margin = top ? S(12) : page ? S(20) : std::max(S(24), bounds.height() / 9);
+  const int max_height = std::max(
+      S(120), (page ? bounds.height() - 2 * top_margin
+                    : std::min(bounds.height() - top_margin - S(24),
+                               S(style_.command_centre ? 600 : 520))));
+  results_scroll_->ClipHeightTo(0, max_height);
+  // Rows are built for what the panel can show and a margin; scrolling and
+  // keyboard selection build the rest as they reach it.
+  initial_rows_ = static_cast<size_t>(max_height / S(kMenuRowHeight)) + 4;
+  if (top || !(page || style_.command_centre))
+    scrim_->SetPanelGrowsTo(gfx::Rect(x, top_margin, width,
+                                      max_height + S(140)));
+  else
+    scrim_->SetPanelBounds(gfx::Rect(
+        x, top_margin, width,
+        page ? bounds.height() - 2 * top_margin
+             : std::min(bounds.height() - top_margin - S(24),
+                        max_height + S(150))));
 }
 void CommandPalette::UpdateHints() {
   if (!hints_)
@@ -831,6 +844,8 @@ void CommandPalette::FinishClose(bool restore_focus, std::string action) {
   search_ = nullptr;
   results_ = nullptr;
   results_scroll_ = nullptr;
+  scrim_ = nullptr;
+  source_tab_.clear();
   overlay_.reset();
   filtered_.clear();
   catalog_.clear();
@@ -845,12 +860,18 @@ void CommandPalette::FinishClose(bool restore_focus, std::string action) {
   if (!action.empty() && (contents || source_was_empty) && !cancelled_)
     execute_.Run(contents.get(), std::move(action));
 }
+// The window moved or was resized (a tiling window manager does both when
+// windows open and close beside it): the surface follows it and keeps its
+// text, selection and focus.
 void CommandPalette::OnWidgetBoundsChanged(views::Widget*, const gfx::Rect&) {
-  Cancel(true);
-}
-void CommandPalette::OnWidgetActivationChanged(views::Widget*, bool active) {
-  if (!active)
-    Cancel();
+  if (!active())
+    return;
+  const gfx::Rect bounds = SurfaceBounds();
+  overlay_->SetBounds(bounds);
+  PlacePanel(bounds);
+  // A taller list shows more rows than were built for the old height, and
+  // without overflow no scroll would build them.
+  EnsureRows(initial_rows_);
 }
 void CommandPalette::OnWidgetDestroying(views::Widget*) {
   desktop_ = nullptr;
@@ -864,10 +885,6 @@ void CommandPalette::PrimaryPageChanged(content::Page&) {
     return;
   }
   Cancel();
-}
-void CommandPalette::OnVisibilityChanged(content::Visibility visibility) {
-  if (visibility != content::Visibility::VISIBLE)
-    Cancel();
 }
 void CommandPalette::WebContentsDestroyed() {
   Cancel();

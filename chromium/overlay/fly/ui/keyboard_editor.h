@@ -10,6 +10,7 @@
 #include <string>
 #include <utility>
 #include <vector>
+#include "base/callback_list.h"
 #include "base/memory/raw_ptr.h"
 #include "base/memory/raw_ref.h"
 #include "base/values.h"
@@ -47,6 +48,7 @@ class FlySlider;
 class FlyTextfield;
 class FlyToggle;
 class KeyHints;
+class MenuScrim;
 // Preferences: a panel with a section rail, one section built at a time and a
 // search across every section. The Keyboard section edits a draft of the
 // bindings in a table (action, shortcut, NORMAL key); the shared command
@@ -142,7 +144,6 @@ class KeyboardEditor : public views::TextfieldController,
   void OnWidgetDestroying(views::Widget*) override;
   void PrimaryPageChanged(content::Page&) override;
   void WebContentsDestroyed() override;
-  void OnVisibilityChanged(content::Visibility) override;
 
   using Key = std::pair<std::string, bool>;
 
@@ -152,6 +153,8 @@ class KeyboardEditor : public views::TextfieldController,
   class KeyRow;
   friend class KeyCell;
   friend class KeyRow;
+  // Centres the panel in the surface's bounds.
+  void PlacePanel(const gfx::Rect& bounds);
   // Section content.
   void ShowContent();
   void ClearContent();
@@ -224,8 +227,10 @@ class KeyboardEditor : public views::TextfieldController,
   std::unique_ptr<views::Widget> overlay_;
   base::RepeatingCallback<void(std::string)> run_action_;
 
+  std::vector<base::CallbackListSubscription> source_tab_;
+
   // Frame.
-  raw_ptr<views::View> root_ = nullptr;
+  raw_ptr<MenuScrim> root_ = nullptr;
   raw_ptr<FlyTextfield> settings_search_ = nullptr;
   std::vector<raw_ptr<RailItem>> rail_;
   raw_ptr<views::View> content_host_ = nullptr;

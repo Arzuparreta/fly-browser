@@ -52,7 +52,6 @@
 #include "ui/views/layout/box_layout.h"
 #include "ui/views/view_utils.h"
 #include "ui/views/widget/widget.h"
-#include "ui/wm/core/coordinate_conversion.h"
 
 namespace fly {
 namespace {
@@ -454,6 +453,7 @@ KeyboardEditor::~KeyboardEditor() {
   status_ = nullptr;
   hints_ = nullptr;
   root_ = nullptr;
+  source_tab_.clear();
   overlay_.reset();
   if (desktop_)
     desktop_->RemoveObserver(this);
@@ -468,6 +468,9 @@ void KeyboardEditor::Toggle(content::WebContents* contents) {
     return;
   restore_page_focus_ = ShouldRestoreNativePageFocus(contents);
   Observe(contents);
+  source_tab_ = WatchMenuSourceTab(
+      contents, base::BindRepeating(&KeyboardEditor::Cancel,
+                                    weak_factory_.GetWeakPtr(), false));
   if (contents)
     contents->StoreFocus();
   const auto current = commands_->Read();
@@ -495,8 +498,7 @@ void KeyboardEditor::Toggle(content::WebContents* contents) {
   selected_cell_.reset();
   status_text_.clear();
 
-  gfx::Rect bounds = desktop_->GetContentsView()->GetBoundsInScreen();
-  wm::ConvertRectFromScreen(desktop_->GetNativeWindow(), &bounds);
+  const gfx::Rect bounds = MenuWidgetBounds(desktop_);
   overlay_ = CreateMenuWidget(desktop_, bounds, "FlyKeyboardPreferences");
   const auto& colors = GetFlyColors();
   auto root = std::make_unique<MenuScrim>(
@@ -504,9 +506,6 @@ void KeyboardEditor::Toggle(content::WebContents* contents) {
                   colors.dark ? 120 : 60),
       base::BindRepeating(&KeyboardEditor::RequestClose,
                           weak_factory_.GetWeakPtr()));
-  // A compact panel: the content keeps a readable width on wide windows.
-  const int width = std::min(S(960), bounds.width() - S(32));
-  const int height = std::min(S(720), bounds.height() - S(32));
   auto panel = std::make_unique<MenuPanel>();
   auto* layout = panel->SetLayoutManager(std::make_unique<views::BoxLayout>(
       views::BoxLayout::Orientation::kVertical, gfx::Insets(), 0));
@@ -574,10 +573,8 @@ void KeyboardEditor::Toggle(content::WebContents* contents) {
       views::ViewAccessibility::LiveRegionStatus::kPolite);
   footer_layout->SetFlexForView(status_, 1);
   root->SetPanel(std::move(panel));
-  root->SetPanelBounds(gfx::Rect((bounds.width() - width) / 2,
-                                 (bounds.height() - height) / 2, width,
-                                 height));
   root_ = root.get();
+  PlacePanel(bounds);
   overlay_->SetContentsView(std::move(root));
   if (!keyboard_readable_)
     status_text_ =
@@ -590,6 +587,15 @@ void KeyboardEditor::Toggle(content::WebContents* contents) {
     search_->RequestFocus();
   else
     settings_search_->RequestFocus();
+}
+
+// A compact panel: the content keeps a readable width on wide windows.
+void KeyboardEditor::PlacePanel(const gfx::Rect& bounds) {
+  const int width = std::min(S(960), bounds.width() - S(32));
+  const int height = std::min(S(720), bounds.height() - S(32));
+  root_->SetPanelBounds(gfx::Rect((bounds.width() - width) / 2,
+                                  (bounds.height() - height) / 2, width,
+                                  height));
 }
 
 void KeyboardEditor::SelectPane(int pane, bool focus_rail) {
@@ -2845,6 +2851,7 @@ void KeyboardEditor::FinishClose(bool restore_focus) {
   status_ = nullptr;
   hints_ = nullptr;
   root_ = nullptr;
+  source_tab_.clear();
   more_runner_.reset();
   more_model_.reset();
   overlay_.reset();
@@ -2859,13 +2866,22 @@ void KeyboardEditor::FinishClose(bool restore_focus) {
   }
 }
 
+// The window moved or was resized: Preferences follows it and keeps its
+// section, scroll position, search, draft and focus.
 void KeyboardEditor::OnWidgetBoundsChanged(views::Widget*, const gfx::Rect&) {
-  Cancel(true);
+  if (!active())
+    return;
+  const gfx::Rect bounds = MenuWidgetBounds(desktop_);
+  overlay_->SetBounds(bounds);
+  PlacePanel(bounds);
 }
+// Preferences stays open while another application has the keyboard. Only
+// the recorder stops: its keys would go to that application.
 void KeyboardEditor::OnWidgetActivationChanged(views::Widget*, bool active) {
-  // A file chooser or the More menu takes activation while it is open.
-  if (!active && !file_dialog_ && !(more_runner_ && more_runner_->IsRunning()))
-    Cancel();
+  if (!active && recording()) {
+    StopRecording();
+    SetStatus(u"Recording cancelled.");
+  }
 }
 void KeyboardEditor::OnWidgetDestroying(views::Widget*) {
   desktop_ = nullptr;
@@ -2876,10 +2892,6 @@ void KeyboardEditor::PrimaryPageChanged(content::Page&) {
 }
 void KeyboardEditor::WebContentsDestroyed() {
   Cancel();
-}
-void KeyboardEditor::OnVisibilityChanged(content::Visibility visibility) {
-  if (visibility != content::Visibility::VISIBLE)
-    Cancel();
 }
 
 void KeyboardEditor::SliderValueChanged(views::Slider* sender,
