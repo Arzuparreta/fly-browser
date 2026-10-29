@@ -6055,6 +6055,31 @@ IN_PROC_BROWSER_TEST_F(FlyWorkspaceBrowserTest,
   ASSERT_TRUE(base::test::RunUntil([&] { return !editor.root_for_testing(); }));
 }
 
+// A list opened in a short window builds the rows a taller window shows when
+// the window grows.
+IN_PROC_BROWSER_TEST_F(FlyWorkspaceBrowserTest,
+                       ResizedListBuildsTheRowsItNowShows) {
+  for (int i = 0; i < 30; ++i)
+    ASSERT_TRUE(AddTabAtIndex(0, GURL("about:blank"),
+                              ui::PAGE_TRANSITION_TYPED));
+  auto& window = Window();
+  browser()->GetWindow()->SetBounds(gfx::Rect(40, 40, 1000, 360));
+  ASSERT_TRUE(base::test::RunUntil([&] {
+    return window.widget()->GetWindowBoundsInScreen().height() == 360;
+  }));
+  ASSERT_TRUE(window.RunCommand("toggle-dashboard"));
+  auto& dashboard = window.workspace_picker();
+  ASSERT_TRUE(dashboard.active());
+  const size_t before = dashboard.built_rows_for_testing();
+  ASSERT_LT(before, dashboard.result_count_for_testing());
+  browser()->GetWindow()->SetBounds(gfx::Rect(40, 40, 1000, 1000));
+  ASSERT_TRUE(base::test::RunUntil([&] {
+    return window.widget()->GetWindowBoundsInScreen().height() == 1000;
+  }));
+  ASSERT_TRUE(dashboard.active());
+  EXPECT_GT(dashboard.built_rows_for_testing(), before);
+}
+
 IN_PROC_BROWSER_TEST_F(FlyWorkspaceBrowserTest,
                        NativeKeyboardRecordingStopsWhenItsWindowIsInactive) {
   auto& window = Window();

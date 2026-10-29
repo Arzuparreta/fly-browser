@@ -869,6 +869,9 @@ void CommandPalette::OnWidgetBoundsChanged(views::Widget*, const gfx::Rect&) {
   const gfx::Rect bounds = SurfaceBounds();
   overlay_->SetBounds(bounds);
   PlacePanel(bounds);
+  // A taller list shows more rows than were built for the old height, and
+  // without overflow no scroll would build them.
+  EnsureRows(initial_rows_);
 }
 void CommandPalette::OnWidgetDestroying(views::Widget*) {
   desktop_ = nullptr;
