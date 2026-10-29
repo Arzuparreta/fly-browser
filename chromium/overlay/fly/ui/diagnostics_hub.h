@@ -57,6 +57,7 @@ struct DiagnosticsSession {
 // Diagnostics & Health Hub: a page over the content area with System &
 // Runtimes, Processes & Memory, the event log and a sanitised bug report.
 class FlyToggle;
+class MenuScrim;
 class DiagnosticsHub : public views::TabbedPaneListener,
                        public views::TextfieldController,
                        public views::WidgetObserver,
@@ -129,10 +130,14 @@ class DiagnosticsHub : public views::TabbedPaneListener,
   void BuildReport(views::View* pane);
   void BuildLogList();
   std::string ReportJson();
+  // The surface's bounds in the desktop window, and the panel inside them.
+  gfx::Rect SurfaceBounds() const;
+  void PlacePanel(const gfx::Rect& bounds);
 
   raw_ptr<views::Widget> desktop_;
   Delegate delegate_;
   std::unique_ptr<views::Widget> overlay_;
+  raw_ptr<MenuScrim> scrim_ = nullptr;
   raw_ptr<views::TabbedPane> tabs_ = nullptr;
   std::vector<raw_ptr<views::View>> panes_;
   raw_ptr<views::Label> badge_ = nullptr;

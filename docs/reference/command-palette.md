@@ -21,6 +21,8 @@ The Command Centre gives you searchable access to Fly's actions and their keyboa
 
 Every Fly menu (the Command Centre, the address bar, history, bookmarks, downloads, extensions, workspaces, Preferences and Diagnostics) shares one look: a header with the menu's own icon and name, a search field, the list, and a footer that shows what the keyboard does in that menu. The icon and the shape of the panel tell the menus apart.
 
+A menu belongs to its window and tab. It stays open, with what you typed, the section you were in and the keyboard focus, while you use another window or application, and it follows the window when it is resized. Switching to another tab closes it.
+
 1. **List**: commands grouped by category, with **Recently used** first when nothing is typed. Each row shows the shortcut on the right; NORMAL mode keys are the quieter chips.
 2. **Details**: under the list, the selected command's name and what it does.
 3. **Clipboard-mediated terminal fallback**: if a search matches no command, the only row is **Run in terminal**. Enter copies the text and passes it to your external terminal using the oversight protocol.

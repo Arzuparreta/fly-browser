@@ -15,6 +15,7 @@
 #include <utility>
 #include <vector>
 
+#include "base/callback_list.h"
 #include "base/functional/callback.h"
 #include "base/memory/raw_ptr.h"
 #include "fly/ui/fly_theme.h"
@@ -24,6 +25,9 @@
 #include "ui/views/controls/textfield/textfield.h"
 #include "ui/views/view.h"
 
+namespace content {
+class WebContents;
+}  // namespace content
 namespace gfx {
 class Canvas;
 struct VectorIcon;
@@ -64,6 +68,20 @@ inline constexpr int kMenuCaptionSize = 11;
 std::unique_ptr<views::Widget> CreateMenuWidget(views::Widget* desktop,
                                                 const gfx::Rect& bounds,
                                                 const char* name);
+
+// The menu widget's bounds: the desktop window's contents (in the window's
+// coordinates), less `insets`.
+gfx::Rect MenuWidgetBounds(views::Widget* desktop,
+                           const gfx::Insets& insets = gfx::Insets());
+
+// A menu belongs to the tab it was opened on and closes when that tab stops
+// being its window's active tab or leaves the window. `close` runs then.
+// Nothing that happens to the window itself (losing the keyboard to another
+// application, being hidden on another desktop, minimised or covered) runs
+// it: the menu, its text and its focus wait for the window to come back.
+std::vector<base::CallbackListSubscription> WatchMenuSourceTab(
+    content::WebContents* contents,
+    base::RepeatingClosure close);
 
 // Root of a menu widget: dims what is around the panel and closes the menu
 // on a click outside it. The panel gets explicit bounds; nothing above it

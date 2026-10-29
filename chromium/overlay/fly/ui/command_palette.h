@@ -121,13 +121,14 @@ class CommandPalette : public views::TextfieldController,
   void ContentsChanged(views::Textfield*, const std::u16string&) override;
   bool HandleKeyEvent(views::Textfield*, const ui::KeyEvent&) override;
   void OnWidgetBoundsChanged(views::Widget*, const gfx::Rect&) override;
-  void OnWidgetActivationChanged(views::Widget*, bool active) override;
   void OnWidgetDestroying(views::Widget*) override;
   void PrimaryPageChanged(content::Page&) override;
   void WebContentsDestroyed() override;
-  void OnVisibilityChanged(content::Visibility) override;
 
  private:
+  // The surface's bounds in the desktop window and the panel inside them.
+  gfx::Rect SurfaceBounds() const;
+  void PlacePanel(const gfx::Rect& bounds);
   void Refresh();
   // Builds the rows of filtered_ up to `count`.
   void EnsureRows(size_t count);
@@ -151,6 +152,8 @@ class CommandPalette : public views::TextfieldController,
   base::RepeatingCallback<void(content::WebContents*, std::string)> execute_;
   base::RepeatingCallback<void(content::WebContents*, std::string)> remove_;
   std::unique_ptr<views::Widget> overlay_;
+  raw_ptr<MenuScrim> scrim_ = nullptr;
+  std::vector<base::CallbackListSubscription> source_tab_;
   raw_ptr<views::Textfield> search_ = nullptr;
   raw_ptr<views::ScrollView> results_scroll_ = nullptr;
   raw_ptr<views::View> results_ = nullptr;

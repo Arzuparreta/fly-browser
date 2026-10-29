@@ -48,7 +48,6 @@
 #include "ui/views/layout/box_layout.h"
 #include "ui/views/widget/native_widget_aura.h"
 #include "ui/views/widget/widget.h"
-#include "ui/wm/core/coordinate_conversion.h"
 #include "v8/include/v8-version-string.h"
 
 namespace fly {
@@ -214,6 +213,7 @@ DiagnosticsHub::~DiagnosticsHub() {
   recording_ = nullptr;
   log_search_ = nullptr;
   log_list_ = nullptr;
+  scrim_ = nullptr;
   overlay_.reset();
   if (desktop_)
     desktop_->RemoveObserver(this);
@@ -226,10 +226,7 @@ void DiagnosticsHub::Toggle() {
   }
   if (!desktop_)
     return;
-  auto bounds = desktop_->GetContentsView()->GetBoundsInScreen();
-  if (delegate_.page_insets)
-    bounds.Inset(delegate_.page_insets.Run());
-  wm::ConvertRectFromScreen(desktop_->GetNativeWindow(), &bounds);
+  const gfx::Rect bounds = SurfaceBounds();
   overlay_ = CreateMenuWidget(desktop_, bounds, "FlyDiagnosticsHub");
   auto scrim = std::make_unique<MenuScrim>(
       SK_ColorTRANSPARENT,
@@ -278,11 +275,9 @@ void DiagnosticsHub::Toggle() {
     panes_.push_back(pane);
   }
   tabs_->SetListener(this);
-  const int margin = FlyScaled(16);
   scrim->SetPanel(std::move(panel));
-  scrim->SetPanelBounds(gfx::Rect(margin, margin,
-                                  std::max(0, bounds.width() - 2 * margin),
-                                  std::max(0, bounds.height() - 2 * margin)));
+  scrim_ = scrim.get();
+  PlacePanel(bounds);
   DisableSubpixelText(scrim.get());
   overlay_->SetContentsView(std::move(scrim));
   Refresh();
@@ -291,9 +286,23 @@ void DiagnosticsHub::Toggle() {
   desktop_->GetNativeWindow()->StackChildAtTop(overlay_->GetNativeWindow());
 }
 
+gfx::Rect DiagnosticsHub::SurfaceBounds() const {
+  return MenuWidgetBounds(desktop_, delegate_.page_insets
+                                        ? delegate_.page_insets.Run()
+                                        : gfx::Insets());
+}
+
+void DiagnosticsHub::PlacePanel(const gfx::Rect& bounds) {
+  const int margin = FlyScaled(16);
+  scrim_->SetPanelBounds(gfx::Rect(margin, margin,
+                                   std::max(0, bounds.width() - 2 * margin),
+                                   std::max(0, bounds.height() - 2 * margin)));
+}
+
 void DiagnosticsHub::Cancel() {
   if (!overlay_)
     return;
+  scrim_ = nullptr;
   if (tabs_)
     tabs_->SetListener(nullptr);
   panes_.clear();
@@ -864,8 +873,14 @@ bool DiagnosticsHub::HandleOverlayKey(const ui::KeyEvent& event) {
   return false;
 }
 
+// The window moved or was resized: the hub follows it and keeps its tab,
+// log search and scroll position.
 void DiagnosticsHub::OnWidgetBoundsChanged(views::Widget*, const gfx::Rect&) {
-  Cancel();
+  if (!overlay_ || !scrim_)
+    return;
+  const gfx::Rect bounds = SurfaceBounds();
+  overlay_->SetBounds(bounds);
+  PlacePanel(bounds);
 }
 
 void DiagnosticsHub::OnWidgetDestroying(views::Widget*) {

@@ -11,6 +11,7 @@
 #include "base/task/single_thread_task_runner.h"
 #include "cc/paint/paint_flags.h"
 #include "chrome/app/vector_icons/vector_icons.h"
+#include "components/tabs/public/tab_interface.h"
 #include "components/vector_icons/vector_icons.h"
 #include "ui/accessibility/ax_enums.mojom.h"
 #include "ui/aura/window.h"
@@ -33,6 +34,7 @@
 #include "ui/views/layout/box_layout.h"
 #include "ui/views/widget/native_widget_aura.h"
 #include "ui/views/widget/widget.h"
+#include "ui/wm/core/coordinate_conversion.h"
 
 namespace fly {
 namespace {
@@ -108,6 +110,31 @@ std::unique_ptr<views::Widget> CreateMenuWidget(views::Widget* desktop,
   params.bounds = bounds;
   widget->Init(std::move(params));
   return widget;
+}
+
+gfx::Rect MenuWidgetBounds(views::Widget* desktop, const gfx::Insets& insets) {
+  gfx::Rect bounds = desktop->GetContentsView()->GetBoundsInScreen();
+  bounds.Inset(insets);
+  wm::ConvertRectFromScreen(desktop->GetNativeWindow(), &bounds);
+  return bounds;
+}
+
+std::vector<base::CallbackListSubscription> WatchMenuSourceTab(
+    content::WebContents* contents,
+    base::RepeatingClosure close) {
+  std::vector<base::CallbackListSubscription> subscriptions;
+  auto* tab =
+      contents ? tabs::TabInterface::MaybeGetFromContents(contents) : nullptr;
+  if (!tab)
+    return subscriptions;
+  subscriptions.push_back(tab->RegisterWillDeactivate(base::BindRepeating(
+      [](base::RepeatingClosure close, tabs::TabInterface*) { close.Run(); },
+      close)));
+  subscriptions.push_back(tab->RegisterWillDetach(base::BindRepeating(
+      [](base::RepeatingClosure close, tabs::TabInterface*,
+         tabs::TabInterface::DetachReason) { close.Run(); },
+      close)));
+  return subscriptions;
 }
 
 MenuScrim::MenuScrim(SkColor scrim, base::RepeatingClosure dismiss)
