@@ -143,7 +143,7 @@
     "id": "focus-sidebar",
     "title": "Toggle Sidebar Focus",
     "desc": "Move focus between the sidebar and the active page",
-    "details": "Opens the sidebar without focusing a tab or button. Use Tab or the arrow keys to navigate. Run again to return to the page and collapse an unpinned sidebar. A pinned sidebar stays open.",
+    "details": "Unpins and opens the sidebar, focusing the active tab or the workspace button when there are no tabs. Use Tab or the arrow keys to navigate. Run again to return to the page and let the sidebar auto-collapse.",
     "tip": "Use the binding shown here, or customise this action in Keyboard controls.",
     "category": "Tabs & Navigation",
     "actionId": "focus-sidebar",

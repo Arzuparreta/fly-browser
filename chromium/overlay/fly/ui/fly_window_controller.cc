@@ -1403,6 +1403,11 @@ void FlyWindowController::ReturnFocusFromSidebar() {
 void FlyWindowController::FocusSidebar() {
   if (Closing() || !sidebar_content_)
     return;
+  // An explicit expansion leaves pinned mode. Apply the preference first:
+  // UpdateSidebarMode clears keyboard expansion and focus when unpinning.
+  auto& preferences = FlyApp::Get().preferences();
+  if (preferences.ReadSidebarAutoCollapse() == false)
+    preferences.SetSidebarAutoCollapse(true);
   if (sidebar_focus_inside_) {
     ReturnFocusFromSidebar();
     return;
