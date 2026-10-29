@@ -7,6 +7,6 @@
 // Fly's product version. scripts/version-sync.js copies it from package.json;
 // `npm test` fails if it drifts. The engine version is separate
 // (version_info::GetVersionNumber()).
-inline constexpr char kFlyVersion[] = "0.35.3";
+inline constexpr char kFlyVersion[] = "0.35.4";
 
 #endif  // FLY_FLY_VERSION_H_
