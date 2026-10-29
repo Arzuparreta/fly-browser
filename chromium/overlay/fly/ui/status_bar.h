@@ -4,17 +4,18 @@
 #ifndef FLY_UI_STATUS_BAR_H_
 #define FLY_UI_STATUS_BAR_H_
 
+#include <cstdint>
 #include <memory>
 #include <string>
 #include "base/functional/callback.h"
 #include "base/memory/raw_ptr.h"
 #include "base/memory/weak_ptr.h"
 #include "base/scoped_observation.h"
+#include "base/timer/timer.h"
 #include "chrome/browser/ui/tabs/tab_strip_model_observer.h"
 #include "components/zoom/zoom_controller.h"
 #include "components/zoom/zoom_observer.h"
 #include "content/public/browser/web_contents_observer.h"
-#include "base/timer/timer.h"
 #include "ui/gfx/image/image_skia.h"
 #include "ui/views/view.h"
 #include "ui/views/view_tracker.h"
@@ -30,10 +31,10 @@ namespace fly {
 class FlyButton;
 class FlyLabel;
 class StatusBadge;
-// Read-only presentation of page and profile state: mode and hovered link on
-// the left; zoom, extension actions, notifications, connection, workspace and
-// clock badges on the right. Link targets arrive from the browser delegate;
-// page code never receives a privileged UI binding.
+// Page and profile state: mode, stop/reload and hovered link or loading
+// destination on the left; zoom, extension actions, notifications, connection,
+// workspace and clock badges on the right. Link targets arrive from the browser
+// delegate; page code never receives a privileged UI binding.
 class StatusBar : public views::View,
                   public TabStripModelObserver,
                   public content::WebContentsObserver,
@@ -74,12 +75,17 @@ class StatusBar : public views::View,
   FlyButton* workspace_for_testing() const;
   FlyButton* zoom_for_testing() const;
   FlyButton* clock_for_testing() const;
+  FlyButton* reload_for_testing() const { return reload_; }
 
   void OnTabStripModelChanged(TabStripModel*,
                               const TabStripModelChange&,
                               const TabStripSelectionChange&) override;
   void OnTabStripModelDestroyed(TabStripModel*) override;
   void DidFinishNavigation(content::NavigationHandle*) override;
+  void DidStartNavigation(content::NavigationHandle*) override;
+  void DidRedirectNavigation(content::NavigationHandle*) override;
+  void DidStartLoading() override;
+  void DidStopLoading() override;
   void DidChangeVisibleSecurityState() override;
   void WebContentsDestroyed() override;
   void OnZoomControllerDestroyed(zoom::ZoomController*) override;
@@ -103,10 +109,12 @@ class StatusBar : public views::View,
   void SelectContents();
   void Update();
   void UpdateZoom();
+  void ReloadOrStop();
   base::WeakPtr<BrowserWindowInterface> browser_;
   raw_ptr<TabStripModel> model_ = nullptr;
   raw_ptr<FlyLabel> mode_;
   raw_ptr<FlyLabel> location_;
+  raw_ptr<FlyButton> reload_;
   raw_ptr<FlyButton> zoom_;
   raw_ptr<views::View> extensions_;
   raw_ptr<FlyButton> notifications_;
@@ -116,6 +124,10 @@ class StatusBar : public views::View,
   base::RepeatingClosure contents_changed_;
   bool private_ = false;
   GURL target_;
+  // Only the selected tab's pending primary navigation, before commit. A
+  // superseded request finishing must not erase the next request's feedback.
+  GURL pending_url_;
+  int64_t pending_navigation_id_ = 0;
   std::unique_ptr<TargetObserver> target_observer_;
   base::ScopedObservation<zoom::ZoomController, zoom::ZoomObserver>
       zoom_observation_{this};

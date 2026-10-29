@@ -39,11 +39,17 @@
 #include "ui/base/models/image_model.h"
 #include "ui/color/color_provider.h"
 #include "ui/compositor/layer.h"
+#include "ui/compositor/layer_animation_element.h"
+#include "ui/compositor/layer_animation_sequence.h"
+#include "ui/compositor/layer_animator.h"
+#include "ui/gfx/animation/animation.h"
 #include "ui/gfx/canvas.h"
 #include "ui/gfx/color_utils.h"
 #include "ui/gfx/font_list.h"
 #include "ui/gfx/image/canvas_image_source.h"
 #include "ui/gfx/image/image_skia_operations.h"
+#include "ui/gfx/interpolated_transform.h"
+#include "ui/gfx/paint_throbber.h"
 #include "ui/gfx/paint_vector_icon.h"
 #include "ui/gfx/text_constants.h"
 #include "ui/menus/simple_menu_model.h"
@@ -110,8 +116,9 @@ class RowIcon : public gfx::CanvasImageSource {
         favicon_(std::move(favicon)),
         split_pane_(split_pane) {}
   void Draw(gfx::Canvas* canvas) override {
-    canvas->DrawImageInt(favicon_, S(4) + (S(18) - favicon_.width()) / 2,
-                         S(4) + (S(18) - favicon_.height()) / 2);
+    if (!favicon_.isNull())
+      canvas->DrawImageInt(favicon_, S(4) + (S(18) - favicon_.width()) / 2,
+                           S(4) + (S(18) - favicon_.height()) / 2);
     if (!split_pane_)
       return;
     const auto& colors = GetFlyColors();
@@ -134,6 +141,91 @@ class RowIcon : public gfx::CanvasImageSource {
   const gfx::ImageSkia favicon_;
   const int split_pane_;
 };
+
+// Only the arc rotates, on its own compositor layer. Loading background tabs
+// must not cause a timer, a list relayout or UI-thread paint on every frame.
+class LoadingArc : public views::View {
+  METADATA_HEADER(LoadingArc, views::View)
+
+ public:
+  LoadingArc() {
+    SetCanProcessEventsWithinSubtree(false);
+    SetPaintToLayer();
+    layer()->SetFillsBoundsOpaquely(false);
+  }
+  void OnBoundsChanged(const gfx::Rect&) override {
+    layer()->GetAnimator()->StopAnimating();
+    layer()->SetTransform(gfx::Transform());
+    if (size().IsEmpty() || !gfx::Animation::ShouldRenderRichAnimation())
+      return;
+    auto rotation = std::make_unique<ui::InterpolatedTransformAboutPivot>(
+        gfx::Point(width() / 2, height() / 2),
+        std::make_unique<ui::InterpolatedRotation>(0, 360));
+    auto element =
+        ui::LayerAnimationElement::CreateInterpolatedTransformElement(
+            std::move(rotation), base::Milliseconds(1568));
+    if (element->duration().is_zero())
+      return;
+    auto sequence = std::make_unique<ui::LayerAnimationSequence>();
+    sequence->set_is_repeating(true);
+    sequence->AddElement(std::move(element));
+    layer()->GetAnimator()->StartAnimation(sequence.release());
+  }
+  void OnPaint(gfx::Canvas* canvas) override {
+    gfx::PaintThrobberSpinning(canvas, GetLocalBounds(), GetFlyColors().accent,
+                               base::Milliseconds(1500),
+                               2 * GetFlyInterfaceScale());
+  }
+};
+BEGIN_METADATA(LoadingArc)
+END_METADATA
+
+// The split badge stays still above the arc, in exactly the favicon's slot.
+// The entire helper (including its animation layers) goes away when idle.
+class LoadingIcon : public views::View {
+  METADATA_HEADER(LoadingIcon, views::View)
+
+ public:
+  LoadingIcon() {
+    SetCanProcessEventsWithinSubtree(false);
+    arc_ = AddChildView(std::make_unique<LoadingArc>());
+    badge_ = AddChildView(std::make_unique<views::ImageView>());
+    badge_->SetPaintToLayer();
+    badge_->layer()->SetFillsBoundsOpaquely(false);
+  }
+  void SetSplitPane(int pane) {
+    if (pane == pane_ && scale_ == GetFlyInterfaceScale())
+      return;
+    pane_ = pane;
+    scale_ = GetFlyInterfaceScale();
+    badge_->SetVisible(pane != 0);
+    badge_->SetImage(ui::ImageModel::FromImageSkia(
+        gfx::CanvasImageSource::MakeImageSkia<RowIcon>(gfx::ImageSkia(), pane)));
+    InvalidateLayout();
+  }
+  void OnThemeChanged() override {
+    views::View::OnThemeChanged();
+    const int pane = pane_;
+    pane_ = -1;
+    SetSplitPane(pane);
+  }
+  void Layout(PassKey) override {
+    // Even dimensions keep the integer rotation pivot at the arc's centre,
+    // including the large interface scale, so it never wobbles as it spins.
+    const int diameter = S(18) & ~1;
+    const int inset = (S(26) - diameter) / 2;
+    arc_->SetBounds(inset, inset, diameter, diameter);
+    badge_->SetBoundsRect(GetLocalBounds());
+  }
+
+ private:
+  raw_ptr<LoadingArc> arc_;
+  raw_ptr<views::ImageView> badge_;
+  int pane_ = -1;
+  float scale_ = 0;
+};
+BEGIN_METADATA(LoadingIcon)
+END_METADATA
 
 // The badges at a row's right end: pin (.tab-pin-badge), audio
 // (.tab-media-badge) and close (.tab-close-btn).
@@ -234,6 +326,17 @@ class FlyTabButton : public FlyButton {
     domain_->SetVisible(!domain.empty());
     InvalidateLayout();
   }
+  void SetLoading(bool loading, int split_pane) {
+    if (loading && !loading_icon_)
+      loading_icon_ = AddChildView(std::make_unique<LoadingIcon>());
+    else if (!loading && loading_icon_)
+      RemoveChildViewT(std::exchange(loading_icon_, nullptr));
+    image_container_view()->SetVisible(!loading);
+    if (loading_icon_) {
+      loading_icon_->SetSplitPane(split_pane);
+    }
+  }
+  views::View* loading_icon() const { return loading_icon_; }
   // The text stops before the row's badges.
   void SetTextRight(int right) {
     if (text_right_ == right)
@@ -253,6 +356,8 @@ class FlyTabButton : public FlyButton {
     image_container_view()->SetBounds(S(5) - S(4),
                                       (height() - S(18)) / 2 - S(4),
                                       S(26), S(26));
+    if (loading_icon_)
+      loading_icon_->SetBoundsRect(image_container_view()->bounds());
     // The text starts past the rail's edge: 5 + 18 + 2 + 8.
     const int left = S(33);
     const int right = std::max(left, text_right_ ? text_right_ : width());
@@ -270,6 +375,7 @@ class FlyTabButton : public FlyButton {
   void OnPaintBackground(gfx::Canvas*) override {}
 
  private:
+  raw_ptr<LoadingIcon> loading_icon_ = nullptr;
   raw_ptr<FlyLabel> domain_ = nullptr;
   int text_right_ = 0;
 };
@@ -1052,7 +1158,8 @@ bool TabSidebar::UpdateRow(content::WebContents* contents, int i) {
   view->select()->GetViewAccessibility().SetName(
       base::NumberToString16(i + 1) + u". " + title +
       (state.selected ? u", selected" : u"") +
-      (state.pinned ? u", pinned" : u"") + audio_status);
+      (state.pinned ? u", pinned" : u"") + audio_status +
+      (contents->ShouldShowLoadingUI() ? u", loading" : u""));
   auto* navigation = contents->GetController().GetVisibleEntry();
   const gfx::ImageSkia icon = navigation && navigation->GetFavicon().valid &&
                                       !navigation->GetFavicon().image.IsEmpty()
@@ -1076,6 +1183,7 @@ bool TabSidebar::UpdateRow(content::WebContents* contents, int i) {
             gfx::CanvasImageSource::MakeImageSkia<RowIcon>(favicon,
                                                            state.split_pane)));
   }
+  view->select()->SetLoading(contents->ShouldShowLoadingUI(), state.split_pane);
   const auto pin_label = u"Unpin " + title;
   view->pin()->GetViewAccessibility().SetName(pin_label);
   view->pin()->SetTooltipText(u"Pinned tab (click to unpin)");
@@ -1183,6 +1291,12 @@ views::Button* TabSidebar::audio_for_testing(
     content::WebContents* contents) const {
   auto it = tab_rows_.find(contents);
   return it == tab_rows_.end() ? nullptr : it->second.view->audio();
+}
+views::View* TabSidebar::loading_icon_for_testing(
+    content::WebContents* contents) const {
+  const auto it = tab_rows_.find(contents);
+  return it == tab_rows_.end() ? nullptr
+                               : it->second.view->select()->loading_icon();
 }
 gfx::ImageSkia TabSidebar::favicon_for_testing(
     content::WebContents* contents) const {

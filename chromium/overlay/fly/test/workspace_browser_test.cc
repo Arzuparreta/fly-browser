@@ -1804,6 +1804,234 @@ IN_PROC_BROWSER_TEST_F(FlyWorkspaceBrowserTest,
   Window().address_picker().Cancel();
 }
 
+// Hold the response before headers and after commit independently. These tests
+// assert the feedback during the otherwise invisible part of a real navigation,
+// rather than merely setting a synthetic loading flag on a view.
+class FlyNavigationFeedbackBrowserTest : public FlySidebarBrowserTest {
+ public:
+  void SetUpOnMainThread() override {
+    FlySidebarBrowserTest::SetUpOnMainThread();
+    ASSERT_TRUE(App().preferences().SetStatusBarVisible(true));
+    host_resolver()->AddRule("*", "127.0.0.1");
+    waiting_ = std::make_unique<net::test_server::ControllableHttpResponse>(
+        &server_, "/waiting", true);
+    next_ = std::make_unique<net::test_server::ControllableHttpResponse>(
+        &server_, "/next");
+    ASSERT_TRUE(server_.Start());
+    ASSERT_TRUE(ui_test_utils::NavigateToURL(
+        browser(), embedded_test_server()->GetURL("/title1.html")));
+    Activate(browser());
+  }
+
+ protected:
+  TabSidebar* Sidebar() { return Window().tab_sidebar_for_testing(); }
+  StatusBar* Status() { return Window().status_bar_for_testing(); }
+  void WaitForFeedback(content::WebContents* contents) {
+    ASSERT_TRUE(base::test::RunUntil([&] {
+      return Sidebar()->loading_icon_for_testing(contents) != nullptr;
+    }));
+    if (contents == Active(browser()))
+      EXPECT_EQ(u"Stop loading",
+                Status()->reload_for_testing()->GetTooltipText());
+  }
+  void WaitForIdle(content::WebContents* contents) {
+    ASSERT_TRUE(base::test::RunUntil([&] {
+      return !contents->IsLoading() &&
+             Sidebar()->row_for_testing(contents) &&
+             Sidebar()->row_count_for_testing() ==
+                 static_cast<size_t>(browser()->GetTabStripModel()->count()) &&
+             !Sidebar()->loading_icon_for_testing(contents);
+    }));
+    if (contents == Active(browser())) {
+      EXPECT_EQ(u"Reload page",
+                Status()->reload_for_testing()->GetTooltipText());
+      EXPECT_TRUE(Status()->location_for_testing()->GetText().empty());
+    }
+  }
+  void Start(const GURL& url) {
+    Active(browser())->GetController().LoadURL(url, content::Referrer(),
+                                               ui::PAGE_TRANSITION_TYPED, "");
+  }
+  void SendPage(net::test_server::ControllableHttpResponse& response) {
+    response.Send(
+        "HTTP/1.1 200 OK\r\nContent-Type: text/html\r\n\r\n"
+        "<!doctype html><title>Destination</title><h1>Destination</h1>" +
+        std::string(4096, ' '));
+  }
+  net::EmbeddedTestServer server_;
+  std::unique_ptr<net::test_server::ControllableHttpResponse> waiting_;
+  std::unique_ptr<net::test_server::ControllableHttpResponse> next_;
+};
+
+IN_PROC_BROWSER_TEST_F(FlyNavigationFeedbackBrowserTest,
+                       SearchAnswersBeforeHeadersAndStopKeepsPreviousPage) {
+  auto* contents = Active(browser());
+  const auto previous = contents->GetLastCommittedURL();
+  SearchService search(*g_browser_process->local_state());
+  ASSERT_TRUE(search.SetEngine(server_.GetURL("/waiting?q=%s").spec()));
+  auto& address = Window().address_picker();
+  ASSERT_TRUE(InvokeNativeCommand(browser(), "toggle-address"));
+  ASSERT_TRUE(base::test::RunUntil([&] { return address.active(); }));
+  address.search_for_testing()->SetText(u"slow search");
+  address.ContentsChanged(address.search_for_testing(), u"slow search");
+  ui::test::EventGenerator keys(
+      Window().widget()->GetNativeWindow()->GetRootWindow());
+  keys.PressKey(ui::VKEY_RETURN, ui::EF_NONE);
+  waiting_->WaitForRequest();
+  WaitForFeedback(contents);
+  EXPECT_EQ(previous, contents->GetLastCommittedURL());
+  EXPECT_EQ(u"Opening 127.0.0.1\u2026",
+            Status()->location_for_testing()->GetText());
+  auto* row = Sidebar()->row_for_testing(contents);
+  auto* select = static_cast<views::Button*>(row->children()[0].get());
+  EXPECT_NE(std::u16string::npos,
+            select->GetViewAccessibility().GetCachedName().find(u", loading"));
+  views::test::ButtonTestApi(Status()->reload_for_testing())
+      .NotifyDefaultMouseClick();
+  WaitForIdle(contents);
+  EXPECT_EQ(previous, contents->GetLastCommittedURL());
+  EXPECT_EQ(row, Sidebar()->row_for_testing(contents));
+  waiting_->Done();
+  // The same control now reloads the current page, rather than the cancelled
+  // URL.
+  content::TestNavigationObserver reloaded(contents);
+  views::test::ButtonTestApi(Status()->reload_for_testing())
+      .NotifyDefaultMouseClick();
+  reloaded.Wait();
+  WaitForIdle(contents);
+  EXPECT_EQ(previous, contents->GetLastCommittedURL());
+}
+
+IN_PROC_BROWSER_TEST_F(FlyNavigationFeedbackBrowserTest,
+                       LinkFeedbackSurvivesCommitRailThemeAndScale) {
+  auto* contents = Active(browser());
+  const auto previous = contents->GetLastCommittedURL();
+  const auto destination = server_.GetURL("/waiting");
+  ASSERT_TRUE(content::ExecJs(contents, content::JsReplace(R"js(
+    const link = document.createElement('a');
+    link.href = $1; link.textContent = 'Open destination';
+    document.body.append(link); link.click();
+  )js",
+                                                           destination)));
+  waiting_->WaitForRequest();
+  WaitForFeedback(contents);
+  EXPECT_EQ(previous, contents->GetLastCommittedURL());
+  EXPECT_EQ(u"Opening 127.0.0.1\u2026",
+            Status()->location_for_testing()->GetText());
+  auto* icon = Sidebar()->loading_icon_for_testing(contents);
+  for (const char* scale : {"large", "normal"}) {
+    ASSERT_TRUE(App().preferences().SetString("interface_scale", scale));
+    ASSERT_TRUE(App().preferences().ToggleTheme());
+    OpenByPointer();
+    WaitForSidebarMotion();
+    views::test::RunScheduledLayout(icon->GetWidget());
+    EXPECT_EQ(gfx::Size(FlyScaled(26), FlyScaled(26)), icon->size());
+    const auto expanded = icon->GetBoundsInScreen();
+    MoveToPage();
+    WaitForSidebarMotion();
+    EXPECT_TRUE(Sidebar()->rail());
+    EXPECT_EQ(expanded, icon->GetBoundsInScreen());
+    EXPECT_EQ(icon, Sidebar()->loading_icon_for_testing(contents));
+    ASSERT_TRUE(App().preferences().ToggleTheme());
+  }
+  SendPage(*waiting_);
+  ASSERT_TRUE(base::test::RunUntil(
+      [&] { return contents->GetLastCommittedURL() == destination; }));
+  WaitForFeedback(contents);
+  EXPECT_EQ(u"Loading 127.0.0.1\u2026",
+            Status()->location_for_testing()->GetText());
+  // A hovered link still takes priority and clearing it restores load feedback.
+  Window().UpdateTargetURL(contents, GURL("https://example.test/link"));
+  EXPECT_NE(
+      std::u16string::npos,
+      Status()->location_for_testing()->GetText().find(u"example.test/link"));
+  Window().UpdateTargetURL(contents, GURL());
+  EXPECT_EQ(u"Loading 127.0.0.1\u2026",
+            Status()->location_for_testing()->GetText());
+  waiting_->Done();
+  WaitForIdle(contents);
+}
+
+IN_PROC_BROWSER_TEST_F(
+    FlyNavigationFeedbackBrowserTest,
+    BackgroundTabKeepsItsOwnFeedbackAndCanCloseWhileLoading) {
+  auto* loading = Active(browser());
+  Start(server_.GetURL("/waiting"));
+  waiting_->WaitForRequest();
+  WaitForFeedback(loading);
+  ASSERT_TRUE(AddTabAtIndex(1, GURL("about:blank"), ui::PAGE_TRANSITION_TYPED));
+  auto* strip = browser()->GetTabStripModel();
+  strip->ActivateTabAt(1);
+  auto* idle = Active(browser());
+  WaitForIdle(idle);
+  EXPECT_TRUE(Sidebar()->loading_icon_for_testing(loading));
+  strip->ActivateTabAt(0);
+  WaitForFeedback(loading);
+  EXPECT_EQ(u"Opening 127.0.0.1\u2026",
+            Status()->location_for_testing()->GetText());
+  strip->CloseWebContentsAt(0, TabCloseTypes::CLOSE_NONE);
+  ASSERT_TRUE(base::test::RunUntil([&] { return strip->count() == 1; }));
+  WaitForIdle(idle);
+  EXPECT_EQ(1u, Sidebar()->row_count_for_testing());
+  waiting_->Done();
+}
+
+IN_PROC_BROWSER_TEST_F(FlyNavigationFeedbackBrowserTest,
+                       RedirectAndSupersededRequestDoNotLeaveStaleFeedback) {
+  auto* contents = Active(browser());
+  Start(server_.GetURL("first.test", "/waiting"));
+  waiting_->WaitForRequest();
+  WaitForFeedback(contents);
+  EXPECT_EQ(u"Opening first.test\u2026",
+            Status()->location_for_testing()->GetText());
+  // Resume observing a navigation which started before this tab was selected.
+  ASSERT_TRUE(AddTabAtIndex(1, GURL("about:blank"), ui::PAGE_TRANSITION_TYPED));
+  auto* strip = browser()->GetTabStripModel();
+  strip->ActivateTabAt(1);
+  WaitForIdle(Active(browser()));
+  strip->ActivateTabAt(0);
+  WaitForFeedback(contents);
+  const auto redirected = server_.GetURL("second.test", "/next");
+  waiting_->Send("HTTP/1.1 302 Found\r\nLocation: " + redirected.spec() +
+                 "\r\nContent-Length: 0\r\n\r\n");
+  waiting_->Done();
+  next_->WaitForRequest();
+  EXPECT_EQ(u"Opening second.test\u2026",
+            Status()->location_for_testing()->GetText());
+  WaitForFeedback(contents);
+  // Replacing the in-flight navigation removes the old destination and spinner.
+  const auto replacement = embedded_test_server()->GetURL("/title2.html");
+  Start(replacement);
+  ASSERT_TRUE(base::test::RunUntil([&] {
+    return contents->GetLastCommittedURL() == replacement;
+  }));
+  WaitForIdle(contents);
+  next_->Done();
+  ASSERT_TRUE(ui_test_utils::NavigateToURL(
+      browser(), embedded_test_server()->GetURL("/title1.html")));
+  ASSERT_TRUE(content::ExecJs(contents, "location.hash = 'section'"));
+  WaitForIdle(contents);
+}
+
+IN_PROC_BROWSER_TEST_F(FlyNavigationFeedbackBrowserTest,
+                       ErrorResponseAndNoContentBothEndFeedback) {
+  auto* contents = Active(browser());
+  Start(server_.GetURL("/waiting"));
+  waiting_->WaitForRequest();
+  WaitForFeedback(contents);
+  // A server closing without headers produces a real Chromium error page.
+  waiting_->Done();
+  WaitForIdle(contents);
+  const auto error_url = contents->GetLastCommittedURL();
+  Start(server_.GetURL("/next"));
+  next_->WaitForRequest();
+  WaitForFeedback(contents);
+  next_->Send("HTTP/1.1 204 No Content\r\n\r\n");
+  next_->Done();
+  WaitForIdle(contents);
+  EXPECT_EQ(error_url, contents->GetLastCommittedURL());
+}
+
 IN_PROC_BROWSER_TEST_F(FlyWorkspaceBrowserTest,
                        SidebarTitleChangesTouchOnlyTheirRow) {
   for (int i = 1; i < 24; ++i)
