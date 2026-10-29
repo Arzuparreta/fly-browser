@@ -1214,6 +1214,48 @@ IN_PROC_BROWSER_TEST_F(FlySidebarBrowserTest,
 }
 
 IN_PROC_BROWSER_TEST_F(FlySidebarBrowserTest,
+                       FocusShortcutUnpinsAndRestoresEditablePage) {
+  ASSERT_TRUE(ui_test_utils::NavigateToURL(
+      browser(), embedded_test_server()->GetURL("/title1.html")));
+  auto* page = Active(browser());
+  ASSERT_TRUE(content::ExecJs(page, R"js(
+    document.body.innerHTML='<input id="edit" style="position:fixed;left:400px;top:40px">';
+    document.querySelector('#edit').focus();
+  )js"));
+  auto& window = Window();
+  MoveToPage();
+  ui::test::EventGenerator keys(
+      window.widget()->GetNativeWindow()->GetRootWindow());
+  auto press = [&](ui::KeyboardCode key, int modifiers) {
+    keys.PressKey(key, modifiers);
+    keys.ReleaseKey(key, modifiers);
+  };
+  press(ui::VKEY_Z, ui::EF_CONTROL_DOWN | ui::EF_SHIFT_DOWN);
+  ASSERT_TRUE(base::test::RunUntil([&] {
+    return App().preferences().ReadSidebarAutoCollapse() == false &&
+           window.sidebar_expanded_for_testing();
+  }));
+  press(ui::VKEY_S, ui::EF_ALT_DOWN);
+  ASSERT_TRUE(base::test::RunUntil([&] {
+    auto* row = window.tab_sidebar_for_testing()->row_for_testing(page);
+    return App().preferences().ReadSidebarAutoCollapse() == true &&
+           window.sidebar_expanded_for_testing() && row &&
+           row->children().front()->HasFocus();
+  }));
+  EXPECT_FALSE(window.sidebar_pin_for_testing()->selected());
+  press(ui::VKEY_S, ui::EF_ALT_DOWN);
+  ASSERT_TRUE(base::test::RunUntil([&] {
+    return !window.sidebar_expanded_for_testing() &&
+           content::EvalJs(page, "document.hasFocus()").ExtractBool();
+  }));
+  press(ui::VKEY_J, ui::EF_NONE);
+  ASSERT_TRUE(base::test::RunUntil([&] {
+    return content::EvalJs(page, "document.querySelector('#edit').value")
+               .ExtractString() == "j";
+  }));
+}
+
+IN_PROC_BROWSER_TEST_F(FlySidebarBrowserTest,
                        RepeatedFocusAfterRowActivationMovesKeyboardFocus) {
   ASSERT_TRUE(ui_test_utils::NavigateToURL(
       browser(), embedded_test_server()->GetURL("/title1.html")));
