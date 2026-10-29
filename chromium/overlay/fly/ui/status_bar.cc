@@ -220,6 +220,13 @@ StatusBar::StatusBar(Actions actions)
   location_->SetHorizontalAlignment(gfx::ALIGN_LEFT);
   location_->SetElideBehavior(gfx::ELIDE_MIDDLE);
   layout->SetFlexForView(location_, 1);
+  extensions_ = AddChildView(std::make_unique<views::View>());
+  extensions_->SetLayoutManager(std::make_unique<views::BoxLayout>(
+      views::BoxLayout::Orientation::kHorizontal, gfx::Insets(), 2));
+  notifications_ = AddChildView(MakeFlyIconButton(
+      std::move(actions.notifications),
+      vector_icons::kNotificationsIcon, u"Toggle web notifications", 18));
+  notifications_->SetVectorIcon(vector_icons::kNotificationsIcon, 12);
   zoom_action_ = std::move(actions.zoom);
   zoom_ = AddChildView(std::make_unique<FlyButton>(
       base::BindRepeating(&StatusBar::ToggleZoomControls,
@@ -230,13 +237,6 @@ StatusBar::StatusBar(Actions actions)
   zoom_->SetImageLabelSpacing(4);
   zoom_->SetOutlined(true);
   zoom_->SetTooltipText(u"Page zoom");
-  extensions_ = AddChildView(std::make_unique<views::View>());
-  extensions_->SetLayoutManager(std::make_unique<views::BoxLayout>(
-      views::BoxLayout::Orientation::kHorizontal, gfx::Insets(), 2));
-  notifications_ = AddChildView(MakeFlyIconButton(
-      std::move(actions.notifications),
-      vector_icons::kNotificationsIcon, u"Toggle web notifications", 18));
-  notifications_->SetVectorIcon(vector_icons::kNotificationsIcon, 12);
   security_ = AddChildView(std::make_unique<StatusBadge>(
       views::Button::PressedCallback(), vector_icons::kLockIcon));
   workspace_ = AddChildView(std::make_unique<StatusBadge>(
