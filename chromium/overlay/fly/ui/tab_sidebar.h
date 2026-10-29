@@ -74,6 +74,7 @@ class TabSidebar : public views::View,
   views::Button* audio_for_testing(content::WebContents* contents) const;
   // The site favicon a row shows (null while it shows the globe).
   gfx::ImageSkia favicon_for_testing(content::WebContents* contents) const;
+  views::View* loading_icon_for_testing(content::WebContents* contents) const;
   ui::SimpleMenuModel* context_menu_for_testing() const;
   void CloseContextMenu();
 

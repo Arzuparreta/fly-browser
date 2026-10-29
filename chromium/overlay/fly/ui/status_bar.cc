@@ -10,6 +10,7 @@
 #include "base/strings/utf_string_conversions.h"
 #include "base/task/single_thread_task_runner.h"
 #include "cc/paint/paint_flags.h"
+#include "chrome/app/vector_icons/vector_icons.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/ssl/chrome_security_state_util.h"
 #include "chrome/browser/ui/browser_window/public/browser_window_interface.h"
@@ -17,22 +18,23 @@
 #include "components/omnibox/browser/vector_icons.h"
 #include "components/url_formatter/url_formatter.h"
 #include "components/vector_icons/vector_icons.h"
+#include "content/public/browser/navigation_controller.h"
+#include "content/public/browser/navigation_entry.h"
 #include "content/public/browser/navigation_handle.h"
 #include "content/public/browser/web_contents.h"
 #include "fly/ui/fly_theme.h"
+#include "ui/accessibility/ax_enums.mojom.h"
 #include "ui/base/metadata/metadata_impl_macros.h"
 #include "ui/gfx/canvas.h"
 #include "ui/gfx/color_utils.h"
 #include "ui/views/accessibility/view_accessibility.h"
 #include "ui/views/background.h"
 #include "ui/views/border.h"
-#include "ui/accessibility/ax_enums.mojom.h"
-#include "ui/views/widget/widget.h"
 #include "ui/views/bubble/bubble_dialog_delegate_view.h"
 #include "ui/views/layout/box_layout.h"
 #include "ui/views/vector_icons.h"
 #include "ui/views/view_class_properties.h"
-#include "chrome/app/vector_icons/vector_icons.h"
+#include "ui/views/widget/widget.h"
 
 namespace fly {
 // A status bar badge: tinted fill and 1px outline.
@@ -214,6 +216,10 @@ StatusBar::StatusBar(Actions actions)
   SetBackground(FlyBackground(FlyRole::kSidebar));
   SetBorder(FlyEdgeBorder(FlyRole::kBorder, gfx::Insets::TLBR(1, 0, 0, 0)));
   mode_ = AddChildView(std::make_unique<ModeLabel>(std::move(actions.mode)));
+  reload_ = AddChildView(MakeFlyIconButton(
+      base::BindRepeating(&StatusBar::ReloadOrStop, base::Unretained(this)),
+      vector_icons::kRefreshIcon, u"Reload page", 20));
+  reload_->SetVectorIcon(vector_icons::kRefreshIcon, 12);
   location_ = AddChildView(std::make_unique<FlyLabel>(
       u"", FlyFace::kMono, 11, gfx::Font::Weight::NORMAL,
       FlyLabel::Tone::kDim));
@@ -331,8 +337,16 @@ void StatusBar::SelectContents() {
     zoom_flash_.Stop();
     zoom_->SetSelected(false);
     target_ = GURL();
+    pending_url_ = GURL();
+    pending_navigation_id_ = 0;
+    message_.clear();
+    message_timer_.Stop();
     target_observer_->Set(nullptr);
     Observe(selected);
+    if (selected && selected->HasUncommittedNavigationInPrimaryMainFrame()) {
+      if (auto* entry = selected->GetController().GetPendingEntry())
+        pending_url_ = entry->GetURL();
+    }
     zoom_observation_.Reset();
     if (auto* zoom =
             selected ? zoom::ZoomController::FromWebContents(selected)
@@ -430,13 +444,34 @@ void StatusBar::UpdateZoom() {
   zoom_->SetEnabled(web_contents() != nullptr);
 }
 void StatusBar::Update() {
-  // The location shows only a hovered link target.
-  const auto location =
-      target_.is_empty() ? message_ : url_formatter::FormatUrl(target_);
+  const bool loading = web_contents() && web_contents()->ShouldShowLoadingUI();
+  reload_->SetEnabled(web_contents() != nullptr);
+  reload_->SetVectorIcon(
+      loading ? vector_icons::kCloseIcon : vector_icons::kRefreshIcon, 12);
+  const auto* reload_label = loading ? u"Stop loading" : u"Reload page";
+  reload_->SetTooltipText(reload_label);
+  reload_->GetViewAccessibility().SetName(reload_label);
+  reload_->SetIconTone(loading ? FlyButton::IconTone::kAccent
+                               : FlyButton::IconTone::kDim);
+  // A hovered link remains inspectable during loading. Otherwise show the
+  // destination immediately, even while the previous document is still drawn.
+  std::u16string location = message_;
+  if (!target_.is_empty()) {
+    location = url_formatter::FormatUrl(target_);
+  } else if (location.empty() && loading) {
+    const GURL& destination = pending_url_.is_empty()
+                                  ? web_contents()->GetVisibleURL()
+                                  : pending_url_;
+    const auto site = destination.has_host()
+                          ? base::UTF8ToUTF16(destination.host())
+                          : u"page";
+    location = (pending_url_.is_empty() ? u"Loading " : u"Opening ") + site +
+               u"\u2026";
+  }
   location_->SetText(location);
   location_->SetTooltipText(location);
   location_->GetViewAccessibility().SetName(
-      location.empty() ? std::u16string() : u"Link: " + location);
+      target_.is_empty() ? location : u"Link: " + location);
   UpdateZoom();
   if (!web_contents()) {
     security_->SetText(u"BLANK");
@@ -492,6 +527,15 @@ void StatusBar::Update() {
   security_->SetTooltipText(tooltip);
   security_->GetViewAccessibility().SetName(tooltip);
 }
+void StatusBar::ReloadOrStop() {
+  auto* contents = web_contents();
+  if (!contents)
+    return;
+  if (contents->ShouldShowLoadingUI())
+    contents->Stop();
+  else
+    contents->GetController().Reload(content::ReloadType::NORMAL, true);
+}
 void StatusBar::OnTabStripModelChanged(TabStripModel*,
                                        const TabStripModelChange&,
                                        const TabStripSelectionChange&) {
@@ -505,11 +549,44 @@ void StatusBar::OnTabStripModelDestroyed(TabStripModel*) {
   ClearTarget();
 }
 void StatusBar::DidFinishNavigation(content::NavigationHandle* navigation) {
+  if (navigation->IsInPrimaryMainFrame() &&
+      (navigation->GetNavigationId() == pending_navigation_id_ ||
+       !pending_navigation_id_)) {
+    pending_url_ = GURL();
+    pending_navigation_id_ = 0;
+    Update();
+  }
   if (navigation->HasCommitted() && navigation->IsInPrimaryMainFrame()) {
     ClearTarget();
     if (contents_changed_ && !navigation->IsSameDocument())
       contents_changed_.Run();
   }
+}
+void StatusBar::DidStartNavigation(content::NavigationHandle* navigation) {
+  if (!navigation->IsInPrimaryMainFrame() || navigation->IsSameDocument())
+    return;
+  pending_url_ = navigation->GetURL();
+  pending_navigation_id_ = navigation->GetNavigationId();
+  message_.clear();
+  message_timer_.Stop();
+  ClearTarget();
+}
+void StatusBar::DidRedirectNavigation(content::NavigationHandle* navigation) {
+  if (navigation->IsInPrimaryMainFrame() &&
+      (navigation->GetNavigationId() == pending_navigation_id_ ||
+       !pending_navigation_id_)) {
+    pending_navigation_id_ = navigation->GetNavigationId();
+    pending_url_ = navigation->GetURL();
+    Update();
+  }
+}
+void StatusBar::DidStartLoading() {
+  Update();
+}
+void StatusBar::DidStopLoading() {
+  pending_url_ = GURL();
+  pending_navigation_id_ = 0;
+  Update();
 }
 void StatusBar::DidChangeVisibleSecurityState() {
   Update();
