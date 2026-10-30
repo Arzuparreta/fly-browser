@@ -402,7 +402,7 @@ TEST_F(PreferencesServiceTest, RemainingSettingsHaveDefaultsAndValidate) {
   EXPECT_EQ(true, service_.ReadBool("web_notifications"));
   EXPECT_EQ(false, service_.ReadBool("preload_address_results"));
   EXPECT_EQ(4, service_.ReadInt("process_limit"));
-  EXPECT_EQ("en-GB", service_.ReadString("spellchecker_language"));
+  EXPECT_FALSE(service_.ReadSpellcheck());
   EXPECT_EQ("normal", service_.ReadString("interface_scale"));
   EXPECT_FALSE(service_.ReadBool("unknown"));
   EXPECT_EQ(nullptr, prefs_.GetUserPref(kPreferencesPref));
@@ -455,4 +455,96 @@ TEST_F(PreferencesServiceTest, MalformedRemainingSettingsRequireRecovery) {
   EXPECT_EQ("4", command_line.GetSwitchValueASCII("renderer-process-limit"));
 }
 }  // namespace
+TEST_F(PreferencesServiceTest, SpellcheckKeepsChromiumsChoiceUntilChosen) {
+  EXPECT_FALSE(service_.ReadSpellcheck());
+  EXPECT_EQ(nullptr, prefs_.GetUserPref(kPreferencesPref));
+  ASSERT_TRUE(service_.SetSpellcheck({.enabled = true,
+                                      .languages = {"es", "en-GB", "de"}}));
+  PreferencesService restarted(prefs_);
+  const auto spellcheck = restarted.ReadSpellcheck();
+  ASSERT_TRUE(spellcheck);
+  EXPECT_TRUE(spellcheck->enabled);
+  // The order is the user's: the first language is checked first.
+  EXPECT_EQ((std::vector<std::string>{"es", "en-GB", "de"}),
+            spellcheck->languages);
+  ASSERT_TRUE(restarted.SetSpellcheck({.enabled = false, .languages = {}}));
+  EXPECT_EQ((SpellcheckPreferences{.enabled = false, .languages = {}}),
+            service_.ReadSpellcheck());
+}
+TEST_F(PreferencesServiceTest, SpellcheckReadsTheSingleLanguageOfEarlierFly) {
+  const auto legacy = [&](std::string value) {
+    prefs_.SetDict(kPreferencesPref,
+                   base::DictValue().Set("schema", 1).Set(
+                       "values", base::DictValue()
+                                     .Set("spellchecker_language", value)
+                                     .Set("show_clock", false)));
+    return service_.ReadSpellcheck();
+  };
+  EXPECT_EQ((SpellcheckPreferences{.enabled = true, .languages = {"es"}}),
+            legacy("es"));
+  EXPECT_EQ((SpellcheckPreferences{.enabled = true, .languages = {"pt-BR"}}),
+            legacy("pt"));
+  EXPECT_EQ((SpellcheckPreferences{.enabled = false, .languages = {}}),
+            legacy("disabled"));
+  EXPECT_EQ((SpellcheckPreferences{.enabled = true, .languages = {}}),
+            legacy("xx"));
+  // Choosing again replaces the single language and keeps other settings.
+  legacy("en-GB");
+  ASSERT_TRUE(service_.SetSpellcheck({.enabled = true,
+                                      .languages = {"en-GB", "es"}}));
+  const auto* values = prefs_.GetDict(kPreferencesPref).FindDict("values");
+  ASSERT_TRUE(values);
+  EXPECT_FALSE(values->Find("spellchecker_language"));
+  EXPECT_EQ(false, values->FindBool("show_clock"));
+  EXPECT_EQ((std::vector<std::string>{"en-GB", "es"}),
+            service_.ReadSpellcheck()->languages);
+}
+TEST_F(PreferencesServiceTest, SpellcheckRefusesUnknownRepeatedOrTooMany) {
+  for (const auto& languages : std::vector<std::vector<std::string>>{
+           {"xx"},
+           {"es", "es"},
+           {"es-ES"},
+           {"en-GB", "es", "fr", "de", "it", "pt-BR"}}) {
+    EXPECT_FALSE(service_.SetSpellcheck({.enabled = true,
+                                         .languages = languages}));
+  }
+  EXPECT_EQ(nullptr, prefs_.GetUserPref(kPreferencesPref));
+  EXPECT_TRUE(service_.SetSpellcheck(
+      {.enabled = true, .languages = {"en-GB", "es", "fr", "de", "it"}}));
+}
+TEST_F(PreferencesServiceTest, SpellcheckLeavesOutUnknownAndExtraLanguages) {
+  base::ListValue stored;
+  for (const char* code :
+       {"xx-future", "es", "es-MX", "en-GB", "de", "fr", "it", "pl", "nl"})
+    stored.Append(code);
+  prefs_.SetDict(kPreferencesPref,
+                 base::DictValue().Set("schema", 1).Set(
+                     "values", base::DictValue().Set("spellcheck_languages",
+                                                     std::move(stored))));
+  EXPECT_EQ((SpellcheckPreferences{
+                .enabled = true,
+                .languages = {"es", "en-GB", "de", "fr", "it"}}),
+            service_.ReadSpellcheck());
+  // A malformed list needs recovery, like any other malformed value.
+  std::vector<base::Value> malformed_values;
+  malformed_values.emplace_back("es");
+  malformed_values.emplace_back(base::ListValue().Append(1));
+  for (const auto& value : malformed_values) {
+    const auto malformed =
+        base::DictValue().Set("schema", 1).Set(
+            "values", base::DictValue().Set("spellcheck_languages",
+                                            value.Clone()));
+    prefs_.SetDict(kPreferencesPref, malformed.Clone());
+    EXPECT_FALSE(service_.ReadSpellcheck());
+    EXPECT_FALSE(service_.ReadClock());
+    EXPECT_FALSE(service_.SetSpellcheck({.enabled = true, .languages = {}}));
+    EXPECT_EQ(malformed, prefs_.GetDict(kPreferencesPref));
+  }
+  const auto policy = base::DictValue().Set("schema", 1).Set(
+      "values", base::DictValue().Set("spellcheck_enabled", false));
+  prefs_.SetManagedPref(kPreferencesPref, base::Value(policy.Clone()));
+  EXPECT_EQ((SpellcheckPreferences{.enabled = false, .languages = {}}),
+            service_.ReadSpellcheck());
+  EXPECT_FALSE(service_.SetSpellcheck({.enabled = true, .languages = {"es"}}));
+}
 }  // namespace fly

@@ -25,7 +25,7 @@ and the `app_id` on Wayland. Notifications name the app `Fly` and point to
 ## Preferences
 
 Use **Preferences** for appearance, keyboard bindings, search and aliases,
-performance, privacy and extensions. Fly stores product dictionaries in
+spell checking, performance, privacy and extensions. Fly stores product dictionaries in
 Chromium's `Local State`; workspace profiles hold Chromium `Preferences`,
 cookies, history and extension state. Files are managed by Chromium's
 PrefService. Close Fly and back up the directory before inspecting or changing
@@ -36,6 +36,9 @@ The implementation contracts are in
 workspace, keyboard, bookmark and session services. The default process limit
 is four; it is a renderer process policy, not a guarantee that every site can
 share one renderer. Interface scale and website zoom are separate preferences.
+Spell checking (`spellcheck_enabled` and the ordered `spellcheck_languages`, at
+most five) is written into every workspace profile's `spellcheck.enable` and
+`spellcheck.dictionaries`; see [spell checking](/guide/spell-checking).
 
 ## Local user content
 

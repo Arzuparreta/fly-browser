@@ -45,6 +45,7 @@ export default defineConfig({
           { text: 'Mouse-Free Navigation', link: '/guide/navigation' },
           { text: 'Workspaces & Containers', link: '/guide/workspaces-and-containers' },
           { text: 'Tab Suspension', link: '/guide/tab-hibernation' },
+          { text: 'Spell Checking', link: '/guide/spell-checking' },
           { text: 'Privacy & Ad Blocking', link: '/guide/privacy-and-shields' },
           { text: 'Bookmarks & History', link: '/guide/bookmarks-and-history' },
           { text: 'Terminal Security & Oversight', link: '/guide/terminal-oversight' },

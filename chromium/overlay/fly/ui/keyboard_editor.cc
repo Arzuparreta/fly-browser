@@ -13,6 +13,7 @@
 #include "base/functional/bind.h"
 #include "base/json/json_reader.h"
 #include "base/json/json_writer.h"
+#include "base/strings/strcat.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/strings/string_split.h"
 #include "base/strings/string_util.h"
@@ -22,11 +23,15 @@
 #include "base/version_info/version_info.h"
 #include "cc/paint/paint_flags.h"
 #include "chrome/browser/profiles/profile.h"
+#include "chrome/browser/spellchecker/spellcheck_factory.h"
+#include "chrome/browser/spellchecker/spellcheck_service.h"
 #include "chrome/browser/ui/browser_window/public/browser_window_interface.h"
 #include "chrome/browser/ui/tabs/tab_strip_model.h"
 #include "components/input/native_web_keyboard_event.h"
 #include "content/public/browser/web_contents.h"
 #include "fly/fly_version.h"
+#include "fly/preferences/spellcheck_languages.h"
+#include "fly/ui/fly_actions.h"
 #include "fly/ui/fly_extensions.h"
 #include "fly/ui/fly_menu.h"
 #include "fly/ui/fly_theme.h"
@@ -74,20 +79,6 @@ constexpr auto kEmailHandlers = std::to_array<std::pair<std::string_view, std::u
      u"Outlook"},
     {"https://mail.proton.me/u/0/compose?subject=%s&body=%b", u"Proton Mail"},
     {"https://app.fastmail.com/mail/compose?subject=%s&body=%b", u"Fastmail"}});
-constexpr auto kSpellcheckLanguages = std::to_array<std::pair<std::string_view, std::u16string_view>>({
-        {"en-GB", u"English (UK)"},
-        {"en-US", u"English (US)"},
-        {"en-CA", u"English (Canada)"},
-        {"en-AU", u"English (Australia)"},
-        {"cs", u"Čeština"},
-        {"de", u"Deutsch"},
-        {"fr", u"Français"},
-        {"es", u"Español"},
-        {"it", u"Italiano"},
-        {"pt", u"Português"},
-        {"nl", u"Nederlands"},
-        {"pl", u"Polski"},
-        {"disabled", u"Off"}});
 constexpr auto kBuiltinAliases = std::to_array<std::pair<std::u16string_view, std::u16string_view>>({
         {u"!w", u"Wikipedia"},       {u"!gh", u"GitHub"},
         {u"!yt", u"YouTube"},        {u"!a", u"Arch Wiki"},
@@ -111,6 +102,8 @@ enum MoreCommand {
   kImportBindings,
   kExportBindings,
 };
+// The Spelling section's language menu: this plus the index of the language.
+constexpr int kSpellingLanguageCommand = 1000;
 
 std::vector<std::u16string> SplitBindings(std::u16string_view text) {
   return base::SplitString(text, u"\n", base::TRIM_WHITESPACE,
@@ -446,6 +439,8 @@ KeyboardEditor::~KeyboardEditor() {
   Observe(nullptr);
   if (more_runner_)
     more_runner_->Cancel();
+  if (spelling_runner_)
+    spelling_runner_->Cancel();
   ClearContent();
   rail_.clear();
   settings_search_ = nullptr;
@@ -632,7 +627,12 @@ void KeyboardEditor::ClearContent() {
   email_choice_ = nullptr;
   email_custom_row_ = nullptr;
   email_handler_ = nullptr;
-  spellcheck_choice_ = nullptr;
+  StopObservingDictionaries();
+  spelling_list_ = nullptr;
+  spelling_add_ = nullptr;
+  spelling_buttons_.clear();
+  spelling_names_.clear();
+  spelling_shown_.clear();
   scale_choice_ = nullptr;
   clock_format_ = nullptr;
   suspension_timeout_ = nullptr;
@@ -972,27 +972,7 @@ void KeyboardEditor::BuildGeneral() {
       search_save_ = save_ptr;
     }
   }
-  {
-    std::vector<std::u16string> languages;
-    for (const auto& [code, label] : kSpellcheckLanguages)
-      languages.emplace_back(label);
-    auto select = std::make_unique<FlySelect>(
-        std::move(languages),
-        base::BindRepeating(
-            [](base::WeakPtr<KeyboardEditor> editor, size_t index) {
-              if (editor && editor->active() &&
-                  index < std::size(kSpellcheckLanguages))
-                editor->preferences_.SetString(
-                    "spellchecker_language",
-                    std::string(kSpellcheckLanguages.at(index).first));
-            },
-            weak_factory_.GetWeakPtr()),
-        u"Spellcheck language");
-    auto* choice = select.get();
-    if (AddRow(u"Spellcheck language", u"", u"spelling dictionary",
-               std::move(select)))
-      spellcheck_choice_ = choice;
-  }
+  BuildSpelling();
   BeginGroup(u"Sharing");
   {
     std::vector<std::u16string> handlers;
@@ -1892,6 +1872,13 @@ void KeyboardEditor::ShowMoreMenu() {
 void KeyboardEditor::ExecuteCommand(int command_id, int) {
   if (!active())
     return;
+  if (command_id >= kSpellingLanguageCommand) {
+    const size_t index =
+        static_cast<size_t>(command_id - kSpellingLanguageCommand);
+    if (index < spelling_menu_codes_.size())
+      AddSpellingLanguage(spelling_menu_codes_[index]);
+    return;
+  }
   switch (command_id) {
     case kRestoreDefaults:
       ResetAll();
@@ -2246,6 +2233,300 @@ void KeyboardEditor::RemoveAlias(std::string alias) {
                      weak_factory_.GetWeakPtr(), std::move(alias)));
 }
 
+// Spelling: the languages words are checked in. A word is correct when any
+// of them knows it; the first is tried first and leads the suggestions.
+void KeyboardEditor::BuildSpelling() {
+  BeginGroup(u"Spelling");
+  AddRow(u"Check spelling", u"In the text fields of web pages.",
+         u"spellcheck spell checker typos",
+         MakeToggle("spellcheck_enabled", u"Check spelling"));
+  {
+    auto list = std::make_unique<views::View>();
+    auto* layout = list->SetLayoutManager(std::make_unique<views::BoxLayout>(
+        views::BoxLayout::Orientation::kVertical, gfx::Insets(), S(4)));
+    layout->set_cross_axis_alignment(
+        views::BoxLayout::CrossAxisAlignment::kStretch);
+    // The group's caption names the list, so the row has no label.
+    list->GetViewAccessibility().SetRole(ax::mojom::Role::kGroup);
+    list->GetViewAccessibility().SetName(u"Spelling languages");
+    auto* list_ptr = list.get();
+    if (AddRow(u"", u"",
+               u"spelling languages spellcheck dictionaries order first",
+               std::move(list), true))
+      spelling_list_ = list_ptr;
+  }
+  {
+    auto add = MakeMenuButton(
+        base::BindRepeating(&KeyboardEditor::ShowSpellingMenu,
+                            weak_factory_.GetWeakPtr()),
+        u"Add…");
+    add->GetViewAccessibility().SetName(u"Add a spelling language");
+    auto* add_ptr = add.get();
+    if (AddRow(u"Add language",
+               base::StrCat({u"Up to ",
+                             base::NumberToString16(kMaxSpellcheckLanguages),
+                             u". Dictionaries come from Google."}),
+               u"spelling spellcheck dictionary language download",
+               std::move(add)))
+      spelling_add_ = add_ptr;
+  }
+  AddNote(
+      u"A word is correct when any of these languages has it. The first is "
+      u"checked first and leads the suggestions. Each extra language makes "
+      u"suggestions slower and lets more typos pass as words of another one.");
+}
+
+Profile* KeyboardEditor::SpellingProfile() const {
+  auto* profile = extensions_profile_ ? extensions_profile_.Run() : nullptr;
+  return profile ? profile->GetOriginalProfile() : nullptr;
+}
+
+void KeyboardEditor::RefreshSpelling() {
+  if (!active())
+    return;
+  auto* profile = SpellingProfile();
+  const auto spelling = ReadEffectiveSpellcheck(profile, preferences_);
+  const bool editable = preferences_.CanEdit();
+  if (auto it = appearance_.find("spellcheck_enabled");
+      it != appearance_.end()) {
+    it->second->SetChecked(spelling.enabled);
+    it->second->SetEnabled(editable);
+  }
+  if (spelling_add_)
+    spelling_add_->SetEnabled(editable && spelling.languages.size() <
+                                              kMaxSpellcheckLanguages);
+  if (!spelling_list_)
+    return;
+  // The download state of each dictionary in the selected workspace; the
+  // dictionary files are shared by every workspace.
+  StopObservingDictionaries();
+  std::map<std::string, std::u16string> states;
+  std::set<std::string> failed;
+  if (auto* service =
+          profile ? SpellcheckServiceFactory::GetForContext(profile) : nullptr) {
+    for (const auto& dictionary : service->GetHunspellDictionaries()) {
+      dictionary->AddObserver(this);
+      observed_dictionaries_.push_back(dictionary->AsWeakPtr());
+      const auto* language = FindSpellcheckLanguage(dictionary->GetLanguage());
+      if (!language)
+        continue;
+      const std::string code(language->code);
+      if (dictionary->IsDownloadInProgress()) {
+        states[code] = u"Downloading…";
+      } else if (dictionary->IsDownloadFailure()) {
+        states[code] = u"Download failed";
+        failed.insert(code);
+      }
+    }
+  }
+  std::string shown =
+      base::JoinString(spelling.languages, ",") + (editable ? "+" : "-");
+  for (const auto& [code, state] : states)
+    shown += "|" + code + base::UTF16ToUTF8(state);
+  if (shown == spelling_shown_)
+    return;
+  spelling_shown_ = shown;
+  spelling_buttons_.clear();
+  spelling_names_.clear();
+  spelling_list_->RemoveAllChildViews();
+  if (spelling.languages.empty())
+    spelling_list_->AddChildView(
+        Text(u"No languages yet. Add one to check spelling.",
+             kMenuSmallTextSize, FlyLabel::Tone::kDim));
+  for (size_t i = 0; i < spelling.languages.size(); ++i) {
+    const std::string& code = spelling.languages[i];
+    const auto* language = FindSpellcheckLanguage(code);
+    const std::u16string name =
+        language ? std::u16string(language->name) : base::UTF8ToUTF16(code);
+    spelling_names_.push_back(name);
+    auto* line = spelling_list_->AddChildView(std::make_unique<views::View>());
+    auto* layout = line->SetLayoutManager(std::make_unique<views::BoxLayout>(
+        views::BoxLayout::Orientation::kHorizontal, gfx::Insets(), S(10)));
+    layout->set_cross_axis_alignment(
+        views::BoxLayout::CrossAxisAlignment::kCenter);
+    // The position is the order the languages are checked in.
+    auto* position = line->AddChildView(std::make_unique<FlyLabel>(
+        base::NumberToString16(i + 1), FlyFace::kMono, kMenuSmallTextSize,
+        gfx::Font::Weight::MEDIUM));
+    position->SetPreferredSize(
+        gfx::Size(S(16), position->GetPreferredSize().height()));
+    position->SetHorizontalAlignment(gfx::ALIGN_LEFT);
+    auto* label = line->AddChildView(Text(name, kMenuSmallTextSize));
+    label->SetElideBehavior(gfx::ELIDE_TAIL);
+    layout->SetFlexForView(label, 1);
+    if (const auto state = states.find(code); state != states.end())
+      line->AddChildView(
+          Text(state->second, kMenuSmallTextSize, FlyLabel::Tone::kDim));
+    const auto add_button = [&](std::string action, std::u16string text,
+                                std::u16string accessible_name, bool enabled) {
+      auto* button = line->AddChildView(MakeMenuButton(
+          base::BindRepeating(&KeyboardEditor::ChangeSpellingLanguage,
+                              weak_factory_.GetWeakPtr(), action, code),
+          std::move(text), MenuButtonStyle::kQuiet));
+      button->GetViewAccessibility().SetName(accessible_name);
+      button->SetEnabled(enabled);
+      spelling_buttons_[action + ":" + code] = button;
+    };
+    if (failed.contains(code))
+      add_button("retry", u"Retry", u"Download the " + name + u" dictionary again",
+                 true);
+    add_button("up", u"Up", u"Move " + name + u" up", editable && i > 0);
+    add_button("remove", u"Remove", u"Remove " + name, editable);
+  }
+  DisableSubpixelText(spelling_list_);
+  spelling_list_->InvalidateLayout();
+}
+
+void KeyboardEditor::StopObservingDictionaries() {
+  for (const auto& dictionary : observed_dictionaries_)
+    if (dictionary)
+      dictionary->RemoveObserver(this);
+  observed_dictionaries_.clear();
+}
+
+void KeyboardEditor::SaveSpelling(SpellcheckPreferences spelling,
+                                  std::u16string done) {
+  if (!active())
+    return;
+  SetStatus(preferences_.SetSpellcheck(spelling)
+                ? std::move(done)
+                : u"Spelling settings were not saved.");
+  RefreshSpelling();
+  // The workspaces load the new dictionaries once every observer of the
+  // change has run; their download states are read after that.
+  base::SingleThreadTaskRunner::GetCurrentDefault()->PostTask(
+      FROM_HERE, base::BindOnce(&KeyboardEditor::RefreshSpelling,
+                                weak_factory_.GetWeakPtr()));
+}
+
+void KeyboardEditor::ShowSpellingMenu() {
+  if (!active() || !spelling_add_)
+    return;
+  const auto spelling = ReadEffectiveSpellcheck(SpellingProfile(), preferences_);
+  spelling_menu_codes_.clear();
+  spelling_model_ = std::make_unique<ui::SimpleMenuModel>(this);
+  for (const auto& language : SpellcheckLanguages()) {
+    if (std::ranges::contains(spelling.languages, language.code))
+      continue;
+    spelling_model_->AddItem(
+        kSpellingLanguageCommand + static_cast<int>(spelling_menu_codes_.size()),
+        std::u16string(language.name));
+    spelling_menu_codes_.emplace_back(language.code);
+  }
+  spelling_runner_ =
+      std::make_unique<views::MenuRunner>(spelling_model_.get(), 0);
+  spelling_runner_->RunMenuAt(spelling_add_->GetWidget(), nullptr,
+                              spelling_add_->GetBoundsInScreen(),
+                              views::MenuAnchorPosition::kBubbleTopLeft,
+                              ui::mojom::MenuSourceType::kNone);
+}
+
+void KeyboardEditor::AddSpellingLanguage(const std::string& code) {
+  if (!active())
+    return;
+  auto spelling = ReadEffectiveSpellcheck(SpellingProfile(), preferences_);
+  const auto* language = FindSpellcheckLanguage(code);
+  if (!language || std::ranges::contains(spelling.languages, language->code))
+    return;
+  if (spelling.languages.size() >= kMaxSpellcheckLanguages) {
+    SetStatus(base::StrCat({u"Up to ",
+                            base::NumberToString16(kMaxSpellcheckLanguages),
+                            u" languages: remove one first."}));
+    return;
+  }
+  spelling.languages.emplace_back(language->code);
+  SaveSpelling(std::move(spelling),
+               std::u16string(language->name) + u" added.");
+}
+
+void KeyboardEditor::ChangeSpellingLanguage(std::string action,
+                                            std::string code) {
+  // The list is rebuilt; finish the button's own event first.
+  base::SingleThreadTaskRunner::GetCurrentDefault()->PostTask(
+      FROM_HERE,
+      base::BindOnce(
+          [](base::WeakPtr<KeyboardEditor> editor, std::string action,
+             std::string code) {
+            if (!editor || !editor->active())
+              return;
+            auto* profile = editor->SpellingProfile();
+            if (action == "retry") {
+              if (auto* service = profile ? SpellcheckServiceFactory::
+                                                GetForContext(profile)
+                                          : nullptr)
+                for (const auto& dictionary : service->GetHunspellDictionaries())
+                  if (const auto* language =
+                          FindSpellcheckLanguage(dictionary->GetLanguage());
+                      language && language->code == code &&
+                      dictionary->IsDownloadFailure())
+                    dictionary->RetryDownloadDictionary(profile);
+              editor->RefreshSpelling();
+              return;
+            }
+            auto spelling =
+                ReadEffectiveSpellcheck(profile, editor->preferences_);
+            const auto found = std::ranges::find(spelling.languages, code);
+            if (found == spelling.languages.end())
+              return;
+            const auto* language = FindSpellcheckLanguage(code);
+            const std::u16string name = language
+                                            ? std::u16string(language->name)
+                                            : base::UTF8ToUTF16(code);
+            if (action == "up" && found != spelling.languages.begin()) {
+              std::iter_swap(found, std::prev(found));
+              editor->SaveSpelling(std::move(spelling), name + u" moved up.");
+            } else if (action == "remove") {
+              spelling.languages.erase(found);
+              editor->SaveSpelling(std::move(spelling), name + u" removed.");
+            }
+          },
+          weak_factory_.GetWeakPtr(), std::move(action), std::move(code)));
+}
+
+void KeyboardEditor::OnHunspellDictionaryInitialized(const std::string&) {
+  base::SingleThreadTaskRunner::GetCurrentDefault()->PostTask(
+      FROM_HERE, base::BindOnce(&KeyboardEditor::RefreshSpelling,
+                                weak_factory_.GetWeakPtr()));
+}
+
+void KeyboardEditor::OnHunspellDictionaryDownloadBegin(const std::string&) {
+  base::SingleThreadTaskRunner::GetCurrentDefault()->PostTask(
+      FROM_HERE, base::BindOnce(&KeyboardEditor::RefreshSpelling,
+                                weak_factory_.GetWeakPtr()));
+}
+
+void KeyboardEditor::OnHunspellDictionaryDownloadSuccess(const std::string&) {
+  base::SingleThreadTaskRunner::GetCurrentDefault()->PostTask(
+      FROM_HERE, base::BindOnce(&KeyboardEditor::RefreshSpelling,
+                                weak_factory_.GetWeakPtr()));
+}
+
+void KeyboardEditor::OnHunspellDictionaryDownloadFailure(const std::string&) {
+  base::SingleThreadTaskRunner::GetCurrentDefault()->PostTask(
+      FROM_HERE, base::BindOnce(&KeyboardEditor::RefreshSpelling,
+                                weak_factory_.GetWeakPtr()));
+}
+
+std::vector<std::u16string> KeyboardEditor::spelling_languages_for_testing()
+    const {
+  return spelling_names_;
+}
+
+views::Button* KeyboardEditor::spelling_button_for_testing(
+    std::string_view action,
+    std::string_view code) {
+  const auto found = spelling_buttons_.find(base::StrCat({action, ":", code}));
+  return found == spelling_buttons_.end() ? nullptr : found->second.get();
+}
+
+views::Button* KeyboardEditor::spelling_add_for_testing() {
+  return spelling_add_;
+}
+
+void KeyboardEditor::AddSpellingLanguageForTesting(const std::string& code) {
+  AddSpellingLanguage(code);
+}
+
 void KeyboardEditor::ShowKeyboard() {
   if (!active())
     return;
@@ -2390,6 +2671,7 @@ void KeyboardEditor::RefreshAppearance() {
   if (!active())
     return;
   RefreshSearchSection();
+  RefreshSpelling();
   RefreshExtensions();
   const auto theme = preferences_.ReadTheme();
   const auto clock = preferences_.ReadClock();
@@ -2452,16 +2734,6 @@ void KeyboardEditor::RefreshAppearance() {
         std::clamp(preferences_.ReadInt("process_limit").value_or(4), 1, 8) -
         1));
     process_limit_->SetEnabled(editable);
-  }
-  if (spellcheck_choice_) {
-    const auto language =
-        preferences_.ReadString("spellchecker_language").value_or("en-GB");
-    std::optional<size_t> index;
-    for (size_t i = 0; i < std::size(kSpellcheckLanguages); ++i)
-      if (kSpellcheckLanguages.at(i).first == language)
-        index = i;
-    spellcheck_choice_->SetSelectedIndex(index);
-    spellcheck_choice_->SetEnabled(editable);
   }
   if (email_choice_) {
     const auto email =
@@ -2572,6 +2844,11 @@ void KeyboardEditor::ChangeAppearance(std::string key) {
     preferences_.SetWindowControlsVisible(checked);
   } else if (key == "sidebar_auto_collapse") {
     preferences_.SetSidebarAutoCollapse(checked);
+  } else if (key == "spellcheck_enabled") {
+    auto spelling = ReadEffectiveSpellcheck(SpellingProfile(), preferences_);
+    spelling.enabled = checked;
+    SaveSpelling(std::move(spelling), checked ? u"Spelling is checked."
+                                              : u"Spelling is not checked.");
   } else {
     preferences_.SetBool(key, checked);
   }
@@ -2835,6 +3112,8 @@ void KeyboardEditor::Cancel(bool restore_focus) {
   closing_ = true;
   if (more_runner_)
     more_runner_->Cancel();
+  if (spelling_runner_)
+    spelling_runner_->Cancel();
   overlay_->Hide();
   base::SingleThreadTaskRunner::GetCurrentDefault()->PostTask(
       FROM_HERE, base::BindOnce(&KeyboardEditor::FinishClose,
@@ -2854,6 +3133,8 @@ void KeyboardEditor::FinishClose(bool restore_focus) {
   source_tab_.clear();
   more_runner_.reset();
   more_model_.reset();
+  spelling_runner_.reset();
+  spelling_model_.reset();
   overlay_.reset();
   draft_.clear();
   catalog_.clear();

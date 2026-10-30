@@ -55,6 +55,7 @@
 #include "content/public/browser/web_contents.h"
 #include "fly/fly_version.h"
 #include "fly/preferences/preferences_service.h"
+#include "fly/preferences/spellcheck_languages.h"
 #include "net/base/filename_util.h"
 #include "net/base/net_errors.h"
 #include "net/base/url_util.h"
@@ -545,19 +546,37 @@ void ApplyProfilePreferences(Profile* profile,
   }
   if (profile->IsOffTheRecord())
     return;
-  if (const auto language = preferences.ReadString("spellchecker_language");
-      language && preferences.HasStoredValue("spellchecker_language")) {
+  // Private workspaces read the profile they belong to.
+  if (const auto choice = preferences.ReadSpellcheck()) {
     auto* prefs = profile->GetPrefs();
-    const bool enabled = !language->empty() && *language != "disabled" &&
-                         *language != "none";
-    prefs->SetBoolean(spellcheck::prefs::kSpellCheckEnable, enabled);
-    if (enabled) {
-      base::ListValue dictionaries;
-      dictionaries.Append(*language);
-      prefs->SetList(spellcheck::prefs::kSpellCheckDictionaries,
-                     std::move(dictionaries));
-    }
+    base::ListValue dictionaries;
+    for (const auto& language : choice->languages)
+      dictionaries.Append(language);
+    // Chromium loads the dictionaries in this order (patch 0044): its
+    // renderers try the first language first and list its suggestions first.
+    prefs->SetList(spellcheck::prefs::kSpellCheckDictionaries,
+                   std::move(dictionaries));
+    prefs->SetBoolean(spellcheck::prefs::kSpellCheckEnable, choice->enabled);
   }
+}
+
+SpellcheckPreferences ReadEffectiveSpellcheck(
+    Profile* profile,
+    const PreferencesService& preferences) {
+  if (const auto choice = preferences.ReadSpellcheck())
+    return *choice;
+  SpellcheckPreferences result;
+  if (!profile)
+    return result;
+  const auto* prefs = profile->GetOriginalProfile()->GetPrefs();
+  result.enabled = prefs->GetBoolean(spellcheck::prefs::kSpellCheckEnable);
+  std::vector<std::string> dictionaries;
+  for (const auto& value :
+       prefs->GetList(spellcheck::prefs::kSpellCheckDictionaries))
+    if (value.is_string())
+      dictionaries.push_back(value.GetString());
+  result.languages = NormalizeSpellcheckLanguages(dictionaries);
+  return result;
 }
 
 void CheckForUpdates(base::OnceCallback<void(UpdateCheckResult)> done) {

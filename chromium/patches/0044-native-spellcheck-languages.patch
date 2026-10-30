@@ -1,0 +1,450 @@
+--- a/chrome/browser/ui/BUILD.gn
++++ b/chrome/browser/ui/BUILD.gn
+@@ -816,6 +816,8 @@
+       "//fly/ui/new_tab_ui.h",
+       "//fly/ui/download_shelf.cc",
+       "//fly/ui/download_shelf.h",
++      "//fly/ui/spellcheck_sync.cc",
++      "//fly/ui/spellcheck_sync.h",
+       "//fly/ui/fly_theme.cc",
+       "//fly/ui/fly_theme.h",
+       "//fly/ui/fly_menu.cc",
+--- a/chrome/browser/renderer_context_menu/spelling_options_submenu_observer.cc
++++ b/chrome/browser/renderer_context_menu/spelling_options_submenu_observer.cc
+@@ -50,6 +50,26 @@ void SpellingOptionsSubMenuObserver::InitMenu(
+     const content::ContextMenuParams& params) {
+   DCHECK_CURRENTLY_ON(BrowserThread::UI);
+ 
++  // Fly: its Preferences choose the spelling languages, all checked together.
++  // Chromium's list here (the languages sent to websites) would replace them
++  // with one, so only the switches stay.
++  if (base::CommandLine::ForCurrentProcess()->HasSwitch("fly-native")) {
++    Profile* profile = Profile::FromBrowserContext(proxy_->GetBrowserContext());
++    submenu_model_.AddCheckItem(
++        IDC_CHECK_SPELLING_WHILE_TYPING,
++        l10n_util::GetStringUTF16(
++            IDS_CONTENT_CONTEXT_CHECK_SPELLING_WHILE_TYPING));
++    RenderViewContextMenu::AddSpellCheckServiceItem(
++        &submenu_model_,
++        profile->GetPrefs()->GetBoolean(spellcheck::prefs::kSpellCheckEnable) &&
++            use_spelling_service_.GetValue());
++    proxy_->AddSubMenu(
++        kSubMenuPlaceholder,
++        l10n_util::GetStringUTF16(IDS_CONTENT_CONTEXT_SPELLCHECK_MENU),
++        &submenu_model_);
++    return;
++  }
++
+   // Add available spell-checker languages to the sub menu.
+   content::BrowserContext* browser_context = proxy_->GetBrowserContext();
+   DCHECK(browser_context);
+--- a/chrome/browser/spellchecker/spellcheck_service.cc
++++ b/chrome/browser/spellchecker/spellcheck_service.cc
+@@ -11,6 +11,7 @@
+ #include <utility>
+ 
+ #include "base/check_op.h"
++#include "base/command_line.h"
+ #include "base/containers/to_vector.h"
+ #include "base/functional/bind.h"
+ #include "base/functional/callback_helpers.h"
+@@ -569,15 +570,22 @@ void SpellcheckService::LoadDictionaries() {
+     blocked_dictionaries_lookup.insert(blocked_dict.GetString());
+   }
+ 
+-  // Merge both lists of dictionaries. Use a set to avoid duplicates.
+-  std::set<std::string> dictionaries;
++  // Merge both lists of dictionaries without duplicates. Fly: in the user's
++  // order instead of sorted, so that renderers try the first (primary)
++  // language first and list its suggestions first.
++  std::vector<std::string> dictionaries;
++  const auto add_dictionary = [&dictionaries](const std::string& dictionary) {
++    if (!std::ranges::contains(dictionaries, dictionary)) {
++      dictionaries.push_back(dictionary);
++    }
++  };
+   for (const auto& dictionary_value : user_dictionaries) {
+     if (!blocked_dictionaries_lookup.contains(dictionary_value.GetString())) {
+-      dictionaries.insert(dictionary_value.GetString());
++      add_dictionary(dictionary_value.GetString());
+     }
+   }
+   for (const auto& dictionary_value : forced_dictionaries) {
+-    dictionaries.insert(dictionary_value.GetString());
++    add_dictionary(dictionary_value.GetString());
+   }
+ 
+   for (const std::string& dictionary : dictionaries) {
+@@ -998,6 +1006,11 @@ void SpellcheckService::OnUseSpellingServiceChanged() {
+ void SpellcheckService::OnAcceptLanguagesChanged() {
+   // Accept-Languages and spell check are decoupled on CrOS.
+ #if !BUILDFLAG(IS_CHROMEOS)
++  // Fly: also in Fly, whose Preferences choose the spell check languages
++  // apart from the languages sent to websites.
++  if (base::CommandLine::ForCurrentProcess()->HasSwitch("fly-native")) {
++    return;
++  }
+   std::vector<std::string> accept_languages = GetNormalizedAcceptLanguages();
+ 
+   StringListPrefMember dictionaries_pref;
+--- a/components/spellcheck/renderer/hunspell_engine.cc
++++ b/components/spellcheck/renderer/hunspell_engine.cc
+@@ -117,6 +117,23 @@ void HunspellEngine::FillSuggestionList(
+   }
+ }
+ 
++bool HunspellEngine::FillSuggestionPart(
++    SuggestionPart part,
++    const std::u16string& wrong_word,
++    spellcheck::mojom::SpellCheckHost& host,
++    std::vector<std::u16string>* optional_suggestions) {
++  if (!hunspell_) {
++    return true;
++  }
++  hunspell_->set_suggest_part(part == SuggestionPart::kNearMiss
++                                  ? Hunspell::kSuggestNearMiss
++                                  : Hunspell::kSuggestRest);
++  FillSuggestionList(wrong_word, host, optional_suggestions);
++  const bool complete = !hunspell_->ngram_skipped();
++  hunspell_->set_suggest_part(Hunspell::kSuggestAll);
++  return complete;
++}
++
+ bool HunspellEngine::InitializeIfNeeded() {
+   if (!initialized_ && !dictionary_requested_) {
+     mojo::Remote<spellcheck::mojom::SpellCheckInitializationHost>
+--- a/components/spellcheck/renderer/hunspell_engine.h
++++ b/components/spellcheck/renderer/hunspell_engine.h
+@@ -36,6 +36,11 @@ class HunspellEngine : public SpellingEngine {
+       const std::u16string& wrong_word,
+       spellcheck::mojom::SpellCheckHost& host,
+       std::vector<std::u16string>* optional_suggestions) override;
++  bool FillSuggestionPart(
++      SuggestionPart part,
++      const std::u16string& wrong_word,
++      spellcheck::mojom::SpellCheckHost& host,
++      std::vector<std::u16string>* optional_suggestions) override;
+ 
+  private:
+   // Initializes the Hunspell dictionary, or does nothing if |hunspell_| is
+--- a/components/spellcheck/renderer/spellcheck.cc
++++ b/components/spellcheck/renderer/spellcheck.cc
+@@ -9,6 +9,7 @@
+ 
+ #include <algorithm>
+ #include <memory>
++#include <optional>
+ #include <string_view>
+ #include <utility>
+ #include <vector>
+@@ -311,9 +312,19 @@ bool SpellCheck::SpellCheckWord(
+   // A vector of vectors containing spelling suggestions from different
+   // languages.
+   std::vector<std::vector<std::u16string>> suggestions_list;
++  // Fly: the language behind each entry of |suggestions_list|, and whether
++  // its near misses are all it would suggest.
++  std::vector<SpellcheckLanguage*> suggesting_languages;
++  std::vector<bool> complete_suggestions;
+   // A vector to hold a language's misspelling suggestions between spellcheck
+   // calls.
+   std::vector<std::u16string> language_suggestions;
++  bool language_suggestions_complete = true;
++  // Fly: near misses first only matter with several languages.
++  std::optional<SpellingEngine::SuggestionPart> suggestion_part;
++  if (optional_per_language_suggestions && languages_.size() > 1) {
++    suggestion_part = SpellingEngine::SuggestionPart::kNearMiss;
++  }
+ 
+   const size_t text_length = text.size();
+   size_t position_in_text = 0;
+@@ -328,6 +339,8 @@ bool SpellCheck::SpellCheckWord(
+     *misspelling_start = 0;
+     *misspelling_len = 0;
+     suggestions_list.clear();
++    suggesting_languages.clear();
++    complete_suggestions.clear();
+ 
+     for (auto language = languages_.begin(); language != languages_.end();) {
+ #if BUILDFLAG(IS_WIN) && BUILDFLAG(USE_BROWSER_SPELLCHECKER)
+@@ -349,7 +362,8 @@ bool SpellCheck::SpellCheckWord(
+               &possible_misspelling_start_relative_to_substring,
+               &possible_misspelling_len,
+               optional_per_language_suggestions ? &language_suggestions
+-                                                : nullptr);
++                                                : nullptr,
++              suggestion_part, &language_suggestions_complete);
+       // SpellCheckWord informs us of a misspelling index relative to the
+       // substring of text which was passed in, so add `position_in_text` to
+       // this value to get the offset relative to `text`.
+@@ -374,6 +388,8 @@ bool SpellCheck::SpellCheckWord(
+             *misspelling_len = 0;
+             position_in_text = possible_misspelling_start;
+             suggestions_list.clear();
++            suggesting_languages.clear();
++            complete_suggestions.clear();
+             language = languages_.begin();
+           } else {
+             language++;
+@@ -387,10 +403,15 @@ bool SpellCheck::SpellCheckWord(
+           // another spellcheck language marked it as correct.
+           if (position_in_text != *misspelling_start) {
+             suggestions_list.clear();
++            suggesting_languages.clear();
++            complete_suggestions.clear();
+             language = languages_.begin();
+             position_in_text = *misspelling_start;
+           } else {
+             suggestions_list.push_back(language_suggestions);
++            suggesting_languages.push_back(language->get());
++            complete_suggestions.push_back(!suggestion_part ||
++                                           language_suggestions_complete);
+             language++;
+           }
+           break;
+@@ -401,6 +422,29 @@ bool SpellCheck::SpellCheckWord(
+     // marked a word misspelled and no other language considered it correct.
+     if (*misspelling_len != 0) {
+       if (optional_per_language_suggestions) {
++        // Fly: every language first offers its near misses (a swapped,
++        // missing or extra letter). A language searches its whole dictionary,
++        // which costs far more, only when it has near misses itself (the word
++        // looks like its own) or when no language has any. With one language
++        // this gives Hunspell's usual suggestions; with several, a word of one
++        // language no longer gets unrelated words of the others.
++        const bool near_miss_found = std::ranges::any_of(
++            suggestions_list, [](const std::vector<std::u16string>& list) {
++              return !list.empty();
++            });
++        for (size_t i = 0; i < suggestions_list.size(); ++i) {
++          if (complete_suggestions[i] ||
++              (near_miss_found && suggestions_list[i].empty())) {
++            continue;
++          }
++          size_t unused_start = 0;
++          size_t unused_length = 0;
++          suggestions_list[i].clear();
++          suggesting_languages[i]->SpellCheckWord(
++              text.substr(*misspelling_start), host, &unused_start,
++              &unused_length, &suggestions_list[i],
++              SpellingEngine::SuggestionPart::kAll);
++        }
+         optional_per_language_suggestions->swap(suggestions_list);
+       }
+       return false;
+--- a/components/spellcheck/renderer/spellcheck_language.cc
++++ b/components/spellcheck/renderer/spellcheck_language.cc
+@@ -45,7 +45,9 @@ SpellcheckLanguage::SpellcheckWordResult SpellcheckLanguage::SpellCheckWord(
+     spellcheck::mojom::SpellCheckHost& host,
+     size_t* skip_or_misspelling_start,
+     size_t* skip_or_misspelling_len,
+-    std::vector<std::u16string>* optional_suggestions) {
++    std::vector<std::u16string>* optional_suggestions,
++    std::optional<SpellingEngine::SuggestionPart> suggestion_part,
++    bool* near_miss_complete) {
+   DCHECK(skip_or_misspelling_start && skip_or_misspelling_len)
+       << "Out vars must be given.";
+ 
+@@ -109,7 +111,13 @@ SpellcheckLanguage::SpellcheckWordResult SpellcheckLanguage::SpellCheckWord(
+     *skip_or_misspelling_len = word_length;
+ 
+     // Get the list of suggested words.
+-    if (optional_suggestions) {
++    if (optional_suggestions && suggestion_part) {
++      const bool complete = platform_spelling_engine_->FillSuggestionPart(
++          *suggestion_part, word, host, optional_suggestions);
++      if (near_miss_complete) {
++        *near_miss_complete = complete;
++      }
++    } else if (optional_suggestions) {
+       platform_spelling_engine_->FillSuggestionList(word, host,
+                                                     optional_suggestions);
+     }
+--- a/components/spellcheck/renderer/spellcheck_language.h
++++ b/components/spellcheck/renderer/spellcheck_language.h
+@@ -13,6 +13,7 @@
+ 
+ #include "base/files/file.h"
+ #include "components/spellcheck/renderer/spellcheck_worditerator.h"
++#include "components/spellcheck/renderer/spelling_engine.h"
+ 
+ namespace service_manager {
+ class LocalInterfaceProvider;
+@@ -22,8 +23,6 @@ namespace spellcheck::mojom {
+ class SpellCheckHost;
+ }
+ 
+-class SpellingEngine;
+-
+ class SpellcheckLanguage {
+  public:
+   enum SpellcheckWordResult {
+@@ -67,12 +66,17 @@ class SpellcheckLanguage {
+   //   suggested words for a given misspelled word and puts them into
+   //   |*optional_suggestions|. If optional_suggestions is nullptr, suggested
+   //   words will not be looked up. Note that doing suggest lookups can be slow.
++  // Fly: with |suggestion_part|, only that part of the suggestions is looked
++  //   up; |near_miss_complete| then gets what FillSuggestionPart() returns.
+   SpellcheckWordResult SpellCheckWord(
+       std::u16string_view text,
+       spellcheck::mojom::SpellCheckHost& host,
+       size_t* skip_or_misspelling_start,
+       size_t* skip_or_misspelling_len,
+-      std::vector<std::u16string>* optional_suggestions);
++      std::vector<std::u16string>* optional_suggestions,
++      std::optional<SpellingEngine::SuggestionPart> suggestion_part =
++          std::nullopt,
++      bool* near_miss_complete = nullptr);
+ 
+   // Initialize |spellcheck_| if that hasn't happened yet.
+   bool InitializeIfNeeded();
+--- a/components/spellcheck/renderer/spelling_engine.cc
++++ b/components/spellcheck/renderer/spelling_engine.cc
+@@ -37,3 +37,12 @@ SpellingEngine* CreateNativeSpellingEngine(
+   return nullptr;
+ #endif
+ }
++
++bool SpellingEngine::FillSuggestionPart(
++    SuggestionPart part,
++    const std::u16string& wrong_word,
++    spellcheck::mojom::SpellCheckHost& host,
++    std::vector<std::u16string>* optional_suggestions) {
++  FillSuggestionList(wrong_word, host, optional_suggestions);
++  return true;
++}
+--- a/components/spellcheck/renderer/spelling_engine.h
++++ b/components/spellcheck/renderer/spelling_engine.h
+@@ -47,6 +47,18 @@ class SpellingEngine {
+       const std::u16string& wrong_word,
+       spellcheck::mojom::SpellCheckHost& host,
+       std::vector<std::u16string>* optional_suggestions) = 0;
++
++  // Fly: FillSuggestionList() in two steps. kNearMiss fills the suggestions
++  // found without searching the whole dictionary and returns false when that
++  // search would add some, because no near miss is a good one. kAll, next and
++  // for the same word, fills every suggestion without finding the near misses
++  // again. Engines without the distinction fill every suggestion both times.
++  enum class SuggestionPart { kNearMiss, kAll };
++  virtual bool FillSuggestionPart(
++      SuggestionPart part,
++      const std::u16string& wrong_word,
++      spellcheck::mojom::SpellCheckHost& host,
++      std::vector<std::u16string>* optional_suggestions);
+ };
+ 
+ #endif  // COMPONENTS_SPELLCHECK_RENDERER_SPELLING_ENGINE_H_
+--- a/third_party/hunspell/src/hunspell/hunspell.cxx
++++ b/third_party/hunspell/src/hunspell/hunspell.cxx
+@@ -83,6 +83,7 @@
+ #include "csutil.hxx"
+ 
+ #include <limits>
++#include <optional>
+ #include <string>
+ 
+ #define MAXWORDUTF8LEN (MAXWORDLEN * 2)
+@@ -113,6 +114,11 @@ public:
+              int* info = NULL, std::string* root = NULL);
+   std::vector<std::string> suggest(const std::string& word);
+   std::vector<std::string> suggest(const std::string& word, std::vector<std::string>& suggest_candidate_stack);
++  void set_suggest_part(Hunspell::SuggestPart part) {
++    suggest_part = part;
++    ngram_skipped_flag = false;
++  }
++  bool ngram_skipped() const { return ngram_skipped_flag; }
+   const std::string& get_wordchars_cpp() const;
+   const std::vector<w_char>& get_wordchars_utf16() const;
+   const std::string& get_dict_encoding() const;
+@@ -150,6 +156,18 @@ private:
+   int utf8;
+   int complexprefixes;
+   std::vector<std::string> wordbreak;
++  // Fly: see Hunspell::set_suggest_part(). What kSuggestNearMiss found for
++  // the word it stopped at.
++  Hunspell::SuggestPart suggest_part = Hunspell::kSuggestAll;
++  bool ngram_skipped_flag = false;
++  struct NearMisses {
++    std::string word;
++    std::vector<std::string> slst;
++    bool good;
++    int onlycmpdsug;
++    bool capwords;
++  };
++  std::optional<NearMisses> near_misses;
+ 
+ #ifdef HUNSPELL_CHROME_CLIENT
+   // Not owned by us, owned by the Hunspell object.
+@@ -1176,7 +1194,14 @@ std::vector<std::string> HunspellImpl::suggest_internal(const std::string& word,
+     }
+   }
+ 
+-  switch (captype) {
++  // Fly: kSuggestRest takes the near misses kSuggestNearMiss found for this
++  // word instead of finding them again (no case matches).
++  const bool top_level = suggest_candidate_stack.size() == 1;
++  if (suggest_part == Hunspell::kSuggestNearMiss && top_level)
++    near_misses.reset();
++  const bool resume = suggest_part == Hunspell::kSuggestRest && top_level &&
++                      near_misses && near_misses->word == word;
++  switch (resume ? -1 : captype) {
+     case NOCAP: {
+       good |= pSMgr->suggest(slst, scw, &onlycmpdsug);
+       if (clock() > timelimit + TIMELIMIT_GLOBAL)
+@@ -1320,8 +1345,21 @@ std::vector<std::string> HunspellImpl::suggest_internal(const std::string& word,
+     }
+   }
+   // END OF LANG_hu section
++  if (resume) {
++    slst = near_misses->slst;
++    good = near_misses->good;
++    onlycmpdsug = near_misses->onlycmpdsug;
++    capwords = near_misses->capwords;
++  }
+   // try ngram approach since found nothing good suggestion
+-  if (!good && pAMgr && (slst.empty() || onlycmpdsug) && (pAMgr->get_maxngramsugs() != 0)) {
++  const bool ngram_wanted = !good && pAMgr && (slst.empty() || onlycmpdsug) &&
++                            (pAMgr->get_maxngramsugs() != 0);
++  if (ngram_wanted && suggest_part == Hunspell::kSuggestNearMiss) {
++    ngram_skipped_flag = true;
++    if (top_level)
++      near_misses = NearMisses{word, slst, good, onlycmpdsug, capwords};
++  }
++  if (ngram_wanted && suggest_part != Hunspell::kSuggestNearMiss) {
+     switch (captype) {
+       case NOCAP: {
+         pSMgr->ngsuggest(slst, scw.c_str(), m_HMgrs, NOCAP);
+@@ -2202,6 +2240,14 @@ std::vector<std::string> Hunspell::suggest(const std::string& word) {
+   return m_Impl->suggest(word);
+ }
+ 
++void Hunspell::set_suggest_part(SuggestPart part) {
++  m_Impl->set_suggest_part(part);
++}
++
++bool Hunspell::ngram_skipped() const {
++  return m_Impl->ngram_skipped();
++}
++
+ std::vector<std::string> Hunspell::suffix_suggest(const std::string& root_word) {
+   return m_Impl->suffix_suggest(root_word);
+ }
+--- a/third_party/hunspell/src/hunspell/hunspell.hxx
++++ b/third_party/hunspell/src/hunspell/hunspell.hxx
+@@ -152,6 +152,17 @@ class LIBHUNSPELL_DLL_EXPORTED Hunspell {
+   std::vector<std::string> suggest(const std::string& word);
+   H_DEPRECATED int suggest(char*** slst, const char* word);
+ 
++  /* Fly: suggest() gives the near misses (swapped, missing, extra or wrong
++   * letters...) and, when none is good, the words an n-gram search of the
++   * whole dictionary finds. set_suggest_part(kSuggestNearMiss) stops before
++   * that search; ngram_skipped() then tells whether it would have run.
++   * kSuggestRest, next and for the same word, continues from there and gives
++   * what kSuggestAll would have given.
++   */
++  enum SuggestPart { kSuggestAll, kSuggestNearMiss, kSuggestRest };
++  void set_suggest_part(SuggestPart part);
++  bool ngram_skipped() const;
++
+   /* Suggest words from suffix rules
+    * suffix_suggest(suggestions, root_word)
+    * input: pointer to an array of strings pointer and the  word

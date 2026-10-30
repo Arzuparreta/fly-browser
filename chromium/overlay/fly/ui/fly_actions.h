@@ -13,6 +13,7 @@
 #include "base/functional/callback.h"
 #include "base/memory/raw_ptr.h"
 #include "fly/commands/palette_catalog.h"
+#include "fly/preferences/preferences_service.h"
 #include "ui/gfx/geometry/point.h"
 #include "ui/menus/simple_menu_model.h"
 #include "url/gurl.h"
@@ -28,7 +29,6 @@ class Widget;
 }  // namespace views
 
 namespace fly {
-class PreferencesService;
 
 // The native settings menu (toggle-menu-bar): startup settings,
 // tab suspension, sidebar options, user content folders and app entries.
@@ -89,9 +89,15 @@ base::FilePath UserContentDirectory(std::string_view name);
 void OpenUserContentDirectory(Profile* profile, std::string_view name);
 
 // Applies product preferences stored per profile in Chromium: web
-// notification permission default and the spellchecker language.
+// notification permission default and spell checking (the switch and the
+// dictionaries in the user's order), each once chosen in Fly.
 void ApplyProfilePreferences(Profile* profile,
                              const PreferencesService& preferences);
+// The spell checking Preferences shows for `profile`: Fly's choice, or before
+// there is one, the profile's own (Chromium's) with the languages Fly knows.
+SpellcheckPreferences ReadEffectiveSpellcheck(
+    Profile* profile,
+    const PreferencesService& preferences);
 
 struct UpdateCheckResult {
   bool ok = false;

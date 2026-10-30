@@ -27,6 +27,7 @@
 #include "fly/ui/fly_actions.h"
 #include "fly/ui/history_service.h"
 #include "fly/ui/site_zoom.h"
+#include "fly/ui/spellcheck_sync.h"
 #include "fly/workspaces/workspace_service.h"
 #include "url/gurl.h"
 
@@ -203,6 +204,7 @@ class FlyApp : public BrowserCollectionObserver {
   std::unique_ptr<FlyExtensions> extensions_;
   std::unique_ptr<UserContentService> user_content_;
   SiteZoom site_zoom_;
+  SpellcheckSync spellcheck_sync_{preferences_};
   PrefChangeRegistrar preferences_registrar_;
   std::optional<ThemePreferences> applied_theme_;
   std::optional<std::string> applied_profile_preferences_;
