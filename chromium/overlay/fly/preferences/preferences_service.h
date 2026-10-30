@@ -7,6 +7,7 @@
 #include <optional>
 #include <string>
 #include <string_view>
+#include <vector>
 
 #include "base/memory/raw_ref.h"
 #include "base/sequence_checker.h"
@@ -37,6 +38,13 @@ struct ThemePreferences {
   bool operator==(const ThemePreferences&) const = default;
 };
 bool WebsiteUsesDarkTheme(const ThemePreferences& theme);
+struct SpellcheckPreferences {
+  bool enabled = true;
+  // Codes of SpellcheckLanguages(), the language checked first first; at most
+  // kMaxSpellcheckLanguages.
+  std::vector<std::string> languages;
+  bool operator==(const SpellcheckPreferences&) const = default;
+};
 
 // App-wide product preferences, separate from each Profile's native site state.
 // Clock, footer, frequent sites, window controls, theme and suspension timeout
@@ -78,12 +86,21 @@ class PreferencesService {
   bool SetSuspendTimeoutMinutes(int minutes);
   bool CycleSuspendTimeout();
 
+  // Spell checking chosen in Fly: spellcheck_enabled and the list
+  // spellcheck_languages, or before those existed the single
+  // spellchecker_language ("disabled" when off). nullopt when Fly has no
+  // choice (each workspace keeps Chromium's) or the store needs recovery.
+  // Unknown or extra languages are left out.
+  std::optional<SpellcheckPreferences> ReadSpellcheck() const;
+  // Stores both keys and drops spellchecker_language. The languages must be
+  // known, without repeats and at most kMaxSpellcheckLanguages.
+  bool SetSpellcheck(const SpellcheckPreferences& spellcheck);
+
   // Remaining product settings, validated per key, with their defaults:
   // bools disable_gpu, background_throttling, enable_diagnostics,
   // web_notifications, desktop_integration_offered, preload_address_results;
   // int process_limit (1-8);
-  // strings spellchecker_language, interface_scale (normal|large),
-  // email_handler, last_seen_version.
+  // strings interface_scale (normal|large), email_handler, last_seen_version.
   std::optional<bool> ReadBool(std::string_view key) const;
   bool SetBool(std::string_view key, bool value);
   std::optional<int> ReadInt(std::string_view key) const;

@@ -2,6 +2,7 @@
 // Use of this source code is governed by the GPL-3.0-or-later license in the
 // Fly repository.
 #include "fly/preferences/preferences_service.h"
+#include "fly/preferences/spellcheck_languages.h"
 #include "fly/prefs/dictionary_store.h"
 
 #include <algorithm>
@@ -40,7 +41,6 @@ constexpr auto kStringDefaults =
         {"email_handler", "system"},
         {"interface_scale", "normal"},
         {"last_seen_version", ""},
-        {"spellchecker_language", "en-GB"},
     });
 constexpr int kDefaultProcessLimit = 4;
 constexpr std::array kThemeColorKeys = {"accent", "bg_main", "bg_sidebar",
@@ -153,9 +153,18 @@ bool PreferencesService::ValidStore() const {
     return false;
   for (auto key :
        {"show_clock", "show_status_bar", "sync_website_theme",
-        "show_window_controls", "sidebar_auto_collapse", "show_frequent_sites"})
+        "show_window_controls", "sidebar_auto_collapse", "show_frequent_sites",
+        "spellcheck_enabled"})
     if (const auto* value = values->Find(key); value && !value->is_bool())
       return false;
+  // Languages a later Fly knows are left out when read, not refused.
+  if (const auto* languages = values->Find("spellcheck_languages");
+      languages &&
+      (!languages->is_list() ||
+       !std::ranges::all_of(languages->GetList(), [](const base::Value& code) {
+         return code.is_string() && code.GetString().size() <= 64;
+       })))
+    return false;
   if (const auto* format = values->Find("clock_format");
       format && (!format->is_string() || !ValidFormat(format->GetString())))
     return false;
@@ -584,6 +593,51 @@ void PreferencesService::ApplyStartupSwitches(const PrefService& local_state,
   add("renderer-process-limit", base::NumberToString(limit));
   if (!added.empty())
     command_line.AppendSwitchASCII(kMarker, base::JoinString(added, ","));
+}
+std::optional<SpellcheckPreferences> PreferencesService::ReadSpellcheck()
+    const {
+  const auto* values = ValidStore() ? StoredValues(*local_state_) : nullptr;
+  if (!values)
+    return std::nullopt;
+  SpellcheckPreferences spellcheck;
+  const auto enabled = values->FindBool("spellcheck_enabled");
+  const auto* languages = values->FindList("spellcheck_languages");
+  if (enabled || languages) {
+    spellcheck.enabled = enabled.value_or(true);
+    std::vector<std::string> codes;
+    if (languages)
+      for (const auto& code : *languages)
+        codes.push_back(code.GetString());
+    spellcheck.languages = NormalizeSpellcheckLanguages(codes);
+    return spellcheck;
+  }
+  // The single language of earlier versions.
+  const auto* legacy = values->FindString("spellchecker_language");
+  if (!legacy)
+    return std::nullopt;
+  if (legacy->empty() || *legacy == "disabled" || *legacy == "none")
+    spellcheck.enabled = false;
+  else
+    spellcheck.languages = NormalizeSpellcheckLanguages({*legacy});
+  return spellcheck;
+}
+bool PreferencesService::SetSpellcheck(const SpellcheckPreferences& spellcheck) {
+  if (!CanEdit() ||
+      NormalizeSpellcheckLanguages(spellcheck.languages) !=
+          spellcheck.languages ||
+      spellcheck.languages.size() > kMaxSpellcheckLanguages)
+    return false;
+  base::ListValue languages;
+  for (const auto& code : spellcheck.languages)
+    languages.Append(code);
+  auto stored = local_state_->GetDict(kPreferencesPref).Clone();
+  stored.Set("schema", 1);
+  auto* values = stored.EnsureDict("values");
+  values->Set("spellcheck_enabled", spellcheck.enabled);
+  values->Set("spellcheck_languages", std::move(languages));
+  values->Remove("spellchecker_language");
+  local_state_->SetDict(kPreferencesPref, std::move(stored));
+  return true;
 }
 bool PreferencesService::HasStoredValue(std::string_view key) const {
   const auto* values = ValidStore() ? StoredValues(*local_state_) : nullptr;

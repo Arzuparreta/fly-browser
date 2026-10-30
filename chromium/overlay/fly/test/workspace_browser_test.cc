@@ -36,6 +36,7 @@
 #include "components/history/core/common/pref_names.h"
 #include "components/password_manager/core/common/password_manager_pref_names.h"
 #include "components/signin/public/base/signin_pref_names.h"
+#include "components/spellcheck/browser/pref_names.h"
 #include "content/public/browser/download_manager.h"
 #include "content/public/browser/host_zoom_map.h"
 #include "crypto/sha2.h"
@@ -5047,6 +5048,104 @@ IN_PROC_BROWSER_TEST_F(FlyWorkspaceBrowserTest,
   ASSERT_TRUE(InvokeNativeCommand(second, "toggle-notifications"));
   EXPECT_EQ(CONTENT_SETTING_ASK, setting(browser()));
   EXPECT_EQ(CONTENT_SETTING_ASK, setting(second));
+}
+
+IN_PROC_BROWSER_TEST_F(FlyWorkspaceBrowserTest,
+                       NativeSpellingLanguagesReachEveryWorkspaceInOrder) {
+  auto* second = SecondWorkspace();
+  ASSERT_TRUE(second);
+  const auto dictionaries = [](BrowserWindowInterface* window) {
+    std::vector<std::string> result;
+    for (const auto& value : window->GetProfile()->GetPrefs()->GetList(
+             spellcheck::prefs::kSpellCheckDictionaries))
+      result.push_back(value.GetString());
+    return result;
+  };
+  const auto enabled = [](BrowserWindowInterface* window) {
+    return window->GetProfile()->GetPrefs()->GetBoolean(
+        spellcheck::prefs::kSpellCheckEnable);
+  };
+  const auto chosen = [&] {
+    const auto spellcheck = App().preferences().ReadSpellcheck();
+    return spellcheck ? spellcheck->languages : std::vector<std::string>();
+  };
+  using Codes = std::vector<std::string>;
+  ASSERT_TRUE(App().preferences().SetSpellcheck(
+      {.enabled = true, .languages = {"en-GB"}}));
+  EXPECT_EQ(Codes{"en-GB"}, dictionaries(browser()));
+  EXPECT_EQ(Codes{"en-GB"}, dictionaries(second));
+
+  auto& window = Window();
+  ASSERT_TRUE(InvokeNativeCommand(browser(), "toggle-help"));
+  auto& editor = window.keyboard_editor();
+  ASSERT_TRUE(editor.active());
+  editor.ShowSearch();
+  ASSERT_TRUE(editor.spelling_add_for_testing());
+  editor.AddSpellingLanguageForTesting("es");
+  EXPECT_EQ((Codes{"en-GB", "es"}), chosen());
+  EXPECT_EQ((Codes{"en-GB", "es"}), dictionaries(browser()));
+  EXPECT_EQ((Codes{"en-GB", "es"}), dictionaries(second));
+  EXPECT_EQ((std::vector<std::u16string>{u"English (UK)", u"Español"}),
+            editor.spelling_languages_for_testing());
+  EXPECT_FALSE(editor.spelling_button_for_testing("up", "en-GB")->GetEnabled());
+  // Up puts Spanish first, where Chromium checks it first.
+  views::test::ButtonTestApi(editor.spelling_button_for_testing("up", "es"))
+      .NotifyDefaultMouseClick();
+  ASSERT_TRUE(base::test::RunUntil(
+      [&] { return dictionaries(second) == Codes{"es", "en-GB"}; }));
+  EXPECT_EQ((Codes{"es", "en-GB"}), dictionaries(browser()));
+  EXPECT_EQ((std::vector<std::u16string>{u"Español", u"English (UK)"}),
+            editor.spelling_languages_for_testing());
+  for (const char* code : {"fr", "de", "it"})
+    editor.AddSpellingLanguageForTesting(code);
+  EXPECT_EQ((Codes{"es", "en-GB", "fr", "de", "it"}), chosen());
+  EXPECT_FALSE(editor.spelling_add_for_testing()->GetEnabled());
+  editor.AddSpellingLanguageForTesting("pt-BR");
+  EXPECT_EQ((Codes{"es", "en-GB", "fr", "de", "it"}), chosen());
+  views::test::ButtonTestApi(editor.spelling_button_for_testing("remove", "fr"))
+      .NotifyDefaultMouseClick();
+  ASSERT_TRUE(base::test::RunUntil([&] {
+    return dictionaries(browser()) == Codes{"es", "en-GB", "de", "it"};
+  }));
+  EXPECT_TRUE(editor.spelling_add_for_testing()->GetEnabled());
+  auto* toggle = editor.appearance_for_testing("spellcheck_enabled");
+  ASSERT_TRUE(toggle && toggle->GetChecked());
+  views::test::ButtonTestApi(toggle).NotifyDefaultMouseClick();
+  EXPECT_FALSE(enabled(browser()));
+  EXPECT_FALSE(enabled(second));
+  EXPECT_EQ(false, App().preferences().ReadSpellcheck()->enabled);
+
+  // A change made in one workspace outside Preferences, as Chromium's context
+  // menu makes it, becomes Fly's choice for the others.
+  second->GetProfile()->GetPrefs()->SetBoolean(
+      spellcheck::prefs::kSpellCheckEnable, true);
+  ASSERT_TRUE(base::test::RunUntil([&] { return enabled(browser()); }));
+  EXPECT_EQ(true, App().preferences().ReadSpellcheck()->enabled);
+  EXPECT_TRUE(toggle->GetChecked());
+  base::ListValue single;
+  single.Append("en-US");
+  second->GetProfile()->GetPrefs()->SetList(
+      spellcheck::prefs::kSpellCheckDictionaries, std::move(single));
+  ASSERT_TRUE(base::test::RunUntil(
+      [&] { return dictionaries(browser()) == Codes{"en-US"}; }));
+  EXPECT_EQ(Codes{"en-US"}, chosen());
+  EXPECT_EQ(std::vector<std::u16string>{u"English (US)"},
+            editor.spelling_languages_for_testing());
+  // Languages Fly does not offer, and more than five, are written over.
+  base::ListValue many;
+  for (const char* code : {"en-US", "xx", "es-ES", "fr", "de", "it", "pt-BR"})
+    many.Append(code);
+  second->GetProfile()->GetPrefs()->SetList(
+      spellcheck::prefs::kSpellCheckDictionaries, std::move(many));
+  const Codes five{"en-US", "es", "fr", "de", "it"};
+  ASSERT_TRUE(base::test::RunUntil([&] {
+    return dictionaries(second) == five && dictionaries(browser()) == five;
+  }));
+  EXPECT_EQ(five, chosen());
+  editor.Cancel(true);
+  ASSERT_TRUE(
+      base::test::RunUntil([&] { return !editor.root_for_testing(); }));
+  EXPECT_EQ(nullptr, editor.spelling_add_for_testing());
 }
 
 IN_PROC_BROWSER_TEST_F(FlyWorkspaceBrowserTest,

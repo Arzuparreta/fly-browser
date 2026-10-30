@@ -36,6 +36,14 @@ text goes to Google only when you translate it. Choose **Never translate** in
 the bubble's menu for a language or site, or turn the offer off in
 `chrome://settings/languages`.
 
+## Spell checking
+
+Spell checking runs on your computer. Fly downloads the dictionary of each
+language you choose from Google the first time it is needed. Chromium's
+**Use enhanced spell check**, in the page's **Spell check** submenu, sends what
+you type to Google; it is off unless you turn it on. See
+[spell checking](/guide/spell-checking).
+
 ## Protected video
 
 Netflix, Spotify, Disney+ and other services that protect their media with

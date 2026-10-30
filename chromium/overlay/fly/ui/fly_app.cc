@@ -194,6 +194,7 @@ void FlyApp::PrepareProfile(Profile* profile) {
     extensions_->AddProfile(profile);
     user_content_->AddProfile(profile);
     site_zoom_.AddProfile(profile);
+    spellcheck_sync_.AddProfile(profile);
   }
 }
 
@@ -1189,9 +1190,11 @@ void FlyApp::ApplyFlyPalette() {
 
 void FlyApp::ApplyProfilePreferencesEverywhere() {
   // Only rewrite per-profile state when the relevant product settings move.
-  const std::string key =
-      (preferences_.ReadBool("web_notifications").value_or(true) ? "1" : "0") +
-      preferences_.ReadString("spellchecker_language").value_or("");
+  std::string key =
+      preferences_.ReadBool("web_notifications").value_or(true) ? "1" : "0";
+  if (const auto spellcheck = preferences_.ReadSpellcheck())
+    key += (spellcheck->enabled ? " 1 " : " 0 ") +
+           base::JoinString(spellcheck->languages, ",");
   if (applied_profile_preferences_ == key)
     return;
   applied_profile_preferences_ = key;

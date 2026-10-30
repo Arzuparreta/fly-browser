@@ -16,6 +16,7 @@
 #include "base/values.h"
 #include "base/memory/weak_ptr.h"
 #include "base/timer/timer.h"
+#include "chrome/browser/spellchecker/spellcheck_hunspell_dictionary.h"
 #include "components/prefs/pref_change_registrar.h"
 #include "content/public/browser/web_contents_observer.h"
 #include "fly/commands/command_service.h"
@@ -59,7 +60,8 @@ class KeyboardEditor : public views::TextfieldController,
                        public ui::SelectFileDialog::Listener,
                        public ui::SimpleMenuModel::Delegate,
                        public views::WidgetObserver,
-                       public content::WebContentsObserver {
+                       public content::WebContentsObserver,
+                       public SpellcheckHunspellDictionary::Observer {
  public:
   KeyboardEditor(views::Widget* desktop, CommandService& commands,
                  PrefService& local_state);
@@ -128,6 +130,13 @@ class KeyboardEditor : public views::TextfieldController,
   FlyToggle* appearance_for_testing(std::string_view key);
   FlySelect* clock_format_for_testing();
   FlySelect* suspension_timeout_for_testing();
+  // Spelling: the shown languages in order, the buttons of one ("up",
+  // "remove" or "retry"), the Add button and the choice its menu makes.
+  std::vector<std::u16string> spelling_languages_for_testing() const;
+  views::Button* spelling_button_for_testing(std::string_view action,
+                                             std::string_view code);
+  views::Button* spelling_add_for_testing();
+  void AddSpellingLanguageForTesting(const std::string& code);
 
   void ContentsChanged(views::Textfield*, const std::u16string&) override;
   bool HandleKeyEvent(views::Textfield*, const ui::KeyEvent&) override;
@@ -144,6 +153,13 @@ class KeyboardEditor : public views::TextfieldController,
   void OnWidgetDestroying(views::Widget*) override;
   void PrimaryPageChanged(content::Page&) override;
   void WebContentsDestroyed() override;
+  // SpellcheckHunspellDictionary::Observer (the shown download states):
+  void OnHunspellDictionaryInitialized(const std::string& language) override;
+  void OnHunspellDictionaryDownloadBegin(const std::string& language) override;
+  void OnHunspellDictionaryDownloadSuccess(
+      const std::string& language) override;
+  void OnHunspellDictionaryDownloadFailure(
+      const std::string& language) override;
 
   using Key = std::pair<std::string, bool>;
 
@@ -178,9 +194,18 @@ class KeyboardEditor : public views::TextfieldController,
   void BuildPerformance();
   void BuildAbout();
   void BuildAliases();
+  void BuildSpelling();
   // Values.
   void RefreshAppearance();
   void RefreshSearchSection();
+  // Spelling. The list's buttons rebuild it, so they act after their event.
+  Profile* SpellingProfile() const;
+  void RefreshSpelling();
+  void StopObservingDictionaries();
+  void SaveSpelling(SpellcheckPreferences spelling, std::u16string done);
+  void ShowSpellingMenu();
+  void AddSpellingLanguage(const std::string& code);
+  void ChangeSpellingLanguage(std::string action, std::string code);
   void RefreshExtensions();
   void SetStatus(std::u16string text);
   void RunAction(std::string action);
@@ -264,7 +289,17 @@ class KeyboardEditor : public views::TextfieldController,
   raw_ptr<FlySelect> email_choice_ = nullptr;
   raw_ptr<views::View> email_custom_row_ = nullptr;
   raw_ptr<views::Textfield> email_handler_ = nullptr;
-  raw_ptr<FlySelect> spellcheck_choice_ = nullptr;
+  raw_ptr<views::View> spelling_list_ = nullptr;
+  raw_ptr<FlyButton> spelling_add_ = nullptr;
+  std::map<std::string, raw_ptr<views::Button>> spelling_buttons_;
+  std::vector<std::u16string> spelling_names_;
+  // What the list shows, so that unrelated changes leave it alone.
+  std::string spelling_shown_;
+  std::unique_ptr<ui::SimpleMenuModel> spelling_model_;
+  std::unique_ptr<views::MenuRunner> spelling_runner_;
+  std::vector<std::string> spelling_menu_codes_;
+  std::vector<base::WeakPtr<SpellcheckHunspellDictionary>>
+      observed_dictionaries_;
   raw_ptr<FlySelect> scale_choice_ = nullptr;
   raw_ptr<FlySelect> clock_format_ = nullptr;
   raw_ptr<FlySelect> suspension_timeout_ = nullptr;

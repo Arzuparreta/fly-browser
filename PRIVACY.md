@@ -19,7 +19,10 @@ and some downloads, Chromium sends Google the address and details of the page
 or file. Google sees your IP for these requests. Turn it off in
 `chrome://settings/security`.
 Translating a page sends its text to Google Translate; Fly only offers it, and
-detects the page language locally. Zero Fly telemetry is not a
+detects the page language locally. Spell checking downloads the dictionary of
+each language you choose from Google the first time it is needed and checks
+your text locally; Chromium's **Use enhanced spell check**, off unless you turn
+it on, sends what you type to Google. Zero Fly telemetry is not a
 promise of zero network activity.
 
 ## Isolation and blocking
