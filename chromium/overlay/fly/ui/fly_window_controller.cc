@@ -529,7 +529,7 @@ void FlyWindowController::BuildSidebar() {
   workspace_badge_->SetCanProcessEventsWithinSubtree(false);
   workspace_label_ = sidebar->AddChildView(std::make_unique<FlyLabel>(
       u"Workspace", FlyFace::kSans, 13, gfx::Font::Weight::MEDIUM));
-  workspace_label_->SetHorizontalAlignment(gfx::ALIGN_CENTER);
+  workspace_label_->SetHorizontalAlignment(gfx::ALIGN_LEFT);
   workspace_label_->SetElideBehavior(gfx::ELIDE_TAIL);
   workspace_label_->SetCanProcessEventsWithinSubtree(false);
   parts.top = {.header = workspace_picker_button_,

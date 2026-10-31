@@ -93,7 +93,7 @@ class SidebarPanel::Engraving : public views::View {
 BEGIN_METADATA(SidebarPanel, Engraving)
 END_METADATA
 
-// A quiet divider shared by the footer and the top row's two control groups.
+// A quiet divider above the footer.
 class SidebarPanel::Rule : public views::View {
   METADATA_HEADER(Rule, views::View)
 
@@ -109,10 +109,8 @@ END_METADATA
 SidebarPanel::SidebarPanel() {
   engraving_ = AddChildView(std::make_unique<Engraving>());
   footer_line_ = AddChildView(std::make_unique<Rule>());
-  top_separator_ = AddChildView(std::make_unique<Rule>());
   AddExpandedOnly(engraving_, false);
   AddExpandedOnly(footer_line_, false);
-  AddExpandedOnly(top_separator_, false);
 }
 SidebarPanel::~SidebarPanel() = default;
 
@@ -156,10 +154,6 @@ void SidebarPanel::SetRail(bool rail, views::AnimationSequenceBlock* block) {
     FadeTo(faded.view, rail ? 1 : 0, faded.interactive, block);
 }
 
-views::View* SidebarPanel::top_separator_for_testing() const {
-  return top_separator_;
-}
-
 gfx::Size SidebarPanel::CalculatePreferredSize(
     const views::SizeBounds&) const {
   return gfx::Size(FlyScaled(kSidebarWidth - 1), 0);
@@ -179,26 +173,27 @@ void SidebarPanel::Layout(PassKey) {
     parts_.window_controls->SetBounds(x, y, row, height);
     y += height + s(6);
   }
-  // Centre the rule in the panel, with equal outer insets and breathing room
-  // for navigation on the left and the workspace name on the right.
+  // Navigation takes three fifths of the usable row. A clear gap separates
+  // its outlined buttons from the quieter, left-aligned workspace name.
   const int top = s(34);
-  const int separator_x = (content - 1) / 2;
-  const int navigation = separator_x - s(8) - x;
+  const int group_gap = s(12);
+  const int navigation = (content - 2 * x - group_gap) * 3 / 5;
   const int new_tab_width = (navigation - s(6) + s(1)) / 3;
   const int history = navigation - s(6) - new_tab_width;
   const int back_width = (history + s(1)) / 2;
   const int new_tab_x = x + history + s(6);
-  const int header_x = separator_x + 1 + s(8);
+  const int header_x = x + navigation + group_gap;
   const int header = content - x - header_x;
-  top_separator_->SetBounds(separator_x, y + s(9), 1, top - s(18));
   if (parts_.top.header)
     parts_.top.header->SetBounds(rail_ ? x : header_x, y,
                                  rail_ ? s(28) : header, top);
   if (parts_.top.badge)
     parts_.top.badge->SetBounds(x, y + (top - s(28)) / 2, s(28), s(28));
-  // Only the full name is shown expanded; long names elide within its button.
+  // Start the name at the workspace target's left edge, without adding more
+  // whitespace to the gap between the two groups.
+  // Long names elide within the same bounds as the button.
   if (parts_.top.label)
-    parts_.top.label->SetBounds(header_x + s(6), y, header - s(12), top);
+    parts_.top.label->SetBounds(header_x, y, header, top);
   if (parts_.top.new_tab)
     parts_.top.new_tab->SetBounds(new_tab_x, y + (top - s(30)) / 2,
                                   new_tab_width, s(30));
@@ -249,7 +244,6 @@ void SidebarPanel::OnThemeChanged() {
   SchedulePaint();
   engraving_->SchedulePaint();
   footer_line_->SchedulePaint();
-  top_separator_->SchedulePaint();
 }
 BEGIN_METADATA(SidebarPanel)
 END_METADATA
