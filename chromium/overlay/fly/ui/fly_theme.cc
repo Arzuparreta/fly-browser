@@ -357,14 +357,6 @@ void FlyButton::SetIconTone(IconTone tone) {
   icon_tone_ = tone;
   UpdateColors();
 }
-void FlyButton::SetPillHalf(PillHalf half) {
-  pill_half_ = half;
-  SchedulePaint();
-}
-void FlyButton::SetHoverFill(bool hover_fill) {
-  hover_fill_ = hover_fill;
-  SchedulePaint();
-}
 void FlyButton::SetLiftOnHover(bool lift) {
   lift_ = lift;
   UpdateColors();
@@ -397,8 +389,6 @@ void FlyButton::OnThemeChanged() {
 void FlyButton::StateChanged(ButtonState old_state) {
   views::MdTextButton::StateChanged(old_state);
   UpdateColors();
-  if (pill_partner_)
-    pill_partner_->SchedulePaint();
 }
 void FlyButton::SetText(std::u16string_view text) {
   // MdTextButton::SetText() replaces the border, which relays out and
@@ -464,12 +454,7 @@ void FlyButton::OnPaintBackground(gfx::Canvas* canvas) {
                    GetVisualState() == STATE_PRESSED;
   const bool selected = ShowsSelected();
   const auto shape = [&](gfx::RectF bounds) {
-    auto radii = GetCornerRadii();
-    const float round = bounds.height() / 2;
-    if (pill_half_ == PillHalf::kLeft)
-      radii = gfx::RoundedCornersF(round, 0, 0, round);
-    else if (pill_half_ == PillHalf::kRight)
-      radii = gfx::RoundedCornersF(0, round, round, 0);
+    const auto radii = GetCornerRadii();
     SkVector corners[4] = {{radii.upper_left(), radii.upper_left()},
                            {radii.upper_right(), radii.upper_right()},
                            {radii.lower_right(), radii.lower_right()},
@@ -531,8 +516,7 @@ void FlyButton::OnPaintBackground(gfx::Canvas* canvas) {
   if (selected || hot || resting_fill_) {
     flags.setColor(selected || !hot ? (selected ? colors.selected
                                                 : *resting_fill_)
-                   : hover_fill_ ? SkColorSetA(colors.text, 18)
-                                 : colors.selected);
+                   : colors.selected);
     canvas->DrawPath(shape(bounds), flags);
   }
   if (selected || outlined_ || HasFocus()) {
@@ -543,13 +527,6 @@ void FlyButton::OnPaintBackground(gfx::Canvas* canvas) {
                        : colors.border);
     bounds.Inset(0.5f);
     canvas->DrawPath(shape(bounds), flags);
-    if (pill_half_ == PillHalf::kRight && pill_partner_ &&
-        (pill_partner_->GetState() == STATE_HOVERED ||
-         pill_partner_->GetState() == STATE_PRESSED || pill_partner_->HasFocus())) {
-      flags.setColor(colors.accent);
-      canvas->DrawLine(gfx::PointF(bounds.x(), bounds.y()),
-                       gfx::PointF(bounds.x(), bounds.bottom()), flags);
-    }
   }
 }
 BEGIN_METADATA(FlyButton)
