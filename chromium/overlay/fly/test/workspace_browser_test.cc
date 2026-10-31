@@ -7723,6 +7723,18 @@ IN_PROC_BROWSER_TEST_F(FlyWorkspaceBrowserTest,
   ASSERT_TRUE(base::test::RunUntil([&] { return !split->selected(); }));
 }
 
+// True once the sidebar is expanded and its slide and `target`'s fade have
+// ended. A compositor animation keeps the layer's starting transform and
+// opacity until it ends, so those values alone can read as settled mid-slide.
+bool SidebarSettledOn(FlyWindowController& window, views::View* target) {
+  auto* root = window.sidebar_root_for_testing();
+  return window.sidebar_expanded_for_testing() && target->layer() &&
+         target->layer()->opacity() == 1.f &&
+         !target->layer()->GetAnimator()->is_animating() &&
+         !root->edge()->layer()->GetAnimator()->is_animating() &&
+         !root->panel()->layer()->GetAnimator()->is_animating();
+}
+
 void CheckSidebarPointerState(BrowserWindowInterface* browser,
                               const GURL& url,
                               bool collapse,
@@ -7748,16 +7760,8 @@ void CheckSidebarPointerState(BrowserWindowInterface* browser,
         window.widget()->GetContentsView()->GetBoundsInScreen();
     const auto rail = desktop.origin() + gfx::Vector2d(12, 180);
     pointer.MoveMouseTo(rail);
-    ASSERT_TRUE(base::test::RunUntil(
-        [&] { return window.sidebar_expanded_for_testing(); }));
-    ASSERT_TRUE(base::test::RunUntil([&] {
-      return target->layer() && target->layer()->opacity() == 1.f &&
-             window.sidebar_root_for_testing()
-                 ->panel()
-                 ->layer()
-                 ->transform()
-                 .IsIdentity();
-    }));
+    ASSERT_TRUE(
+        base::test::RunUntil([&] { return SidebarSettledOn(window, target); }));
     views::test::RunScheduledLayout(target->GetWidget());
     pointer.MoveMouseTo(target->GetBoundsInScreen().CenterPoint());
     pointer.ClickLeftButton();
@@ -7774,15 +7778,8 @@ void CheckSidebarPointerState(BrowserWindowInterface* browser,
     pointer.MoveMouseTo(desktop.CenterPoint());
     base::RunLoop().RunUntilIdle();
     pointer.MoveMouseTo(rail);
-    ASSERT_TRUE(base::test::RunUntil([&] {
-      return window.sidebar_expanded_for_testing() &&
-             target->layer()->opacity() == 1.f &&
-             window.sidebar_root_for_testing()
-                 ->panel()
-                 ->layer()
-                 ->transform()
-                 .IsIdentity();
-    }));
+    ASSERT_TRUE(
+        base::test::RunUntil([&] { return SidebarSettledOn(window, target); }));
     base::RunLoop().RunUntilIdle();
 
     EXPECT_FALSE(target->HasFocus());
