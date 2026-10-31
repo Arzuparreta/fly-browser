@@ -305,6 +305,12 @@ MenuHeader::MenuHeader(MenuKind kind, std::u16string title) {
   SetMinimumCrossAxisSize(Scaled(34));
 }
 MenuHeader::~MenuHeader() = default;
+void MenuHeader::SetFlexibleTitle() {
+  if (!title_)
+    return;
+  title_->SetElideBehavior(gfx::ELIDE_TAIL);
+  static_cast<views::BoxLayout*>(GetLayoutManager())->SetFlexForView(title_, 1);
+}
 FlyTextfield* MenuHeader::SetSearch(std::unique_ptr<FlyTextfield> search) {
   search->SetSearchStyle(true);
   auto* field = AddChildView(std::move(search));
@@ -641,36 +647,44 @@ int PaintKeyChipsLeftAligned(gfx::Canvas* canvas,
 }
 
 KeyHints::KeyHints(std::vector<Hint> hints) : hints_(std::move(hints)) {
-  GetViewAccessibility().SetIsIgnored(true);
+  GetViewAccessibility().SetRole(ax::mojom::Role::kStaticText);
+  SetHints(std::move(hints_));
 }
 KeyHints::~KeyHints() = default;
 void KeyHints::SetHints(std::vector<Hint> hints) {
   hints_ = std::move(hints);
+  std::u16string description;
+  for (const auto& [key, label] : hints_)
+    description += key + u": " + label + u". ";
+  GetViewAccessibility().SetName(description);
   PreferredSizeChanged();
   SchedulePaint();
 }
-gfx::Size KeyHints::CalculatePreferredSize(const views::SizeBounds&) const {
+gfx::Size KeyHints::CalculatePreferredSize(const views::SizeBounds& available) const {
   const auto font = FlyFont(FlyFace::kSans, kMenuSmallTextSize);
-  int width = 0;
-  for (const auto& [key, label] : hints_)
-    width += KeyChipWidth(key) + Scaled(6) + gfx::GetStringWidth(label, font) +
-             Scaled(16);
-  return gfx::Size(width, Scaled(22));
+  const int limit = std::max(1, available.width().value_or(100000));
+  int width = 0, row = 0, lines = 1;
+  for (const auto& [key, label] : hints_) {
+    const int item = KeyChipWidth(key) + Scaled(6) + gfx::GetStringWidth(label, font) + Scaled(16);
+    if (row && row + item > limit) { width = std::max(width, row); row = 0; ++lines; }
+    row += item;
+  }
+  return gfx::Size(std::min(limit, std::max(width, row)), lines * Scaled(26));
 }
 void KeyHints::OnPaint(gfx::Canvas* canvas) {
   const auto font = FlyFont(FlyFace::kSans, kMenuSmallTextSize);
   const auto& colors = GetFlyColors();
   int x = 0;
-  const int centre = height() / 2;
+  int y = 0;
+  const int row_height = Scaled(26);
   for (const auto& [key, label] : hints_) {
-    if (x >= width())
-      break;
-    x += PaintKeyChip(canvas, x, centre, key) + Scaled(6);
     const int label_width = gfx::GetStringWidth(label, font);
+    const int item = KeyChipWidth(key) + Scaled(6) + label_width + Scaled(16);
+    if (x && x + item > width()) { x = 0; y += row_height; }
+    x += PaintKeyChip(canvas, x, y + row_height / 2, key) + Scaled(6);
     canvas->DrawStringRectWithFlags(
         label, font, colors.dim,
-        gfx::Rect(x, 0, std::min(label_width, std::max(0, width() - x)),
-                  height()),
+        gfx::Rect(x, y, std::min(label_width, std::max(0, width() - x)), row_height),
         gfx::Canvas::NO_SUBPIXEL_RENDERING);
     x += label_width + Scaled(16);
   }

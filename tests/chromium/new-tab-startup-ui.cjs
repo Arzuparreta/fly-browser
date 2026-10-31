@@ -41,7 +41,7 @@ const report = [];
             const context = browser.contexts()[0];
             const initial = context.pages().find(page => page.url().startsWith('chrome://fly-new-tab/'));
             assert(initial, 'Native startup opens Fly new tab');
-            await initial.waitForFunction(() => document.getElementById('clock')?.textContent);
+            await initial.waitForFunction(() => document.getElementById('search')?.textContent);
             report.push({mode,scale,startupObservedMs:performance.now()-start});
             await context.addInitScript(() => {
                 // Prove the page has its final presentation without relying on
@@ -64,7 +64,7 @@ const report = [];
                         resolve({background:getComputedStyle(document.body).backgroundColor,
                             light:document.body.classList.contains('light'),
                             scale:getComputedStyle(document.documentElement).zoom,
-                            clockLeft:document.getElementById('clock')?.getBoundingClientRect().left});
+                            searchLeft:document.getElementById('search')?.getBoundingClientRect().left});
                     };
                     requestAnimationFrame(sample);
                 });
@@ -78,21 +78,21 @@ const report = [];
                 await cdp.send('Target.createTarget', {url:'chrome://fly-new-tab/'});
                 const page = await opened;
                 await page.waitForURL('chrome://fly-new-tab/');
-                await page.waitForFunction(() => document.getElementById('clock')?.textContent &&
+                await page.waitForFunction(() => document.getElementById('search')?.textContent &&
                     performance.getEntriesByType('paint').length);
                 const state = await page.evaluate(async () => ({
                     frame:await window.firstNewTabFrame,
                     readySuppressed:window.readySuppressed,
-                    memory:document.getElementById('memory').textContent,
+                    telemetryElements:document.querySelectorAll('#memory,#clock,#sites').length,
                     paints:performance.getEntriesByType('paint').map(p => ({name:p.name,ms:p.startTime})),
                     domMs:performance.getEntriesByType('navigation')[0].domContentLoadedEventEnd,
                     initial:JSON.parse(document.getElementById('initial-data').textContent)}));
                 assert.equal(state.readySuppressed, true, 'The ready round trip was suppressed');
-                assert.equal(state.memory, '—', 'Memory is independent of initial presentation');
+                assert.equal(state.telemetryElements, 0, 'Quiet has no telemetry or history surface');
                 assert.equal(state.frame.light, mode==='light', 'First frame uses the saved theme');
                 assert.equal(state.frame.scale, scale==='large' ? '1.25' : '1', 'First frame has final scale');
                 assert.equal(state.frame.background, mode==='light' ? 'rgb(236, 230, 216)' : 'rgb(18, 18, 17)');
-                assert(state.frame.clockLeft >= state.initial.sidebarOverhang-1, 'First frame reserves sidebar');
+                assert(state.frame.searchLeft >= state.initial.sidebarOverhang-1, 'First frame reserves sidebar');
                 report.push({mode,scale,tab,observedMs:performance.now()-startTab,
                     frame:state.frame,paints:state.paints,domMs:state.domMs});
                 if (evidence && tab===0) {

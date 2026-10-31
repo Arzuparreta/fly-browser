@@ -4,20 +4,21 @@
 #ifndef FLY_UI_COMMAND_PALETTE_H_
 #define FLY_UI_COMMAND_PALETTE_H_
 
-#include <memory>
-#include <vector>
 #include "base/callback_list.h"
 #include "base/functional/callback.h"
-#include "ui/gfx/geometry/insets.h"
 #include "base/memory/raw_ptr.h"
-#include "ui/gfx/geometry/point.h"
 #include "base/memory/weak_ptr.h"
 #include "content/public/browser/web_contents_observer.h"
+#include "fly/bookmarks/bookmark_service.h"
 #include "fly/commands/palette_catalog.h"
 #include "fly/ui/fly_menu.h"
 #include "fly/ui/fly_theme.h"
+#include "ui/gfx/geometry/insets.h"
+#include "ui/gfx/geometry/point.h"
 #include "ui/views/controls/textfield/textfield_controller.h"
 #include "ui/views/widget/widget_observer.h"
+#include <memory>
+#include <vector>
 
 namespace views {
 class Label;
@@ -67,6 +68,24 @@ class CommandPalette : public views::TextfieldController,
                                               std::string)> remove = {});
   ~CommandPalette() override;
   void SetStyle(PaletteStyle style) { style_ = std::move(style); }
+  void SetBookmarks(BookmarkService *service) { bookmarks_ = service; }
+  void SetBackgroundOpen(
+      base::RepeatingCallback<void(content::WebContents *, std::string)>
+          callback) {
+    background_open_ = std::move(callback);
+  }
+  bool editing_bookmark() const { return editing_url_.has_value(); }
+  views::Textfield *bookmark_name_for_testing() { return bookmark_name_; }
+  views::Textfield *bookmark_url_for_testing() { return bookmark_url_; }
+  FlyButton *bookmark_save_for_testing() { return bookmark_save_; }
+  FlyButton *bookmark_undo_for_testing() { return bookmark_undo_; }
+  void EditBookmark(std::string url);
+  void SaveBookmark();
+  void UndoBookmark();
+  void MoveBookmark(int direction);
+  void DeleteSelectedBookmark();
+  gfx::Rect row_title_bounds_for_testing(size_t index);
+  SkColor row_subtitle_color_for_testing(size_t index);
   // Runs with the action of each newly highlighted row.
   void SetSelectionCallback(
       base::RepeatingCallback<void(std::string_view)> callback) {
@@ -146,7 +165,30 @@ class CommandPalette : public views::TextfieldController,
   void UpdateInspector();
   void SetCategory(std::string category);
   void Hover(size_t index);
+  void BuildBookmarkEditor();
+  void EndBookmarkEdit();
+  void BookmarkMessage(std::u16string text);
+  void SelectBookmark(std::string_view url);
+  void ResetBookmarksUI();
+  void ActivateRow(std::string action, const ui::Event &event);
+  void OpenInBackground(std::string action);
   PaletteStyle style_;
+  raw_ptr<BookmarkService> bookmarks_ = nullptr;
+  base::RepeatingCallback<void(content::WebContents *, std::string)>
+      background_open_;
+  raw_ptr<MenuHeader> header_ = nullptr;
+  raw_ptr<FlyButton> bookmark_add_ = nullptr;
+  raw_ptr<views::ScrollView> bookmark_editor_scroll_ = nullptr;
+  raw_ptr<views::View> bookmark_editor_ = nullptr;
+  raw_ptr<views::Textfield> bookmark_name_ = nullptr;
+  raw_ptr<views::Textfield> bookmark_url_ = nullptr;
+  raw_ptr<FlyButton> bookmark_save_ = nullptr;
+  raw_ptr<FlyButton> bookmark_undo_ = nullptr;
+  raw_ptr<FlyLabel> bookmark_status_ = nullptr;
+  raw_ptr<FlyLabel> bookmark_error_ = nullptr;
+  std::optional<std::string> editing_url_;
+  std::optional<size_t> editing_position_;
+  std::optional<RemovedBookmark> removed_bookmark_;
   raw_ptr<views::Widget> desktop_;
   base::RepeatingCallback<bool(std::string_view)> available_;
   base::RepeatingCallback<void(content::WebContents*, std::string)> execute_;

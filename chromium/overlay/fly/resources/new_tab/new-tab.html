@@ -4,31 +4,16 @@
 <meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
 <title>New tab</title>
 <link rel="icon" href="identity/pixel-32.png"><link rel="stylesheet" href="fonts/fonts.css"><link rel="stylesheet" href="new-tab.css">
-<link rel="preload" href="fonts/doto-0.woff2" as="font" type="font/woff2" crossorigin>
 <link rel="preload" href="fonts/plex-sans-0.woff2" as="font" type="font/woff2" crossorigin>
-<link rel="preload" href="fonts/plex-mono-2.woff2" as="font" type="font/woff2" crossorigin>
 <script src="new-tab.js" defer></script>
 </head>
 <body class="<!--BODY_CLASS-->">
 <!--INITIAL_DATA-->
-<main>
-<header class="time">
-<time id="clock"></time><div id="date"></div>
-</header>
-<section class="navigation" aria-label="New tab">
-<section id="saved-bookmarks" class="collection" aria-labelledby="bookmarks-label" hidden>
-<div class="collection-header"><h2 id="bookmarks-label" class="eyebrow">BOOKMARKS</h2><nav id="bookmarks-paging" class="paging" aria-label="Bookmark pages" hidden></nav></div>
-<nav class="entries" id="bookmarks" aria-label="Saved bookmarks"></nav>
-<p class="empty" id="bookmarks-empty">Save pages to bookmarks to see them here.</p>
-</section>
-<section id="frequent-sites" class="collection" aria-label="Frequent sites" hidden>
-<div class="collection-header"><h2 class="eyebrow">FREQUENT SITES</h2><nav id="sites-paging" class="paging" aria-label="Frequent site pages" hidden></nav></div><nav class="entries" id="sites" aria-label="Frequent sites"></nav>
-<p class="empty" id="empty">Your frequent sites will appear here as you browse.</p>
-</section>
-</section>
-<figure class="specimen" aria-label="Fly specimen and memory use">
-<img id="memory-fly" src="identity/memory-chasis@2x.png" alt="Ink drawing of a fly, fading towards the tail">
-<figcaption class="annotation memory"><span id="memory">—</span><small>MEMORY</small></figcaption>
-</figure>
-</main><footer><strong>Fly Browser</strong> <span>by <a href="https://arzuparreta.github.io/">Arzuparreta</a></span></footer>
+<main aria-label="New tab">
+<div class="starting-point">
+<img id="memory-fly" src="identity/memory-chasis@2x.png" alt="Ink drawing of a fly with red eyes">
+<button id="search" type="button">Search or enter address <span id="search-binding" aria-hidden="true"></span></button>
+</div>
+<nav aria-label="New tab shortcuts"><button id="bookmarks" type="button">Bookmarks <span id="bookmarks-binding" aria-hidden="true"></span></button></nav>
+</main>
 </body></html>

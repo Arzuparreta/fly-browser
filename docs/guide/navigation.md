@@ -19,7 +19,7 @@ Link Hints allow you to click any link, button, or input field on a web page usi
 
 ## Floating Address Bar (`Ctrl + L`)
 
-Press **Ctrl + L** at any time to open the floating, high-contrast address overlay. **Ctrl + T** and the sidebar's **+** button open a new tab with it ready.
+Press **Ctrl + L** at any time to open the floating, high-contrast address overlay. **Ctrl + T** and the sidebar's New Tab button open Quiet, where you can choose search or bookmarks.
 
 - **Direct Navigation**: Type any full or partial URL and press **Enter**. The current page stays on screen until the new one has painted.
 - **Loading feedback**: A rotating indicator replaces the tab's favicon as soon as navigation starts, including while waiting for the server. It stays visible in the collapsed sidebar and on background tabs. With the status bar enabled, **Opening…** shows the destination before the new page arrives, followed by **Loading…** while its resources load. The button beside the keyboard mode badge stops the active page's load; when finished, it becomes **Reload page**. Hovering a link still shows its destination in the status bar.
@@ -215,10 +215,14 @@ Fly includes an in-engine DOM distiller powered by Mozilla Readability to strip 
 * **Reading Metrics**: Header estimates word count and reading time based on typical reading velocity.
 
 
-## Local new tab
+## Quiet new tab and bookmarks
 
-Frequent sites are suggestions from history, not saved bookmarks. The bookmarks manager shows only pages you explicitly saved.
+New tabs open a quiet local page with the Fly illustration. **Search or enter address** opens Fly's native address overlay, with your configured search engine, aliases, bangs and calculator. **Bookmarks** opens the same menu as **Ctrl + Shift + B**. The hints reflect your current bindings. Both controls work by mouse, Tab and Enter. The page follows your theme and interface scale without fetching fonts, favicons or other network content. It does not display history suggestions or sample memory use; memory information remains in Diagnostics and the clock remains in the status bar.
 
-New tabs open a local Fly page with a clock, bookmark buttons below the clock and date, followed by frequent sites from local history and a specimen illustration. Bookmark buttons show only their saved names, with no icons or extra network requests. Bookmark shortcuts use the same local collection as the bookmarks manager and refresh when you return to a new tab. They open the saved page in the current tab and are hidden on private new tabs. The list shows up to five sites, balancing frequency with recency across the last 500 history entries. Sites already saved in bookmarks are excluded by origin (scheme, hostname and port), regardless of the saved page path. Adding or removing bookmarks updates visible new tabs immediately; other new tabs refresh when activated. It is calculated locally in memory, without background polling or network requests. Use the × button beside a site to hide it permanently from this list without deleting its history. Private tabs neither contribute visits nor display frequent sites. To hide the entire section, turn off **Frequent sites on new tabs** in **Settings → Appearance → Interface**. This preference persists without deleting history or hidden sites. Use the browser address bar to search with your configured engine. The address bar retains aliases, bangs and calculator commands; its hint and link hints reflect your current bindings. Private mode does not show history suggestions.
+Bookmarks are your explicit saved pages, shared across workspaces. Opening a bookmark uses the current workspace's profile, cookies and private-mode identity. Click a row or press Enter to open it. From a new tab, the destination replaces that empty tab; from an existing page, it opens in a new tab. **Ctrl + Enter**, Ctrl-click or middle-click opens a background tab while keeping the menu available for opening several pages.
 
-Memory is a process-resident-memory snapshot taken when the tab opens or becomes active; shared pages can be counted by more than one process. Zero telemetry is a policy statement. No tracker count is invented. The clock pauses while the page is hidden.
+Type in **Search bookmarks** to match names and addresses. Up/Down selects a result; Page Up/Page Down moves through longer lists. Full names and addresses remain available to accessibility tools and in tooltips when the visible text is shortened.
+
+Choose **Edit** beside a bookmark or press **F2** to change its name or address in the same menu. **Add bookmark** (or **Ctrl + N** inside the menu) starts with the current page's details when available. Enter or Ctrl + S saves the fields; Escape cancels the draft. Invalid or already saved addresses show an explanation and keep your draft. Tab and Shift + Tab move through the editor without triggering page navigation keys.
+
+Use **Move earlier** / **Move later** in the editor or **Alt + Up/Down** in the list to choose a stable order for daily destinations. Order changes in the editor are saved with the name and address; Escape cancels the whole draft. Alt + Up/Down in the list reorders immediately. **Delete** in the editor removes the bookmark; **Undo delete** restores it to its previous position. Delete in the search field keeps normal text-editing behavior, and removes the selected bookmark only when the caret is at the end with no text selected. Escape closes the menu and restores focus to the page.
