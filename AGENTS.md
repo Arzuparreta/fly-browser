@@ -45,6 +45,16 @@
   with `scripts/release.js` (see `docs/releasing.md`, or `/release`).
 - The PR description says what changed and why, how it was validated and what
   remains unverified or limited. Report failures and gaps honestly.
+- After every runtime or visual change, including each iteration the owner is
+  about to try, update the local native build before handing it back so the
+  owner can test with the usual `./launch.sh`. Sync this task's overlay into
+  the engine checkout with `scripts/chromium/native.py refresh-overlay`,
+  configure as required and rebuild `chrome`, including its runtime resources.
+  Verify that the default launcher selects that updated build. Updating Git or
+  passing `npm test` alone does not make the local browser current. If the build
+  is unavailable or fails, report that explicitly. Preserve the owner's running
+  session and say when a full restart is needed to load the changes.
+  Documentation-only changes do not require a native rebuild.
 - Run `npm test` and `git diff --check` before pushing (and `npm run docs:build` when docs change). Actions, their default
   bindings and the Command Centre entries live in
   `chromium/overlay/fly/commands/actions.json` and `commands.json`; after
