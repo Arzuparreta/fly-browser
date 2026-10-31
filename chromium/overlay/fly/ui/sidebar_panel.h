@@ -75,7 +75,6 @@ class SidebarPanel : public views::View {
   void SetRail(bool rail, views::AnimationSequenceBlock* block);
   bool rail() const { return rail_; }
   const TopRow& top_for_testing() const { return parts_.top; }
-  views::View* top_separator_for_testing() const;
 
   // views::View:
   gfx::Size CalculatePreferredSize(
@@ -93,7 +92,6 @@ class SidebarPanel : public views::View {
   Parts parts_;
   raw_ptr<Engraving> engraving_ = nullptr;
   raw_ptr<Rule> footer_line_ = nullptr;
-  raw_ptr<Rule> top_separator_ = nullptr;
   gfx::ImageSkia paper_grain_;
   struct Faded {
     raw_ptr<views::View> view;
