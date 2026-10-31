@@ -3,6 +3,12 @@
 - Fly is the renamed, independent continuation of Mise. This repository does
   not track or contribute to Rakosn1cek/Mise-browser: never fetch, merge or
   open pull requests against it.
+- For every requested task, create a dedicated git worktree with its own branch
+  from the latest `origin/main` before making changes, and do all task work in
+  that worktree. A separate branch in the shared checkout is not sufficient.
+  Give each parallel agent its own worktree and branch. Never switch branches,
+  edit files, reset, clean, or remove worktrees belonging to the owner or another
+  agent. Reuse a task's worktree only when continuing that same task.
 - Every completed implementation in Fly ends with a git commit. The owner does
   not create these commits manually. Commit only the changes that belong to
   the completed task unless the owner explicitly asks to include others.
@@ -14,7 +20,9 @@
   fix their causes, commit and push, then wait again for that new head. Local
   validation alone never satisfies this gate. Once the checks pass, squash-merge
   the PR without asking for further confirmation, delete its branch, then
-  switch the local checkout back to `main` and pull.
+  clean up only this task's worktree and branch. Update the primary checkout
+  to `main` and pull only if it is idle and safe to do so; never switch or modify
+  a checkout another agent or the owner is using.
 - Before opening a PR, run `git fetch origin` and
   `git merge-base --is-ancestor origin/main HEAD`. If the base moved, bring it
   into the branch, resolve conflicts without dropping either side's changes,
