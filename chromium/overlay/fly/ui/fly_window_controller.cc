@@ -493,9 +493,28 @@ void FlyWindowController::BuildSidebar() {
     window_control_buttons_.emplace(name, button);
   }
   parts.window_controls = window_controls_;
-  // The workspace header opens the dashboard. Its short badge stays in the
-  // favicon column in both states; the full name appears beside it, in the
-  // tab titles' column, when the sidebar expands.
+  auto* back = sidebar->AddChildView(MakeFlyIconButton(
+      action("go-back"), vector_icons::kArrowBackIcon, u"Go back", 30));
+  auto* forward = sidebar->AddChildView(MakeFlyIconButton(
+      action("go-forward"), vector_icons::kArrowForwardIcon, u"Go forward",
+      30));
+  // .nav-history-group: one pill, each half with its own border.
+  back->SetPillHalf(FlyButton::PillHalf::kLeft);
+  forward->SetPillHalf(FlyButton::PillHalf::kRight);
+  back->SetPillPartner(forward);
+  forward->SetPillPartner(back);
+  new_tab_button_ = sidebar->AddChildView(MakeFlyIconButton(
+      base::BindRepeating(base::IgnoreResult(&FlyWindowController::CreateTab),
+                          weak_factory_.GetWeakPtr()),
+      kNewTabInGroupRefreshOldIcon, u"New tab", 28));
+  new_tab_button_->SetOutlined(true);
+  new_tab_button_->SetCornerRadius(4);
+  for (FlyButton* button : {new_tab_button_.get(), back, forward}) {
+    button->SetOutlined(true);
+    button->SetIconTone(FlyButton::IconTone::kText);
+  }
+  // The full workspace name follows the web controls. Its compact badge
+  // occupies the favicon column only while the sidebar is collapsed.
   workspace_picker_button_ = sidebar->AddChildView(std::make_unique<FlyButton>(
       base::BindRepeating(&FlyWindowController::ToggleWorkspacePicker,
                           weak_factory_.GetWeakPtr()),
@@ -513,26 +532,6 @@ void FlyWindowController::BuildSidebar() {
   workspace_label_->SetHorizontalAlignment(gfx::ALIGN_LEFT);
   workspace_label_->SetElideBehavior(gfx::ELIDE_TAIL);
   workspace_label_->SetCanProcessEventsWithinSubtree(false);
-  new_tab_button_ = sidebar->AddChildView(MakeFlyIconButton(
-      base::BindRepeating(base::IgnoreResult(&FlyWindowController::CreateTab),
-                          weak_factory_.GetWeakPtr()),
-      kAddIcon, u"New Tab / Navigation", 28));
-  new_tab_button_->SetOutlined(true);
-  new_tab_button_->SetCornerRadius(4);
-  auto* back = sidebar->AddChildView(MakeFlyIconButton(
-      action("go-back"), vector_icons::kArrowBackIcon, u"Go back", 30));
-  auto* forward = sidebar->AddChildView(MakeFlyIconButton(
-      action("go-forward"), vector_icons::kArrowForwardIcon, u"Go forward",
-      30));
-  // .nav-history-group: one pill, each half with its own border.
-  back->SetPillHalf(FlyButton::PillHalf::kLeft);
-  forward->SetPillHalf(FlyButton::PillHalf::kRight);
-  back->SetPillPartner(forward);
-  forward->SetPillPartner(back);
-  for (FlyButton* button : {new_tab_button_.get(), back, forward}) {
-    button->SetOutlined(true);
-    button->SetIconTone(FlyButton::IconTone::kText);
-  }
   parts.top = {.header = workspace_picker_button_,
                .badge = workspace_badge_,
                .label = workspace_label_,
@@ -601,8 +600,8 @@ void FlyWindowController::BuildSidebar() {
         static_cast<views::View*>(search),
         static_cast<views::View*>(preferences_button_.get())})
     sidebar->AddExpandedOnly(view);
-  // The badge sits over the header and never takes its clicks.
-  DisableSubpixelText(workspace_badge_);
+  // The badge fades out as navigation takes its place at the left edge.
+  sidebar->AddRailOnly(workspace_badge_, false);
   sidebar->AddExpandedOnly(tab_sidebar_->expanded_surfaces(), false);
   sidebar->AddRailOnly(tab_sidebar_->rail_surfaces(), false);
   sidebar->AddRailOnly(tab_sidebar_->rail_marks(), false);
@@ -1732,6 +1731,8 @@ void FlyWindowController::UpdateWorkspaceHeader() {
   }
   workspace_badge_->SetText(is_private ? compact : WorkspaceBadgeText(name));
   workspace_label_->SetText(name);
+  workspace_picker_button_->SetTooltipText(
+      name + u": open the workspace dashboard");
   workspace_picker_button_->GetViewAccessibility().SetName(
       u"Workspace " + name + u": open the workspace dashboard");
   // The list is only needed to reach other workspaces or windows directly.

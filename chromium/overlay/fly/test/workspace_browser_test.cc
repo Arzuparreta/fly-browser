@@ -923,6 +923,85 @@ class FlySidebarBrowserTest : public FlyWorkspaceBrowserTest {
 };
 
 IN_PROC_BROWSER_TEST_F(FlySidebarBrowserTest,
+                       TopRowSeparatesWebNavigationFromWorkspace) {
+  auto& window = Window();
+  auto* panel = window.sidebar_root_for_testing()->panel();
+  const auto& top = panel->top_for_testing();
+  auto* separator = panel->top_separator_for_testing();
+  const GURL first = embedded_test_server()->GetURL("/title1.html");
+  const GURL second = embedded_test_server()->GetURL("/title2.html");
+  ASSERT_TRUE(ui_test_utils::NavigateToURL(browser(), first));
+  ASSERT_TRUE(ui_test_utils::NavigateToURL(browser(), second));
+
+  for (const char* scale : {"normal", "large"}) {
+    SCOPED_TRACE(scale);
+    ASSERT_TRUE(App().preferences().SetString("interface_scale", scale));
+    MoveToPage();
+    WaitForSidebarMotion();
+    views::test::RunScheduledLayout(top.header->GetWidget());
+    EXPECT_EQ(1.f, top.badge->layer()->opacity());
+    EXPECT_EQ(0.f, top.label->layer()->opacity());
+    EXPECT_TRUE(top.header->bounds().Contains(top.badge->bounds()));
+
+    OpenByPointer();
+    WaitForSidebarMotion();
+    views::test::RunScheduledLayout(top.header->GetWidget());
+    EXPECT_EQ(0.f, top.badge->layer()->opacity());
+    EXPECT_EQ(1.f, top.label->layer()->opacity());
+    EXPECT_EQ(1.f, separator->layer()->opacity());
+    EXPECT_EQ(FlyScaled(4), top.back->x());
+    EXPECT_LT(top.back->x(), top.forward->x());
+    EXPECT_LT(top.forward->bounds().right(), top.new_tab->x());
+    EXPECT_LT(top.new_tab->bounds().right(), separator->x());
+    EXPECT_LT(separator->bounds().right(), top.header->x());
+    EXPECT_TRUE(top.header->bounds().Contains(top.label->bounds()));
+    EXPECT_LE(top.header->bounds().right(), panel->width());
+    auto* label = views::AsViewClass<views::Label>(top.label);
+    EXPECT_EQ(label->GetText(), label->GetDisplayTextForTesting());
+    EXPECT_EQ(top.back->GetNextFocusableView(), top.forward);
+    EXPECT_EQ(top.forward->GetNextFocusableView(), top.new_tab);
+    EXPECT_EQ(top.new_tab->GetNextFocusableView(), top.header);
+    // Moving straight up within the rail reaches Back without crossing the
+    // workspace target or the page, and therefore keeps the sidebar open.
+    const auto back = top.back->GetBoundsInScreen();
+    MovePointer(gfx::Point(back.x() + FlyScaled(14), back.CenterPoint().y()));
+    EXPECT_TRUE(window.sidebar_expanded_for_testing());
+    EXPECT_EQ(views::Button::STATE_HOVERED,
+              views::AsViewClass<FlyButton>(top.back)->GetState());
+  }
+
+  ui::test::EventGenerator pointer(
+      window.widget()->GetNativeWindow()->GetRootWindow());
+  pointer.MoveMouseTo(top.back->GetBoundsInScreen().CenterPoint());
+  pointer.ClickLeftButton();
+  ASSERT_TRUE(base::test::RunUntil(
+      [&] { return Active(browser())->GetLastCommittedURL() == first; }));
+  pointer.MoveMouseTo(top.forward->GetBoundsInScreen().CenterPoint());
+  pointer.ClickLeftButton();
+  ASSERT_TRUE(base::test::RunUntil(
+      [&] { return Active(browser())->GetLastCommittedURL() == second; }));
+  const int tabs = browser()->GetTabStripModel()->count();
+  pointer.MoveMouseTo(top.new_tab->GetBoundsInScreen().CenterPoint());
+  pointer.ClickLeftButton();
+  ASSERT_TRUE(base::test::RunUntil(
+      [&] { return browser()->GetTabStripModel()->count() == tabs + 1; }));
+  EXPECT_EQ(u"New tab", window.new_tab_button_for_testing()->GetTooltipText());
+  EXPECT_FALSE(window.workspace_picker().active());
+  ASSERT_TRUE(base::test::RunUntil(
+      [&] { return window.address_picker().active(); }));
+  window.address_picker().Cancel();
+  ASSERT_TRUE(base::test::RunUntil(
+      [&] { return !window.address_picker().showing(); }));
+  OpenByPointer();
+  WaitForSidebarMotion();
+  views::test::RunScheduledLayout(top.header->GetWidget());
+  pointer.MoveMouseTo(top.header->GetBoundsInScreen().CenterPoint());
+  pointer.ClickLeftButton();
+  ASSERT_TRUE(base::test::RunUntil(
+      [&] { return window.workspace_picker().active(); }));
+}
+
+IN_PROC_BROWSER_TEST_F(FlySidebarBrowserTest,
                        HoverKeepsViewportVisibilityAndBlocksPageClickThrough) {
   ASSERT_TRUE(ui_test_utils::NavigateToURL(
       browser(), embedded_test_server()->GetURL("/title1.html")));
