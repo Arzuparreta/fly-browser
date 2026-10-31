@@ -31,8 +31,9 @@ inline constexpr int kSidebarWidth = 260;
 inline constexpr int kSidebarRailWidth = 36;
 
 // One layout for both sidebar states. The collapsed rail is the panel's left
-// column, so rows, icons and text never move; rail-only and expanded-only
-// details crossfade.
+// column, so tab rows, icons and text never move; rail-only and expanded-only
+// details crossfade. The workspace hit target follows its badge in the rail
+// and its name to the right of the expanded navigation controls.
 class SidebarPanel : public views::View {
   METADATA_HEADER(SidebarPanel, views::View)
 
@@ -73,6 +74,8 @@ class SidebarPanel : public views::View {
   // Adds the crossfade to `block`, or applies it at once when null.
   void SetRail(bool rail, views::AnimationSequenceBlock* block);
   bool rail() const { return rail_; }
+  const TopRow& top_for_testing() const { return parts_.top; }
+  views::View* top_separator_for_testing() const;
 
   // views::View:
   gfx::Size CalculatePreferredSize(
@@ -86,10 +89,11 @@ class SidebarPanel : public views::View {
 
  private:
   class Engraving;
-  class FooterLine;
+  class Rule;
   Parts parts_;
   raw_ptr<Engraving> engraving_ = nullptr;
-  raw_ptr<FooterLine> footer_line_ = nullptr;
+  raw_ptr<Rule> footer_line_ = nullptr;
+  raw_ptr<Rule> top_separator_ = nullptr;
   gfx::ImageSkia paper_grain_;
   struct Faded {
     raw_ptr<views::View> view;

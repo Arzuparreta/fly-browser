@@ -93,24 +93,26 @@ class SidebarPanel::Engraving : public views::View {
 BEGIN_METADATA(SidebarPanel, Engraving)
 END_METADATA
 
-// .bottom-theme-layout::before: the footer's top rule.
-class SidebarPanel::FooterLine : public views::View {
-  METADATA_HEADER(FooterLine, views::View)
+// A quiet divider shared by the footer and the top row's two control groups.
+class SidebarPanel::Rule : public views::View {
+  METADATA_HEADER(Rule, views::View)
 
  public:
-  FooterLine() { SetCanProcessEventsWithinSubtree(false); }
+  Rule() { SetCanProcessEventsWithinSubtree(false); }
   void OnPaint(gfx::Canvas* canvas) override {
     canvas->FillRect(GetLocalBounds(), GetFlyColors().border);
   }
 };
-BEGIN_METADATA(SidebarPanel, FooterLine)
+BEGIN_METADATA(SidebarPanel, Rule)
 END_METADATA
 
 SidebarPanel::SidebarPanel() {
   engraving_ = AddChildView(std::make_unique<Engraving>());
-  footer_line_ = AddChildView(std::make_unique<FooterLine>());
+  footer_line_ = AddChildView(std::make_unique<Rule>());
+  top_separator_ = AddChildView(std::make_unique<Rule>());
   AddExpandedOnly(engraving_, false);
   AddExpandedOnly(footer_line_, false);
+  AddExpandedOnly(top_separator_, false);
 }
 SidebarPanel::~SidebarPanel() = default;
 
@@ -142,11 +144,20 @@ void SidebarPanel::AddRailOnly(views::View* view, bool interactive) {
   FadeTo(view, rail_ ? 1 : 0, interactive, nullptr);
 }
 void SidebarPanel::SetRail(bool rail, views::AnimationSequenceBlock* block) {
+  if (rail_ != rail) {
+    if (parts_.top.header)
+      ClearPointerState(parts_.top.header);
+    InvalidateLayout();
+  }
   rail_ = rail;
   for (auto& faded : expanded_only_)
     FadeTo(faded.view, rail ? 0 : 1, faded.interactive, block);
   for (auto& faded : rail_only_)
     FadeTo(faded.view, rail ? 1 : 0, faded.interactive, block);
+}
+
+views::View* SidebarPanel::top_separator_for_testing() const {
+  return top_separator_;
 }
 
 gfx::Size SidebarPanel::CalculatePreferredSize(
@@ -168,27 +179,31 @@ void SidebarPanel::Layout(PassKey) {
     parts_.window_controls->SetBounds(x, y, row, height);
     y += height + s(6);
   }
-  // .sidebar-top-row: the workspace header, then New tab and the history
-  // pill, 8px apart.
+  // Web controls start at the rail's left inset: history, then New tab.
+  // A short rule and equal breathing room separate the workspace name.
   const int top = s(34);
   const int pill = s(34);
-  const int nav = s(28) + s(8) + pill * 2 - s(1);
-  const int header = row - s(8) - nav;
+  const int history = pill * 2 - s(1);
+  const int new_tab_x = x + history + s(6);
+  const int separator_x = new_tab_x + s(28) + s(8);
+  const int header_x = separator_x + 1 + s(8);
+  const int header = x + row - header_x;
+  top_separator_->SetBounds(separator_x, y + s(9), 1, top - s(18));
   if (parts_.top.header)
-    parts_.top.header->SetBounds(x, y, header, top);
+    parts_.top.header->SetBounds(rail_ ? x : header_x, y,
+                                 rail_ ? s(28) : header, top);
   if (parts_.top.badge)
     parts_.top.badge->SetBounds(x, y + (top - s(28)) / 2, s(28), s(28));
-  // The name starts on the tab titles' column, past the badge.
+  // Only the full name is shown expanded; long names elide within its button.
   if (parts_.top.label)
-    parts_.top.label->SetBounds(x + s(33), y, header - s(38), top);
-  int nav_x = x + header + s(8);
+    parts_.top.label->SetBounds(header_x + s(6), y, header - s(12), top);
   if (parts_.top.new_tab)
-    parts_.top.new_tab->SetBounds(nav_x, y + (top - s(28)) / 2, s(28), s(28));
-  nav_x += s(28) + s(8);
+    parts_.top.new_tab->SetBounds(new_tab_x, y + (top - s(28)) / 2,
+                                  s(28), s(28));
   if (parts_.top.back)
-    parts_.top.back->SetBounds(nav_x, y + (top - s(30)) / 2, pill, s(30));
+    parts_.top.back->SetBounds(x, y + (top - s(30)) / 2, pill, s(30));
   if (parts_.top.forward)
-    parts_.top.forward->SetBounds(nav_x + pill - s(1), y + (top - s(30)) / 2,
+    parts_.top.forward->SetBounds(x + pill - s(1), y + (top - s(30)) / 2,
                                   pill, s(30));
   y += top + s(6);
   if (parts_.workspaces && parts_.workspaces->GetVisible()) {
@@ -230,6 +245,8 @@ void SidebarPanel::OnThemeChanged() {
   views::View::OnThemeChanged();
   SchedulePaint();
   engraving_->SchedulePaint();
+  footer_line_->SchedulePaint();
+  top_separator_->SchedulePaint();
 }
 BEGIN_METADATA(SidebarPanel)
 END_METADATA
