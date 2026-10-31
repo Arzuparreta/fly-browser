@@ -549,21 +549,21 @@ void FlyWindowController::BuildSidebar() {
   parts.tabs = tab_sidebar_;
   tab_sidebar_->SetStateChangedCallback(base::BindRepeating(
       &FlyWindowController::UpdateSplitButton, weak_factory_.GetWeakPtr()));
-  // The bottom row: pin, theme and the other sidebar controls, in order.
+  // The bottom row: pin, split, reader, search, extensions and settings.
   sidebar_pin_button_ = sidebar->AddChildView(MakeFlyIconButton(
       base::BindRepeating(&FlyWindowController::ToggleSidebarAutoCollapse,
                           weak_factory_.GetWeakPtr()),
-      views::kKeepIcon, u"Pin / Auto-Collapse Sidebar", 28));
+      views::kKeepIcon, u"Pin / Auto-Collapse Sidebar", 36));
   split_button_ = sidebar->AddChildView(MakeFlyIconButton(
-      action("toggle-split"), kSplitSceneIcon, u"Toggle Split View", 28));
+      action("toggle-split"), kSplitSceneIcon, u"Toggle Split View", 36));
   reader_button_ = sidebar->AddChildView(MakeFlyIconButton(
-      action("toggle-reader-view"), kMenuBookIcon, u"Toggle Reader View", 28));
+      action("toggle-reader-view"), kMenuBookIcon, u"Toggle Reader View", 36));
   auto* search = sidebar->AddChildView(
       MakeFlyIconButton(action("toggle-address"), vector_icons::kSearchIcon,
-                        u"Search or enter address", 28));
+                        u"Search or enter address", 36));
   auto* extensions = sidebar->AddChildView(MakeFlyIconButton(
       action("open-extension-actions"), vector_icons::kExtensionOldIcon,
-      u"Extensions", 28));
+      u"Extensions", 36));
   preferences_button_ = sidebar->AddChildView(MakeFlyIconButton(
       base::BindRepeating(
           [](base::WeakPtr<FlyWindowController> window) {
@@ -573,7 +573,7 @@ void FlyWindowController::BuildSidebar() {
             }
           },
           weak_factory_.GetWeakPtr()),
-      vector_icons::kSettingsIcon, u"Settings", 28));
+      vector_icons::kSettingsIcon, u"Settings", 36));
   preferences_button_->SetEnabled(true);
   for (FlyButton* button :
        {sidebar_pin_button_.get(), split_button_.get(), reader_button_.get(),
@@ -581,10 +581,10 @@ void FlyWindowController::BuildSidebar() {
     // Pointer actions must not leave a focused accent after dismissal.
     // Keyboard traversal can still focus and activate these controls.
     button->SetRequestFocusOnPress(false);
-    button->SetOutlined(true);
-    button->SetCornerRadius(4);
+    button->SetLiftOnHover(true);
+    button->SetCornerRadius(6);
     button->SetIconTone(FlyButton::IconTone::kText);
-    button->SetVectorIcon(*button->vector_icon(), 12);
+    button->SetVectorIcon(*button->vector_icon(), 16);
     parts.footer.push_back(button);
   }
   sidebar->SetParts(std::move(parts));
@@ -1181,7 +1181,7 @@ void FlyWindowController::UpdateSidebarMode() {
   if (auto* pin = sidebar_pin_button_.get()) {
     const auto* label = collapse ? u"Pin sidebar" : u"Unpin sidebar";
     pin->SetVectorIcon(collapse ? views::kKeepIcon : views::kKeepFilledIcon,
-                       12);
+                       16);
     pin->SetSelected(!collapse);
     pin->SetAccentText(!collapse);
     pin->SetTooltipText(label);

@@ -126,6 +126,11 @@ class FlyButton : public views::MdTextButton {
   // Hover tints with the text colour at 7% and no outline (the workspace
   // header).
   void SetHoverFill(bool hover_fill);
+  // A borderless key (the sidebar's bottom row): only the icon at rest; on
+  // hover a raised fill with a soft drop shadow, which goes away while
+  // pressed. An active toggle keeps a faint fill and an accent icon. The key
+  // is inset 2px inside the bounds so the shadow is not clipped.
+  void SetLiftOnHover(bool lift);
   // A fill shown at rest (the sidebar clock).
   void SetRestingFill(SkColor color);
   const gfx::VectorIcon* vector_icon() const { return icon_; }
@@ -161,6 +166,7 @@ class FlyButton : public views::MdTextButton {
   bool primary_ = false;
   bool outlined_ = false;
   bool hover_fill_ = false;
+  bool lift_ = false;
   PillHalf pill_half_ = PillHalf::kNone;
   IconTone icon_tone_ = IconTone::kDim;
   std::optional<SkColor> resting_fill_;

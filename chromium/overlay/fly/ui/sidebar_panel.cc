@@ -64,8 +64,9 @@ void FadeTo(views::View* view,
 }
 }  // namespace
 
-// The engraving, 230px wide and centred, ends 41px above the footer rule:
-// the same clearance it had above the clock badge. Resizing never recentres it.
+// The engraving, 230px wide and centred, ends 81px above the panel's bottom
+// edge: the same clearance it had above the clock badge. Resizing never
+// recentres it.
 class SidebarPanel::Engraving : public views::View {
   METADATA_HEADER(Engraving, views::View)
 
@@ -83,7 +84,7 @@ class SidebarPanel::Engraving : public views::View {
     const int size = FlyScaled(230);
     canvas->DrawImageInt(image, 0, 0, image.width(), image.height(),
                          (width() - size) / 2,
-                         height() - FlyScaled(41) - size, size, size, true);
+                         height() - FlyScaled(81) - size, size, size, true);
   }
 
  private:
@@ -93,24 +94,9 @@ class SidebarPanel::Engraving : public views::View {
 BEGIN_METADATA(SidebarPanel, Engraving)
 END_METADATA
 
-// A quiet divider above the footer.
-class SidebarPanel::Rule : public views::View {
-  METADATA_HEADER(Rule, views::View)
-
- public:
-  Rule() { SetCanProcessEventsWithinSubtree(false); }
-  void OnPaint(gfx::Canvas* canvas) override {
-    canvas->FillRect(GetLocalBounds(), GetFlyColors().border);
-  }
-};
-BEGIN_METADATA(SidebarPanel, Rule)
-END_METADATA
-
 SidebarPanel::SidebarPanel() {
   engraving_ = AddChildView(std::make_unique<Engraving>());
-  footer_line_ = AddChildView(std::make_unique<Rule>());
   AddExpandedOnly(engraving_, false);
-  AddExpandedOnly(footer_line_, false);
 }
 SidebarPanel::~SidebarPanel() = default;
 
@@ -166,8 +152,11 @@ void SidebarPanel::Layout(PassKey) {
   const int x = s(4);
   const int row = s(245);
   int y = s(8);
-  const int footer_y = height() - s(6) - s(34);
-  engraving_->SetBounds(0, 0, content, std::max(0, footer_y));
+  // The bottom row's keys are 32px with 2px around them for the hover
+  // shadow, 8px above the bottom edge.
+  const int key = s(36);
+  const int footer_y = height() - s(6) - key;
+  engraving_->SetBoundsRect(GetLocalBounds());
   if (parts_.window_controls && parts_.window_controls->GetVisible()) {
     const int height = parts_.window_controls->GetPreferredSize().height();
     parts_.window_controls->SetBounds(x, y, row, height);
@@ -209,24 +198,20 @@ void SidebarPanel::Layout(PassKey) {
     parts_.workspaces->SetBounds(x, y, row, height);
     y += height + s(4);
   }
-  // The tab list fills the free height above the footer rule.
+  // The tab list fills the free height above the bottom row. Empty space,
+  // not a rule, separates the two.
   y += s(4);
+  const int tabs_bottom = footer_y - s(6);
   if (parts_.tabs)
-    parts_.tabs->SetBounds(0, y, content, std::max(0, footer_y - y));
-  // .bottom-theme-layout: 6px above the bottom, 8px 4px 0 padding, buttons
-  // spread across the row with the pin first, centred on the rail.
-  footer_line_->SetBounds(0, footer_y, content, 1);
+    parts_.tabs->SetBounds(0, y, content, std::max(0, tabs_bottom - y));
+  // The keys spread across the row, symmetric about its centre, with the
+  // pin first and centred on the rail.
   const int count = static_cast<int>(parts_.footer.size());
   if (!count)
     return;
-  const int button_width = s(28);
-  const int span = content - s(8);
-  const int gap =
-      count > 1 ? (span - count * button_width) / (count - 1) : 0;
-  for (int i = 0; i < count; ++i) {
-    parts_.footer[i]->SetBounds(x + i * (button_width + gap),
-                                footer_y + s(8), button_width, s(26));
-  }
+  const int gap = count > 1 ? (content - count * key) / (count - 1) : 0;
+  for (int i = 0; i < count; ++i)
+    parts_.footer[i]->SetBounds(i * (key + gap), footer_y, key, key);
 }
 
 void SidebarPanel::ChildVisibilityChanged(views::View* child) {
@@ -243,7 +228,6 @@ void SidebarPanel::OnThemeChanged() {
   views::View::OnThemeChanged();
   SchedulePaint();
   engraving_->SchedulePaint();
-  footer_line_->SchedulePaint();
 }
 BEGIN_METADATA(SidebarPanel)
 END_METADATA
