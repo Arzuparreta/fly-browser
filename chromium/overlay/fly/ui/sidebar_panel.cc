@@ -179,15 +179,17 @@ void SidebarPanel::Layout(PassKey) {
     parts_.window_controls->SetBounds(x, y, row, height);
     y += height + s(6);
   }
-  // Web controls start at the rail's left inset: history, then New tab.
-  // A short rule and equal breathing room separate the workspace name.
+  // Centre the rule in the panel, with equal outer insets and breathing room
+  // for navigation on the left and the workspace name on the right.
   const int top = s(34);
-  const int pill = s(34);
-  const int history = pill * 2 - s(1);
+  const int separator_x = (content - 1) / 2;
+  const int navigation = separator_x - s(8) - x;
+  const int new_tab_width = (navigation - s(6) + s(1)) / 3;
+  const int history = navigation - s(6) - new_tab_width;
+  const int back_width = (history + s(1)) / 2;
   const int new_tab_x = x + history + s(6);
-  const int separator_x = new_tab_x + s(28) + s(8);
   const int header_x = separator_x + 1 + s(8);
-  const int header = x + row - header_x;
+  const int header = content - x - header_x;
   top_separator_->SetBounds(separator_x, y + s(9), 1, top - s(18));
   if (parts_.top.header)
     parts_.top.header->SetBounds(rail_ ? x : header_x, y,
@@ -198,13 +200,14 @@ void SidebarPanel::Layout(PassKey) {
   if (parts_.top.label)
     parts_.top.label->SetBounds(header_x + s(6), y, header - s(12), top);
   if (parts_.top.new_tab)
-    parts_.top.new_tab->SetBounds(new_tab_x, y + (top - s(28)) / 2,
-                                  s(28), s(28));
+    parts_.top.new_tab->SetBounds(new_tab_x, y + (top - s(30)) / 2,
+                                  new_tab_width, s(30));
   if (parts_.top.back)
-    parts_.top.back->SetBounds(x, y + (top - s(30)) / 2, pill, s(30));
+    parts_.top.back->SetBounds(x, y + (top - s(30)) / 2, back_width, s(30));
   if (parts_.top.forward)
-    parts_.top.forward->SetBounds(x + pill - s(1), y + (top - s(30)) / 2,
-                                  pill, s(30));
+    parts_.top.forward->SetBounds(x + back_width - s(1),
+                                  y + (top - s(30)) / 2,
+                                  history - back_width + s(1), s(30));
   y += top + s(6);
   if (parts_.workspaces && parts_.workspaces->GetVisible()) {
     const int height = parts_.workspaces->GetHeightForWidth(row);

@@ -1,6 +1,8 @@
 // Copyright Fly Browser contributors. All rights reserved.
 // Use of this source code is governed by the GPL-3.0-or-later license in the
 // Fly repository.
+#include <cstdlib>
+
 #include "base/files/file_enumerator.h"
 #include "base/files/file_util.h"
 #include "base/files/scoped_temp_dir.h"
@@ -949,6 +951,16 @@ IN_PROC_BROWSER_TEST_F(FlySidebarBrowserTest,
     EXPECT_EQ(0.f, top.badge->layer()->opacity());
     EXPECT_EQ(1.f, top.label->layer()->opacity());
     EXPECT_EQ(1.f, separator->layer()->opacity());
+    // Pixel rounding may leave one extra pixel on either half at larger scales.
+    EXPECT_LE(std::abs(separator->x() -
+                       (panel->width() - separator->bounds().right())), 1);
+    EXPECT_LE(std::abs(top.header->width() -
+                       (top.new_tab->bounds().right() - top.back->x())), 1);
+    EXPECT_EQ(top.back->x(), panel->width() - top.header->bounds().right());
+    EXPECT_EQ(separator->x() - top.new_tab->bounds().right(),
+              top.header->x() - separator->bounds().right());
+    EXPECT_LE(std::abs(top.back->width() - top.new_tab->width()), 1);
+    EXPECT_LE(std::abs(top.forward->width() - top.new_tab->width()), 1);
     EXPECT_EQ(FlyScaled(4), top.back->x());
     EXPECT_LT(top.back->x(), top.forward->x());
     EXPECT_LT(top.forward->bounds().right(), top.new_tab->x());
@@ -957,6 +969,7 @@ IN_PROC_BROWSER_TEST_F(FlySidebarBrowserTest,
     EXPECT_TRUE(top.header->bounds().Contains(top.label->bounds()));
     EXPECT_LE(top.header->bounds().right(), panel->width());
     auto* label = views::AsViewClass<views::Label>(top.label);
+    EXPECT_EQ(gfx::ALIGN_CENTER, label->GetHorizontalAlignment());
     EXPECT_EQ(label->GetText(), label->GetDisplayTextForTesting());
     EXPECT_EQ(top.back->GetNextFocusableView(), top.forward);
     EXPECT_EQ(top.forward->GetNextFocusableView(), top.new_tab);
