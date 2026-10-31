@@ -949,19 +949,32 @@ IN_PROC_BROWSER_TEST_F(FlySidebarBrowserTest,
     views::test::RunScheduledLayout(top.header->GetWidget());
     EXPECT_EQ(0.f, top.badge->layer()->opacity());
     EXPECT_EQ(1.f, top.label->layer()->opacity());
-    const int navigation = top.new_tab->bounds().right() - top.back->x();
-    EXPECT_NEAR(1.5, static_cast<double>(navigation) / top.header->width(), 0.02);
-    EXPECT_EQ(top.back->x(), panel->width() - top.header->bounds().right());
-    EXPECT_EQ(FlyScaled(12), top.header->x() - top.new_tab->bounds().right());
-    EXPECT_LE(std::abs(top.back->width() - top.new_tab->width()), 1);
-    EXPECT_LE(std::abs(top.forward->width() - top.new_tab->width()), 1);
-    EXPECT_EQ(FlyScaled(4), top.back->x());
-    EXPECT_LT(top.back->x(), top.forward->x());
+    // Navigation takes three fifths of the usable row, with one key the size
+    // of the bottom row's centred in each third.
+    const int inset = FlyScaled(4);
+    const int navigation =
+        (panel->width() - 2 * inset - FlyScaled(12)) * 3 / 5;
+    const int slot = navigation / 3;
+    int third = 0;
+    for (views::View* key : {top.back.get(), top.forward.get(),
+                             top.new_tab.get()}) {
+      EXPECT_EQ(gfx::Size(FlyScaled(36), FlyScaled(36)), key->size());
+      EXPECT_NEAR(inset + slot * third + slot / 2,
+                  key->bounds().CenterPoint().x(), 1);
+      ++third;
+    }
+    EXPECT_LT(top.back->bounds().right(), top.forward->x());
     EXPECT_LT(top.forward->bounds().right(), top.new_tab->x());
     EXPECT_LT(top.new_tab->bounds().right(), top.header->x());
+    // The name starts 12px after navigation; the workspace key reaches 10px
+    // beyond it on both sides and ends at the panel's edge.
+    EXPECT_EQ(inset + navigation + FlyScaled(12), top.label->x());
+    EXPECT_GT(navigation, top.label->width());
     EXPECT_TRUE(top.header->bounds().Contains(top.label->bounds()));
-    EXPECT_EQ(top.header->bounds(), top.label->bounds());
-    EXPECT_LE(top.header->bounds().right(), panel->width());
+    EXPECT_EQ(FlyScaled(10), top.label->x() - top.header->x());
+    EXPECT_EQ(FlyScaled(10),
+              top.header->bounds().right() - top.label->bounds().right());
+    EXPECT_EQ(panel->width(), top.header->bounds().right());
     auto* label = views::AsViewClass<views::Label>(top.label);
     EXPECT_EQ(gfx::ALIGN_LEFT, label->GetHorizontalAlignment());
     EXPECT_EQ(label->GetText(), label->GetDisplayTextForTesting());

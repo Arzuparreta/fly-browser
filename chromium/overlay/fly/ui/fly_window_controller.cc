@@ -493,25 +493,21 @@ void FlyWindowController::BuildSidebar() {
     window_control_buttons_.emplace(name, button);
   }
   parts.window_controls = window_controls_;
+  // Back, forward and new tab: borderless keys, like the bottom row.
   auto* back = sidebar->AddChildView(MakeFlyIconButton(
-      action("go-back"), vector_icons::kArrowBackIcon, u"Go back", 30));
+      action("go-back"), vector_icons::kArrowBackIcon, u"Go back", 36));
   auto* forward = sidebar->AddChildView(MakeFlyIconButton(
       action("go-forward"), vector_icons::kArrowForwardIcon, u"Go forward",
-      30));
-  // .nav-history-group: one pill, each half with its own border.
-  back->SetPillHalf(FlyButton::PillHalf::kLeft);
-  forward->SetPillHalf(FlyButton::PillHalf::kRight);
-  back->SetPillPartner(forward);
-  forward->SetPillPartner(back);
+      36));
   new_tab_button_ = sidebar->AddChildView(MakeFlyIconButton(
       base::BindRepeating(base::IgnoreResult(&FlyWindowController::CreateTab),
                           weak_factory_.GetWeakPtr()),
-      kNewTabInGroupRefreshOldIcon, u"New tab", 28));
-  new_tab_button_->SetOutlined(true);
-  new_tab_button_->SetCornerRadius(4);
-  for (FlyButton* button : {new_tab_button_.get(), back, forward}) {
-    button->SetOutlined(true);
+      kNewTabInGroupRefreshOldIcon, u"New tab", 36));
+  for (FlyButton* button : {back, forward, new_tab_button_.get()}) {
+    button->SetLiftOnHover(true);
+    button->SetCornerRadius(6);
     button->SetIconTone(FlyButton::IconTone::kText);
+    button->SetVectorIcon(*button->vector_icon(), 16);
   }
   // The full workspace name follows the web controls. Its compact badge
   // occupies the favicon column only while the sidebar is collapsed.
@@ -521,8 +517,8 @@ void FlyWindowController::BuildSidebar() {
       u"", FlyFace::kSans, 14));
   workspace_picker_button_->SetTooltipText(
       u"Workspace: Click to open Workspace Dashboard");
-  workspace_picker_button_->SetCornerRadius(4);
-  workspace_picker_button_->SetHoverFill(true);
+  workspace_picker_button_->SetCornerRadius(6);
+  workspace_picker_button_->SetLiftOnHover(true);
   workspace_badge_ = sidebar->AddChildView(std::make_unique<FlyLabel>(
       u"W1", FlyFace::kMono, 12, gfx::Font::Weight::MEDIUM));
   workspace_badge_->SetHorizontalAlignment(gfx::ALIGN_CENTER);

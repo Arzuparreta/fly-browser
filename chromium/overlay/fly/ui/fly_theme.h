@@ -9,7 +9,6 @@
 #include <string>
 
 #include "base/functional/callback.h"
-#include "base/memory/weak_ptr.h"
 #include "third_party/skia/include/core/SkColor.h"
 #include "ui/gfx/font.h"
 #include "ui/gfx/font_list.h"
@@ -119,14 +118,7 @@ class FlyButton : public views::MdTextButton {
   void SetPrimary(bool primary);
   // A bordered button: the border turns to the accent on hover.
   void SetOutlined(bool outlined);
-  // One half of the back/forward pill: fully rounded on that side.
-  enum class PillHalf { kNone, kLeft, kRight };
-  void SetPillHalf(PillHalf half);
-  void SetPillPartner(FlyButton* partner) { pill_partner_ = partner->weak_factory_.GetWeakPtr(); }
-  // Hover tints with the text colour at 7% and no outline (the workspace
-  // header).
-  void SetHoverFill(bool hover_fill);
-  // A borderless key (the sidebar's bottom row): only the icon at rest; on
+  // A borderless key (the sidebar's top and bottom rows): only the icon at rest; on
   // hover a raised fill with a soft drop shadow, which goes away while
   // pressed. An active toggle keeps a faint fill and an accent icon. The key
   // is inset 2px inside the bounds so the shadow is not clipped.
@@ -160,17 +152,13 @@ class FlyButton : public views::MdTextButton {
   FlyFace face_;
   int size_;
   gfx::Font::Weight weight_ = gfx::Font::Weight::NORMAL;
-  base::WeakPtr<FlyButton> pill_partner_;
   bool selected_ = false;
   bool accent_text_ = false;
   bool primary_ = false;
   bool outlined_ = false;
-  bool hover_fill_ = false;
   bool lift_ = false;
-  PillHalf pill_half_ = PillHalf::kNone;
   IconTone icon_tone_ = IconTone::kDim;
   std::optional<SkColor> resting_fill_;
-  base::WeakPtrFactory<FlyButton> weak_factory_{this};
 };
 // Square icon button (sidebar navigation and footer actions).
 std::unique_ptr<FlyButton> MakeFlyIconButton(

@@ -152,9 +152,9 @@ void SidebarPanel::Layout(PassKey) {
   const int x = s(4);
   const int row = s(245);
   int y = s(8);
-  // The bottom row's keys are 32px with 2px around them for the hover
-  // shadow, 8px above the bottom edge.
+  // Keys are 32px with 2px around them for the hover shadow.
   const int key = s(36);
+  // The bottom row sits 8px above the bottom edge.
   const int footer_y = height() - s(6) - key;
   engraving_->SetBoundsRect(GetLocalBounds());
   if (parts_.window_controls && parts_.window_controls->GetVisible()) {
@@ -162,36 +162,38 @@ void SidebarPanel::Layout(PassKey) {
     parts_.window_controls->SetBounds(x, y, row, height);
     y += height + s(6);
   }
-  // Navigation takes three fifths of the usable row. A clear gap separates
-  // its outlined buttons from the quieter, left-aligned workspace name.
+  // Navigation takes three fifths of the usable row, one key centred in each
+  // third. A clear gap separates it from the left-aligned workspace name.
   const int top = s(34);
+  const int key_y = y + (top - key) / 2;
   const int group_gap = s(12);
   const int navigation = (content - 2 * x - group_gap) * 3 / 5;
-  const int new_tab_width = (navigation - s(6) + s(1)) / 3;
-  const int history = navigation - s(6) - new_tab_width;
-  const int back_width = (history + s(1)) / 2;
-  const int new_tab_x = x + history + s(6);
+  const int slot = navigation / 3;
+  int slot_x = x;
+  for (views::View* view :
+       {parts_.top.back.get(), parts_.top.forward.get(),
+        parts_.top.new_tab.get()}) {
+    if (view)
+      view->SetBounds(slot_x + (slot - key) / 2, key_y, key, key);
+    slot_x += slot;
+  }
+  // The name starts after the gap. The workspace key reaches 10px further
+  // out on both sides, so its hover fill leaves 8px around the name. Long
+  // names elide within the label.
   const int header_x = x + navigation + group_gap;
-  const int header = content - x - header_x;
-  if (parts_.top.header)
-    parts_.top.header->SetBounds(rail_ ? x : header_x, y,
-                                 rail_ ? s(28) : header, top);
+  const int name_inset = s(10);
+  if (parts_.top.header) {
+    if (rail_)
+      parts_.top.header->SetBounds(0, key_y, key, key);
+    else
+      parts_.top.header->SetBounds(header_x - name_inset, key_y,
+                                   content - header_x + name_inset, key);
+  }
   if (parts_.top.badge)
     parts_.top.badge->SetBounds(x, y + (top - s(28)) / 2, s(28), s(28));
-  // Start the name at the workspace target's left edge, without adding more
-  // whitespace to the gap between the two groups.
-  // Long names elide within the same bounds as the button.
   if (parts_.top.label)
-    parts_.top.label->SetBounds(header_x, y, header, top);
-  if (parts_.top.new_tab)
-    parts_.top.new_tab->SetBounds(new_tab_x, y + (top - s(30)) / 2,
-                                  new_tab_width, s(30));
-  if (parts_.top.back)
-    parts_.top.back->SetBounds(x, y + (top - s(30)) / 2, back_width, s(30));
-  if (parts_.top.forward)
-    parts_.top.forward->SetBounds(x + back_width - s(1),
-                                  y + (top - s(30)) / 2,
-                                  history - back_width + s(1), s(30));
+    parts_.top.label->SetBounds(header_x, y, content - name_inset - header_x,
+                                top);
   y += top + s(6);
   if (parts_.workspaces && parts_.workspaces->GetVisible()) {
     const int height = parts_.workspaces->GetHeightForWidth(row);
