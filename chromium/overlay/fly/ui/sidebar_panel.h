@@ -51,7 +51,7 @@ class SidebarPanel : public views::View {
     TopRow top;
     raw_ptr<views::View> workspaces = nullptr;
     raw_ptr<views::View> tabs = nullptr;
-    // .bottom-theme-layout buttons, left to right.
+    // The bottom row's keys, left to right.
     std::vector<raw_ptr<views::View>> footer;
   };
 
@@ -65,8 +65,8 @@ class SidebarPanel : public views::View {
                   gfx::ImageSkia engraving_light,
                   gfx::ImageSkia paper_grain);
   // Parts shown only in one state fade with the edge. They get their own
-  // layers; the panel's own decorations (engraving, footer line) are
-  // registered here too.
+  // layers; the panel's own decoration (the engraving) is registered here
+  // too.
   // `interactive` parts ignore the pointer while hidden; decorations never
   // take it.
   void AddExpandedOnly(views::View* view, bool interactive = true);
@@ -88,10 +88,8 @@ class SidebarPanel : public views::View {
 
  private:
   class Engraving;
-  class Rule;
   Parts parts_;
   raw_ptr<Engraving> engraving_ = nullptr;
-  raw_ptr<Rule> footer_line_ = nullptr;
   gfx::ImageSkia paper_grain_;
   struct Faded {
     raw_ptr<views::View> view;

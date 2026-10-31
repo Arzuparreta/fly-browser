@@ -13,6 +13,7 @@
 #include "base/files/file_util.h"
 #include "base/path_service.h"
 #include "build/build_config.h"
+#include "cc/paint/draw_looper.h"
 #include "cc/paint/paint_flags.h"
 #include "ui/base/metadata/metadata_impl_macros.h"
 #include "ui/base/models/image_model.h"
@@ -364,6 +365,10 @@ void FlyButton::SetHoverFill(bool hover_fill) {
   hover_fill_ = hover_fill;
   SchedulePaint();
 }
+void FlyButton::SetLiftOnHover(bool lift) {
+  lift_ = lift;
+  UpdateColors();
+}
 void FlyButton::SetRestingFill(SkColor color) {
   resting_fill_ = color;
   SchedulePaint();
@@ -433,13 +438,18 @@ void FlyButton::UpdateColors() {
       rest = text;
     if (icon_tone_ == IconTone::kAccent)
       rest = colors.accent;
+    // A key has no outline to show that its toggle is on; the icon does.
+    const bool accent_key = lift_ && ShowsSelected();
+    if (accent_key)
+      rest = colors.accent;
     views::LabelButton::SetImageModel(
         STATE_NORMAL,
         ui::ImageModel::FromVectorIcon(*icon_, rest, FlyScaled(icon_size_)));
     for (auto state : {STATE_HOVERED, STATE_PRESSED})
       views::LabelButton::SetImageModel(
-          state,
-          ui::ImageModel::FromVectorIcon(*icon_, text, FlyScaled(icon_size_)));
+          state, ui::ImageModel::FromVectorIcon(
+                     *icon_, accent_key ? colors.accent : text,
+                     FlyScaled(icon_size_)));
     views::LabelButton::SetImageModel(
         STATE_DISABLED,
         ui::ImageModel::FromVectorIcon(*icon_, colors.border,
@@ -471,6 +481,42 @@ void FlyButton::OnPaintBackground(gfx::Canvas* canvas) {
   gfx::RectF bounds(GetLocalBounds());
   cc::PaintFlags flags;
   flags.setAntiAlias(true);
+  if (lift_) {
+    bounds.Inset(FlyScaled(2));
+    // The key lifts above the sidebar: lighter than it in both themes.
+    const SkColor key = colors.dark ? colors.cell : colors.panel;
+    const bool enabled = GetEnabled();
+    const bool hovered = enabled && GetVisualState() == STATE_HOVERED;
+    const bool pressed = enabled && GetVisualState() == STATE_PRESSED;
+    if (hovered) {
+      cc::DrawLooperBuilder shadow;
+      shadow.AddShadow({0, 1}, 1,
+                       SkColor4f::FromColor(
+                           SkColorSetA(SK_ColorBLACK, colors.dark ? 150 : 56)),
+                       cc::DrawLooper::kOverrideAlphaFlag);
+      shadow.AddUnmodifiedContent(/*add_on_top=*/true);
+      flags.setLooper(shadow.Detach());
+    }
+    // Pressed, the key sinks: no shadow and a fill halfway to the sidebar.
+    if (hovered || pressed || selected) {
+      flags.setColor(hovered ? key
+                     : pressed
+                         ? color_utils::AlphaBlend(
+                               key, FlyRoleColor(FlyRole::kSidebarSurface),
+                               0.5f)
+                         : SkColorSetA(key, 0x99));
+      canvas->DrawPath(shape(bounds), flags);
+      flags.setLooper(nullptr);
+    }
+    if (HasFocus()) {
+      flags.setStyle(cc::PaintFlags::kStroke_Style);
+      flags.setStrokeWidth(1);
+      flags.setColor(colors.accent);
+      bounds.Inset(0.5f);
+      canvas->DrawPath(shape(bounds), flags);
+    }
+    return;
+  }
   if (primary_ && !selected) {
     const bool enabled = GetEnabled();
     flags.setColor(SkColorSetA(colors.accent, !enabled ? 0 : hot ? 56 : 28));
