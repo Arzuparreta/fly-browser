@@ -298,6 +298,7 @@ class FlyWindowController : public views::WidgetObserver,
   void ConfirmHistoryClear(content::WebContents* source);
   std::vector<PaletteEntry> BookmarkEntries();
   void OpenBookmark(content::WebContents* source, std::string url);
+  void OpenBookmarkInBackground(content::WebContents* source, std::string url);
   void RemoveBookmark(content::WebContents* source, std::string url);
 
   // Other surfaces.

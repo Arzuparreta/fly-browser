@@ -17,6 +17,7 @@
 #include "ui/base/page_transition_types.h"
 #include "ui/color/color_id.h"
 #include "ui/color/color_provider.h"
+#include "ui/gfx/color_utils.h"
 #include "chrome/browser/lifetime/application_lifetime_desktop.h"
 #include "chrome/browser/ssl/chrome_security_state_util.h"
 #include "chrome/browser/ui/browser_window/public/browser_window_interface_iterator.h"
@@ -2240,53 +2241,25 @@ IN_PROC_BROWSER_TEST_F(FlySidebarBrowserTest,
   }
 }
 
-// New tabs open Fly's new tab page: clock, date, lists and the memory use of
-// Fly, refreshed while the page shows.
+// Quiet new tabs use the same native search and bookmark surfaces as shortcuts.
 IN_PROC_BROWSER_TEST_F(FlyWorkspaceBrowserTest,
-                       NewTabShowsFlysPageWithLiveMemory) {
-  auto* model = browser()->GetTabStripModel();
-  const int count = model->count();
+                       QuietNewTabOpensTheNativeNavigationSurfaces) {
   ASSERT_TRUE(ExecuteNativeCommand(browser(), "spawn-tab"));
-  ASSERT_EQ(count + 1, model->count());
   auto* contents = Active(browser());
   ASSERT_TRUE(content::WaitForLoadStop(contents));
   EXPECT_EQ(GURL(kFlyNewTabURL), contents->GetLastCommittedURL());
   EXPECT_EQ(u"New tab", contents->GetTitle());
-  EXPECT_TRUE(IsFlyNewTabPage(contents->GetLastCommittedURL()));
-  ASSERT_TRUE(base::test::RunUntil([&] {
-    return content::EvalJs(contents,
-                           "document.getElementById('memory').textContent")
-        .ExtractString()
-        .ends_with(" MB");
-  }));
-  EXPECT_FALSE(content::EvalJs(contents,
-                               "document.getElementById('clock').textContent")
-                   .ExtractString()
-                   .empty());
-  EXPECT_EQ("MEMORY",
-            content::EvalJs(contents,
-                            "document.querySelector('.annotation small')"
-                            ".textContent"));
-  // The figure is rewritten every second while the page shows.
-  ASSERT_TRUE(content::ExecJs(
-      contents, "document.getElementById('memory').textContent = 'stale'"));
-  ASSERT_TRUE(base::test::RunUntil([&] {
-    return content::EvalJs(contents,
-                           "document.getElementById('memory').textContent")
-               .ExtractString() != "stale";
-  }));
-  EXPECT_EQ(false, content::EvalJs(
-                       contents,
-                       "document.getElementById('saved-bookmarks').hidden"));
-  // The sidebar row shows the title alone.
-  auto* row =
-      Window().tab_sidebar_for_testing()->row_for_testing(
-          contents);
-  ASSERT_TRUE(row);
+  EXPECT_EQ(2, content::EvalJs(contents, "document.querySelectorAll('button').length"));
+  EXPECT_EQ(0, content::EvalJs(contents, "document.querySelectorAll('#clock,#memory,#sites').length"));
+  ASSERT_TRUE(content::ExecJs(contents, "document.getElementById('bookmarks').click()"));
+  auto& picker = Window().bookmark_picker();
+  ASSERT_TRUE(base::test::RunUntil([&] { return picker.active() && picker.search_for_testing()->HasFocus(); }));
+  ASSERT_TRUE(InvokeNativeCommand(browser(), "toggle-bookmarks"));
+  ASSERT_TRUE(base::test::RunUntil([&] { return !picker.showing(); }));
+  ASSERT_TRUE(content::ExecJs(contents, "document.getElementById('search').click()"));
+  ASSERT_TRUE(base::test::RunUntil([&] { return Window().address_picker().active(); }));
 }
 
-// The HTML and its blocking stylesheet must already carry the correct state,
-// independently of the asynchronous WebUI ready message and script execution.
 IN_PROC_BROWSER_TEST_F(FlyWorkspaceBrowserTest,
                        NewTabAddressAcceptsTypingBeforeLoadFinishes) {
   auto& window = Window();
@@ -2317,96 +2290,43 @@ IN_PROC_BROWSER_TEST_F(FlyWorkspaceBrowserTest,
   ASSERT_TRUE(App().preferences().SetString("interface_scale", "large"));
   ASSERT_TRUE(App().preferences().SetSidebarAutoCollapse(true));
   ASSERT_TRUE(App().preferences().SetThemeColor(false, "bg_main", "#efe8d1"));
-  const std::string title = "</script><script>window.injected = true</script>";
-  ASSERT_TRUE(App().bookmarks().Add("https://snapshot.example/", title));
+  ASSERT_TRUE(App().bookmarks().Add("https://snapshot.example/", "</script><script>window.injected=true</script>"));
+  const auto queries = App().new_tab_history().query_count_for_testing();
   ASSERT_TRUE(ExecuteNativeCommand(browser(), "spawn-tab"));
   auto* contents = Active(browser());
   ASSERT_TRUE(content::WaitForLoadStop(contents));
   EXPECT_EQ(true, content::EvalJs(contents, R"JS(
-    (async () => {
-      const css = [...document.styleSheets].find(sheet =>
-          sheet.href?.endsWith('/new-tab.css')).cssRules;
-      const initialStyle = [...css].at(-1).style;
-      const parsed = document;
-      const data = JSON.parse(parsed.getElementById('initial-data').textContent);
-      return parsed.body.classList.contains('light') && data.light &&
-          data.scale === 1.25 && data.sidebarOverhang === 280 &&
-          data.colours['--bg-main'] === '#efe8d1' &&
-          data.bookmarks[0].title === '</script><script>window.injected = true</script>' &&
-          parsed.querySelectorAll('script').length === 2 && !window.injected &&
-          parsed.getElementById('memory-fly').getAttribute('src').includes('papel') &&
-          initialStyle.getPropertyValue('--bg-main').trim() === '#efe8d1' &&
-          initialStyle.getPropertyValue('--scale').trim() === '1.250000' &&
-          initialStyle.getPropertyValue('--sidebar-overhang').trim() === '280px';
-    })()
-  )JS"));
-  EXPECT_EQ("rgb(239, 232, 209)", content::EvalJs(contents,
-      "getComputedStyle(document.body).backgroundColor"));
-  EXPECT_EQ(title, content::EvalJs(contents,
-      "document.querySelector('#bookmarks a').textContent"));
-  const auto queries = App().new_tab_history().query_count_for_testing();
-  ASSERT_TRUE(Window(browser()).RunCommand("toggle-private-mode"));
-  ASSERT_TRUE(base::test::RunUntil([&] {
-    return LastActive() != browser();
-  }));
-  auto* private_browser = LastActive();
-  ASSERT_TRUE(private_browser->GetProfile()->IsOffTheRecord());
-  ASSERT_TRUE(content::WaitForLoadStop(Active(private_browser)));
-  EXPECT_EQ(true, content::EvalJs(Active(private_browser), R"JS(
     (() => {
+      const css = [...document.styleSheets].find(s => s.href?.endsWith('/new-tab.css')).cssRules;
+      const initial = [...css].at(-1).style;
       const data = JSON.parse(document.getElementById('initial-data').textContent);
-      return data.light && !data.showBookmarks && !data.showSites &&
-          data.bookmarks.length === 0 && data.sites.length === 0 &&
-          document.querySelectorAll('#bookmarks a, #sites a').length === 0;
+      return data.light && data.scale === 1.25 && data.sidebarOverhang === 280 &&
+          data.bookmarks === undefined && data.sites === undefined && !window.injected &&
+          document.querySelectorAll('script').length === 2 &&
+          document.getElementById('memory-fly').src.includes('papel') &&
+          initial.getPropertyValue('--bg-main').trim() === '#efe8d1' &&
+          initial.getPropertyValue('--sidebar-overhang').trim() === '280px';
     })()
   )JS"));
+  EXPECT_EQ("rgb(239, 232, 209)", content::EvalJs(contents, "getComputedStyle(document.body).backgroundColor"));
+  EXPECT_EQ(queries, App().new_tab_history().query_count_for_testing());
+  ASSERT_TRUE(Window().RunCommand("toggle-private-mode"));
+  ASSERT_TRUE(base::test::RunUntil([&] { return LastActive() != browser(); }));
+  ASSERT_TRUE(content::WaitForLoadStop(Active(LastActive())));
+  EXPECT_EQ(2, content::EvalJs(Active(LastActive()), "document.querySelectorAll('button').length"));
   EXPECT_EQ(queries, App().new_tab_history().query_count_for_testing());
 }
 
 IN_PROC_BROWSER_TEST_F(FlyWorkspaceBrowserTest,
-                       NewTabsShareHistoryAndInvalidateDeletedEntries) {
-  const auto visited = embedded_test_server()->GetURL("/title1.html");
-  ASSERT_TRUE(ui_test_utils::NavigateToURL(browser(), visited));
-  base::CancelableTaskTracker tracker;
-  base::test::TestFuture<history::QueryResults> flushed;
-  auto* history = HistoryServiceFactory::GetForProfile(
-      browser()->GetProfile(), ServiceAccessType::EXPLICIT_ACCESS);
-  history->QueryHistory({}, history::QueryOptions(), flushed.GetCallback(), &tracker);
-  ASSERT_FALSE(flushed.Get().empty());
-  ASSERT_TRUE(ExecuteNativeCommand(browser(), "spawn-tab"));
-  ASSERT_TRUE(content::WaitForLoadStop(Active(browser())));
-  ASSERT_TRUE(base::test::RunUntil([&] {
-    return content::EvalJs(Active(browser()),
-        "document.querySelectorAll('#sites a').length").ExtractInt() == 1;
-  }));
+                       QuietNewTabsDoNotQueryBrowsingHistory) {
+  ASSERT_TRUE(ui_test_utils::NavigateToURL(browser(), embedded_test_server()->GetURL("/title1.html")));
   const auto queries = App().new_tab_history().query_count_for_testing();
-  for (int i = 0; i < 3; ++i) {
+  for (int i = 0; i < 4; ++i) {
     ASSERT_TRUE(ExecuteNativeCommand(browser(), "spawn-tab"));
     ASSERT_TRUE(content::WaitForLoadStop(Active(browser())));
-    EXPECT_EQ(1, content::EvalJs(Active(browser()),
-        "document.querySelectorAll('#sites a').length"));
-    EXPECT_EQ(queries, App().new_tab_history().query_count_for_testing());
+    EXPECT_EQ(0, content::EvalJs(Active(browser()), "document.querySelectorAll('#sites,#saved-bookmarks').length"));
   }
-  ASSERT_TRUE(App().preferences().ToggleTheme());
-  ASSERT_TRUE(App().preferences().SetString("interface_scale", "large"));
-  base::RunLoop().RunUntilIdle();
   EXPECT_EQ(queries, App().new_tab_history().query_count_for_testing());
-  // All new tabs are hidden when the original HTTP tab is selected. Deletion
-  // must invalidate their cached history without querying in the background.
-  browser()->GetTabStripModel()->ActivateTabAt(0);
-  base::RunLoop().RunUntilIdle();
-  history->DeleteURLs({visited});
-  ASSERT_TRUE(base::test::RunUntil([&] {
-    return App().new_tab_history().entries().empty();
-  }));
-  EXPECT_EQ(queries, App().new_tab_history().query_count_for_testing());
-  ASSERT_TRUE(ExecuteNativeCommand(browser(), "spawn-tab"));
-  ASSERT_TRUE(content::WaitForLoadStop(Active(browser())));
-  ASSERT_TRUE(base::test::RunUntil([&] {
-    return App().new_tab_history().query_count_for_testing() > queries;
-  }));
-  EXPECT_EQ(0, content::EvalJs(Active(browser()),
-      "document.querySelectorAll('#sites a').length"));
 }
 
 IN_PROC_BROWSER_TEST_F(FlyWorkspaceBrowserTest,
@@ -2441,7 +2361,7 @@ IN_PROC_BROWSER_TEST_F(FlyWorkspaceBrowserTest,
           "await new Promise(requestAnimationFrame); "
           "await new Promise(requestAnimationFrame); })()"));
       const auto clock_left = content::EvalJs(contents,
-          "document.getElementById('clock').getBoundingClientRect().left")
+          "document.getElementById('search').getBoundingClientRect().left")
           .ExtractDouble();
       EXPECT_GE(clock_left, overhang);
       if (collapse) {
@@ -2450,7 +2370,7 @@ IN_PROC_BROWSER_TEST_F(FlyWorkspaceBrowserTest,
           return window.sidebar_expanded_for_testing();
         }));
         EXPECT_EQ(clock_left, content::EvalJs(contents,
-            "document.getElementById('clock').getBoundingClientRect().left")
+            "document.getElementById('search').getBoundingClientRect().left")
             .ExtractDouble());
         ASSERT_TRUE(InvokeNativeCommand(browser(), "focus-sidebar"));
       }
@@ -2459,121 +2379,34 @@ IN_PROC_BROWSER_TEST_F(FlyWorkspaceBrowserTest,
 }
 
 IN_PROC_BROWSER_TEST_F(FlyWorkspaceBrowserTest,
-                       NewTabLoadsFreshListsAndFollowsLivePreferences) {
-  const auto visited = embedded_test_server()->GetURL("/title1.html");
-  ASSERT_TRUE(ui_test_utils::NavigateToURL(browser(), visited));
-  // Flush the native history write, without ever opening a Fly picker.
-  base::CancelableTaskTracker tracker;
-  base::test::TestFuture<history::QueryResults> flushed;
-  HistoryServiceFactory::GetForProfile(browser()->GetProfile(),
-                                       ServiceAccessType::EXPLICIT_ACCESS)
-      ->QueryHistory({}, history::QueryOptions(), flushed.GetCallback(), &tracker);
-  ASSERT_FALSE(flushed.Get().empty());
+                       QuietNewTabFollowsLiveThemeAndScale) {
   ASSERT_TRUE(ExecuteNativeCommand(browser(), "spawn-tab"));
   auto* contents = Active(browser());
   ASSERT_TRUE(content::WaitForLoadStop(contents));
-  ASSERT_TRUE(base::test::RunUntil([&] {
-    return content::EvalJs(contents,
-        "document.querySelectorAll('#sites a').length").ExtractInt() == 1;
-  }));
-  EXPECT_EQ(url::Origin::Create(visited).GetURL().spec(),
-            content::EvalJs(contents, "document.querySelector('#sites a').href"));
-  // Bookmarks also exclude their origins from frequent sites immediately.
-  ASSERT_TRUE(App().bookmarks().Add(visited.spec(), "Saved page"));
-  ASSERT_TRUE(base::test::RunUntil([&] {
-    return content::EvalJs(contents,
-        "document.querySelector('#bookmarks a')?.textContent === 'Saved page'"
-        " && document.querySelectorAll('#sites a').length === 0").ExtractBool();
-  }));
-  ASSERT_TRUE(App().bookmarks().Remove(visited.spec()));
-  ASSERT_TRUE(base::test::RunUntil([&] {
-    return content::EvalJs(contents,
-        "document.querySelectorAll('#sites a').length").ExtractInt() == 1;
-  }));
-  ASSERT_TRUE(App().preferences().SetFrequentSitesVisible(false));
-  ASSERT_TRUE(base::test::RunUntil([&] {
-    return content::EvalJs(contents,
-        "document.getElementById('frequent-sites').hidden").ExtractBool();
-  }));
-  ASSERT_TRUE(App().preferences().SetFrequentSitesVisible(true));
   ASSERT_TRUE(App().preferences().ToggleTheme());
   ASSERT_TRUE(App().preferences().SetString("interface_scale", "large"));
   ASSERT_TRUE(base::test::RunUntil([&] {
     return content::EvalJs(contents,
         "document.body.classList.contains('light') && "
-        "document.documentElement.style.getPropertyValue('--scale') === '1.25' && "
-        "!document.getElementById('frequent-sites').hidden && "
-        "document.querySelectorAll('#sites a').length === 1").ExtractBool();
+        "document.documentElement.style.getPropertyValue('--scale') === '1.25'").ExtractBool();
   }));
-  // Native history deletion updates the visible new tab too.
-  HistoryServiceFactory::GetForProfile(browser()->GetProfile(),
-                                       ServiceAccessType::EXPLICIT_ACCESS)
-      ->DeleteURLs({visited});
-  ASSERT_TRUE(base::test::RunUntil([&] {
-    return content::EvalJs(contents,
-        "document.querySelectorAll('#sites a').length").ExtractInt() == 0;
-  }));
+  EXPECT_EQ(0, content::EvalJs(contents, "document.querySelectorAll('#clock,#memory,#sites').length"));
 }
 
 IN_PROC_BROWSER_TEST_F(FlyWorkspaceBrowserTest,
-                       BackgroundNewTabSamplesOnlyWhileVisible) {
+                       QuietBackgroundNewTabHasNoTelemetryOrHistoryWork) {
+  const auto queries = App().new_tab_history().query_count_for_testing();
   ASSERT_TRUE(ui_test_utils::NavigateToURLWithDisposition(
       browser(), GURL(kFlyNewTabURL), WindowOpenDisposition::NEW_BACKGROUND_TAB,
       ui_test_utils::BROWSER_TEST_WAIT_FOR_LOAD_STOP));
   auto* model = browser()->GetTabStripModel();
   auto* contents = model->GetWebContentsAt(model->count() - 1);
-  ASSERT_NE(contents, Active(browser()));
-  ASSERT_NE(content::Visibility::VISIBLE, contents->GetVisibility());
-  // Give a hidden page more than a complete sample interval. Its initial
-  // ready message must not start a timer, even without a visibilitychange.
-  const auto wait_interval = [] {
-    base::RunLoop loop;
-    base::OneShotTimer timer;
-    timer.Start(FROM_HERE, base::Milliseconds(1500), loop.QuitClosure());
-    loop.Run();
-  };
-  wait_interval();
-  EXPECT_EQ("—", content::EvalJs(contents,
-      "document.getElementById('memory').textContent"));
+  EXPECT_EQ(0, content::EvalJs(contents, "document.querySelectorAll('#memory,#clock,#sites').length"));
   model->ActivateTabAt(model->GetIndexOfWebContents(contents));
-  ASSERT_TRUE(base::test::RunUntil([&] {
-    return content::EvalJs(contents,
-        "document.getElementById('memory').textContent")
-        .ExtractString().ends_with(" MB");
-  }));
-  model->ActivateTabAt(0);
-  ASSERT_NE(content::Visibility::VISIBLE, contents->GetVisibility());
-  ASSERT_TRUE(content::ExecJs(contents,
-      "document.getElementById('memory').textContent = 'hidden'"));
-  wait_interval();
-  EXPECT_EQ("hidden", content::EvalJs(contents,
-      "document.getElementById('memory').textContent"));
-  model->ActivateTabAt(model->GetIndexOfWebContents(contents));
-  ASSERT_TRUE(base::test::RunUntil([&] {
-    return content::EvalJs(contents,
-        "document.getElementById('memory').textContent")
-        .ExtractString().ends_with(" MB");
-  }));
-  auto* desktop = Window().widget();
-  desktop->Minimize();
-  ASSERT_TRUE(base::test::RunUntil([&] {
-    return contents->GetVisibility() != content::Visibility::VISIBLE;
-  }));
-  ASSERT_TRUE(content::ExecJs(contents,
-      "document.getElementById('memory').textContent = 'minimized'"));
-  wait_interval();
-  EXPECT_EQ("minimized", content::EvalJs(contents,
-      "document.getElementById('memory').textContent"));
-  desktop->Restore();
-  ASSERT_TRUE(base::test::RunUntil([&] {
-    return content::EvalJs(contents,
-        "document.getElementById('memory').textContent")
-        .ExtractString().ends_with(" MB");
-  }));
+  EXPECT_EQ(2, content::EvalJs(contents, "document.querySelectorAll('button').length"));
+  EXPECT_EQ(queries, App().new_tab_history().query_count_for_testing());
 }
 
-// The download shelf appears when a download starts, shows the card, and
-// toggle-downloads hides it again.
 IN_PROC_BROWSER_TEST_F(FlyWorkspaceBrowserTest, DownloadShelfFollowsDownloads) {
   ASSERT_TRUE(ui_test_utils::NavigateToURL(
       browser(), embedded_test_server()->GetURL("/title1.html")));
@@ -5098,8 +4931,7 @@ IN_PROC_BROWSER_TEST_F(FlyWorkspaceBrowserTest,
     return picker.active() && picker.result_count_for_testing() == 1;
   }));
   ASSERT_TRUE(picker.remove_for_testing(0));
-  views::test::ButtonTestApi(picker.remove_for_testing(0))
-      .NotifyDefaultMouseClick();
+  picker.DeleteSelectedBookmark();
   ASSERT_TRUE(base::test::RunUntil([&] {
     return picker.active() && picker.result_count_for_testing() == 0;
   }));
@@ -5110,6 +4942,114 @@ IN_PROC_BROWSER_TEST_F(FlyWorkspaceBrowserTest,
   ASSERT_TRUE(frequent);
   ASSERT_EQ(1u, frequent->size());
   EXPECT_EQ(url::Origin::Create(url).Serialize(), frequent->front().url);
+}
+
+IN_PROC_BROWSER_TEST_F(FlyWorkspaceBrowserTest,
+                       BookmarksEditAddressesCancelAndUndoInTheSameMenu) {
+  ASSERT_TRUE(ui_test_utils::NavigateToURL(browser(), embedded_test_server()->GetURL("/title1.html")));
+  ASSERT_TRUE(App().bookmarks().Add("https://one.test/", "One"));
+  ASSERT_TRUE(App().bookmarks().Add("https://two.test/", "Two"));
+  auto& window = Window();
+  ASSERT_TRUE(InvokeNativeCommand(browser(), "toggle-bookmarks"));
+  auto& picker = window.bookmark_picker();
+  ui::test::EventGenerator keys(window.widget()->GetNativeWindow()->GetRootWindow());
+  keys.PressKey(ui::VKEY_F2, ui::EF_NONE);
+  ASSERT_TRUE(base::test::RunUntil([&] { return picker.editing_bookmark(); }));
+  ASSERT_TRUE(picker.bookmark_name_for_testing()->HasFocus());
+  keys.PressKey(ui::VKEY_H, ui::EF_NONE);
+  EXPECT_EQ(u"h", picker.bookmark_name_for_testing()->GetText());
+  picker.bookmark_name_for_testing()->SetText(u"My daily page");
+  picker.bookmark_url_for_testing()->SetText(u"https://daily.test/work");
+  keys.PressKey(ui::VKEY_RETURN, ui::EF_NONE);
+  ASSERT_TRUE(base::test::RunUntil([&] { return !picker.editing_bookmark(); }));
+  EXPECT_TRUE(App().bookmarks().Contains("https://daily.test/work"));
+  EXPECT_FALSE(App().bookmarks().Contains("https://two.test/"));
+  EXPECT_EQ("https://daily.test/work", picker.selected_action_for_testing());
+  EXPECT_TRUE(picker.search_for_testing()->HasFocus());
+  keys.PressKey(ui::VKEY_F2, ui::EF_NONE);
+  ASSERT_TRUE(base::test::RunUntil([&] { return picker.editing_bookmark(); }));
+  picker.bookmark_name_for_testing()->SetText(u"Discard this draft");
+  picker.MoveBookmark(1);
+  keys.PressKey(ui::VKEY_ESCAPE, ui::EF_NONE);
+  EXPECT_FALSE(picker.editing_bookmark());
+  EXPECT_EQ("My daily page", App().bookmarks().Read()->front().title);
+  keys.PressKey(ui::VKEY_DOWN, ui::EF_ALT_DOWN);
+  ASSERT_TRUE(base::test::RunUntil([&] { return App().bookmarks().Read()->back().url == "https://daily.test/work"; }));
+  picker.DeleteSelectedBookmark();
+  ASSERT_TRUE(base::test::RunUntil([&] { return picker.result_count_for_testing() == 1; }));
+  ASSERT_TRUE(picker.bookmark_undo_for_testing()->GetVisible());
+  views::test::ButtonTestApi(picker.bookmark_undo_for_testing()).NotifyDefaultMouseClick();
+  EXPECT_TRUE(App().bookmarks().Contains("https://daily.test/work"));
+  EXPECT_EQ("https://daily.test/work", picker.selected_action_for_testing());
+  picker.EditBookmark("");
+  ASSERT_TRUE(base::test::RunUntil([&] { return picker.editing_bookmark(); }));
+  picker.bookmark_name_for_testing()->SetText(u"Duplicate");
+  picker.bookmark_url_for_testing()->SetText(u"https://one.test/");
+  picker.SaveBookmark();
+  EXPECT_TRUE(picker.editing_bookmark());
+  EXPECT_EQ(2u, App().bookmarks().Read()->size());
+  picker.bookmark_url_for_testing()->SetText(u"https://new.test/");
+  picker.SaveBookmark();
+  EXPECT_FALSE(picker.editing_bookmark());
+  EXPECT_TRUE(App().bookmarks().Contains("https://new.test/"));
+}
+
+IN_PROC_BROWSER_TEST_F(FlyWorkspaceBrowserTest,
+                       BookmarkBackgroundOpenKeepsMenuAndReusesQuiet) {
+  const auto url = embedded_test_server()->GetURL("/title1.html");
+  ASSERT_TRUE(App().bookmarks().Add(url.spec(), "Daily page"));
+  ASSERT_TRUE(ExecuteNativeCommand(browser(), "spawn-tab"));
+  auto* quiet = Active(browser());
+  ASSERT_TRUE(content::WaitForLoadStop(quiet));
+  const int before = browser()->tab_strip_model()->count();
+  ASSERT_TRUE(InvokeNativeCommand(browser(), "toggle-bookmarks"));
+  auto& picker = Window().bookmark_picker();
+  ui::test::EventGenerator keys(Window().widget()->GetNativeWindow()->GetRootWindow());
+  keys.PressKey(ui::VKEY_RETURN, ui::EF_CONTROL_DOWN);
+  ASSERT_TRUE(base::test::RunUntil([&] { return browser()->tab_strip_model()->count() == before + 1; }));
+  EXPECT_EQ(quiet, Active(browser()));
+  EXPECT_TRUE(picker.active());
+  keys.PressKey(ui::VKEY_RETURN, ui::EF_NONE);
+  ASSERT_TRUE(base::test::RunUntil([&] { return !picker.showing(); }));
+  ASSERT_TRUE(content::WaitForLoadStop(quiet));
+  EXPECT_EQ(url, quiet->GetLastCommittedURL());
+  EXPECT_EQ(before + 1, browser()->tab_strip_model()->count());
+}
+
+IN_PROC_BROWSER_TEST_F(FlyWorkspaceBrowserTest,
+                       BookmarkRowsContainBothTextLinesAtEveryInterfaceScale) {
+  ASSERT_TRUE(ui_test_utils::NavigateToURL(browser(), embedded_test_server()->GetURL("/title1.html")));
+  ASSERT_TRUE(App().bookmarks().Add("https://example.test/very/long/address?with=query#and-fragment",
+      "A long bookmark title: Español 日本語 and more text"));
+  auto& window = Window();
+  for (const char* scale : {"normal", "large"}) {
+    ASSERT_TRUE(App().preferences().SetString("interface_scale", scale));
+    for (bool light : {false, true}) {
+      SCOPED_TRACE(scale);
+      SCOPED_TRACE(light);
+      if (GetFlyColors().dark == light)
+        ASSERT_TRUE(App().preferences().ToggleTheme());
+      ASSERT_TRUE(InvokeNativeCommand(browser(), "toggle-bookmarks"));
+      auto& picker = window.bookmark_picker();
+      ASSERT_TRUE(picker.active());
+      auto* row = picker.row_for_testing(0);
+      row->GetWidget()->LayoutRootViewIfNecessary();
+      const int subtitle_bottom = picker.row_title_bounds_for_testing(0).bottom() + FlyScaled(3) +
+          FlyFont(FlyFace::kSans, kMenuSmallTextSize).GetHeight();
+      EXPECT_LE(subtitle_bottom + FlyScaled(8), row->height());
+      EXPECT_GT(picker.row_title_bounds_for_testing(0).width(), 100);
+      const auto& colors = GetFlyColors();
+      const auto background = color_utils::AlphaBlend(colors.text, colors.bg_sidebar, static_cast<SkAlpha>(22));
+      EXPECT_GE(color_utils::GetContrastRatio(picker.row_subtitle_color_for_testing(0), background), 4.5f);
+      EXPECT_FALSE(row->GetBoundsInScreen().Intersects(picker.remove_for_testing(0)->GetBoundsInScreen()));
+      ui::AXNodeData node;
+      row->GetViewAccessibility().GetAccessibleNodeData(&node);
+      EXPECT_EQ(ax::mojom::Role::kListBoxOption, node.role);
+      EXPECT_NE(std::string::npos, node.GetStringAttribute(ax::mojom::StringAttribute::kName).find("https://example.test"));
+      picker.Cancel(true);
+      ASSERT_TRUE(base::test::RunUntil([&] { return !picker.showing(); }));
+    }
+  }
 }
 
 IN_PROC_BROWSER_TEST_F(FlyWorkspaceBrowserTest,

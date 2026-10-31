@@ -46,6 +46,7 @@
 #include "content/public/common/url_constants.h"
 #include "fly/bookmarks/bookmark_service.h"
 #include "fly/ui/fly_app.h"
+#include "fly/ui/fly_window_controller.h"
 #include "fly/ui/fly_theme.h"
 #include "fly/ui/sidebar_panel.h"
 #include "services/network/public/mojom/content_security_policy.mojom.h"
@@ -150,7 +151,7 @@ std::string Hex(SkColor color) {
 // stylesheet includes the current theme/geometry, so painting never depends on
 // a renderer -> browser -> renderer ready message. Dynamic bytes are never
 // cached with the product assets, nor shared between regular/private pages.
-base::DictValue PageData(bool private_page, bool include_lists = true) {
+base::DictValue PageData(bool private_page) {
   const auto& colors = GetFlyColors();
   base::DictValue colours;
   colours.Set("--bg-main", Hex(colors.bg_main));
@@ -168,10 +169,13 @@ base::DictValue PageData(bool private_page, bool include_lists = true) {
                            : 1.0;
   base::DictValue data;
   if (auto* window = FlyApp::GetIfCreated()) {
-    if (include_lists)
-      data = window->NewTabLists(
-          private_page, private_page ? std::vector<HistoryEntry>()
-                                     : window->new_tab_history().entries());
+    const auto config = window->commands().Read().value_or(DefaultKeyboardConfig());
+    for (const auto [key, action] : {std::pair{"searchBinding", "toggle-address"},
+                                    std::pair{"bookmarksBinding", "toggle-bookmarks"}}) {
+      const auto bindings = config.shortcuts.find(action);
+      if (bindings != config.shortcuts.end() && !bindings->second.empty())
+        data.Set(key, bindings->second.front());
+    }
     data.Set("sidebarOverhang",
              window->preferences().ReadSidebarAutoCollapse().value_or(false)
                  ? static_cast<int>((kSidebarWidth - kSidebarRailWidth) * scale)
@@ -196,7 +200,7 @@ void Serve(bool private_page,
               std::move(done).Run(std::move(bytes));
               return;
             }
-            const auto data = PageData(private_page, path == "new-tab.html");
+            const auto data = PageData(private_page);
             std::string text(base::as_string_view(base::span(*bytes)));
             if (path == "new-tab.html") {
               auto json = base::WriteJson(data).value_or("{}");
@@ -232,30 +236,6 @@ void Serve(bool private_page,
           private_page, path, std::move(done)));
 }
 
-// Fly's processes: the browser, renderers and child processes (GPU,
-// utilities), as the diagnostics hub counts them.
-std::vector<base::ProcessId> FlyProcesses() {
-  std::vector<base::ProcessId> pids = {base::Process::Current().Pid()};
-  for (auto it = content::RenderProcessHost::AllHostsIterator(); !it.IsAtEnd();
-       it.Advance()) {
-    if (it.GetCurrentValue()->GetProcess().IsValid())
-      pids.push_back(it.GetCurrentValue()->GetProcess().Pid());
-  }
-  for (content::BrowserChildProcessHostIterator it; !it.Done(); ++it) {
-    if (it.GetProcess().IsValid())
-      pids.push_back(it.GetProcess().Pid());
-  }
-  return pids;
-}
-int ResidentMegabytes(std::vector<base::ProcessId> pids) {
-  uint64_t bytes = 0;
-  for (const auto pid : pids) {
-    const auto metrics = base::ProcessMetrics::CreateProcessMetrics(pid);
-    if (const auto info = metrics->GetMemoryInfo(); info.has_value())
-      bytes += info->resident_set_bytes;
-  }
-  return static_cast<int>(bytes / (1024 * 1024));
-}
 
 class NewTabHandler : public content::WebUIMessageHandler,
                       public content::WebContentsObserver {
@@ -268,23 +248,15 @@ class NewTabHandler : public content::WebUIMessageHandler,
   void RegisterMessages() override {
     Observe(web_ui()->GetWebContents());
     registrar_.Init(g_browser_process->local_state());
-    for (const char* pref :
-         {kPreferencesPref, kBookmarksPref, kWorkspacesPref}) {
+    for (const char* pref : {kPreferencesPref, kKeyboardPref})
       registrar_.Add(pref, base::BindRepeating(&NewTabHandler::Refresh,
-                                               base::Unretained(this)));
-    }
-    web_ui()->RegisterMessageCallback(
-        "ready",
-        base::BindRepeating(&NewTabHandler::OnReady, base::Unretained(this)));
-    web_ui()->RegisterMessageCallback(
-        "hideSite", base::BindRepeating(&NewTabHandler::OnHideSite,
-                                        base::Unretained(this)));
-  }
-  void OnJavascriptDisallowed() override {
-    memory_timer_.Stop();
-    weak_factory_.InvalidateWeakPtrs();
-    sampling_ = false;
-    history_subscription_ = {};
+                                              base::Unretained(this)));
+    web_ui()->RegisterMessageCallback("ready", base::BindRepeating(
+        &NewTabHandler::OnReady, base::Unretained(this)));
+    web_ui()->RegisterMessageCallback("openSearch", base::BindRepeating(
+        &NewTabHandler::Open, base::Unretained(this), "toggle-address"));
+    web_ui()->RegisterMessageCallback("openBookmarks", base::BindRepeating(
+        &NewTabHandler::Open, base::Unretained(this), "toggle-bookmarks"));
   }
   void OnVisibilityChanged(content::Visibility) override { Refresh(); }
   void DidStartNavigation(content::NavigationHandle* navigation) override {
@@ -306,71 +278,17 @@ class NewTabHandler : public content::WebUIMessageHandler,
   void Refresh() {
     if (!IsJavascriptAllowed())
       return;
-    if (!Visible()) {
-      memory_timer_.Stop();
-      history_subscription_ = {};
-      return;
-    }
-    web_contents()->SetPageBaseBackgroundColor(GetFlyColors().bg_main);
-    SendPage();
-    if (!memory_timer_.IsRunning())
-      StartMemory();
-    const bool show_sites =
-        !OffTheRecord() && PreferencesService(*g_browser_process->local_state())
-                               .ReadFrequentSitesVisible()
-                               .value_or(true);
-    if (!show_sites) {
-      history_subscription_ = {};
-    } else if (!history_subscription_) {
-      if (auto* window = FlyApp::GetIfCreated())
-        history_subscription_ =
-            window->new_tab_history().Subscribe(base::BindRepeating(
-                &NewTabHandler::SendPage, weak_factory_.GetWeakPtr()));
-    }
+    if (Visible())
+      web_contents()->SetPageBaseBackgroundColor(GetFlyColors().bg_main);
+    CallJavascriptFunction("updateFlyNewTab", base::Value(PageData(OffTheRecord())));
   }
-
-  void OnHideSite(const base::ListValue& args) {
-    auto* window = FlyApp::GetIfCreated();
-    if (window && !OffTheRecord() && !args.empty() && args[0].is_string())
-      window->HideFrequentSite(args[0].GetString());
-    SendPage();
+  void Open(std::string action, const base::ListValue&) {
+    // A background or detached WebUI must not operate another tab's window.
+    auto* window = FlyWindowController::FromContents(web_contents());
+    if (Visible() && window && window->ActiveContents() == web_contents())
+      window->RunCommand(action);
   }
-  void SendPage() {
-    if (!IsJavascriptAllowed())
-      return;
-    CallJavascriptFunction("updateFlyNewTab",
-                           base::Value(PageData(OffTheRecord())));
-  }
-
-  // The memory figure follows Fly live, once a second while the page shows.
-  void StartMemory() {
-    SampleMemory();
-    memory_timer_.Start(FROM_HERE, base::Seconds(1),
-                        base::BindRepeating(&NewTabHandler::SampleMemory,
-                                            base::Unretained(this)));
-  }
-  void SampleMemory() {
-    if (sampling_ || !IsJavascriptAllowed() || !Visible())
-      return;
-    sampling_ = true;
-    base::ThreadPool::PostTaskAndReplyWithResult(
-        FROM_HERE,
-        {base::MayBlock(), base::TaskPriority::USER_VISIBLE,
-         base::TaskShutdownBehavior::CONTINUE_ON_SHUTDOWN},
-        base::BindOnce(&ResidentMegabytes, FlyProcesses()),
-        base::BindOnce(&NewTabHandler::OnMemory, weak_factory_.GetWeakPtr()));
-  }
-  void OnMemory(int megabytes) {
-    sampling_ = false;
-    if (IsJavascriptAllowed() && Visible())
-      CallJavascriptFunction("updateFlyNewTabMemory", base::Value(megabytes));
-  }
-
-  base::RepeatingTimer memory_timer_;
-  bool sampling_ = false;
   PrefChangeRegistrar registrar_;
-  base::CallbackListSubscription history_subscription_;
-  base::WeakPtrFactory<NewTabHandler> weak_factory_{this};
 };
 
 class NewTabUI : public content::WebUIController {

@@ -3,14 +3,14 @@
 // Fly repository.
 #include "fly/bookmarks/bookmark_service.h"
 
-#include <algorithm>
-#include <cmath>
 #include "base/strings/string_util.h"
 #include "components/prefs/pref_registry_simple.h"
 #include "components/prefs/pref_service.h"
 #include "fly/prefs/dictionary_store.h"
 #include "url/gurl.h"
 #include "url/origin.h"
+#include <algorithm>
+#include <cmath>
 
 namespace fly {
 namespace {
@@ -105,15 +105,84 @@ bool BookmarkService::Add(std::string_view url, std::string_view title,
   return true;
 }
 bool BookmarkService::Remove(std::string_view url) {
+  return RemoveWithUndo(url).has_value();
+}
+bool BookmarkService::Update(std::string_view original_url,
+                             std::string_view url, std::string_view title,
+                             std::optional<size_t> position) {
+  auto stored = ReadValidated(true);
+  if (!stored || !ValidURL(url) || !ValidTitle(title))
+    return false;
+  auto *items = stored->FindList("items");
+  if (position && *position >= items->size())
+    return false;
+  if (url != original_url && std::ranges::any_of(*items, [&](const auto &item) {
+        return *item.GetDict().FindString("url") == url;
+      }))
+    return false;
+  for (size_t i = 0; i < items->size(); ++i) {
+    auto& item = (*items)[i];
+    if (*item.GetDict().FindString("url") != original_url)
+      continue;
+    item.GetDict().Set("url", std::string(url));
+    item.GetDict().Set("title",
+                       title.empty() ? std::string(url) : std::string(title));
+    if (position && *position != i) {
+      auto moved = std::move(item);
+      items->erase(items->begin() + i);
+      items->Insert(items->begin() + *position, std::move(moved));
+    }
+    local_state_->SetDict(kBookmarksPref, std::move(*stored));
+    return true;
+  }
+  return false;
+}
+bool BookmarkService::MoveTo(std::string_view url, size_t index) {
   auto stored = ReadValidated(true);
   if (!stored)
     return false;
   auto* items = stored->FindList("items");
-  const auto removed = items->EraseIf([&](const base::Value& item) {
-    return *item.GetDict().FindString("url") == url;
-  });
-  if (!removed)
+  if (index >= items->size())
     return false;
+  for (size_t i = 0; i < items->size(); ++i) {
+    if (*(*items)[i].GetDict().FindString("url") != url)
+      continue;
+    auto item = std::move((*items)[i]);
+    items->erase(items->begin() + i);
+    items->Insert(items->begin() + index, std::move(item));
+    local_state_->SetDict(kBookmarksPref, std::move(*stored));
+    return true;
+  }
+  return false;
+}
+std::optional<RemovedBookmark>
+BookmarkService::RemoveWithUndo(std::string_view url) {
+  auto stored = ReadValidated(true);
+  if (!stored)
+    return std::nullopt;
+  auto *items = stored->FindList("items");
+  for (size_t i = 0; i < items->size(); ++i) {
+    if (*(*items)[i].GetDict().FindString("url") != url)
+      continue;
+    RemovedBookmark removed{(*items)[i].GetDict().Clone(), i};
+    items->erase(items->begin() + i);
+    local_state_->SetDict(kBookmarksPref, std::move(*stored));
+    return removed;
+  }
+  return std::nullopt;
+}
+bool BookmarkService::Restore(const RemovedBookmark &removed) {
+  auto stored = ReadValidated(true);
+  const auto *url = removed.item.FindString("url");
+  const auto *title = removed.item.FindString("title");
+  const auto timestamp = removed.item.FindDouble("timestamp");
+  if (!stored || !url || !ValidURL(*url) || !title || !ValidTitle(*title) ||
+      !timestamp || !std::isfinite(*timestamp) || *timestamp < 0 ||
+      Contains(*url))
+    return false;
+  auto *items = stored->FindList("items");
+  items->Insert(items->begin() + std::min(removed.index, items->size()),
+                base::Value(removed.item.Clone()));
   local_state_->SetDict(kBookmarksPref, std::move(*stored));
   return true;
 }

@@ -4,8 +4,6 @@
 #include "fly/ui/command_palette.h"
 #include "fly/ui/new_tab_ui.h"
 
-#include <algorithm>
-#include <utility>
 #include "base/functional/bind.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/strings/string_util.h"
@@ -13,17 +11,18 @@
 #include "base/task/single_thread_task_runner.h"
 #include "cc/paint/paint_flags.h"
 #include "components/input/native_web_keyboard_event.h"
-#include "ui/base/metadata/metadata_header_macros.h"
-#include "ui/base/metadata/metadata_impl_macros.h"
 #include "content/public/browser/web_contents.h"
 #include "fly/ui/fly_menu.h"
-#include "fly/ui/native_commands.h"
 #include "fly/ui/fly_theme.h"
+#include "fly/ui/native_commands.h"
 #include "ui/accessibility/ax_enums.mojom.h"
 #include "ui/aura/env.h"
 #include "ui/aura/window.h"
+#include "ui/base/metadata/metadata_header_macros.h"
+#include "ui/base/metadata/metadata_impl_macros.h"
 #include "ui/events/event.h"
 #include "ui/gfx/canvas.h"
+#include "ui/gfx/color_utils.h"
 #include "ui/gfx/text_elider.h"
 #include "ui/gfx/text_utils.h"
 #include "ui/views/accessibility/view_accessibility.h"
@@ -34,6 +33,9 @@
 #include "ui/views/controls/textfield/textfield.h"
 #include "ui/views/layout/box_layout.h"
 #include "ui/views/widget/widget.h"
+#include "url/gurl.h"
+#include <algorithm>
+#include <utility>
 
 namespace fly {
 namespace {
@@ -74,11 +76,29 @@ class PickerButton : public FlyButton {
   }
   gfx::Size CalculatePreferredSize(
       const views::SizeBounds&) const override {
-    return gfx::Size(S(200), S(subtitle_.empty() ? kMenuRowHeight
-                                                 : kMenuTallRowHeight));
+    const int text_height = label()->GetPreferredSize().height();
+    const int content_height =
+        subtitle_.empty()
+            ? text_height
+            : text_height + S(3) +
+                  FlyFont(FlyFace::kSans, kMenuSmallTextSize).GetHeight();
+    return gfx::Size(S(200), std::max(S(subtitle_.empty() ? kMenuRowHeight
+                                                 : kMenuTallRowHeight),
+                                      content_height + S(16)));
   }
   void SetHoverCallback(base::RepeatingClosure hover) {
     hover_ = std::move(hover);
+  }
+  gfx::Rect TitleBoundsForTesting() const { return label()->bounds(); }
+  SkColor SubtitleColor() const {
+    const auto &colors = GetFlyColors();
+    const bool hot = GetState() == STATE_HOVERED || GetState() == STATE_PRESSED;
+    const auto background =
+        color_utils::AlphaBlend(colors.text, colors.bg_sidebar,
+                                static_cast<SkAlpha>(selected() ? 22
+                                : hot && GetEnabled() ? 12
+                                                      : 0));
+    return color_utils::BlendForMinContrast(colors.dim, background).color;
   }
   // Rows that can be dragged (dashboard tabs) report the pointer while
   // dragging and where they were dropped, in screen coordinates.
@@ -133,7 +153,7 @@ class PickerButton : public FlyButton {
       label()->SetBounds(left, (height() - line) / 2,
                          std::max(0, right - left), line);
     } else {
-      label()->SetBounds(left, S(5), std::max(0, right - left), line);
+      label()->SetBounds(left, S(8), std::max(0, right - left), line);
     }
   }
   void OnPaintBackground(gfx::Canvas* canvas) override {
@@ -162,7 +182,6 @@ class PickerButton : public FlyButton {
     }
   }
   void PaintButtonContents(gfx::Canvas* canvas) override {
-    const auto& colors = GetFlyColors();
     const int centre = height() / 2;
     int right = width() - S(12);
     if (!normal_keys_.empty())
@@ -179,7 +198,7 @@ class PickerButton : public FlyButton {
                                  this->width() / 3);
       canvas->DrawStringRectWithFlags(
           gfx::ElideText(detail_, small, width, gfx::ELIDE_TAIL), small,
-          colors.dim, gfx::Rect(right - width - S(4), 0, width, height()),
+          SubtitleColor(), gfx::Rect(right - width - S(4), 0, width, height()),
           gfx::Canvas::TEXT_ALIGN_RIGHT | gfx::Canvas::NO_SUBPIXEL_RENDERING);
     }
     if (!subtitle_.empty()) {
@@ -187,8 +206,8 @@ class PickerButton : public FlyButton {
       const int line = small.GetHeight();
       canvas->DrawStringRectWithFlags(
           gfx::ElideText(subtitle_, small, title.width(), gfx::ELIDE_MIDDLE),
-          small, colors.dim,
-          gfx::Rect(title.x(), title.bottom() + S(1), title.width(), line),
+          small, SubtitleColor(),
+          gfx::Rect(title.x(), title.bottom() + S(3), title.width(), line),
           gfx::Canvas::NO_SUBPIXEL_RENDERING);
     }
   }
@@ -263,6 +282,7 @@ CommandPalette::~CommandPalette() {
   results_scroll_ = nullptr;
   scrim_ = nullptr;
   source_tab_.clear();
+  ResetBookmarksUI();
   overlay_.reset();
   if (desktop_)
     desktop_->RemoveObserver(this);
@@ -313,15 +333,43 @@ void CommandPalette::ToggleItems(content::WebContents* contents,
       base::BindRepeating(&CommandPalette::Cancel, weak_factory_.GetWeakPtr(),
                           true));
   auto panel = std::make_unique<MenuPanel>();
+  if (bookmarks_) {
+    panel->GetViewAccessibility().SetRole(ax::mojom::Role::kDialog);
+    panel->GetViewAccessibility().SetName(u"Bookmarks");
+    panel->GetViewAccessibility().SetIsModal(true);
+  }
   auto* layout = panel->SetLayoutManager(std::make_unique<views::BoxLayout>(
       views::BoxLayout::Orientation::kVertical, gfx::Insets(S(10)), S(8)));
   layout->set_cross_axis_alignment(
       views::BoxLayout::CrossAxisAlignment::kStretch);
   auto* header = panel->AddChildView(
       std::make_unique<MenuHeader>(style_.kind, style_.title));
-  search_ = header->SetSearch(std::make_unique<FlyTextfield>(placeholder));
+  header_ = header;
+  if (bookmarks_) {
+    header->SetFlexibleTitle();
+    count_ = header->AddStatus();
+    bookmark_add_ = header->AddTrailing(
+        MakeMenuButton(base::BindRepeating(&CommandPalette::EditBookmark,
+                                           weak_factory_.GetWeakPtr(), ""),
+                       u"Add"));
+    bookmark_add_->GetViewAccessibility().SetName(u"Add bookmark (Ctrl+N)");
+    bookmark_add_->SetTooltipText(u"Add bookmark (Ctrl+N)");
+    bookmark_add_->SetEnabled(bookmarks_->CanEdit());
+    search_ = panel->AddChildView(std::make_unique<FlyTextfield>(placeholder));
+    static_cast<FlyTextfield *>(search_.get())->SetSearchStyle(true);
+  } else {
+    search_ = header->SetSearch(std::make_unique<FlyTextfield>(placeholder));
+  }
   search_->set_controller(this);
-  count_ = style_.kind == MenuKind::kAddress ? nullptr : header->AddStatus();
+  if (bookmarks_) {
+    search_->GetViewAccessibility().SetRole(
+        ax::mojom::Role::kTextFieldWithComboBox);
+    search_->GetViewAccessibility().SetHasPopup(ax::mojom::HasPopup::kListbox);
+    search_->GetViewAccessibility().SetAutoComplete("list");
+    search_->GetViewAccessibility().SetIsExpanded();
+  }
+  if (!bookmarks_)
+    count_ = style_.kind == MenuKind::kAddress ? nullptr : header->AddStatus();
   if (style_.layout != PaletteStyle::Layout::kTop)
     header->AddClose(base::BindRepeating(&CommandPalette::Cancel,
                                          weak_factory_.GetWeakPtr(), true));
@@ -350,6 +398,36 @@ void CommandPalette::ToggleItems(content::WebContents* contents,
     inspector_->SetBorder(
         FlyEdgeBorder(FlyRole::kBorder, gfx::Insets::TLBR(1, 0, 0, 0)));
   }
+  if (bookmarks_) {
+    bookmark_editor_scroll_ =
+        panel->AddChildView(std::make_unique<views::ScrollView>());
+    bookmark_editor_scroll_->SetHorizontalScrollBarMode(
+        views::ScrollView::ScrollBarMode::kDisabled);
+    bookmark_editor_scroll_->SetBackgroundColor(std::nullopt);
+    bookmark_editor_scroll_->SetDrawOverflowIndicator(false);
+    bookmark_editor_ =
+        bookmark_editor_scroll_->SetContents(std::make_unique<views::View>());
+    bookmark_editor_scroll_->SetVisible(false);
+    layout->SetFlexForView(bookmark_editor_scroll_, 1);
+    auto *feedback = panel->AddChildView(std::make_unique<views::View>());
+    auto *feedback_layout =
+        feedback->SetLayoutManager(std::make_unique<views::BoxLayout>(
+            views::BoxLayout::Orientation::kHorizontal,
+            gfx::Insets::VH(S(4), S(8)), S(8)));
+    bookmark_status_ = feedback->AddChildView(std::make_unique<FlyLabel>(
+        u"", FlyFace::kSans, kMenuSmallTextSize,
+        gfx::Font::Weight::NORMAL, FlyLabel::Tone::kDim));
+    bookmark_status_->SetHorizontalAlignment(gfx::ALIGN_LEFT);
+    bookmark_status_->SetElideBehavior(gfx::ELIDE_TAIL);
+    bookmark_status_->GetViewAccessibility().SetLiveRegionContainer(
+        views::ViewAccessibility::LiveRegionStatus::kPolite);
+    feedback_layout->SetFlexForView(bookmark_status_, 1);
+    bookmark_undo_ = feedback->AddChildView(
+        MakeMenuButton(base::BindRepeating(&CommandPalette::UndoBookmark,
+                                           weak_factory_.GetWeakPtr()),
+                       u"Undo delete", MenuButtonStyle::kQuiet));
+    bookmark_undo_->SetVisible(false);
+  }
   hints_ = panel->AddChildView(std::make_unique<KeyHints>(
       std::vector<KeyHints::Hint>()));
   hints_->SetBorder(views::CreateEmptyBorder(gfx::Insets::TLBR(0, S(2), 0, 0)));
@@ -377,6 +455,8 @@ void CommandPalette::PlacePanel(const gfx::Rect& bounds) {
   const bool top = style_.layout == PaletteStyle::Layout::kTop;
   const bool page = style_.layout == PaletteStyle::Layout::kPage;
   const int width = std::min(S(style_.width), bounds.width() - S(24));
+  if (bookmarks_ && count_)
+    count_->SetVisible(width >= S(430));
   const int x = (bounds.width() - width) / 2;
   const int top_margin = top ? S(12) : page ? S(20) : std::max(S(24), bounds.height() / 9);
   const int max_height = std::max(
@@ -384,6 +464,8 @@ void CommandPalette::PlacePanel(const gfx::Rect& bounds) {
                     : std::min(bounds.height() - top_margin - S(24),
                                S(style_.command_centre ? 600 : 520))));
   results_scroll_->ClipHeightTo(0, max_height);
+  if (bookmark_editor_scroll_)
+    bookmark_editor_scroll_->ClipHeightTo(0, max_height);
   // Rows are built for what the panel can show and a margin; scrolling and
   // keyboard selection build the rest as they reach it.
   initial_rows_ = static_cast<size_t>(max_height / S(kMenuRowHeight)) + 4;
@@ -400,11 +482,19 @@ void CommandPalette::PlacePanel(const gfx::Rect& bounds) {
 void CommandPalette::UpdateHints() {
   if (!hints_)
     return;
+  if (editing_url_) {
+    hints_->SetHints(
+        {{u"Enter", u"Save"}, {u"Tab", u"Next field"}, {u"Esc", u"Cancel"}});
+    return;
+  }
   std::vector<KeyHints::Hint> hints = {{u"↑↓", u"Move"},
                                        {u"Enter", style_.enter_label}};
   if (style_.command_centre)
     hints.push_back({u"Tab", u"Category"});
-  if (remove_ && removable_)
+  if (bookmarks_ && removable_) {
+    hints.push_back({u"F2", u"Edit"});
+    hints.push_back({u"Alt ↑↓", u"Reorder"});
+  } else if (remove_ && removable_)
     hints.push_back({u"Del", u"Remove"});
   if (drop_ && draggable_)
     hints.push_back({u"Drag", u"Move tab"});
@@ -419,6 +509,10 @@ void CommandPalette::UpdateItems(std::vector<PaletteEntry> items, bool removable
     selected = filtered_[selected_].action;
   catalog_ = std::move(items);
   removable_ = removable;
+  if (bookmark_add_)
+    bookmark_add_->SetEnabled(removable && !editing_url_);
+  if (bookmark_save_)
+    bookmark_save_->SetEnabled(removable);
   UpdateHints();
   Refresh();
   for (size_t i = 0; i < filtered_.size(); ++i) {
@@ -542,7 +636,8 @@ void CommandPalette::Refresh() {
   if (count_)
     count_->SetText(filtered_.empty()
                         ? std::u16string()
-                        : base::NumberToString16(filtered_.size()));
+                        : base::NumberToString16(filtered_.size()) +
+                              (bookmarks_ ? u" saved" : u""));
   if (buttons_.empty() && !(style_.layout == PaletteStyle::Layout::kTop &&
                             query.empty() && query_provider_))
     results_->AddChildView(MakeEmptyState(query.empty() ? style_.empty_text
@@ -586,7 +681,7 @@ void CommandPalette::AppendRow(size_t i) {
           gfx::Insets::TLBR(i ? S(10) : S(2), S(12), S(4), S(12))));
     }
     auto* button = results_->AddChildView(std::make_unique<PickerButton>(
-        base::BindRepeating(&CommandPalette::Activate,
+        base::BindRepeating(&CommandPalette::ActivateRow,
                             weak_factory_.GetWeakPtr(), entry.action),
         base::UTF8ToUTF16(entry.title), std::u16string(), std::u16string(),
         ToUTF16(entry.shortcuts), ToUTF16(entry.normal), 0));
@@ -628,6 +723,9 @@ void CommandPalette::AppendRow(size_t i) {
         secondary_line ? base::UTF8ToUTF16(entry.category) : std::u16string(),
         secondary_line ? std::u16string() : base::UTF8ToUTF16(entry.category),
         ToUTF16(entry.shortcuts), ToUTF16(entry.normal), entry.indent));
+    if (bookmarks_)
+      button->SetTriggerableEventFlags(ui::EF_LEFT_MOUSE_BUTTON |
+                                       ui::EF_MIDDLE_MOUSE_BUTTON);
     button->SetEnabled(available_.Run(entry.action));
     button->SetFocusBehavior(views::View::FocusBehavior::NEVER);
     button->SetHoverCallback(base::BindRepeating(
@@ -646,6 +744,7 @@ void CommandPalette::AppendRow(size_t i) {
     }
     button->GetViewAccessibility().SetRole(ax::mojom::Role::kListBoxOption);
     button->GetViewAccessibility().SetName(base::UTF8ToUTF16(text));
+    button->SetTooltipText(base::UTF8ToUTF16(text));
     if (drop_ && draggable_ && draggable_.Run(entry.action)) {
       button->SetDragCallbacks(
           base::BindRepeating(&CommandPalette::DragOver,
@@ -657,12 +756,18 @@ void CommandPalette::AppendRow(size_t i) {
     buttons_.push_back(button);
     if (remove_) {
       auto* remove = parent->AddChildView(MakeMenuButton(
-          base::BindRepeating(&CommandPalette::Remove,
+          bookmarks_
+              ? base::BindRepeating(&CommandPalette::EditBookmark,
+                                    weak_factory_.GetWeakPtr(), entry.action)
+              : base::BindRepeating(&CommandPalette::Remove,
                               weak_factory_.GetWeakPtr(), entry.action),
-          u"Remove", MenuButtonStyle::kQuiet));
+          bookmarks_ ? u"Edit" : u"Remove", MenuButtonStyle::kQuiet));
       remove->SetEnabled(removable_ && available_.Run(entry.action));
-      remove->GetViewAccessibility().SetName(u"Remove " +
+      remove->GetViewAccessibility().SetName(
+          (bookmarks_ ? u"Edit " : u"Remove ") +
                                              base::UTF8ToUTF16(text));
+      if (bookmarks_)
+        remove->SetFocusBehavior(views::View::FocusBehavior::NEVER);
       remove_buttons_.push_back(remove);
     }
     row = parent;
@@ -697,6 +802,10 @@ void CommandPalette::SetRowSelected(int index, bool selected) {
     return;
   auto* row = buttons_[index].get();
   row->SetSelected(selected);
+  if (bookmarks_ && static_cast<size_t>(index) < remove_buttons_.size())
+    remove_buttons_[index]->SetFocusBehavior(
+        selected ? views::View::FocusBehavior::ALWAYS
+                 : views::View::FocusBehavior::NEVER);
   row->GetViewAccessibility().SetIsSelected(selected);
   if (search_) {
     if (selected)
@@ -713,8 +822,9 @@ void CommandPalette::RefreshQuery() {
   if (active() && query_provider_)
     UpdateItems(catalog_, removable_);
 }
-void CommandPalette::ContentsChanged(views::Textfield*, const std::u16string&) {
-  Refresh();
+void CommandPalette::ContentsChanged(views::Textfield*field, const std::u16string&) {
+  if (field == search_)
+    Refresh();
 }
 bool CommandPalette::HandleKeyEvent(views::Textfield*,
                                     const ui::KeyEvent& event) {
@@ -724,6 +834,58 @@ bool CommandPalette::HandleOverlayKey(const ui::KeyEvent& event) {
   if (event.type() != ui::EventType::kKeyPressed || search_->IsIMEComposing() ||
       event.IsAltGrDown())
     return false;
+  if (editing_url_) {
+    if ((bookmark_name_ && bookmark_name_->IsIMEComposing()) ||
+        (bookmark_url_ && bookmark_url_->IsIMEComposing()))
+      return false;
+    if (event.key_code() == ui::VKEY_ESCAPE) {
+      EndBookmarkEdit();
+      return true;
+    }
+    const auto stroke = NativeEventStroke(input::NativeWebKeyboardEvent(event));
+    if (std::ranges::find(palette_bindings_, stroke) !=
+        palette_bindings_.end()) {
+      Cancel(true);
+      return true;
+    }
+    if (event.key_code() == ui::VKEY_TAB)
+      return CycleMenuFocus(bookmark_editor_, event.IsShiftDown());
+    if (event.key_code() == ui::VKEY_RETURN ||
+        (event.IsControlDown() && event.key_code() == ui::VKEY_S)) {
+      // Space/Enter on Cancel or Delete must retain that button's action.
+      if (bookmark_name_->HasFocus() || bookmark_url_->HasFocus() ||
+          (event.IsControlDown() && event.key_code() == ui::VKEY_S)) {
+        SaveBookmark();
+        return true;
+      }
+    }
+    return false;
+  }
+  if (bookmarks_) {
+    if (event.IsControlDown() && event.key_code() == ui::VKEY_RETURN &&
+        selected_ >= 0) {
+      OpenInBackground(filtered_[selected_].action);
+      return true;
+    }
+    if (event.IsAltDown() && (event.key_code() == ui::VKEY_UP ||
+                              event.key_code() == ui::VKEY_DOWN)) {
+      MoveBookmark(event.key_code() == ui::VKEY_UP ? -1 : 1);
+      return true;
+    }
+    if (event.IsControlDown() && event.key_code() == ui::VKEY_N) {
+      EditBookmark("");
+      return true;
+    }
+    if (event.key_code() == ui::VKEY_F2 && selected_ >= 0) {
+      EditBookmark(filtered_[selected_].action);
+      return true;
+    }
+    if (event.IsControlDown() && event.key_code() == ui::VKEY_Z &&
+        removed_bookmark_) {
+      UndoBookmark();
+      return true;
+    }
+  }
   const input::NativeWebKeyboardEvent native(event);
   const auto stroke = NativeEventStroke(native);
   if (event.key_code() == ui::VKEY_ESCAPE ||
@@ -800,8 +962,43 @@ void CommandPalette::Remove(std::string action) {
 }
 void CommandPalette::RemoveAfterEvent(std::string action) {
   if (active() && !cancelled_ && removable_ && (web_contents() || empty_source_) &&
-      available_.Run(action))
-    remove_.Run(web_contents(), std::move(action));
+      available_.Run(action)) {
+    if (bookmarks_) {
+      EndBookmarkEdit();
+      removed_bookmark_ = bookmarks_->RemoveWithUndo(action);
+      if (removed_bookmark_) {
+        bookmark_undo_->SetVisible(true);
+        BookmarkMessage(u"Bookmark deleted. You can undo this.");
+      } else {
+        BookmarkMessage(u"Could not delete this bookmark.");
+      }
+    } else {
+      remove_.Run(web_contents(), std::move(action));
+    }
+  }
+}
+void CommandPalette::ActivateRow(std::string action, const ui::Event &event) {
+  if (bookmarks_ &&
+      (event.IsControlDown() || (event.flags() & ui::EF_MIDDLE_MOUSE_BUTTON)))
+    OpenInBackground(std::move(action));
+  else
+    Activate(std::move(action));
+}
+void CommandPalette::OpenInBackground(std::string action) {
+  if (!active() || !background_open_ || !available_.Run(action))
+    return;
+  base::SingleThreadTaskRunner::GetCurrentDefault()->PostTask(
+      FROM_HERE,
+      base::BindOnce(
+          [](base::WeakPtr<CommandPalette> menu, std::string action) {
+            if (menu && menu->active() && !menu->cancelled_ &&
+                menu->available_.Run(action)) {
+              menu->background_open_.Run(menu->web_contents(),
+                                         std::move(action));
+              menu->BookmarkMessage(u"Opened in a background tab.");
+            }
+          },
+          weak_factory_.GetWeakPtr(), std::move(action)));
 }
 void CommandPalette::Activate(std::string action) {
   if (!active() ||
@@ -846,6 +1043,7 @@ void CommandPalette::FinishClose(bool restore_focus, std::string action) {
   results_scroll_ = nullptr;
   scrim_ = nullptr;
   source_tab_.clear();
+  ResetBookmarksUI();
   overlay_.reset();
   filtered_.clear();
   catalog_.clear();
@@ -887,7 +1085,305 @@ void CommandPalette::PrimaryPageChanged(content::Page&) {
   Cancel();
 }
 void CommandPalette::WebContentsDestroyed() {
-  Cancel();
+  Cancel(); }
+
+void CommandPalette::ResetBookmarksUI() {
+  header_ = nullptr;
+  bookmark_add_ = nullptr;
+  bookmark_editor_scroll_ = nullptr;
+  bookmark_editor_ = nullptr;
+  bookmark_name_ = nullptr;
+  bookmark_url_ = nullptr;
+  bookmark_save_ = nullptr;
+  bookmark_undo_ = nullptr;
+  bookmark_status_ = nullptr;
+  bookmark_error_ = nullptr;
+  editing_url_.reset();
+  editing_position_.reset();
+  removed_bookmark_.reset();
+}
+void CommandPalette::BookmarkMessage(std::u16string text) {
+  if (!bookmark_status_)
+    return;
+  bookmark_status_->SetText(text);
+  bookmark_status_->SetTooltipText(text);
+}
+void CommandPalette::EditBookmark(std::string url) {
+  if (!active() || !bookmarks_ || !bookmarks_->CanEdit())
+    return;
+  base::SingleThreadTaskRunner::GetCurrentDefault()->PostTask(
+      FROM_HERE, base::BindOnce(
+                     [](base::WeakPtr<CommandPalette> menu, std::string url) {
+                       if (!menu || !menu->active() ||
+                           !menu->bookmarks_->CanEdit() ||
+                           (!url.empty() && !menu->bookmarks_->Contains(url)))
+                         return;
+                       menu->editing_url_ = std::move(url);
+            menu->editing_position_.reset();
+                       menu->BuildBookmarkEditor();
+                     },
+                     weak_factory_.GetWeakPtr(), std::move(url)));
+}
+void CommandPalette::BuildBookmarkEditor() {
+  const bool adding = editing_url_->empty();
+  std::u16string name, url;
+  if (adding) {
+    if (web_contents() &&
+        !IsFlyNewTabPage(web_contents()->GetLastCommittedURL()) &&
+        bookmarks_->CanAdd(web_contents()->GetLastCommittedURL().spec())) {
+      name = web_contents()->GetTitle();
+      url = base::UTF8ToUTF16(web_contents()->GetLastCommittedURL().spec());
+    }
+  } else {
+    const auto items = bookmarks_->Read();
+    if (!items)
+      return;
+    for (const auto &bookmark : *items) {
+      if (bookmark.url == *editing_url_) {
+        name = base::UTF8ToUTF16(bookmark.title);
+        url = base::UTF8ToUTF16(bookmark.url);
+        break;
+      }
+    }
+  }
+  bookmark_name_ = nullptr;
+  bookmark_url_ = nullptr;
+  bookmark_save_ = nullptr;
+  bookmark_error_ = nullptr;
+  bookmark_editor_->RemoveAllChildViews();
+  bookmark_editor_->GetViewAccessibility().SetRole(ax::mojom::Role::kGroup);
+  bookmark_editor_->GetViewAccessibility().SetName(adding ? u"Add bookmark"
+                                                          : u"Edit bookmark");
+  auto *layout =
+      bookmark_editor_->SetLayoutManager(std::make_unique<views::BoxLayout>(
+          views::BoxLayout::Orientation::kVertical,
+          gfx::Insets::VH(S(16), S(12)), S(10)));
+  layout->set_cross_axis_alignment(
+      views::BoxLayout::CrossAxisAlignment::kStretch);
+  auto *title = bookmark_editor_->AddChildView(std::make_unique<FlyLabel>(
+      adding ? u"Add bookmark" : u"Edit bookmark", FlyFace::kSans, 18,
+      gfx::Font::Weight::MEDIUM));
+  title->SetHorizontalAlignment(gfx::ALIGN_LEFT);
+  title->GetViewAccessibility().SetRole(ax::mojom::Role::kHeading);
+  title->GetViewAccessibility().SetHierarchicalLevel(2);
+  const auto field = [&](std::u16string label, const std::u16string &value) {
+    auto *caption = bookmark_editor_->AddChildView(MakeMenuCaption(label));
+    caption->SetTone(FlyLabel::Tone::kText);
+    caption->SetHorizontalAlignment(gfx::ALIGN_LEFT);
+    auto *input =
+        bookmark_editor_->AddChildView(std::make_unique<FlyTextfield>(label));
+    input->SetText(value);
+    input->set_controller(this);
+    return input;
+  };
+  bookmark_name_ = field(u"Name", name);
+  bookmark_url_ = field(u"Address", url);
+  auto *help = bookmark_editor_->AddChildView(std::make_unique<FlyLabel>(
+      u"Use a full address, including https:// for a website.", FlyFace::kSans,
+      kMenuSmallTextSize, gfx::Font::Weight::NORMAL, FlyLabel::Tone::kDim));
+  help->SetHorizontalAlignment(gfx::ALIGN_LEFT);
+  help->SetMultiLine(true);
+  if (!adding) {
+    auto *order =
+        bookmark_editor_->AddChildView(std::make_unique<views::View>());
+    order->SetLayoutManager(std::make_unique<views::BoxLayout>(
+        views::BoxLayout::Orientation::kHorizontal, gfx::Insets(), S(8)));
+    for (int direction : {-1, 1}) {
+      order->AddChildView(MakeMenuButton(
+          base::BindRepeating(&CommandPalette::MoveBookmark,
+                              weak_factory_.GetWeakPtr(), direction),
+          direction < 0 ? u"Move earlier" : u"Move later"));
+    }
+  }
+  bookmark_error_ = bookmark_editor_->AddChildView(std::make_unique<FlyLabel>(
+      u"", FlyFace::kSans, kMenuSmallTextSize, gfx::Font::Weight::NORMAL,
+      FlyLabel::Tone::kText));
+  bookmark_error_->SetHorizontalAlignment(gfx::ALIGN_LEFT);
+  bookmark_error_->SetMultiLine(true);
+  bookmark_error_->GetViewAccessibility().SetLiveRegionContainer(
+      views::ViewAccessibility::LiveRegionStatus::kPolite);
+  auto *actions =
+      bookmark_editor_->AddChildView(std::make_unique<views::View>());
+  auto *actions_layout =
+      actions->SetLayoutManager(std::make_unique<views::BoxLayout>(
+          views::BoxLayout::Orientation::kHorizontal, gfx::Insets::VH(S(12), 0),
+          S(8)));
+  if (!adding) {
+    actions->AddChildView(MakeMenuButton(
+        base::BindRepeating(&CommandPalette::Remove, weak_factory_.GetWeakPtr(),
+                            *editing_url_),
+        u"Delete", MenuButtonStyle::kQuiet));
+  }
+  auto *space = actions->AddChildView(std::make_unique<views::View>());
+  actions_layout->SetFlexForView(space, 1);
+  actions->AddChildView(
+      MakeMenuButton(base::BindRepeating(&CommandPalette::EndBookmarkEdit,
+                                         weak_factory_.GetWeakPtr()),
+                     u"Cancel"));
+  bookmark_save_ = actions->AddChildView(
+      MakeMenuButton(base::BindRepeating(&CommandPalette::SaveBookmark,
+                                         weak_factory_.GetWeakPtr()),
+                     u"Save", MenuButtonStyle::kPrimary));
+  bookmark_save_->SetAccentText(false);
+  search_->SetVisible(false);
+  results_scroll_->SetVisible(false);
+  bookmark_add_->SetVisible(false);
+  bookmark_undo_->SetVisible(false);
+  bookmark_editor_scroll_->SetVisible(true);
+  bookmark_editor_->InvalidateLayout();
+  DisableSubpixelText(bookmark_editor_);
+  UpdateHints();
+  bookmark_name_->RequestFocus();
+  bookmark_name_->SelectAll(false);
+  bookmark_editor_scroll_->ScrollToPosition(
+      bookmark_editor_scroll_->vertical_scroll_bar(), 0);
+}
+void CommandPalette::EndBookmarkEdit() {
+  if (!active() || !editing_url_)
+    return;
+  const std::string url = *editing_url_;
+  editing_url_.reset();
+  editing_position_.reset();
+  bookmark_editor_scroll_->SetVisible(false);
+  bookmark_add_->SetVisible(true);
+  bookmark_add_->SetEnabled(bookmarks_->CanEdit());
+  bookmark_undo_->SetVisible(removed_bookmark_.has_value());
+  BookmarkMessage(u"");
+  search_->SetVisible(true);
+  results_scroll_->SetVisible(true);
+  UpdateHints();
+  SelectBookmark(url);
+  search_->RequestFocus();
+}
+void CommandPalette::SelectBookmark(std::string_view url) {
+  for (size_t i = 0; i < filtered_.size(); ++i) {
+    if (filtered_[i].action != url)
+      continue;
+    if (selected_ >= 0)
+      SetRowSelected(selected_, false);
+    EnsureRows(i + 1);
+    selected_ = static_cast<int>(i);
+    SetRowSelected(selected_, true);
+    ScrollSelectedIntoView();
+    break;
+  }
+}
+void CommandPalette::SaveBookmark() {
+  if (!active() || !editing_url_)
+    return;
+  const auto name =
+      base::TrimWhitespace(bookmark_name_->GetText(), base::TRIM_ALL);
+  const GURL url(base::UTF16ToUTF8(
+      base::TrimWhitespace(bookmark_url_->GetText(), base::TRIM_ALL)));
+  std::u16string error;
+  if (!bookmarks_->CanEdit())
+    error =
+        u"Bookmarks are read-only right now. Your changes have not been saved.";
+  else if (name.empty())
+    error = u"Give this bookmark a name.";
+  else if (!url.is_valid() || !bookmarks_->CanAdd(url.spec()))
+    error = u"Enter a valid website, file or browser-page address.";
+  else if (url.spec() != *editing_url_ && bookmarks_->Contains(url.spec()))
+    error =
+        u"This address is already saved. Edit the existing bookmark instead.";
+  if (error.empty()) {
+    const bool saved =
+        editing_url_->empty()
+            ? bookmarks_->Add(url.spec(), base::UTF16ToUTF8(name))
+            : bookmarks_->Update(*editing_url_, url.spec(),
+                                 base::UTF16ToUTF8(name), editing_position_);
+    if (!saved)
+      error = u"This bookmark changed or could not be saved. Your draft is "
+              u"still here.";
+  }
+  if (!error.empty()) {
+    bookmark_error_->SetText(error);
+    bookmark_error_->GetViewAccessibility().NotifyEvent(
+        ax::mojom::Event::kAlert, true);
+    return;
+  }
+  editing_url_ = url.spec();
+  EndBookmarkEdit();
+  if (std::ranges::none_of(filtered_, [&](const auto &item) {
+        return item.action == url.spec();
+      })) {
+    search_->SetText(u"");
+    Refresh();
+  }
+  SelectBookmark(url.spec());
+  BookmarkMessage(u"Bookmark saved.");
+}
+void CommandPalette::UndoBookmark() {
+  if (!active() || !removed_bookmark_)
+    return;
+  const std::string url = *removed_bookmark_->item.FindString("url");
+  if (!bookmarks_->Restore(*removed_bookmark_)) {
+    BookmarkMessage(u"Could not undo: the address may already be saved or "
+                    u"bookmarks are read-only.");
+    return;
+  }
+  removed_bookmark_.reset();
+  bookmark_undo_->SetVisible(false);
+  SelectBookmark(url);
+  search_->RequestFocus();
+  BookmarkMessage(u"Bookmark restored.");
+}
+void CommandPalette::MoveBookmark(int direction) {
+  if (!active() || !bookmarks_ || !bookmarks_->CanEdit())
+    return;
+  const std::string url =
+      editing_url_ ? *editing_url_ : selected_action_for_testing();
+  const auto items = bookmarks_->Read();
+  if (!items)
+    return;
+  const auto found = std::ranges::find(*items, url, &Bookmark::url);
+  if (found == items->end())
+    return;
+  const int index = editing_position_ ? static_cast<int>(*editing_position_)
+                                    : static_cast<int>(found - items->begin());
+  const int target = index + direction;
+  if (target < 0 || target >= static_cast<int>(items->size())) {
+    BookmarkMessage(direction < 0 ? u"Already the first bookmark."
+                                  : u"Already the last bookmark.");
+    return;
+  }
+  if (editing_url_) {
+    editing_position_ = static_cast<size_t>(target);
+    BookmarkMessage(u"Position " + base::NumberToString16(target + 1) +
+                    u" of " + base::NumberToString16(items->size()) + u". Save to apply.");
+    return;
+  }
+  // Updating preferences replaces list rows. Defer beyond their input callback.
+  base::SingleThreadTaskRunner::GetCurrentDefault()->PostTask(
+      FROM_HERE,
+      base::BindOnce(
+          [](base::WeakPtr<CommandPalette> menu, std::string url,
+             size_t target) {
+            if (menu && menu->active() &&
+                menu->bookmarks_->MoveTo(url, target)) {
+              menu->SelectBookmark(url);
+              menu->BookmarkMessage(u"Bookmark order updated.");
+            }
+          },
+          weak_factory_.GetWeakPtr(), url, static_cast<size_t>(target)));
+}
+void CommandPalette::DeleteSelectedBookmark() {
+  if (selected_ >= 0)
+    Remove(filtered_[selected_].action);
+}
+gfx::Rect CommandPalette::row_title_bounds_for_testing(size_t index) {
+  EnsureRows(index + 1);
+  return index < buttons_.size()
+             ? static_cast<PickerButton *>(buttons_[index].get())
+                   ->TitleBoundsForTesting()
+             : gfx::Rect();
+}
+SkColor CommandPalette::row_subtitle_color_for_testing(size_t index) {
+  EnsureRows(index + 1);
+  return index < buttons_.size()
+             ? static_cast<PickerButton *>(buttons_[index].get())
+                   ->SubtitleColor()
+             : SK_ColorTRANSPARENT;
 }
 
 // The Command Centre adds category chips above the list.

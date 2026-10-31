@@ -168,6 +168,7 @@ class MenuHeader : public views::View {
   FlyTextfield* SetSearch(std::unique_ptr<FlyTextfield> search);
   // A dim count or status shown before the close button.
   FlyLabel* AddStatus();
+  void SetFlexibleTitle();
   void AddClose(base::RepeatingClosure close);
   template <typename T>
   T* AddTrailing(std::unique_ptr<T> view) {

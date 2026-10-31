@@ -119,5 +119,53 @@ TEST_F(BookmarkServiceTest, IntegerJSONTimestampAndExplicitEmptyUserStoreAreVali
   EXPECT_TRUE(service_.CanEdit());
   EXPECT_TRUE(service_.Add("https://two.test/", "Two", Added()));
 }
-}  // namespace
-}  // namespace fly
+TEST_F(BookmarkServiceTest, EditAndReorderPreserveMetadataAndRejectDuplicates) {
+  ASSERT_TRUE(service_.Add("https://one.test/", "One", Added()));
+  ASSERT_TRUE(service_.Add("https://two.test/", "Two", Added()));
+  auto stored = prefs_.GetDict(kBookmarksPref).Clone();
+  stored.FindList("items")->back().GetDict().Set("imported", "keep me");
+  prefs_.SetDict(kBookmarksPref, std::move(stored));
+  ASSERT_TRUE(service_.Update("https://one.test/", "https://edited.test/path",
+                              "Español 日本語"));
+  EXPECT_EQ("https://two.test/", service_.Read()->front().url);
+  EXPECT_EQ("Español 日本語", service_.Read()->back().title);
+  EXPECT_EQ(1000, service_.Read()->back().timestamp_ms);
+  ASSERT_TRUE(service_.Update("https://edited.test/path", "https://edited.test/path", "Español 日本語", 0));
+  EXPECT_EQ("keep me", *prefs_.GetDict(kBookmarksPref)
+                            .FindList("items")
+                            ->front()
+                            .GetDict()
+                            .FindString("imported"));
+  const auto before = prefs_.GetDict(kBookmarksPref).Clone();
+  EXPECT_FALSE(service_.Update("https://edited.test/path", "https://two.test/",
+                               "duplicate"));
+  EXPECT_FALSE(
+      service_.Update("https://missing.test/", "https://new.test/", "missing"));
+  EXPECT_FALSE(service_.Update("https://edited.test/path",
+                               "javascript:alert(1)", "bad"));
+  EXPECT_FALSE(service_.MoveTo("https://edited.test/path", 2));
+  EXPECT_EQ(before, prefs_.GetDict(kBookmarksPref));
+}
+TEST_F(BookmarkServiceTest,
+       UndoPreservesRemovedRowWithoutReplacingOtherChanges) {
+  ASSERT_TRUE(service_.Add("https://one.test/", "One", Added()));
+  ASSERT_TRUE(service_.Add("https://two.test/", "Two", Added()));
+  const auto removed = service_.RemoveWithUndo("https://one.test/");
+  ASSERT_TRUE(removed);
+  ASSERT_TRUE(service_.Update("https://two.test/", "https://two.test/",
+                              "Changed meanwhile"));
+  ASSERT_TRUE(service_.Add("https://three.test/", "Three", Added()));
+  ASSERT_TRUE(service_.Restore(*removed));
+  EXPECT_EQ(3u, service_.Read()->size());
+  EXPECT_EQ("Changed meanwhile", service_.Read()->back().title);
+  const auto before = prefs_.GetDict(kBookmarksPref).Clone();
+  EXPECT_FALSE(service_.Restore(*removed));
+  EXPECT_EQ(before, prefs_.GetDict(kBookmarksPref));
+  prefs_.SetManagedPref(kBookmarksPref, base::Value(before.Clone()));
+  EXPECT_FALSE(
+      service_.Update("https://one.test/", "https://edit.test/", "Read only"));
+  EXPECT_FALSE(service_.MoveTo("https://one.test/", 0));
+  EXPECT_FALSE(service_.RemoveWithUndo("https://one.test/"));
+}
+} // namespace
+} // namespace fly

@@ -51,8 +51,8 @@ class NewTabHistory {
   base::WeakPtrFactory<NewTabHistory> weak_factory_{this};
 };
 
-// Fly's new tab page (chrome://fly-new-tab/): clock, date, bookmarks,
-// frequent sites and the live memory use of Fly, served from
+// Fly's quiet new tab page: artwork and entry points to native navigation.
+// Served from
 // <out>/fly_resources/new_tab.
 inline constexpr char kFlyNewTabHost[] = "fly-new-tab";
 inline constexpr char kFlyNewTabURL[] = "chrome://fly-new-tab/";

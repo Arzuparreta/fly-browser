@@ -758,6 +758,9 @@ void FlyWindowController::BuildSurfaces() {
                           weak_factory_.GetWeakPtr()),
       base::BindRepeating(&FlyWindowController::RemoveBookmark,
                           weak_factory_.GetWeakPtr()));
+  bookmark_picker_->SetBookmarks(&FlyApp::Get().bookmarks());
+  bookmark_picker_->SetBackgroundOpen(base::BindRepeating(
+      &FlyWindowController::OpenBookmarkInBackground, weak_factory_.GetWeakPtr()));
   workspace_picker_ = std::make_unique<CommandPalette>(
       widget_,
       base::BindRepeating(
@@ -2855,7 +2858,23 @@ void FlyWindowController::OpenBookmark(content::WebContents* source,
   auto& app = FlyApp::Get();
   if (!app.bookmarks().Contains(url))
     return;
-  app.OpenInNewTab(GURL(url), browser_);
+  if (source && IsFlyNewTabPage(source->GetLastCommittedURL())) {
+    NavigateParams params(browser_, GURL(url), ui::PAGE_TRANSITION_AUTO_BOOKMARK);
+    params.disposition = WindowOpenDisposition::CURRENT_TAB;
+    Navigate(&params);
+  } else {
+    app.OpenInNewTab(GURL(url), browser_);
+  }
+}
+
+void FlyWindowController::OpenBookmarkInBackground(content::WebContents* source,
+                                                   std::string url) {
+  if (Closing() || ActiveContents() != source || !bookmark_urls_.contains(url) ||
+      !FlyApp::Get().bookmarks().Contains(url))
+    return;
+  NavigateParams params(browser_, GURL(url), ui::PAGE_TRANSITION_AUTO_BOOKMARK);
+  params.disposition = WindowOpenDisposition::NEW_BACKGROUND_TAB;
+  Navigate(&params);
 }
 
 void FlyWindowController::RemoveBookmark(content::WebContents* source,

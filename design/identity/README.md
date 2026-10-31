@@ -19,7 +19,7 @@ and the engraving.
 | Eyes | Compound eye facets as a dot lattice that fades with the light. No glint in any line art version. |
 | Desktop icon | Modelled colour fly as a die cut vinyl sticker: crisp edge, thin cut line, shadow that hugs the sticker. Its eyes keep a soft glint with a subtle bloom. |
 | Sidebar | The fly engraved into the surface (line art, debossed), replacing the old Mise mark. |
-| New tab | A "memory" of the fly: only its lines, fading towards the tail, letting the dot grid show through. The red eyes are its only colour. Red hairlines annotate it with live browser data. |
+| New tab | A "memory" of the fly: only its lines, fading towards the tail, letting the dot grid show through. The red eyes are its only colour. Quiet gives it room beside entry points to native search and bookmarks. |
 
 ## System
 
@@ -79,7 +79,7 @@ All three are under the SIL Open Font License. The browser bundles them (`chromi
 - **Workspace card:** workspace number in Doto cells, name, its key hint.
 - **Tab board:** title over domain (domain in Link colour, mono). Audio/mute, pin and split-pane controls convey actionable state. The active row gets the panel background and the red bar.
 - **Engraving:** the engraved fly at the bottom of the sidebar, under the tabs.
-- **New tab:** Doto clock on cells, date in spaced mono capitals, search field with corner brackets and its `/` hint, a short list of frequent sites with key hints, and the fly memory.
+- **New tab:** Quiet keeps the fly memory, a small native-search entry point and a Bookmarks shortcut. The native menu hosts saved-page navigation and editing; the status bar hosts the clock and Diagnostics hosts memory data.
 - **Status bar:** mode badge in Doto on a cell (`NORMAL`, `INSERT`, `HINTS`, `PASSTHROUGH`), key hints, and on the right connection security and time.
 
 ## Assets in this folder

@@ -1187,8 +1187,6 @@ void KeyboardEditor::BuildAppearance() {
                u"date time seconds format", Controls(std::move(controls))))
       clock_format_ = choice;
   }
-  AddRow(u"Frequent sites on new tabs", u"", u"most visited new tab page",
-         MakeToggle("show_frequent_sites", u"Frequent sites on new tabs"));
 }
 
 void KeyboardEditor::BuildPrivacy() {
