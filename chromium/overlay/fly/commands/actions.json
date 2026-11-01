@@ -76,7 +76,7 @@
     "show-whats-new": {"label": "Show What's New", "category": "System", "shortcuts": [], "normal": []},
     "toggle-native-menu-visibility": {"label": "Toggle native menu bar visibility", "category": "System", "shortcuts": [], "normal": []},
     "move-tab-to-workspace": {"label": "Move active tab to another workspace", "category": "Tabs", "shortcuts": [], "normal": []},
-    "open-keyboard-settings": {"label": "Customise keyboard controls", "category": "System", "shortcuts": ["Ctrl+,"], "normal": []},
+    "open-keyboard-settings": {"label": "Customise keyboard controls", "category": "System", "shortcuts": ["Ctrl+,"], "normal": ["Shift+?"]},
     "reopen-closed-tab": {"label": "Reopen last closed tab", "category": "Tabs", "shortcuts": ["Ctrl+Shift+T"], "normal": []},
     "move-tab-left": {"label": "Move tab left", "category": "Tabs", "shortcuts": ["Ctrl+Shift+PageUp"], "normal": []},
     "move-tab-right": {"label": "Move tab right", "category": "Tabs", "shortcuts": ["Ctrl+Shift+PageDown"], "normal": []},

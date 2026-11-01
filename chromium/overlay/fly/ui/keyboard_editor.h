@@ -21,6 +21,7 @@
 #include "content/public/browser/web_contents_observer.h"
 #include "fly/commands/command_service.h"
 #include "fly/commands/palette_catalog.h"
+#include "fly/preferences/new_tab_tips.h"
 #include "fly/preferences/preferences_service.h"
 #include "fly/preferences/search_service.h"
 #include "ui/menus/simple_menu_model.h"
@@ -247,6 +248,7 @@ class KeyboardEditor : public views::TextfieldController,
   raw_ptr<views::Widget> desktop_;
   const raw_ref<CommandService> commands_;
   PreferencesService preferences_;
+  NewTabTips new_tab_tips_;
   SearchService search_preferences_;
   PrefChangeRegistrar preferences_registrar_;
   std::unique_ptr<views::Widget> overlay_;

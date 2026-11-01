@@ -2,6 +2,8 @@
 // Use of this source code is governed by the GPL-3.0-or-later license in the
 // Fly repository.
 #include "fly/preferences/preferences_service.h"
+
+#include "fly/preferences/new_tab_tips.h"
 #include "fly/preferences/spellcheck_languages.h"
 #include "fly/prefs/dictionary_store.h"
 
@@ -33,6 +35,7 @@ constexpr auto kBoolDefaults = base::MakeFixedFlatMap<std::string_view, bool>({
     {"disable_gpu", false},
     {"enable_diagnostics", false},
     {"extensions_enabled", true},
+    {"new_tab_tips", true},
     {"preload_address_results", false},
     {"web_notifications", true},
 });
@@ -119,6 +122,7 @@ ClockText FormatClock(base::Time time, std::string_view format) {
 void PreferencesService::RegisterLocalStatePrefs(PrefRegistrySimple* registry) {
   registry->RegisterDictionaryPref(kPreferencesPref);
   registry->RegisterListPref(kRecentCommandsPref);
+  NewTabTips::RegisterLocalStatePrefs(registry);
 }
 std::vector<std::string> PreferencesService::ReadRecentCommands() const {
   std::vector<std::string> result;

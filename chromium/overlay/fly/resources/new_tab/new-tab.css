@@ -5,15 +5,23 @@ html { zoom:var(--scale); }
    overlays this canvas and must not reserve extra space or move its contents. */
 body { margin:0; height:calc(100dvh / var(--scale)); background:var(--bg-main); color:var(--text); font:14px/1.5 'IBM Plex Sans',sans-serif; }
 body.light { background-image:url('identity/paper-grain.png'); background-size:128px 128px; }
-main { height:100%; min-height:0; display:grid; grid-template-rows:minmax(0,1fr) auto; padding:clamp(12px,4vh,36px) clamp(16px,4vw,48px); }
+main { height:100%; min-height:0; display:grid; grid-template-rows:minmax(0,1fr); padding:clamp(12px,4vh,36px) clamp(16px,4vw,48px); }
 .starting-point { min-height:0; display:flex; flex-direction:column; align-items:center; justify-content:center; gap:clamp(8px,3vh,24px); }
 #memory-fly { display:block; width:clamp(100px,30vw,280px); height:clamp(60px,45vh,280px); max-width:100%; object-fit:contain; }
 button { border:0; border-radius:4px; padding:10px 12px; font:inherit; background:transparent; color:var(--text); cursor:pointer; }
 button:hover { background:color-mix(in srgb,var(--text) 6%,transparent); }
 button:focus-visible { outline:2px solid var(--accent); outline-offset:3px; }
 button:active { background:color-mix(in srgb,var(--text) 10%,transparent); }
-#search { display:flex; justify-content:center; align-items:center; flex-wrap:wrap; gap:6px 14px; }
+.entry { display:flex; flex-direction:column; align-items:center; gap:4px; max-width:100%; }
+nav { display:flex; justify-content:center; flex-wrap:wrap; gap:4px 8px; }
+nav button { display:flex; justify-content:center; align-items:center; flex-wrap:wrap; gap:6px 14px; }
 button span { font:11px/1.5 'IBM Plex Mono',monospace; color:color-mix(in srgb,var(--text) 70%,var(--bg-main)); }
-nav { padding-top:12px; }
-@media(max-height:300px) { main { padding-block:8px; } .starting-point { flex-direction:row; gap:12px; } #memory-fly { width:90px; height:90px; max-height:100%; } nav { padding-top:4px; } }
+/* One keyboard tip, quieter than the entry points above it. */
+#tip { margin:0; max-width:100%; font-size:13px; line-height:22px; text-align:center; color:color-mix(in srgb,var(--text) 62%,var(--bg-main)); }
+#tip-text { margin:0 6px 0 10px; }
+#tip[hidden] { display:none; }
+#tip.gone { visibility:hidden; }
+kbd { font:11px/1.6 'IBM Plex Mono',monospace; color:var(--text); padding:0 6px; border:1px solid color-mix(in srgb,var(--text) 22%,var(--bg-main)); border-radius:4px; }
+#tip-dismiss { padding:0 6px; font-size:14px; line-height:22px; color:inherit; vertical-align:top; }
+@media(max-height:300px) { main { padding-block:8px; } .starting-point { flex-direction:row; gap:12px; } #memory-fly { width:90px; height:90px; max-height:100%; } .entry { align-items:flex-start; } nav { justify-content:flex-start; } #tip { display:none; } }
 @media(prefers-reduced-motion:reduce) { * { scroll-behavior:auto; } }

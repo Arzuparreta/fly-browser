@@ -420,6 +420,7 @@ KeyboardEditor::KeyboardEditor(views::Widget* desktop,
     : desktop_(desktop),
       commands_(commands),
       preferences_(local_state),
+      new_tab_tips_(local_state),
       search_preferences_(local_state) {
   desktop_->AddObserver(this);
   preferences_registrar_.Init(&local_state);
@@ -1184,6 +1185,25 @@ void KeyboardEditor::BuildAppearance() {
     if (AddRow(u"Clock", u"In the bottom status bar.",
                u"date time seconds format", Controls(std::move(controls))))
       clock_format_ = choice;
+  }
+  BeginGroup(u"New tab");
+  {
+    std::vector<std::unique_ptr<views::View>> controls;
+    controls.push_back(MakeMenuButton(
+        base::BindRepeating(
+            [](base::WeakPtr<KeyboardEditor> editor) {
+              if (editor && editor->active()) {
+                editor->new_tab_tips_.Reset();
+                editor->SetStatus(u"Every keyboard tip shows again.");
+              }
+            },
+            weak_factory_.GetWeakPtr()),
+        u"Show all again"));
+    controls.push_back(MakeToggle("new_tab_tips", u"Keyboard tips"));
+    AddRow(u"Keyboard tips",
+           u"One shortcut per new tab, until you have used its keys twice.",
+           u"hints help learn shortcuts keys quiet",
+           Controls(std::move(controls)));
   }
 }
 
@@ -2692,7 +2712,7 @@ void KeyboardEditor::RefreshAppearance() {
       preferences_.CanEditSidebarAutoCollapse());
   for (const char* key :
        {"web_notifications", "disable_gpu", "background_throttling",
-        "enable_diagnostics", "preload_address_results"})
+        "enable_diagnostics", "preload_address_results", "new_tab_tips"})
     set(key, preferences_.ReadBool(key).value_or(false), editable);
   if (suspension_timeout_) {
     std::optional<size_t> index;

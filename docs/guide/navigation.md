@@ -172,6 +172,7 @@ Fly Browser provides a Vim-inspired modal navigation engine that frees you from 
 | `s` | Focus Sidebar | Moves focus to vertical sidebar tab list |
 | `y` | Yank URL | Copies current URL to clipboard with status bar feedback |
 | `i` | Insert Mode | Explicitly enters INSERT mode |
+| `?` | Keyboard Settings | Opens the list of every shortcut and NORMAL key, where you can change them |
 | `Shift + Escape` | Passthrough Mode | Toggles PASSTHROUGH mode on or off |
 
 ***
@@ -217,7 +218,9 @@ Fly includes an in-engine DOM distiller powered by Mozilla Readability to strip 
 
 ## Quiet new tab and bookmarks
 
-New tabs open a quiet local page with the Fly illustration. **Search or enter address** opens Fly's native address overlay, with your configured search engine, aliases, bangs and calculator. **Bookmarks** opens the same menu as **Ctrl + Shift + B**. The hints reflect your current bindings. Both controls work by mouse, Tab and Enter. The fly stays centered in the available page area. A floating sidebar overlays that area without shifting the page; pinning the sidebar reduces the area and Quiet centers itself inside it. The page follows your theme and interface scale without fetching fonts, favicons or other network content. It does not display history suggestions or sample memory use; memory information remains in Diagnostics and the clock remains in the status bar.
+New tabs open a quiet local page with the Fly illustration. Under it, **Search or enter address** opens Fly's native address overlay, with your configured search engine, aliases, bangs and calculator, and **Bookmarks** opens the same menu as **Ctrl + Shift + B**. The keys shown next to them reflect your current bindings. Both controls work by mouse, Tab and Enter. The fly stays centered in the available page area. A floating sidebar overlays that area without shifting the page; pinning the sidebar reduces the area and Quiet centers itself inside it. The page follows your theme and interface scale without fetching fonts, favicons or other network content. It does not display history suggestions or sample memory use; memory information remains in Diagnostics and the clock remains in the status bar.
+
+Below Search and Bookmarks, one keyboard tip teaches a key you have not used yet, such as **f** for link hints or **Ctrl + P** for the Command Centre. Each new tab shows the next pending tip. A tip stops appearing once you have used its keys twice, or when you click **×** next to it; when you know them all, the line disappears. Tips show your current bindings and skip actions that have no key. Turn them off, or show them all again, in **Preferences → Appearance → New tab → Keyboard tips**. Fly counts only those keys, in its `Local State`, and nothing leaves your computer. To see every shortcut at once, press **?** in NORMAL mode.
 
 Bookmarks are your explicit saved pages, shared across workspaces. Opening a bookmark uses the current workspace's profile, cookies and private-mode identity. Click a row or press Enter to open it. From a new tab, the destination replaces that empty tab; from an existing page, it opens in a new tab. **Ctrl + Enter**, Ctrl-click or middle-click opens a background tab while keeping the menu available for opening several pages.
 

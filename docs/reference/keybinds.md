@@ -81,7 +81,7 @@ The table lists the bindings of a new profile.
 | Close Split View | Unassigned | Unassigned |
 | Cycle Split View Orientation | Unassigned | Unassigned |
 | Toggle Dual-Split View (Stacked) | Unassigned | Unassigned |
-| Customise keyboard controls | `Ctrl+,` | Unassigned |
+| Customise keyboard controls | `Ctrl+,` | `Shift+?` |
 | Open native settings menu | `F1` | Unassigned |
 | Show What's New | Unassigned | Unassigned |
 | Toggle full screen | `F11` | Unassigned |
