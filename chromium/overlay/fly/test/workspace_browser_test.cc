@@ -1,6 +1,7 @@
 // Copyright Fly Browser contributors. All rights reserved.
 // Use of this source code is governed by the GPL-3.0-or-later license in the
 // Fly repository.
+#include <cmath>
 #include <cstdlib>
 
 #include "base/files/file_enumerator.h"
@@ -2300,12 +2301,12 @@ IN_PROC_BROWSER_TEST_F(FlyWorkspaceBrowserTest,
       const css = [...document.styleSheets].find(s => s.href?.endsWith('/new-tab.css')).cssRules;
       const initial = [...css].at(-1).style;
       const data = JSON.parse(document.getElementById('initial-data').textContent);
-      return data.light && data.scale === 1.25 && data.sidebarOverhang === 280 &&
+      return data.light && data.scale === 1.25 && data.sidebarOverhang === undefined &&
           data.bookmarks === undefined && data.sites === undefined && !window.injected &&
           document.querySelectorAll('script').length === 2 &&
           document.getElementById('memory-fly').src.includes('papel') &&
           initial.getPropertyValue('--bg-main').trim() === '#efe8d1' &&
-          initial.getPropertyValue('--sidebar-overhang').trim() === '280px';
+          initial.getPropertyValue('--sidebar-overhang').trim() === '';
     })()
   )JS"));
   EXPECT_EQ("rgb(239, 232, 209)", content::EvalJs(contents, "getComputedStyle(document.body).backgroundColor"));
@@ -2330,49 +2331,49 @@ IN_PROC_BROWSER_TEST_F(FlyWorkspaceBrowserTest,
 }
 
 IN_PROC_BROWSER_TEST_F(FlyWorkspaceBrowserTest,
-                       NewTabReservesScaledSidebarOverhang) {
+                       QuietCentersInCanvasWithFloatingAndPinnedSidebar) {
   auto& window = Window();
+  browser()->GetWindow()->SetBounds(gfx::Rect(40, 40, 640, 720));
   ASSERT_TRUE(ExecuteNativeCommand(browser(), "spawn-tab"));
   auto* contents = Active(browser());
   ASSERT_TRUE(content::WaitForLoadStop(contents));
-  for (const char* scale : {"normal", "large", "normal"}) {
+  const auto centre = [&] {
+    return content::EvalJs(contents,
+        "(() => { const r = document.getElementById('memory-fly').getBoundingClientRect(); "
+        "return r.x + r.width / 2; })()").ExtractDouble();
+  };
+  for (const char* scale : {"normal", "large"}) {
     SCOPED_TRACE(scale);
     ASSERT_TRUE(App().preferences().SetString("interface_scale", scale));
-    for (bool collapse : {true, false}) {
-      SCOPED_TRACE(collapse);
-      ASSERT_TRUE(App().preferences().SetSidebarAutoCollapse(collapse));
-      const int overhang = collapse
-          ? FlyScaled(kSidebarWidth) - FlyScaled(kSidebarRailWidth) : 0;
-      ASSERT_TRUE(base::test::RunUntil([&] {
-        return content::EvalJs(contents, content::JsReplace(
-            "document.documentElement.style.getPropertyValue("
-            "'--sidebar-overhang') === $1", std::to_string(overhang) + "px"))
-            .ExtractBool();
-      }));
-      // Native viewport resizing and the WebUI preference update arrive
-      // separately. Measure after both, before checking hover's invariant.
+    int floating_width = 0;
+    for (bool floating : {true, false, true}) {
+      SCOPED_TRACE(floating);
+      ASSERT_TRUE(App().preferences().SetSidebarAutoCollapse(floating));
       window.widget()->LayoutRootViewIfNecessary();
       ASSERT_TRUE(base::test::RunUntil([&] {
-        return content::EvalJs(contents, "innerWidth").ExtractInt() ==
-               contents->GetRenderWidgetHostView()->GetViewBounds().width();
+        const int width = contents->GetRenderWidgetHostView()->GetViewBounds().width();
+        return content::EvalJs(contents, "innerWidth").ExtractInt() == width &&
+               std::abs(centre() - width / 2.0) <= 1;
       }));
-      ASSERT_TRUE(content::ExecJs(contents,
-          "(async () => { await document.fonts.ready; "
-          "await new Promise(requestAnimationFrame); "
-          "await new Promise(requestAnimationFrame); })()"));
-      const auto clock_left = content::EvalJs(contents,
-          "document.getElementById('search').getBoundingClientRect().left")
-          .ExtractDouble();
-      EXPECT_GE(clock_left, overhang);
-      if (collapse) {
+      const auto canvas = contents->GetRenderWidgetHostView()->GetViewBounds();
+      if (floating) {
+        if (!floating_width)
+          floating_width = canvas.width();
+        EXPECT_EQ(floating_width, canvas.width());
+      } else {
+        EXPECT_LT(canvas.width(), floating_width);
+      }
+      EXPECT_NEAR(canvas.width() / 2.0, centre(), 1);
+      EXPECT_EQ("0px", content::EvalJs(contents, "getComputedStyle(document.body).paddingLeft"));
+      if (floating) {
         ASSERT_TRUE(InvokeNativeCommand(browser(), "focus-sidebar"));
-        ASSERT_TRUE(base::test::RunUntil([&] {
-          return window.sidebar_expanded_for_testing();
-        }));
-        EXPECT_EQ(clock_left, content::EvalJs(contents,
-            "document.getElementById('search').getBoundingClientRect().left")
-            .ExtractDouble());
+        ASSERT_TRUE(base::test::RunUntil([&] { return window.sidebar_expanded_for_testing(); }));
+        // Expanding covers the canvas's left margin, without resizing or shifting it.
+        EXPECT_EQ(canvas, contents->GetRenderWidgetHostView()->GetViewBounds());
+        EXPECT_GT(window.sidebar_widget_for_testing()->GetWindowBoundsInScreen().right(), canvas.x());
+        EXPECT_NEAR(canvas.width() / 2.0, centre(), 1);
         ASSERT_TRUE(InvokeNativeCommand(browser(), "focus-sidebar"));
+        ASSERT_TRUE(base::test::RunUntil([&] { return !window.sidebar_expanded_for_testing(); }));
       }
     }
   }
