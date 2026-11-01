@@ -96,6 +96,7 @@ FlyApp::FlyApp()
     : workspaces_(*g_browser_process->local_state()),
       commands_(*g_browser_process->local_state()),
       preferences_(*g_browser_process->local_state()),
+      new_tab_tips_(*g_browser_process->local_state()),
       bookmarks_(
           std::make_unique<BookmarkService>(*g_browser_process->local_state())) {
   auto& local_state = *g_browser_process->local_state();

@@ -510,6 +510,8 @@ content::KeyboardEventProcessingResult RouteNativePageKey(
     contents->ClearFocusedElement();
     contents->Focus();
   } else if (key.kind == KeyResultKind::kAction) {
+    // A tip on the new tab retires once its keys have been used.
+    FlyApp::Get().new_tab_tips().RecordKeyboardUse(key.action);
     // Native commands can close the BrowserView; never read it afterwards.
     window.RunCommand(key.action);
   }

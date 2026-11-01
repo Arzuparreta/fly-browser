@@ -2250,7 +2250,7 @@ IN_PROC_BROWSER_TEST_F(FlyWorkspaceBrowserTest,
   ASSERT_TRUE(content::WaitForLoadStop(contents));
   EXPECT_EQ(GURL(kFlyNewTabURL), contents->GetLastCommittedURL());
   EXPECT_EQ(u"New tab", contents->GetTitle());
-  EXPECT_EQ(2, content::EvalJs(contents, "document.querySelectorAll('button').length"));
+  EXPECT_EQ(2, content::EvalJs(contents, "document.querySelectorAll('nav button').length"));
   EXPECT_EQ(0, content::EvalJs(contents, "document.querySelectorAll('#clock,#memory,#sites').length"));
   ASSERT_TRUE(content::ExecJs(contents, "document.getElementById('bookmarks').click()"));
   auto& picker = Window().bookmark_picker();
@@ -2314,7 +2314,7 @@ IN_PROC_BROWSER_TEST_F(FlyWorkspaceBrowserTest,
   ASSERT_TRUE(Window().RunCommand("toggle-private-mode"));
   ASSERT_TRUE(base::test::RunUntil([&] { return LastActive() != browser(); }));
   ASSERT_TRUE(content::WaitForLoadStop(Active(LastActive())));
-  EXPECT_EQ(2, content::EvalJs(Active(LastActive()), "document.querySelectorAll('button').length"));
+  EXPECT_EQ(2, content::EvalJs(Active(LastActive()), "document.querySelectorAll('nav button').length"));
   EXPECT_EQ(queries, App().new_tab_history().query_count_for_testing());
 }
 
@@ -2404,8 +2404,99 @@ IN_PROC_BROWSER_TEST_F(FlyWorkspaceBrowserTest,
   auto* contents = model->GetWebContentsAt(model->count() - 1);
   EXPECT_EQ(0, content::EvalJs(contents, "document.querySelectorAll('#memory,#clock,#sites').length"));
   model->ActivateTabAt(model->GetIndexOfWebContents(contents));
-  EXPECT_EQ(2, content::EvalJs(contents, "document.querySelectorAll('button').length"));
+  EXPECT_EQ(2, content::EvalJs(contents, "document.querySelectorAll('nav button').length"));
   EXPECT_EQ(queries, App().new_tab_history().query_count_for_testing());
+}
+
+// Each new tab teaches one pending key; using the keys twice or dismissing
+// the tip retires it, and the preference hides every tip.
+IN_PROC_BROWSER_TEST_F(FlySidebarBrowserTest,
+                       QuietNewTabTipsRotateRetireAndDismiss) {
+  auto& tips = App().new_tab_tips();
+  const auto open_tab = [&] {
+    EXPECT_TRUE(ExecuteNativeCommand(browser(), "spawn-tab"));
+    auto* contents = Active(browser());
+    EXPECT_TRUE(content::WaitForLoadStop(contents));
+    return contents;
+  };
+  const auto tip = [](content::WebContents* contents) {
+    return content::EvalJs(contents, R"JS(
+      (() => {
+        const tip = document.getElementById('tip');
+        if (tip.hidden || tip.classList.contains('gone')) return '';
+        return document.getElementById('tip-key').textContent + ' ' +
+            document.getElementById('tip-text').textContent;
+      })()
+    )JS").ExtractString();
+  };
+  auto* first = open_tab();
+  const auto first_tip = tip(first);
+  EXPECT_FALSE(first_tip.empty());
+  const auto first_action =
+      content::EvalJs(first, "JSON.parse(document.getElementById("
+                             "'initial-data').textContent).tip.action")
+          .ExtractString();
+  EXPECT_TRUE(tips.Pending(first_action));
+  EXPECT_EQ(2, content::EvalJs(first, "document.querySelectorAll('nav button').length"));
+  auto* second = open_tab();
+  EXPECT_NE(first_tip, tip(second));
+
+  // NORMAL keys typed on a page count as learning their tip.
+  ASSERT_TRUE(ui_test_utils::NavigateToURL(
+      browser(), embedded_test_server()->GetURL("/title1.html")));
+  ASSERT_TRUE(tips.Pending("yank-url"));
+  auto* page = Active(browser());
+  MoveToPage();
+  ASSERT_TRUE(base::test::RunUntil([&] {
+    return content::EvalJs(page, "document.hasFocus()").ExtractBool();
+  }));
+  ui::test::EventGenerator keys(
+      Window().widget()->GetNativeWindow()->GetRootWindow());
+  keys.PressKey(ui::VKEY_Y, ui::EF_NONE);
+  keys.ReleaseKey(ui::VKEY_Y, ui::EF_NONE);
+  // One use is not enough to retire a tip.
+  ASSERT_TRUE(base::test::RunUntil([&] {
+    return g_browser_process->local_state()
+               ->GetDict(kNewTabTipsPref)
+               .FindInt("yank-url") == 1;
+  }));
+  EXPECT_TRUE(tips.Pending("yank-url"));
+  keys.PressKey(ui::VKEY_Y, ui::EF_NONE);
+  keys.ReleaseKey(ui::VKEY_Y, ui::EF_NONE);
+  ASSERT_TRUE(base::test::RunUntil([&] { return !tips.Pending("yank-url"); }));
+  // ? lists every shortcut.
+  auto& editor = Window().keyboard_editor();
+  ASSERT_FALSE(editor.active());
+  keys.PressKey(ui::VKEY_OEM_2, ui::EF_SHIFT_DOWN);
+  keys.ReleaseKey(ui::VKEY_OEM_2, ui::EF_SHIFT_DOWN);
+  ASSERT_TRUE(base::test::RunUntil([&] { return editor.active(); }));
+  EXPECT_EQ(KeyboardEditor::kKeyboardPane, editor.selected_pane_for_testing());
+  editor.Cancel();
+  ASSERT_TRUE(base::test::RunUntil([&] { return !editor.active(); }));
+
+  // Dismissing hides this page's tip without moving the fly.
+  auto* third = open_tab();
+  const auto dismissed =
+      content::EvalJs(third, "JSON.parse(document.getElementById("
+                             "'initial-data').textContent).tip.action")
+          .ExtractString();
+  const auto fly = [&] {
+    return content::EvalJs(third, "document.getElementById('memory-fly')"
+                                  ".getBoundingClientRect().y")
+        .ExtractDouble();
+  };
+  const double before = fly();
+  ASSERT_TRUE(content::ExecJs(third, "document.getElementById('tip-dismiss').click()"));
+  ASSERT_TRUE(base::test::RunUntil([&] { return tip(third).empty(); }));
+  EXPECT_FALSE(tips.Pending(dismissed));
+  EXPECT_EQ(before, fly());
+
+  ASSERT_TRUE(App().preferences().SetBool("new_tab_tips", false));
+  EXPECT_EQ("", tip(open_tab()));
+  ASSERT_TRUE(App().preferences().SetBool("new_tab_tips", true));
+  tips.Reset();
+  EXPECT_TRUE(tips.Pending(dismissed));
+  EXPECT_TRUE(tips.Pending("yank-url"));
 }
 
 IN_PROC_BROWSER_TEST_F(FlyWorkspaceBrowserTest, DownloadShelfFollowsDownloads) {

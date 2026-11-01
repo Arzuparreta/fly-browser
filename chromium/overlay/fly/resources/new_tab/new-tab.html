@@ -12,8 +12,10 @@
 <main aria-label="New tab">
 <div class="starting-point">
 <img id="memory-fly" src="identity/memory-chasis@2x.png" alt="Ink drawing of a fly with red eyes">
-<button id="search" type="button">Search or enter address <span id="search-binding" aria-hidden="true"></span></button>
+<div class="entry">
+<nav aria-label="New tab shortcuts"><button id="search" type="button">Search or enter address <span id="search-binding" aria-hidden="true"></span></button><button id="bookmarks" type="button">Bookmarks <span id="bookmarks-binding" aria-hidden="true"></span></button></nav>
+<p id="tip" role="note" aria-label="Keyboard tip" hidden><kbd id="tip-key"></kbd><span id="tip-text"></span><button id="tip-dismiss" type="button" title="Hide this tip" aria-label="Hide this tip">×</button></p>
 </div>
-<nav aria-label="New tab shortcuts"><button id="bookmarks" type="button">Bookmarks <span id="bookmarks-binding" aria-hidden="true"></span></button></nav>
+</div>
 </main>
 </body></html>

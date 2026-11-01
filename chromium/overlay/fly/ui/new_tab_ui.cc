@@ -5,6 +5,7 @@
 
 #include <map>
 #include <memory>
+#include <optional>
 #include <string>
 #include <string_view>
 #include <utility>
@@ -45,6 +46,8 @@
 #include "content/public/browser/webui_config_map.h"
 #include "content/public/common/url_constants.h"
 #include "fly/bookmarks/bookmark_service.h"
+#include "fly/commands/keyboard_config.h"
+#include "fly/preferences/new_tab_tips.h"
 #include "fly/ui/fly_app.h"
 #include "fly/ui/fly_window_controller.h"
 #include "fly/ui/fly_theme.h"
@@ -146,11 +149,42 @@ std::string Hex(SkColor color) {
                             SkColorGetG(color), SkColorGetB(color));
 }
 
+// The key a tip teaches: the NORMAL key when there is one, as it is the
+// shortest, otherwise the first shortcut. No key, no tip.
+std::optional<base::DictValue> TipKey(const KeyboardConfig& config,
+                                      std::string_view action) {
+  for (const auto [table, normal] :
+       {std::pair{&config.normal, true}, std::pair{&config.shortcuts, false}}) {
+    const auto bindings = table->find(std::string(action));
+    if (bindings != table->end() && !bindings->second.empty())
+      return base::DictValue()
+          .Set("key", bindings->second.front())
+          .Set("normal", normal);
+  }
+  return std::nullopt;
+}
+KeyboardConfig CurrentKeyboard(FlyApp& app) {
+  return app.commands().Read().value_or(DefaultKeyboardConfig());
+}
+bool TipsEnabled(FlyApp& app) {
+  return app.preferences().ReadBool("new_tab_tips").value_or(true);
+}
+// The tip a new page starts with; moves the rotation on.
+std::string NextTip(FlyApp& app, const KeyboardConfig& config) {
+  if (!TipsEnabled(app))
+    return std::string();
+  const auto tip = app.new_tab_tips().Next([&](std::string_view action) {
+    return TipKey(config, action).has_value();
+  });
+  return tip ? std::string(tip->action) : std::string();
+}
+
 // A current snapshot is embedded as inert JSON in the document. The first
 // stylesheet includes the current theme/geometry, so painting never depends on
 // a renderer -> browser -> renderer ready message. Dynamic bytes are never
 // cached with the product assets, nor shared between regular/private pages.
-base::DictValue PageData(bool private_page) {
+// `tip` is the action of the keyboard tip to show, if any.
+base::DictValue PageData(bool private_page, std::string_view tip = {}) {
   const auto& colors = GetFlyColors();
   base::DictValue colours;
   colours.Set("--bg-main", Hex(colors.bg_main));
@@ -168,12 +202,18 @@ base::DictValue PageData(bool private_page) {
                            : 1.0;
   base::DictValue data;
   if (auto* window = FlyApp::GetIfCreated()) {
-    const auto config = window->commands().Read().value_or(DefaultKeyboardConfig());
+    const auto config = CurrentKeyboard(*window);
     for (const auto [key, action] : {std::pair{"searchBinding", "toggle-address"},
                                     std::pair{"bookmarksBinding", "toggle-bookmarks"}}) {
       const auto bindings = config.shortcuts.find(action);
       if (bindings != config.shortcuts.end() && !bindings->second.empty())
         data.Set(key, bindings->second.front());
+    }
+    const auto found = NewTabTips::Find(tip);
+    if (auto key = found ? TipKey(config, tip) : std::nullopt) {
+      key->Set("action", tip);
+      key->Set("text", found->text);
+      data.Set("tip", std::move(*key));
     }
   }
   data.Set("light", !colors.dark);
@@ -195,7 +235,11 @@ void Serve(bool private_page,
               std::move(done).Run(std::move(bytes));
               return;
             }
-            const auto data = PageData(private_page);
+            std::string tip;
+            if (auto* app = FlyApp::GetIfCreated();
+                app && path == "new-tab.html")
+              tip = NextTip(*app, CurrentKeyboard(*app));
+            const auto data = PageData(private_page, tip);
             std::string text(base::as_string_view(base::span(*bytes)));
             if (path == "new-tab.html") {
               auto json = base::WriteJson(data).value_or("{}");
@@ -241,7 +285,8 @@ class NewTabHandler : public content::WebUIMessageHandler,
   void RegisterMessages() override {
     Observe(web_ui()->GetWebContents());
     registrar_.Init(g_browser_process->local_state());
-    for (const char* pref : {kPreferencesPref, kKeyboardPref})
+    for (const char* pref :
+         {kPreferencesPref, kKeyboardPref, kNewTabTipsPref})
       registrar_.Add(pref, base::BindRepeating(&NewTabHandler::Refresh,
                                               base::Unretained(this)));
     web_ui()->RegisterMessageCallback("ready", base::BindRepeating(
@@ -250,6 +295,8 @@ class NewTabHandler : public content::WebUIMessageHandler,
         &NewTabHandler::Open, base::Unretained(this), "toggle-address"));
     web_ui()->RegisterMessageCallback("openBookmarks", base::BindRepeating(
         &NewTabHandler::Open, base::Unretained(this), "toggle-bookmarks"));
+    web_ui()->RegisterMessageCallback("dismissTip", base::BindRepeating(
+        &NewTabHandler::DismissTip, base::Unretained(this)));
   }
   void OnVisibilityChanged(content::Visibility) override { Refresh(); }
   void DidStartNavigation(content::NavigationHandle* navigation) override {
@@ -260,8 +307,34 @@ class NewTabHandler : public content::WebUIMessageHandler,
 
  private:
   bool OffTheRecord() { return Profile::FromWebUI(web_ui())->IsOffTheRecord(); }
-  void OnReady(const base::ListValue&) {
+  void OnReady(const base::ListValue& args) {
+    // The page reports the tip its document was served with.
+    if (!args.empty() && args[0].is_string() &&
+        NewTabTips::Find(args[0].GetString()))
+      tip_ = args[0].GetString();
     AllowJavascript();
+    Refresh();
+  }
+  // Keeps this page's tip until it is learned, dismissed or loses its key;
+  // then the next pending one takes its place. A tip dismissed here leaves
+  // the page without one.
+  std::string CurrentTip() {
+    auto* app = FlyApp::GetIfCreated();
+    if (!app || dismissed_ || !TipsEnabled(*app))
+      return std::string();
+    const auto config = CurrentKeyboard(*app);
+    if (tip_.empty() || !app->new_tab_tips().Pending(tip_) ||
+        !TipKey(config, tip_))
+      tip_ = NextTip(*app, config);
+    return tip_;
+  }
+  void DismissTip(const base::ListValue&) {
+    auto* app = FlyApp::GetIfCreated();
+    if (!app || tip_.empty())
+      return;
+    dismissed_ = true;
+    // Other new tabs showing the same tip move on to the next one.
+    app->new_tab_tips().Dismiss(tip_);
     Refresh();
   }
   bool Visible() const {
@@ -273,7 +346,8 @@ class NewTabHandler : public content::WebUIMessageHandler,
       return;
     if (Visible())
       web_contents()->SetPageBaseBackgroundColor(GetFlyColors().bg_main);
-    CallJavascriptFunction("updateFlyNewTab", base::Value(PageData(OffTheRecord())));
+    CallJavascriptFunction("updateFlyNewTab",
+                           base::Value(PageData(OffTheRecord(), CurrentTip())));
   }
   void Open(std::string action, const base::ListValue&) {
     // A background or detached WebUI must not operate another tab's window.
@@ -282,6 +356,8 @@ class NewTabHandler : public content::WebUIMessageHandler,
       window->RunCommand(action);
   }
   PrefChangeRegistrar registrar_;
+  std::string tip_;
+  bool dismissed_ = false;
 };
 
 class NewTabUI : public content::WebUIController {

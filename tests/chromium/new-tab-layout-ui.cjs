@@ -34,6 +34,7 @@ const report = [];
             assert(page,'Startup opens Quiet');
             const errors=[]; page.on('pageerror',e=>errors.push(e.message));
             await page.waitForSelector('#bookmarks');
+            assert.equal(await page.locator('#tip').isVisible(),true,'A new profile shows a keyboard tip');
             await page.evaluate(()=>document.fonts.ready);
             const data=await page.evaluate(()=>JSON.parse(document.getElementById('initial-data').textContent));
             assert.equal(data.scale,scale==='large'?1.25:1);
@@ -46,7 +47,8 @@ const report = [];
                 await page.evaluate(async()=>{await document.fonts.ready;for(let i=0;i<3;i++)await new Promise(requestAnimationFrame);});
                 const state=await page.evaluate(()=>{
                     const root=document.scrollingElement;
-                    const offenders=[...document.querySelectorAll('#memory-fly,#search,#bookmarks')].filter(element=>{
+                    // The keyboard tip is left out on very short pages; when shown it must fit too.
+                    const offenders=[...document.querySelectorAll('#memory-fly,#search,#bookmarks,#tip')].filter(element=>element.id!=='tip'||element.getClientRects().length).filter(element=>{
                         const r=element.getBoundingClientRect();
                         return r.x< -1||r.y< -1||r.right>innerWidth+1||r.bottom>innerHeight+1||r.width<=0||r.height<=0;
                     }).map(element=>element.id);

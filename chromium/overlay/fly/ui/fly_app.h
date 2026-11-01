@@ -22,6 +22,7 @@
 #include "components/prefs/pref_change_registrar.h"
 #include "fly/commands/command_service.h"
 #include "fly/commands/palette_catalog.h"
+#include "fly/preferences/new_tab_tips.h"
 #include "fly/preferences/preferences_service.h"
 #include "fly/ui/diagnostics_hub.h"
 #include "fly/ui/fly_actions.h"
@@ -75,6 +76,7 @@ class FlyApp : public BrowserCollectionObserver {
   const PreferencesService& preferences() const { return preferences_; }
   BookmarkService& bookmarks() { return *bookmarks_; }
   NewTabHistory& new_tab_history() { return *new_tab_history_; }
+  NewTabTips& new_tab_tips() { return new_tab_tips_; }
   // Clearing history runs once for all normal workspaces.
   void ClearHistory();
   bool history_clear_running() const { return history_clear_running_; }
@@ -197,6 +199,7 @@ class FlyApp : public BrowserCollectionObserver {
   WorkspaceService workspaces_;
   CommandService commands_;
   PreferencesService preferences_;
+  NewTabTips new_tab_tips_;
   std::unique_ptr<BookmarkService> bookmarks_;
   std::unique_ptr<FrequentSitesService> frequent_sites_;
   std::unique_ptr<NewTabHistory> new_tab_history_;

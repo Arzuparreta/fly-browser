@@ -50,6 +50,8 @@ source_set("commands") {
 
 source_set("preferences") {
   sources = [
+    "preferences/new_tab_tips.cc",
+    "preferences/new_tab_tips.h",
     "preferences/preferences_service.cc",
     "preferences/preferences_service.h",
     "preferences/search_service.cc",
@@ -113,6 +115,7 @@ test("fly_unittests") {
     "commands/hint_codes_unittest.cc",
     "commands/keyboard_config_unittest.cc",
     "commands/palette_catalog_unittest.cc",
+    "preferences/new_tab_tips_unittest.cc",
     "preferences/preferences_service_unittest.cc",
     "preferences/search_service_unittest.cc",
     "preferences/spellcheck_languages_unittest.cc",
