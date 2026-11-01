@@ -52,8 +52,8 @@
   {
     "id": "toggle-clock",
     "title": "Toggle Clock & Date Display",
-    "desc": "Show or hide the live clock in the status bar and sidebar",
-    "details": "Toggles the real-time clock widget displaying local date and time in the bottom status bar and vertical sidebar.",
+    "desc": "Show or hide the live clock in the bottom status bar",
+    "details": "Toggles the real-time clock widget displaying local date and time in the bottom status bar.",
     "tip": "Click on the clock at any time to cycle between date and time, time only, and seconds.",
     "category": "Preferences & System",
     "actionId": "toggle-clock",
@@ -64,7 +64,7 @@
     "title": "Cycle Clock Format (Date & Time / Time / Seconds)",
     "desc": "Switch between date and time, compact time, or time with seconds",
     "details": "Rotates the clock presentation mode between standard UK date and time, compact time-only, and high-precision seconds.",
-    "tip": "You can also click the clock widget directly in the status bar or sidebar.",
+    "tip": "You can also click the clock widget directly in the bottom status bar.",
     "category": "Preferences & System",
     "actionId": "cycle-clock-format",
     "keywords": ["clock", "format", "seconds", "time", "date", "cycle", "switch"]

@@ -1183,7 +1183,7 @@ void KeyboardEditor::BuildAppearance() {
     std::vector<std::unique_ptr<views::View>> controls;
     controls.push_back(std::move(select));
     controls.push_back(MakeToggle("show_clock", u"Clock"));
-    if (AddRow(u"Clock", u"In the sidebar and the status bar.",
+    if (AddRow(u"Clock", u"In the bottom status bar.",
                u"date time seconds format", Controls(std::move(controls))))
       clock_format_ = choice;
   }

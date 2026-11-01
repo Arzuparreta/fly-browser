@@ -62,7 +62,7 @@ own commands under **Extensions**.
 
 | Command | Shortcut | Page key | Action | What it does |
 | :--- | :--- | :--- | :--- | :--- |
-| **Toggle Clock & Date Display** | Unassigned | Unassigned | `toggle-clock` | Show or hide the live clock in the status bar and sidebar. |
+| **Toggle Clock & Date Display** | Unassigned | Unassigned | `toggle-clock` | Show or hide the live clock in the bottom status bar. |
 | **Cycle Clock Format (Date & Time / Time / Seconds)** | Unassigned | Unassigned | `cycle-clock-format` | Switch between date and time, compact time, or time with seconds. |
 | **Toggle Window Controls (Minimise, Maximise, Close)** | Unassigned | Unassigned | `toggle-window-controls` | Show or hide window action buttons in the sidebar for desktop environments. |
 | **Toggle Private Browsing Mode** | `Ctrl+Shift+P` | Unassigned | `toggle-private-mode` | Open a private window, or close the private windows. |
