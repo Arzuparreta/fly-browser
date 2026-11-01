@@ -3,15 +3,18 @@ const keyNames = {ctrl:'Ctrl', alt:'Alt', shift:'Shift', meta:'Meta', escape:'Es
     arrowleft:'←', arrowright:'→', arrowup:'↑', arrowdown:'↓', pagedown:'Page Down', pageup:'Page Up'};
 const keyLabel = key => keyNames[key.toLowerCase()] || (key.length === 1 ? key.toUpperCase() : key);
 const chordKeys = binding => (binding || '').split('+').filter(Boolean).map(keyLabel);
+const chordLabel = stroke => chordKeys(stroke).join(' + ');
 // A NORMAL key is typed as shown: "F" is f, "Shift+H" is H.
-const normalKey = stroke => {
+const normalStroke = stroke => {
     const parts = stroke.split('+');
     const key = parts.at(-1);
-    if (key.length !== 1) return chordKeys(stroke).join(' + ');
+    if (key.length !== 1) return chordLabel(stroke);
     if (parts.length === 1) return key.toLowerCase();
     if (parts.length === 2 && parts[0] === 'Shift') return key.toUpperCase();
-    return chordKeys(stroke).join(' + ');
+    return chordLabel(stroke);
 };
+// Bindings may be sequences of strokes separated by spaces ("G G" is gg).
+const sequence = (binding, format) => binding.split(' ').filter(Boolean).map(format).join(' ');
 let tipShown = false;
 window.updateFlyNewTab = data => {
     document.body.classList.toggle('light', data.light);
@@ -20,15 +23,14 @@ window.updateFlyNewTab = data => {
     document.documentElement.style.setProperty('--scale', data.scale || 1);
     document.getElementById('memory-fly').src = `identity/memory-${data.light ? 'papel' : 'chasis'}@2x.png`;
     for (const [id, binding] of [['search', data.searchBinding], ['bookmarks', data.bookmarksBinding]]) {
-        const keys = chordKeys(binding);
-        document.getElementById(`${id}-binding`).textContent = keys.join(' + ');
+        document.getElementById(`${id}-binding`).textContent = sequence(binding || '', chordLabel);
         const button = document.getElementById(id);
-        if (keys.length) button.setAttribute('aria-keyshortcuts', (binding || '').replace(/\bCtrl\b/g, 'Control'));
+        if (binding) button.setAttribute('aria-keyshortcuts', (binding || '').replace(/\bCtrl\b/g, 'Control'));
         else button.removeAttribute('aria-keyshortcuts');
     }
     const tip = document.getElementById('tip');
     if (data.tip) {
-        document.getElementById('tip-key').textContent = data.tip.normal ? normalKey(data.tip.key) : chordKeys(data.tip.key).join(' + ');
+        document.getElementById('tip-key').textContent = sequence(data.tip.key, data.tip.normal ? normalStroke : chordLabel);
         document.getElementById('tip-text').textContent = data.tip.text;
         tip.hidden = false;
         tip.classList.remove('gone');
