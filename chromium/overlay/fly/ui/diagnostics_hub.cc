@@ -259,16 +259,14 @@ void DiagnosticsHub::Toggle() {
   tabs_ = root->AddChildView(std::make_unique<views::TabbedPane>(
       views::TabbedPane::Orientation::kHorizontal,
       views::TabbedPane::TabStripStyle::kBorder));
+  // The hub is as tall as the shown tab, not the tallest one.
+  tabs_->SetIncludeHiddenViewsInLayout(false);
   static_cast<views::BoxLayout*>(root->GetLayoutManager())
       ->SetFlexForView(tabs_, 1);
   panes_.clear();
   for (const auto* title : {u"System & Runtimes", u"Processes & Memory",
                             u"Event Log", u"Bug Report"}) {
-    auto* scroll = tabs_->AddTab(title, std::make_unique<views::ScrollView>());
-    scroll->SetHorizontalScrollBarMode(
-        views::ScrollView::ScrollBarMode::kDisabled);
-    scroll->ClipHeightTo(0, std::numeric_limits<int>::max());
-    scroll->SetBackgroundColor(std::nullopt);
+    auto* scroll = tabs_->AddTab(title, MakeMenuScroll());
     auto* pane = scroll->SetContents(std::make_unique<views::View>());
     pane->SetLayoutManager(std::make_unique<views::BoxLayout>(
         views::BoxLayout::Orientation::kVertical, gfx::Insets(12), 12));
@@ -292,11 +290,12 @@ gfx::Rect DiagnosticsHub::SurfaceBounds() const {
                                         : gfx::Insets());
 }
 
+// The hub may fill the content area; it is as tall as the shown tab.
 void DiagnosticsHub::PlacePanel(const gfx::Rect& bounds) {
   const int margin = FlyScaled(16);
-  scrim_->SetPanelBounds(gfx::Rect(margin, margin,
-                                   std::max(0, bounds.width() - 2 * margin),
-                                   std::max(0, bounds.height() - 2 * margin)));
+  scrim_->SetPanelArea(gfx::Rect(margin, margin,
+                                 std::max(0, bounds.width() - 2 * margin),
+                                 std::max(0, bounds.height() - 2 * margin)));
 }
 
 void DiagnosticsHub::Cancel() {
@@ -891,6 +890,10 @@ void DiagnosticsHub::OnWidgetDestroying(views::Widget*) {
 void DiagnosticsHub::SelectTabForTesting(size_t index) {
   if (tabs_)
     tabs_->SelectTabAt(index);
+}
+
+views::View* DiagnosticsHub::panel_for_testing() {
+  return scrim_ ? scrim_->panel() : nullptr;
 }
 
 std::u16string DiagnosticsHub::tab_text_for_testing() const {

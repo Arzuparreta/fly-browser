@@ -4,6 +4,7 @@
 #include "fly/ui/fly_menu.h"
 
 #include <algorithm>
+#include <limits>
 #include <utility>
 
 #include "base/functional/bind.h"
@@ -30,6 +31,7 @@
 #include "ui/views/border.h"
 #include "ui/views/controls/focus_ring.h"
 #include "ui/views/controls/menu/menu_runner.h"
+#include "ui/views/controls/scroll_view.h"
 #include "ui/views/focus/focus_manager.h"
 #include "ui/views/layout/box_layout.h"
 #include "ui/views/widget/native_widget_aura.h"
@@ -149,23 +151,16 @@ views::View* MenuScrim::SetPanel(std::unique_ptr<views::View> panel) {
   panel_ = AddChildView(std::move(panel));
   return panel_;
 }
-void MenuScrim::SetPanelBounds(const gfx::Rect& bounds) {
-  bounds_ = bounds;
-  grows_ = false;
-  InvalidateLayout();
-}
-void MenuScrim::SetPanelGrowsTo(const gfx::Rect& bounds_at_max_height) {
-  bounds_ = bounds_at_max_height;
-  grows_ = true;
+void MenuScrim::SetPanelArea(const gfx::Rect& area) {
+  area_ = area;
   InvalidateLayout();
 }
 void MenuScrim::Layout(PassKey) {
   if (!panel_)
     return;
-  auto bounds = bounds_;
-  if (grows_)
-    bounds.set_height(std::min(
-        bounds_.height(), panel_->GetHeightForWidth(bounds_.width())));
+  gfx::Rect bounds = area_;
+  bounds.set_height(
+      std::min(area_.height(), panel_->GetHeightForWidth(area_.width())));
   panel_->SetBoundsRect(bounds);
 }
 bool MenuScrim::OnMousePressed(const ui::MouseEvent& event) {
@@ -179,6 +174,18 @@ bool MenuScrim::OnMousePressed(const ui::MouseEvent& event) {
 }
 BEGIN_METADATA(MenuScrim)
 END_METADATA
+
+std::unique_ptr<views::ScrollView> MakeMenuScroll() {
+  auto scroll = std::make_unique<views::ScrollView>();
+  scroll->SetHorizontalScrollBarMode(
+      views::ScrollView::ScrollBarMode::kDisabled);
+  scroll->SetBackgroundColor(std::nullopt);
+  scroll->SetDrawOverflowIndicator(false);
+  // Bounded, so the contents get their own height and the region scrolls
+  // when it has less.
+  scroll->ClipHeightTo(0, std::numeric_limits<int>::max());
+  return scroll;
+}
 
 MenuPanel::MenuPanel() = default;
 MenuPanel::~MenuPanel() = default;

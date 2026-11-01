@@ -894,6 +894,7 @@ void FlyWindowController::BuildSurfaces() {
                       .kind = MenuKind::kCommands,
                       .title = u"Commands",
                       .width = 760,
+                      .max_height = 750,
                       .page_insets = page_insets,
                       .command_centre = true,
                       .enter_label = u"Run"});

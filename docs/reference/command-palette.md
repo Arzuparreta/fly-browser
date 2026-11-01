@@ -19,7 +19,7 @@ The Command Centre gives you searchable access to Fly's actions and their keyboa
 
 ## Layout
 
-Every Fly menu (the Command Centre, the address bar, history, bookmarks, downloads, extensions, workspaces, Preferences and Diagnostics) shares one look: a header with the menu's own icon and name, a search field, the list, and a footer that shows what the keyboard does in that menu. The icon and the shape of the panel tell the menus apart.
+Every Fly menu (the Command Centre, the address bar, history, bookmarks, downloads, extensions, workspaces, Preferences and Diagnostics) shares one look: a header with the menu's own icon and name, a search field, the list, and a footer that shows what the keyboard does in that menu. The icon and the shape of the panel tell the menus apart. Every panel is as tall as what it shows, up to the room it has, and scrolls beyond that; its top edge stays in place while you search or change section.
 
 A menu belongs to its window and tab. It stays open, with what you typed, the section you were in and the keyboard focus, while you use another window or application, and it follows the window when it is resized. Switching to another tab closes it.
 
