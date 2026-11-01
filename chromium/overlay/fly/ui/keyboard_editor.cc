@@ -6,7 +6,6 @@
 #include <algorithm>
 #include <array>
 #include <cmath>
-#include <limits>
 #include <set>
 
 #include "base/files/file_util.h"
@@ -522,13 +521,15 @@ void KeyboardEditor::Toggle(content::WebContents* contents) {
       views::BoxLayout::CrossAxisAlignment::kStretch);
   layout->SetFlexForView(body, 1);
   auto* rail = body->AddChildView(std::make_unique<views::View>());
-  rail->SetPreferredSize(gfx::Size(S(176), 0));
   rail->SetBorder(FlyEdgeBorder(FlyRole::kBorder, gfx::Insets::TLBR(0, 0, 0, 1),
                                 gfx::Insets::VH(S(10), S(8))));
   auto* rail_layout = rail->SetLayoutManager(std::make_unique<views::BoxLayout>(
       views::BoxLayout::Orientation::kVertical, gfx::Insets(), S(2)));
   rail_layout->set_cross_axis_alignment(
       views::BoxLayout::CrossAxisAlignment::kStretch);
+  // A fixed width and the height of its sections: a short section never
+  // makes the panel shorter than the rail.
+  rail_layout->set_minimum_cross_axis_size(S(176) - rail->GetInsets().width());
   rail->GetViewAccessibility().SetRole(ax::mojom::Role::kTabList);
   rail->GetViewAccessibility().SetName(u"Sections");
   rail_.clear();
@@ -584,13 +585,16 @@ void KeyboardEditor::Toggle(content::WebContents* contents) {
     settings_search_->RequestFocus();
 }
 
-// A compact panel: the content keeps a readable width on wide windows.
+// A compact panel: the content keeps a readable width on wide windows. The
+// panel is as tall as the shown section, up to 720; its top is where a
+// centred panel of that height would start, so switching sections only moves
+// its bottom edge.
 void KeyboardEditor::PlacePanel(const gfx::Rect& bounds) {
   const int width = std::min(S(960), bounds.width() - S(32));
-  const int height = std::min(S(720), bounds.height() - S(32));
-  root_->SetPanelBounds(gfx::Rect((bounds.width() - width) / 2,
-                                  (bounds.height() - height) / 2, width,
-                                  height));
+  const int height = std::max(0, std::min(S(720), bounds.height() - S(32)));
+  root_->SetPanelArea(gfx::Rect((bounds.width() - width) / 2,
+                                (bounds.height() - height) / 2, width,
+                                height));
 }
 
 void KeyboardEditor::SelectPane(int pane, bool focus_rail) {
@@ -688,13 +692,7 @@ void KeyboardEditor::ShowContent() {
     DisableSubpixelText(keyboard.get());
     content_host_->AddChildView(std::move(keyboard));
   } else {
-    auto scroll = std::make_unique<views::ScrollView>();
-    scroll->SetHorizontalScrollBarMode(
-        views::ScrollView::ScrollBarMode::kDisabled);
-    scroll->SetBackgroundColor(std::nullopt);
-    scroll->SetDrawOverflowIndicator(false);
-    // A bounded viewport gives the BoxLayout contents real bounds.
-    scroll->ClipHeightTo(0, std::numeric_limits<int>::max());
+    auto scroll = MakeMenuScroll();
     auto contents = std::make_unique<views::View>();
     auto* layout = contents->SetLayoutManager(std::make_unique<views::BoxLayout>(
         views::BoxLayout::Orientation::kVertical,
@@ -1531,12 +1529,7 @@ void KeyboardEditor::BuildKeyboard() {
   table_layout->set_cross_axis_alignment(
       views::BoxLayout::CrossAxisAlignment::kStretch);
   table->AddChildView(std::make_unique<KeyTableHeader>());
-  rows_scroll_ = table->AddChildView(std::make_unique<views::ScrollView>());
-  rows_scroll_->SetHorizontalScrollBarMode(
-      views::ScrollView::ScrollBarMode::kDisabled);
-  rows_scroll_->SetBackgroundColor(std::nullopt);
-  rows_scroll_->SetDrawOverflowIndicator(false);
-  rows_scroll_->ClipHeightTo(0, std::numeric_limits<int>::max());
+  rows_scroll_ = table->AddChildView(MakeMenuScroll());
   key_rows_ = rows_scroll_->SetContents(std::make_unique<views::View>());
   table_layout->SetFlexForView(rows_scroll_, 1);
   layout->SetFlexForView(table, 1);

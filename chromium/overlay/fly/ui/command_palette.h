@@ -28,19 +28,23 @@ class ScrollView;
 }  // namespace views
 namespace fly {
 // Presentation of a picker. Every picker shares the menu look (fly_menu.h);
-// its kind gives it its badge and its layout its shape.
+// its kind gives it its badge and its layout its shape. Every layout is as
+// tall as its rows, up to the room that layout has.
 struct PaletteStyle {
   enum class Layout {
     kCentre,  // Compact card over a dimmed page (pickers, Command Centre).
     kTop,     // Floating card under the window top, page left visible
               // (address bar, history).
-    kPage,    // Tall manager over the content area (bookmarks, workspace
-              // dashboard).
+    kPage,    // Manager over the content area, which it may fill (bookmarks,
+              // workspace dashboard).
   };
   Layout layout = Layout::kCentre;
   MenuKind kind = MenuKind::kCommands;
   std::u16string title;
   int width = 640;
+  // kCentre and kTop: the tallest the panel grows before its rows scroll
+  // (about sixteen rows under the header and key hints).
+  int max_height = 616;
   // kPage only: area of the desktop contents left uncovered (sidebar rail,
   // footer), queried when the surface opens.
   base::RepeatingCallback<gfx::Insets()> page_insets;
@@ -118,6 +122,8 @@ class CommandPalette : public views::TextfieldController,
   void SetCategoryForTesting(std::string category);
   std::u16string inspector_title_for_testing() const;
   std::u16string count_for_testing() const;
+  // The panel in the menu's widget, or null while closed.
+  views::View* panel_for_testing() { return scrim_ ? scrim_->panel() : nullptr; }
   std::string selected_action_for_testing() const {
     return selected_ >= 0 ? filtered_[selected_].action : std::string();
   }

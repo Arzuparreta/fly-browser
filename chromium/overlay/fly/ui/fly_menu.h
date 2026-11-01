@@ -7,7 +7,8 @@
 // The visual system shared by Fly's menus: the command palette and its
 // pickers, Preferences and the Diagnostics hub. Every menu has the same
 // panel, header, controls and key hints; its badge (icon and title) and its
-// shape tell the menus apart.
+// shape tell the menus apart. Every panel is as tall as its contents, up to
+// the room its menu gives it; past that, its scroll region scrolls.
 
 #include <memory>
 #include <optional>
@@ -34,6 +35,7 @@ struct VectorIcon;
 }  // namespace gfx
 namespace views {
 class MenuRunner;
+class ScrollView;
 class Widget;
 }  // namespace views
 
@@ -84,8 +86,7 @@ std::vector<base::CallbackListSubscription> WatchMenuSourceTab(
     base::RepeatingClosure close);
 
 // Root of a menu widget: dims what is around the panel and closes the menu
-// on a click outside it. The panel gets explicit bounds; nothing above it
-// measures the panel's contents.
+// on a click outside it.
 class MenuScrim : public views::View {
   METADATA_HEADER(MenuScrim, views::View)
 
@@ -93,10 +94,10 @@ class MenuScrim : public views::View {
   MenuScrim(SkColor scrim, base::RepeatingClosure dismiss);
   ~MenuScrim() override;
   views::View* SetPanel(std::unique_ptr<views::View> panel);
-  // Fixed bounds, or a fixed width and top with a height that follows the
-  // panel up to `max_height`.
-  void SetPanelBounds(const gfx::Rect& bounds);
-  void SetPanelGrowsTo(const gfx::Rect& bounds_at_max_height);
+  // The room the panel has: it takes the width and top of `area` and the
+  // height of its contents, up to the height of `area`. The panel stays
+  // anchored at the top, so its header never moves when its contents change.
+  void SetPanelArea(const gfx::Rect& area);
   views::View* panel() { return panel_; }
   void Layout(PassKey) override;
   bool OnMousePressed(const ui::MouseEvent& event) override;
@@ -104,9 +105,14 @@ class MenuScrim : public views::View {
  private:
   base::RepeatingClosure dismiss_;
   raw_ptr<views::View> panel_ = nullptr;
-  gfx::Rect bounds_;
-  bool grows_ = false;
+  gfx::Rect area_;
 };
+
+// The scroll region of a menu panel. It asks for the height of all its
+// contents, so the panel can fit them. Give it flex in the panel's layout:
+// when the panel reaches the height of its area, it is the part that shrinks
+// and scrolls.
+std::unique_ptr<views::ScrollView> MakeMenuScroll();
 
 // The panel: one surface, one border, one radius for every menu.
 class MenuPanel : public views::View {

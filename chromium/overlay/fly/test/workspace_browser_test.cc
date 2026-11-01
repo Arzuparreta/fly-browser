@@ -5219,6 +5219,115 @@ IN_PROC_BROWSER_TEST_F(FlyWorkspaceBrowserTest,
   EXPECT_FALSE(hub->active());
 }
 
+// Every menu is as tall as its contents, up to the room it has: a short list
+// gives a short panel, a long one fills that room and scrolls. The panel's top
+// stays where it opened while its contents change.
+IN_PROC_BROWSER_TEST_F(FlyWorkspaceBrowserTest, MenusAreAsTallAsTheirContents) {
+  ASSERT_TRUE(ui_test_utils::NavigateToURL(
+      browser(), embedded_test_server()->GetURL("/title1.html")));
+  auto& window = Window();
+  const auto laid_out = [](views::View* panel) {
+    panel->GetWidget()->LayoutRootViewIfNecessary();
+    return panel->bounds();
+  };
+  const auto contents_height = [](views::View* panel) {
+    return panel->GetHeightForWidth(panel->width());
+  };
+
+  // Bookmarks: one bookmark is a short panel; many fill the content area.
+  ASSERT_TRUE(App().bookmarks().Add("https://one.example.test/", "One"));
+  auto& bookmarks = window.bookmark_picker();
+  ASSERT_TRUE(InvokeNativeCommand(browser(), "toggle-bookmarks"));
+  ASSERT_TRUE(base::test::RunUntil([&] { return bookmarks.active(); }));
+  auto* panel = bookmarks.panel_for_testing();
+  ASSERT_TRUE(panel);
+  const int page_room = panel->parent()->height() - 2 * FlyScaled(20);
+  const gfx::Rect one = laid_out(panel);
+  EXPECT_EQ(contents_height(panel), one.height());
+  EXPECT_LT(one.height(), page_room);
+  for (int i = 0; i < 40; ++i) {
+    const auto n = base::NumberToString(i);
+    ASSERT_TRUE(App().bookmarks().Add("https://site" + n + ".example.test/",
+                                      "Site " + n));
+  }
+  ASSERT_EQ(41u, bookmarks.result_count_for_testing());
+  const gfx::Rect many = laid_out(panel);
+  EXPECT_EQ(one.y(), many.y());
+  EXPECT_EQ(page_room, many.height());
+  EXPECT_GT(contents_height(panel), many.height());
+  bookmarks.Cancel(true);
+  ASSERT_TRUE(base::test::RunUntil([&] { return !bookmarks.showing(); }));
+
+  // The Command Centre: a search with few matches shrinks the panel under
+  // the same header.
+  auto& palette = window.palette();
+  ASSERT_TRUE(InvokeNativeCommand(browser(), "toggle-palette"));
+  ASSERT_TRUE(base::test::RunUntil([&] { return palette.active(); }));
+  panel = palette.panel_for_testing();
+  ASSERT_TRUE(panel);
+  const gfx::Rect all = laid_out(panel);
+  EXPECT_GT(contents_height(panel), all.height());
+  palette.search_for_testing()->SetText(u"New Blank Tab");
+  palette.ContentsChanged(palette.search_for_testing(), u"New Blank Tab");
+  const gfx::Rect found = laid_out(panel);
+  EXPECT_EQ(all.y(), found.y());
+  EXPECT_EQ(contents_height(panel), found.height());
+  EXPECT_LT(found.height(), all.height());
+  palette.Cancel(true);
+  ASSERT_TRUE(base::test::RunUntil([&] { return !palette.showing(); }));
+
+  // Preferences: each section has its own height under the same top, and a
+  // short one never cuts off the section rail.
+  ASSERT_TRUE(InvokeNativeCommand(browser(), "toggle-help"));
+  auto& editor = window.keyboard_editor();
+  ASSERT_TRUE(base::test::RunUntil([&] { return editor.active(); }));
+  panel = views::AsViewClass<MenuScrim>(editor.root_for_testing())->panel();
+  editor.ShowPane(KeyboardEditor::kKeyboardPane);
+  const gfx::Rect keyboard = laid_out(panel);
+  auto* search = editor.settings_search_for_testing();
+  search->SetText(u"no setting is called this");
+  editor.ContentsChanged(search, u"no setting is called this");
+  const gfx::Rect nothing = laid_out(panel);
+  EXPECT_EQ(keyboard.y(), nothing.y());
+  EXPECT_EQ(contents_height(panel), nothing.height());
+  EXPECT_LT(nothing.height(), keyboard.height());
+  const auto rail = [](auto& self, views::View* view) -> views::View* {
+    ui::AXNodeData data;
+    view->GetViewAccessibility().GetAccessibleNodeData(&data);
+    if (data.role == ax::mojom::Role::kTabList)
+      return view;
+    for (views::View* child : view->children())
+      if (auto* found = self(self, child))
+        return found;
+    return nullptr;
+  };
+  auto* sections = rail(rail, panel);
+  ASSERT_TRUE(sections);
+  ASSERT_FALSE(sections->children().empty());
+  EXPECT_LE(sections->children().back()->bounds().bottom(),
+            sections->GetContentsBounds().bottom());
+  editor.Cancel();
+  ASSERT_TRUE(base::test::RunUntil([&] { return !editor.active(); }));
+
+  // Diagnostics: as tall as the shown tab, not the tallest one.
+  ASSERT_TRUE(InvokeNativeCommand(browser(), "open-diagnostics"));
+  auto* hub = window.diagnostics_hub_for_testing();
+  ASSERT_TRUE(hub && hub->active());
+  ASSERT_TRUE(base::test::RunUntil(
+      [&] { return hub->has_snapshot_for_testing(); }));
+  panel = hub->panel_for_testing();
+  ASSERT_TRUE(panel);
+  const int hub_room = panel->parent()->height() - 2 * FlyScaled(16);
+  std::set<int> heights;
+  for (size_t tab = 0; tab < 4; ++tab) {
+    hub->SelectTabForTesting(tab);
+    const gfx::Rect shown = laid_out(panel);
+    EXPECT_EQ(std::min(hub_room, contents_height(panel)), shown.height());
+    heights.insert(shown.height());
+  }
+  EXPECT_GT(heights.size(), 1u);
+}
+
 // The dashboard: each workspace with its tabs (pinned marked) and
 // rename/delete buttons; choosing a tab opens its workspace on that tab.
 // Dragging a tab onto another tab of its workspace reorders them.

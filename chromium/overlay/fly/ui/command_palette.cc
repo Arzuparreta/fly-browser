@@ -375,11 +375,7 @@ void CommandPalette::ToggleItems(content::WebContents* contents,
                                          weak_factory_.GetWeakPtr(), true));
   if (style_.command_centre)
     BuildCommandCentre(panel.get());
-  auto* scroll = panel->AddChildView(std::make_unique<views::ScrollView>());
-  scroll->SetHorizontalScrollBarMode(
-      views::ScrollView::ScrollBarMode::kDisabled);
-  scroll->SetBackgroundColor(std::nullopt);
-  scroll->SetDrawOverflowIndicator(false);
+  auto* scroll = panel->AddChildView(MakeMenuScroll());
   results_scroll_ = scroll;
   results_ = scroll->SetContents(std::make_unique<views::View>());
   scroll_subscription_ = scroll->AddContentsScrolledCallback(
@@ -399,12 +395,7 @@ void CommandPalette::ToggleItems(content::WebContents* contents,
         FlyEdgeBorder(FlyRole::kBorder, gfx::Insets::TLBR(1, 0, 0, 0)));
   }
   if (bookmarks_) {
-    bookmark_editor_scroll_ =
-        panel->AddChildView(std::make_unique<views::ScrollView>());
-    bookmark_editor_scroll_->SetHorizontalScrollBarMode(
-        views::ScrollView::ScrollBarMode::kDisabled);
-    bookmark_editor_scroll_->SetBackgroundColor(std::nullopt);
-    bookmark_editor_scroll_->SetDrawOverflowIndicator(false);
+    bookmark_editor_scroll_ = panel->AddChildView(MakeMenuScroll());
     bookmark_editor_ =
         bookmark_editor_scroll_->SetContents(std::make_unique<views::View>());
     bookmark_editor_scroll_->SetVisible(false);
@@ -449,35 +440,24 @@ gfx::Rect CommandPalette::SurfaceBounds() const {
                     ? style_.page_insets.Run()
                     : gfx::Insets());
 }
-// Panel geometry: compact cards grow with their results, managers and the
-// Command Centre keep one size so the list does not jump while filtering.
+// The panel fits its rows, up to its maximum height or, for a manager, the
+// whole content area. Its header stays where it opened while the rows below
+// it change.
 void CommandPalette::PlacePanel(const gfx::Rect& bounds) {
   const bool top = style_.layout == PaletteStyle::Layout::kTop;
   const bool page = style_.layout == PaletteStyle::Layout::kPage;
   const int width = std::min(S(style_.width), bounds.width() - S(24));
   if (bookmarks_ && count_)
     count_->SetVisible(width >= S(430));
-  const int x = (bounds.width() - width) / 2;
   const int top_margin = top ? S(12) : page ? S(20) : std::max(S(24), bounds.height() / 9);
-  const int max_height = std::max(
-      S(120), (page ? bounds.height() - 2 * top_margin
-                    : std::min(bounds.height() - top_margin - S(24),
-                               S(style_.command_centre ? 600 : 520))));
-  results_scroll_->ClipHeightTo(0, max_height);
-  if (bookmark_editor_scroll_)
-    bookmark_editor_scroll_->ClipHeightTo(0, max_height);
+  const int room =
+      std::max(0, bounds.height() - top_margin - (page ? S(20) : S(24)));
+  const int height = page ? room : std::min(room, S(style_.max_height));
   // Rows are built for what the panel can show and a margin; scrolling and
   // keyboard selection build the rest as they reach it.
-  initial_rows_ = static_cast<size_t>(max_height / S(kMenuRowHeight)) + 4;
-  if (top || !(page || style_.command_centre))
-    scrim_->SetPanelGrowsTo(gfx::Rect(x, top_margin, width,
-                                      max_height + S(140)));
-  else
-    scrim_->SetPanelBounds(gfx::Rect(
-        x, top_margin, width,
-        page ? bounds.height() - 2 * top_margin
-             : std::min(bounds.height() - top_margin - S(24),
-                        max_height + S(150))));
+  initial_rows_ = static_cast<size_t>(height / S(kMenuRowHeight)) + 4;
+  scrim_->SetPanelArea(
+      gfx::Rect((bounds.width() - width) / 2, top_margin, width, height));
 }
 void CommandPalette::UpdateHints() {
   if (!hints_)

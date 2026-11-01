@@ -85,6 +85,8 @@ class DiagnosticsHub : public views::TabbedPaneListener,
   std::string MarkdownReport();
   void SelectTabForTesting(size_t index);
   std::u16string tab_text_for_testing() const;
+  // The panel in the hub's widget, or null while closed.
+  views::View* panel_for_testing();
 
   // views::TabbedPaneListener:
   void TabSelectedAt(int index) override;
