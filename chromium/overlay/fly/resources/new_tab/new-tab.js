@@ -4,7 +4,6 @@ window.updateFlyNewTab = data => {
     for (const [key, value] of Object.entries(data.colours))
         document.documentElement.style.setProperty(key, value);
     document.documentElement.style.setProperty('--scale', data.scale || 1);
-    document.documentElement.style.setProperty('--sidebar-overhang', `${data.sidebarOverhang || 0}px`);
     document.getElementById('memory-fly').src = `identity/memory-${data.light ? 'papel' : 'chasis'}@2x.png`;
     for (const [id, binding] of [['search', data.searchBinding], ['bookmarks', data.bookmarksBinding]]) {
         const keys = (binding || '').split('+').filter(Boolean).map(key => ({

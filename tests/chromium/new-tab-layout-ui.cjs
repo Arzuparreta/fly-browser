@@ -51,11 +51,11 @@ const report = [];
                         return r.x< -1||r.y< -1||r.right>innerWidth+1||r.bottom>innerHeight+1||r.width<=0||r.height<=0;
                     }).map(element=>element.id);
                     return {scroll:[root.scrollWidth,root.scrollHeight],offenders,
-                        searchLeft:document.getElementById('search').getBoundingClientRect().left};
+                        flyCenter:(()=>{const r=document.getElementById('memory-fly').getBoundingClientRect();return r.x+r.width/2;})()};
                 });
                 report.push({scale,width,height,...state});
                 assert(state.scroll[0]<=width+1&&state.scroll[1]<=height+1&&!state.offenders.length,JSON.stringify(report.at(-1)));
-                assert(state.searchLeft>=Math.min(data.sidebarOverhang,Math.max(0,width-320))-1,JSON.stringify(report.at(-1)));
+                if(height>300)assert(Math.abs(state.flyCenter-width/2)<=1,JSON.stringify(report.at(-1)));
                 if(evidence&&[[1366,768],[640,480],[360,640],[1200,360]].some(s=>s[0]===width&&s[1]===height))
                     await page.screenshot({path:path.join(evidence,`${scale}-${width}x${height}.png`)});
             }

@@ -48,7 +48,6 @@
 #include "fly/ui/fly_app.h"
 #include "fly/ui/fly_window_controller.h"
 #include "fly/ui/fly_theme.h"
-#include "fly/ui/sidebar_panel.h"
 #include "services/network/public/mojom/content_security_policy.mojom.h"
 
 namespace fly {
@@ -176,10 +175,6 @@ base::DictValue PageData(bool private_page) {
       if (bindings != config.shortcuts.end() && !bindings->second.empty())
         data.Set(key, bindings->second.front());
     }
-    data.Set("sidebarOverhang",
-             window->preferences().ReadSidebarAutoCollapse().value_or(false)
-                 ? static_cast<int>((kSidebarWidth - kSidebarRailWidth) * scale)
-                 : 0);
   }
   data.Set("light", !colors.dark);
   data.Set("scale", scale);
@@ -224,9 +219,7 @@ void Serve(bool private_page,
               text +=
                   "--scale:" +
                   std::to_string(data.FindDouble("scale").value_or(1)) +
-                  ";--sidebar-overhang:" +
-                  std::to_string(data.FindInt("sidebarOverhang").value_or(0)) +
-                  "px;color-scheme:" +
+                  ";color-scheme:" +
                   (data.FindBool("light").value_or(false) ? "light" : "dark") +
                   ";}";
             }

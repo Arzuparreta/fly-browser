@@ -64,7 +64,8 @@ const report = [];
                         resolve({background:getComputedStyle(document.body).backgroundColor,
                             light:document.body.classList.contains('light'),
                             scale:getComputedStyle(document.documentElement).zoom,
-                            searchLeft:document.getElementById('search')?.getBoundingClientRect().left});
+                            flyCenter:(()=>{const r=document.getElementById('memory-fly')?.getBoundingClientRect();return r?r.x+r.width/2:undefined;})(),
+                            viewportCenter:innerWidth/2});
                     };
                     requestAnimationFrame(sample);
                 });
@@ -92,7 +93,7 @@ const report = [];
                 assert.equal(state.frame.light, mode==='light', 'First frame uses the saved theme');
                 assert.equal(state.frame.scale, scale==='large' ? '1.25' : '1', 'First frame has final scale');
                 assert.equal(state.frame.background, mode==='light' ? 'rgb(236, 230, 216)' : 'rgb(18, 18, 17)');
-                assert(state.frame.searchLeft >= state.initial.sidebarOverhang-1, 'First frame reserves sidebar');
+                assert(Math.abs(state.frame.flyCenter-state.frame.viewportCenter)<=1, 'First frame centers the fly in the actual canvas');
                 report.push({mode,scale,tab,observedMs:performance.now()-startTab,
                     frame:state.frame,paints:state.paints,domMs:state.domMs});
                 if (evidence && tab===0) {
