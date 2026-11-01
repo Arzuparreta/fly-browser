@@ -123,11 +123,11 @@ class FlyButton : public views::MdTextButton {
   // pressed. An active toggle keeps a faint fill and an accent icon. The key
   // is inset 2px inside the bounds so the shadow is not clipped.
   void SetLiftOnHover(bool lift);
-  // A fill shown at rest (the sidebar clock).
+  // A fill shown at rest.
   void SetRestingFill(SkColor color);
   const gfx::VectorIcon* vector_icon() const { return icon_; }
-  // The icon's colour at rest: dim by default, the text colour (bordered
-  // buttons) or the accent (the sidebar clock).
+  // The icon's colour at rest: dim by default, the text colour for bordered
+  // buttons or the accent for active actions.
   enum class IconTone { kDim, kText, kAccent };
   void SetIconTone(IconTone tone);
   void SetFlyFont(FlyFace face, int size,
