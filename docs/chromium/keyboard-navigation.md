@@ -84,8 +84,9 @@ active. An assistive technology's pre-existing full tree stays intact. Screen
 DIP bounds come from accessibility, including nested frames and zoom; no CSS
 coordinates are reconstructed in the browser process.
 
-During the first 1.5 seconds after labels appear, tree updates can add targets
-and regenerate the prefix-free code set. Typing a prefix freezes that set.
+Until a label is typed, tree updates can add targets and regenerate the
+prefix-free code set, including late page hydration. Typing a prefix freezes
+that set for the rest of the hint session, even after Backspace.
 Existing labels then follow their target identities, hide when targets are
 removed or off screen, and validate the target again before native activation.
 Layout changes do not close the overlay. Navigation, page/window focus loss,
@@ -104,7 +105,7 @@ Scroll snapping, scroll chaining and smooth page jumps follow Chromium's
 compositor policies. Hints only cover accessible clickable targets and retain
 the existing target cap; they do not implement all Vimium features such as
 link-text filtering, opening hints in background tabs or overlap rotation.
-New targets after the settling window require reopening hints. These are
+New targets added after you start typing require reopening hints. These are
 explicit boundaries, not claims of complete Vimium parity.
 
 Unit tests exercise tap distance, held-key speed, release, repeated taps,

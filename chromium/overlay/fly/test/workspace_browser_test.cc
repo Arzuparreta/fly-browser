@@ -7836,6 +7836,10 @@ IN_PROC_BROWSER_TEST_F(FlyPageScrollBrowserTest,
   keys.PressAndReleaseKey(ui::VKEY_F, ui::EF_NONE);
   ASSERT_TRUE(base::test::RunUntil(
       [&] { return window.hints().visible_count_for_testing() == 1; }));
+  // Hydration can arrive well after hints first appear. No elapsed-time
+  // cutoff should prevent the initial tree from becoming complete.
+  ASSERT_TRUE(content::ExecJs(
+      contents, "new Promise(resolve => setTimeout(resolve, 1800))"));
   // Blink's initial on-screen tree arrives in batches. A later batch must
   // add labels instead of cancelling the whole overlay.
   ASSERT_TRUE(content::ExecJs(contents, R"js(

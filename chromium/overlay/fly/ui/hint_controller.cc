@@ -232,10 +232,7 @@ void HintController::Update() {
   if (!active_ || !web_contents() || !desktop_)
     return;
   // Until a label is typed, a tree that is still arriving may add targets.
-  const bool settling =
-      !ready_ ||
-      (!codes_frozen_ && base::TimeTicks::Now() - ready_time_ < kSettleTime);
-  if (tree_changed_ && settling) {
+  if (tree_changed_ && !codes_frozen_) {
     tree_changed_ = false;
     std::vector<Target> targets;
     if (!Collect(&targets)) {
@@ -300,7 +297,6 @@ void HintController::Relabel(std::vector<Target> targets) {
     targets_[i].code = std::move(codes[i]);
   if (!ready_) {
     ready_ = true;
-    ready_time_ = base::TimeTicks::Now();
     startup_timeout_.Stop();
     state_changed_.Run(true);
   }

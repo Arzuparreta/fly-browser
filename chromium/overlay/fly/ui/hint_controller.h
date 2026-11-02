@@ -40,13 +40,10 @@ class HintLabel;
 // key is pressed, or the page goes away. They follow their elements when the
 // page scrolls or its layout moves, and hide while an element is off screen.
 // Blink sends a newly enabled accessibility tree in several updates, so the
-// targets are gathered again while updates arrive during kSettleTime, before
-// any label is typed.
+// targets are gathered again while updates arrive, until a label is typed.
 class HintController : public content::WebContentsObserver,
                        public views::WidgetObserver {
  public:
-  static constexpr base::TimeDelta kSettleTime = base::Milliseconds(1500);
-
   HintController(views::Widget* desktop,
                  base::RepeatingCallback<void(bool)> state_changed);
   ~HintController() override;
@@ -112,7 +109,6 @@ class HintController : public content::WebContentsObserver,
   // Tree updates since the last collection may have added targets.
   bool tree_changed_ = false;
   bool codes_frozen_ = false;
-  base::TimeTicks ready_time_;
   base::OneShotTimer startup_timeout_;
   base::WeakPtrFactory<HintController> weak_factory_{this};
 };
