@@ -20,6 +20,8 @@ jobs:
       - uses: actions/checkout@v4
       - uses: actions/configure-pages@v5
       - name: Prepare static site and verified RPM bodies
+        env:
+          GH_TOKEN: ${{ github.token }}
         run: python3 .github/fly-packages-build.py --output _site
       - uses: actions/upload-pages-artifact@v3
         with:

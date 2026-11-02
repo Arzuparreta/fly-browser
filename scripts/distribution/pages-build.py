@@ -8,6 +8,7 @@ artifact. Large binaries never enter the site's Git history.
 import argparse
 import hashlib
 import json
+import os
 from pathlib import Path
 import re
 import shutil
@@ -55,7 +56,10 @@ def main():
     manifest = json.loads(metadata.read_text())
     desired = list(manifest['packages'])
     # Retain two previous releases for clients with a recently cached index.
-    request = urllib.request.Request(API, headers={'User-Agent': 'Fly-packages'})
+    headers = {'User-Agent': 'Fly-packages'}
+    if token := os.environ.get('GH_TOKEN'):
+        headers['Authorization'] = 'Bearer ' + token
+    request = urllib.request.Request(API, headers=headers)
     if args.local_pool:
         releases = []
     else:
