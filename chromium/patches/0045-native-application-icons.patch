@@ -1,0 +1,194 @@
+--- a/chrome/app/theme/chrome_unscaled_resources.grd
++++ b/chrome/app/theme/chrome_unscaled_resources.grd
+@@ -16,23 +16,23 @@
+     <includes>
+       <if expr="is_linux">
+         <then>
+-          <include name="IDR_PRODUCT_LOGO_64" file="${branding_path_component}/linux/product_logo_64.png" type="BINDATA" />
+-          <include name="IDR_PRODUCT_LOGO_128" file="${branding_path_component}/linux/product_logo_128.png" type="BINDATA" />
+-          <include name="IDR_PRODUCT_LOGO_256" file="${branding_path_component}/linux/product_logo_256.png" type="BINDATA" />
++          <include name="IDR_PRODUCT_LOGO_64" file="../../../fly/resources/icons/fly-logo64.png" type="BINDATA" />
++          <include name="IDR_PRODUCT_LOGO_128" file="../../../fly/resources/icons/fly-logo128.png" type="BINDATA" />
++          <include name="IDR_PRODUCT_LOGO_256" file="../../../fly/resources/icons/fly-logo256.png" type="BINDATA" />
+         </then>
+         <else>
+-          <include name="IDR_PRODUCT_LOGO_64" file="${branding_path_component}/product_logo_64.png" type="BINDATA" />
+-          <include name="IDR_PRODUCT_LOGO_128" file="${branding_path_component}/product_logo_128.png" type="BINDATA" />
+-          <include name="IDR_PRODUCT_LOGO_256" file="${branding_path_component}/product_logo_256.png" type="BINDATA" />
++          <include name="IDR_PRODUCT_LOGO_64" file="../../../fly/resources/icons/fly-logo64.png" type="BINDATA" />
++          <include name="IDR_PRODUCT_LOGO_128" file="../../../fly/resources/icons/fly-logo128.png" type="BINDATA" />
++          <include name="IDR_PRODUCT_LOGO_256" file="../../../fly/resources/icons/fly-logo256.png" type="BINDATA" />
+         </else>
+       </if>
+       <if expr="is_macosx">
+         <if expr="_is_chrome_for_testing_branded">
+           <then>
+-            <include name="IDR_STATUS_TRAY_ICON" file="google_chrome/product_logo_22_mono.png" type="BINDATA" />
++            <include name="IDR_STATUS_TRAY_ICON" file="../../../fly/resources/icons/fly-template22.png" type="BINDATA" />
+           </then>
+           <else> <!-- not _is_chrome_for_testing_branded -->
+-            <include name="IDR_STATUS_TRAY_ICON" file="${branding_path_component}/product_logo_22_mono.png" type="BINDATA" />
++            <include name="IDR_STATUS_TRAY_ICON" file="../../../fly/resources/icons/fly-template22.png" type="BINDATA" />
+           </else>
+         </if> <!-- _is_chrome_for_testing_branded -->
+       </if>
+@@ -76,22 +76,22 @@
+         <else> <!-- not _google_chrome -->
+           <if expr="_is_chrome_for_testing_branded">
+             <then>
+-              <include name="IDR_PRODUCT_LOGO_SVG" file="chromium/product_logo.svg" type="BINDATA" />
+-              <include name="IDR_PRODUCT_LOGO_ANIMATION_SVG" file="chromium/product_logo_animation.svg" type="BINDATA" />
++              <include name="IDR_PRODUCT_LOGO_SVG" file="../../../fly/resources/icons/fly-logo.svg" type="BINDATA" />
++              <include name="IDR_PRODUCT_LOGO_ANIMATION_SVG" file="../../../fly/resources/icons/fly-logo.svg" type="BINDATA" />
+               <include name="IDR_PRODUCT_LOGO_16_CFT_SHORTCUTS" file="google_chrome/google_chrome_for_testing/product_logo_16.png" type="BINDATA" />
+               <include name="IDR_PRODUCT_LOGO_24_CFT_SHORTCUTS" file="google_chrome/google_chrome_for_testing/product_logo_24.png" type="BINDATA" />
+               <include name="IDR_PRODUCT_LOGO_64_CFT_SHORTCUTS" file="google_chrome/google_chrome_for_testing/product_logo_64.png" type="BINDATA" />
+               <include name="IDR_PRODUCT_LOGO_128_CFT_SHORTCUTS" file="google_chrome/google_chrome_for_testing/product_logo_128.png" type="BINDATA" />
+             </then>
+             <else> <!-- not _is_chrome_for_testing_branded -->
+-              <include name="IDR_PRODUCT_LOGO_SVG" file="${branding_path_component}/product_logo.svg" type="BINDATA" />
+-              <include name="IDR_PRODUCT_LOGO_ANIMATION_SVG" file="${branding_path_component}/product_logo_animation.svg" type="BINDATA" />
++              <include name="IDR_PRODUCT_LOGO_SVG" file="../../../fly/resources/icons/fly-logo.svg" type="BINDATA" />
++              <include name="IDR_PRODUCT_LOGO_ANIMATION_SVG" file="../../../fly/resources/icons/fly-logo.svg" type="BINDATA" />
+             </else>
+           </if> <!-- _is_chrome_for_testing_branded -->
+-            <include name="IDR_PRODUCT_LOGO_16_SHORTCUTS" file="chromium/product_logo_16.png" type="BINDATA" />
+-            <include name="IDR_PRODUCT_LOGO_24_SHORTCUTS" file="chromium/product_logo_24.png" type="BINDATA" />
+-            <include name="IDR_PRODUCT_LOGO_64_SHORTCUTS" file="chromium/product_logo_64.png" type="BINDATA" />
+-            <include name="IDR_PRODUCT_LOGO_128_SHORTCUTS" file="chromium/product_logo_128.png" type="BINDATA" />
++            <include name="IDR_PRODUCT_LOGO_16_SHORTCUTS" file="../../../fly/resources/icons/fly-logo16.png" type="BINDATA" />
++            <include name="IDR_PRODUCT_LOGO_24_SHORTCUTS" file="../../../fly/resources/icons/fly-logo24.png" type="BINDATA" />
++            <include name="IDR_PRODUCT_LOGO_64_SHORTCUTS" file="../../../fly/resources/icons/fly-logo64.png" type="BINDATA" />
++            <include name="IDR_PRODUCT_LOGO_128_SHORTCUTS" file="../../../fly/resources/icons/fly-logo128.png" type="BINDATA" />
+         </else>
+       </if> <!-- _google_chrome -->
+       <!-- NOTE: product_logo_*.* files beyond what's listed above are
+--- a/chrome/app/chrome_exe.rc
++++ b/chrome/app/chrome_exe.rc
+@@ -56,7 +56,7 @@
+ #elif BUILDFLAG(GOOGLE_CHROME_FOR_TESTING_BRANDING)
+ IDR_MAINFRAME           ICON       "theme\\google_chrome\\google_chrome_for_testing\\win\\chrome.ico"
+ #else
+-IDR_MAINFRAME           ICON       "theme\\chromium\\win\\chromium.ico"
++IDR_MAINFRAME           ICON       "../../fly/resources/icons/fly.ico"
+ #endif
+ 
+ // Start a naming scheme to keep icons in order. A leading X is used to keep
+@@ -75,7 +75,7 @@
+ IDR_X008_ISOLATED       ICON       "theme\\google_chrome\\win\\isolated.ico"
+ IDR_X009_OMNIBOX_EVERYWHERE ICON   "theme\\google_chrome\\win\\omnibox_everywhere.ico"
+ #else
+-IDR_X001_APP_LIST       ICON       "theme\\chromium\\win\\app_list.ico"
++IDR_X001_APP_LIST       ICON       "../../fly/resources/icons/fly.ico"
+ IDR_X003_INCOGNITO      ICON       "theme\\chromium\\win\\incognito.ico"
+ IDR_X006_HTML_DOC       ICON       "theme\\chromium\\win\\chromium_doc.ico"
+ IDR_X007_PDF_DOC        ICON       "theme\\chromium\\win\\chromium_pdf.ico"
+--- a/chrome/app/chrome_dll.rc
++++ b/chrome/app/chrome_dll.rc
+@@ -174,7 +174,7 @@
+ #elif BUILDFLAG(GOOGLE_CHROME_FOR_TESTING_BRANDING)
+ IDR_MAINFRAME       ICON                        "theme\google_chrome\google_chrome_for_testing\win\chrome.ico"
+ #else
+-IDR_MAINFRAME       ICON                        "theme\chromium\win\chromium.ico"
++IDR_MAINFRAME       ICON                        "../../fly/resources/icons/fly.ico"
+ #endif
+ 
+ // We include these resources because all ICON types need to be in the
+--- a/chrome/BUILD.gn
++++ b/chrome/BUILD.gn
+@@ -662,13 +662,13 @@
+   }
+ 
+   bundle_data("chrome_app_icon") {
+-    sources = [ "app/theme/$branding_path_component/mac/app.icns" ]
++    sources = [ "//fly/resources/icons/app.icns" ]
+     outputs = [ "{{bundle_resources_dir}}/{{source_file_part}}" ]
+   }
+ 
+-  bundle_data("chrome_asset_catalog") {
+-    sources = [ "app/theme/$branding_path_component/mac/Assets.car" ]
+-    outputs = [ "{{bundle_resources_dir}}/{{source_file_part}}" ]
++  # Fly uses its ICNS on every macOS release. Do not ship Chromium's modern
++  # asset catalog, which would override CFBundleIconFile with its own icon.
++  group("chrome_asset_catalog") {
+   }
+ 
+   bundle_data("chrome_resources") {
+@@ -1699,8 +1699,8 @@
+ 
+ copy("visual_elements_resources") {
+   sources = [
+-    "//chrome/app/theme/$branding_path_component/win/tiles/Logo.png",
+-    "//chrome/app/theme/$branding_path_component/win/tiles/SmallLogo.png",
++    "//fly/resources/icons/Logo.png",
++    "//fly/resources/icons/SmallLogo.png",
+     "app/visual_elements_resources/chrome.VisualElementsManifest.xml",
+   ]
+ 
+@@ -2022,11 +2022,11 @@
+     sources = [ "//chrome/tools/build/linux/chrome-wrapper" ]
+     if (is_linux) {
+       sources += [
+-        "//chrome/app/theme/$branding_path_component/linux/product_logo_48.png",
++        "//fly/resources/icons/product_logo_48.png",
+       ]
+     } else {
+       sources +=
+-          [ "//chrome/app/theme/$branding_path_component/product_logo_48.png" ]
++          [ "//fly/resources/icons/product_logo_48.png" ]
+     }
+     outputs = [ "$root_out_dir/{{source_file_part}}" ]
+   }
+--- a/chrome/app/app-Info.plist
++++ b/chrome/app/app-Info.plist
+@@ -149,8 +149,6 @@
+ 	<string>${EXECUTABLE_NAME}</string>
+ 	<key>CFBundleIconFile</key>
+ 	<string>app.icns</string>
+-	<key>CFBundleIconName</key>
+-	<string>AppIcon</string>
+ 	<key>CFBundleIdentifier</key>
+ 	<string>${CHROMIUM_BUNDLE_ID}</string>
+ 	<key>CFBundleInfoDictionaryVersion</key>
+--- a/chrome/app/helper-alerts-Info.plist
++++ b/chrome/app/helper-alerts-Info.plist
+@@ -6,8 +6,6 @@
+ 	<string>${CHROMIUM_BUNDLE_ID}.framework.AlertNotificationService</string>
+ 	<key>CFBundleIconFile</key>
+ 	<string>app.icns</string>
+-	<key>CFBundleIconName</key>
+-	<string>AppIcon</string>
+ 	<key>NSUserNotificationAlertStyle</key>
+ 	<string>alert</string>
+ </dict>
+--- a/chrome/browser/profiles/profile_shortcut_manager_win.cc
++++ b/chrome/browser/profiles/profile_shortcut_manager_win.cc
+@@ -78,7 +78,7 @@
+ // Incrementing this number will cause profile icons to be regenerated on
+ // profile startup (it should be incremented whenever the product/avatar icons
+ // change, etc).
+-const int kCurrentProfileIconVersion = 10;
++const int kCurrentProfileIconVersion = 11;
+ 
+ bool disabled_for_unit_tests = false;
+ bool disable_unpinning_for_unit_tests = false;
+--- a/chrome/common/channel_info_posix.cc
++++ b/chrome/common/channel_info_posix.cc
+@@ -141,14 +141,9 @@
+       return "google-chrome.desktop";
+   }
+ #else  // BUILDFLAG(CHROMIUM_BRANDING)
+-  // Allow $CHROME_DESKTOP to override the built-in value, so that development
+-  // versions can set themselves as the default without interfering with
+-  // non-official, packaged versions using the built-in value.
+-  std::optional<std::string> name = env->GetVar("CHROME_DESKTOP");
+-  if (name.has_value() && !name.value().empty()) {
+-    return name.value();
+-  }
+-  // Fly: the desktop entry Fly's packages install.
++  // Fly: Electron/Chromium parents can export their own CHROME_DESKTOP.
++  // Fly must still match its installed desktop entry for Wayland app IDs,
++  // X11 identity, default-browser registration and notification icons.
+   return "fly-browser.desktop";
+ #endif
+ }
