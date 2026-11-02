@@ -80,6 +80,14 @@ The profile is preserved. Package-manager installations and direct installations
 have different update owners; `fly-install update` delegates to your package
 manager when it detects an installed system package.
 
+Older system packages are migrated to the official signed package and
+repository on the next `fly-install update`. Your browser profile is kept.
+Standalone copies of the installer are independent files; refresh an old
+command once with the installer above and put it where you normally run it.
+For existing Arch helpers that still request `PKGBUILD`, Releases retains a
+compatibility recipe which verifies and repackages the same signed official
+binary. It neither builds Chromium nor uses AUR.
+
 ## Remove Fly
 
 ```sh
