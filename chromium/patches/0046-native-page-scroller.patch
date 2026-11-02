@@ -1,6 +1,6 @@
 --- a/chrome/browser/ui/BUILD.gn
 +++ b/chrome/browser/ui/BUILD.gn
-@@ -838,6 +838,8 @@
+@@ -838,5 +838,7 @@
        "//fly/ui/keyboard_editor.h",
        "//fly/ui/status_bar.cc",
        "//fly/ui/status_bar.h",
@@ -8,4 +8,3 @@
 +      "//fly/ui/page_scroller.h",
      ]
    }
- 
