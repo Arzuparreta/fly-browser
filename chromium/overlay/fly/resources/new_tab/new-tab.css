@@ -8,9 +8,8 @@ body.light { background-image:url('identity/paper-grain.png'); background-size:1
 main { height:100%; min-height:0; display:grid; grid-template-rows:minmax(0,1fr); padding:clamp(12px,4vh,36px) clamp(16px,4vw,48px); }
 .starting-point { min-height:0; display:flex; flex-direction:column; align-items:center; justify-content:center; gap:clamp(8px,3vh,24px); }
 #memory-fly { --fly-size:min(clamp(100px,30vw,280px),clamp(60px,45vh,280px)); display:block; width:var(--fly-size); height:var(--fly-size); max-width:100%; object-fit:cover; object-position:0% 50%; }
-/* Discrete crops of one prerendered strip; no continuous animation or layer. */
-#memory-fly[data-pose="1"] { object-position:50% 50%; }
-#memory-fly[data-pose="2"] { object-position:100% 50%; }
+/* Keep layout and alternative text; the browser paints the cached PNG crop. */
+#memory-fly.native-artwork { opacity:0; }
 button { border:0; border-radius:4px; padding:10px 12px; font:inherit; background:transparent; color:var(--text); cursor:pointer; }
 button:hover { background:color-mix(in srgb,var(--text) 6%,transparent); }
 button:focus-visible { outline:2px solid var(--accent); outline-offset:3px; }

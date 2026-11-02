@@ -7,6 +7,7 @@
 #include "base/files/file_enumerator.h"
 #include "base/files/file_util.h"
 #include "base/files/scoped_temp_dir.h"
+#include "base/functional/callback_helpers.h"
 #include "base/path_service.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/threading/thread_restrictions.h"
@@ -71,6 +72,7 @@
 #include "ui/compositor/layer.h"
 #include "ui/compositor/layer_animator.h"
 #include "ui/gfx/color_utils.h"
+#include "ui/gfx/animation/animation.h"
 #include "ui/gfx/x/connection.h"
 #include "ui/gfx/x/xproto.h"
 #include "ui/ozone/public/ozone_platform.h"
@@ -2277,6 +2279,13 @@ IN_PROC_BROWSER_TEST_F(FlyNavigationFeedbackBrowserTest,
   waiting_->WaitForRequest();
   EXPECT_EQ(true, content::EvalJs(contents,
       "document.getElementById('memory-fly').dataset.pose === undefined"));
+  ASSERT_TRUE(base::test::RunUntil([&] {
+    auto* artwork = NewTabArtwork::FromWebContents(contents);
+    return artwork && artwork->visible_for_testing();
+  }));
+  auto* artwork = NewTabArtwork::FromWebContents(contents);
+  EXPECT_EQ(0, artwork->pose_for_testing());
+  EXPECT_FALSE(artwork->timer_running_for_testing());
   SendPage(*waiting_);
   waiting_->Done();
   auto* model = browser()->GetTabStripModel();
@@ -2284,14 +2293,13 @@ IN_PROC_BROWSER_TEST_F(FlyNavigationFeedbackBrowserTest,
   Start(server_.GetURL("/next"));
   next_->WaitForRequest();
   ASSERT_TRUE(base::test::RunUntil([&] {
-    return content::EvalJs(contents,
-        "['1','2'].includes(document.getElementById('memory-fly').dataset.pose)").ExtractBool();
+    return artwork->pose_for_testing() != 0;
   }));
   EXPECT_EQ(GURL(kFlyNewTabURL), contents->GetLastCommittedURL());
   contents->Stop();
   ASSERT_TRUE(base::test::RunUntil([&] {
-    return content::EvalJs(contents,
-        "document.getElementById('memory-fly').dataset.pose === undefined").ExtractBool();
+    return artwork->pose_for_testing() == 0 &&
+           !artwork->timer_running_for_testing();
   }));
 }
 
@@ -2302,15 +2310,16 @@ IN_PROC_BROWSER_TEST_F(FlyNavigationFeedbackBrowserTest,
   Start(server_.GetURL("/waiting"));
   waiting_->WaitForRequest();
   const auto moving = [&] {
-    return content::EvalJs(contents,
-        "['1','2'].includes(document.getElementById('memory-fly').dataset.pose)").ExtractBool();
+    auto* artwork = NewTabArtwork::FromWebContents(contents);
+    return artwork && artwork->pose_for_testing() != 0;
   };
   ASSERT_TRUE(base::test::RunUntil(moving));
   ASSERT_TRUE(ExecuteNativeCommand(browser(), "spawn-tab"));
   ASSERT_TRUE(content::WaitForLoadStop(Active(browser())));
   ASSERT_TRUE(base::test::RunUntil([&] {
-    return content::EvalJs(contents,
-        "document.hidden && document.getElementById('memory-fly').dataset.pose === undefined").ExtractBool();
+    auto* artwork = NewTabArtwork::FromWebContents(contents);
+    return artwork && !artwork->visible_for_testing() &&
+           !artwork->timer_running_for_testing();
   }));
   auto* model = browser()->GetTabStripModel();
   model->ActivateTabAt(model->GetIndexOfWebContents(contents));
@@ -2320,6 +2329,8 @@ IN_PROC_BROWSER_TEST_F(FlyNavigationFeedbackBrowserTest,
   ASSERT_TRUE(content::WaitForLoadStop(contents));
   EXPECT_EQ(server_.GetURL("/waiting"), contents->GetLastCommittedURL());
   EXPECT_EQ(false, content::EvalJs(contents, "!!document.getElementById('memory-fly')"));
+  EXPECT_FALSE(NewTabArtwork::FromWebContents(contents)->visible_for_testing());
+  EXPECT_FALSE(NewTabArtwork::FromWebContents(contents)->timer_running_for_testing());
 }
 
 IN_PROC_BROWSER_TEST_F(FlyNavigationFeedbackBrowserTest,
@@ -2331,14 +2342,88 @@ IN_PROC_BROWSER_TEST_F(FlyNavigationFeedbackBrowserTest,
   Start(server_.GetURL("/next"));
   next_->WaitForRequest();
   ASSERT_TRUE(base::test::RunUntil([&] {
-    return content::EvalJs(contents,
-        "['1','2'].includes(document.getElementById('memory-fly').dataset.pose)").ExtractBool();
+    auto* artwork = NewTabArtwork::FromWebContents(contents);
+    return artwork && artwork->pose_for_testing() != 0;
   }));
   contents->Stop();
   ASSERT_TRUE(base::test::RunUntil([&] {
-    return content::EvalJs(contents,
-        "document.getElementById('memory-fly').dataset.pose === undefined").ExtractBool();
+    auto* artwork = NewTabArtwork::FromWebContents(contents);
+    return artwork && artwork->pose_for_testing() == 0 &&
+           !artwork->timer_running_for_testing();
   }));
+}
+
+IN_PROC_BROWSER_TEST_F(FlyNavigationFeedbackBrowserTest,
+                       NewTabFlyReducedMotionHasNoTimer) {
+  const bool previous = gfx::Animation::PrefersReducedMotion();
+  base::ScopedClosureRunner restore(base::BindOnce(
+      &gfx::Animation::SetPrefersReducedMotionForTesting, previous));
+  gfx::Animation::SetPrefersReducedMotionForTesting(true);
+  ASSERT_TRUE(ui_test_utils::NavigateToURL(browser(), GURL(kFlyNewTabURL)));
+  auto* contents = Active(browser());
+  ASSERT_TRUE(base::test::RunUntil([&] {
+    auto* artwork = NewTabArtwork::FromWebContents(contents);
+    return artwork && artwork->visible_for_testing();
+  }));
+  auto* artwork = NewTabArtwork::FromWebContents(contents);
+  Start(server_.GetURL("/waiting"));
+  waiting_->WaitForRequest();
+  EXPECT_EQ(0, artwork->pose_for_testing());
+  EXPECT_FALSE(artwork->timer_running_for_testing());
+  contents->Stop();
+}
+
+IN_PROC_BROWSER_TEST_F(FlyNavigationFeedbackBrowserTest,
+                       NewTabFlyRepeatsAfterItsDocumentIsDestroyed) {
+  ASSERT_TRUE(ui_test_utils::NavigateToURL(browser(), GURL(kFlyNewTabURL)));
+  auto* contents = Active(browser());
+  ASSERT_TRUE(base::test::RunUntil([&] {
+    auto* artwork = NewTabArtwork::FromWebContents(contents);
+    return artwork && artwork->visible_for_testing();
+  }));
+  auto* artwork = NewTabArtwork::FromWebContents(contents);
+  const auto bounds = artwork->bounds_for_testing();
+  EXPECT_GT(bounds.width(), 50);
+  const size_t before = artwork->ticks_for_testing();
+  // This is the real address-bar transition: Chromium retains the outgoing
+  // surface after commit while a parser-blocking script delays the first paint.
+  ASSERT_TRUE(Window().RunCommand("toggle-address"));
+  auto& address = Window().address_picker();
+  const auto target = base::UTF8ToUTF16(server_.GetURL("/waiting").spec());
+  address.search_for_testing()->SetText(target);
+  address.ContentsChanged(address.search_for_testing(), target);
+  ui::test::EventGenerator keys(
+      Window().widget()->GetNativeWindow()->GetRootWindow());
+  keys.PressKey(ui::VKEY_RETURN, ui::EF_NONE);
+  waiting_->WaitForRequest();
+  waiting_->Send(
+      "HTTP/1.1 200 OK\r\nContent-Type: text/html\r\n\r\n"
+      "<!doctype html><head><script src='/next'></script></head>" +
+      std::string(4096, ' '));
+  next_->WaitForRequest();
+  ASSERT_TRUE(base::test::RunUntil([&] {
+    return contents->GetLastCommittedURL() == server_.GetURL("/waiting");
+  }));
+  ASSERT_FALSE(contents->GetWebUI());
+  EXPECT_TRUE(artwork->visible_for_testing());
+  // Observe three full bursts without evaluating outgoing-page JavaScript.
+  ASSERT_TRUE(base::test::RunUntil([&] {
+    return artwork->ticks_for_testing() >= before + 15;
+  }));
+  EXPECT_TRUE(artwork->visible_for_testing());
+  EXPECT_EQ(bounds, artwork->bounds_for_testing());
+  next_->Send("HTTP/1.1 200 OK\r\nContent-Type: application/javascript\r\n\r\n");
+  next_->Done();
+  waiting_->Send("<body><h1>First content</h1>" + std::string(4096, ' '));
+  // The overlay must disappear when content paints, even if the response is
+  // still streaming. It must not wait for DidStopLoading.
+  ASSERT_TRUE(base::test::RunUntil([&] {
+    return !artwork->visible_for_testing();
+  }));
+  EXPECT_TRUE(contents->IsLoading());
+  EXPECT_FALSE(artwork->timer_running_for_testing());
+  waiting_->Done();
+  ASSERT_TRUE(content::WaitForLoadStop(contents));
 }
 
 IN_PROC_BROWSER_TEST_F(FlyWorkspaceBrowserTest,
