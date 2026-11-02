@@ -7864,9 +7864,12 @@ IN_PROC_BROWSER_TEST_F(FlyPageScrollBrowserTest,
   const auto before =
       window.hints().label_bounds_for_testing(u"Late target 14");
   EXPECT_LT(filtered, 16u);
+  keys.PressAndReleaseKey(ui::VKEY_BACK, ui::EF_NONE);
+  EXPECT_EQ(16u, window.hints().visible_count_for_testing());
 
   // Move the selected targets, and add another clickable element while a
-  // prefix is typed. Its existing label must keep naming the same target.
+  // prefix has been erased. Its existing label must keep naming the same
+  // target, and typing the prefix again must restore the same filter.
   ASSERT_TRUE(content::ExecJs(contents, R"js(
     document.body.style.paddingTop = '150px';
     document.body.insertAdjacentHTML('afterbegin', '<button>New target</button>');
@@ -7878,6 +7881,8 @@ IN_PROC_BROWSER_TEST_F(FlyPageScrollBrowserTest,
   }));
   EXPECT_TRUE(window.hints().active());
   EXPECT_EQ(code, window.hints().code_for_testing(u"Late target 14"));
+  EXPECT_EQ(16u, window.hints().visible_count_for_testing());
+  keys.PressAndReleaseKey(ui::VKEY_V, ui::EF_NONE);
   EXPECT_EQ(filtered, window.hints().visible_count_for_testing());
   content::TitleWatcher title(contents, u"Late target 14");
   keys.PressAndReleaseKey(
