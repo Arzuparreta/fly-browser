@@ -45,6 +45,7 @@
 #include "fly/ui/fly_app.h"
 #include "fly/ui/fly_window_controller.h"
 #include "fly/ui/hint_controller.h"
+#include "fly/ui/page_scroller.h"
 #include "ui/base/clipboard/clipboard_buffer.h"
 #include "ui/base/clipboard/scoped_clipboard_writer.h"
 #include "ui/events/keycodes/dom/dom_code.h"
@@ -483,26 +484,31 @@ content::KeyboardEventProcessingResult RouteNativePageKey(
         PageKeyboardState::FromWebContents(contents)->router().mode() ==
             KeyboardMode::kPassthrough);
   }
+  const bool repeat =
+      event.GetModifiers() & blink::WebInputEvent::kIsAutoRepeat;
+  if (event.GetType() == blink::WebInputEvent::Type::kKeyUp)
+    window.scroller().Release(event.dom_code);
   if (event.GetType() != blink::WebInputEvent::Type::kRawKeyDown) {
     return Result::NOT_HANDLED;
   }
+  if (!repeat)
+    window.scroller().OtherKey(event.dom_code);
   if (!contents)
     return Result::NOT_HANDLED;
   if (window.hints().HandleKey(contents, event))
     return Result::HANDLED;
   PageKeyboardState::CreateForWebContents(contents);
   auto& router = PageKeyboardState::FromWebContents(contents)->router();
-  const auto key = router.Route(
-      {.stroke = EventStroke(event),
-       .time = base::TimeTicks::Now(),
-       .repeat =
-           bool(event.GetModifiers() & blink::WebInputEvent::kIsAutoRepeat),
-       .composing =
-           event.skip_if_unhandled ||
-           bool(event.GetModifiers() & (blink::WebInputEvent::kIsComposing |
-                                        blink::WebInputEvent::kAltGrKey)),
-       .editable =
-           browser_ui_editable || contents->IsFocusedElementEditable()});
+  const auto key =
+      router.Route({.stroke = EventStroke(event),
+                    .time = base::TimeTicks::Now(),
+                    .repeat = repeat,
+                    .composing = event.skip_if_unhandled ||
+                                 bool(event.GetModifiers() &
+                                      (blink::WebInputEvent::kIsComposing |
+                                       blink::WebInputEvent::kAltGrKey)),
+                    .editable = browser_ui_editable ||
+                                contents->IsFocusedElementEditable()});
   window.UpdateModeLabel();
   if (key.kind == KeyResultKind::kPass)
     return Result::NOT_HANDLED;
@@ -511,9 +517,15 @@ content::KeyboardEventProcessingResult RouteNativePageKey(
     contents->Focus();
   } else if (key.kind == KeyResultKind::kAction) {
     // A tip on the new tab retires once its keys have been used.
-    FlyApp::Get().new_tab_tips().RecordKeyboardUse(key.action);
-    // Native commands can close the BrowserView; never read it afterwards.
-    window.RunCommand(key.action);
+    if (!repeat)
+      FlyApp::Get().new_tab_tips().RecordKeyboardUse(key.action);
+    if (const auto scroll = PageScrollForAction(key.action)) {
+      // Held keys scroll until their release (see PageScroller).
+      window.scroller().Press(contents, *scroll, event.dom_code, repeat);
+    } else {
+      // Native commands can close the BrowserView; never read it afterwards.
+      window.RunCommand(key.action);
+    }
   }
   return Result::HANDLED;
 }
@@ -665,22 +677,10 @@ bool ExecuteNativeCommand(BrowserWindowInterface* browser,
     return true;
   }
   auto* contents = browser->GetTabStripModel()->GetActiveWebContents();
-  using Scroll = content::WebContents::PageScrollCommand;
-  constexpr std::pair<std::string_view, Scroll> scrolling[] = {
-      {"scroll-down", Scroll::kStepDown},
-      {"scroll-up", Scroll::kStepUp},
-      {"scroll-left", Scroll::kStepLeft},
-      {"scroll-right", Scroll::kStepRight},
-      {"half-page-down", Scroll::kHalfPageDown},
-      {"half-page-up", Scroll::kHalfPageUp},
-      {"page-top", Scroll::kTop},
-      {"page-bottom", Scroll::kBottom}};
-  for (const auto& [name, command] : scrolling) {
-    if (action == name) {
-      if (contents)
-        contents->ScrollFocusedPage(command);
-      return true;
-    }
+  if (const auto scroll = PageScrollForAction(action)) {
+    if (auto* window = FlyWindowController::FromBrowser(browser))
+      window->scroller().Step(contents, *scroll);
+    return true;
   }
   if (action == "toggle-tab-audio-mute") {
     if (contents)

@@ -6,6 +6,9 @@ commands below first prepare an **unmodified upstream control**; the next
 section builds Fly's overlay on top of it. Installing npm dependencies alone
 does not build the browser.
 
+The [keyboard navigation design](keyboard-navigation.md) describes native scrolling,
+link hints and their regression coverage.
+
 ## Build and launch Fly
 
 After completing the control setup below:

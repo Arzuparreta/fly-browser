@@ -60,6 +60,7 @@ class FlyBrowserFrame;
 class FlyButton;
 class FlyLabel;
 class HintController;
+class PageScroller;
 class KeyboardEditor;
 class SettingsMenu;
 class SidebarPanel;
@@ -160,6 +161,7 @@ class FlyWindowController : public views::WidgetObserver,
   SettingsMenu& settings_menu() { return *settings_menu_; }
   KeyboardEditor& keyboard_editor() { return *keyboard_editor_; }
   HintController& hints() { return *hints_; }
+  PageScroller& scroller() { return *scroller_; }
 
   // Testing.
   TabSidebar* tab_sidebar_for_testing() { return tab_sidebar_; }
@@ -376,6 +378,7 @@ class FlyWindowController : public views::WidgetObserver,
 
   // Floating surfaces.
   std::unique_ptr<HintController> hints_;
+  std::unique_ptr<PageScroller> scroller_;
   std::unique_ptr<CommandPalette> palette_;
   std::unique_ptr<CommandPalette> bookmark_picker_;
   std::unique_ptr<CommandPalette> address_picker_;

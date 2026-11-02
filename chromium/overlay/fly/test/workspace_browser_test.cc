@@ -12,38 +12,34 @@
 #include "base/threading/thread_restrictions.h"
 #include "chrome/browser/bookmarks/bookmark_model_factory.h"
 #include "chrome/browser/content_settings/host_content_settings_map_factory.h"
+#include "chrome/browser/extensions/extension_action_dispatcher.h"
 #include "chrome/browser/history/history_service_factory.h"
-#include "components/history/core/test/history_service_test_util.h"
-#include "content/public/test/prerender_test_util.h"
-#include "ui/base/page_transition_types.h"
-#include "ui/color/color_id.h"
-#include "ui/color/color_provider.h"
-#include "ui/gfx/color_utils.h"
 #include "chrome/browser/lifetime/application_lifetime_desktop.h"
-#include "chrome/browser/ssl/chrome_security_state_util.h"
-#include "chrome/browser/ui/browser_window/public/browser_window_interface_iterator.h"
 #include "chrome/browser/sessions/exit_type_service.h"
 #include "chrome/browser/sessions/session_service.h"
 #include "chrome/browser/sessions/session_service_factory.h"
-#include "chrome/browser/extensions/extension_action_dispatcher.h"
+#include "chrome/browser/ssl/chrome_security_state_util.h"
+#include "chrome/browser/ui/browser_window/public/browser_window_interface_iterator.h"
 #include "chrome/browser/ui/views/frame/browser_view.h"
 #include "chrome/browser/ui/views/location_bar/location_bar_view.h"
-#include "chrome/browser/ui/views/toolbar/toolbar_view.h"
-#include "extensions/browser/extension_action_manager.h"
-#include "extensions/browser/extension_action.h"
 #include "chrome/browser/ui/views/session_crashed_bubble_view.h"
+#include "chrome/browser/ui/views/toolbar/toolbar_view.h"
 #include "chrome/common/chrome_paths.h"
 #include "components/bookmarks/browser/bookmark_model.h"
 #include "components/content_settings/core/browser/host_content_settings_map.h"
 #include "components/download/public/common/download_item.h"
 #include "components/history/core/browser/history_service.h"
 #include "components/history/core/common/pref_names.h"
+#include "components/history/core/test/history_service_test_util.h"
 #include "components/password_manager/core/common/password_manager_pref_names.h"
 #include "components/signin/public/base/signin_pref_names.h"
 #include "components/spellcheck/browser/pref_names.h"
 #include "content/public/browser/download_manager.h"
 #include "content/public/browser/host_zoom_map.h"
+#include "content/public/test/prerender_test_util.h"
 #include "crypto/sha2.h"
+#include "extensions/browser/extension_action.h"
+#include "extensions/browser/extension_action_manager.h"
 #include "extensions/browser/extension_registry.h"
 #include "fly/bookmarks/bookmark_service.h"
 #include "fly/bookmarks/frequent_sites_service.h"
@@ -52,24 +48,29 @@
 #include "fly/ui/command_palette.h"
 #include "fly/ui/download_shelf.h"
 #include "fly/ui/fly_actions.h"
+#include "fly/ui/fly_app.h"
 #include "fly/ui/fly_extensions.h"
 #include "fly/ui/fly_theme.h"
-#include "fly/ui/fly_app.h"
 #include "fly/ui/fly_window_controller.h"
 #include "fly/ui/hint_controller.h"
 #include "fly/ui/history_service.h"
 #include "fly/ui/keyboard_editor.h"
 #include "fly/ui/native_commands.h"
 #include "fly/ui/new_tab_ui.h"
+#include "fly/ui/page_scroller.h"
 #include "fly/ui/sidebar_panel.h"
-#include "fly/ui/status_bar.h"
 #include "fly/ui/startup_maintenance.h"
+#include "fly/ui/status_bar.h"
 #include "fly/ui/tab_sidebar.h"
 #include "fly/ui/user_content.h"
 #include "third_party/zlib/google/zip.h"
 #include "ui/aura/window_tree_host.h"
+#include "ui/base/page_transition_types.h"
+#include "ui/color/color_id.h"
+#include "ui/color/color_provider.h"
 #include "ui/compositor/layer.h"
 #include "ui/compositor/layer_animator.h"
+#include "ui/gfx/color_utils.h"
 #include "ui/gfx/x/connection.h"
 #include "ui/gfx/x/xproto.h"
 #include "ui/ozone/public/ozone_platform.h"
@@ -6596,19 +6597,19 @@ IN_PROC_BROWSER_TEST_F(FlyWorkspaceBrowserTest,
   views::test::ButtonTestApi(record).NotifyDefaultMouseClick();
   ui::test::EventGenerator keys(
       window.widget()->GetNativeWindow()->GetRootWindow());
-  keys.PressKey(ui::VKEY_Q, ui::EF_NONE);
+  keys.PressAndReleaseKey(ui::VKEY_Q, ui::EF_NONE);
   EXPECT_TRUE(editor.recording());
-  keys.PressKey(ui::VKEY_Q, ui::EF_NONE);
+  keys.PressAndReleaseKey(ui::VKEY_Q, ui::EF_NONE);
   EXPECT_FALSE(editor.recording());
   EXPECT_EQ(u"J\nQ Q", editor.bindings_for_testing("scroll-down", true));
   EXPECT_EQ(0, content::EvalJs(contents, "scrollY"));
   views::test::ButtonTestApi(editor.save_for_testing()).NotifyDefaultMouseClick();
   keys.PressKey(ui::VKEY_ESCAPE, ui::EF_NONE);
   ASSERT_TRUE(base::test::RunUntil([&] { return !editor.root_for_testing(); }));
-  keys.PressKey(ui::VKEY_Q, ui::EF_NONE);
-  keys.PressKey(ui::VKEY_Q, ui::EF_NONE);
+  keys.PressAndReleaseKey(ui::VKEY_Q, ui::EF_NONE);
+  keys.PressAndReleaseKey(ui::VKEY_Q, ui::EF_NONE);
   ASSERT_TRUE(base::test::RunUntil([&] {
-    return content::EvalJs(contents, "Math.round(scrollY)").ExtractInt() == 80;
+    return content::EvalJs(contents, "Math.round(scrollY)").ExtractInt() == 60;
   }));
 }
 
@@ -7611,7 +7612,7 @@ IN_PROC_BROWSER_TEST_F(FlyPageScrollBrowserTest,
 }
 
 IN_PROC_BROWSER_TEST_F(FlyPageScrollBrowserTest,
-                       FocusedContainerPixelsHalfPageAndEditableKeys) {
+                       ClickedContainerPixelsHalfPageAndEditableKeys) {
   ASSERT_TRUE(ui_test_utils::NavigateToURL(
       browser(), embedded_test_server()->GetURL("/title1.html")));
   auto* contents = Active(browser());
@@ -7650,37 +7651,58 @@ IN_PROC_BROWSER_TEST_F(FlyPageScrollBrowserTest,
       )js", axis, offset)).ExtractBool();
     });
   };
-  keys.PressKey(ui::VKEY_J, ui::EF_NONE);
-  ASSERT_TRUE(wait_offset("scrollTop", 80)) << content::EvalJs(contents, "document.querySelector('#box').scrollTop");
+  // Keyboard scrolling follows a real click, including nested scrollers.
+  auto origin = contents->GetRenderWidgetHostView()->GetViewBounds().origin();
+  keys.MoveMouseTo(origin + gfx::Vector2d(100, 100));
+  keys.ClickLeftButton();
+  keys.PressAndReleaseKey(ui::VKEY_J, ui::EF_NONE);
+  ASSERT_TRUE(wait_offset("scrollTop", 60))
+      << content::EvalJs(contents, "document.querySelector('#box').scrollTop");
   EXPECT_EQ(0, content::EvalJs(contents, "scrollY"));
   const int half_page =
       content::EvalJs(
           contents,
           "Math.floor(document.querySelector('#box').clientHeight / 2)")
           .ExtractInt();
-  keys.PressKey(ui::VKEY_D, ui::EF_NONE);
-  ASSERT_TRUE(wait_offset("scrollTop", 80 + half_page))
-      << content::EvalJs(contents, "JSON.stringify({top:document.querySelector('#box').scrollTop,left:document.querySelector('#box').scrollLeft,height:document.querySelector('#box').clientHeight})");
-  keys.PressKey(ui::VKEY_U, ui::EF_NONE);
-  ASSERT_TRUE(wait_offset("scrollTop", 80)) << content::EvalJs(contents, "document.querySelector('#box').scrollTop");
-  keys.PressKey(ui::VKEY_L, ui::EF_NONE);
-  ASSERT_TRUE(wait_offset("scrollLeft", 80));
-  keys.PressKey(ui::VKEY_G, ui::EF_NONE);
-  keys.PressKey(ui::VKEY_G, ui::EF_NONE);
+  keys.PressAndReleaseKey(ui::VKEY_D, ui::EF_NONE);
+  ASSERT_TRUE(wait_offset("scrollTop", 60 + half_page)) << content::EvalJs(
+      contents,
+      "JSON.stringify({top:document.querySelector('#box').scrollTop,"
+      "left:document.querySelector('#box').scrollLeft,height:"
+      "document.querySelector('#box').clientHeight})");
+  keys.PressAndReleaseKey(ui::VKEY_U, ui::EF_NONE);
+  ASSERT_TRUE(wait_offset("scrollTop", 60))
+      << content::EvalJs(contents, "document.querySelector('#box').scrollTop");
+  keys.PressAndReleaseKey(ui::VKEY_L, ui::EF_NONE);
+  ASSERT_TRUE(wait_offset("scrollLeft", 60));
+  keys.PressAndReleaseKey(ui::VKEY_G, ui::EF_NONE);
+  keys.PressAndReleaseKey(ui::VKEY_G, ui::EF_NONE);
   ASSERT_TRUE(wait_offset("scrollTop", 0));
-  ASSERT_TRUE(wait_offset("scrollLeft", 0));
-  keys.PressKey(ui::VKEY_G, ui::EF_SHIFT_DOWN);
+  ASSERT_TRUE(wait_offset("scrollLeft", 60));
+  keys.PressAndReleaseKey(ui::VKEY_G, ui::EF_SHIFT_DOWN);
   const int bottom =
       content::EvalJs(contents,
                       "document.querySelector('#box').scrollHeight - "
                       "document.querySelector('#box').clientHeight")
           .ExtractInt();
+  ASSERT_TRUE(wait_offset("scrollTop", bottom)) << content::EvalJs(
+      contents, "JSON.stringify({box:document.querySelector('#box').scrollTop,"
+                "page:scrollY,expected:document.querySelector('#box').scrollHeight-"
+                "document.querySelector('#box').clientHeight})");
+  ASSERT_TRUE(content::ExecJs(
+      contents,
+      "document.querySelector('#box').style.overscrollBehavior = 'contain'"));
+  keys.PressAndReleaseKey(ui::VKEY_J, ui::EF_NONE);
+  ASSERT_TRUE(base::test::RunUntil([&] {
+    return std::abs(content::EvalJs(contents, "scrollY").ExtractDouble() -
+                    60) <= 1;
+  }));
   ASSERT_TRUE(wait_offset("scrollTop", bottom));
   ASSERT_TRUE(
       content::ExecJs(contents, "document.querySelector('#editable').focus()"));
   ASSERT_TRUE(base::test::RunUntil(
       [&] { return contents->IsFocusedElementEditable(); }));
-  keys.PressKey(ui::VKEY_J, ui::EF_NONE);
+  keys.PressAndReleaseKey(ui::VKEY_J, ui::EF_NONE);
   ASSERT_TRUE(base::test::RunUntil([&] {
     return content::EvalJs(contents,
                            "document.querySelector('#editable').value")
@@ -7720,9 +7742,9 @@ IN_PROC_BROWSER_TEST_F(FlyPageScrollBrowserTest,
       [&] { return contents->GetFocusedFrame() == child; }));
   ui::test::EventGenerator keys(
       window.widget()->GetNativeWindow()->GetRootWindow());
-  keys.PressKey(ui::VKEY_J, ui::EF_NONE);
+  keys.PressAndReleaseKey(ui::VKEY_J, ui::EF_NONE);
   ASSERT_TRUE(base::test::RunUntil([&] {
-    return content::EvalJs(child, "Math.round(scrollY)").ExtractInt() == 80;
+    return content::EvalJs(child, "Math.round(scrollY)").ExtractInt() == 60;
   }));
   EXPECT_EQ(0, content::EvalJs(contents, "scrollY"));
 }
@@ -7744,6 +7766,139 @@ IN_PROC_BROWSER_TEST_F(FlyWorkspaceBrowserTest,
   }
 }
 
+IN_PROC_BROWSER_TEST_F(
+    FlyPageScrollBrowserTest,
+    HeldScrollMovesBeforeRepeatAndStopsOnReleaseOrFocusLoss) {
+  ASSERT_TRUE(ui_test_utils::NavigateToURL(
+      browser(), embedded_test_server()->GetURL("/title1.html")));
+  auto* contents = Active(browser());
+  ASSERT_TRUE(content::ExecJs(contents, R"js(
+    document.body.innerHTML = '<div style="height:20000px">Scroll</div>';
+    window.scrollTo(0, 0);
+    window.waitFrames = async n => {
+      while (n--) await new Promise(requestAnimationFrame);
+      return scrollY;
+    };
+  )js"));
+  auto& window = Window();
+  Activate(browser());
+  contents->Focus();
+  ui::test::EventGenerator keys(
+      window.widget()->GetNativeWindow()->GetRootWindow());
+  keys.PressKey(ui::VKEY_J, ui::EF_NONE);
+  ASSERT_TRUE(base::test::RunUntil(
+      [&] { return window.scroller().held_for_testing(); }));
+  // No OS repeats are generated: a held key must still pass one step.
+  ASSERT_TRUE(base::test::RunUntil([&] {
+    return content::EvalJs(contents, "scrollY").ExtractDouble() > 120;
+  }));
+  const double before_repeats =
+      content::EvalJs(contents, "scrollY").ExtractDouble();
+  for (int i = 0; i < 20; ++i)
+    keys.PressKey(ui::VKEY_J, ui::EF_IS_REPEAT);
+  keys.ReleaseKey(ui::VKEY_J, ui::EF_NONE);
+  ASSERT_TRUE(
+      base::test::RunUntil([&] { return !window.scroller().scrolling(); }));
+  const double released =
+      content::EvalJs(contents, "waitFrames(3)").ExtractDouble();
+  // Repeat notifications must not leave twenty queued 60-pixel steps.
+  EXPECT_LT(released - before_repeats, 600);
+  EXPECT_DOUBLE_EQ(
+      released, content::EvalJs(contents, "waitFrames(8)").ExtractDouble());
+
+  keys.PressKey(ui::VKEY_J, ui::EF_NONE);
+  ASSERT_TRUE(base::test::RunUntil([&] {
+    return content::EvalJs(contents, "scrollY").ExtractDouble() >
+           released + 120;
+  }));
+  ASSERT_TRUE(window.RunCommand("toggle-address"));
+  ASSERT_TRUE(
+      base::test::RunUntil([&] { return !window.scroller().scrolling(); }));
+  keys.ReleaseKey(ui::VKEY_J, ui::EF_NONE);
+  const double blurred =
+      content::EvalJs(contents, "waitFrames(3)").ExtractDouble();
+  EXPECT_DOUBLE_EQ(
+      blurred, content::EvalJs(contents, "waitFrames(8)").ExtractDouble());
+}
+
+IN_PROC_BROWSER_TEST_F(FlyPageScrollBrowserTest,
+                       HintLabelsSurviveLateTreeUpdatesAndTrackMovingTargets) {
+  ASSERT_TRUE(ui_test_utils::NavigateToURL(
+      browser(), embedded_test_server()->GetURL("/title1.html")));
+  auto* contents = Active(browser());
+  ASSERT_TRUE(content::ExecJs(contents, R"js(
+    document.body.innerHTML = '<button id="first">First target</button>';
+    window.waitFrames = async n => {
+      while (n--) await new Promise(requestAnimationFrame);
+      return true;
+    };
+  )js"));
+  auto& window = Window();
+  Activate(browser());
+  contents->Focus();
+  ui::test::EventGenerator keys(
+      window.widget()->GetNativeWindow()->GetRootWindow());
+  keys.PressAndReleaseKey(ui::VKEY_F, ui::EF_NONE);
+  ASSERT_TRUE(base::test::RunUntil(
+      [&] { return window.hints().visible_count_for_testing() == 1; }));
+  // Hydration can arrive well after hints first appear. No elapsed-time
+  // cutoff should prevent the initial tree from becoming complete.
+  ASSERT_TRUE(content::ExecJs(
+      contents, "new Promise(resolve => setTimeout(resolve, 1800))"));
+  // Blink's initial on-screen tree arrives in batches. A later batch must
+  // add labels instead of cancelling the whole overlay.
+  ASSERT_TRUE(content::ExecJs(contents, R"js(
+    for (let i = 0; i < 15; ++i) {
+      const button = document.createElement('button');
+      button.textContent = 'Late target ' + i;
+      button.id = 'late' + i;
+      button.onclick = () => document.title = button.textContent;
+      document.body.append(button);
+    }
+  )js"));
+  ASSERT_TRUE(base::test::RunUntil([&] {
+    return window.hints().active() &&
+           window.hints().visible_count_for_testing() == 16;
+  }));
+  const auto code = window.hints().code_for_testing(u"Late target 14");
+  ASSERT_EQ(2u, code.size());
+  ASSERT_EQ('v', code.front());
+  keys.PressAndReleaseKey(ui::VKEY_V, ui::EF_NONE);
+  ASSERT_TRUE(window.hints().active());
+  const auto filtered = window.hints().visible_count_for_testing();
+  const auto before =
+      window.hints().label_bounds_for_testing(u"Late target 14");
+  EXPECT_LT(filtered, 16u);
+  keys.PressAndReleaseKey(ui::VKEY_BACK, ui::EF_NONE);
+  EXPECT_EQ(16u, window.hints().visible_count_for_testing());
+
+  // Move the selected targets, and add another clickable element while a
+  // prefix has been erased. Its existing label must keep naming the same
+  // target, and typing the prefix again must restore the same filter.
+  ASSERT_TRUE(content::ExecJs(contents, R"js(
+    document.body.style.paddingTop = '150px';
+    document.body.insertAdjacentHTML('afterbegin', '<button>New target</button>');
+    waitFrames(8);
+  )js"));
+  ASSERT_TRUE(base::test::RunUntil([&] {
+    return window.hints().label_bounds_for_testing(u"Late target 14").y() >
+           before.y() + 100;
+  }));
+  EXPECT_TRUE(window.hints().active());
+  EXPECT_EQ(code, window.hints().code_for_testing(u"Late target 14"));
+  EXPECT_EQ(16u, window.hints().visible_count_for_testing());
+  keys.PressAndReleaseKey(ui::VKEY_V, ui::EF_NONE);
+  EXPECT_EQ(filtered, window.hints().visible_count_for_testing());
+  content::TitleWatcher title(contents, u"Late target 14");
+  keys.PressAndReleaseKey(
+      static_cast<ui::KeyboardCode>(ui::VKEY_A + code.back() - 'a'),
+      ui::EF_NONE);
+  EXPECT_EQ(u"Late target 14", title.WaitAndGetTitle());
+  EXPECT_FALSE(window.hints().active());
+  EXPECT_FALSE(
+      contents->GetAccessibilityMode().has_mode(ui::AXMode::kWebContents));
+}
+
 IN_PROC_BROWSER_TEST_F(FlyPageScrollBrowserTest,
                        RepeatedScrollAccumulatesWithoutRestartingOrBouncing) {
   ASSERT_TRUE(ui_test_utils::NavigateToURL(
@@ -7762,8 +7917,9 @@ IN_PROC_BROWSER_TEST_F(FlyPageScrollBrowserTest,
   for (int i = 0; i < 12; ++i)
     ASSERT_TRUE(ExecuteNativeCommand(browser(), "scroll-down"));
   ASSERT_TRUE(base::test::RunUntil([&] {
-    return content::EvalJs(contents, "Math.round(scrollY)").ExtractInt() == 960;
-  })) << content::EvalJs(contents, "JSON.stringify({y:scrollY,last:samples.slice(-5)})");
+    return content::EvalJs(contents, "Math.round(scrollY)").ExtractInt() == 720;
+  })) << content::EvalJs(contents,
+                         "JSON.stringify({y:scrollY,last:samples.slice(-5)})");
   EXPECT_EQ(true, content::EvalJs(
                       contents,
                       "samples.every((y,i) => i === 0 || y >= samples[i-1])"));
@@ -7771,8 +7927,9 @@ IN_PROC_BROWSER_TEST_F(FlyPageScrollBrowserTest,
   for (int i = 0; i < 8; ++i)
     ASSERT_TRUE(ExecuteNativeCommand(browser(), "scroll-up"));
   ASSERT_TRUE(base::test::RunUntil([&] {
-    return content::EvalJs(contents, "Math.round(scrollY)").ExtractInt() == 320;
-  })) << content::EvalJs(contents, "JSON.stringify({y:scrollY,last:samples.slice(-5)})");
+    return content::EvalJs(contents, "Math.round(scrollY)").ExtractInt() == 240;
+  })) << content::EvalJs(contents,
+                         "JSON.stringify({y:scrollY,last:samples.slice(-5)})");
   EXPECT_EQ(true, content::EvalJs(
                       contents,
                       "samples.every((y,i) => i === 0 || y <= samples[i-1])"));

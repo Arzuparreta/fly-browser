@@ -68,6 +68,7 @@
 #include "fly/ui/keyboard_editor.h"
 #include "fly/ui/native_commands.h"
 #include "fly/ui/new_tab_ui.h"
+#include "fly/ui/page_scroller.h"
 #include "fly/ui/sidebar_panel.h"
 #include "fly/ui/status_bar.h"
 #include "fly/ui/tab_move_transaction.h"
@@ -420,6 +421,7 @@ FlyWindowController::~FlyWindowController() {
   if (frame_)
     frame_->SetController(nullptr);
   hints_.reset();
+  scroller_.reset();
   palette_.reset();
   bookmark_picker_.reset();
   address_picker_.reset();
@@ -681,6 +683,7 @@ void FlyWindowController::BuildFooter() {
 
 void FlyWindowController::BuildSurfaces() {
   auto& app = FlyApp::Get();
+  scroller_ = std::make_unique<PageScroller>(widget_->GetNativeWindow());
   hints_ = std::make_unique<HintController>(
       widget_, base::BindRepeating(
                    [](base::WeakPtr<FlyWindowController> window, bool) {
@@ -1061,6 +1064,8 @@ views::ImageButton* FlyWindowController::window_control_for_testing(
 
 void FlyWindowController::CancelSurfaces() {
   CancelWorkspaceRename();
+  if (scroller_)
+    scroller_->Stop();
   if (hints_)
     hints_->Cancel();
   for (auto* picker :
@@ -1466,7 +1471,27 @@ void FlyWindowController::OnWidgetBoundsChanged(views::Widget* widget,
 }
 
 void FlyWindowController::OnMouseEvent(ui::MouseEvent* event) {
-  if (Closing() || !sidebar_content_ || SidebarOverlayBlocked())
+  if (Closing())
+    return;
+  if (event->type() == ui::EventType::kMousewheel)
+    scroller_->Stop();
+  if (event->type() == ui::EventType::kMousePressed) {
+    scroller_->Stop();
+    // Like Vimium, keyboard scrolling follows the last click on the page.
+    auto point = event->root_location();
+    wm::ConvertPointToScreen(widget_->GetNativeWindow()->GetRootWindow(),
+                             &point);
+    auto* target = static_cast<aura::Window*>(event->target());
+    auto* tabs = browser_->GetTabStripModel();
+    for (int i = 0; i < tabs->count(); ++i) {
+      auto* contents = tabs->GetWebContentsAt(i);
+      // Clicks on Fly's surfaces above the page do not count.
+      if (contents->GetVisibility() == content::Visibility::VISIBLE && target &&
+          contents->GetNativeView()->Contains(target))
+        PageScroller::SetAnchor(contents, gfx::PointF(point));
+    }
+  }
+  if (!sidebar_content_ || SidebarOverlayBlocked())
     return;
   if (event->type() != ui::EventType::kMouseMoved &&
       event->type() != ui::EventType::kMouseEntered &&
@@ -1576,9 +1601,12 @@ void FlyWindowController::OnWidgetShowStateChanged(views::Widget* widget) {
 }
 
 void FlyWindowController::OnWidgetVisibilityChanged(views::Widget* widget,
-                                                    bool) {
-  if (widget == widget_)
+                                                    bool visible) {
+  if (widget == widget_) {
+    if (!visible && scroller_)
+      scroller_->Stop();
     UpdateClock();
+  }
 }
 
 void FlyWindowController::OnWidgetActivationChanged(views::Widget* widget,
@@ -1586,8 +1614,11 @@ void FlyWindowController::OnWidgetActivationChanged(views::Widget* widget,
   if (widget != widget_)
     return;
   // A blurred window can no longer see the modifier's release.
-  if (!active)
+  if (!active) {
     SetTabNumbers(false);
+    if (scroller_)
+      scroller_->Stop();
+  }
 }
 
 void FlyWindowController::OnWidgetDestroying(views::Widget* widget) {
@@ -3168,6 +3199,13 @@ void FlyWindowController::SetTabNumbers(bool shown) {
 }
 
 void FlyWindowController::OnKeyEvent(ui::KeyEvent* event) {
+  // Also see releases routed to a browser surface rather than the page.
+  if (scroller_) {
+    if (event->type() == ui::EventType::kKeyReleased)
+      scroller_->Release(static_cast<uint32_t>(event->code()));
+    else if (event->type() == ui::EventType::kKeyPressed && !event->is_repeat())
+      scroller_->OtherKey(static_cast<uint32_t>(event->code()));
+  }
   TrackTabNumbers(event->type() == ui::EventType::kKeyPressed,
                   event->key_code(), event->code(), event->flags(),
                   event->is_repeat(), false);
