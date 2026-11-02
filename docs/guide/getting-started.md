@@ -40,6 +40,7 @@ Once launched, Fly opens a window for your first workspace with a new tab:
 - Press **Ctrl + T** to open a new tab with the address bar ready for typing.
 - Press **Alt + F** (or **f** in NORMAL mode) to activate the Link Hints overlay and navigate links using your keyboard.
 - Press **Ctrl + P** to bring up the Command Palette for quick access to all browser functions.
-- Press **Ctrl + ,** to open Preferences. Use the section index on the left, or ↑/↓ once it has focus, to move between sections. Press **/** or **Ctrl + F** to search every setting.
+- Press **Ctrl + H** to open Preferences, and again to close it. Use the section index on the left, or ↑/↓ once it has focus, to move between sections. Press **/** or **Ctrl + F** to search every setting.
+- Press **Ctrl + ,** (or **?** in NORMAL mode) to open Preferences directly on its **Keyboard** section, where you see every shortcut and can change it.
 
-These are new-profile defaults. Open **Preferences → Keyboard** (default **Ctrl+,**) to choose your browser and page bindings. See the [keyboard reference](/reference/keybinds).
+These are new-profile defaults. See the [keyboard reference](/reference/keybinds).
