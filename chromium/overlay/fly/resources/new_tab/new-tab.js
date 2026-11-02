@@ -17,36 +17,22 @@ const normalStroke = stroke => {
 const sequence = (binding, format) => binding.split(' ').filter(Boolean).map(format).join(' ');
 const fly = document.getElementById('memory-fly');
 const reducedMotion = matchMedia('(prefers-reduced-motion: reduce)');
-let navigationLoading = false;
-let motionTimer = 0;
-// Four short movements, then 1.8 seconds at rest: a 2.4-second cycle.
-// Only one timeout exists at a time, and none exists while idle or hidden.
-const poses = [1, 2, 1, 2, 0];
-function syncLoadingMotion() {
-    clearTimeout(motionTimer);
-    motionTimer = 0;
-    delete fly.dataset.pose;
-    if (!navigationLoading || document.hidden || reducedMotion.matches) return;
-    let phase = 0;
-    const step = () => {
-        fly.dataset.pose = poses[phase];
-        motionTimer = setTimeout(step, phase === 4 ? 1800 : 150);
-        phase = (phase + 1) % poses.length;
-    };
-    // Avoid a flash of movement on fast navigations.
-    motionTimer = setTimeout(step, 160);
+// Report layout only when it changes. Native artwork survives destruction of
+// this document while Chromium holds its old surface before the first paint.
+function syncArtwork() {
+    const bounds = fly.getBoundingClientRect();
+    chrome.send('artwork', [bounds.x / innerWidth, bounds.y / innerHeight,
+        bounds.width / innerWidth, bounds.height / innerHeight, reducedMotion.matches]);
 }
-window.updateFlyNewTabLoading = loading => {
-    if (navigationLoading === loading) return;
-    navigationLoading = loading;
-    syncLoadingMotion();
+window.useNativeFlyArtwork = () => {
+    fly.classList.add('native-artwork');
 };
-document.addEventListener('visibilitychange', syncLoadingMotion);
-reducedMotion.addEventListener('change', syncLoadingMotion);
-window.addEventListener('pagehide', () => {
-    navigationLoading = false;
-    syncLoadingMotion();
-});
+const artworkLayout = new ResizeObserver(syncArtwork);
+for (const element of [document.querySelector('main'), fly, document.querySelector('.entry')])
+    artworkLayout.observe(element);
+document.fonts.ready.then(syncArtwork);
+document.addEventListener('visibilitychange', syncArtwork);
+reducedMotion.addEventListener('change', syncArtwork);
 let tipShown = false;
 window.updateFlyNewTab = data => {
     document.body.classList.toggle('light', data.light);
@@ -73,6 +59,7 @@ window.updateFlyNewTab = data => {
     } else {
         tip.hidden = true;
     }
+    syncArtwork();
 };
 document.getElementById('search').addEventListener('click', () => chrome.send('openSearch'));
 document.getElementById('bookmarks').addEventListener('click', () => chrome.send('openBookmarks'));

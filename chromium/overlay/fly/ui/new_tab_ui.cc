@@ -3,7 +3,10 @@
 // Fly repository.
 #include "fly/ui/new_tab_ui.h"
 
+#include <algorithm>
+#include <array>
 #include <cstdint>
+#include <cmath>
 #include <map>
 #include <memory>
 #include <optional>
@@ -14,6 +17,7 @@
 
 #include "base/base_paths.h"
 #include "base/containers/fixed_flat_set.h"
+#include "base/containers/span.h"
 #include "base/files/file_path.h"
 #include "base/files/file_util.h"
 #include "base/functional/bind.h"
@@ -53,6 +57,17 @@
 #include "fly/ui/fly_window_controller.h"
 #include "fly/ui/fly_theme.h"
 #include "services/network/public/mojom/content_security_policy.mojom.h"
+#include "ui/aura/window.h"
+#include "ui/base/metadata/metadata_header_macros.h"
+#include "ui/base/metadata/metadata_impl_macros.h"
+#include "ui/gfx/animation/animation.h"
+#include "ui/gfx/canvas.h"
+#include "ui/gfx/codec/png_codec.h"
+#include "ui/gfx/geometry/rect_conversions.h"
+#include "ui/gfx/image/image_skia.h"
+#include "ui/views/view.h"
+#include "ui/views/widget/native_widget_aura.h"
+#include "ui/views/widget/widget.h"
 
 namespace fly {
 namespace {
@@ -86,6 +101,11 @@ class NewTabResources {
  public:
   using Bytes = scoped_refptr<base::RefCountedMemory>;
   using Bundle = std::map<std::string, Bytes>;
+  struct LoadedBundle {
+    Bundle files;
+    SkBitmap dark;
+    SkBitmap light;
+  };
   static NewTabResources& Get() {
     static base::NoDestructor<NewTabResources> instance;
     return *instance;
@@ -98,7 +118,7 @@ class NewTabResources {
         FROM_HERE, {base::MayBlock(), base::TaskPriority::USER_BLOCKING},
         base::BindOnce([] {
           TRACE_EVENT("browser", "Fly.NewTabResources.ReadBundle");
-          Bundle bundle;
+          LoadedBundle bundle;
           base::FilePath assets;
           if (!base::PathService::Get(base::DIR_ASSETS, &assets))
             return bundle;
@@ -109,13 +129,20 @@ class NewTabResources {
                         .AppendASCII("new_tab")
                         .AppendASCII(path),
                     &bytes, 4 * 1024 * 1024)) {
-              bundle.emplace(path, base::MakeRefCounted<base::RefCountedString>(
+              if (path == "identity/memory-chasis@2x.png")
+                bundle.dark = gfx::PNGCodec::Decode(base::as_byte_span(bytes));
+              else if (path == "identity/memory-papel@2x.png")
+                bundle.light = gfx::PNGCodec::Decode(base::as_byte_span(bytes));
+              bundle.files.emplace(path, base::MakeRefCounted<base::RefCountedString>(
                                        std::move(bytes)));
             }
           }
           return bundle;
         }),
         base::BindOnce(&NewTabResources::Loaded, base::Unretained(this)));
+  }
+  const gfx::ImageSkia& Memory(bool dark) const {
+    return dark ? dark_ : light_;
   }
   void Read(std::string path, content::WebUIDataSource::GotDataCallback done) {
     if (!kFiles.contains(path)) {
@@ -130,8 +157,13 @@ class NewTabResources {
   }
 
  private:
-  void Loaded(Bundle bundle) {
-    bundle_ = std::move(bundle);
+  void Loaded(LoadedBundle bundle) {
+    // Decode once off the UI thread, then share immutable pixels across tabs.
+    bundle.dark.setImmutable();
+    bundle.light.setImmutable();
+    dark_ = gfx::ImageSkia::CreateFromBitmap(bundle.dark, 2.0f);
+    light_ = gfx::ImageSkia::CreateFromBitmap(bundle.light, 2.0f);
+    bundle_ = std::move(bundle.files);
     loaded_ = true;
     loading_ = false;
     auto pending = std::move(pending_);
@@ -141,6 +173,8 @@ class NewTabResources {
   bool loading_ = false;
   bool loaded_ = false;
   Bundle bundle_;
+  gfx::ImageSkia dark_;
+  gfx::ImageSkia light_;
   std::vector<std::pair<std::string, content::WebUIDataSource::GotDataCallback>>
       pending_;
 };
@@ -298,30 +332,10 @@ class NewTabHandler : public content::WebUIMessageHandler,
         &NewTabHandler::Open, base::Unretained(this), "toggle-bookmarks"));
     web_ui()->RegisterMessageCallback("dismissTip", base::BindRepeating(
         &NewTabHandler::DismissTip, base::Unretained(this)));
+    web_ui()->RegisterMessageCallback("artwork", base::BindRepeating(
+        &NewTabHandler::Artwork, base::Unretained(this)));
   }
   void OnVisibilityChanged(content::Visibility) override { Refresh(); }
-  void DidStartNavigation(content::NavigationHandle* navigation) override {
-    if (!navigation->IsInPrimaryMainFrame() || navigation->IsSameDocument() ||
-        IsFlyNewTabPage(navigation->GetURL()))
-      return;
-    web_contents()->SetPageBaseBackgroundColor(std::nullopt);
-    loading_navigation_ = navigation->GetNavigationId();
-    SetLoading(true);
-  }
-  void DidFinishNavigation(content::NavigationHandle* navigation) override {
-    if (navigation->GetNavigationId() != loading_navigation_)
-      return;
-    loading_navigation_ = 0;
-    // A committed page replaces this document; never call into its renderer.
-    if (navigation->HasCommitted())
-      loading_ = false;
-    else
-      SetLoading(false);
-  }
-  void DidStopLoading() override {
-    loading_navigation_ = 0;
-    SetLoading(false);
-  }
 
  private:
   bool OffTheRecord() { return Profile::FromWebUI(web_ui())->IsOffTheRecord(); }
@@ -332,17 +346,24 @@ class NewTabHandler : public content::WebUIMessageHandler,
       tip_ = args[0].GetString();
     AllowJavascript();
     Refresh();
-    RefreshLoading();
   }
-  void SetLoading(bool loading) {
-    if (loading_ == loading)
+  void Artwork(const base::ListValue& args) {
+    if (args.size() != 5 || !args[4].is_bool())
       return;
-    loading_ = loading;
-    RefreshLoading();
-  }
-  void RefreshLoading() {
+    for (size_t i = 0; i < 4; ++i) {
+      if (!args[i].is_double() && !args[i].is_int())
+        return;
+      if (!std::isfinite(args[i].GetDouble()) ||
+          std::abs(args[i].GetDouble()) > 2)
+        return;
+    }
+    NewTabArtwork::CreateForWebContents(web_contents());
+    NewTabArtwork::FromWebContents(web_contents())->Update(
+        gfx::RectF(args[0].GetDouble(), args[1].GetDouble(),
+                   args[2].GetDouble(), args[3].GetDouble()),
+        args[4].GetBool());
     if (IsJavascriptAllowed())
-      CallJavascriptFunction("updateFlyNewTabLoading", base::Value(loading_));
+      CallJavascriptFunction("useNativeFlyArtwork");
   }
   // Keeps this page's tip until it is learned, dismissed or loses its key;
   // then the next pending one takes its place. A tip dismissed here leaves
@@ -387,8 +408,6 @@ class NewTabHandler : public content::WebUIMessageHandler,
   PrefChangeRegistrar registrar_;
   std::string tip_;
   bool dismissed_ = false;
-  int64_t loading_navigation_ = 0;
-  bool loading_ = false;
 };
 
 class NewTabUI : public content::WebUIController {
@@ -427,6 +446,218 @@ class NewTabConfig : public content::DefaultWebUIConfig<NewTabUI> {
       : DefaultWebUIConfig(content::kChromeUIScheme, kFlyNewTabHost) {}
 };
 }  // namespace
+
+class NewTabArtworkView : public views::View {
+  METADATA_HEADER(NewTabArtworkView, views::View)
+ public:
+  NewTabArtworkView() { SetCanProcessEventsWithinSubtree(false); }
+  void SetPose(int pose) {
+    if (pose_ == pose && dark_ == GetFlyColors().dark)
+      return;
+    pose_ = pose;
+    dark_ = GetFlyColors().dark;
+    SchedulePaint();
+  }
+  void OnPaint(gfx::Canvas* canvas) override {
+    const auto& strip = NewTabResources::Get().Memory(dark_);
+    if (!strip.isNull())
+      canvas->DrawImageInt(strip, pose_ * 280, 0, 280, 280, 0, 0, width(),
+                           height(), true);
+  }
+
+ private:
+  int pose_ = 0;
+  bool dark_ = GetFlyColors().dark;
+};
+BEGIN_METADATA(NewTabArtworkView)
+END_METADATA
+
+WEB_CONTENTS_USER_DATA_KEY_IMPL(NewTabArtwork);
+NewTabArtwork::NewTabArtwork(content::WebContents* contents)
+    : content::WebContentsObserver(contents),
+      content::WebContentsUserData<NewTabArtwork>(*contents) {}
+NewTabArtwork::~NewTabArtwork() {
+  DestroyOverlay();
+}
+
+void NewTabArtwork::Update(const gfx::RectF& bounds, bool reduced_motion) {
+  if (!web_contents() ||
+      !IsFlyNewTabPage(web_contents()->GetLastCommittedURL()))
+    return;
+  active_ = true;
+  relative_bounds_ = bounds;
+  reduced_motion_ = reduced_motion;
+  Sync();
+}
+bool NewTabArtwork::visible_for_testing() const {
+  return overlay_ && overlay_->IsVisible();
+}
+gfx::Rect NewTabArtwork::bounds_for_testing() const {
+  return overlay_ ? overlay_->GetWindowBoundsInScreen() : gfx::Rect();
+}
+void NewTabArtwork::Sync() {
+  auto* parent = web_contents() ? web_contents()->GetNativeView() : nullptr;
+  if (parent != parent_) {
+    DestroyOverlay();
+    parent_ = parent;
+    if (parent_)
+      parent_->AddObserver(this);
+  }
+  const bool visible =
+      active_ && !relative_bounds_.IsEmpty() && parent && parent->IsVisible() &&
+      web_contents()->GetVisibility() == content::Visibility::VISIBLE;
+  if (!visible) {
+    timer_.Stop();
+    SetPose(0);
+    // Keep observing the container: it can become visible after the tab's
+    // visibility notification (for example when restoring a minimized window).
+    artwork_ = nullptr;
+    overlay_.reset();
+    return;
+  }
+  if (!overlay_) {
+    overlay_ = std::make_unique<views::Widget>();
+    views::Widget::InitParams params(
+        views::Widget::InitParams::CLIENT_OWNS_WIDGET,
+        views::Widget::InitParams::TYPE_CONTROL);
+    params.parent = parent;
+    params.child = true;
+    params.activatable = views::Widget::InitParams::Activatable::kNo;
+    params.accept_events = false;
+    params.opacity = views::Widget::InitParams::WindowOpacity::kTranslucent;
+    params.native_widget = new views::NativeWidgetAura(overlay_.get());
+    params.name = "FlyNewTabArtwork";
+    overlay_->Init(std::move(params));
+    artwork_ = overlay_->SetContentsView(std::make_unique<NewTabArtworkView>());
+  }
+  const auto size = parent_->bounds().size();
+  overlay_->SetBounds(gfx::ToRoundedRect(gfx::RectF(
+      relative_bounds_.x() * size.width(), relative_bounds_.y() * size.height(),
+      relative_bounds_.width() * size.width(),
+      relative_bounds_.height() * size.height())));
+  artwork_->SetPose(pose_);
+  overlay_->ShowInactive();
+  parent_->StackChildAtTop(overlay_->GetNativeWindow());
+  if (!loading_ || reduced_motion_ || gfx::Animation::PrefersReducedMotion()) {
+    timer_.Stop();
+    SetPose(0);
+  } else if (!timer_.IsRunning()) {
+    started_ = base::TimeTicks::Now() + base::Milliseconds(160);
+    timer_.Start(FROM_HERE, base::Milliseconds(160), this,
+                 &NewTabArtwork::Tick);
+  }
+}
+void NewTabArtwork::SetPose(int pose) {
+  pose_ = pose;
+  if (artwork_)
+    artwork_->SetPose(pose);
+}
+void NewTabArtwork::Tick() {
+  ++ticks_;
+  if (!active_ || !loading_ || !overlay_ || reduced_motion_ ||
+      gfx::Animation::PrefersReducedMotion()) {
+    timer_.Stop();
+    SetPose(0);
+    return;
+  }
+  // Use elapsed time, not chained durations: a busy machine skips a missed
+  // boundary instead of accumulating drift or replaying a burst of callbacks.
+  constexpr std::array poses = {1, 2, 1, 2, 0};
+  const int64_t position =
+      (base::TimeTicks::Now() - started_).InMicroseconds() % 2400000;
+  const int phase = std::min<int64_t>(position / 150000, 4);
+  SetPose(poses[phase]);
+  const int64_t next = phase < 4 ? (phase + 1) * 150000 : 2400000;
+  timer_.Start(FROM_HERE, base::Microseconds(next - position), this,
+               &NewTabArtwork::Tick);
+}
+void NewTabArtwork::Clear() {
+  active_ = false;
+  loading_ = committed_ = false;
+  navigation_ = 0;
+  timer_.Stop();
+  SetPose(0);
+  DestroyOverlay();
+}
+void NewTabArtwork::DestroyOverlay() {
+  if (parent_)
+    parent_->RemoveObserver(this);
+  parent_ = nullptr;
+  artwork_ = nullptr;
+  overlay_.reset();
+}
+void NewTabArtwork::DidStartNavigation(content::NavigationHandle* navigation) {
+  if (!active_ || !navigation->IsInPrimaryMainFrame() ||
+      navigation->IsSameDocument())
+    return;
+  if (IsFlyNewTabPage(navigation->GetURL())) {
+    Clear();
+    return;
+  }
+  web_contents()->SetPageBaseBackgroundColor(std::nullopt);
+  navigation_ = navigation->GetNavigationId();
+  loading_ = true;
+  Sync();
+}
+void NewTabArtwork::DidFinishNavigation(content::NavigationHandle* navigation) {
+  if (!navigation_ || navigation->GetNavigationId() != navigation_)
+    return;
+  if (navigation->HasCommitted()) {
+    committed_ = true;
+    // The old WebUI is gone, but its surface can still be on screen.
+    Sync();
+  } else {
+    navigation_ = 0;
+    loading_ = false;
+    if (committed_)
+      Clear();
+    else
+      Sync();
+  }
+}
+void NewTabArtwork::DidStopLoading() {
+  navigation_ = 0;
+  loading_ = false;
+  if (committed_)
+    Clear();
+  else
+    Sync();
+}
+void NewTabArtwork::DidFirstVisuallyNonEmptyPaint() {
+  if (committed_)
+    Clear();
+}
+void NewTabArtwork::OnFirstContentfulPaintInPrimaryMainFrame(base::TimeTicks) {
+  if (committed_)
+    Clear();
+}
+void NewTabArtwork::OnVisibilityChanged(content::Visibility) {
+  Sync();
+}
+void NewTabArtwork::PrimaryMainFrameRenderProcessGone(base::TerminationStatus) {
+  Clear();
+}
+void NewTabArtwork::WebContentsDestroyed() {
+  Clear();
+}
+void NewTabArtwork::OnWindowBoundsChanged(aura::Window* window,
+                                          const gfx::Rect&,
+                                          const gfx::Rect&,
+                                          ui::PropertyChangeReason) {
+  if (window == parent_)
+    Sync();
+}
+void NewTabArtwork::OnWindowVisibilityChanged(aura::Window* window, bool) {
+  if (parent_ && window->Contains(parent_))
+    Sync();
+}
+void NewTabArtwork::OnWindowAdded(aura::Window* window) {
+  if (overlay_ && window != overlay_->GetNativeWindow())
+    parent_->StackChildAtTop(overlay_->GetNativeWindow());
+}
+void NewTabArtwork::OnWindowDestroying(aura::Window*) {
+  Clear();
+}
 
 NewTabHistory::NewTabHistory(ProfileManager& manager,
                              WorkspaceService& workspaces,

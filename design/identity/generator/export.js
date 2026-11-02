@@ -115,7 +115,7 @@ async function main() {
     if (!newTabOnly) jobs.push({ name: `engraving-${theme}@2x.png`, size: 512, svg: files[`fly-engraving-${theme}.svg`] });
     // One decoded 2x strip: rest, front legs together, front legs rubbing.
     jobs.push({ name: `memory-${theme}@2x.png`, size: 560,
-      frames: [0, 50, 58].map(angle => memorySvg(theme, angle)) });
+      frames: [0, 40, 64].map(angle => memorySvg(theme, angle)) });
   }
   await rasterise(jobs);
 }

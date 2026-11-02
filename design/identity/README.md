@@ -104,10 +104,21 @@ Fly targets old machines without a dedicated GPU. Use the PNG renders in the
 interface; do not run the SVG filters (deboss, sticker, blur) at runtime.
 
 New-tab loading uses discrete crops of one decoded PNG, with four 150 ms
-movements and 1800 ms at rest. It starts only after a 160 ms pending-navigation
-delay, stops when the tab is hidden or navigation ends, and stays still with
-reduced motion. There is no animation loop or timer while idle. The new-tab
-rotation is computed as `atan2(9, 16)`; only its displayed angle is rounded.
+movements and 1800 ms at rest. The front-leg poses differ by 24 degrees so the
+rub remains readable at the actual display size. A small transparent native
+view paints the artwork from the start: Chromium can retain the outgoing
+new-tab surface after destroying its document, so renderer timers cannot keep
+that surface moving. The artwork belongs to the tab until the destination's
+first content paint, then disappears even if that page is still loading.
+
+PNG strips are decoded once off the UI thread and shared between tabs. A single
+native one-shot timer runs only during a visible outgoing navigation: five
+pose boundaries per 2.4-second cycle, with no frame loop, layout work, runtime
+filters or idle timer. Elapsed time determines the pose and next boundary, so
+busy machines skip missed boundaries without accumulating timing drift.
+Movement starts after 160 ms, stops when hidden or cancelled, and stays still
+with reduced motion. The new-tab rotation is computed as `atan2(9, 16)`; only
+its displayed angle is rounded.
 
 ## Regenerating the assets
 
