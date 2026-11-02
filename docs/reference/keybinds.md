@@ -8,9 +8,9 @@ Select a cell with the arrow keys or the pointer. **Enter**, **Space**, a double
 
 ## Modes and text input
 
-Fly has a small custom Vim-style controller, not the Vimium extension. Browser shortcuts work in text fields as well as elsewhere. Page keys only run in NORMAL mode, outside editable fields, explicit INSERT mode and link hints. Open shadow roots and composed input events are checked before consuming page keys. Custom element names do not imply editing; actual inputs, contenteditable regions and textbox/searchbox/combobox roles protect text entry. IME composition, dead keys and AltGr are left alone.
+Fly uses a native Vim-style controller with continuous scrolling inspired by Vimium. Browser shortcuts work in text fields as well as elsewhere. Page keys only run in NORMAL mode, outside editable fields, explicit INSERT mode and link hints. Open shadow roots and composed input events are checked before consuming page keys. Custom element names do not imply editing; actual inputs, contenteditable regions and textbox/searchbox/combobox roles protect text entry. IME composition, dead keys and AltGr are left alone.
 
-- **NORMAL:** page keys are available. Defaults include hjkl scrolling, d/u for half-page scrolling, gg for the top, and Shift+G for the bottom.
+- **NORMAL:** page keys are available. Tap hjkl for a 60 CSS pixel step or hold for continuous scrolling. d/u jump half the current scroll container per press; gg and Shift+G move to its vertical ends.
 - **INSERT:** focus a text field or use the configured insert action. Escape leaves insert mode.
 - **PASSTHROUGH:** all page keys and browser shortcuts go to the page except the configured passthrough toggle. Keep at least one browser binding for this toggle so you can return. The default is Shift+Escape.
 - **Hints:** the custom hint overlay consumes its label alphabet, Backspace and Escape. Browser shortcuts retain precedence. Disabled and inert controls are excluded. Hint letters are temporary labels, not action bindings.

@@ -9,11 +9,13 @@ Fly Browser is built around a keyboard-driven workflow, enabling efficient navig
 Link Hints allow you to click any link, button, or input field on a web page using short letter combinations:
 
 1. Press **f** in NORMAL mode to trigger the hint labels.
-2. Fly injects letter labels over visible interactive elements on the page, using an ergonomic left-hand home-cluster layout: `q, w, e, a, s, d, z, x, c, r, f, v`.
-3. Type the label corresponding to your target element (its length depends on the number of targets):
+2. Fly draws compact native letter labels over visible interactive elements on the page, using an ergonomic left-hand home-cluster layout: `q, w, e, a, s, d, z, x, c, r, f, v`.
+3. Type the label corresponding to your target element (Fly keeps as many one-letter labels as possible):
    - Links navigate immediately.
    - Text inputs and search bars automatically receive focus for immediate typing.
 4. Press **Escape** or the browser hint shortcut (**Alt + F** by default) to dismiss hints without clicking. Within hints, **f** can be part of a target label.
+
+Hints follow their targets when the page layout changes, instead of disappearing. While the initial accessibility tree arrives, Fly can add targets; once you start typing a label, that selection stays fixed. Backspace removes a typed letter. Labels for targets removed from the page or moved off screen are hidden.
 
 ---
 
@@ -146,16 +148,18 @@ Fly Browser provides a Vim-inspired modal navigation engine that frees you from 
 2. **INSERT Mode**: Automatically entered whenever you click or focus a text input, search box, or content-editable field (or press `i` explicitly). Keystrokes pass directly into the field. Pressing **Escape** blurs the field and immediately returns to **NORMAL** mode.
 3. **PASSTHROUGH Mode**: Designed for rich web applications like Google Docs, sheets, design suites, and cloud terminals. In passthrough mode, all keystrokes pass directly to the guest web application without browser interception. Toggle passthrough mode at any time using **Shift + Escape** or by clicking the mode badge in the status bar.
 
+Holding **j/k/h/l** starts moving without waiting for the keyboard repeat delay. Releasing the key stops the continuous movement; a short tap completes one step. Scrolling follows the container under your last page click or activated hint, with a fallback to the middle of the focused frame. This also works inside cross-origin frames. **d/u** make one half-container jump per press; **gg/G** move vertically to its ends.
+
 ### NORMAL Mode Keymap
 
 | Key | Action | Description |
 | :--- | :--- | :--- |
-| `j` | Scroll Down | Smooth scroll down by 80px |
-| `k` | Scroll Up | Smooth scroll up by 80px |
-| `d` | Half Page Down | Scrolls down by half the viewport height |
-| `u` | Half Page Up | Smooth scroll up by half the viewport height |
-| `h` | Scroll Left | Smooth scroll left by 80px |
-| `l` | Scroll Right | Smooth scroll right by 80px |
+| `j` | Scroll Down | Tap for 60 CSS pixels; hold for continuous scrolling |
+| `k` | Scroll Up | Tap for 60 CSS pixels; hold for continuous scrolling |
+| `d` | Half Page Down | One animated jump of half the scroll container height |
+| `u` | Half Page Up | One animated jump of half the scroll container height |
+| `h` | Scroll Left | Tap for 60 CSS pixels; hold for continuous scrolling |
+| `l` | Scroll Right | Tap for 60 CSS pixels; hold for continuous scrolling |
 | `gg` | Jump to Top | Smooth scroll to top of page |
 | `G` | Jump to Bottom | Smooth scroll to bottom of page |
 | `t` | New Tab | Opens a new tab with default search engine |
@@ -166,7 +170,7 @@ Fly Browser provides a Vim-inspired modal navigation engine that frees you from 
 | `H` | History Back | Navigates back in page history |
 | `L` | History Forward | Navigates forward in page history |
 | `/` | Find in Page | Opens the in-page search bar |
-| `f` | Link Hints | Injects hint labels over visible interactive elements |
+| `f` | Link Hints | Shows native hint labels over visible interactive elements |
 | `e` | Reader View | Toggles native distraction-free reader view |
 | `w` | Dashboard | Opens the Workspace Dashboard tree |
 | `s` | Focus Sidebar | Moves focus to vertical sidebar tab list |

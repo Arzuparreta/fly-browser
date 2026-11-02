@@ -4,7 +4,6 @@
 0003-native-tab-sidebar.patch
 0004-native-tab-identity.patch
 0005-native-hints-and-window-lifetime.patch
-0006-native-focused-page-scroll.patch
 0007-native-command-palette.patch
 0009-native-session-startup.patch
 0010-native-private-product-defaults.patch
@@ -40,3 +39,4 @@
 0043-native-startup-maintenance.patch
 0044-native-spellcheck-languages.patch
 0045-native-application-icons.patch
+0046-native-page-scroller.patch

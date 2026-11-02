@@ -37,6 +37,8 @@ source_set("commands") {
     "commands/keyboard_router.h",
     "commands/palette_catalog.cc",
     "commands/palette_catalog.h",
+    "commands/scroll_motion.cc",
+    "commands/scroll_motion.h",
   ]
   public_deps = [
     "//base",
@@ -115,6 +117,7 @@ test("fly_unittests") {
     "commands/hint_codes_unittest.cc",
     "commands/keyboard_config_unittest.cc",
     "commands/palette_catalog_unittest.cc",
+    "commands/scroll_motion_unittest.cc",
     "preferences/new_tab_tips_unittest.cc",
     "preferences/preferences_service_unittest.cc",
     "preferences/search_service_unittest.cc",
@@ -235,6 +238,7 @@ group("user_content_resources") {
   deps = [
     ":icons",
     ":identity_resources",
+    ":navigation_licenses",
     ":new_tab_fonts",
     ":new_tab_identity",
     ":new_tab_page",
@@ -242,6 +246,12 @@ group("user_content_resources") {
     ":user_content_worker",
     ":whats_new_page",
   ]
+}
+
+# Attribution for the Vimium algorithms adapted by native navigation.
+copy("navigation_licenses") {
+  sources = [ "resources/licenses/vimium-MIT.txt" ]
+  outputs = [ "$root_out_dir/fly_resources/licenses/{{source_file_part}}" ]
 }
 
 # Reader view: Mozilla Readability with Fly's reading layout.
