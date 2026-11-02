@@ -64,6 +64,9 @@ class SidebarPanel : public views::View {
   void SetArtwork(gfx::ImageSkia engraving_dark,
                   gfx::ImageSkia engraving_light,
                   gfx::ImageSkia paper_grain);
+  // The engraved fly is hidden while the page shows the new-tab fly.
+  void SetEngravingShown(bool shown);
+  bool engraving_shown_for_testing() const;
   // Parts shown only in one state fade with the edge. They get their own
   // layers; the panel's own decoration (the engraving) is registered here
   // too.

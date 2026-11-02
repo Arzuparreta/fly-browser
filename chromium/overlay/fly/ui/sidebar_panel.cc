@@ -64,9 +64,9 @@ void FadeTo(views::View* view,
 }
 }  // namespace
 
-// The engraving, 230px wide and centred, ends 81px above the panel's bottom
-// edge: the same clearance it had above the clock badge. Resizing never
-// recentres it.
+// The engraving, 168px wide (60% of the new-tab fly) and centred, ends 81px
+// above the panel's bottom edge: the same clearance it had above the clock
+// badge. Resizing never recentres it.
 class SidebarPanel::Engraving : public views::View {
   METADATA_HEADER(Engraving, views::View)
 
@@ -81,7 +81,7 @@ class SidebarPanel::Engraving : public views::View {
     const auto& image = GetFlyColors().dark ? dark_ : light_;
     if (image.isNull())
       return;
-    const int size = FlyScaled(230);
+    const int size = FlyScaled(168);
     canvas->DrawImageInt(image, 0, 0, image.width(), image.height(),
                          (width() - size) / 2,
                          height() - FlyScaled(81) - size, size, size, true);
@@ -110,6 +110,12 @@ void SidebarPanel::SetArtwork(gfx::ImageSkia engraving_dark,
   engraving_->SetImages(std::move(engraving_dark), std::move(engraving_light));
   paper_grain_ = std::move(paper_grain);
   SchedulePaint();
+}
+void SidebarPanel::SetEngravingShown(bool shown) {
+  engraving_->SetVisible(shown);
+}
+bool SidebarPanel::engraving_shown_for_testing() const {
+  return engraving_->GetVisible();
 }
 void SidebarPanel::AddExpandedOnly(views::View* view, bool interactive) {
   if (!view)
@@ -217,7 +223,9 @@ void SidebarPanel::Layout(PassKey) {
 }
 
 void SidebarPanel::ChildVisibilityChanged(views::View* child) {
-  InvalidateLayout();
+  // The engraving's bounds never depend on its visibility.
+  if (child != engraving_)
+    InvalidateLayout();
 }
 
 void SidebarPanel::OnPaintBackground(gfx::Canvas* canvas) {

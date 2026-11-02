@@ -39,6 +39,8 @@
 #include "components/prefs/pref_change_registrar.h"
 #include "content/public/browser/browser_child_process_host_iterator.h"
 #include "content/public/browser/child_process_data.h"
+#include "content/public/browser/navigation_controller.h"
+#include "content/public/browser/navigation_entry.h"
 #include "content/public/browser/navigation_handle.h"
 #include "content/public/browser/render_process_host.h"
 #include "content/public/browser/web_contents.h"
@@ -415,6 +417,9 @@ class NewTabUI : public content::WebUIController {
   explicit NewTabUI(content::WebUI* web_ui) : content::WebUIController(web_ui) {
     web_ui->GetWebContents()->SetPageBaseBackgroundColor(
         GetFlyColors().bg_main);
+    // Observes from the start, so a navigation away that begins before the
+    // page reports its artwork is still followed.
+    NewTabArtwork::CreateForWebContents(web_ui->GetWebContents());
     auto* source = content::WebUIDataSource::CreateAndAdd(
         Profile::FromWebUI(web_ui), kFlyNewTabHost);
     source->SetRequestFilter(
@@ -572,12 +577,17 @@ void NewTabArtwork::Tick() {
                &NewTabArtwork::Tick);
 }
 void NewTabArtwork::Clear() {
-  active_ = false;
+  const bool was_active = std::exchange(active_, false);
   loading_ = committed_ = false;
   navigation_ = 0;
   timer_.Stop();
   SetPose(0);
   DestroyOverlay();
+  // The fly left: the sidebar shows its own again, unless this tab is still
+  // on the new tab page.
+  if (was_active)
+    if (auto* window = FlyWindowController::FromContents(web_contents()))
+      window->UpdateSidebarFly();
 }
 void NewTabArtwork::DestroyOverlay() {
   if (parent_)
@@ -587,8 +597,10 @@ void NewTabArtwork::DestroyOverlay() {
   overlay_.reset();
 }
 void NewTabArtwork::DidStartNavigation(content::NavigationHandle* navigation) {
-  if (!active_ || !navigation->IsInPrimaryMainFrame() ||
-      navigation->IsSameDocument())
+  // The page may report its artwork after a navigation away has started, so
+  // navigations from the new tab page are tracked before that report too.
+  if (!(active_ || IsFlyNewTabPage(web_contents()->GetLastCommittedURL())) ||
+      !navigation->IsInPrimaryMainFrame() || navigation->IsSameDocument())
     return;
   if (IsFlyNewTabPage(navigation->GetURL())) {
     Clear();
@@ -719,6 +731,21 @@ bool IsFlyNewTabPage(const GURL& url) {
   return url.is_empty() || url.IsAboutBlank() ||
          (url.SchemeIs(content::kChromeUIScheme) &&
           (url.host() == kFlyNewTabHost || url.host() == "newtab"));
+}
+
+bool ShowsNewTabFly(content::WebContents* contents) {
+  if (!contents)
+    return false;
+  // A tab that has not committed yet is judged by the page it is opening,
+  // so new tabs do not flash the sidebar fly. Blank pages show no fly.
+  GURL url = contents->GetLastCommittedURL();
+  if (const auto* pending = contents->GetController().GetPendingEntry();
+      url.is_empty() && pending)
+    url = pending->GetURL();
+  if (!url.is_empty() && !url.IsAboutBlank() && IsFlyNewTabPage(url))
+    return true;
+  const auto* artwork = NewTabArtwork::FromWebContents(contents);
+  return artwork && artwork->active();
 }
 
 bool RewriteNewTabURL(GURL* url, content::BrowserContext*) {

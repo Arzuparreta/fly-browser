@@ -141,6 +141,7 @@
 #include "components/performance_manager/public/graph/page_node.h"
 #include "components/performance_manager/public/performance_manager.h"
 #include "components/prefs/pref_service.h"
+#include "components/tabs/public/split_tab_data.h"
 #include "components/tabs/public/tab_interface.h"
 #include "content/public/browser/browser_accessibility_state.h"
 #include "content/public/browser/devtools_agent_host.h"
@@ -2331,6 +2332,57 @@ IN_PROC_BROWSER_TEST_F(FlyNavigationFeedbackBrowserTest,
   EXPECT_EQ(false, content::EvalJs(contents, "!!document.getElementById('memory-fly')"));
   EXPECT_FALSE(NewTabArtwork::FromWebContents(contents)->visible_for_testing());
   EXPECT_FALSE(NewTabArtwork::FromWebContents(contents)->timer_running_for_testing());
+}
+
+// The sidebar's engraved fly gives way to the new-tab fly, including while
+// that fly stays on screen for its pending navigation and while it shows in
+// the other pane of a split view.
+IN_PROC_BROWSER_TEST_F(FlyNavigationFeedbackBrowserTest,
+                       SidebarFlyHidesWhileTheNewTabFlyShows) {
+  auto* panel = Window().sidebar_root_for_testing()->panel();
+  const auto shown = [&](bool expected) {
+    return base::test::RunUntil(
+        [&] { return panel->engraving_shown_for_testing() == expected; });
+  };
+  ASSERT_TRUE(shown(true));
+  ASSERT_TRUE(ui_test_utils::NavigateToURL(browser(), GURL(kFlyNewTabURL)));
+  auto* contents = Active(browser());
+  ASSERT_TRUE(shown(false));
+  ASSERT_TRUE(base::test::RunUntil([&] {
+    auto* artwork = NewTabArtwork::FromWebContents(contents);
+    return artwork && artwork->visible_for_testing();
+  }));
+  Start(server_.GetURL("/waiting"));
+  waiting_->WaitForRequest();
+  EXPECT_FALSE(panel->engraving_shown_for_testing());
+  SendPage(*waiting_);
+  waiting_->Done();
+  ASSERT_TRUE(content::WaitForLoadStop(contents));
+  ASSERT_TRUE(shown(true));
+  EXPECT_FALSE(NewTabArtwork::FromWebContents(contents)->active());
+
+  ASSERT_TRUE(ExecuteNativeCommand(browser(), "spawn-tab"));
+  ASSERT_TRUE(content::WaitForLoadStop(Active(browser())));
+  ASSERT_TRUE(shown(false));
+  auto* model = browser()->GetTabStripModel();
+  model->ActivateTabAt(model->GetIndexOfWebContents(contents));
+  ASSERT_TRUE(shown(true));
+
+  // A split view of the page and a new tab shows the new-tab fly whichever
+  // pane has focus.
+  ASSERT_TRUE(ExecuteNativeCommand(browser(), "toggle-split"));
+  const auto split = model->GetSplitForTab(model->active_index());
+  ASSERT_TRUE(split);
+  bool has_new_tab = false;
+  for (auto* tab : model->GetSplitData(*split)->ListTabs())
+    has_new_tab = has_new_tab ||
+                  IsFlyNewTabPage(tab->GetContents()->GetLastCommittedURL());
+  ASSERT_TRUE(has_new_tab);
+  ASSERT_TRUE(shown(false));
+  ASSERT_TRUE(ExecuteNativeCommand(browser(), "switch-split-focus"));
+  ASSERT_TRUE(shown(false));
+  ASSERT_TRUE(ExecuteNativeCommand(browser(), "switch-split-focus"));
+  ASSERT_TRUE(shown(false));
 }
 
 IN_PROC_BROWSER_TEST_F(FlyNavigationFeedbackBrowserTest,

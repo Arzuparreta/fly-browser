@@ -45,6 +45,7 @@
 #include "chrome/browser/ui/tabs/tab_strip_model.h"
 #include "components/input/native_web_keyboard_event.h"
 #include "components/omnibox/browser/vector_icons.h"
+#include "components/tabs/public/split_tab_data.h"
 #include "components/tabs/public/tab_interface.h"
 #include "components/vector_icons/vector_icons.h"
 #include "content/public/browser/devtools_agent_host.h"
@@ -407,6 +408,7 @@ FlyWindowController::FlyWindowController(BrowserWindowInterface* browser,
   ScheduleExtensionRefresh();
   UpdateModeLabel();
   UpdateSplitButton();
+  UpdateSidebarFly();
 }
 
 FlyWindowController::~FlyWindowController() {
@@ -545,8 +547,15 @@ void FlyWindowController::BuildSidebar() {
           base::IgnoreResult(&FlyWindowController::CreateTab),
           weak_factory_.GetWeakPtr())));
   parts.tabs = tab_sidebar_;
+  // Runs after tab, selection, split and navigation changes.
   tab_sidebar_->SetStateChangedCallback(base::BindRepeating(
-      &FlyWindowController::UpdateSplitButton, weak_factory_.GetWeakPtr()));
+      [](base::WeakPtr<FlyWindowController> window) {
+        if (!window)
+          return;
+        window->UpdateSplitButton();
+        window->UpdateSidebarFly();
+      },
+      weak_factory_.GetWeakPtr()));
   // The bottom row: pin, split, reader, search, extensions and settings.
   sidebar_pin_button_ = sidebar->AddChildView(MakeFlyIconButton(
       base::BindRepeating(&FlyWindowController::ToggleSidebarAutoCollapse,
@@ -1811,6 +1820,21 @@ void FlyWindowController::UpdateClock() {
 
 void FlyWindowController::CycleClockFormat() {
   FlyApp::Get().preferences().CycleClockFormat();
+}
+
+void FlyWindowController::UpdateSidebarFly() {
+  if (Closing() || !sidebar_panel_)
+    return;
+  auto* model = browser_->GetTabStripModel();
+  bool shows = ShowsNewTabFly(model->GetActiveWebContents());
+  // Both panes of a split view are on screen.
+  if (const int active = model->active_index(); !shows && active >= 0) {
+    if (const auto split = model->GetSplitForTab(active)) {
+      for (auto* tab : model->GetSplitData(*split)->ListTabs())
+        shows = shows || ShowsNewTabFly(tab->GetContents());
+    }
+  }
+  sidebar_panel_->SetEngravingShown(!shows);
 }
 
 void FlyWindowController::UpdateSplitButton() {
