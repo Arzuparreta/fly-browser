@@ -43,11 +43,11 @@ std::optional<PageScroll> PageScrollForAction(std::string_view action);
 
 // Scrolls pages the way Vimium does (see ScrollMotion): a key press moves at
 // once at a steady speed, holding the key keeps moving, and releasing it stops
-// after at least one step. Half pages (d, u) and the ends (gg, G) are one
-// jump per press, which the page's compositor animates over the size of the
-// scroller it reaches. The keyboard's auto-repeat only confirms that the
-// key is still down, so there is no pause before a held key starts moving and
-// no burst of restarted animations afterwards.
+// after at least one step. Half pages (d, u) are one animated jump per press
+// over the size of the scroller reached; gg/G go directly to its ends. The
+// keyboard's auto-repeat only confirms that the key is still down, so there is
+// no pause before a held key starts moving and no burst of restarted animations
+// afterwards.
 //
 // The motion is a synthetic autoscroll gesture sent to the page's compositor
 // on every frame of the browser window. Eligible scrollers move on the
@@ -137,7 +137,7 @@ class PageScroller : public ui::CompositorAnimationObserver,
   bool anchored_ = false;
   bool first_ack_pending_ = false;
   std::optional<gfx::Vector2dF> anchor_probe_;
-  // An animated jump: pages for d/u, a document delta for gg/G.
+  // A jump: pages for d/u, precise endpoint delta for gg/G.
   float jump_ = 0;
 
   std::optional<ScrollMotion> motion_;

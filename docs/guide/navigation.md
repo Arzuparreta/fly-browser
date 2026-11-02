@@ -160,8 +160,8 @@ Holding **j/k/h/l** starts moving without waiting for the keyboard repeat delay.
 | `u` | Half Page Up | One animated jump of half the scroll container height |
 | `h` | Scroll Left | Tap for 60 CSS pixels; hold for continuous scrolling |
 | `l` | Scroll Right | Tap for 60 CSS pixels; hold for continuous scrolling |
-| `gg` | Jump to Top | Smooth scroll to top of page |
-| `G` | Jump to Bottom | Smooth scroll to bottom of page |
+| `gg` | Jump to Top | Jump directly to the scroll container's top |
+| `G` | Jump to Bottom | Jump directly to the scroll container's bottom |
 | `t` | New Tab | Opens a new tab with default search engine |
 | `x` | Close Tab | Closes the current active tab |
 | `o` | Address Bar | Opens floating address overlay for navigation |

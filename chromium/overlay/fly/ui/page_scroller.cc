@@ -6,6 +6,7 @@
 #include <algorithm>
 #include <utility>
 
+#include "base/logging.h"
 #include "base/memory/weak_ptr.h"
 #include "content/public/browser/host_zoom_map.h"
 #include "content/public/browser/page.h"
@@ -34,8 +35,9 @@ constexpr base::TimeDelta kMaxFrame = base::Milliseconds(50);
 // the scroller it latches to and animates. It scales pages by 0.875
 // (kMinFractionToStepWhenPaging), so this is exactly half of the scroller.
 constexpr float kHalfPage = 0.5f / 0.875f;
-// A document-sized delta, clamped to the target scroll node's bounds.
-// Document granularity avoids per-page step limits in nested scrollers.
+// A precise endpoint delta, clamped to the target scroll node's bounds.
+// Endpoints are immediate: Chromium limits animated nested-scroll deltas to
+// one container after normalizing their granularity to pixels.
 constexpr float kDocumentEnd = 1e9f;
 
 // d, u, gg and G jump; the other scrolls move while their key is down.
@@ -138,6 +140,8 @@ void PageScroller::Press(content::WebContents* contents,
                          PageScroll scroll,
                          uint32_t key,
                          bool repeat) {
+  VLOG(1) << "Page scroll press type=" << static_cast<int>(scroll)
+          << " repeat=" << repeat;
   // A jump happens once per press.
   if (repeat && JumpAmount(scroll))
     return;
@@ -176,8 +180,9 @@ void PageScroller::Start(content::WebContents* contents,
     jump_ = *amount;
     if (Begin(contents, true))
       SendUpdate(gfx::ScaleVector2d(direction_, jump_), true);
-    // The compositor animates the jump; the gesture can end now. A jump from
-    // a clicked point that scrolls nothing is retried from the middle.
+    // Half-page animation continues after the gesture ends; endpoints have
+    // already been applied. A clicked point that scrolls nothing is retried
+    // from the middle.
     if (!first_ack_pending_)
       End();
     return;
@@ -257,16 +262,18 @@ void PageScroller::SendUpdate(const gfx::Vector2dF& delta, bool animated_jump) {
     anchor_probe_ = delta;
   auto event = blink::SyntheticWebGestureEventBuilder::BuildScrollUpdate(
       -delta.x(), -delta.y(), 0, kDevice);
-  // Jumps animate in the compositor. Document ends must not be interpreted
-  // as page steps: nested scrollers can limit those to a single page.
+  // Half pages animate. Endpoints use precise pixels so the compositor does
+  // not clamp a long nested-scroll animation to a single container's size.
   event.data.scroll_update.delta_units =
-      ui::ScrollGranularity::kScrollByPrecisePixel;
-  if (animated_jump) {
-    event.data.scroll_update.delta_units =
-        scroll_ == PageScroll::kTop || scroll_ == PageScroll::kBottom
-            ? ui::ScrollGranularity::kScrollByDocument
-            : ui::ScrollGranularity::kScrollByPage;
-  }
+      animated_jump && scroll_ != PageScroll::kTop &&
+              scroll_ != PageScroll::kBottom
+          ? ui::ScrollGranularity::kScrollByPage
+          : ui::ScrollGranularity::kScrollByPrecisePixel;
+  if (animated_jump)
+    VLOG(1) << "Page scroll jump type=" << static_cast<int>(scroll_)
+            << " units="
+            << static_cast<int>(event.data.scroll_update.delta_units)
+            << " delta=" << delta.ToString();
   event.SetPositionInWidget(point_);
   event.SetPositionInScreen(screen_point_);
   widget_->ForwardGestureEvent(event);
