@@ -10,7 +10,26 @@ data=${XDG_DATA_HOME:-$HOME/.local/share}
 target=$data/fly-browser
 say() { printf '%s\n' "$*"; }
 die() { say "fly-install: $*" >&2; exit 1; }
-package_installed() { command -v pacman >/dev/null && pacman -Q fly-browser-bin >/dev/null 2>&1; }
+package_manager() {
+    if command -v dpkg-query >/dev/null && dpkg-query -W -f='${Status}' fly-browser-bin 2>/dev/null | grep -q 'install ok installed'; then echo apt
+    elif command -v rpm >/dev/null && rpm -q fly-browser-bin >/dev/null 2>&1; then
+        if command -v zypper >/dev/null; then echo zypper; else echo dnf; fi
+    elif command -v pacman >/dev/null && pacman -Q fly-browser-bin >/dev/null 2>&1; then echo pacman
+    fi
+}
+package_installed() { [ -n "$(package_manager)" ]; }
+as_root() { if [ "$(id -u)" = 0 ]; then "$@"; else sudo "$@"; fi; }
+# Pinned release key, not a key downloaded beside an untrusted package.
+release_key='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'
+release_key_armored='LS0tLS1CRUdJTiBQR1AgUFVCTElDIEtFWSBCTE9DSy0tLS0tCgptUUlOQkdybnhxTUJFQUM0d0tPUVhaYnU5MG9Nb2pTQ0pMTXpLdWlvaDB4bks0Q25nK2JyUGRQZWordXlCMEtXClAvSHNjb214NXc0UEJaZkZHYStDdDA5c2k0VjNSRCtZS3BQY0VzRjBQNXE3S1VMUnROR2Z5ZmwyMXd6Q0hTSDYKOFQwc3VHWUpodnJVbkowYy9ONzVVZGgyVWFlTWhDK3pXanpiYWJ4LzUxalpUWlBwWmFKWmJiQVZIZzZDaGpxbQpwRnhQdHo4bmtjTnp5bUhVdmwwRkxXcG0zQlpDZ3Z3RFBQeld4ODVqd25VVnYxTDBqK2Z4N2xMRXMvNVZrOGRsCjBwdTFMaEhhRWV6cCtiS3hxMUxwVDNLK0Z4eVVQeW5Ta3hlR01pckg2U0tVYnZJTnpMZmlwZXh2TjZ1eHFGRC8KUWtkZ3VNZGxFMW9EeHgrdFUrc0E3WGs2S21nYmZmeFZtcEkrMU9kc3ROMGxHSzUvanRCUk5yM1orYmVVUnhTdgpyYzdlRTZtMnd5ZlZqTy9vTzBIKy9kNW5iYzBFc3RyMUpTazBaRmJyV3FHTGpEb0FUSy9XUFBreldCVGVuOFRaCmNlZ01QNkFrWHBURDJWWHp1VXRMNGlQYnRnSzJib1F6dW1ReVBSNlVEVjdESEM3N1M5MjFHdmhGVHBXa1NnNlEKS243ODQyR3BNWG1PQk9SU29JdnVrc1Y3L3FPOWRDdkRCemY5cHpETm9na2ZWZGY2RThIVWNEU05JeHoxQ3hCYgpGcm5ueGVFOFVVVWtFWEp3MUQ0cXN2WEpYeWlHZ3UzSERZWnBwOGczM2ZtNncycXJMNnBTQ0loSTNKUWVjSUNlCjhBc0dZcG1KMjdHVHN1ZjEyWW5XZVhsNU5NVCtBMGRidmlsaGxsVHZmQ3Ria0wzclp6Wk9DSldFMndBUkFRQUIKdEJ0R2JIa2dRbkp2ZDNObGNpQlNaV3hsWVhObElGTnBaMjVwYm1lSkFrNEVFd0VLQURnV0lRVHRYRU1Ha1haRApGdm1NR29Zakowc2QrckFhdmdVQ2F1Zkc1UUliQVFVTENRZ0hBZ1lWQ2drSUN3SUVGZ0lEQVFJZUFRSVhnQUFLCkNSQWpKMHNkK3JBYXZza1pFQUNxRUxDOXdGNUtzZHJTdkpDWGR0QldzVjY1dlpieEtVOFNMekV1Z2xCY05YUnYKUzhyT1FjMEo3aGVvMFl0VGR2dkt4Yk9vNUtiaDUzZlJVT0daV3dvdUZ6MGZwR0ZBTkZ1KzY0alZPZjhOcHhCTQoyNVdENjNxOWxlK2ZtZ0ltdW9mTHcvN3VFRjVmNy9JSFd2c3NSTi94NkJScFVHeVB4WVg0STVLMDNtajU5R0pPCkYwUDdvNnMzcmZWcmpCVXhRMUdJaS81MDh4Z01Yalpud2cySm9RTDBPYUtzbmJ3YVlkejJId1MwNW56M2RBeFEKdXVYRVg1b2wrUUMvZThOeWpaM2NMb0pDTHBpWFZxd2ZPcHV3WUFBcGEwKzZQakZ1YmdqSUN0ZjhscU51cTZyMgpMaU4rdFg0dE0rU2Y4VXNHMmI3Z2dGRUYxRmJUSDByU0xDTTM1Mm9rUjUrZ09zczAwSFBiTm42eTJKbHFzMTg1ClB4U2RKMmlhSUphSlM1ZENYcE9zalJkUENQMG9rRStUaEtVbDFuZFJpVnhOazMveCtPRG5mcXpNZ2dUTlg3bVYKek5NUFgwNjZ2bW1xZGNvU1R4SjJRdzVaUnlpU0xabW54TFM1S2lJMXRTdC9pVTBkRmZzZ1Aya3grampnZTNDQQpHK1FhZ0hIOTFicFl0bGNKZ1pnenpGcWZrd2FYTU0xNVdjUVhuODJHcWsvMmYrTC9FRDcvWS83QzNLcWhtQndPCktrNkxlbjNzcklzcXdOQkJtd0JRK21ERXlPa1BaYXNacHhNR2tXSU8wdTgrazBRUnUxSXJJb1FoUlR2QzJnaDMKMEVnUUZ1bzNGbE83SkJHRURLN3AzRVJZc0t0NC9DaTdLNk9XQTkzWXdsUE11QU5tZ2pLNFVoSTZNSVNPSXJRNgpSbXg1SUVKeWIzZHpaWElnVW1Wc1pXRnpaU0JUYVdkdWFXNW5JRHh5Wld4bFlYTmxjMEJtYkhrdFluSnZkM05sCmNpNXBiblpoYkdsa1Bva0NOZ1F3QVFvQUlCWWhCTzFjUXdhUmRrTVcrWXdhaGlNblN4MzZzQnErQlFKcTU4YmwKQWgwZ0FBb0pFQ01uU3gzNnNCcStMT0lRQUxGMVIxajZXc2pCajNCWTVHTXhyQWE2ZDc1WEVYdFdEQm9Dc3JCSQpZMFo4MXl5S3ZpYlkrWmU3ZUw5MVJQRVRvc3BLck5sSGdmVkRtWlYzZWlBdW55S1JxV2R4UDBhS1VibkhmVEJtCnZKWU43S0NxNkZLbGR2amsxWkM1Y1ZVcnhsVXR0Rk56R2xwR2xxZ1RrT2FCM2d3N1piZEx6OFFFbUlzVXY0THUKRjgrMTl4VVRzNnhGNGxpemNXQ2J0czRvN25HbndkbFY1eWp3cTNIN0RaR3hMU3h2MFdPQlBIckdBRHEyOEVpbgozUmN5SUtBMHFqMzhkU1BEcGdJRi9PUlZ0NnVvdG5wQ29UZXkzTGVQN1RqT3pNdWttd2lpRDZ0TFdJZWFmejdNCmp4MEJnVmNLWm1TbFFpbStuWlhRWTMwd3Y2YVBHN3hOc1JMbG5aaGI1TGV0QWRudVVvYmdvTHVTMGFtd0tnMU4KMFJJNldSMzV6T1FWMWQ1SDNrYTh3ZVNlOUVtOXAyVG1JNWZ5ckgvc2xIazlrSU1CTTZCSjllUy9nM2JXOGh6YwpyNmMzems3L2duVkJpTVpOMU9FWmhnQXVTZDVqR2NQdmVjLzJHTU1jT2RLQ2F0d3hDMGp2LzF0R292L25kQkZVCmwrMnBDOExGMUpIaHUzYUlyNi9iQ0RROFlianZwT2U2NTl5dlA4S2h2dDJMb0dVSmlMZ1Jma2ticC9Yb1VFU1IKL0FJYWJKRWsrdjBvN2RSV2dJb1ZwWDFrN2QvL0xUYUx0Vzc3bmdJYTRPVTExcnNKdTNNWGxqYXN2ZzMrY2wvMgpDelk1bzhyVkxpUWZ6WjQwb3NTU0NPTXlJUWxSbDdHYVQ5VHpxckErbzZIS1hKbGt2RXNwRnNKaE1NWGo4TkNvCm9uM29pUUpPQkJNQkNnQTRGaUVFN1Z4REJwRjJReGI1akJxR0l5ZExIZnF3R3I0RkFtcm54cU1DR3dFRkN3a0kKQndJR0ZRb0pDQXNDQkJZQ0F3RUNIZ0VDRjRBQUNna1FJeWRMSGZxd0dyN0Nrdy8rSWxjV1RhUm50UHZJNGFFbgpiRkZQSHpSeW1HcW1NMXkzV3dYTnFUWXkzQXJjMTdLTGpUOWhEZllja1VsREd0N1RKK0FjbGFwMDMrUmVWcmVtCjNXcmsxbmFZWTBNUUZ5YVRWSXgzUlliMGY4WC9WUDQzQ1E4VlQ1UFBrZ0VZdkFqbGFYdEpPWVpnZVFQOXZPcWEKdDdkbTB1ekNybGppUzFUOXE2SVFmbDhoRlZIUU1KalBWa3VTNFo4UGI0TlkrZkdNNkk2L2NHMW1nZU5pSVRFRgo2U1JRT2ZQMTBQcWtrSmNISnNDT09OYkxiQnlkT1Y0YnVwZE1ON2ZWNm9CeGpEYzBGWE9SU0grT3hMeUJ5N0VYCmR2UnhVbXM1eTcyV25wMW11Q0JWSHdOMmYyR2NwMWF2aUVrWFFyRUU2MGlCWnFzSTlLNU9ULzZ5VEpSa0VabGQKTWFOUlpFVEthcWtaNGZHL3ZSVmMvNjllS0YxbzFkQWFRN25DNHM4clBxNFl6RVZoUjh0dzhZNjNFK1M1ZEQyOApjVEExRVBXQ1YyYjdDcWZGRThrak1FRC9UZitLK1ZOa3lLOXZyckJKYW1kZlIwTmNIWDlyYm4zamkzczJEV3JpCnZXSXcwcVV5YUMrWCszVEFNVUhoeGpFRjJQTGJLQUZ0QWNPd24vMlRPblNoZjdqQjJKOFNlTEwyVTE2dkhvMWUKY2tGUzN6S0JMcTVKOEhPN2NHUVFzb1RqWVlIS3FaOHVwdDhVWEkvUlhRQUtac2ZHRzV0MGEzcVMzTTgzOXlILwpGb1E3ZkZ1NmhaUU9xTFhBUm9JQm5nTEVSWldOT0dFVUJWL2IrbG4zQnJKTFdueUEzNXZ6ak9JT2czcm9qR05ZCkxJekpCSjI3ZzdkYm9WQWN3czc5eFBGUkZvSzVBZzBFYXVmRzVRRVFBTDVKZ1VUbWdxRUgralNYMUZKd1d0SkgKZkpnK215UjAzNFRXZWhiMHRVbVV6WkNZRTNsamFFeVVNRzcwRjJkYmpmQVRaUi9reld4ZWoyMlA2OUUyMWU3QgpnUy94bC84cStJdHJHV0hMaXlBYmJ1T1N6MVBlb1RTbzZuWTdiK2JxWDVFR0prOUJxWmZnL3ZIRFl1VTBoY0xWCjh5TE4zZlhFdmltWEJ5L1d5eC9PMU50U2hKM1JvVDdKWVZkR3lJcnRydGF5eWY3QWFMU3R2dGFvQUQ4WXdyRUcKeE9iem5VbXBITjR4amNKbEdIZm5WUFBvS29iOTd5TVhHL1dpNFFjTmZJOVMxU0MvSklEeDZ6YzZFenJTeDZ1WgpSdytYTlRKN3Yxd1ZFTTFVVzY5enZlSTAzSzh4T0RLRDhoclFFbUdHMzRJSlVoa25GejlQYXVNaG9mSmluS2krCkVXVkpIZVQ2RkQ0akFQemdmKzVrMUVWejA0UkFkMzFrME9HaUhhdVUzVlFQT3VXY3lOV1RyUlAvZ1g2QTM0ZVIKVkZmUjF3cVFwQnVJVUFOS042NlVieDJOdERheGt6emtSdCs3ZkFOSVcybmtPZEtmM1d5UWwvMEpSR0RsbkdYUApuMmM2azVyankxYmM1TDNzajFCcFUweUpBOC9hWWZQcjRuRytTd0ZVVnMxTnpaSEFodE1hYmIvNmxRT0k5S2VtCnBJb0xUVW9zNUQwc29MMEdjOXdvOWFuc2NMcjBDdWlHVGcyMm5Ra0MwSWJpblptVzRSVGpPcEtTRTE3SWdkQVIKUlRSMU1INTNXSXNYZkJyejRoaEFqSjA3a0dvUWg3VXpaTjhSYTZrQ3IwWnFSd2kzQkpEdzhCSG13TnhPaCtBWgplS3F6S044SFVsM21Qa0FnSzVqdkFCRUJBQUdKQkhJRUdBRUtBQ1lXSVFUdFhFTUdrWFpERnZtTUdvWWpKMHNkCityQWF2Z1VDYXVmRzVRSWJBZ1VKQThKbkFBSkFDUkFqSjBzZCtyQWF2c0YwSUFRWkFRb0FIUlloQkxOUkNxMVcKdUkxd05CR2w2b0JxeE1GcUNCQnJCUUpxNThibEFBb0pFSUJxeE1GcUNCQnJ0MlVRQUxiaW04WTBKM2JzYWZ2TQpxREZCN1d2L0p2SHBHdTZpaUZONzR6TVRXZk4zQ2kvc2hpbjNJZ2N2ZWdFbXoydTl4bCt4TVJxeWgyT2hNQTVGCnNjbWtpVm5iZllNLzVFazYzSExTTmtyaXEvQWRsaDBJSWxOYkhCR3JHMzFPbVJTUmNrd2ltc0UxLzFwbC91Q2MKbU0rdnR1OVppL0xWZ29ReTl6RzN5eVQzYkErcVN3ZGJxUFN2MlA1RHdOandwM3pkUHpBWmk3cHRiVTIzYWYxUwp5K05rUFdRTnlqQ0d6UERtb3BYbkxraWdhTCtpMkxQeWpTcWFmMjA2cFVaYkJSUnBvdkc0QStpclFHTnhlZjFTCldxUklBeGgwdnhtQmtObjBTUWVlQnpPY3YxMllLM1VxSmZEWlRBbW02MW9qODA5UWduS0VqcVJSckxqQmtSVlgKM1crNVp2RE45K2RGbTVuRlMybzNOUy9zeEM5a0pUQ1pYeUxveC9ZVEpTQkQvbmo3Y3RaK3A1YS9FTWRURVpuQgppZ043cVpwNDJVSnJoaU5qcW5OZ3piaWNpb3RnZk9LSldIaHJJNGZpSlcwektoZElMRHhiaHZ5cUhvMzdQZnlsCk5IZ3d1V1Jid0xwaVluWStlSEpPRUVJYVprUTNXS3o5NW4vcGNTZXpNd1oyU3FNaFRTNG9RTlBQeS9hMGwyMU4KRVZ2QUc1M0ViSVF6RENJWjY0ekJxaDcrSjN4UmtKV0FRSHluODlGdVlFa3FjdDJaSENmME9GK0VlL2VLT0Q4QgpaL1c0Z3k5OXFTZE9leXZDTlllbkFWQkxYNFhZNG50K0NSYXhYamk3bXIzeXREOFlhbDZRSkJxSDZuVmVWWmE5CnZVaExQOVBXVFEyd3V2cElwM0l5Y2U5RjhYcXVBc0VQLzFtL1QrWGtoUTk5cjhMK0xsaGxCaWtOZXcyYWQvV1IKaHhzVWFLQU9BL1FtcHdZRmVYcVNCUnhxWGpVaVpLVGlDWElKMS83eU53YndUd2h1bzExeXNsYWo3NXRLMXNsRwozd1RTN1dwYmMzbjVuV1VWanBBNGpRaGdxTHZ6SXRjdW8yQjJBVUFJTTV6ek5ONlZMeXg1TVBYWXordWpYV2NKCjgyNWF5NXo2dFRvZmhvMGJUS2x1aCtqaWRibDc0eDlmazJFbkZyMlI5d2t4cHlyQ1hNczRaRWkrYzFOcFl0Uy8KOEYyQVpqNlpGRW11YjFRMm1uSWwvZDdmTktQdnorakFMZzlQc3Y0Tko1TFZRY0Zzelcrd3lpNC9BTkwrUUN4SQpuV1pDUXR5bEJtWURvODg4UVprN1hQeFVScnVBSnJrbEhTWXNSVHdHZDNFcU91NGtNdWRGVDQ3aXZpQ1FFeTF2CnhObGtXR0s4UjZmcE5xNEhtSG9vK3ZVajFJQmZQUHRmWVdzd2IxUzJoUHh4Uk51Mkhpanl2R0hEK2Q1R0N5NzMKMzhkMjFkK0pGWGtKcFIwTlorUnUxNGNQV2d6dVVsc2VsR1J3aTdPTmwrbitXa2xHVlFlL3hvR3hTWThMSGJTYgpPbWVDaytua05KUHo5M3JZRUZleTFkMnBTaFVwL1AybTE4MkU0bUxaS1VwOFFPMVJlMTJ5dlA5eTN5YlEwYTQ2CnZmTDJQMWgvY1pMWmM2dTFCWUFyM1V4SkRwMlBOdTlld2t0S3c4RDdvRGR1Uld4UU9ZUDlVb2dUWGZyUVZkVU4KbnE1KzdpRzU3V3NZYWZNQ2NsbldPZk90d1EyYWRPbU1xQml2bjlhRitTbjVYbU1RZkxyQmZRSDM1TG9ObENWNApCeGFRaS9MSWlSTVgKPWl4RFgKLS0tLS1FTkQgUEdQIFBVQkxJQyBLRVkgQkxPQ0stLS0tLQo='
+verify_release() {
+    command -v gpgv >/dev/null || die 'Install gpgv (Debian/Ubuntu) or GnuPG, then retry.'
+    printf '%s' "$release_key" | base64 -d > "$tmp/release-key.gpg"
+    mkdir -m 700 "$tmp/gnupg"
+    printf '%s' "$release_key_armored" | base64 -d > "$tmp/release-key.asc"
+    curl -fsSL "$base/SHA256SUMS.txt.asc" -o "$tmp/SHA256SUMS.txt.asc" || die 'The release has no signature; nothing was installed.'
+    gpgv --homedir "$tmp/gnupg" --keyring "$tmp/release-key.gpg" "$tmp/SHA256SUMS.txt.asc" "$tmp/SHA256SUMS.txt" || die 'Release signature verification failed; nothing was installed.'
+}
 install_native() (
     [ "$(uname -s)" = Linux ] && [ "$(uname -m)" = x86_64 ] || die 'Native packages currently support Linux x86_64 only.'
     cache=${XDG_CACHE_HOME:-$HOME/.cache}/fly-install
@@ -26,25 +45,51 @@ install_native() (
     base=https://github.com/$repo/releases/download/v$version
     name=Fly-$version-native-linux-x64.tar.gz
     curl -fsSL "$base/SHA256SUMS.txt" -o "$tmp/SHA256SUMS.txt"
+    verify_release
+    if [ -f "$target/VERSION" ]; then
+        installed=$(sed -n 's/^Fly //p' "$target/VERSION")
+        [ "$(printf '%s\n%s\n' "$installed" "$version" | sort -V | head -n1)" = "$installed" ] || die 'Refusing to downgrade the installed browser.'
+    fi
+    if [ "$method" = package ]; then
+        [ ! -d "$target" ] || die 'Remove the user installation first with fly-install uninstall native --yes; your profile is kept.'
+        if [ -e /run/ostree-booted ]; then die 'This is an immutable system; use the user installation.'; fi
+        if command -v apt-get >/dev/null; then kind=deb
+        elif command -v zypper >/dev/null; then kind=rpm
+        elif command -v dnf >/dev/null; then kind=rpm
+        elif command -v pacman >/dev/null; then kind=pkg.tar.zst
+        else die 'No supported package manager; use --native.'; fi
+        name=$(awk -v suffix=".$kind" 'index($2,"fly-browser-bin") == 1 && substr($2,length($2)-length(suffix)+1) == suffix {print $2; exit}' "$tmp/SHA256SUMS.txt")
+        [ -n "$name" ] || die 'This release has no package for this system.'
+    fi
     expected=$(awk -v name="$name" '$2 == name || $2 == "*" name {print $1}' "$tmp/SHA256SUMS.txt")
     [[ $expected =~ ^[a-f0-9]{64}$ ]] || die 'This release has no Linux package checksum; nothing was installed.'
-    if [ "$method" = package ]; then
-        command -v makepkg >/dev/null || die 'The --package option needs makepkg on an Arch-based system.'
-        curl -fsSL "$base/PKGBUILD" -o "$tmp/PKGBUILD"
-        grep -Fq -- '-native-linux-x64.tar.gz' "$tmp/PKGBUILD" && grep -Fq -- "$expected" "$tmp/PKGBUILD" || die 'PKGBUILD does not match the release.'
-        (cd "$tmp" && makepkg -si)
-        exit
-    fi
     curl -fL "$base/$name" -o "$tmp/$name" || die 'This release has no Linux package; nothing was installed. See docs/guide/installation.md.'
     actual=$(sha256sum "$tmp/$name"); actual=${actual%% *}
     [ "$expected" = "$actual" ] || die 'Native package checksum mismatch; installation was not changed.'
+    if [ "$method" = package ]; then
+        case $kind in
+            deb) as_root apt-get install "$tmp/$name" ;;
+            rpm)
+                as_root rpm --import "$tmp/release-key.asc"
+                if command -v zypper >/dev/null; then as_root zypper --non-interactive install "$tmp/$name"
+                else as_root dnf install "$tmp/$name"; fi ;;
+            pkg.tar.zst)
+                as_root pacman-key --add "$tmp/release-key.gpg"
+                as_root pacman-key --lsign-key ED5C430691764316F98C1A8623274B1DFAB01ABE
+                as_root pacman -U "$tmp/$name"
+                if ! grep -Eq '^Include[[:space:]]*=[[:space:]]*/etc/pacman.d/fly-browser.conf[[:space:]]*$' /etc/pacman.conf; then
+                    printf '\nInclude = /etc/pacman.d/fly-browser.conf\n' | as_root tee -a /etc/pacman.conf >/dev/null
+                fi ;;
+        esac
+        exit
+    fi
     tar -xzf "$tmp/$name" -C "$tmp"
     "$tmp/fly-browser/install.sh"
 )
 method=auto
 case ${1:-status} in
     install|update|upgrade)
-        command=${1}; shift
+        operation=$1; shift
         for arg in "$@"; do
             case $arg in
                 --native) method=native ;;
@@ -52,12 +97,20 @@ case ${1:-status} in
                 *) die "Unknown option: $arg" ;;
             esac
         done
-        if package_installed; then method=package
-        elif [ "$method" = auto ] && [ "$command" = install ] && command -v pacman >/dev/null && command -v makepkg >/dev/null; then method=package; fi
+        if package_installed && [ "$operation" != install ]; then
+            case $(package_manager) in
+                apt) as_root apt-get update; as_root apt-get install --only-upgrade fly-browser-bin ;;
+                dnf) as_root dnf upgrade fly-browser-bin ;;
+                zypper) as_root zypper update fly-browser-bin ;;
+                pacman) as_root pacman -Syu fly-browser-bin ;;
+            esac
+            exit
+        fi
+        if package_installed; then method=package; fi
         install_native ;;
     status|scan|list)
         if [ -f "$target/VERSION" ]; then cat "$target/VERSION"; say "Installation: $target"; else say 'Fly is not installed for this user.'; fi
-        if package_installed; then pacman -Q fly-browser-bin; fi
+        if package_installed; then say "System package: fly-browser-bin ($(package_manager))"; fi
         for profile in "$config/fly-browser" "$config/fly-browser-flags.conf"; do
             [ ! -e "$profile" ] || say "Retained configuration: $profile"
         done ;;
@@ -81,17 +134,20 @@ case ${1:-status} in
             [[ $answer = [yY] ]] || exit 1
         fi
         if [ "$scope" != native ] && package_installed; then
-            if [ "$(id -u)" = 0 ]; then
-                pacman -R --noconfirm fly-browser-bin
-            else
-                sudo pacman -R --noconfirm fly-browser-bin
-            fi
+            case $(package_manager) in
+                apt) as_root apt-get purge --yes fly-browser-bin ;;
+                dnf) as_root dnf remove --assumeyes fly-browser-bin ;;
+                zypper) as_root zypper --non-interactive remove fly-browser-bin ;;
+                pacman) as_root pacman -R --noconfirm fly-browser-bin ;;
+            esac
         fi
         if [ "$scope" != package ]; then
-            rm -rf "$target"
-            for link in "$HOME/.local/bin/fly-browser"; do
-                if [ "$(readlink "$link" 2>/dev/null || true)" = "$target/fly-browser" ]; then rm -f "$link"; fi
-            done
+            mkdir -p "$data"
+            exec 9>"$target.lock"
+            flock -n 9 || die 'Another Fly installation is in progress.'
+            rm -rf "$target" "$target.old" "$target.new"
+            link=$HOME/.local/bin/fly-browser
+            if [ "$(readlink "$link" 2>/dev/null || true)" = "$target/fly-browser" ]; then rm -f "$link"; fi
             rm -f "$data/applications/fly-browser.desktop"
             for size in 48 128 256; do rm -f "$data/icons/hicolor/${size}x${size}/apps/fly-browser.png"; done
             command -v update-desktop-database >/dev/null && update-desktop-database "$data/applications" || true

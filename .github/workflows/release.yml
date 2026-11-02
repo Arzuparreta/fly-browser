@@ -86,7 +86,7 @@ jobs:
       - name: Generate SHA-256 checksums
         working-directory: release-assets
         run: |
-          sha256sum * > SHA256SUMS.txt
+          sha256sum -- * > SHA256SUMS.txt
           cat SHA256SUMS.txt
 
       # `-rc.` in the tag is the only thing that marks a pre-release, so the
@@ -107,9 +107,9 @@ jobs:
             against `SHA256SUMS.txt`. Extract it and run `./install.sh`, or use
             `fly-install install`.
 
-            On Arch Linux, download `PKGBUILD` below into an empty directory
-            and run `makepkg -si` there: it installs `fly-browser-bin`, with
-            Fly in your launcher.
+            Official DEB, RPM and pacman packages are added by the next job.
+            They configure Fly's own signed repositories for system updates.
+            The tarball remains available for installation without root.
 
             Running from source and per-platform notes:
             [Installation](https://github.com/${{ github.repository }}/blob/${{ github.ref_name }}/docs/guide/installation.md).
@@ -118,15 +118,14 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
-  # The Arch package: its PKGBUILD is attached to the release and pushed to
-  # the AUR. Release candidates stay on GitHub: pkgver cannot express them.
-  aur:
-    name: Publish to the AUR
+  packages:
+    name: Publish official Linux packages
     needs: publish
     if: github.ref_type == 'tag' && !contains(github.ref_name, '-rc.')
     permissions:
       contents: write
-    uses: ./.github/workflows/aur.yml
+    uses: ./.github/workflows/official-packages.yml
     with:
       tag: ${{ github.ref_name }}
+      from_release: true
     secrets: inherit

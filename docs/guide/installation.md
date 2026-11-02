@@ -1,67 +1,102 @@
 # Installation
 
-Fly is built on Chromium. Release packages support Linux x86_64.
+Fly provides its own signed Linux x86_64 packages. Packages are built from one
+native Chromium payload and published directly by Fly, without a third-party
+store or AUR. Other architectures and musl-based systems are not supported.
 
-## Installer script (any distribution)
+## Recommended: your system package manager
 
-```sh
-mkdir -p ~/.local/bin
-curl -fsSL https://raw.githubusercontent.com/Arzuparreta/fly-browser/main/scripts/fly-install -o ~/.local/bin/fly-install
-chmod +x ~/.local/bin/fly-install
-~/.local/bin/fly-install install
-```
-
-The installer downloads `Fly-<version>-native-linux-x64.tar.gz`, verifies it
-against the release's `SHA256SUMS.txt`, and runs its `install.sh`. If the latest
-release has no such package, installation stops and changes nothing.
+Install `curl` and `gpgv` (or GnuPG) using your distribution's package manager,
+then download the official installer, inspect it if desired, and run:
 
 ```sh
-fly-install status
-fly-install update
-fly-install uninstall --yes
-# Also delete profiles, history, passwords and settings (even if Fly is already removed):
-fly-install uninstall --purge --yes
+curl -fsSL https://arzuparreta.github.io/fly-browser.github.io/packages/fly-install -o fly-install
+bash fly-install install --package
 ```
 
-The user installation lives in `$XDG_DATA_HOME/fly-browser` (default
-`~/.local/share/fly-browser`). Start `~/.local/bin/fly-browser`, or choose **Fly** in your launcher. Add
-`~/.local/bin` to `PATH` if needed. Uninstall removes the Arch package and user installation, and keeps profiles by default.
-`--purge` also deletes the Fly profile and launcher flags
-under `$XDG_CONFIG_HOME` (default `~/.config`), even if no installation remains.
+The installer verifies the release signature using its embedded public key and
+checks the package hash before requesting administrator privileges. It selects
+DEB for APT systems, RPM for DNF/Zypper, or a binary pacman package for Arch.
+It uses your package manager to install dependencies and the browser.
 
-On Arch-based systems with `pacman` and `makepkg`, installation uses the
-release's `PKGBUILD` and installs `fly-browser-bin`. You can request it with
-`fly-install install --package`; `--native` selects the user tarball when no
-system package is installed. A system package is updated through `makepkg`,
-not replaced with a second user installation. Remove it with
-`sudo pacman -R fly-browser-bin`.
+DEB and RPM install Fly's repository configuration automatically. On Arch the
+installer imports the pinned key, locally trusts it and registers Fly's signed
+repository in pacman. Afterwards update normally:
 
-## Manual tarball
+| Family | Update |
+| --- | --- |
+| Debian, Ubuntu and derivatives | `sudo apt update && sudo apt upgrade` |
+| Fedora | `sudo dnf upgrade` |
+| openSUSE Tumbleweed | `sudo zypper dup` |
+| Arch and derivatives | `sudo pacman -Syu` |
 
-Download the Linux tarball and `SHA256SUMS.txt` from
-[Releases](https://github.com/Arzuparreta/fly-browser/releases), verify the
-archive with `sha256sum`, extract it, enter `fly-browser/` and run
-`./install.sh`. Run `./install.sh --remove` from the extracted bundle to remove
-the user installation. Linux must support Chromium's sandbox and runtime
-libraries; no launcher disables the sandbox.
+The package is `fly-browser-bin`, the command is `fly-browser`, and the menu
+entry is **Fly**. System installation lives in `/opt/fly-browser`. The browser
+does not replace files owned by your package manager. You can also download
+the native package and its signature from [Releases](https://github.com/Arzuparreta/fly-browser/releases).
 
-## Profile
+## Install for your user
 
-Fly keeps its data in `~/.config/fly-browser` (or `$XDG_CONFIG_HOME/fly-browser`).
-For a clean start, uninstall and reinstall Fly; use
-`fly-install uninstall --purge --yes` to delete the profile as well.
+For a conventional Linux system without administrator access, use the same
+installer with `--native`. It verifies and installs the tarball instead:
+
+```sh
+bash fly-install install --native
+bash fly-install update
+bash fly-install status
+```
+
+The installation lives in `$XDG_DATA_HOME/fly-browser` (default
+`~/.local/share/fly-browser`), with a launcher in `~/.local/bin/fly-browser`.
+Preferences can install signed updates for this installation. Updates preserve
+a previous installation for recovery and retain your profile.
+
+This route still needs Chromium's system runtime libraries, `gpgv`, `flock`
+(util-linux) and a working Chromium sandbox. AppImage would not remove all of
+these constraints. Fly never starts with `--no-sandbox`.
+
+Immutable systems such as Silverblue/Bazzite and NixOS need separate acceptance;
+a user tarball is not a promise of compatibility there. A self-hosted Flatpak
+channel is a possible later addition, not an available installation today.
+
+## Trust and repositories
+
+The public key and fingerprint are published on the
+[official packages page](https://arzuparreta.github.io/fly-browser.github.io/packages/).
+APT and pacman metadata/package files are hosted on the project's
+`linux-repository` GitHub prerelease; RPM is a conventional repository on GitHub Pages, built from verified packages
+on Releases without storing binaries in Git. This infrastructure prerelease is not a browser
+version and is never offered as an update.
+
+For an already installed older user copy, remove it before switching to a
+system package, so a stale user launcher cannot hide the system installation:
+
+```sh
+bash fly-install uninstall native --yes
+bash fly-install install --package
+```
+
+The profile is preserved. Package-manager installations and direct installations
+have different update owners; `fly-install update` delegates to your package
+manager when it detects an installed system package.
+
+## Remove Fly
+
+```sh
+bash fly-install uninstall --yes
+# Also permanently delete your profile, history, passwords and settings:
+bash fly-install uninstall --purge --yes
+```
+
+You can instead remove `fly-browser-bin` using your package manager. Removal
+keeps `~/.config/fly-browser` (or `$XDG_CONFIG_HOME/fly-browser`) unless you
+explicitly request `--purge` from the installer.
 
 ## Running from source
 
-Follow [Chromium development](/chromium/build) to prepare and build the pinned
-engine. Then run `FLY_ENGINE_ROOT=/path/to/fly-chromium npm start` from the repo.
-Set `FLY_ENGINE_OUTPUT=out/FlyNative` to run the development build. Building
-Chromium is explicit and requires substantial disk, memory and time; launching
-never builds an engine.
-
-## Updates
-
-`fly-install update` installs the latest stable package. Preferences can
-also check GitHub for updates and replace a writable installation.
-System packages should be updated through the package manager/installer.
-Release candidates are not offered by the stable update check.
+Follow [Chromium development](/chromium/build), then run
+`FLY_ENGINE_ROOT=/path/to/fly-chromium npm start`. Building Chromium is explicit;
+launching never builds an engine. `./launch.sh --release` verifies the stable
+release signature before running a downloaded build with a development profile.
+Pull-request test builds are explicitly selected development artifacts, checked
+by hash, and are not the signed stable distribution channel.

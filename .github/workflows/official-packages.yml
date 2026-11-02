@@ -1,0 +1,107 @@
+name: Official Linux packages
+
+# Trusted release-only work. Ordinary pull requests still run npm test only.
+on:
+  workflow_call:
+    inputs:
+      tag:
+        required: true
+        type: string
+      from_release:
+        type: boolean
+        default: false
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: Published stable release to package (empty selects latest)
+        type: string
+  schedule:
+    - cron: '17 5 * * 1'
+
+permissions:
+  contents: write
+
+concurrency:
+  group: official-linux-packages
+  cancel-in-progress: false
+
+jobs:
+  publish:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+      - name: Select a published stable release
+        id: release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REQUESTED_TAG: ${{ inputs.tag }}
+        run: |
+          tag=${REQUESTED_TAG:-$(gh release view --json tagName --jq .tagName)}
+          test "$(gh release view "$tag" --json isDraft,isPrerelease --jq '.isDraft or .isPrerelease')" = false
+          declared=$(node scripts/version-sync.js --print)
+          test "$tag" = "v$declared"
+          echo "tag=$tag" >> "$GITHUB_OUTPUT"
+          mkdir -p "$RUNNER_TEMP/assets"
+          gh release download "$tag" --pattern '*native-linux-x64.tar.gz*' --dir "$RUNNER_TEMP/assets"
+          names=$(gh release view "$tag" --json assets --jq '.assets[].name')
+          if grep -q '\.deb$' <<< "$names" && grep -q '\.rpm$' <<< "$names" && grep -q '\.pkg.tar.zst$' <<< "$names" && grep -q '^SHA256SUMS.txt.asc$' <<< "$names"; then
+            gh release download "$tag" --pattern '*.deb' --pattern '*.rpm' --pattern '*.pkg.tar.zst' --pattern 'SHA256SUMS.txt*' --dir "$RUNNER_TEMP/assets"
+            mkdir -m 700 "$RUNNER_TEMP/verification"
+            gpgv --homedir "$RUNNER_TEMP/verification" --keyring "$PWD/distribution/release-key.gpg" "$RUNNER_TEMP/assets/SHA256SUMS.txt.asc" "$RUNNER_TEMP/assets/SHA256SUMS.txt"
+            (cd "$RUNNER_TEMP/assets" && sha256sum --ignore-missing -c SHA256SUMS.txt)
+          elif [ '${{ inputs.from_release }}' != true ]; then
+            echo 'Unsigned initial packaging is allowed only immediately after the trusted native release build.' >&2
+            exit 1
+          fi
+      - name: Import the release signing subkey
+        env:
+          SIGNING_KEY: ${{ secrets.FLY_RELEASE_SIGNING_KEY }}
+          SIGNING_PASSPHRASE: ${{ secrets.FLY_RELEASE_SIGNING_PASSPHRASE }}
+        run: |
+          test -n "$SIGNING_KEY" && test -n "$SIGNING_PASSPHRASE"
+          install -d -m 700 "$RUNNER_TEMP/signing"
+          printf '%s' "$SIGNING_KEY" > "$RUNNER_TEMP/signing/import.asc"
+          printf '%s' "$SIGNING_PASSPHRASE" > "$RUNNER_TEMP/signing/passphrase"
+          chmod 600 "$RUNNER_TEMP/signing/"*
+      - name: Build the common packaging environment
+        run: docker build -t fly-linux-packaging -f scripts/distribution/Dockerfile .
+      - name: Package and sign the common native payload
+        env:
+          TAG: ${{ steps.release.outputs.tag }}
+        run: |
+          archive=$(find "$RUNNER_TEMP/assets" -name '*native-linux-x64.tar.gz' -print -quit)
+          (cd "$RUNNER_TEMP/assets" && sha256sum -c "$(basename "$archive").sha256")
+          if ! compgen -G "$RUNNER_TEMP/assets/*.deb" >/dev/null; then
+            docker run --rm -v "$PWD:/work:ro" -v "$RUNNER_TEMP:/delivery" fly-linux-packaging packages --archive "/delivery/assets/$(basename "$archive")" --output /delivery/assets
+          fi
+          docker run --rm -v "$PWD:/work:ro" -v "$RUNNER_TEMP:/delivery" -e GNUPGHOME=/delivery/signing -e FLY_SIGNING_PASSPHRASE_FILE=/delivery/signing/passphrase --entrypoint /bin/sh fly-linux-packaging -c 'gpg --batch --import /delivery/signing/import.asc && rm /delivery/signing/import.asc && python3 scripts/distribution/linux.py repositories --assets /delivery/assets --output /delivery/repositories'
+          # RPM's embedded signature changes its bytes; publish precisely the
+          # same signed package indexed by the repository.
+          cp "$RUNNER_TEMP/repositories/flat/"*.rpm "$RUNNER_TEMP/assets/"
+          cp "$RUNNER_TEMP/repositories/flat/"*.deb.sig "$RUNNER_TEMP/repositories/flat/"*.rpm.sig "$RUNNER_TEMP/repositories/flat/"*.pkg.tar.zst.sig "$RUNNER_TEMP/assets/"
+          docker run --rm -v "$PWD:/work:ro" -v "$RUNNER_TEMP:/delivery" -e GNUPGHOME=/delivery/signing -e FLY_SIGNING_PASSPHRASE_FILE=/delivery/signing/passphrase fly-linux-packaging sign --assets /delivery/assets
+      - name: Validate the packaged browser on the Ubuntu kernel
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y --no-install-recommends "$RUNNER_TEMP/assets/"*.deb
+          dbus-run-session -- timeout 120s fly-browser --headless --disable-gpu --dump-dom 'data:text/html,<title>Fly release acceptance</title>' > "$RUNNER_TEMP/fly-release-dom.html"
+          grep -q 'Fly release acceptance' "$RUNNER_TEMP/fly-release-dom.html"
+          sudo apt-get purge -y fly-browser-bin
+      - name: Publish official packages and repositories
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ steps.release.outputs.tag }}
+          SITE_DEPLOY_KEY: ${{ secrets.FLY_PACKAGES_DEPLOY_KEY }}
+        run: bash scripts/distribution/publish.sh "$RUNNER_TEMP/assets" "$RUNNER_TEMP/repositories" "$TAG"
+      - name: Retain the package validation outputs
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: official-linux-repository-metadata
+          path: ${{ runner.temp }}/repositories/site/
+          if-no-files-found: ignore
+          retention-days: 3
+      - name: Remove ephemeral signing material
+        if: always()
+        run: sudo rm -rf "$RUNNER_TEMP/signing"

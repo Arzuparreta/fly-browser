@@ -6,6 +6,11 @@
 #include <algorithm>
 #include <utility>
 
+#include "build/build_config.h"
+#if BUILDFLAG(IS_POSIX)
+#include <sys/file.h>
+#endif
+
 #include "base/environment.h"
 #include "base/files/file_util.h"
 #include "base/strings/strcat.h"
@@ -579,7 +584,9 @@ SpellcheckPreferences ReadEffectiveSpellcheck(
   return result;
 }
 
-void CheckForUpdates(base::OnceCallback<void(UpdateCheckResult)> done) {
+namespace {
+void CheckForUpdatesWithInstallation(
+    base::OnceCallback<void(UpdateCheckResult)> done, bool managed_by_system) {
   auto request = std::make_unique<network::ResourceRequest>();
   // Tests point the check at a local feed.
   const auto* command_line = base::CommandLine::ForCurrentProcess();
@@ -608,10 +615,11 @@ void CheckForUpdates(base::OnceCallback<void(UpdateCheckResult)> done) {
   raw->DownloadToString(
       g_browser_process->shared_url_loader_factory().get(),
       base::BindOnce(
-          [](std::unique_ptr<network::SimpleURLLoader>,
+          [](std::unique_ptr<network::SimpleURLLoader>, bool managed_by_system,
              base::OnceCallback<void(UpdateCheckResult)> done,
              std::optional<std::string> body) {
             UpdateCheckResult result;
+            result.managed_by_system = managed_by_system;
             result.page = GURL(kReleasesPage);
             const auto json =
                 body ? base::JSONReader::ReadDict(*body, base::JSON_PARSE_RFC)
@@ -647,20 +655,39 @@ void CheckForUpdates(base::OnceCallback<void(UpdateCheckResult)> done) {
                               "fly-update-feed") &&
                           url.SchemeIs(url::kHttpScheme)))
                       continue;
+                    if (url.ExtractFileName() != *name)
+                      continue;
                     if (*name == package)
                       result.package = url;
                     else if (*name == package + ".sha256")
                       result.checksum = url;
+                    else if (*name == package + ".sha256.asc")
+                      result.signature = url;
                   }
                 }
-                if (!result.package.is_valid() || !result.checksum.is_valid())
+                if (!result.package.is_valid() || !result.checksum.is_valid() ||
+                    !result.signature.is_valid())
                   result.package = result.checksum = GURL();
               }
             }
             std::move(done).Run(std::move(result));
           },
-          std::move(loader), std::move(done)),
+          std::move(loader), managed_by_system, std::move(done)),
       256 * 1024);
+}
+}  // namespace
+
+void CheckForUpdates(base::OnceCallback<void(UpdateCheckResult)> done) {
+  base::ThreadPool::PostTaskAndReplyWithResult(
+      FROM_HERE, {base::MayBlock(), base::TaskPriority::USER_VISIBLE},
+      base::BindOnce([] {
+        base::FilePath exe;
+        std::string installation;
+        return base::PathService::Get(base::DIR_EXE, &exe) &&
+               base::ReadFileToString(exe.AppendASCII("INSTALLATION"), &installation) &&
+               base::TrimWhitespaceASCII(installation, base::TRIM_ALL) == "system";
+      }),
+      base::BindOnce(&CheckForUpdatesWithInstallation, std::move(done)));
 }
 
 namespace {
@@ -682,11 +709,47 @@ const net::NetworkTrafficAnnotationTag kUpdateDownload =
 // Runs on a blocking sequence: checks the package, unpacks it and swaps it in
 // for the running installation. Returns an error, or "" on success.
 std::u16string ReplaceInstallation(base::FilePath package,
-                                   std::string checksum_file) {
+                                   std::string checksum_file,
+                                   std::string signature,
+                                   std::string expected_name) {
+  base::FilePath exe;
+  if (!base::PathService::Get(base::DIR_EXE, &exe))
+    return u"This installation's folder is unknown.";
+  std::string installation;
+  base::ReadFileToString(exe.AppendASCII("INSTALLATION"), &installation);
+  if (base::TrimWhitespaceASCII(installation, base::TRIM_ALL) == "system")
+    return u"Update Fly using your system's package manager.";
+  if (!base::PathExists(exe.AppendASCII("fly-browser")))
+    return u"This is a development build; rebuild it from source.";
+  base::File update_lock(exe.AddExtensionASCII("lock"),
+                         base::File::FLAG_OPEN_ALWAYS | base::File::FLAG_WRITE);
+#if BUILDFLAG(IS_POSIX)
+  if (!update_lock.IsValid() ||
+      flock(update_lock.GetPlatformFile(), LOCK_EX | LOCK_NB) != 0)
+    return u"Another Fly installation is in progress.";
+#endif
+  base::ScopedTempDir verification;
+  if (!verification.CreateUniqueTempDir())
+    return u"No space to verify the update.";
+  const auto sums_path = verification.GetPath().AppendASCII("checksums");
+  const auto sig_path = verification.GetPath().AppendASCII("signature");
+  if (!base::WriteFile(sums_path, checksum_file) ||
+      !base::WriteFile(sig_path, signature))
+    return u"The update signature could not be checked.";
+  int signature_exit = -1;
+  auto verifier = base::LaunchProcess(
+      {"gpgv", "--homedir", verification.GetPath().value(), "--keyring",
+       exe.AppendASCII("release-key.gpg").value(), sig_path.value(),
+       sums_path.value()}, base::LaunchOptions());
+  if (!verifier.IsValid() || !verifier.WaitForExit(&signature_exit) ||
+      signature_exit != 0)
+    return u"Update signature verification failed. Install GnuPG if missing; "
+           u"the current installation has been kept.";
   const auto parts = base::SplitString(checksum_file, " \t\r\n",
                                        base::TRIM_WHITESPACE,
                                        base::SPLIT_WANT_NONEMPTY);
-  if (parts.empty() || parts[0].size() != 64)
+  if (parts.size() != 2 || parts[0].size() != 64 ||
+      parts[1] != expected_name)
     return u"The release's checksum file is not readable.";
   base::File file(package, base::File::FLAG_OPEN | base::File::FLAG_READ);
   if (!file.IsValid())
@@ -706,9 +769,6 @@ std::u16string ReplaceInstallation(base::FilePath package,
   if (base::ToLowerASCII(base::HexEncode(digest)) !=
       base::ToLowerASCII(parts[0]))
     return u"The downloaded package does not match its checksum.";
-  base::FilePath exe;
-  if (!base::PathService::Get(base::DIR_EXE, &exe))
-    return u"This installation's folder is unknown.";
   if (!base::PathIsWritable(exe) || !base::PathIsWritable(exe.DirName()))
     return u"This installation is not writable; download the release and run "
            u"its install.sh.";
@@ -736,73 +796,84 @@ std::u16string ReplaceInstallation(base::FilePath package,
     base::Move(old, exe);
     return u"This installation could not be replaced.";
   }
-  base::DeletePathRecursively(old);
+  // Keep the previous installation until the next successful update.
   return u"";
+}
+}  // namespace
+
+namespace {
+using UpdateDone = base::OnceCallback<void(std::u16string)>;
+using TextDone = base::OnceCallback<void(std::optional<std::string>)>;
+void DownloadUpdateText(GURL url, TextDone done) {
+  auto request = std::make_unique<network::ResourceRequest>();
+  request->url = url;
+  request->credentials_mode = network::mojom::CredentialsMode::kOmit;
+  auto loader = network::SimpleURLLoader::Create(std::move(request), kUpdateDownload);
+  auto* raw = loader.get();
+  raw->DownloadToString(g_browser_process->shared_url_loader_factory().get(),
+      base::BindOnce([](std::unique_ptr<network::SimpleURLLoader>, TextDone done,
+                       std::optional<std::string> body) {
+        std::move(done).Run(std::move(body));
+      }, std::move(loader), std::move(done)), 16 * 1024);
+}
+void DownloadSignedPackage(GURL package, std::string checksum,
+                           std::string signature, UpdateDone done) {
+  auto request = std::make_unique<network::ResourceRequest>();
+  request->url = package;
+  request->credentials_mode = network::mojom::CredentialsMode::kOmit;
+  auto loader = network::SimpleURLLoader::Create(std::move(request), kUpdateDownload);
+  auto* raw = loader.get();
+  raw->DownloadToTempFile(g_browser_process->shared_url_loader_factory().get(),
+      base::BindOnce([](std::unique_ptr<network::SimpleURLLoader>,
+                       std::string checksum, std::string signature,
+                       std::string expected_name, UpdateDone done,
+                       base::FilePath file) {
+        if (file.empty()) {
+          std::move(done).Run(u"The update could not be downloaded.");
+          return;
+        }
+        base::ThreadPool::PostTaskAndReplyWithResult(
+            FROM_HERE,
+            {base::MayBlock(), base::WithBaseSyncPrimitives(),
+             base::TaskPriority::USER_VISIBLE,
+             base::TaskShutdownBehavior::BLOCK_SHUTDOWN},
+            base::BindOnce([](base::FilePath file, std::string checksum,
+                              std::string signature, std::string expected_name) {
+              auto result = ReplaceInstallation(file, checksum, signature, expected_name);
+              base::DeleteFile(file);
+              return result;
+            }, file, std::move(checksum), std::move(signature), std::move(expected_name)),
+            std::move(done));
+      }, std::move(loader), std::move(checksum), std::move(signature),
+         package.ExtractFileName(), std::move(done)), 512 * 1024 * 1024);
 }
 }  // namespace
 
 void InstallNativeUpdate(const UpdateCheckResult& update,
                          base::OnceCallback<void(std::u16string)> done) {
-  if (!update.package.is_valid() || !update.checksum.is_valid()) {
-    std::move(done).Run(u"This release has no native package to install.");
+  if (!update.package.is_valid() || !update.checksum.is_valid() ||
+      !update.signature.is_valid()) {
+    std::move(done).Run(u"This release has no signed native package to install.");
     return;
   }
-  auto checksum_request = std::make_unique<network::ResourceRequest>();
-  checksum_request->url = update.checksum;
-  checksum_request->credentials_mode = network::mojom::CredentialsMode::kOmit;
-  auto checksum_loader = network::SimpleURLLoader::Create(
-      std::move(checksum_request), kUpdateDownload);
-  auto* checksum_raw = checksum_loader.get();
-  checksum_raw->DownloadToString(
-      g_browser_process->shared_url_loader_factory().get(),
-      base::BindOnce(
-          [](std::unique_ptr<network::SimpleURLLoader>, GURL package,
-             base::OnceCallback<void(std::u16string)> done,
-             std::optional<std::string> checksum) {
-            if (!checksum) {
-              std::move(done).Run(u"The release's checksum could not be "
-                                  u"downloaded.");
-              return;
-            }
-            auto request = std::make_unique<network::ResourceRequest>();
-            request->url = package;
-            request->credentials_mode =
-                network::mojom::CredentialsMode::kOmit;
-            auto loader = network::SimpleURLLoader::Create(std::move(request),
-                                                           kUpdateDownload);
-            auto* raw = loader.get();
-            raw->DownloadToTempFile(
-                g_browser_process->shared_url_loader_factory().get(),
-                base::BindOnce(
-                    [](std::unique_ptr<network::SimpleURLLoader>,
-                       std::string checksum,
-                       base::OnceCallback<void(std::u16string)> done,
-                       base::FilePath file) {
-                      if (file.empty()) {
-                        std::move(done).Run(
-                            u"The update could not be downloaded.");
-                        return;
-                      }
-                      base::ThreadPool::PostTaskAndReplyWithResult(
-                          FROM_HERE,
-                          {base::MayBlock(), base::WithBaseSyncPrimitives(),
-                           base::TaskPriority::USER_VISIBLE,
-                           base::TaskShutdownBehavior::BLOCK_SHUTDOWN},
-                          base::BindOnce(
-                              [](base::FilePath file, std::string checksum) {
-                                auto result =
-                                    ReplaceInstallation(file, checksum);
-                                base::DeleteFile(file);
-                                return result;
-                              },
-                              file, std::move(checksum)),
-                          std::move(done));
-                    },
-                    std::move(loader), std::move(*checksum), std::move(done)),
-                512 * 1024 * 1024);
-          },
-          std::move(checksum_loader), update.package, std::move(done)),
-      4096);
+  DownloadUpdateText(update.signature, base::BindOnce(
+      [](UpdateCheckResult update, UpdateDone done,
+         std::optional<std::string> signature) {
+        if (!signature) {
+          std::move(done).Run(u"The update signature could not be downloaded.");
+          return;
+        }
+        DownloadUpdateText(update.checksum, base::BindOnce(
+            [](GURL package, std::string signature, UpdateDone done,
+               std::optional<std::string> checksum) {
+              if (!checksum) {
+                std::move(done).Run(u"The release checksum could not be downloaded.");
+                return;
+              }
+              DownloadSignedPackage(package, std::move(*checksum),
+                                    std::move(signature), std::move(done));
+            }, update.package, std::move(*signature), std::move(done)));
+      }, update, std::move(done)));
 }
 
 namespace {

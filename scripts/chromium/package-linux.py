@@ -63,8 +63,12 @@ TARGET="$DATA/fly-browser"
 BIN="$HOME/.local/bin"
 APPS="$DATA/applications"
 ICONS="$DATA/icons/hicolor"
+mkdir -p "$DATA"
+command -v flock >/dev/null 2>&1 || { echo "Install util-linux (flock), then retry." >&2; exit 1; }
+exec 9>"$TARGET.lock"
+flock -n 9 || { echo "Another Fly installation is in progress." >&2; exit 1; }
 if [ "${1:-}" = "--remove" ]; then
-  rm -rf "$TARGET" "$APPS/fly-browser.desktop"
+  rm -rf "$TARGET" "$TARGET.old" "$TARGET.new" "$APPS/fly-browser.desktop"
   for link in "$BIN/fly-browser"; do
     if [ "$(readlink "$link" 2>/dev/null || true)" = "$TARGET/fly-browser" ]; then rm -f "$link"; fi
   done
@@ -80,8 +84,10 @@ mkdir -p "$STAGE" "$BIN" "$APPS"
 cp -a "$HERE/app/." "$STAGE/"
 rm -rf "$TARGET.old"
 [ -d "$TARGET" ] && mv "$TARGET" "$TARGET.old"
-mv "$STAGE" "$TARGET"
-rm -rf "$TARGET.old"
+if ! mv "$STAGE" "$TARGET"; then
+  [ ! -d "$TARGET.old" ] || mv "$TARGET.old" "$TARGET"
+  exit 1
+fi
 ln -sf "$TARGET/fly-browser" "$BIN/fly-browser"
 for size in 48 128 256; do
   mkdir -p "$ICONS/${size}x${size}/apps"
@@ -214,6 +220,8 @@ def main():
         compat.write_text(COMPAT_FLY, encoding='utf-8')
         compat.chmod(0o755)
         (app / 'fly-browser.desktop').write_text(DESKTOP, encoding='utf-8')
+        (app / 'INSTALLATION').write_text('user\n')
+        shutil.copy2(REPO / 'distribution/release-key.gpg', app / 'release-key.gpg')
         (app / 'VERSION').write_text(f'Fly {version}\nEngine Chromium {engine}\n',
                                      encoding='utf-8')
         installer = top / 'install.sh'
