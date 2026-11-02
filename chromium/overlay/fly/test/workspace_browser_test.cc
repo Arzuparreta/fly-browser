@@ -2262,6 +2262,85 @@ IN_PROC_BROWSER_TEST_F(FlyWorkspaceBrowserTest,
   ASSERT_TRUE(base::test::RunUntil([&] { return Window().address_picker().active(); }));
 }
 
+IN_PROC_BROWSER_TEST_F(FlyNavigationFeedbackBrowserTest,
+                       NewTabFlyOnlyMovesForItsOwnPendingNavigation) {
+  ASSERT_TRUE(ui_test_utils::NavigateToURL(browser(), GURL(kFlyNewTabURL)));
+  auto* contents = Active(browser());
+  EXPECT_EQ(1680, content::EvalJs(contents,
+      "document.getElementById('memory-fly').naturalWidth"));
+  EXPECT_EQ(0, content::EvalJs(contents, "document.getAnimations().length"));
+  ui_test_utils::NavigateToURLWithDisposition(
+      browser(), server_.GetURL("/waiting"),
+      WindowOpenDisposition::NEW_BACKGROUND_TAB,
+      ui_test_utils::BROWSER_TEST_NO_WAIT);
+  EXPECT_EQ(contents, Active(browser()));
+  waiting_->WaitForRequest();
+  EXPECT_EQ(true, content::EvalJs(contents,
+      "document.getElementById('memory-fly').dataset.pose === undefined"));
+  SendPage(*waiting_);
+  waiting_->Done();
+  auto* model = browser()->GetTabStripModel();
+  ASSERT_TRUE(content::WaitForLoadStop(model->GetWebContentsAt(model->count() - 1)));
+  Start(server_.GetURL("/next"));
+  next_->WaitForRequest();
+  ASSERT_TRUE(base::test::RunUntil([&] {
+    return content::EvalJs(contents,
+        "['1','2'].includes(document.getElementById('memory-fly').dataset.pose)").ExtractBool();
+  }));
+  EXPECT_EQ(GURL(kFlyNewTabURL), contents->GetLastCommittedURL());
+  contents->Stop();
+  ASSERT_TRUE(base::test::RunUntil([&] {
+    return content::EvalJs(contents,
+        "document.getElementById('memory-fly').dataset.pose === undefined").ExtractBool();
+  }));
+}
+
+IN_PROC_BROWSER_TEST_F(FlyNavigationFeedbackBrowserTest,
+                       NewTabFlyStopsWhenHiddenAndOnCommit) {
+  ASSERT_TRUE(ui_test_utils::NavigateToURL(browser(), GURL(kFlyNewTabURL)));
+  auto* contents = Active(browser());
+  Start(server_.GetURL("/waiting"));
+  waiting_->WaitForRequest();
+  const auto moving = [&] {
+    return content::EvalJs(contents,
+        "['1','2'].includes(document.getElementById('memory-fly').dataset.pose)").ExtractBool();
+  };
+  ASSERT_TRUE(base::test::RunUntil(moving));
+  ASSERT_TRUE(ExecuteNativeCommand(browser(), "spawn-tab"));
+  ASSERT_TRUE(content::WaitForLoadStop(Active(browser())));
+  ASSERT_TRUE(base::test::RunUntil([&] {
+    return content::EvalJs(contents,
+        "document.hidden && document.getElementById('memory-fly').dataset.pose === undefined").ExtractBool();
+  }));
+  auto* model = browser()->GetTabStripModel();
+  model->ActivateTabAt(model->GetIndexOfWebContents(contents));
+  ASSERT_TRUE(base::test::RunUntil(moving));
+  SendPage(*waiting_);
+  waiting_->Done();
+  ASSERT_TRUE(content::WaitForLoadStop(contents));
+  EXPECT_EQ(server_.GetURL("/waiting"), contents->GetLastCommittedURL());
+  EXPECT_EQ(false, content::EvalJs(contents, "!!document.getElementById('memory-fly')"));
+}
+
+IN_PROC_BROWSER_TEST_F(FlyNavigationFeedbackBrowserTest,
+                       NewTabFlyTracksReplacementNavigation) {
+  ASSERT_TRUE(ui_test_utils::NavigateToURL(browser(), GURL(kFlyNewTabURL)));
+  auto* contents = Active(browser());
+  Start(server_.GetURL("/waiting"));
+  waiting_->WaitForRequest();
+  Start(server_.GetURL("/next"));
+  next_->WaitForRequest();
+  ASSERT_TRUE(base::test::RunUntil([&] {
+    return content::EvalJs(contents,
+        "['1','2'].includes(document.getElementById('memory-fly').dataset.pose)").ExtractBool();
+  }));
+  contents->Stop();
+  ASSERT_TRUE(base::test::RunUntil([&] {
+    return content::EvalJs(contents,
+        "document.getElementById('memory-fly').dataset.pose === undefined").ExtractBool();
+  }));
+}
+
 IN_PROC_BROWSER_TEST_F(FlyWorkspaceBrowserTest,
                        NewTabAddressAcceptsTypingBeforeLoadFinishes) {
   auto& window = Window();

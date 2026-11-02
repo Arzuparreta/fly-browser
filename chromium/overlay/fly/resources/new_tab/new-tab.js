@@ -15,6 +15,38 @@ const normalStroke = stroke => {
 };
 // Bindings may be sequences of strokes separated by spaces ("G G" is gg).
 const sequence = (binding, format) => binding.split(' ').filter(Boolean).map(format).join(' ');
+const fly = document.getElementById('memory-fly');
+const reducedMotion = matchMedia('(prefers-reduced-motion: reduce)');
+let navigationLoading = false;
+let motionTimer = 0;
+// Four short movements, then 1.8 seconds at rest: a 2.4-second cycle.
+// Only one timeout exists at a time, and none exists while idle or hidden.
+const poses = [1, 2, 1, 2, 0];
+function syncLoadingMotion() {
+    clearTimeout(motionTimer);
+    motionTimer = 0;
+    delete fly.dataset.pose;
+    if (!navigationLoading || document.hidden || reducedMotion.matches) return;
+    let phase = 0;
+    const step = () => {
+        fly.dataset.pose = poses[phase];
+        motionTimer = setTimeout(step, phase === 4 ? 1800 : 150);
+        phase = (phase + 1) % poses.length;
+    };
+    // Avoid a flash of movement on fast navigations.
+    motionTimer = setTimeout(step, 160);
+}
+window.updateFlyNewTabLoading = loading => {
+    if (navigationLoading === loading) return;
+    navigationLoading = loading;
+    syncLoadingMotion();
+};
+document.addEventListener('visibilitychange', syncLoadingMotion);
+reducedMotion.addEventListener('change', syncLoadingMotion);
+window.addEventListener('pagehide', () => {
+    navigationLoading = false;
+    syncLoadingMotion();
+});
 let tipShown = false;
 window.updateFlyNewTab = data => {
     document.body.classList.toggle('light', data.light);

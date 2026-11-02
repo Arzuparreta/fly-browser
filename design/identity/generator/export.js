@@ -16,8 +16,8 @@ const THEMES = {
 };
 
 // Line art with every colour behind a CSS custom property, so one file serves both themes.
-function themeableLine() {
-  const l = R.line({ ink: 'INK', paper: 'PAPER', eye: 'EYE', id: 'fl' });
+function themeableLine(rotation = ROT, frontLegAngle = 0) {
+  const l = R.line({ ink: 'INK', paper: 'PAPER', eye: 'EYE', id: 'fl', frontLegAngle });
   const body = l.body
     .replace(/fill="INK"/g, 'style="fill:var(--ink)"')
     .replace(/fill="PAPER" fill-opacity="([\d.]+)"/g, 'style="fill:var(--paper);fill-opacity:var(--wash,$1)"')
@@ -25,11 +25,11 @@ function themeableLine() {
     .replace(/fill="EYE"/g, 'style="fill:var(--eye,var(--paper))"')
     .replace(/var\(--facet-ink,INK\)/g, 'var(--facet-ink,var(--ink))');
   if (/INK|PAPER|EYE/.test(body)) throw new Error('unreplaced colour token');
-  return `<g transform="${ROT}">${body}</g>`;
+  return `<g transform="${rotation}">${body}</g>`;
 }
 
-function eyes() {
-  return `<g transform="${ROT}">${R.eyesOnly()}</g>`;
+function eyes(rotation = ROT) {
+  return `<g transform="${rotation}">${R.eyesOnly()}</g>`;
 }
 
 const svgDoc = (inner, viewBox = '0 0 1000 1000', style = '') =>
@@ -65,26 +65,29 @@ function engravingSvg(theme) {
 }
 
 // New tab memory: only the lines, fading towards the tail, with the eyes as the one colour.
-function memorySvg(theme) {
+function memorySvg(theme, frontLegAngle = 0) {
   const t = THEMES[theme];
+  const rotation = `rotate(${Math.atan2(9, 16) * 180 / Math.PI} 500 520)`;
   return svgDoc(`<defs>
-    <mask id="m" maskUnits="userSpaceOnUse" x="0" y="0" width="1000" height="1000"><g style="--ink:#fff;--paper:#000;--eye:#000;--facet:1;--facet-ink:#fff;--wash:1">${themeableLine()}</g></mask>
+    <mask id="m" maskUnits="userSpaceOnUse" x="0" y="0" width="1000" height="1000"><g style="--ink:#fff;--paper:#000;--eye:#000;--facet:1;--facet-ink:#fff;--wash:1">${themeableLine(rotation, frontLegAngle)}</g></mask>
     <linearGradient id="f" x1="0" y1="0" x2="0" y2="1"><stop offset=".22" stop-color="#fff"/><stop offset=".78" stop-color="#fff" stop-opacity=".12"/></linearGradient>
     <mask id="fm" maskUnits="userSpaceOnUse" x="0" y="0" width="1000" height="1000"><rect width="1000" height="1000" fill="url(#f)"/></mask>
-  </defs><g mask="url(#fm)"><g opacity="${t.eyeOpacity}">${eyes()}</g><rect width="1000" height="1000" fill="${t.ink}" fill-opacity="${t.inkOpacity}" mask="url(#m)"/></g>`);
+  </defs><g mask="url(#fm)"><g opacity="${t.eyeOpacity}">${eyes(rotation)}</g><rect width="1000" height="1000" fill="${t.ink}" fill-opacity="${t.inkOpacity}" mask="url(#m)"/></g>`);
 }
 
 async function rasterise(jobs) {
   let chromium;
   try { ({ chromium } = require('playwright')); } catch { console.log('Playwright not found: PNG export skipped.'); return; }
-  const browser = await chromium.launch();
+  const browser = await chromium.launch(process.env.FLY_ART_CHROMIUM ? {executablePath: process.env.FLY_ART_CHROMIUM} : {});
   const page = await browser.newPage();
   fs.mkdirSync(PNG, { recursive: true });
   for (const job of jobs) {
-    await page.setViewportSize({ width: job.size, height: job.size });
-    await page.setContent(`<!doctype html><html><body style="margin:0;background:transparent"><img src="data:image/svg+xml;base64,${Buffer.from(job.svg).toString('base64')}" width="${job.size}" height="${job.size}" style="display:block"></body></html>`);
-    await page.waitForFunction(() => document.images[0] && document.images[0].complete);
-    await page.screenshot({ path: path.join(PNG, job.name), omitBackground: true, clip: { x: 0, y: 0, width: job.size, height: job.size } });
+    const frames = job.frames || [job.svg];
+    const width = job.size * frames.length;
+    await page.setViewportSize({ width, height: job.size });
+    await page.setContent(`<!doctype html><html><body style="margin:0;background:transparent;display:flex">${frames.map(svg => `<img src="data:image/svg+xml;base64,${Buffer.from(svg).toString('base64')}" width="${job.size}" height="${job.size}" style="display:block;flex-shrink:0">`).join('')}</body></html>`);
+    await page.waitForFunction(() => [...document.images].every(image => image.complete && image.naturalWidth));
+    await page.screenshot({ path: path.join(PNG, job.name), omitBackground: true, clip: { x: 0, y: 0, width, height: job.size } });
     console.log('png', job.name);
   }
   await browser.close();
@@ -105,11 +108,14 @@ async function main() {
     fs.writeFileSync(path.join(OUT, name), svg);
     console.log('svg', name, Math.round(svg.length / 1024) + ' KB');
   }
-  const jobs = [1024, 600, 512, 256, 176, 128, 64, 48, 40, 32, 24, 20, 16].map((size) => ({ name: `icon-${size}.png`, size, svg: files['fly-icon.svg'] }));
-  jobs.push({ name: 'icon-mono22.png', size: 22, svg: files['fly-icon-mono.svg'] });
+  const newTabOnly = process.argv.includes('--new-tab-only');
+  const jobs = newTabOnly ? [] : [1024, 600, 512, 256, 176, 128, 64, 48, 40, 32, 24, 20, 16].map((size) => ({ name: `icon-${size}.png`, size, svg: files['fly-icon.svg'] }));
+  if (!newTabOnly) jobs.push({ name: 'icon-mono22.png', size: 22, svg: files['fly-icon-mono.svg'] });
   for (const theme of Object.keys(THEMES)) {
-    jobs.push({ name: `engraving-${theme}@2x.png`, size: 512, svg: files[`fly-engraving-${theme}.svg`] });
-    jobs.push({ name: `memory-${theme}@2x.png`, size: 1200, svg: files[`fly-memory-${theme}.svg`] });
+    if (!newTabOnly) jobs.push({ name: `engraving-${theme}@2x.png`, size: 512, svg: files[`fly-engraving-${theme}.svg`] });
+    // One decoded 2x strip: rest, front legs together, front legs rubbing.
+    jobs.push({ name: `memory-${theme}@2x.png`, size: 560,
+      frames: [0, 50, 58].map(angle => memorySvg(theme, angle)) });
   }
   await rasterise(jobs);
 }
