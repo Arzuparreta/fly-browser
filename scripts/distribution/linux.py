@@ -5,6 +5,7 @@ Run in scripts/distribution/Dockerfile. No distro build service or store is used
 Private keys are supplied through GNUPGHOME; they never enter the payload/site.
 """
 import argparse
+import base64
 import datetime as dt
 import email.utils
 import gzip
@@ -58,8 +59,9 @@ def write(path, content, mode=0o644):
 
 
 def fingerprint():
-    result = run(['gpg', '--batch', '--with-colons', '--show-keys', KEY],
-                 capture_output=True, text=True)
+    with tempfile.TemporaryDirectory() as home:
+        result = run(['gpg', '--homedir', home, '--batch', '--with-colons', '--show-keys', KEY],
+                     capture_output=True, text=True)
     return next(line.split(':')[9] for line in result.stdout.splitlines()
                 if line.startswith('fpr:'))
 
@@ -358,9 +360,79 @@ def repositories(assets, output):
     verify(rpm_repo / 'repodata/repomd.xml', rpm_repo / 'repodata/repomd.xml.asc')
 
 
+def legacy_pkgbuild(assets):
+    """Keep already installed makepkg-based helpers on the same signed payload.
+
+    This is a first-party compatibility entry point, not an AUR package or a
+    Chromium build. The current installer downloads native packages directly.
+    """
+    name = f"{CONFIG['package']}-{VERSION}-1-x86_64.pkg.tar.zst"
+    package = assets / name
+    signature = assets / (name + '.asc')
+    # Recovery/weekly publication must authenticate the immutable package
+    # before producing another executable entry point for it.
+    verify(package, signature)
+    checksum = hashlib.sha256(package.read_bytes()).hexdigest()
+    key = base64.b64encode(KEY.read_bytes()).decode()
+    dependencies = ' '.join("'" + dep + "'" for dep in CONFIG['dependencies']['pacman'])
+    signer = fingerprint()
+    source = CONFIG['homepage'] + '/releases/download/v' + VERSION
+    write(assets / 'PKGBUILD', f'''# Compatibility for older fly-install commands. Uses Fly's signed binary package.
+pkgname={CONFIG['package']}
+pkgver={VERSION}
+pkgrel=1
+pkgdesc='{DESCRIPTION}'
+arch=('x86_64')
+url='{CONFIG['homepage']}'
+license=('GPL-3.0-or-later')
+depends=({dependencies})
+provides=('fly-browser')
+conflicts=('fly-browser')
+backup=('etc/pacman.d/fly-browser.conf')
+options=('!strip' '!debug')
+source=('payload::{source}/{name}'
+        'payload.signature::{source}/{name}.asc')
+noextract=('payload' 'payload.signature')
+sha256sums=('{checksum}' 'SKIP')
+
+# The legacy helper downloads only PKGBUILD. Materialize its package hook in
+# that same disposable build directory, without touching the caller's setup.
+install=fly-browser-compat.install
+cat > "$startdir/$install" <<'FLY_HOOK'
+post_install() {{
+    sh /usr/share/fly-browser/integration.sh install
+    pacman-key --add /opt/fly-browser/release-key.gpg || return
+    pacman-key --lsign-key {signer} || return
+    if ! grep -Eq '^Include[[:space:]]*=[[:space:]]*/etc/pacman.d/fly-browser.conf[[:space:]]*$' /etc/pacman.conf; then
+        printf '\\nInclude = /etc/pacman.d/fly-browser.conf\\n' >> /etc/pacman.conf
+    fi
+}}
+post_upgrade() {{ post_install; }}
+pre_remove() {{ sh /usr/share/fly-browser/integration.sh remove; }}
+FLY_HOOK
+
+prepare() {{
+    printf '%s' '{key}' | base64 -d > "$srcdir/release-key.gpg"
+    mkdir -p -m 700 "$srcdir/verification"
+    gpgv --homedir "$srcdir/verification" --keyring "$srcdir/release-key.gpg" \\
+        "$srcdir/payload.signature" "$srcdir/payload"
+}}
+
+package() {{
+    bsdtar -xf "$srcdir/payload" -C "$pkgdir" \\
+        --exclude .PKGINFO --exclude .BUILDINFO --exclude .MTREE --exclude .INSTALL
+}}
+''')
+
+
 def sign_assets(assets):
     # RPM signing changes its bytes; call after repositories() copies the signed
     # RPM back, before constructing the release checksums.
+    # On first publication the pacman package has not got its .asc yet. The
+    # legacy bridge verifies that signature as well as pinning its hash.
+    package = assets / f"{CONFIG['package']}-{VERSION}-1-x86_64.pkg.tar.zst"
+    sign(package)
+    legacy_pkgbuild(assets)
     for file in sorted(assets.iterdir()):
         if file.is_file() and not file.name.endswith(('.asc', '.sig')) and file.name != 'SHA256SUMS.txt':
             sign(file)

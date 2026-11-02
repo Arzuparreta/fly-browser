@@ -3,10 +3,13 @@ import hashlib
 import importlib.util
 import io
 import json
+import shutil
+import subprocess
 from pathlib import Path
 import tarfile
 import tempfile
 import unittest
+from unittest import mock
 
 ROOT = Path(__file__).resolve().parents[1]
 SPEC = importlib.util.spec_from_file_location('distribution', ROOT / 'scripts/distribution/linux.py')
@@ -83,6 +86,41 @@ class DistributionTest(unittest.TestCase):
         self.assertEqual(base64.b64decode(encoded), delivery.KEY.read_bytes())
         armored = re.search(r"^release_key_armored='([^']+)'$", script, re.M)[1]
         self.assertEqual(base64.b64decode(armored), (ROOT / 'distribution/release-key.asc').read_bytes())
+
+    def test_legacy_recipe_authenticates_payload_without_a_user_keyring(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            home = root / 'signing'
+            home.mkdir(mode=0o700)
+            def gpg(*args):
+                return subprocess.run(['gpg', '--homedir', str(home), '--batch', '--yes', *args],
+                                      check=True, capture_output=True).stdout
+            gpg('--passphrase', '', '--quick-generate-key', 'Fly compatibility test', 'ed25519', 'sign', '0')
+            key = root / 'key.gpg'
+            key.write_bytes(gpg('--export'))
+            assets = root / 'assets'
+            assets.mkdir()
+            name = f"{delivery.CONFIG['package']}-{delivery.VERSION}-1-x86_64.pkg.tar.zst"
+            payload = assets / name
+            payload.write_bytes(b'authenticated native payload')
+            gpg('--armor', '--detach-sign', str(payload))
+            with mock.patch.object(delivery, 'KEY', key):
+                delivery.legacy_pkgbuild(assets)
+                recipe = (assets / 'PKGBUILD').read_text()
+                self.assertIn(hashlib.sha256(payload.read_bytes()).hexdigest(), recipe)
+                self.assertIn("options=('!strip' '!debug')", recipe)
+                source = root / 'source'
+                source.mkdir()
+                shutil.copy2(payload, source / 'payload')
+                shutil.copy2(str(payload) + '.asc', source / 'payload.signature')
+                command = ['bash', '-c', 'set -e; startdir=$1; srcdir=$2; source "$3"; prepare',
+                           'legacy-test', str(root), str(source), str(assets / 'PKGBUILD')]
+                self.assertEqual(subprocess.run(command, capture_output=True).returncode, 0)
+                (source / 'payload').write_bytes(b'tampered payload')
+                self.assertNotEqual(subprocess.run(command, capture_output=True).returncode, 0)
+                payload.write_bytes(b'tampered published package')
+                with self.assertRaises(subprocess.CalledProcessError):
+                    delivery.legacy_pkgbuild(assets)
 
 
 if __name__ == '__main__':

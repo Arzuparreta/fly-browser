@@ -14,6 +14,8 @@ signing.installer(path.join(root, 'scripts/fly-install'), installer);
 const run = (file, args, env) => spawnSync('bash', [file === 'scripts/fly-install' ? installer : path.join(root, file), ...args], {env, encoding: 'utf8'});
 try {
     const home = path.join(temp, 'home with spaces');
+    const systemMarker = path.join(temp, 'system-installation');
+    fs.writeFileSync(installer, fs.readFileSync(installer, 'utf8').replaceAll('/opt/fly-browser/INSTALLATION', systemMarker));
     const bin = path.join(temp, 'bin');
     const releases = path.join(temp, 'releases');
     const engine = path.join(temp, 'engine');
@@ -135,6 +137,15 @@ cp "${releases}/$(basename "$url")" "$out"
     assert.match(fs.readFileSync(calls, 'utf8'), new RegExp(`install\\n[^\\n]+/${deb.replaceAll('.', '\\.')}\\n`));
     fs.unlinkSync(calls);
     fs.writeFileSync(path.join(bin, 'dpkg-query'), '#!/bin/sh\nprintf "install ok installed"\n', {mode:0o755});
+    // Existing packages from the old updater have no official-repository
+    // marker. Bootstrap the authenticated native package before delegating.
+    const migration = run('scripts/fly-install', ['update'], packageEnv);
+    assert.equal(migration.status, 0, migration.stderr);
+    assert.match(migration.stdout, /Migrating the existing Fly package/);
+    assert.match(fs.readFileSync(calls, 'utf8'), new RegExp(`install\\n[^\\n]+/${deb.replaceAll('.', '\\.')}\\n`));
+    assert.doesNotMatch(fs.readFileSync(calls, 'utf8'), /--only-upgrade/);
+    fs.unlinkSync(calls);
+    fs.writeFileSync(systemMarker, 'system\n');
     assert.equal(run('scripts/fly-install', ['update'], packageEnv).status, 0);
     assert.equal(fs.readFileSync(calls, 'utf8'), 'update\ninstall\n--only-upgrade\nfly-browser-bin\n');
     fs.writeFileSync(path.join(bin, 'dpkg-query'), '#!/bin/sh\nexit 1\n', {mode:0o755});
