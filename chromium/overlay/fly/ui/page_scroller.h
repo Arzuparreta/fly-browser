@@ -14,6 +14,7 @@
 #include "content/public/browser/render_widget_host_observer.h"
 #include "content/public/browser/web_contents_observer.h"
 #include "fly/commands/scroll_motion.h"
+#include "ui/aura/window_observer.h"
 #include "ui/compositor/compositor_animation_observer.h"
 #include "ui/gfx/geometry/point_f.h"
 #include "ui/gfx/geometry/vector2d_f.h"
@@ -57,6 +58,7 @@ std::optional<PageScroll> PageScrollForAction(std::string_view action);
 // When the clicked point can scroll nothing in that direction, it falls back to
 // the middle of the frame.
 class PageScroller : public ui::CompositorAnimationObserver,
+                     public aura::WindowObserver,
                      public content::WebContentsObserver,
                      public content::RenderWidgetHostObserver,
                      public content::RenderWidgetHost::InputEventObserver {
@@ -95,6 +97,8 @@ class PageScroller : public ui::CompositorAnimationObserver,
   // ui::CompositorAnimationObserver:
   void OnAnimationStep(base::TimeTicks timestamp) override;
   void OnCompositingShuttingDown(ui::Compositor* compositor) override;
+  // aura::WindowObserver:
+  void OnWindowDestroying(aura::Window* window) override;
   // content::WebContentsObserver:
   void PrimaryPageChanged(content::Page& page) override;
   void OnVisibilityChanged(content::Visibility visibility) override;

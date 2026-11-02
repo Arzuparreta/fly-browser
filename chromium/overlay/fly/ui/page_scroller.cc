@@ -104,6 +104,8 @@ std::optional<PageScroll> PageScrollForAction(std::string_view action) {
 }
 
 PageScroller::PageScroller(aura::Window* window) : window_(window) {
+  if (window_)
+    window_->AddObserver(this);
   // A key may legitimately stay down for longer than the compositor's
   // runaway-animation check allows.
   set_check_active_duration(false);
@@ -112,6 +114,8 @@ PageScroller::PageScroller(aura::Window* window) : window_(window) {
 PageScroller::~PageScroller() {
   Stop();
   Animate(false);
+  if (window_)
+    window_->RemoveObserver(this);
 }
 
 // static
@@ -367,6 +371,12 @@ void PageScroller::OnCompositingShuttingDown(ui::Compositor* compositor) {
 
 void PageScroller::PrimaryPageChanged(content::Page&) {
   Stop();
+}
+
+void PageScroller::OnWindowDestroying(aura::Window* window) {
+  Stop();
+  window->RemoveObserver(this);
+  window_ = nullptr;
 }
 
 void PageScroller::OnVisibilityChanged(content::Visibility visibility) {
