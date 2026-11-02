@@ -44,6 +44,14 @@ function iconSvg() {
   return svgDoc(`<defs>${c.defs}${R.STICKER_FILTER('cut')}</defs><g transform="${ROT}"><g filter="url(#cut)">${c.sil}</g>${c.body}</g>`, '-40 -40 1080 1080');
 }
 
+function monochromeIconSvg() {
+  const source = iconSvg();
+  const start = source.indexOf('>') + 1;
+  const filter = '<defs><filter id="template"><feColorMatrix type="matrix" values="0 0 0 0 0  0 0 0 0 0  0 0 0 0 0  0 0 0 1 0"/></filter></defs>';
+  return source.slice(0, start) + filter + '<g filter="url(#template)">' +
+    source.slice(start).replace('</svg>', '</g></svg>');
+}
+
 // Engraving: the line art cut into the surface. Light catches the lower edge, shadow sits in the cut.
 function engravingSvg(theme) {
   const t = THEMES[theme];
@@ -87,6 +95,7 @@ async function main() {
   const files = {
     'fly-line.svg': lineSvg(),
     'fly-icon.svg': iconSvg(),
+    'fly-icon-mono.svg': monochromeIconSvg(),
     'fly-engraving-chasis.svg': engravingSvg('chasis'),
     'fly-engraving-papel.svg': engravingSvg('papel'),
     'fly-memory-chasis.svg': memorySvg('chasis'),
@@ -96,7 +105,8 @@ async function main() {
     fs.writeFileSync(path.join(OUT, name), svg);
     console.log('svg', name, Math.round(svg.length / 1024) + ' KB');
   }
-  const jobs = [1024, 512, 256, 128, 64, 48].map((size) => ({ name: `icon-${size}.png`, size, svg: files['fly-icon.svg'] }));
+  const jobs = [1024, 600, 512, 256, 176, 128, 64, 48, 40, 32, 24, 20, 16].map((size) => ({ name: `icon-${size}.png`, size, svg: files['fly-icon.svg'] }));
+  jobs.push({ name: 'icon-mono22.png', size: 22, svg: files['fly-icon-mono.svg'] });
   for (const theme of Object.keys(THEMES)) {
     jobs.push({ name: `engraving-${theme}@2x.png`, size: 512, svg: files[`fly-engraving-${theme}.svg`] });
     jobs.push({ name: `memory-${theme}@2x.png`, size: 1200, svg: files[`fly-memory-${theme}.svg`] });

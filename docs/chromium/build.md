@@ -383,7 +383,37 @@ owner edits remain protected and require preservation before recovery can procee
 The optional [live Twitch/Pie desktop regression](./live-media.md) records real
 public-player behavior separately from deterministic local media fixtures.
 
-### Release build and Linux package
+### Application icons
+
+The application icon is separate from website favicons. Its master is
+`design/identity/assets/fly-icon.svg`; the committed PNG renders supply the native
+resources. After regenerating those renders with the identity exporter, run:
+
+```sh
+python3 scripts/chromium/application-icons.py
+python3 scripts/chromium/application-icons.py --check
+```
+
+`npm test` checks these generated resources without an image-library dependency.
+Linux embeds Fly's product icon in its resource pack for X11 window properties;
+Wayland uses the `fly-browser` app ID, matching `fly-browser.desktop` and the
+installed hicolor icons. Fly ignores an inherited `CHROME_DESKTOP` from another
+Chromium/Electron application, so that launching it from T3 cannot change that
+identity. Both the user installer and the DEB, RPM, pacman and
+AUR packages install the desktop icons. i3 normally does not display them.
+
+The overlay also connects the Windows EXE/DLL icon, profile shortcuts and Start
+tiles to Fly's ICO/PNG resources. macOS bundles Fly's ICNS, with standard and
+Retina images, and uses a monochrome status icon. It deliberately uses
+`CFBundleIconFile` without Chromium's asset catalog or `CFBundleIconName`, so a
+stock Chromium catalog cannot override the Fly icon. These resource integrations
+do not add Windows or macOS release packages: published builds remain Linux
+x86_64, and native Windows/macOS appearance needs validation on those hosts.
+
+`t3.json` points T3 Code at the SVG master. T3's automatic project-icon search
+does not include the identity or Chromium overlay directories.
+
+### Building a release package
 
 Development outputs (`FlyNative`) are component builds with DCHECKs on. Packages
 come from a separate static build without DCHECKs:

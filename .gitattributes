@@ -1,9 +1,9 @@
 chromium/overlay/fly/commands/generated_catalog.h linguist-generated=true
 chromium/overlay/fly/resources/whats_new/whats-new-releases.js linguist-generated=true
 
-# Unified patches prefix an empty context line with one space. Validate their
+# Unified patches prefix context lines (including tabs) with one space. Validate
 # added source whitespace with git apply --whitespace=error-all instead.
-chromium/patches/*.patch whitespace=-blank-at-eol
+chromium/patches/*.patch whitespace=-blank-at-eol,-space-before-tab
 
 # Native overlay hashes, GN arguments and patch context must be identical on
 # every host. Windows autocrlf conversion makes LF upstream patches fail.

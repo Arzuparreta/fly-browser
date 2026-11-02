@@ -83,7 +83,7 @@ class TestBuildTest(unittest.TestCase):
         self.assertEqual(create[3], 'test-pr-153')
         self.assertIn('--prerelease', create)
         self.assertEqual(create[create.index('--target') + 1], PR['headRefOid'])
-        files = [Path(part).name for part in create if str(part).startswith('/')]
+        files = [Path(part).name for part in create if Path(part).is_absolute()]
         self.assertEqual(files, ['Fly-9.9.9-native-linux-x64.tar.gz', 'SHA256SUMS.txt'])
         # The earlier test build is replaced, the release untouched.
         deletes = [call for call in github.calls if call[:3] == ['gh', 'release', 'delete']]

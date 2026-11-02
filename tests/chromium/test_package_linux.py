@@ -3,6 +3,7 @@ import importlib.util
 import os
 from pathlib import Path
 import subprocess
+import sys
 import tempfile
 import unittest
 
@@ -12,6 +13,7 @@ SPEC.loader.exec_module(package)
 
 
 class PackageInstallerTest(unittest.TestCase):
+    @unittest.skipIf(os.name == 'nt', 'POSIX permission bits are not available on Windows')
     def test_release_modes_do_not_depend_on_runner_umask(self):
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp) / 'package'
@@ -47,6 +49,7 @@ class PackageInstallerTest(unittest.TestCase):
         self.assertIn('\nStartupWMClass=Fly\n', package.DESKTOP)
         self.assertIn('\nIcon=fly-browser\n', package.DESKTOP)
 
+    @unittest.skipIf(os.name == 'nt', 'The compatibility launcher is a POSIX executable script')
     def test_earlier_releases_start_fly_browser_through_app_fly(self):
         with tempfile.TemporaryDirectory() as tmp:
             app = Path(tmp) / 'app dir'
@@ -60,8 +63,9 @@ class PackageInstallerTest(unittest.TestCase):
             link.symlink_to(app / 'fly')
             result = subprocess.run([str(link), '--fly-native', '--user-data-dir=/a b'],
                                     capture_output=True, text=True, check=True)
-            self.assertEqual(result.stdout, f'{app}/fly-browser|--fly-native|--user-data-dir=/a b|')
+            self.assertEqual(result.stdout, f'{app.resolve()}/fly-browser|--fly-native|--user-data-dir=/a b|')
 
+    @unittest.skipUnless(sys.platform == 'linux', 'The native installer supports Linux only')
     def test_install_update_remove_keeps_profile(self):
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)

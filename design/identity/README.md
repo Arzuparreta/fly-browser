@@ -90,7 +90,7 @@ All three are under the SIL Open Font License. The browser bundles them (`chromi
 | `assets/fly-icon.svg` | Colour icon with the sticker die cut. |
 | `assets/fly-engraving-{chasis,papel}.svg` | Debossed line art per theme, transparent background. |
 | `assets/fly-memory-{chasis,papel}.svg` | New tab memory per theme, transparent background. |
-| `assets/png/icon-{1024,512,256,128,64,48}.png` | Icon renders. 48, 128 and 256 are the application icons (`chromium/overlay/fly/resources/icons/fly-logo*.png`). |
+| `assets/png/icon-*.png` | Application icon renders, from 16 to 1024 pixels, plus the monochrome macOS status icon. `scripts/chromium/application-icons.py` synchronizes the native PNG, SVG, ICO and ICNS resources. |
 | `assets/png/engraving-{chasis,papel}@2x.png` | Engraving at 512 px for a 256 px slot. |
 | `assets/png/memory-{chasis,papel}@2x.png` | Memory at 1200 px. |
 | `assets/png/pixel-{16,24,32}.{png,svg}` | Hand-drawn pixel icons for sizes where the illustration turns to mush. |
