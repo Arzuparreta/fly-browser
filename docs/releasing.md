@@ -280,3 +280,12 @@ explicit instead of describing an untested distribution as supported.
 
 Ordinary PR CI remains `npm test`. Container/package rehearsals and the native
 rebuild are release/local work, not new mandatory pull-request checks.
+
+If the native build and tarball publication succeeded but the initial native
+package job failed, fix the packaging on `main`, then dispatch
+`official-packages.yml` on `main` with that release's `tag` and
+`from_release=true`. This explicit recovery reuses the published native archive,
+checks its checksum and binary provenance, and runs signing, Ubuntu acceptance
+and public repository deployment again. No Chromium rebuild or tag replacement
+is needed. Leave the recovery flag false for normal refreshes, which require
+an already signed release and reuse its immutable package bodies.
