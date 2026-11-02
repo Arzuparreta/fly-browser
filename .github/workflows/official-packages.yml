@@ -15,6 +15,10 @@ on:
       tag:
         description: Published stable release to package (empty selects latest)
         type: string
+      from_release:
+        description: Recover initial packaging after a verified successful native build
+        type: boolean
+        default: false
   schedule:
     - cron: '17 5 * * 1'
 
@@ -75,11 +79,11 @@ jobs:
           if ! compgen -G "$RUNNER_TEMP/assets/*.deb" >/dev/null; then
             docker run --rm -v "$PWD:/work:ro" -v "$RUNNER_TEMP:/delivery" fly-linux-packaging packages --archive "/delivery/assets/$(basename "$archive")" --output /delivery/assets
           fi
-          docker run --rm -v "$PWD:/work:ro" -v "$RUNNER_TEMP:/delivery" -e GNUPGHOME=/delivery/signing -e FLY_SIGNING_PASSPHRASE_FILE=/delivery/signing/passphrase --entrypoint /bin/sh fly-linux-packaging -c 'gpg --batch --import /delivery/signing/import.asc && rm /delivery/signing/import.asc && python3 scripts/distribution/linux.py repositories --assets /delivery/assets --output /delivery/repositories'
+          docker run --rm -v "$PWD:/work:ro" -v "$RUNNER_TEMP:/delivery" -e GNUPGHOME=/delivery/signing -e FLY_SIGNING_PASSPHRASE_FILE=/delivery/signing/passphrase --entrypoint /bin/sh fly-linux-packaging -c 'chown -R root:root /delivery/signing && gpg --batch --import /delivery/signing/import.asc && rm /delivery/signing/import.asc && python3 scripts/distribution/linux.py repositories --assets /delivery/assets --output /delivery/repositories'
           # RPM's embedded signature changes its bytes; publish precisely the
           # same signed package indexed by the repository.
-          cp "$RUNNER_TEMP/repositories/flat/"*.rpm "$RUNNER_TEMP/assets/"
-          cp "$RUNNER_TEMP/repositories/flat/"*.deb.sig "$RUNNER_TEMP/repositories/flat/"*.rpm.sig "$RUNNER_TEMP/repositories/flat/"*.pkg.tar.zst.sig "$RUNNER_TEMP/assets/"
+          sudo cp "$RUNNER_TEMP/repositories/flat/"*.rpm "$RUNNER_TEMP/assets/"
+          sudo cp "$RUNNER_TEMP/repositories/flat/"*.deb.sig "$RUNNER_TEMP/repositories/flat/"*.rpm.sig "$RUNNER_TEMP/repositories/flat/"*.pkg.tar.zst.sig "$RUNNER_TEMP/assets/"
           docker run --rm -v "$PWD:/work:ro" -v "$RUNNER_TEMP:/delivery" -e GNUPGHOME=/delivery/signing -e FLY_SIGNING_PASSPHRASE_FILE=/delivery/signing/passphrase fly-linux-packaging sign --assets /delivery/assets
       - name: Validate the packaged browser on the Ubuntu kernel
         run: |
