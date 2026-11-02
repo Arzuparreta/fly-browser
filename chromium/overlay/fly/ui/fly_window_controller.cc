@@ -407,6 +407,7 @@ FlyWindowController::FlyWindowController(BrowserWindowInterface* browser,
   ScheduleExtensionRefresh();
   UpdateModeLabel();
   UpdateSplitButton();
+  UpdateSidebarFly();
 }
 
 FlyWindowController::~FlyWindowController() {
@@ -673,6 +674,7 @@ void FlyWindowController::BuildFooter() {
                   return;
                 window->ScheduleExtensionRefresh();
                 window->RefreshReaderState();
+                window->UpdateSidebarFly();
               },
               weak_factory_.GetWeakPtr()),
       }));
@@ -1811,6 +1813,11 @@ void FlyWindowController::UpdateClock() {
 
 void FlyWindowController::CycleClockFormat() {
   FlyApp::Get().preferences().CycleClockFormat();
+}
+
+void FlyWindowController::UpdateSidebarFly() {
+  if (sidebar_panel_)
+    sidebar_panel_->SetEngravingShown(!ShowsNewTabFly(ActiveContents()));
 }
 
 void FlyWindowController::UpdateSplitButton() {

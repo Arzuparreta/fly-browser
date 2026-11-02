@@ -9,6 +9,8 @@ const R = require('./render.js');
 const OUT = path.join(__dirname, '..', 'assets');
 const PNG = path.join(OUT, 'png');
 const ROT = 'rotate(13 500 520)';
+// The sidebar engraving and the new-tab memory share one angle, 29.36°.
+const NEW_TAB_ROT = `rotate(${Math.atan2(9, 16) * 180 / Math.PI} 500 520)`;
 
 const THEMES = {
   chasis: { ink: '#e7e1d3', inkOpacity: 0.46, eyeOpacity: 0.75, lit: ['#fff', 0.17], cut: ['#000', 0.72] },
@@ -60,14 +62,14 @@ function engravingSvg(theme) {
     <feFlood flood-color="${t.cut[0]}" flood-opacity="${t.cut[1]}"/><feComposite in2="a" operator="in" result="cut"/>
     <feOffset in="a" dx="5" dy="5" result="ao"/><feFlood flood-color="${t.lit[0]}" flood-opacity="${t.lit[1]}"/><feComposite in2="ao" operator="in" result="lit"/>
     <feMerge><feMergeNode in="lit"/><feMergeNode in="cut"/></feMerge></filter>`;
-  return svgDoc(`<defs>${filter}</defs><g filter="url(#eg)">${themeableLine()}</g>`, '0 0 1000 1000',
+  return svgDoc(`<defs>${filter}</defs><g filter="url(#eg)">${themeableLine(NEW_TAB_ROT)}</g>`, '0 0 1000 1000',
     'svg{--ink:#000;--paper:#fff;--eye:#fff;--facet:1;--facet-ink:#000;--wash:1}');
 }
 
 // New tab memory: only the lines, fading towards the tail, with the eyes as the one colour.
 function memorySvg(theme, frontLegAngle = 0) {
   const t = THEMES[theme];
-  const rotation = `rotate(${Math.atan2(9, 16) * 180 / Math.PI} 500 520)`;
+  const rotation = NEW_TAB_ROT;
   return svgDoc(`<defs>
     <mask id="m" maskUnits="userSpaceOnUse" x="0" y="0" width="1000" height="1000"><g style="--ink:#fff;--paper:#000;--eye:#000;--facet:1;--facet-ink:#fff;--wash:1">${themeableLine(rotation, frontLegAngle)}</g></mask>
     <linearGradient id="f" x1="0" y1="0" x2="0" y2="1"><stop offset=".22" stop-color="#fff"/><stop offset=".78" stop-color="#fff" stop-opacity=".12"/></linearGradient>
@@ -108,16 +110,19 @@ async function main() {
     fs.writeFileSync(path.join(OUT, name), svg);
     console.log('svg', name, Math.round(svg.length / 1024) + ' KB');
   }
-  const newTabOnly = process.argv.includes('--new-tab-only');
-  const jobs = newTabOnly ? [] : [1024, 600, 512, 256, 176, 128, 64, 48, 40, 32, 24, 20, 16].map((size) => ({ name: `icon-${size}.png`, size, svg: files['fly-icon.svg'] }));
-  if (!newTabOnly) jobs.push({ name: 'icon-mono22.png', size: 22, svg: files['fly-icon-mono.svg'] });
+  const jobs = [1024, 600, 512, 256, 176, 128, 64, 48, 40, 32, 24, 20, 16].map((size) => ({ name: `icon-${size}.png`, size, svg: files['fly-icon.svg'] }));
+  jobs.push({ name: 'icon-mono22.png', size: 22, svg: files['fly-icon-mono.svg'] });
   for (const theme of Object.keys(THEMES)) {
-    if (!newTabOnly) jobs.push({ name: `engraving-${theme}@2x.png`, size: 512, svg: files[`fly-engraving-${theme}.svg`] });
+    // 2x of the sidebar's 168 px slot, 60% of the new-tab fly's 280 px.
+    jobs.push({ name: `engraving-${theme}@2x.png`, size: 336, svg: files[`fly-engraving-${theme}.svg`] });
     // One decoded 2x strip: rest, front legs together, front legs rubbing.
     jobs.push({ name: `memory-${theme}@2x.png`, size: 560,
       frames: [0, 40, 64].map(angle => memorySvg(theme, angle)) });
   }
-  await rasterise(jobs);
+  // --new-tab-only and --sidebar-only render just that surface's PNGs.
+  const only = process.argv.includes('--new-tab-only') ? 'memory-'
+    : process.argv.includes('--sidebar-only') ? 'engraving-' : '';
+  await rasterise(jobs.filter(job => job.name.startsWith(only)));
 }
 
 main().catch((err) => { console.error(err); process.exit(1); });

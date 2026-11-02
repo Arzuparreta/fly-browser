@@ -579,6 +579,11 @@ void NewTabArtwork::Clear() {
   SetPose(0);
   DestroyOverlay();
 }
+void NewTabArtwork::Finish() {
+  Clear();
+  if (auto* window = FlyWindowController::FromContents(web_contents()))
+    window->UpdateSidebarFly();
+}
 void NewTabArtwork::DestroyOverlay() {
   if (parent_)
     parent_->RemoveObserver(this);
@@ -610,7 +615,7 @@ void NewTabArtwork::DidFinishNavigation(content::NavigationHandle* navigation) {
     navigation_ = 0;
     loading_ = false;
     if (committed_)
-      Clear();
+      Finish();
     else
       Sync();
   }
@@ -619,17 +624,17 @@ void NewTabArtwork::DidStopLoading() {
   navigation_ = 0;
   loading_ = false;
   if (committed_)
-    Clear();
+    Finish();
   else
     Sync();
 }
 void NewTabArtwork::DidFirstVisuallyNonEmptyPaint() {
   if (committed_)
-    Clear();
+    Finish();
 }
 void NewTabArtwork::OnFirstContentfulPaintInPrimaryMainFrame(base::TimeTicks) {
   if (committed_)
-    Clear();
+    Finish();
 }
 void NewTabArtwork::OnVisibilityChanged(content::Visibility) {
   Sync();
@@ -719,6 +724,15 @@ bool IsFlyNewTabPage(const GURL& url) {
   return url.is_empty() || url.IsAboutBlank() ||
          (url.SchemeIs(content::kChromeUIScheme) &&
           (url.host() == kFlyNewTabHost || url.host() == "newtab"));
+}
+
+bool ShowsNewTabFly(content::WebContents* contents) {
+  if (!contents)
+    return false;
+  if (IsFlyNewTabPage(contents->GetLastCommittedURL()))
+    return true;
+  const auto* artwork = NewTabArtwork::FromWebContents(contents);
+  return artwork && artwork->active();
 }
 
 bool RewriteNewTabURL(GURL* url, content::BrowserContext*) {

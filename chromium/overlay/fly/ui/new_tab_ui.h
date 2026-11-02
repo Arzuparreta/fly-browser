@@ -43,6 +43,9 @@ class NewTabArtwork : public content::WebContentsObserver,
   ~NewTabArtwork() override;
   void Update(const gfx::RectF& relative_bounds, bool reduced_motion);
 
+  // The tab shows the new-tab fly: on its page or, after leaving it, until
+  // the destination paints.
+  bool active() const { return active_; }
   bool visible_for_testing() const;
   int pose_for_testing() const { return pose_; }
   bool timer_running_for_testing() const { return timer_.IsRunning(); }
@@ -56,6 +59,8 @@ class NewTabArtwork : public content::WebContentsObserver,
   void Tick();
   void SetPose(int pose);
   void Clear();
+  // The destination painted: the fly leaves and the sidebar shows its own.
+  void Finish();
   void DestroyOverlay();
   void DidStartNavigation(content::NavigationHandle*) override;
   void DidFinishNavigation(content::NavigationHandle*) override;
@@ -127,6 +132,9 @@ inline constexpr char kFlyNewTabURL[] = "chrome://fly-new-tab/";
 
 // New tabs and blank pages are both "new tab" in Fly's interface.
 bool IsFlyNewTabPage(const GURL& url);
+// Whether `contents` shows the new-tab fly, so the sidebar hides its engraved
+// one. The fly stays after leaving the page until the destination paints.
+bool ShowsNewTabFly(content::WebContents* contents);
 // BrowserURLHandler rewrite: chrome://newtab (Chromium's new tab page, also
 // the start page) becomes Fly's page in every profile.
 bool RewriteNewTabURL(GURL* url, content::BrowserContext* browser_context);

@@ -2333,6 +2333,39 @@ IN_PROC_BROWSER_TEST_F(FlyNavigationFeedbackBrowserTest,
   EXPECT_FALSE(NewTabArtwork::FromWebContents(contents)->timer_running_for_testing());
 }
 
+// The sidebar's engraved fly gives way to the new-tab fly, including while
+// that fly stays on screen for its pending navigation.
+IN_PROC_BROWSER_TEST_F(FlyNavigationFeedbackBrowserTest,
+                       SidebarFlyHidesWhileTheNewTabFlyShows) {
+  auto* panel = Window().sidebar_root_for_testing()->panel();
+  EXPECT_TRUE(panel->engraving_shown_for_testing());
+  ASSERT_TRUE(ui_test_utils::NavigateToURL(browser(), GURL(kFlyNewTabURL)));
+  auto* contents = Active(browser());
+  EXPECT_FALSE(panel->engraving_shown_for_testing());
+  ASSERT_TRUE(base::test::RunUntil([&] {
+    auto* artwork = NewTabArtwork::FromWebContents(contents);
+    return artwork && artwork->visible_for_testing();
+  }));
+  Start(server_.GetURL("/waiting"));
+  waiting_->WaitForRequest();
+  EXPECT_FALSE(panel->engraving_shown_for_testing());
+  SendPage(*waiting_);
+  waiting_->Done();
+  ASSERT_TRUE(content::WaitForLoadStop(contents));
+  ASSERT_TRUE(base::test::RunUntil(
+      [&] { return panel->engraving_shown_for_testing(); }));
+  EXPECT_FALSE(NewTabArtwork::FromWebContents(contents)->active());
+
+  ASSERT_TRUE(ExecuteNativeCommand(browser(), "spawn-tab"));
+  ASSERT_TRUE(content::WaitForLoadStop(Active(browser())));
+  ASSERT_TRUE(base::test::RunUntil(
+      [&] { return !panel->engraving_shown_for_testing(); }));
+  auto* model = browser()->GetTabStripModel();
+  model->ActivateTabAt(model->GetIndexOfWebContents(contents));
+  ASSERT_TRUE(base::test::RunUntil(
+      [&] { return panel->engraving_shown_for_testing(); }));
+}
+
 IN_PROC_BROWSER_TEST_F(FlyNavigationFeedbackBrowserTest,
                        NewTabFlyTracksReplacementNavigation) {
   ASSERT_TRUE(ui_test_utils::NavigateToURL(browser(), GURL(kFlyNewTabURL)));
