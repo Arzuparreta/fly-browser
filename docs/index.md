@@ -73,6 +73,7 @@ Keep your hands on the home row. Every major workflow is reachable via concise, 
 | `Ctrl + Shift + H` | History Overlay | Search, reopen, or purge visited history records |
 | `Ctrl + Shift + P` | Private Window | Open zero-trace volatile browsing container |
 | `Ctrl + H` | Preferences | Adjust hardware flags, suspension timeouts, and site permissions |
+| `Ctrl + ,` / `?` | Keyboard Controls | Open Preferences on the Keyboard section to see and change every shortcut |
 
 ---
 

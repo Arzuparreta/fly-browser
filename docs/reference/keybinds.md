@@ -1,6 +1,6 @@
 # Keyboard controls
 
-Open **Preferences → Keyboard**, or press **Ctrl+,** with a new profile. The editor is a table with one row per action and three columns: the action, its **shortcut** (works everywhere, also while typing) and its **NORMAL mode** key (works only when you are not typing). Filter the table by action, category or key, or turn on **Changed only** to list the actions that differ from the defaults. **Tab numbers** sets the one modifier used with 1–9 to select tabs (Alt by default, or Off).
+Press **Ctrl+,**, or **?** (Shift+?) in NORMAL mode, to open Preferences directly on its **Keyboard** section. **Ctrl+H** opens Preferences; choose **Keyboard** in the section list from there. Both are new-profile defaults. The editor is a table with one row per action and three columns: the action, its **shortcut** (works everywhere, also while typing) and its **NORMAL mode** key (works only when you are not typing). Filter the table by action, category or key, or turn on **Changed only** to list the actions that differ from the defaults. **Tab numbers** sets the one modifier used with 1–9 to select tabs (Alt by default, or Off).
 
 Select a cell with the arrow keys or the pointer. **Enter**, **Space**, a double click or **Record key** records a new binding for that cell; a NORMAL mode cell accepts one key or two keys in a row. **Delete** or **Clear** empties the cell and **Default** restores it. Changed cells are drawn in the accent colour. Typing a letter while a cell has focus filters the table.
 
