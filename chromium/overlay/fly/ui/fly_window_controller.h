@@ -135,8 +135,8 @@ class FlyWindowController : public views::WidgetObserver,
   void UpdateModeLabel();
   void UpdateTargetURL(content::WebContents* source, const GURL& url);
   void UpdateSplitButton();
-  // Hides the sidebar's engraved fly while the active tab shows the new-tab
-  // fly.
+  // Hides the sidebar's engraved fly while a tab on screen (the active tab
+  // or another pane of its split) shows the new-tab fly.
   void UpdateSidebarFly();
   // Fly status line (footer mode badge), also kept in the in-memory
   // diagnostics log while recording is enabled.

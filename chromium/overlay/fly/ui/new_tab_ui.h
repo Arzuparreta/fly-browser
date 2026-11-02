@@ -59,8 +59,6 @@ class NewTabArtwork : public content::WebContentsObserver,
   void Tick();
   void SetPose(int pose);
   void Clear();
-  // The destination painted: the fly leaves and the sidebar shows its own.
-  void Finish();
   void DestroyOverlay();
   void DidStartNavigation(content::NavigationHandle*) override;
   void DidFinishNavigation(content::NavigationHandle*) override;
@@ -87,7 +85,7 @@ class NewTabArtwork : public content::WebContentsObserver,
   int64_t navigation_ = 0;
   int pose_ = 0;
   size_t ticks_ = 0;
-  bool active_ = true;
+  bool active_ = false;
   bool loading_ = false;
   bool committed_ = false;
   bool reduced_motion_ = false;

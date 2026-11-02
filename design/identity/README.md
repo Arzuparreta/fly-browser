@@ -18,7 +18,7 @@ and the engraving.
 | Line art | Clean contour whose weight swells on the shadow side. No stipple, no grain, modest detail. |
 | Eyes | Compound eye facets as a dot lattice that fades with the light. No glint in any line art version. |
 | Desktop icon | Modelled colour fly as a die cut vinyl sticker: crisp edge, thin cut line, shadow that hugs the sticker. Its eyes keep a soft glint with a subtle bloom. |
-| Sidebar | The fly engraved into the surface (line art, debossed), replacing the old Mise mark. It is 60% the size of the new-tab fly and gives way to it: hidden while the active tab shows the new tab page, and until the destination paints after leaving it. |
+| Sidebar | The fly engraved into the surface (line art, debossed), replacing the old Mise mark. It is 60% the size of the new-tab fly and gives way to it: hidden while a tab on screen (including the other pane of a split view) shows the new tab page, and after leaving it until the destination paints. |
 | New tab | A "memory" of the fly: only its lines, fading towards the tail. The red eyes are its only colour. During its own pending navigation it briefly rubs its front legs, then rests, on a 2.4-second cycle. Quiet gives it room beside entry points to native search and bookmarks. |
 
 ## System
