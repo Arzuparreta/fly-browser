@@ -99,8 +99,12 @@ download_build() {
     done
     cached() {
         # The newest complete download of this channel.
-        local found
-        found=$(ls -1td "$cache"/*/fly-browser/app/fly 2>/dev/null | head -n1 || true)
+        local found='' candidate
+        for candidate in "$cache"/*/fly-browser/app/fly; do
+            if [ -x "$candidate" ] && { [ -z "$found" ] || [ "$candidate" -nt "$found" ]; }; then
+                found=$candidate
+            fi
+        done
         [ -n "$found" ] && binary=$found
     }
     # GitHub's answer: 200 found, 404 not published, anything else (000 when
@@ -110,7 +114,7 @@ download_build() {
     }
     local http=200 answer
     answer=$(mktemp "$cache/download.answer.XXXXXXXXXX")
-    tag= sums=
+    tag='' sums=''
     if [ "$channel" = release ]; then
         fetch "https://api.github.com/repos/$github/releases/latest" "$answer"
         if [ "$http" = 200 ]; then
@@ -123,6 +127,18 @@ download_build() {
     if [ "$http" = 200 ]; then
         fetch "https://github.com/$github/releases/download/$tag/SHA256SUMS.txt" "$answer"
         [ "$http" != 200 ] || sums=$(cat "$answer")
+    fi
+    if [ "$channel" = release ] && [ "$http" = 200 ]; then
+        local verification
+        verification=$(mktemp -d "$cache/download.signature.XXXXXXXXXX")
+        command -v gpgv >/dev/null || die 'Install gpgv or GnuPG to verify Fly releases.'
+        fetch "https://github.com/$github/releases/download/$tag/SHA256SUMS.txt.asc" "$verification/signature"
+        if [ "$http" != 200 ] || ! gpgv --homedir "$verification" \
+            --keyring "$repo/distribution/release-key.gpg" "$verification/signature" "$answer"; then
+            rm -rf "$verification" "$answer"
+            die 'Release signature verification failed; nothing was started.'
+        fi
+        rm -rf "$verification"
     fi
     rm -f "$answer"
     name=$(printf '%s\n' "$sums" | awk '$2 ~ /-native-linux-x64\.tar\.gz$/ {sub(/^\*/, "", $2); print $2; exit}')

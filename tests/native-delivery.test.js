@@ -8,7 +8,10 @@ const {spawnSync} = require('node:child_process');
 const root = path.resolve(__dirname, '..');
 const version = require('../package.json').version;
 const temp = fs.mkdtempSync(path.join(os.tmpdir(), 'fly-native-delivery-'));
-const run = (file, args, env) => spawnSync('bash', [path.join(root, file), ...args], {env, encoding: 'utf8'});
+const signing = require('./release-signing')(temp);
+const installer = path.join(temp, 'fly-install');
+signing.installer(path.join(root, 'scripts/fly-install'), installer);
+const run = (file, args, env) => spawnSync('bash', [file === 'scripts/fly-install' ? installer : path.join(root, file), ...args], {env, encoding: 'utf8'});
 try {
     const home = path.join(temp, 'home with spaces');
     const bin = path.join(temp, 'bin');
@@ -76,9 +79,12 @@ cp "${releases}/$(basename "$url")" "$out"
     const digest = crypto.createHash('sha256').update(fs.readFileSync(archive)).digest('hex');
     const sums = path.join(releases, 'SHA256SUMS.txt');
     fs.writeFileSync(sums, `${'0'.repeat(64)}  ${name}\n`);
+    signing.sign(sums);
     assert.match(run('scripts/fly-install', ['install', '--native'], env).stderr, /checksum mismatch/);
     assert.equal(fs.existsSync(path.join(env.XDG_DATA_HOME, 'fly-browser')), false);
     fs.writeFileSync(sums, `${digest}  ${name}\n`);
+    assert.match(run('scripts/fly-install', ['install', '--native'], env).stderr, /signature verification failed/);
+    signing.sign(sums);
     assert.equal(run('scripts/fly-install', ['install', '--native'], env).status, 0);
     assert.match(run('scripts/fly-install', ['status'], env).stdout, /native/);
     fs.mkdirSync(path.join(env.XDG_CONFIG_HOME, 'fly-browser'), {recursive:true});
@@ -116,6 +122,22 @@ cp "${releases}/$(basename "$url")" "$out"
     assert.equal(fs.existsSync(path.join(env.XDG_CONFIG_HOME, 'fly-browser-flags.conf')), false);
     assert.equal(fs.readFileSync(path.join(unrelated, 'kept'), 'utf8'), 'unrelated');
     assert.equal(run('scripts/fly-install', ['uninstall', '--purge', '--yes'], env).status, 0);
+    // The native package route authenticates the same manifest before handing
+    // the exact downloaded file to the system manager; no PKGBUILD is executed.
+    const deb = `fly-browser-bin_${version}_amd64.deb`;
+    fs.writeFileSync(path.join(releases, deb), 'disposable package transport fixture');
+    const debDigest = crypto.createHash('sha256').update(fs.readFileSync(path.join(releases, deb))).digest('hex');
+    fs.writeFileSync(sums, `${digest}  ${name}\n${debDigest}  ${deb}\n`);
+    signing.sign(sums);
+    fs.writeFileSync(path.join(bin, 'apt-get'), '#!/bin/sh\nprintf "%s\\n" "$@" >> "$FLY_TEST_CALLS"\n', {mode:0o755});
+    fs.writeFileSync(path.join(bin, 'dpkg-query'), '#!/bin/sh\nexit 1\n', {mode:0o755});
+    assert.equal(run('scripts/fly-install', ['install', '--package'], packageEnv).status, 0);
+    assert.match(fs.readFileSync(calls, 'utf8'), new RegExp(`install\\n[^\\n]+/${deb.replaceAll('.', '\\.')}\\n`));
+    fs.unlinkSync(calls);
+    fs.writeFileSync(path.join(bin, 'dpkg-query'), '#!/bin/sh\nprintf "install ok installed"\n', {mode:0o755});
+    assert.equal(run('scripts/fly-install', ['update'], packageEnv).status, 0);
+    assert.equal(fs.readFileSync(calls, 'utf8'), 'update\ninstall\n--only-upgrade\nfly-browser-bin\n');
+    fs.writeFileSync(path.join(bin, 'dpkg-query'), '#!/bin/sh\nexit 1\n', {mode:0o755});
     fs.unlinkSync(archive);
     assert.match(run('scripts/fly-install', ['install', '--native'], env).stderr, /no Linux package/);
     console.log('Native launcher and installer preserve arguments, verify releases, reject releases without a Linux package and retain profile/unrelated launchers.');

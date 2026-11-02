@@ -6,7 +6,7 @@
   "license": "GPL-3.0-or-later",
   "scripts": {
     "start": "bash launch.sh",
-    "test": "node scripts/chromium/generate-commands.js --check && node scripts/version-sync.js --check && python3 scripts/chromium/bundled-extensions.py --check && node tests/release-tooling.test.js && node tests/aur-package.test.js && node tests/native-delivery.test.js && node tests/launch-downloads.test.js",
+    "test": "node scripts/chromium/generate-commands.js --check && node scripts/version-sync.js --check && python3 scripts/chromium/bundled-extensions.py --check && python3 -B tests/distribution_test.py && node tests/release-tooling.test.js && node tests/native-delivery.test.js && node tests/launch-downloads.test.js",
     "test:chromium-tooling": "python3 -B -m unittest discover -s tests/chromium -p 'test_*.py'",
     "docs:dev": "vitepress dev docs",
     "docs:build": "vitepress build docs",

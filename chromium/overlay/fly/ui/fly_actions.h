@@ -102,11 +102,13 @@ SpellcheckPreferences ReadEffectiveSpellcheck(
 struct UpdateCheckResult {
   bool ok = false;
   bool newer = false;
+  bool managed_by_system = false;
   std::string latest;
   GURL page;
   // The release's native Linux package and its .sha256 file, when published.
   GURL package;
   GURL checksum;
+  GURL signature;
 };
 // Queries the latest published Fly release (GitHub, no credentials).
 void CheckForUpdates(base::OnceCallback<void(UpdateCheckResult)> done);

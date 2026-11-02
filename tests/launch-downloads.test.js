@@ -14,6 +14,9 @@ try {
     const checkout = path.join(temp, 'projects/fly-browser');
     fs.mkdirSync(checkout, {recursive:true});
     fs.copyFileSync(path.join(root, 'launch.sh'), path.join(checkout, 'launch.sh'));
+    const signing = require('./release-signing')(temp);
+    fs.mkdirSync(path.join(checkout, 'distribution'));
+    fs.writeFileSync(path.join(checkout, 'distribution/release-key.gpg'), signing.key);
     const home = path.join(temp, 'home with spaces');
     const bin = path.join(temp, 'bin');
     const github = path.join(temp, 'github');
@@ -76,6 +79,7 @@ code 200
         const digest = corrupt ? '0'.repeat(64)
             : crypto.createHash('sha256').update(fs.readFileSync(path.join(dir, name))).digest('hex');
         fs.writeFileSync(path.join(dir, 'SHA256SUMS.txt'), `${digest}  ${name}\n`);
+        signing.sign(path.join(dir, 'SHA256SUMS.txt'));
     };
     const api = path.join(github, 'repos/Arzuparreta/fly-browser/releases');
     fs.mkdirSync(api, {recursive:true});

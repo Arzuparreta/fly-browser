@@ -946,11 +946,13 @@ void FlyApp::CheckUpdates(bool manual, BrowserWindowInterface* origin) {
           return;
         }
         status(u"Fly " + base::UTF8ToUTF16(result.latest) +
-                   (result.package.is_valid()
+                   (result.managed_by_system
+                        ? u" is available. Update using your system's package manager."
+                        : result.package.is_valid()
                         ? u" is available. Install it here; Fly restarts "
                           u"with your tabs."
                         : u" is available as a download."),
-               result.latest);
+               result.managed_by_system ? std::string() : result.latest);
         app->ShowStatus(u"Fly " + base::UTF8ToUTF16(result.latest) +
                         u" is available. Check for Updates opens it.");
         if (manual)
@@ -969,6 +971,10 @@ void FlyApp::InstallUpdate() {
   };
   if (!update_.newer) {
     status(u"Check for updates first.", "");
+    return;
+  }
+  if (update_.managed_by_system) {
+    status(u"Update Fly using your system's package manager.", "");
     return;
   }
   if (!update_.package.is_valid()) {

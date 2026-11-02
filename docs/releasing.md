@@ -177,7 +177,7 @@ development profile. Export `FLY_GOOGLE_API_KEY` first for a test build with
 Safe Browsing; without it the build works but does not check sites.
 
 Test builds never reach users: their tags do not start with `v`, so neither the
-release workflow nor the AUR publication runs, and Fly's update check and
+release workflow nor the official repository publication runs, and Fly's update check and
 `fly-install` read `releases/latest`, which never returns a pre-release. Each
 publication, and `python3 scripts/chromium/test-build.py --pr N --remove`
 (which deletes that pull request's test build), also deletes the test builds of
@@ -195,32 +195,88 @@ that a running Fly uses is never deleted. While a development Fly from one
 build is running, starting another build is refused: Chromium would only open
 a window in the running one.
 
-## The AUR package
+## Official Linux distribution
 
-Once a stable release is published, `release.yml` calls `aur.yml`, which writes `fly-browser-bin`'s `PKGBUILD` and `.SRCINFO` with `scripts/aur.js`, attaches the `PKGBUILD` to the release (so Arch users can `makepkg -si` it without the AUR) and pushes both to the AUR. Both are generated from the version in `package.json` and the tarball's line in `SHA256SUMS.txt`, so nothing is edited per release. Release candidates are not published there.
+Fly publishes its own packages and repositories. There is no AUR, third-party
+store or external package build service in the delivery path. The Chromium
+payload is compiled once per supported architecture. `distribution/linux.json`
+declares the common package identity, dependency mappings and public URLs.
+`scripts/distribution/linux.py` derives DEB, RPM and pacman packages from that
+same native tarball; it checks the payload version and binary provenance first.
 
-Pushing needs the `AUR_SSH_PRIVATE_KEY` repository secret, whose public half is registered to the AUR account that maintains the package, and the `AUR_PUBLISH` repository variable set to `true`. Until the variable is set, the job writes the package, notes that it was not pushed and succeeds, so a release is never held back or marked failed by the AUR. Once it is set, a failed push fails the job, because something has broken.
+The release's final job calls `official-packages.yml`. It creates the native
+packages, signs them, signs the tarball/checksums, attaches the results to the
+release and publishes repository metadata. A release is not fully delivered
+until this job and the public repository checks pass. Release candidates do
+not replace stable repositories.
 
-### Activating the AUR package
+### Hosting
 
-The secret is already set; the package goes live once the account exists. AUR registration was paused when this was set up (October 2026); it is announced on aur-general and the Arch news feed when it reopens.
+GitHub Releases stores the versioned package bodies. A separate prerelease
+named `linux-repository` serves a flat signed APT repository and the pacman
+database. It never becomes the latest browser release. Old versioned package
+bodies remain available for clients holding a previous signed index.
 
-1. Register at <https://aur.archlinux.org/register>.
-2. In **My Account → SSH Public Key**, add the release workflow's key:
+The `gh-pages` branch of `Arzuparreta/fly-browser.github.io` stores small
+files under `packages/`: instructions, public keys and signed RPM metadata.
+Its own Pages workflow builds a deployment artifact and downloads the current
+RPM and two previous signed releases into it, verifying their signed hashes.
+Large binaries never enter Git history. Both DNF and libzypp then see a normal
+RPM repository with relative package locations; libzypp cannot use the external
+package URLs accepted by DNF. The build refuses to exceed its Pages size budget
+and leaves the previous deployed site working on failure.
 
-   ```
-   ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIMngmlcK3MfT93rjMMQ72gopn2PSJlqginRVwLgWBMws fly-browser release workflow (AUR)
-   ```
+The publisher changes only `packages/`, its two owned Pages workflow/helper
+files, and creates a minimal index only if no landing exists. It preserves a
+future static landing. Pages must use the Actions build type. Its SSH deploy key
+is scoped to that repository only; the browser repository never receives a
+general account token. The browser release job waits until the matching public
+RPM metadata and package body are available. All public hosting addresses are
+in `distribution/linux.json`.
 
-3. Turn publishing on and publish the current release:
+### Signing and key custody
 
-   ```bash
-   gh variable set AUR_PUBLISH --body true
-   gh workflow run aur.yml -f tag="$(gh release view --json tagName -q .tagName)"
-   ```
+`distribution/release-key.gpg` and `.asc` are public. `fly-install` embeds the
+same key so it never obtains its trust root from the package download. The
+browser uses the key already installed beside its executable. `gpgv` verifies
+signed checksums before a direct installation/update is unpacked. Native
+packages use APT's signed Release/InRelease, RPM signatures and signed repomd,
+and pacman's package/database signatures. No signature check is disabled.
 
-The first push creates `fly-browser-bin` on the AUR. If the name has been taken in the meantime, change `PKGNAME` in `scripts/aur.js`. If the key is ever lost, generate a new one with `ssh-keygen -t ed25519`, store the private half with `gh secret set AUR_SSH_PRIVATE_KEY`, and register the public half instead of the one above.
+The signing primary key certifies a separate release signing subkey. Only the
+protected signing subkey belongs in GitHub secrets:
 
-To publish a release again, for example after the secret was added or when only the packaging changed, dispatch the workflow: `gh workflow run aur.yml -f tag=vX.Y.Z`, adding `-f pkgrel=2` (and so on) when the version is already on the AUR.
+- `FLY_RELEASE_SIGNING_KEY`: ASCII-armored secret signing subkey export.
+- `FLY_RELEASE_SIGNING_PASSPHRASE`: its passphrase.
+- `FLY_PACKAGES_DEPLOY_KEY`: SSH private deploy key for the site repository.
 
-To test a packaging change before it reaches a release, run the workflow on its branch: `gh workflow run release.yml --ref <branch>`. It builds the Linux package and keeps it as a workflow artefact for three days, and publishes nothing.
+Keep the primary secret key and revocation certificate outside all repositories,
+with a protected offline backup. Never put either into Actions. Signing subkeys
+expire and must be renewed and shipped to clients in a release signed by the still-valid previous subkey before expiry. Replacing a root key needs a staged
+release that distributes both trusted public keys while still signed by the
+old key; do not replace the download key unilaterally. Compromise requires
+revocation and an independently communicated recovery procedure.
+
+The workflow removes ephemeral signing material even on failure. Weekly runs
+reuse and verify published native packages, then renew expiring APT metadata.
+They do not rebuild different package contents under the same version.
+
+### Local rehearsal
+
+Build the packaging container, package a native archive, and generate repositories
+using a disposable signing key for tests (or the release subkey for production):
+
+```sh
+docker build -t fly-linux-packaging -f scripts/distribution/Dockerfile .
+# See linux.py --help and its packages/repositories/sign subcommands.
+python3 scripts/distribution/validate.py --help
+```
+
+Validation must cover clean installation, package-manager updates, removal that
+preserves profiles, dependency resolution, desktop entries, sandbox permissions,
+and rejection of modified packages and metadata. Container launch checks do not
+prove X11/Wayland, GPU, DRM or immutable-desktop acceptance. Keep these limits
+explicit instead of describing an untested distribution as supported.
+
+Ordinary PR CI remains `npm test`. Container/package rehearsals and the native
+rebuild are release/local work, not new mandatory pull-request checks.

@@ -14,15 +14,16 @@ workspaces with separate Chromium profiles.
 
 ```sh
 mkdir -p ~/.local/bin
-curl -fsSL https://raw.githubusercontent.com/Arzuparreta/fly-browser/main/scripts/fly-install -o ~/.local/bin/fly-install
+curl -fsSL https://arzuparreta.github.io/fly-browser.github.io/packages/fly-install -o ~/.local/bin/fly-install
 chmod +x ~/.local/bin/fly-install
-~/.local/bin/fly-install install
+~/.local/bin/fly-install install --package
 ```
 
-`fly-install` installs Fly for Linux x86_64, checks the release SHA-256 and adds
-Fly to the applications menu. Use `fly-install update`, `fly-install status` or
-`fly-install uninstall`. Arch users can use the generated `fly-browser-bin`
-package. See [installation](docs/guide/installation.md) for details.
+With `curl` and `gpgv`/GnuPG installed, `fly-install` verifies Fly's release
+signature and installs the official DEB, RPM or pacman package and its signed
+repository. Update with your usual package manager. Use `install --native` for
+a user installation without root, `status` to inspect it, or `uninstall` to
+remove it while keeping your profile. See [installation](docs/guide/installation.md).
 
 Releases are built for Linux x86_64 only.
 
