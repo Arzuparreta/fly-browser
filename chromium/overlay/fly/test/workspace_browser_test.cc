@@ -7685,7 +7685,10 @@ IN_PROC_BROWSER_TEST_F(FlyPageScrollBrowserTest,
                       "document.querySelector('#box').scrollHeight - "
                       "document.querySelector('#box').clientHeight")
           .ExtractInt();
-  ASSERT_TRUE(wait_offset("scrollTop", bottom));
+  ASSERT_TRUE(wait_offset("scrollTop", bottom)) << content::EvalJs(
+      contents, "JSON.stringify({box:document.querySelector('#box').scrollTop,"
+                "page:scrollY,expected:document.querySelector('#box').scrollHeight-"
+                "document.querySelector('#box').clientHeight})");
   ASSERT_TRUE(content::ExecJs(
       contents,
       "document.querySelector('#box').style.overscrollBehavior = 'contain'"));
@@ -7800,7 +7803,8 @@ IN_PROC_BROWSER_TEST_F(
       content::EvalJs(contents, "waitFrames(3)").ExtractDouble();
   // Repeat notifications must not leave twenty queued 60-pixel steps.
   EXPECT_LT(released - before_repeats, 600);
-  EXPECT_EQ(released, content::EvalJs(contents, "waitFrames(8)"));
+  EXPECT_DOUBLE_EQ(
+      released, content::EvalJs(contents, "waitFrames(8)").ExtractDouble());
 
   keys.PressKey(ui::VKEY_J, ui::EF_NONE);
   ASSERT_TRUE(base::test::RunUntil([&] {
@@ -7813,7 +7817,8 @@ IN_PROC_BROWSER_TEST_F(
   keys.ReleaseKey(ui::VKEY_J, ui::EF_NONE);
   const double blurred =
       content::EvalJs(contents, "waitFrames(3)").ExtractDouble();
-  EXPECT_EQ(blurred, content::EvalJs(contents, "waitFrames(8)"));
+  EXPECT_DOUBLE_EQ(
+      blurred, content::EvalJs(contents, "waitFrames(8)").ExtractDouble());
 }
 
 IN_PROC_BROWSER_TEST_F(FlyPageScrollBrowserTest,
