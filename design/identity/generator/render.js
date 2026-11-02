@@ -107,7 +107,12 @@ function line(o = {}) {
   const { A } = G;
   const s = [];
   s.push(`<defs><mask id="${o.id}lm" maskUnits="userSpaceOnUse" x="0" y="0" width="1000" height="1000"><rect width="1000" height="1000" fill="#fff"/>${A.wings.map((W) => `<path d="${pathOf(W.outline)}" fill="#000"/>`).join('')}</mask></defs>`);
-  s.push(`<g fill="${o.ink}" mask="url(#${o.id}lm)">${G.legs.map(({ L, g }) => legPaths(g, L).map((d) => `<path d="${d}"/>`).join('')).join('')}</g>`);
+  s.push(`<g fill="${o.ink}" mask="url(#${o.id}lm)">${G.legs.map(({ L, g }, i) => {
+    const paths = legPaths(g, L).map((d) => `<path d="${d}"/>`).join('');
+    return i < 2 && o.frontLegAngle
+      ? `<g transform="rotate(${-L.side * o.frontLegAngle} ${L.j[0].join(' ')})">${paths}</g>`
+      : paths;
+  }).join('')}</g>`);
   const part = (B, base, heavy) => { const p = blobPts(B); return `<path d="${pathOf(p)}" fill="${o.paper}"/><path d="${contour(p, base, heavy)}" fill="${o.ink}"/>`; };
   s.push(part(A.abdomen, 4.4, 7));
   s.push(`<g fill="${o.ink}">${tergites(A).map((l) => `<path d="${taper(l, 0.6, 0.6, 3)}"/>`).join('')}</g>`);

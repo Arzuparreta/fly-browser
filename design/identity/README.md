@@ -14,12 +14,12 @@ and the engraving.
 | Topic | Decision |
 | :--- | :--- |
 | Default theme | Chasis (dark). Papel (light) must receive the same care. |
-| The fly | Seen from above, turned 13° to the right. A three quarter perspective was tried and dropped. |
+| The fly | Seen from above, turned 13° to the right in the icon and engraving, and 29.36° to the right on new tabs. A three quarter perspective was tried and dropped. |
 | Line art | Clean contour whose weight swells on the shadow side. No stipple, no grain, modest detail. |
 | Eyes | Compound eye facets as a dot lattice that fades with the light. No glint in any line art version. |
 | Desktop icon | Modelled colour fly as a die cut vinyl sticker: crisp edge, thin cut line, shadow that hugs the sticker. Its eyes keep a soft glint with a subtle bloom. |
 | Sidebar | The fly engraved into the surface (line art, debossed), replacing the old Mise mark. |
-| New tab | A "memory" of the fly: only its lines, fading towards the tail, letting the dot grid show through. The red eyes are its only colour. Quiet gives it room beside entry points to native search and bookmarks. |
+| New tab | A "memory" of the fly: only its lines, fading towards the tail. The red eyes are its only colour. During its own pending navigation it briefly rubs its front legs, then rests, on a 2.4-second cycle. Quiet gives it room beside entry points to native search and bookmarks. |
 
 ## System
 
@@ -92,7 +92,7 @@ All three are under the SIL Open Font License. The browser bundles them (`chromi
 | `assets/fly-memory-{chasis,papel}.svg` | New tab memory per theme, transparent background. |
 | `assets/png/icon-*.png` | Application icon renders, from 16 to 1024 pixels, plus the monochrome macOS status icon. `scripts/chromium/application-icons.py` synchronizes the native PNG, SVG, ICO and ICNS resources. |
 | `assets/png/engraving-{chasis,papel}@2x.png` | Engraving at 512 px for a 256 px slot. |
-| `assets/png/memory-{chasis,papel}@2x.png` | Memory at 1200 px. |
+| `assets/png/memory-{chasis,papel}@2x.png` | Three 560 px square poses in a 1680 × 560 strip: rest and two front-leg positions, for a 280 px slot at 2× density. |
 | `assets/png/pixel-{16,24,32}.{png,svg}` | Hand-drawn pixel icons for sizes where the illustration turns to mush. |
 | `assets/png/paper-grain.png` | Static paper grain tiled over light-theme surfaces. |
 | `assets/png/wordmark.png` | FLY set in Doto. |
@@ -103,12 +103,21 @@ All three are under the SIL Open Font License. The browser bundles them (`chromi
 Fly targets old machines without a dedicated GPU. Use the PNG renders in the
 interface; do not run the SVG filters (deboss, sticker, blur) at runtime.
 
+New-tab loading uses discrete crops of one decoded PNG, with four 150 ms
+movements and 1800 ms at rest. It starts only after a 160 ms pending-navigation
+delay, stops when the tab is hidden or navigation ends, and stays still with
+reduced motion. There is no animation loop or timer while idle. The new-tab
+rotation is computed as `atan2(9, 16)`; only its displayed angle is rounded.
+
 ## Regenerating the assets
 
 ```bash
 node design/identity/generator/export.js
 python3 design/identity/generator/pixels.py
 ```
+
+To export only the new-tab PNG strips, use `export.js --new-tab-only`.
+`FLY_ART_CHROMIUM` optionally selects the Chromium executable for rasterisation.
 
 `export.js` writes the SVG masters and their PNG renders. SVG export needs only Node; PNG export also needs Playwright with Chromium (`npm i -g playwright`, then run with `NODE_PATH` pointing at the global modules if needed). `generator/anatomy.js` holds the fly's anatomy, `generator/render.js` the line and colour renderers, and the theme values for the engraving and memory sit at the top of `generator/export.js`. `pixels.py` (Pillow) draws the pixel icons and the paper grain.
 

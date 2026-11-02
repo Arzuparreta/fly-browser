@@ -3,6 +3,7 @@
 // Fly repository.
 #include "fly/ui/new_tab_ui.h"
 
+#include <cstdint>
 #include <map>
 #include <memory>
 #include <optional>
@@ -300,9 +301,26 @@ class NewTabHandler : public content::WebUIMessageHandler,
   }
   void OnVisibilityChanged(content::Visibility) override { Refresh(); }
   void DidStartNavigation(content::NavigationHandle* navigation) override {
-    if (navigation->IsInPrimaryMainFrame() &&
-        !IsFlyNewTabPage(navigation->GetURL()))
-      web_contents()->SetPageBaseBackgroundColor(std::nullopt);
+    if (!navigation->IsInPrimaryMainFrame() || navigation->IsSameDocument() ||
+        IsFlyNewTabPage(navigation->GetURL()))
+      return;
+    web_contents()->SetPageBaseBackgroundColor(std::nullopt);
+    loading_navigation_ = navigation->GetNavigationId();
+    SetLoading(true);
+  }
+  void DidFinishNavigation(content::NavigationHandle* navigation) override {
+    if (navigation->GetNavigationId() != loading_navigation_)
+      return;
+    loading_navigation_ = 0;
+    // A committed page replaces this document; never call into its renderer.
+    if (navigation->HasCommitted())
+      loading_ = false;
+    else
+      SetLoading(false);
+  }
+  void DidStopLoading() override {
+    loading_navigation_ = 0;
+    SetLoading(false);
   }
 
  private:
@@ -314,6 +332,17 @@ class NewTabHandler : public content::WebUIMessageHandler,
       tip_ = args[0].GetString();
     AllowJavascript();
     Refresh();
+    RefreshLoading();
+  }
+  void SetLoading(bool loading) {
+    if (loading_ == loading)
+      return;
+    loading_ = loading;
+    RefreshLoading();
+  }
+  void RefreshLoading() {
+    if (IsJavascriptAllowed())
+      CallJavascriptFunction("updateFlyNewTabLoading", base::Value(loading_));
   }
   // Keeps this page's tip until it is learned, dismissed or loses its key;
   // then the next pending one takes its place. A tip dismissed here leaves
@@ -358,6 +387,8 @@ class NewTabHandler : public content::WebUIMessageHandler,
   PrefChangeRegistrar registrar_;
   std::string tip_;
   bool dismissed_ = false;
+  int64_t loading_navigation_ = 0;
+  bool loading_ = false;
 };
 
 class NewTabUI : public content::WebUIController {
