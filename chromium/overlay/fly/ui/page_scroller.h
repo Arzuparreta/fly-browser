@@ -120,7 +120,7 @@ class PageScroller : public ui::CompositorAnimationObserver,
   // `use_anchor` and it lies in that frame, otherwise at its middle.
   bool Begin(content::WebContents* contents, bool use_anchor);
   void SendBegin();
-  void SendUpdate(const gfx::Vector2dF& delta, bool whole_pages);
+  void SendUpdate(const gfx::Vector2dF& delta, bool animated_jump);
   // Ends the gesture; Stop() also forgets the motion.
   void End();
   void Animate(bool on);
@@ -137,7 +137,7 @@ class PageScroller : public ui::CompositorAnimationObserver,
   bool anchored_ = false;
   bool first_ack_pending_ = false;
   std::optional<gfx::Vector2dF> anchor_probe_;
-  // d, u, gg and G: the pages of one animated update instead of a motion.
+  // An animated jump: pages for d/u, a document delta for gg/G.
   float jump_ = 0;
 
   std::optional<ScrollMotion> motion_;

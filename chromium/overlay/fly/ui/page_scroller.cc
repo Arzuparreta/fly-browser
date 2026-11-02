@@ -34,18 +34,19 @@ constexpr base::TimeDelta kMaxFrame = base::Milliseconds(50);
 // the scroller it latches to and animates. It scales pages by 0.875
 // (kMinFractionToStepWhenPaging), so this is exactly half of the scroller.
 constexpr float kHalfPage = 0.5f / 0.875f;
-// gg and G: more pages than any document has.
-constexpr float kWholePages = 100000;
+// A document-sized delta, clamped to the target scroll node's bounds.
+// Document granularity avoids per-page step limits in nested scrollers.
+constexpr float kDocumentEnd = 1e9f;
 
 // d, u, gg and G jump; the other scrolls move while their key is down.
-std::optional<float> JumpPages(PageScroll scroll) {
+std::optional<float> JumpAmount(PageScroll scroll) {
   switch (scroll) {
     case PageScroll::kHalfPageDown:
     case PageScroll::kHalfPageUp:
       return kHalfPage;
     case PageScroll::kTop:
     case PageScroll::kBottom:
-      return kWholePages;
+      return kDocumentEnd;
     default:
       return std::nullopt;
   }
@@ -138,7 +139,7 @@ void PageScroller::Press(content::WebContents* contents,
                          uint32_t key,
                          bool repeat) {
   // A jump happens once per press.
-  if (repeat && JumpPages(scroll))
+  if (repeat && JumpAmount(scroll))
     return;
   if (repeat && motion_ && key == key_) {
     // Auto-repeat must not restart the animation or queue distance.
@@ -168,10 +169,11 @@ void PageScroller::Start(content::WebContents* contents,
   if (!contents)
     return;
   const auto direction = DirectionOf(scroll);
-  if (const auto pages = JumpPages(scroll)) {
+  if (const auto amount = JumpAmount(scroll)) {
     Stop();
     direction_ = direction;
-    jump_ = *pages;
+    scroll_ = scroll;
+    jump_ = *amount;
     if (Begin(contents, true))
       SendUpdate(gfx::ScaleVector2d(direction_, jump_), true);
     // The compositor animates the jump; the gesture can end now. A jump from
@@ -250,15 +252,21 @@ void PageScroller::SendBegin() {
   widget_->ForwardGestureEvent(event);
 }
 
-void PageScroller::SendUpdate(const gfx::Vector2dF& delta, bool whole_pages) {
+void PageScroller::SendUpdate(const gfx::Vector2dF& delta, bool animated_jump) {
   if (first_ack_pending_)
     anchor_probe_ = delta;
   auto event = blink::SyntheticWebGestureEventBuilder::BuildScrollUpdate(
       -delta.x(), -delta.y(), 0, kDevice);
-  // Whole pages animate in the compositor, as a wheel notch does.
+  // Jumps animate in the compositor. Document ends must not be interpreted
+  // as page steps: nested scrollers can limit those to a single page.
   event.data.scroll_update.delta_units =
-      whole_pages ? ui::ScrollGranularity::kScrollByPage
-                  : ui::ScrollGranularity::kScrollByPrecisePixel;
+      ui::ScrollGranularity::kScrollByPrecisePixel;
+  if (animated_jump) {
+    event.data.scroll_update.delta_units =
+        scroll_ == PageScroll::kTop || scroll_ == PageScroll::kBottom
+            ? ui::ScrollGranularity::kScrollByDocument
+            : ui::ScrollGranularity::kScrollByPage;
+  }
   event.SetPositionInWidget(point_);
   event.SetPositionInScreen(screen_point_);
   widget_->ForwardGestureEvent(event);

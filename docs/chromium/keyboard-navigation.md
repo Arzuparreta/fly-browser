@@ -71,8 +71,9 @@ for clickable targets, coordinate transforms and activation across frames.
   gesture tries the focused frame's centre.
 - d/u use page-granularity compositor animation, adjusted for Chromium's paging
   fraction to cover half the actual container. They, gg and G are deliberate
-  single jumps per press; OS repeats do not queue jumps. gg/G preserve the
-  horizontal offset.
+  single jumps per press; OS repeats do not queue jumps. gg/G use document
+  granularity to reach the ends of nested scrollers and preserve the horizontal
+  offset.
 - The old `0006-native-focused-page-scroll.patch` is removed. Scrolling no
   longer adds an API through WebContents, IPC, WebFrame and Blink. The new
   integration patch only registers Fly's source files in the browser build.
