@@ -13,13 +13,3 @@
    // Return false if this window does not normally display a tabstrip or if the
    // tabstrip is currently hidden, e.g. because we're in fullscreen.
    if (!WindowFeatureController::From(browser_)->SupportsWindowFeature(
---- a/chrome/browser/ui/BUILD.gn
-+++ b/chrome/browser/ui/BUILD.gn
-@@ -795,5 +795,7 @@
-       "//fly/ui/fly_window_controller.h",
-       "//fly/ui/native_commands.cc",
-       "//fly/ui/native_commands.h",
-+      "//fly/ui/tab_sidebar.cc",
-+      "//fly/ui/tab_sidebar.h",
-     ]
-   }

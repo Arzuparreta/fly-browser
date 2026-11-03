@@ -115,8 +115,13 @@ def read_manifest(root, lock, allow_pending=False):
     if not file.is_file():
         engine.fail('No managed native overlay; run apply first')
     manifest = json.loads(file.read_text())
-    if manifest.get('schema') != 1 or manifest.get('upstream') != lock['chromium']['revision']:
-        engine.fail('Native manifest schema/upstream differs; preserve it for recovery')
+    if manifest.get('schema') != 1:
+        engine.fail('Native manifest schema differs; preserve it for recovery')
+    if manifest.get('upstream') != lock['chromium']['revision']:
+        engine.fail('The engine overlay belongs to Chromium ' + str(manifest.get('upstream')) +
+                    ', but this checkout pins ' + lock['chromium']['revision'] +
+                    '. Merge origin/main, or move the engine with '
+                    'scripts/chromium/engine_update.py upgrade')
     if manifest.get('phase') not in ('applied', 'applying', 'reverting'):
         engine.fail('Unknown native overlay transaction phase')
     if not allow_pending and manifest.get('phase') != 'applied':

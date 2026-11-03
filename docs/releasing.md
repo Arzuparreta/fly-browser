@@ -117,6 +117,9 @@ The local Linux engine host now has the repository runner
 `/mnt/storage/fly-actions-runner`; the engine checkout is
 `/mnt/storage/fly-chromium`. It runs as the owner's user through
 `fly-chromium-runner.service`, with `FLY_ENGINE_ROOT` set by that service.
+The service also sets `FLY_ENGINE_CANDIDATE_ROOT=/mnt/storage/fly-chromium-next`,
+the second engine root where [engine updates](./chromium/engine-updates.md) are
+validated before a release adopts them.
 User lingering was already enabled, so the service can start without an
 interactive login. The machine must be powered on and connected to receive jobs.
 

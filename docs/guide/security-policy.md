@@ -22,8 +22,11 @@ must be checked, including redirects and local addresses.
 ## Updates and local data
 
 The engine source is pinned in `chromium/upstream.lock.json`; product metadata
-comes from `package.json`. Engine updates need a build and acceptance
-validation. Do not equate a passing npm audit with a patched Chromium engine.
+comes from `package.json`. Fly follows every Chromium Stable release: a scheduled
+workflow pins it, builds and tests it on the engine host, and releases it
+([engine updates](../chromium/engine-updates.md)). A patch that no longer
+applies, a failed build or a powered-off engine host delays that release. Do not
+equate a passing npm audit with a patched Chromium engine.
 Linux archives carry SHA-256 checksums. Verify downloaded packages; checksums
 do not replace authenticated distribution or code signing.
 

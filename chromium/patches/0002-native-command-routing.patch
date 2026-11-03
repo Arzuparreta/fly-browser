@@ -39,26 +39,6 @@
      // In app mode, only allow accelerators of allowlisted commands to pass
      // through.
      if (is_app_mode &&
---- a/chrome/browser/ui/BUILD.gn
-+++ b/chrome/browser/ui/BUILD.gn
-@@ -793,6 +793,8 @@
-       "//fly/ui/fly_browser_frame.h",
-       "//fly/ui/fly_window_controller.cc",
-       "//fly/ui/fly_window_controller.h",
-+      "//fly/ui/native_commands.cc",
-+      "//fly/ui/native_commands.h",
-     ]
-   }
- 
-@@ -1096,7 +1098,7 @@
-     "//ui/webui",
-   ]
-   if (is_linux || is_win) {
--    deps += [ "//fly:workspaces" ]
-+    deps += [ "//fly:workspaces", "//fly:commands" ]
-   }
- 
-   allow_circular_includes_from = [
 --- a/chrome/browser/prefs/browser_prefs.cc
 +++ b/chrome/browser/prefs/browser_prefs.cc
 @@ -5,6 +5,7 @@
@@ -77,26 +57,3 @@
    // Call outs to individual subsystems that register Local State (browser-wide)
    // prefs en masse. See RegisterProfilePrefs for per-profile prefs. Please
    // keep this list alphabetized.
---- a/chrome/browser/prefs/BUILD.gn
-+++ b/chrome/browser/prefs/BUILD.gn
-@@ -59,6 +59,7 @@
- 
-   deps = [
-     "//fly:workspaces",
-+    "//fly:commands",
-     ":prefs",
-     ":util",
-     "//chrome/browser:browser_process",
---- a/chrome/test/BUILD.gn
-+++ b/chrome/test/BUILD.gn
-@@ -2830,6 +2830,10 @@
-       "data/webui/mojo/mojo_js_interface_broker_browsertest.cc",
-       "data/webui/mojo/mojo_web_ui_controller_browsertest.cc",
-     ]
-+    if (is_linux || is_win) {
-+      sources += [ "//fly/test/workspace_browser_test.cc" ]
-+      deps += [ "//fly:commands", "//fly:workspaces" ]
-+    }
-     fuzztests = [ "SafeXmlParserFixture.ParseXML" ]
-     fuzztest_additional_args = [
-       "--single-process-tests",

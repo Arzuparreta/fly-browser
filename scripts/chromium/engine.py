@@ -27,8 +27,11 @@ def fail(message):
 
 
 def read_lock():
-    lock = json.loads(LOCK.read_text())
-    if lock.get('schema') != 1:
+    return validate_lock(json.loads(LOCK.read_text()))
+
+
+def validate_lock(lock):
+    if not isinstance(lock, dict) or lock.get('schema') != 1:
         fail('Unsupported upstream lock schema')
     expected = {
         'chromium': 'https://chromium.googlesource.com/chromium/src.git',
@@ -213,18 +216,34 @@ def engine_root(raw):
     return root
 
 
+LEASE_TOKEN = 'FLY_ENGINE_LEASE'
+
+
 @contextlib.contextmanager
 def exclusive(root):
     # Atomic mkdir works on the supported build hosts without an extra module.
     lease = root / '.fly-engine-operation'
+    # A long operation (engine_update.py) holds the lease for its entire
+    # sequence and runs these commands as children; they inherit its token.
+    token = os.environ.get(LEASE_TOKEN)
+    if token and lease.is_dir():
+        try:
+            owner = json.loads((lease / 'owner.json').read_text())
+        except (OSError, ValueError):
+            owner = {}
+        if owner.get('token') == token:
+            yield
+            return
     try:
         lease.mkdir()
     except FileExistsError:
         fail(f'Another engine command owns {lease}; inspect owner.json and its '
              'process before removing a stale lease. Never run sync during a build.')
     try:
-        atomic_json(lease / 'owner.json', {'pid': os.getpid(), 'host': platform.node(),
-                                         'command': sys.argv[1:]})
+        record = {'pid': os.getpid(), 'host': platform.node(), 'command': sys.argv[1:]}
+        if token:
+            record['token'] = token
+        atomic_json(lease / 'owner.json', record)
         yield
     finally:
         (lease / 'owner.json').unlink(missing_ok=True)
@@ -274,7 +293,9 @@ def verify_checkout(directory, pin):
     if git(directory, 'remote', 'get-url', 'origin') != pin['url']:
         fail(f'Unexpected origin in {directory}; no changes made')
     if git(directory, 'rev-parse', 'HEAD') != pin['revision']:
-        fail(f'Unexpected source revision in {directory}; no reset is permitted')
+        fail(f'Unexpected source revision in {directory}; no reset is permitted. '
+             'If the Chromium pin moved, update this checkout with '
+             'scripts/chromium/engine_update.py upgrade')
     if git(directory, 'status', '--porcelain', '--untracked-files=normal'):
         fail(f'Dirty checkout: {directory}; preserve and inspect changes first')
 

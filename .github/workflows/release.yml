@@ -48,6 +48,8 @@ jobs:
     # trusted host as documented in docs/releasing.md; never use PR triggers.
     runs-on: [self-hosted, linux, x64, fly-chromium]
     timeout-minutes: 720
+    outputs:
+      engine_moved: ${{ steps.engine.outputs.moved }}
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
@@ -55,6 +57,16 @@ jobs:
           node-version: 22
       - name: Require provisioned engine checkout
         run: test -n "$FLY_ENGINE_ROOT" && test -d "$FLY_ENGINE_ROOT/src"
+      # When the release moves Chromium, take the exact sources the engine
+      # update validated in the candidate root (copied locally, nothing is
+      # downloaded again); without such a candidate, move and rebuild here.
+      # Dry runs on a branch never move the owner's engine root.
+      - name: Bring the engine checkout to this release's Chromium
+        id: engine
+        if: github.ref_type == 'tag'
+        run: >-
+          python3 scripts/chromium/engine_update.py follow --root "$FLY_ENGINE_ROOT"
+          --jobs "$(nproc)" ${FLY_ENGINE_CANDIDATE_ROOT:+--candidate "$FLY_ENGINE_CANDIDATE_ROOT"}
       - name: Apply this release overlay
         run: python3 scripts/chromium/native.py refresh-overlay --include-upstream --root "$FLY_ENGINE_ROOT"
       - name: Build and package native Fly
@@ -68,6 +80,20 @@ jobs:
           path: ${{ runner.temp }}/fly-release-${{ github.run_id }}/*
           if-no-files-found: error
           retention-days: 3
+
+  # The owner's ./launch.sh runs out/FlyNative. After Chromium moved, rebuild
+  # it (and the unmodified control it is checked against) on the new engine.
+  # Packages do not wait for this.
+  development-build:
+    name: Rebuild the development browser on the new engine
+    needs: build
+    if: needs.build.outputs.engine_moved == 'true'
+    runs-on: [self-hosted, linux, x64, fly-chromium]
+    timeout-minutes: 720
+    steps:
+      - uses: actions/checkout@v4
+      - name: Rebuild out/FlyControl and out/FlyNative
+        run: python3 scripts/chromium/engine_update.py upgrade --through build --root "$FLY_ENGINE_ROOT" --jobs "$(nproc)"
 
   publish:
     name: Publish release

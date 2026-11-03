@@ -1,0 +1,219 @@
+#!/usr/bin/env bash
+# Steps of .github/workflows/engine-update.yml, on the trusted engine host.
+#
+#   engine-update-ci.sh prepare    commit a newer Stable pin to the update
+#                                  branch and open or update its pull request
+#   engine-update-ci.sh validate   build and test that branch in the candidate
+#                                  engine root; record the result on the commit
+#   engine-update-ci.sh merge      merge once every check passed, revalidating
+#                                  after main moves
+#   engine-update-ci.sh release    cut the release that ships it
+#
+# Pushes, pull requests and merges use the host's `gh` login, not
+# GITHUB_TOKEN: a push made with GITHUB_TOKEN starts no workflows, so the
+# pull request would never receive its checks. docs/chromium/engine-updates.md
+# describes the process.
+set -euo pipefail
+
+BRANCH=${FLY_ENGINE_UPDATE_BRANCH:-engine/chromium-stable}
+CONTEXT=engine-validation
+REPO=${GITHUB_REPOSITORY:?}
+STATE=${RUNNER_TEMP:-/tmp}/engine-update-state
+LOGS=${RUNNER_TEMP:-/tmp}/engine-update-logs
+mkdir -p "$LOGS"
+cd "$(git rev-parse --show-toplevel)"
+
+note() { printf '%s\n' "$*"; }
+fail() { printf '::error::%s\n' "$*"; exit 1; }
+output() { [ -n "${GITHUB_OUTPUT:-}" ] && printf '%s=%s\n' "$1" "$2" >>"$GITHUB_OUTPUT"; true; }
+saved() { sed -n "s/^$1=//p" "$STATE" 2>/dev/null | tail -1; }
+save() { printf '%s=%s\n' "$1" "$2" >>"$STATE"; }
+pinned() { python3 -c 'import json; print(json.load(open("chromium/upstream.lock.json"))["engine_version"])'; }
+open_pr() { gh pr list --repo "$REPO" --head "$BRANCH" --state open --json number --jq '.[0].number // empty'; }
+
+credentials() {
+    gh auth status >/dev/null 2>&1 || fail "The engine host has no gh login; run gh auth login as the runner's user."
+    git config user.name >/dev/null || fail "The engine host has no git user.name."
+    git remote set-url origin "https://github.com/$REPO.git"
+    git config --local --unset-all http.https://github.com/.extraheader 2>/dev/null || true
+    git config --local credential.helper ''
+    git config --local --add credential.helper '!gh auth git-credential'
+}
+
+status_of() {
+    gh api "repos/$REPO/commits/$1/statuses" \
+        --jq "[.[] | select(.context == \"$CONTEXT\")][0].state // \"\""
+}
+
+set_status() {
+    gh api --silent "repos/$REPO/statuses/$1" -f state="$2" -f context="$CONTEXT" \
+        -f description="$3" -f target_url="${GITHUB_SERVER_URL:-https://github.com}/$REPO/actions/runs/${GITHUB_RUN_ID:-0}"
+}
+
+body() {
+    local version=$1
+    cat <<TEXT
+Moves Fly to Chromium \`$version\`, the latest official Stable release for Linux, with the security fixes Google published for it.
+
+Opened by \`.github/workflows/engine-update.yml\`. The \`$CONTEXT\` status is the native validation on the engine host: the candidate engine root moved to this pin, the unmodified Chromium control and Fly were built, and Fly's unit and browser tests ran. The workflow merges this pull request once every check passes and then cuts a release. If a patch or the build fails, the failure is commented here: fix it on \`$BRANCH\` and run the workflow again (\`gh workflow run engine-update.yml\`).
+
+Chromium release notes: https://chromereleases.googleblog.com/search/label/Stable%20updates
+
+## What's New
+
+### Chromium $version
+
+Fly now runs Chromium $version, with the security fixes Google published for it.
+TEXT
+}
+
+prepare() {
+    credentials
+    : >"$STATE"
+    git fetch --quiet origin main
+    local pr newer
+    pr=$(open_pr)
+    newer=$(python3 scripts/chromium/engine_update.py status | python3 -c 'import json,sys; print(json.load(sys.stdin)["newer"])')
+    if [ -n "$pr" ]; then
+        git fetch --quiet origin "$BRANCH"
+        git switch --quiet --force-create "$BRANCH" "origin/$BRANCH"
+        if ! git merge-base --is-ancestor origin/main HEAD; then
+            git merge --quiet --no-edit origin/main ||
+                fail "origin/main does not merge cleanly into $BRANCH; resolve it on the branch."
+        fi
+    elif [ "$newer" = True ]; then
+        git switch --quiet --force-create "$BRANCH" origin/main
+    else
+        note "Fly already pins the latest Stable release ($(pinned)); no update pull request is open."
+        output active false
+        return
+    fi
+    python3 scripts/chromium/engine_update.py pin
+    if [ -n "$pr" ] && git diff --quiet origin/main HEAD; then
+        gh pr close "$pr" --repo "$REPO" --delete-branch \
+            --comment "main already pins Chromium $(pinned); nothing left to update." >/dev/null
+        note "Closed #$pr: main already has this pin."
+        output active false
+        return
+    fi
+    local version
+    version=$(pinned)
+    if ! git diff --quiet; then
+        git commit --quiet --all --message "Update Chromium to $version"
+    fi
+    if [ -n "$pr" ]; then
+        git push --quiet origin "HEAD:refs/heads/$BRANCH"
+    else
+        git push --quiet --force origin "HEAD:refs/heads/$BRANCH"
+    fi
+    body "$version" >"$LOGS/body.md"
+    if [ -n "$pr" ]; then
+        gh pr edit "$pr" --repo "$REPO" --title "Update Chromium to $version" --body-file "$LOGS/body.md" >/dev/null
+    else
+        gh pr create --repo "$REPO" --base main --head "$BRANCH" --title "Update Chromium to $version" \
+            --body-file "$LOGS/body.md" --label impact:patch >/dev/null
+        pr=$(open_pr)
+    fi
+    note "Pull request #$pr: Chromium $version at $(git rev-parse --short HEAD)."
+    save pr "$pr"
+    save version "$version"
+    output active true
+}
+
+comment_failure() {
+    local pr=$1 log=$2 what=$3
+    {
+        printf '%s failed on `%s`.\n\n<details><summary>Last lines of the log</summary>\n\n```\n' "$what" "$(git rev-parse --short HEAD)"
+        tail -n 80 "$log" | sed 's/```/` ` `/g'
+        printf '```\n\n</details>\n\nFix it on `%s` and run the workflow again: `gh workflow run engine-update.yml`.\n' "$BRANCH"
+    } >"$LOGS/comment.md"
+    gh pr comment "$pr" --repo "$REPO" --body-file "$LOGS/comment.md" >/dev/null || true
+}
+
+validate() {
+    local pr version sha
+    pr=$(saved pr) version=$(saved version) sha=$(git rev-parse HEAD)
+    [ -n "$pr" ] || fail "No update pull request was prepared."
+    if [ "$(status_of "$sha")" = success ]; then
+        note "$sha already passed native validation."
+        return
+    fi
+    : "${FLY_ENGINE_CANDIDATE_ROOT:?the runner service must set FLY_ENGINE_CANDIDATE_ROOT}"
+    : "${FLY_ENGINE_ROOT:?the runner service must set FLY_ENGINE_ROOT}"
+    set_status "$sha" pending "Checking that every patch applies to Chromium $version"
+    if ! python3 scripts/chromium/engine_update.py patch-check 2>&1 | tee "$LOGS/patch-check.log"; then
+        set_status "$sha" failure "Patches do not apply to Chromium $version"
+        comment_failure "$pr" "$LOGS/patch-check.log" "Replaying the patch series on Chromium $version"
+        fail "Patches do not apply to Chromium $version; see the pull request."
+    fi
+    set_status "$sha" pending "Building Chromium $version and Fly, then running Fly's tests"
+    if ! python3 scripts/chromium/engine_update.py validate --root "$FLY_ENGINE_CANDIDATE_ROOT" \
+            --test-tools "$FLY_ENGINE_ROOT/test-tools" --jobs "$(nproc)" >"$LOGS/validate.log" 2>&1; then
+        tail -n 200 "$LOGS/validate.log"
+        set_status "$sha" failure "Native validation failed on Chromium $version"
+        comment_failure "$pr" "$LOGS/validate.log" "Native validation"
+        fail "Native validation failed; see the pull request."
+    fi
+    tail -n 20 "$LOGS/validate.log"
+    set_status "$sha" success "Chromium $version: control and Fly built, Fly's tests passed"
+}
+
+checks_passed() {
+    local pr=$1 deadline=$(( $(date +%s) + 3600 )) checks
+    while [ "$(date +%s)" -lt "$deadline" ]; do
+        checks=$(gh pr checks "$pr" --repo "$REPO" --json name,bucket 2>/dev/null || echo '[]')
+        if jq -e 'any(.[]; .bucket == "fail" or .bucket == "cancel")' >/dev/null <<<"$checks"; then
+            note "$checks"
+            return 1
+        fi
+        if jq -e 'length > 0 and all(.[]; .bucket == "pass" or .bucket == "skipping")' >/dev/null <<<"$checks"; then
+            return 0
+        fi
+        sleep 30
+    done
+    note "Timed out waiting for the checks of #$pr."
+    return 1
+}
+
+merge() {
+    local pr sha
+    pr=$(saved pr)
+    [ -n "$pr" ] || fail "No update pull request was prepared."
+    for _ in 1 2 3 4 5; do
+        git fetch --quiet origin main
+        if ! git merge-base --is-ancestor origin/main HEAD; then
+            # main moved while this was built: bring it in and validate the
+            # combination (an incremental build).
+            git merge --quiet --no-edit origin/main ||
+                fail "origin/main does not merge cleanly into $BRANCH; resolve it on the branch."
+            git push --quiet origin "HEAD:refs/heads/$BRANCH"
+            validate
+            continue
+        fi
+        sha=$(git rev-parse HEAD)
+        checks_passed "$pr" || fail "Checks of #$pr did not pass; it stays open."
+        if gh pr merge "$pr" --repo "$REPO" --squash --delete-branch --match-head-commit "$sha"; then
+            note "Merged #$pr."
+            save merged true
+            return
+        fi
+    done
+    fail "main kept moving; #$pr stays open for the next run."
+}
+
+release() {
+    [ "$(saved merged)" = true ] || { note "Nothing was merged; no release."; return; }
+    credentials
+    git fetch --quiet --tags origin main
+    git switch --quiet --detach origin/main
+    local hold=()
+    if [ "${FLY_ENGINE_RELEASE:-}" = hold ]; then
+        hold=(--hold)
+    fi
+    node scripts/release.js prepare "${hold[@]}"
+}
+
+case "${1:-}" in
+    prepare|validate|merge|release) "$1" ;;
+    *) fail "usage: engine-update-ci.sh prepare|validate|merge|release" ;;
+esac
