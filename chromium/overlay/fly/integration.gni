@@ -15,6 +15,8 @@ fly_browser_ui_deps = [ "//fly:session_metadata" ]
 fly_browser_ui_data_deps = []
 if (is_linux || is_win) {
   fly_browser_ui_sources += [
+    "//fly/ui/bookmark_favicons.cc",
+    "//fly/ui/bookmark_favicons.h",
     "//fly/ui/command_palette.cc",
     "//fly/ui/command_palette.h",
     "//fly/ui/diagnostics_hub.cc",
@@ -68,9 +70,11 @@ if (is_linux || is_win) {
   ]
   fly_browser_ui_deps += [
     "//chrome/browser/dom_distiller",
+    "//chrome/browser/favicon",
     "//chrome/browser/ssl",
     "//chrome/browser/ui/navigator",
     "//components/dom_distiller/core",
+    "//components/favicon/core",
     "//components/history/core/common",
     "//components/spellcheck/browser",
     "//components/url_formatter",
@@ -102,6 +106,8 @@ fly_browser_tests_deps = []
 if (is_linux || is_win) {
   fly_browser_tests_sources += [ "//fly/test/workspace_browser_test.cc" ]
   fly_browser_tests_deps += [
+    "//chrome/browser/favicon",
+    "//components/favicon/core",
     "//fly:bookmarks",
     "//fly:commands",
     "//fly:preferences",

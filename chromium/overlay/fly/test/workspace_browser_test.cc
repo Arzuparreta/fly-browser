@@ -14,6 +14,7 @@
 #include "chrome/browser/bookmarks/bookmark_model_factory.h"
 #include "chrome/browser/content_settings/host_content_settings_map_factory.h"
 #include "chrome/browser/extensions/extension_action_dispatcher.h"
+#include "chrome/browser/favicon/favicon_service_factory.h"
 #include "chrome/browser/history/history_service_factory.h"
 #include "chrome/browser/lifetime/application_lifetime_desktop.h"
 #include "chrome/browser/sessions/exit_type_service.h"
@@ -29,6 +30,7 @@
 #include "components/bookmarks/browser/bookmark_model.h"
 #include "components/content_settings/core/browser/host_content_settings_map.h"
 #include "components/download/public/common/download_item.h"
+#include "components/favicon/core/favicon_service.h"
 #include "components/history/core/browser/history_service.h"
 #include "components/history/core/common/pref_names.h"
 #include "components/history/core/test/history_service_test_util.h"
@@ -46,6 +48,7 @@
 #include "fly/bookmarks/frequent_sites_service.h"
 #include "fly/preferences/search_service.h"
 #include "fly/sessions/tab_identity.h"
+#include "fly/ui/bookmark_favicons.h"
 #include "fly/ui/command_palette.h"
 #include "fly/ui/download_shelf.h"
 #include "fly/ui/fly_actions.h"
@@ -71,8 +74,10 @@
 #include "ui/color/color_provider.h"
 #include "ui/compositor/layer.h"
 #include "ui/compositor/layer_animator.h"
-#include "ui/gfx/color_utils.h"
 #include "ui/gfx/animation/animation.h"
+#include "ui/gfx/color_utils.h"
+#include "ui/gfx/image/image.h"
+#include "ui/gfx/image/image_skia_rep.h"
 #include "ui/gfx/x/connection.h"
 #include "ui/gfx/x/xproto.h"
 #include "ui/ozone/public/ozone_platform.h"
@@ -5326,6 +5331,133 @@ IN_PROC_BROWSER_TEST_F(FlyWorkspaceBrowserTest,
 }
 
 IN_PROC_BROWSER_TEST_F(FlyWorkspaceBrowserTest,
+                       BookmarkFaviconsLoadLazilyWithoutMovingTextOrSelection) {
+  ASSERT_TRUE(ui_test_utils::NavigateToURL(browser(), GURL("about:blank")));
+  auto* profile = browser()->GetProfile();
+  auto* favicons = FaviconServiceFactory::GetForProfile(
+      profile, ServiceAccessType::EXPLICIT_ACCESS);
+  ASSERT_TRUE(favicons);
+  SkBitmap bitmap;
+  bitmap.allocN32Pixels(32, 32);
+  bitmap.eraseColor(SK_ColorRED);
+  const GURL saved("https://bookmark.test/saved");
+  favicons->SetFavicons({saved}, GURL("https://bookmark.test/favicon.ico"),
+                        favicon_base::IconType::kFavicon,
+                        gfx::Image::CreateFrom1xBitmap(bitmap));
+  history::BlockUntilHistoryProcessesPendingRequests(
+      HistoryServiceFactory::GetForProfile(profile,
+                                           ServiceAccessType::EXPLICIT_ACCESS));
+  for (int i = 0; i < 200; ++i)
+    ASSERT_TRUE(App().bookmarks().Add(
+        "https://missing.test/" + base::NumberToString(i), "Without an icon"));
+  // No exact mapping for this URL: use only the locally cached host icon.
+  ASSERT_TRUE(
+      App().bookmarks().Add("https://bookmark.test/imported", "Imported page"));
+  ASSERT_TRUE(App().bookmarks().Add(saved.spec(), "Saved website"));
+
+  auto& picker = Window().bookmark_picker();
+  auto* cache = BookmarkFavicons::ForProfile(profile);
+  ASSERT_EQ(0u, cache->queries_for_testing());
+  ASSERT_TRUE(InvokeNativeCommand(browser(), "toggle-bookmarks"));
+  const size_t built = picker.built_rows_for_testing();
+  EXPECT_LT(built, picker.result_count_for_testing());
+  EXPECT_EQ(built, cache->queries_for_testing());
+  picker.row_for_testing(0)->GetWidget()->LayoutRootViewIfNecessary();
+  const auto title = picker.row_title_bounds_for_testing(0);
+  const auto selected = picker.selected_action_for_testing();
+  ASSERT_TRUE(
+      base::test::RunUntil([&] { return cache->size_for_testing() == built; }));
+  EXPECT_FALSE(picker.row_favicon_for_testing(0).isNull());
+  EXPECT_FALSE(picker.row_favicon_for_testing(1).isNull());
+  EXPECT_TRUE(picker.row_favicon_for_testing(2).isNull());
+  EXPECT_EQ(title, picker.row_title_bounds_for_testing(0));
+  EXPECT_EQ(selected, picker.selected_action_for_testing());
+  const size_t queries = cache->queries_for_testing();
+  picker.Cancel(true);
+  ASSERT_TRUE(base::test::RunUntil([&] { return !picker.showing(); }));
+  ASSERT_TRUE(InvokeNativeCommand(browser(), "toggle-bookmarks"));
+  EXPECT_EQ(queries,
+            cache->queries_for_testing());  // Positive and negative hits.
+  EXPECT_FALSE(picker.row_favicon_for_testing(0).isNull());
+
+  // A filter replaces rows while lookups may still be pending. Only the row
+  // owning the callback can receive its result, never a recycled row index.
+  picker.row_for_testing(180);
+  picker.search_for_testing()->SetText(u"Imported page");
+  picker.ContentsChanged(picker.search_for_testing(), u"Imported page");
+  ASSERT_EQ(1u, picker.result_count_for_testing());
+  EXPECT_EQ("https://bookmark.test/imported",
+            picker.selected_action_for_testing());
+  picker.Cancel(true);
+  ASSERT_TRUE(base::test::RunUntil([&] { return !picker.showing(); }));
+  const size_t cached = cache->size_for_testing();
+  ASSERT_TRUE(App().bookmarks().Remove(saved.spec()));
+  EXPECT_EQ(cached - 1, cache->size_for_testing());
+}
+
+IN_PROC_BROWSER_TEST_F(FlyWorkspaceBrowserTest,
+                       BookmarkFaviconCachesStayInTheirProfileAndAreBounded) {
+  auto* first = browser()->GetProfile();
+  auto* second = SecondWorkspace()->GetProfile();
+  const GURL url("https://isolated.test/page");
+  auto seed = [&](Profile* profile, SkColor color) {
+    SkBitmap bitmap;
+    bitmap.allocN32Pixels(32, 32);
+    bitmap.eraseColor(color);
+    FaviconServiceFactory::GetForProfile(profile,
+                                         ServiceAccessType::EXPLICIT_ACCESS)
+        ->SetFavicons({url}, GURL("https://isolated.test/icon.png"),
+                      favicon_base::IconType::kFavicon,
+                      gfx::Image::CreateFrom1xBitmap(bitmap));
+    history::BlockUntilHistoryProcessesPendingRequests(
+        HistoryServiceFactory::GetForProfile(
+            profile, ServiceAccessType::EXPLICIT_ACCESS));
+  };
+  seed(first, SK_ColorRED);
+  seed(second, SK_ColorBLUE);
+  base::CancelableTaskTracker tracker;
+  auto read = [&](Profile* profile, const GURL& page) {
+    base::test::TestFuture<gfx::ImageSkia> result;
+    BookmarkFavicons::ForProfile(profile)->Get(page, 32, result.GetCallback(),
+                                               &tracker);
+    return result.Take();
+  };
+  EXPECT_EQ(SK_ColorRED,
+            read(first, url).GetRepresentation(1).GetBitmap().getColor(0, 0));
+  EXPECT_EQ(SK_ColorBLUE,
+            read(second, url).GetRepresentation(1).GetBitmap().getColor(0, 0));
+  EXPECT_EQ(nullptr,
+            BookmarkFavicons::ForProfile(first->GetPrimaryOTRProfile(true)));
+  // Background navigation on another host must not discard a pending icon.
+  base::test::TestFuture<gfx::ImageSkia> pending;
+  auto* cache = BookmarkFavicons::ForProfile(first);
+  cache->Get(url, 64, pending.GetCallback(), &tracker);
+  history::VisitedURLInfo visit;
+  visit.url_row = history::URLRow(GURL("https://background.test/"));
+  static_cast<history::HistoryServiceObserver*>(cache)->OnURLVisited(
+      HistoryServiceFactory::GetForProfile(first,
+                                           ServiceAccessType::EXPLICIT_ACCESS),
+      visit);
+  const auto pending_image = pending.Take();
+  ASSERT_FALSE(pending_image.isNull());
+  EXPECT_EQ(SK_ColorRED,
+            pending_image.GetRepresentation(1).GetBitmap().getColor(0, 0));
+  for (int i = 0; i < 270; ++i)
+    EXPECT_TRUE(
+        read(first, GURL("https://absent.test/" + base::NumberToString(i)))
+            .isNull());
+  EXPECT_EQ(256u, BookmarkFavicons::ForProfile(first)->size_for_testing());
+  // Clearing history also discards decoded copies held by the RAM cache.
+  base::test::TestFuture<void> cleared;
+  HistoryServiceFactory::GetForProfile(first,
+                                       ServiceAccessType::EXPLICIT_ACCESS)
+      ->ExpireHistoryBetween({}, std::nullopt, base::Time(), base::Time(), true,
+                             cleared.GetCallback(), &tracker);
+  ASSERT_TRUE(cleared.Wait());
+  EXPECT_EQ(0u, BookmarkFavicons::ForProfile(first)->size_for_testing());
+}
+
+IN_PROC_BROWSER_TEST_F(FlyWorkspaceBrowserTest,
                        BookmarkRowsContainBothTextLinesAtEveryInterfaceScale) {
   ASSERT_TRUE(ui_test_utils::NavigateToURL(browser(), embedded_test_server()->GetURL("/title1.html")));
   ASSERT_TRUE(App().bookmarks().Add("https://example.test/very/long/address?with=query#and-fragment",
@@ -5347,6 +5479,11 @@ IN_PROC_BROWSER_TEST_F(FlyWorkspaceBrowserTest,
           FlyFont(FlyFace::kSans, kMenuSmallTextSize).GetHeight();
       EXPECT_LE(subtitle_bottom + FlyScaled(8), row->height());
       EXPECT_GT(picker.row_title_bounds_for_testing(0).width(), 100);
+      const auto icon = picker.row_favicon_bounds_for_testing(0);
+      EXPECT_EQ(gfx::Size(FlyScaled(16), FlyScaled(16)), icon.size());
+      EXPECT_GE(picker.row_title_bounds_for_testing(0).x() - icon.right(),
+                FlyScaled(12));
+      EXPECT_NEAR(row->height() / 2.0, icon.CenterPoint().y(), 1);
       const auto& colors = GetFlyColors();
       const auto background = color_utils::AlphaBlend(colors.text, colors.bg_sidebar, static_cast<SkAlpha>(22));
       EXPECT_GE(color_utils::GetContrastRatio(picker.row_subtitle_color_for_testing(0), background), 4.5f);
