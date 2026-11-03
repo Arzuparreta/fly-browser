@@ -1,9 +1,9 @@
 --- a/components/keep_alive_registry/keep_alive_types.h
 +++ b/components/keep_alive_registry/keep_alive_types.h
-@@ -95,6 +95,9 @@
+@@ -98,6 +98,9 @@
  
-   // c/b/loader
-   FETCH_KEEPALIVE_REQUEST,
+   // c/b/win
+   ISOLATION_STATE_CHANGE,
 +
 +  // Fly: keeps running while a workspace window replaces the last one.
 +  FLY_WINDOW,
@@ -12,12 +12,12 @@
  // Restart: Allow Chrome to restart when all the registered KeepAlives allow
 --- a/components/keep_alive_registry/keep_alive_types.cc
 +++ b/components/keep_alive_registry/keep_alive_types.cc
-@@ -99,6 +99,8 @@
-       return out << "OMNIBOX_EVERYWHERE_UI";
-     case KeepAliveOrigin::OMNIBOX_EVERYWHERE_STARTUP:
-       return out << "OMNIBOX_EVERYWHERE_STARTUP";
+@@ -103,6 +103,8 @@
+       return out << "FETCH_KEEPALIVE_REQUEST";
+     case KeepAliveOrigin::ISOLATION_STATE_CHANGE:
+       return out << "ISOLATION_STATE_CHANGE";
 +    case KeepAliveOrigin::FLY_WINDOW:
 +      return out << "FLY_WINDOW";
-     case KeepAliveOrigin::FETCH_KEEPALIVE_REQUEST:
-       return out << "FETCH_KEEPALIVE_REQUEST";
    }
+ 
+   NOTREACHED() << static_cast<int>(origin);

@@ -10,16 +10,16 @@
  
 --- a/chrome/browser/ui/browser_live_tab_context.cc
 +++ b/chrome/browser/ui/browser_live_tab_context.cc
-@@ -3,6 +3,8 @@
- // found in the LICENSE file.
+@@ -4,6 +4,8 @@
  
  #include "chrome/browser/ui/browser_live_tab_context.h"
-+
-+#include "fly/sessions/tab_identity.h"
  
++#include "fly/sessions/tab_identity.h"
++
+ #include <algorithm>
  #include <memory>
  #include <numeric>
-@@ -169,6 +171,8 @@
+@@ -197,6 +199,8 @@
  std::map<std::string, std::string> BrowserLiveTabContext::GetExtraDataForTab(
      int index) const {
    std::map<std::string, std::string> extra_data;
@@ -50,14 +50,14 @@
        web_contents.get(), extra_data);
 --- a/chrome/browser/ui/BUILD.gn
 +++ b/chrome/browser/ui/BUILD.gn
-@@ -399,6 +399,7 @@
+@@ -469,6 +469,7 @@
        "//chrome/browser:browser_public_dependencies",
      ]
      deps = [
 +      "//fly:session_metadata",
+       ":browser_window_header",
        ":tab_ui_helper",
        "//base",
-       "//chrome/browser/apps/app_service",
 --- a/chrome/browser/sessions/session_service.cc
 +++ b/chrome/browser/sessions/session_service.cc
 @@ -3,6 +3,8 @@
