@@ -108,7 +108,11 @@ prepare() {
     fi
     body "$version" >"$LOGS/body.md"
     if [ -n "$pr" ]; then
-        gh pr edit "$pr" --repo "$REPO" --title "Update Chromium to $version" --body-file "$LOGS/body.md" >/dev/null
+        # Keep a description written for fixes on the branch; rewrite it only
+        # when the pull request moves to another Chromium version.
+        if [ "$(gh pr view "$pr" --repo "$REPO" --json title --jq .title)" != "Update Chromium to $version" ]; then
+            gh pr edit "$pr" --repo "$REPO" --title "Update Chromium to $version" --body-file "$LOGS/body.md" >/dev/null
+        fi
     else
         gh pr create --repo "$REPO" --base main --head "$BRANCH" --title "Update Chromium to $version" \
             --body-file "$LOGS/body.md" --label impact:patch >/dev/null
