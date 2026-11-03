@@ -273,6 +273,40 @@ class MoveTests(unittest.TestCase):
         self.assertEqual((self.src / 'upstream.cc').read_text(), 'new\n')
 
 
+class UpgradeCurrentTests(unittest.TestCase):
+    """upgrade only skips work when the applied overlay and the built browser
+    both come from this checkout's inputs, not merely from the same pin."""
+
+    def setUp(self):
+        tmp = tempfile.TemporaryDirectory(prefix='fly-upgrade-current-')
+        self.addCleanup(tmp.cleanup)
+        self.root = Path(tmp.name)
+        self.lock = lock_for('a' * 40, 'deps', 'b' * 40, '156.0.1.1')
+        lock_file = self.root / 'upstream.lock.json'
+        lock_file.write_text(json.dumps(self.lock))
+        for scope in (patch.object(engine, 'LOCK', lock_file),
+                      patch.object(native, 'fingerprint', return_value='inputs')):
+            scope.start()
+            self.addCleanup(scope.stop)
+        engine.evidence(self.root, 'build', self.lock)
+
+    def record(self, applied, built):
+        engine.atomic_json(self.root / native.MANIFEST, {
+            'schema': 1, 'phase': 'applied', 'upstream': 'a' * 40,
+            'fingerprint': applied, 'files': {}})
+        engine.evidence(self.root, 'native-build', self.lock, {'fingerprint': built})
+
+    def test_changed_overlay_inputs_are_not_current(self):
+        self.record('inputs', 'inputs')
+        self.assertTrue(engine_update.upgrade_current(self.root, self.lock, 'build'))
+        self.record('older', 'older')
+        self.assertFalse(engine_update.upgrade_current(self.root, self.lock, 'apply'))
+        self.assertFalse(engine_update.upgrade_current(self.root, self.lock, 'build'))
+        self.record('inputs', 'older')
+        self.assertTrue(engine_update.upgrade_current(self.root, self.lock, 'apply'))
+        self.assertFalse(engine_update.upgrade_current(self.root, self.lock, 'build'))
+
+
 @unittest.skipUnless(shutil.which('rsync'), 'rsync is not installed')
 class CopyTests(unittest.TestCase):
     def test_copies_sources_not_outputs_and_dates_written_files_now(self):

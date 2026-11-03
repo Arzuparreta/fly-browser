@@ -88,6 +88,7 @@ def write_github_output(values):
 
 def write_lock(latest):
     engine.atomic_json(engine.LOCK, engine.validate_lock(latest))
+    os.chmod(engine.LOCK, 0o644)
 
 
 # --- patch-check --------------------------------------------------------------
@@ -480,6 +481,22 @@ def overlay_current(root, lock):
             manifest.get('phase') == 'applied' and manifest.get('kind') is None)
 
 
+def upgrade_current(root, lock, through):
+    """Whether `upgrade --through <through>` has nothing to do: the overlay
+    applied is this checkout's (same fingerprint), the control is built for
+    this pin and, for `build`, out/FlyNative was built from this overlay."""
+    if not (overlay_current(root, lock) and stage_current(root, 'build')):
+        return False
+    expected = native.fingerprint()
+    if json.loads((root / native.MANIFEST).read_text()).get('fingerprint') != expected:
+        return False
+    if through == 'apply':
+        return True
+    record = root / 'evidence/native-build.json'
+    return (stage_current(root, 'native-build') and
+            json.loads(record.read_text())['details'].get('fingerprint') == expected)
+
+
 def upgrade(root, lock, jobs, through, tools=None, force=False):
     """move, control build, overlay apply; then Fly's build and tests as far as
     `through` asks. Holds the engine lease for the whole sequence."""
@@ -492,9 +509,7 @@ def upgrade(root, lock, jobs, through, tools=None, force=False):
     steps = []
     with engine.exclusive(root):
         moved = move(root, lock, jobs)
-        current = (not moved and overlay_current(root, lock) and stage_current(root, 'build') and
-                   (through == 'apply' or stage_current(root, 'native-build')))
-        if current and not force:
+        if not moved and not force and upgrade_current(root, lock, through):
             print('Nothing to upgrade.', flush=True)
             return {'moved': False, 'steps': []}
         if moved or not stage_current(root, 'build'):
