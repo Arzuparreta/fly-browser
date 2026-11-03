@@ -125,7 +125,9 @@ application.
 Moving the candidate downloads only what changed in Chromium since the previous
 pin: Git objects, toolchain packages and hook downloads. Before `gclient sync`,
 `move` fetches each dependency's new revision alone (`git fetch --depth=1`), one
-repository at a time and waiting when googlesource answers HTTP 429. Left to
+repository at a time and waiting when googlesource answers HTTP 429. A
+dependency with its own `DEPS` (ANGLE, Dawn) is checked out at its new revision
+first, so the dependencies it pins are fetched the same way. Left to
 itself, `gclient sync` fetches every branch's full history into an existing
 dependency that lacks its new revision, which costs gigabytes per version on a
 shallow root. A security update within

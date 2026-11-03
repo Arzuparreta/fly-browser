@@ -205,41 +205,55 @@ def same_remote(first, second):
     return normal(first) == normal(second)
 
 
-def fetch_dependencies(root, env, waits=(30, 60, 120, 240, 480)):
+def fetch_dependencies(root, env, waits=(30, 60, 120, 240, 480), rounds=10):
     """Fetch only the new revision of each dependency already checked out.
     gclient sync fetches every branch's history (no depth) into an existing
     dependency that lacks its new revision; on a shallow engine root that is
     gigabytes per Chromium version. With the revision present, gclient checks
     it out without fetching. One repository at a time: googlesource limits
-    anonymous clients (HTTP 429)."""
-    with tempfile.TemporaryDirectory(prefix='fly-revinfo-') as directory:
-        output = Path(directory) / 'revinfo.json'
-        engine.run(['gclient', 'revinfo', '--output-json', output], root, env)
-        dependencies = json.loads(output.read_text())
+    anonymous clients (HTTP 429).
+
+    gclient reads a nested dependency's revision (recursedeps, such as
+    ANGLE's VK-GL-CTS) from its parent's checkout, so a dependency with its
+    own DEPS is checked out at its new revision, as gclient would, and the
+    revisions are read again until a round changes nothing."""
     fetched = 0
-    for path, info in sorted(dependencies.items()):
-        revision, url = info.get('rev'), info.get('url')
-        checkout = root / path
-        if (path == 'src' or not url or not revision or
-                not re.fullmatch(r'[0-9a-f]{40}', revision) or not (checkout / '.git').exists()):
-            continue
-        if subprocess.run(['git', 'cat-file', '-e', revision + '^{commit}'], cwd=checkout,
-                          stderr=subprocess.DEVNULL).returncode == 0:
-            continue
-        origin = engine.git(checkout, 'remote', 'get-url', 'origin')
-        if not same_remote(origin, url):
-            continue  # The dependency moved repository; gclient replaces it.
-        for wait in (*waits, None):
-            try:
-                engine.run(['git', 'fetch', '--depth=1', '--no-tags', 'origin', revision],
-                           checkout, env)
-                break
-            except subprocess.CalledProcessError:
-                if wait is None:
-                    raise
-                print(f'Fetch failed in {path}; retrying in {wait} s.', flush=True)
-                time.sleep(wait)
-        fetched += 1
+    for _ in range(rounds):
+        with tempfile.TemporaryDirectory(prefix='fly-revinfo-') as directory:
+            output = Path(directory) / 'revinfo.json'
+            engine.run(['gclient', 'revinfo', '--output-json', output], root, env)
+            dependencies = json.loads(output.read_text())
+        changed = False
+        for path, info in sorted(dependencies.items()):
+            revision, url = info.get('rev'), info.get('url')
+            checkout = root / path
+            if (path == 'src' or not url or not revision or
+                    not re.fullmatch(r'[0-9a-f]{40}', revision) or
+                    not (checkout / '.git').exists()):
+                continue
+            origin = engine.git(checkout, 'remote', 'get-url', 'origin')
+            if not same_remote(origin, url):
+                continue  # The dependency moved repository; gclient replaces it.
+            if subprocess.run(['git', 'cat-file', '-e', revision + '^{commit}'], cwd=checkout,
+                              stderr=subprocess.DEVNULL).returncode:
+                for wait in (*waits, None):
+                    try:
+                        engine.run(['git', 'fetch', '--depth=1', '--no-tags', 'origin',
+                                    revision], checkout, env)
+                        break
+                    except subprocess.CalledProcessError:
+                        if wait is None:
+                            raise
+                        print(f'Fetch failed in {path}; retrying in {wait} s.', flush=True)
+                        time.sleep(wait)
+                fetched += 1
+                changed = True
+            if (checkout / 'DEPS').is_file() and head(checkout) != revision:
+                engine.run(['git', '-c', 'core.autocrlf=false', 'checkout', '--quiet',
+                            '--detach', revision], checkout, env)
+                changed = True
+        if not changed:
+            break
     print(f'Fetched the new revision of {fetched} dependencies.', flush=True)
     return fetched
 
