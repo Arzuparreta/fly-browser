@@ -287,7 +287,10 @@ def doctor(root, minimum_free_gib=100):
     return result
 
 
-def verify_checkout(directory, pin):
+def verify_checkout(directory, pin, submodules=True):
+    """`submodules=False` ignores gitlink differences: right after src moves
+    to a new pin its dependencies still sit at the old revisions until gclient
+    sync moves them, and verify_dependencies checks each one after that."""
     if not (directory / '.git').exists():
         fail(f'Missing Git checkout: {directory}; run bootstrap first')
     if git(directory, 'remote', 'get-url', 'origin') != pin['url']:
@@ -296,7 +299,10 @@ def verify_checkout(directory, pin):
         fail(f'Unexpected source revision in {directory}; no reset is permitted. '
              'If the Chromium pin moved, update this checkout with '
              'scripts/chromium/engine_update.py upgrade')
-    if git(directory, 'status', '--porcelain', '--untracked-files=normal'):
+    status = ['status', '--porcelain', '--untracked-files=normal']
+    if not submodules:
+        status.append('--ignore-submodules=all')
+    if git(directory, *status):
         fail(f'Dirty checkout: {directory}; preserve and inspect changes first')
 
 
@@ -324,9 +330,9 @@ def checkout(root, name, pin):
     verify_checkout(directory, pin)
 
 
-def verify(root, lock):
+def verify(root, lock, submodules=True):
     verify_checkout(root / 'depot_tools', lock['depot_tools'])
-    verify_checkout(root / 'src', lock['chromium'])
+    verify_checkout(root / 'src', lock['chromium'], submodules)
     if digest(root / 'src/DEPS') != lock['chromium']['deps_sha256']:
         fail('DEPS differs from the pinned upstream content')
     return environment(root)

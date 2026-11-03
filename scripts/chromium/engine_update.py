@@ -158,12 +158,14 @@ def head(directory):
     return engine.git(directory, 'rev-parse', 'HEAD')
 
 
-def move_checkout(directory, old, new):
+def move_checkout(directory, old, new, submodules=True):
     """Detach a shallow official checkout at a new revision. Refuses anything
-    but a clean tree at the old or the new pin; never resets."""
+    but a clean tree at the old or the new pin; never resets. With
+    `submodules=False` the tree at the new pin may still have its gitlinks at
+    the old dependency revisions (gclient sync moves them next)."""
     current = head(directory)
     if current == new['revision']:
-        engine.verify_checkout(directory, new)
+        engine.verify_checkout(directory, new, submodules)
         return False
     engine.verify_checkout(directory, old)
     present = subprocess.run(['git', 'cat-file', '-e', new['revision'] + '^{commit}'],
@@ -172,7 +174,7 @@ def move_checkout(directory, old, new):
         engine.run(['git', 'fetch', '--depth=1', 'origin', new['revision']], directory)
     engine.run(['git', '-c', 'core.autocrlf=false', 'checkout', '--quiet', '--detach',
                 new['revision']], directory)
-    engine.verify_checkout(directory, new)
+    engine.verify_checkout(directory, new, submodules)
     return True
 
 
@@ -232,9 +234,10 @@ def move(root, lock, jobs, minimum_free_gib=100):
         else:
             engine.run([root / 'depot_tools/ensure_bootstrap'], root, env)
         engine.verify_checkout(root / 'depot_tools', lock['depot_tools'])
-    move_checkout(root / 'src', old['chromium'], lock['chromium'])
-    env = engine.verify(root, lock)
-    if not stage_current(root, 'sync'):
+    synced = stage_current(root, 'sync')
+    move_checkout(root / 'src', old['chromium'], lock['chromium'], submodules=synced)
+    env = engine.verify(root, lock, submodules=synced)
+    if not synced:
         engine.gclient_config(root, lock)
         engine.run(['gclient', 'sync', '--nohooks', '--no-history',
                     '--revision', 'src@' + lock['chromium']['revision'],

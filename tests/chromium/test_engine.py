@@ -52,6 +52,33 @@ class EngineTests(unittest.TestCase):
             engine.checkout(self.root, 'src', pin)
         self.assertEqual((directory / 'owner.txt').read_text(), 'keep')
 
+    def test_moved_dependency_gitlinks_are_only_ignored_on_request(self):
+        directory, pin, git = self.repository()
+        dependency = directory / 'third_party/dependency'
+        dependency.mkdir(parents=True)
+        def dep(*args):
+            return subprocess.run(['git', *args], cwd=dependency, check=True,
+                                  capture_output=True, text=True).stdout.strip()
+        dep('init')
+        dep('config', 'user.email', 'fixture@invalid.example')
+        dep('config', 'user.name', 'Fixture')
+        for content in ('old\n', 'new\n'):
+            (dependency / 'file').write_text(content)
+            dep('add', 'file')
+            dep('commit', '-m', content.strip())
+        git('update-index', '--add', '--cacheinfo',
+            '160000,' + dep('rev-parse', 'HEAD~1') + ',third_party/dependency')
+        git('commit', '-m', 'gitlink')
+        pin['revision'] = git('rev-parse', 'HEAD')
+        # The dependency sits at another revision than src records, as it does
+        # between moving src and running gclient sync.
+        with self.assertRaisesRegex(RuntimeError, 'Dirty checkout'):
+            engine.verify_checkout(directory, pin)
+        engine.verify_checkout(directory, pin, submodules=False)
+        (directory / 'DEPS').write_text('owner changes\n')
+        with self.assertRaisesRegex(RuntimeError, 'Dirty checkout'):
+            engine.verify_checkout(directory, pin, submodules=False)
+
     def test_revision_and_remote_mismatches_do_not_reset(self):
         directory, pin, git = self.repository()
         original = git('rev-parse', 'HEAD')
