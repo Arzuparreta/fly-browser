@@ -77,35 +77,6 @@
    browser_frame_view_ = browser_frame_view.get();
    return browser_frame_view;
  }
---- a/chrome/browser/ui/BUILD.gn
-+++ b/chrome/browser/ui/BUILD.gn
-@@ -787,6 +787,16 @@
-     "tab_helpers.cc",
-     "tab_helpers.h",
-   ]
-+  if (is_linux || is_win) {
-+    sources += [
-+      "//fly/ui/fly_app.cc",
-+      "//fly/ui/fly_app.h",
-+      "//fly/ui/fly_browser_frame.cc",
-+      "//fly/ui/fly_browser_frame.h",
-+      "//fly/ui/fly_window_controller.cc",
-+      "//fly/ui/fly_window_controller.h",
-+    ]
-+  }
- 
-   defines = []
-   libs = []
-@@ -1087,6 +1095,9 @@
-     "//ui/strings",
-     "//ui/webui",
-   ]
-+  if (is_linux || is_win) {
-+    deps += [ "//fly:workspaces" ]
-+  }
- 
-   allow_circular_includes_from = [
-     # page_load_metrics's :impl includes headers from //chrome/browser/ui that
 --- a/chrome/browser/prefs/browser_prefs.cc
 +++ b/chrome/browser/prefs/browser_prefs.cc
 @@ -3,6 +3,8 @@
@@ -125,13 +96,3 @@
    // Call outs to individual subsystems that register Local State (browser-wide)
    // prefs en masse. See RegisterProfilePrefs for per-profile prefs. Please
    // keep this list alphabetized.
---- a/chrome/browser/prefs/BUILD.gn
-+++ b/chrome/browser/prefs/BUILD.gn
-@@ -58,6 +58,7 @@
-   ]
- 
-   deps = [
-+    "//fly:workspaces",
-     ":prefs",
-     ":util",
-     "//chrome/browser:browser_process",

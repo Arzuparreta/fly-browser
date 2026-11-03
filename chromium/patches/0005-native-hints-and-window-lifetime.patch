@@ -1,23 +1,3 @@
---- a/chrome/browser/ui/BUILD.gn
-+++ b/chrome/browser/ui/BUILD.gn
-@@ -798,6 +798,8 @@
-       "//fly/ui/native_commands.h",
-       "//fly/ui/tab_sidebar.cc",
-       "//fly/ui/tab_sidebar.h",
-+      "//fly/ui/hint_controller.cc",
-+      "//fly/ui/hint_controller.h",
-     ]
-   }
- 
-@@ -1101,7 +1103,7 @@
-     "//ui/webui",
-   ]
-   if (is_linux || is_win) {
--    deps += [ "//fly:workspaces", "//fly:commands" ]
-+    deps += [ "//fly:workspaces", "//fly:commands", "//ui/accessibility", "//ui/wm" ]
-   }
-   deps += [ "//fly:session_metadata" ]
- 
 --- a/components/keep_alive_registry/keep_alive_types.h
 +++ b/components/keep_alive_registry/keep_alive_types.h
 @@ -95,6 +95,9 @@

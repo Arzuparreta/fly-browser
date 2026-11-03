@@ -219,19 +219,26 @@ hidden state without replacing any page getter or media method. Security stays
 enabled. Audio-only fixture checks do not cover Fly workspace composition,
 native split, minimisation, video, Twitch/real Pie or packaged applications.
 
-## Resolve a future engine update
+## Engine updates
+
+Fly follows Chromium Stable automatically: a scheduled workflow pins each new
+release, validates it in a second engine root and ships it. The process, its
+commands and what to do when a patch stops applying are in
+[Chromium engine updates](./engine-updates.md).
 
 ```sh
 python3 scripts/chromium/pin-upstream.py --output /tmp/fly-upstream-candidate.json
 ```
 
-This explicitly queries official Stable/Linux release metadata and verifies
-`chrome/VERSION` and `DEPS` against the exact source pin. It refuses to overwrite
-an existing output. Review the candidate, upstream security/release state and
-platform coverage before adopting it on an engine-update branch. It does not
-rebase, update the current lock or change a checkout. The engine-update rehearsal
-is still outstanding. Fly's product version remains generated from
-`package.json` by the existing release tooling.
+This explicitly queries official Stable/Linux release metadata (`--channel`
+is not offered here; `engine_update.py patch-check --channel Beta` covers Beta)
+and verifies `chrome/VERSION` and `DEPS` against the exact source pin. It refuses
+to overwrite an existing output and does not change the lock or a checkout. Fly's
+product version remains generated from `package.json` by the existing release
+tooling.
+
+New Fly sources and dependencies go into `chromium/overlay/fly/integration.gni`,
+never into another upstream `BUILD.gn` hunk.
 
 
 ## Native overlay development

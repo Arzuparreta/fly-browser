@@ -69,6 +69,7 @@ export default defineConfig({
           { text: 'Configuration Files', link: '/reference/configuration' },
           { text: 'Versioning & Releases', link: '/releasing' },
           { text: 'Chromium Development', link: '/chromium/build' },
+          { text: 'Chromium Engine Updates', link: '/chromium/engine-updates' },
           { text: 'Startup Performance Study', link: '/chromium/startup-study' },
           { text: 'Live Media Test', link: '/chromium/live-media' }
         ]

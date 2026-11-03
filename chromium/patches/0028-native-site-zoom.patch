@@ -26,14 +26,3 @@
    zoom::PageZoom::Zoom(browser->GetTabStripModel()->GetActiveWebContents(),
                         zoom);
  }
---- a/chrome/browser/ui/BUILD.gn
-+++ b/chrome/browser/ui/BUILD.gn
-@@ -802,6 +802,8 @@
-       "//fly/ui/fly_extensions.h",
-       "//fly/ui/user_content.cc",
-       "//fly/ui/user_content.h",
-+      "//fly/ui/site_zoom.cc",
-+      "//fly/ui/site_zoom.h",
-       "//fly/ui/fly_theme.cc",
-       "//fly/ui/fly_theme.h",
-       "//fly/ui/fly_window_controller.cc",

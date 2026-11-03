@@ -55,6 +55,12 @@
   is unavailable or fails, report that explicitly. Preserve the owner's running
   session and say when a full restart is needed to load the changes.
   Documentation-only changes do not require a native rebuild.
+- New Fly sources and dependencies go into
+  `chromium/overlay/fly/integration.gni`, not into new hunks in upstream
+  `BUILD.gn` files. Chromium updates are automatic
+  (`docs/chromium/engine-updates.md`); when main moved the Chromium pin, bring
+  `origin/main` into your branch and run
+  `python3 scripts/chromium/engine_update.py upgrade --root /mnt/storage/fly-chromium`.
 - Run `npm test` and `git diff --check` before pushing (and `npm run docs:build` when docs change). Actions, their default
   bindings and the Command Centre entries live in
   `chromium/overlay/fly/commands/actions.json` and `commands.json`; after

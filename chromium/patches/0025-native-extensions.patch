@@ -1,16 +1,3 @@
---- a/chrome/browser/ui/BUILD.gn
-+++ b/chrome/browser/ui/BUILD.gn
-@@ -798,6 +798,10 @@
-       "//fly/ui/workspace_close_transaction.h",
-       "//fly/ui/fly_actions.cc",
-       "//fly/ui/fly_actions.h",
-+      "//fly/ui/fly_extensions.cc",
-+      "//fly/ui/fly_extensions.h",
-+      "//fly/ui/user_content.cc",
-+      "//fly/ui/user_content.h",
-       "//fly/ui/fly_theme.cc",
-       "//fly/ui/fly_theme.h",
-       "//fly/ui/fly_window_controller.cc",
 --- a/chrome/browser/extensions/component_extensions_allowlist/allowlist.cc
 +++ b/chrome/browser/extensions/component_extensions_allowlist/allowlist.cc
 @@ -69,6 +69,13 @@

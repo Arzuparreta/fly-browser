@@ -1,14 +1,3 @@
---- a/chrome/browser/ui/BUILD.gn
-+++ b/chrome/browser/ui/BUILD.gn
-@@ -816,6 +816,8 @@
-       "//fly/ui/new_tab_ui.h",
-       "//fly/ui/download_shelf.cc",
-       "//fly/ui/download_shelf.h",
-+      "//fly/ui/spellcheck_sync.cc",
-+      "//fly/ui/spellcheck_sync.h",
-       "//fly/ui/fly_theme.cc",
-       "//fly/ui/fly_theme.h",
-       "//fly/ui/fly_menu.cc",
 --- a/chrome/browser/renderer_context_menu/spelling_options_submenu_observer.cc
 +++ b/chrome/browser/renderer_context_menu/spelling_options_submenu_observer.cc
 @@ -50,6 +50,26 @@ void SpellingOptionsSubMenuObserver::InitMenu(

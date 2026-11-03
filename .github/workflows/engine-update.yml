@@ -1,0 +1,128 @@
+name: Chromium engine updates
+
+# Keeps Fly on the latest official Chromium Stable release, with the security
+# fixes Google publishes for it. Runs on a schedule and by hand, never on pull
+# requests: it executes code from main on the trusted engine host.
+#
+# beta    replays Fly's patches on the next major version (Chromium Beta) and
+#         keeps one issue open while any of them does not apply: the early
+#         warning to rebase them before that version reaches Stable.
+# update  when Stable is newer than the pin, commits the new pin to the
+#         engine/chromium-stable branch and opens its pull request; validates
+#         it in the candidate engine root ($FLY_ENGINE_CANDIDATE_ROOT), so the
+#         owner's engine root is never left half-updated; merges it once every
+#         check passes, and cuts the release. release.yml then gives
+#         $FLY_ENGINE_ROOT the validated sources before building packages.
+#
+# A failure leaves the pull request open with the log in a comment. The
+# process is described in docs/chromium/engine-updates.md.
+
+on:
+  schedule:
+    - cron: '41 */6 * * *'
+  workflow_dispatch:
+    inputs:
+      release:
+        description: Cut a release after the update merges
+        type: boolean
+        default: true
+
+permissions:
+  contents: read
+
+concurrency:
+  group: engine-update
+  cancel-in-progress: false
+
+jobs:
+  beta:
+    name: Patches on Chromium Beta
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    permissions:
+      contents: read
+      issues: write
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Replay the patch series on Chromium Beta
+        id: check
+        continue-on-error: true
+        shell: bash
+        run: python3 scripts/chromium/engine_update.py patch-check --channel Beta | tee "$RUNNER_TEMP/patch-check.log"
+      - name: Keep the early-warning issue current
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+          OUTCOME: ${{ steps.check.outcome }}
+          VERSION: ${{ steps.check.outputs.version }}
+          PATCHES: ${{ steps.check.outputs.patches }}
+        run: |
+          set -euo pipefail
+          title='Fly patches do not apply to Chromium Beta'
+          issue=$(gh issue list --repo "$GITHUB_REPOSITORY" --state open --search "in:title \"$title\"" \
+            --json number,title --jq ".[] | select(.title == \"$title\") | .number" | head -1)
+          if [ "$OUTCOME" = success ]; then
+            if [ -n "$issue" ]; then
+              gh issue close "$issue" --repo "$GITHUB_REPOSITORY" \
+                --comment "Every patch applies to Chromium Beta $VERSION again."
+            fi
+            exit 0
+          fi
+          if [ -z "$VERSION" ]; then
+            echo "::error::The Beta check did not run to completion; see its log."
+            exit 1
+          fi
+          {
+            echo "Chromium Beta $VERSION is the next Stable major version. These patches do not apply to it:"
+            echo
+            for name in $PATCHES; do echo "- \`chromium/patches/$name\`"; done
+            echo
+            echo "Rebase them before that version reaches Stable, or the automatic update stops at them."
+            echo "Check locally with \`python3 scripts/chromium/engine_update.py patch-check --channel Beta\`."
+            echo
+            echo '<details><summary>Log</summary>'
+            echo
+            echo '```'
+            tail -n 120 "$RUNNER_TEMP/patch-check.log" | sed 's/```/` ` `/g'
+            echo '```'
+            echo
+            echo '</details>'
+          } > "$RUNNER_TEMP/issue.md"
+          if [ -n "$issue" ]; then
+            gh issue edit "$issue" --repo "$GITHUB_REPOSITORY" --body-file "$RUNNER_TEMP/issue.md"
+          else
+            gh issue create --repo "$GITHUB_REPOSITORY" --title "$title" --body-file "$RUNNER_TEMP/issue.md"
+          fi
+
+  update:
+    name: Update to the latest Stable
+    # Chromium builds need the trusted engine host; see docs/releasing.md.
+    runs-on: [self-hosted, linux, x64, fly-chromium]
+    timeout-minutes: 2880
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+          fetch-depth: 0
+          # Pushes use the host's gh login so that they start workflows.
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Open or update the update pull request
+        id: prepare
+        run: scripts/chromium/engine-update-ci.sh prepare
+      - name: Build and test it in the candidate engine root
+        if: steps.prepare.outputs.active == 'true'
+        run: scripts/chromium/engine-update-ci.sh validate
+      - name: Merge it once every check passes
+        if: steps.prepare.outputs.active == 'true'
+        run: scripts/chromium/engine-update-ci.sh merge
+      - name: Cut the release
+        if: steps.prepare.outputs.active == 'true' && github.event.inputs.release != 'false'
+        env:
+          FLY_ENGINE_RELEASE: ${{ vars.FLY_ENGINE_RELEASE }}
+        run: scripts/chromium/engine-update-ci.sh release

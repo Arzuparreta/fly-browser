@@ -141,16 +141,3 @@
  
    if (enable_extensions) {
      deps += [ "//chrome/browser/extensions" ]
---- a/chrome/browser/ui/BUILD.gn
-+++ b/chrome/browser/ui/BUILD.gn
-@@ -792,8 +792,10 @@
-     sources += [
-       "//fly/ui/fly_app.cc",
-       "//fly/ui/fly_app.h",
-       "//fly/ui/fly_browser_frame.cc",
-       "//fly/ui/fly_browser_frame.h",
-+      "//fly/ui/workspace_close_transaction.cc",
-+      "//fly/ui/workspace_close_transaction.h",
-       "//fly/ui/fly_window_controller.cc",
-       "//fly/ui/fly_window_controller.h",
-       "//fly/ui/native_commands.cc",

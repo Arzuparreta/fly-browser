@@ -1,0 +1,119 @@
+# Copyright Fly Browser contributors. All rights reserved.
+# Use of this source code is governed by the GPL-3.0-or-later license in the
+# Fly repository.
+
+# Fly's additions to upstream Chromium build targets.
+#
+# Each upstream target adds these lists with a single hook from
+# chromium/patches/0000-native-build-integration.patch. A new Fly source or
+# dependency belongs here, not in another upstream patch hunk: one hook per
+# upstream file is all a Chromium update can conflict with.
+
+# //chrome/browser/ui:ui
+fly_browser_ui_sources = []
+fly_browser_ui_deps = [ "//fly:session_metadata" ]
+fly_browser_ui_data_deps = []
+if (is_linux || is_win) {
+  fly_browser_ui_sources += [
+    "//fly/ui/command_palette.cc",
+    "//fly/ui/command_palette.h",
+    "//fly/ui/diagnostics_hub.cc",
+    "//fly/ui/diagnostics_hub.h",
+    "//fly/ui/download_shelf.cc",
+    "//fly/ui/download_shelf.h",
+    "//fly/ui/fly_actions.cc",
+    "//fly/ui/fly_actions.h",
+    "//fly/ui/fly_app.cc",
+    "//fly/ui/fly_app.h",
+    "//fly/ui/fly_browser_frame.cc",
+    "//fly/ui/fly_browser_frame.h",
+    "//fly/ui/fly_extensions.cc",
+    "//fly/ui/fly_extensions.h",
+    "//fly/ui/fly_menu.cc",
+    "//fly/ui/fly_menu.h",
+    "//fly/ui/fly_theme.cc",
+    "//fly/ui/fly_theme.h",
+    "//fly/ui/fly_window_controller.cc",
+    "//fly/ui/fly_window_controller.h",
+    "//fly/ui/hint_controller.cc",
+    "//fly/ui/hint_controller.h",
+    "//fly/ui/history_service.cc",
+    "//fly/ui/history_service.h",
+    "//fly/ui/keyboard_editor.cc",
+    "//fly/ui/keyboard_editor.h",
+    "//fly/ui/native_commands.cc",
+    "//fly/ui/native_commands.h",
+    "//fly/ui/new_tab_ui.cc",
+    "//fly/ui/new_tab_ui.h",
+    "//fly/ui/page_scroller.cc",
+    "//fly/ui/page_scroller.h",
+    "//fly/ui/sidebar_panel.cc",
+    "//fly/ui/sidebar_panel.h",
+    "//fly/ui/site_zoom.cc",
+    "//fly/ui/site_zoom.h",
+    "//fly/ui/spellcheck_sync.cc",
+    "//fly/ui/spellcheck_sync.h",
+    "//fly/ui/startup_maintenance.cc",
+    "//fly/ui/startup_maintenance.h",
+    "//fly/ui/status_bar.cc",
+    "//fly/ui/status_bar.h",
+    "//fly/ui/tab_move_transaction.cc",
+    "//fly/ui/tab_move_transaction.h",
+    "//fly/ui/tab_sidebar.cc",
+    "//fly/ui/tab_sidebar.h",
+    "//fly/ui/user_content.cc",
+    "//fly/ui/user_content.h",
+    "//fly/ui/workspace_close_transaction.cc",
+    "//fly/ui/workspace_close_transaction.h",
+  ]
+  fly_browser_ui_deps += [
+    "//chrome/browser/dom_distiller",
+    "//chrome/browser/ssl",
+    "//chrome/browser/ui/navigator",
+    "//components/dom_distiller/core",
+    "//components/history/core/common",
+    "//components/spellcheck/browser",
+    "//components/url_formatter",
+    "//components/vector_icons",
+    "//fly:bookmarks",
+    "//fly:commands",
+    "//fly:preferences",
+    "//fly:workspaces",
+    "//ui/accessibility",
+    "//ui/wm",
+  ]
+  fly_browser_ui_data_deps += [
+    "//fly:fonts",
+    "//fly:user_content_resources",
+  ]
+  if (is_linux) {
+    fly_browser_ui_deps += [
+      "//third_party/fontconfig",
+
+      # Popup windows are transient for Fly's window (X11).
+      "//ui/gfx/x",
+    ]
+  }
+}
+
+# //chrome/test:browser_tests
+fly_browser_tests_sources = []
+fly_browser_tests_deps = []
+if (is_linux || is_win) {
+  fly_browser_tests_sources += [ "//fly/test/workspace_browser_test.cc" ]
+  fly_browser_tests_deps += [
+    "//fly:bookmarks",
+    "//fly:commands",
+    "//fly:preferences",
+    "//fly:session_metadata",
+    "//fly:workspaces",
+  ]
+}
+
+# //chrome/browser/prefs:impl
+fly_prefs_impl_deps = [
+  "//fly:bookmarks",
+  "//fly:commands",
+  "//fly:preferences",
+  "//fly:workspaces",
+]

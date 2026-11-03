@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Resolve official Stable/Linux source pins; does not update a checkout."""
+"""Resolve official Stable (or Beta) Linux source pins; does not update a checkout."""
 
 import argparse
 import base64
@@ -10,7 +10,8 @@ from pathlib import Path
 import re
 import urllib.request
 
-DASH = 'https://chromiumdash.appspot.com/fetch_releases?channel=Stable&platform=Linux&num=1'
+DASH = 'https://chromiumdash.appspot.com/fetch_releases?channel={channel}&platform=Linux&num=1'
+CHANNELS = ('Stable', 'Beta')
 SOURCE = 'https://chromium.googlesource.com/chromium/src'
 TOOLS = 'https://chromium.googlesource.com/chromium/tools/depot_tools'
 
@@ -30,10 +31,13 @@ def gitiles_json(url):
     return json.loads(raw[5:])
 
 
-def resolve():
-    release = json.loads(fetch(DASH))[0]
-    if release['channel'] != 'Stable' or release['platform'] != 'Linux':
-        raise ValueError('Release endpoint did not return Stable/Linux')
+def resolve(channel='Stable'):
+    if channel not in CHANNELS:
+        raise ValueError('Unsupported release channel: ' + channel)
+    source = DASH.format(channel=channel)
+    release = json.loads(fetch(source))[0]
+    if release['channel'] != channel or release['platform'] != 'Linux':
+        raise ValueError('Release endpoint did not return ' + channel + '/Linux')
     chromium = release['hashes']['chromium']
     tools = gitiles_json(TOOLS + '/+/HEAD?format=JSON')['commit']
     for sha in (chromium, tools):
@@ -48,7 +52,7 @@ def resolve():
     return {
         'schema': 1,
         'resolved_at': datetime.datetime.now(datetime.timezone.utc).isoformat(),
-        'release_source': DASH, 'channel': release['channel'], 'platform': release['platform'],
+        'release_source': source, 'channel': release['channel'], 'platform': release['platform'],
         'release_time': release['time'], 'engine_version': actual,
         'chromium': {'url': SOURCE + '.git', 'revision': chromium,
                      'deps_sha256': hashlib.sha256(deps).hexdigest()},
