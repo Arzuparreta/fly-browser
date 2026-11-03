@@ -8267,6 +8267,12 @@ IN_PROC_BROWSER_TEST_F(FlyPageScrollBrowserTest,
       if (sampling) requestAnimationFrame(sample);
     });
   )JS"));
+  // Scroll only once a frame with the tall layout has been produced. Earlier,
+  // the compositor still clamps the gesture to the old page's height.
+  ASSERT_TRUE(content::ExecJs(contents, R"JS(
+    new Promise(resolve =>
+        requestAnimationFrame(() => requestAnimationFrame(resolve)));
+  )JS"));
   for (int i = 0; i < 12; ++i)
     ASSERT_TRUE(ExecuteNativeCommand(browser(), "scroll-down"));
   ASSERT_TRUE(base::test::RunUntil([&] {

@@ -52,12 +52,12 @@ FlyColors& Palette() {
 class RoleBackground : public views::Background {
  public:
   RoleBackground(FlyRole role, float radius) : role_(role), radius_(radius) {
-    SetColor(FlyRoleColor(role_));
+    set_color(FlyRoleColor(role_));
   }
   // The resolved colour also tells Label that text is painted on an opaque
   // surface (subpixel rendering).
   void OnViewThemeChanged(views::View* view) override {
-    SetColor(FlyRoleColor(role_));
+    set_color(FlyRoleColor(role_));
     view->SchedulePaint();
   }
   void Paint(gfx::Canvas* canvas, views::View* view) const override {

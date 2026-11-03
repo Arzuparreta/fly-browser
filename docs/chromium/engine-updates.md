@@ -123,7 +123,12 @@ application.
 ## Data use
 
 Moving the candidate downloads only what changed in Chromium since the previous
-pin: Git objects, toolchain packages and hook downloads. A security update within
+pin: Git objects, toolchain packages and hook downloads. Before `gclient sync`,
+`move` fetches each dependency's new revision alone (`git fetch --depth=1`), one
+repository at a time and waiting when googlesource answers HTTP 429. Left to
+itself, `gclient sync` fetches every branch's full history into an existing
+dependency that lacks its new revision, which costs gigabytes per version on a
+shallow root. A security update within
 a major version is a small download; a new major version is larger, because four
 weeks of Chromium changes and usually new toolchains come with it. Adopting a
 candidate into the active root and building packages downloads nothing more than

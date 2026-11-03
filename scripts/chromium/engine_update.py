@@ -158,12 +158,14 @@ def head(directory):
     return engine.git(directory, 'rev-parse', 'HEAD')
 
 
-def move_checkout(directory, old, new):
+def move_checkout(directory, old, new, submodules=True):
     """Detach a shallow official checkout at a new revision. Refuses anything
-    but a clean tree at the old or the new pin; never resets."""
+    but a clean tree at the old or the new pin; never resets. With
+    `submodules=False` the tree at the new pin may still have its gitlinks at
+    the old dependency revisions (gclient sync moves them next)."""
     current = head(directory)
     if current == new['revision']:
-        engine.verify_checkout(directory, new)
+        engine.verify_checkout(directory, new, submodules)
         return False
     engine.verify_checkout(directory, old)
     present = subprocess.run(['git', 'cat-file', '-e', new['revision'] + '^{commit}'],
@@ -172,7 +174,7 @@ def move_checkout(directory, old, new):
         engine.run(['git', 'fetch', '--depth=1', 'origin', new['revision']], directory)
     engine.run(['git', '-c', 'core.autocrlf=false', 'checkout', '--quiet', '--detach',
                 new['revision']], directory)
-    engine.verify_checkout(directory, new)
+    engine.verify_checkout(directory, new, submodules)
     return True
 
 
@@ -194,6 +196,52 @@ def revert_overlay(root, old, lock):
                     'checkout of the previous pin first')
     native.revert(root, old)
     return 'reverted'
+
+
+def same_remote(first, second):
+    def normal(url):
+        url = url.rstrip('/')
+        return url[:-4] if url.endswith('.git') else url
+    return normal(first) == normal(second)
+
+
+def fetch_dependencies(root, env, waits=(30, 60, 120, 240, 480)):
+    """Fetch only the new revision of each dependency already checked out.
+    gclient sync fetches every branch's history (no depth) into an existing
+    dependency that lacks its new revision; on a shallow engine root that is
+    gigabytes per Chromium version. With the revision present, gclient checks
+    it out without fetching. One repository at a time: googlesource limits
+    anonymous clients (HTTP 429)."""
+    with tempfile.TemporaryDirectory(prefix='fly-revinfo-') as directory:
+        output = Path(directory) / 'revinfo.json'
+        engine.run(['gclient', 'revinfo', '--output-json', output], root, env)
+        dependencies = json.loads(output.read_text())
+    fetched = 0
+    for path, info in sorted(dependencies.items()):
+        revision, url = info.get('rev'), info.get('url')
+        checkout = root / path
+        if (path == 'src' or not url or not revision or
+                not re.fullmatch(r'[0-9a-f]{40}', revision) or not (checkout / '.git').exists()):
+            continue
+        if subprocess.run(['git', 'cat-file', '-e', revision + '^{commit}'], cwd=checkout,
+                          stderr=subprocess.DEVNULL).returncode == 0:
+            continue
+        origin = engine.git(checkout, 'remote', 'get-url', 'origin')
+        if not same_remote(origin, url):
+            continue  # The dependency moved repository; gclient replaces it.
+        for wait in (*waits, None):
+            try:
+                engine.run(['git', 'fetch', '--depth=1', '--no-tags', 'origin', revision],
+                           checkout, env)
+                break
+            except subprocess.CalledProcessError:
+                if wait is None:
+                    raise
+                print(f'Fetch failed in {path}; retrying in {wait} s.', flush=True)
+                time.sleep(wait)
+        fetched += 1
+    print(f'Fetched the new revision of {fetched} dependencies.', flush=True)
+    return fetched
 
 
 def move(root, lock, jobs, minimum_free_gib=100):
@@ -232,10 +280,12 @@ def move(root, lock, jobs, minimum_free_gib=100):
         else:
             engine.run([root / 'depot_tools/ensure_bootstrap'], root, env)
         engine.verify_checkout(root / 'depot_tools', lock['depot_tools'])
-    move_checkout(root / 'src', old['chromium'], lock['chromium'])
-    env = engine.verify(root, lock)
-    if not stage_current(root, 'sync'):
+    synced = stage_current(root, 'sync')
+    move_checkout(root / 'src', old['chromium'], lock['chromium'], submodules=synced)
+    env = engine.verify(root, lock, submodules=synced)
+    if not synced:
         engine.gclient_config(root, lock)
+        fetch_dependencies(root, env)
         engine.run(['gclient', 'sync', '--nohooks', '--no-history',
                     '--revision', 'src@' + lock['chromium']['revision'],
                     '--jobs', str(jobs)], root, env)

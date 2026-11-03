@@ -143,6 +143,59 @@ class PatchCheckTests(unittest.TestCase):
         self.assertEqual(len(calls), 3)
 
 
+class FetchDependenciesTests(unittest.TestCase):
+    """Only the missing new revision of each dependency is fetched, shallow,
+    from a local origin; gclient revinfo is simulated."""
+
+    def setUp(self):
+        tmp = tempfile.TemporaryDirectory(prefix='fly-fetch-')
+        self.addCleanup(tmp.cleanup)
+        base = Path(tmp.name).resolve()
+        self.origin = base / 'origin'
+        self.origin.mkdir()
+        git(self.origin, 'init', '--quiet')
+        self.old_rev = commit(self.origin, {'file': 'old\n'}, 'old')
+        self.root = base / 'engine'
+        self.dependency = self.root / 'src/third_party/dependency'
+        self.dependency.parent.mkdir(parents=True)
+        git(base, 'clone', '--quiet', '--depth=1', self.origin.as_uri(), str(self.dependency))
+        commit(self.origin, {'file': 'history\n'}, 'history')
+        self.new_rev = commit(self.origin, {'file': 'new\n'}, 'new')
+        self.inventory = {'src': {'url': SRC_URL, 'rev': 'a' * 40},
+                          'src/third_party/dependency': {'url': self.origin.as_uri() + '.git',
+                                                         'rev': self.new_rev},
+                          'src/third_party/cipd': {'url': None, 'rev': None}}
+        self.fetches = []
+        real = engine.run
+
+        def run(args, cwd, env=None, capture=False, foreground=False):
+            args = [str(arg) for arg in args]
+            if args[:2] == ['gclient', 'revinfo']:
+                Path(args[-1]).write_text(json.dumps(self.inventory))
+                return ''
+            if args[:2] == ['git', 'fetch']:
+                self.fetches.append(args)
+                if len(self.fetches) == 1:
+                    raise subprocess.CalledProcessError(128, args)  # HTTP 429
+            return real(args, cwd, env, capture, foreground)
+        scope = patch.object(engine, 'run', side_effect=run)
+        scope.start()
+        self.addCleanup(scope.stop)
+
+    def test_fetches_only_the_missing_revision_shallow_and_retries(self):
+        with patch.object(engine_update.time, 'sleep') as sleep:
+            self.assertEqual(engine_update.fetch_dependencies(self.root, None), 1)
+        sleep.assert_called_once()
+        self.assertEqual(self.fetches[-1], ['git', 'fetch', '--depth=1', '--no-tags', 'origin',
+                                            self.new_rev])
+        git(self.dependency, 'cat-file', '-e', self.new_rev + '^{commit}')
+        # Only the new commit came, not the history between the two pins.
+        self.assertEqual(git(self.dependency, 'rev-list', '--count', self.new_rev), '1')
+        self.fetches.clear()
+        self.assertEqual(engine_update.fetch_dependencies(self.root, None), 0)
+        self.assertEqual(self.fetches, [])
+
+
 class MoveTests(unittest.TestCase):
     """A root at an old pin moves to a new one; the new revision is already
     in the object store, so nothing is fetched."""
@@ -196,14 +249,14 @@ class MoveTests(unittest.TestCase):
                                   capture_output=True).stdout.strip()
         self.commands.append(args[:2])
         if args[:2] == ['gclient', 'revinfo']:
-            self.write_inventory(self.new_rev, Path(cwd))
+            Path(args[-1]).write_text(json.dumps({'src': {'url': SRC_URL, 'rev': self.new_rev}}))
         return ''
 
     def test_moves_syncs_and_runs_hooks_once(self):
         self.assertTrue(engine_update.move(self.root, self.new, jobs=1))
         self.assertEqual(git(self.src, 'rev-parse', 'HEAD'), self.new_rev)
-        self.assertEqual(self.commands, [['gclient', 'sync'], ['gclient', 'revinfo'],
-                                         ['gclient', 'runhooks']])
+        self.assertEqual(self.commands, [['gclient', 'revinfo'], ['gclient', 'sync'],
+                                         ['gclient', 'revinfo'], ['gclient', 'runhooks']])
         self.assertEqual(engine_update.recorded_lock(self.root)['engine_version'], '156.0.1.1')
         self.assertFalse((self.root / engine_update.MOVE_STATE).exists())
         self.commands.clear()

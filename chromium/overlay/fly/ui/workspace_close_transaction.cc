@@ -134,7 +134,7 @@ void WorkspaceCloseTransaction::Advance() {
         weak_factory_.GetWeakPtr(), index_));
     if (result == UnloadController::WarnBeforeClosingResult::kDoNotClose)
       return;
-  } else if (unload->TryToCloseWindow(
+  } else if (unload->RunBeforeUnloadForShutdown(
                  false,
                  base::BindRepeating(&WorkspaceCloseTransaction::Confirmed,
                                      weak_factory_.GetWeakPtr(), index_))) {
@@ -179,7 +179,7 @@ void WorkspaceCloseTransaction::ResetHandlers() {
   // first so cancellation cannot reenter the transaction during teardown.
   for (const auto& browser : browsers_)
     if (browser && !browser->IsDeleteScheduled())
-      UnloadController::From(browser.get())->ResetTryToCloseWindow();
+      UnloadController::From(browser.get())->ResetBeforeUnloadForShutdown();
 }
 void WorkspaceCloseTransaction::Finish(bool success) {
   if (phase_ == Phase::kComplete)

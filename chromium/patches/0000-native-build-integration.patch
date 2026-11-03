@@ -1,6 +1,6 @@
 --- a/chrome/browser/ui/BUILD.gn
 +++ b/chrome/browser/ui/BUILD.gn
-@@ -27,6 +27,7 @@
+@@ -28,6 +28,7 @@
  import("//tools/metrics/generate_allowlist_from_histograms_file.gni")
  import("//ui/base/ui_features.gni")
  import("//ui/views/features.gni")
@@ -8,19 +8,20 @@
  
  assert(enable_supervised_users)
  assert(!is_fuchsia, "Fuchsia shouldn't use anything in //chrome")
-@@ -1087,6 +1088,12 @@
-     "//ui/strings",
-     "//ui/webui",
-   ]
+@@ -4694,6 +4695,13 @@
+           [ "//chrome/browser/ui/views/extensions:extensions_toolbar_desktop" ]
+     }
+   }
++
 +  # Fly: sources and dependencies listed in //fly/integration.gni.
 +  sources += fly_browser_ui_sources
 +  deps += fly_browser_ui_deps
 +  if (fly_browser_ui_data_deps != []) {
 +    data_deps = fly_browser_ui_data_deps
 +  }
+ }
  
-   allow_circular_includes_from = [
-     # page_load_metrics's :impl includes headers from //chrome/browser/ui that
+ # These are the dependencies for the "ui" target that are outside of
 --- a/chrome/test/BUILD.gn
 +++ b/chrome/test/BUILD.gn
 @@ -50,6 +50,7 @@
