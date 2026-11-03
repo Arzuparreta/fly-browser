@@ -1,3 +1,32 @@
+--- a/chrome/browser/profiles/BUILD.gn
++++ b/chrome/browser/profiles/BUILD.gn
+@@ -433,6 +433,13 @@
+     "//content/public/browser",
+     "//extensions/buildflags",
+   ]
++  if (is_linux || is_win) {
++    deps += [
++      "//chrome/browser:browser_process",
++      "//fly:workspaces",
++    ]
++  }
++
+   if (enable_extensions_core) {
+     deps += [ "//extensions/browser" ]
+   }
+@@ -528,6 +535,12 @@
+     "//google_apis",
+   ]
+ 
++  if (is_linux || is_win) {
++    deps += [
++      "//fly:workspaces",
++    ]
++  }
++
+   if (enable_extensions) {
+     deps += [ "//chrome/browser/extensions" ]
+   }
 --- a/chrome/browser/profiles/profile.cc
 +++ b/chrome/browser/profiles/profile.cc
 @@ -47,6 +47,13 @@
@@ -14,7 +43,7 @@
  #if BUILDFLAG(IS_CHROMEOS)
  #include "ash/constants/ash_features.h"
  #include "ash/constants/ash_pref_names.h"
-@@ -584,6 +591,24 @@
+@@ -581,6 +588,24 @@
      return false;
    }
  
@@ -59,7 +88,7 @@
  #include "build/chromeos_buildflags.h"
  #include "chrome/browser/accessibility/accessibility_labels_service.h"
  #include "chrome/browser/accessibility/accessibility_labels_service_factory.h"
-@@ -607,6 +611,13 @@
+@@ -606,6 +610,13 @@
          LOG(WARNING) << "Invalid entry in " << prefs::kProfilesLastActive;
          continue;
        }
@@ -73,16 +102,13 @@
        Profile* profile =
            profile_manager->GetProfile(profile_manager->user_data_dir().Append(
                base::FilePath::FromUTF8Unsafe(*profile_base_name)));
-@@ -951,12 +962,32 @@
+@@ -950,12 +961,32 @@
        local_state->GetFilePath(prefs::kProfileLastUsed);
    // Make sure the system profile can't be the one marked as the last one used
    // since it shouldn't get a browser.
 -  if (!last_used_profile_base_name.empty() &&
 -      last_used_profile_base_name.value() != chrome::kSystemProfileDir) {
 -    return last_used_profile_base_name;
--  }
--
--  return base::FilePath::FromASCII(chrome::kInitialProfile);
 +  if (last_used_profile_base_name.empty() ||
 +      last_used_profile_base_name.value() == chrome::kSystemProfileDir) {
 +    last_used_profile_base_name = base::FilePath::FromASCII(chrome::kInitialProfile);
@@ -106,38 +132,11 @@
 +      local_state->SetFilePath(prefs::kProfileLastUsed, fresh);
 +      return fresh;
 +    }
-+  }
+   }
+-
+-  return base::FilePath::FromASCII(chrome::kInitialProfile);
 +#endif
 +  return last_used_profile_base_name;
  }
  
  base::FilePath ProfileManager::GetProfileDirForEmail(const std::string& email) {
---- a/chrome/browser/profiles/BUILD.gn
-+++ b/chrome/browser/profiles/BUILD.gn
-@@ -423,6 +423,13 @@
-     "//content/public/browser",
-     "//extensions/buildflags",
-   ]
-+  if (is_linux || is_win) {
-+    deps += [
-+      "//chrome/browser:browser_process",
-+      "//fly:workspaces",
-+    ]
-+  }
-+
-   if (enable_extensions) {
-     deps += [ "//extensions/browser" ]
-   }
-@@ -511,6 +518,12 @@
-     "//extensions/buildflags",
-     "//google_apis",
-   ]
-+
-+  if (is_linux || is_win) {
-+    deps += [
-+      "//fly:workspaces",
-+    ]
-+  }
- 
-   if (enable_extensions) {
-     deps += [ "//chrome/browser/extensions" ]

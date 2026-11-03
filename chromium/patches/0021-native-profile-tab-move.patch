@@ -1,3 +1,16 @@
+--- a/chrome/browser/ui/tabs/BUILD.gn
++++ b/chrome/browser/ui/tabs/BUILD.gn
+@@ -424,6 +424,10 @@
+       "//components/web_modal",
+       "//components/webapps/common",
+     ]
++
++    if (is_linux || is_win) {
++      deps += [ "//fly:session_metadata" ]
++    }
+   }
+ 
+   source_set("tabs") {
 --- a/chrome/browser/ui/tabs/tab_strip_model.cc
 +++ b/chrome/browser/ui/tabs/tab_strip_model.cc
 @@ -3,6 +3,10 @@
@@ -11,7 +24,7 @@
  
  #include <algorithm>
  #include <cstddef>
-@@ -3572,6 +3576,11 @@
+@@ -3724,6 +3728,11 @@
  
  bool TabStripModel::ShouldRunUnloadListenerBeforeClosing(
      content::WebContents* contents) {
@@ -23,7 +36,7 @@
    return contents->NeedToFireBeforeUnloadOrUnloadEvents() ||
           delegate_->ShouldRunUnloadListenerBeforeClosing(contents);
  }
-@@ -4064,6 +4073,16 @@
+@@ -4202,6 +4211,16 @@
        continue;
      }
  
@@ -40,7 +53,7 @@
      tabs::TabModel* tab_model = GetTabModelAtIndex(current_index);
      if (ShouldRunUnloadListenerBeforeClosing(closing_contents)) {
        tab_model->WillDetach(base::PassKey<TabStripModel>(),
-@@ -4072,6 +4091,11 @@
+@@ -4210,6 +4229,11 @@
  
      bool create_historical_tab =
          close_types & TabCloseTypes::CLOSE_CREATE_HISTORICAL_TAB;
@@ -65,7 +78,7 @@
  
  #include <algorithm>
  
-@@ -353,6 +357,11 @@
+@@ -410,5 +414,10 @@
  
  bool UnloadController::BeforeUnloadFired(content::WebContents* contents,
                                           bool proceed) {
@@ -76,17 +89,3 @@
 +#endif
    if (!proceed) {
      DevToolsWindow::OnPageCloseCanceled(contents);
- 
---- a/chrome/browser/ui/tabs/BUILD.gn
-+++ b/chrome/browser/ui/tabs/BUILD.gn
-@@ -406,6 +406,10 @@
-     # TODO(crbug.com/40031409): Fix code that adds exit-time destructors and
-     # enable the diagnostic by removing this line.
-     configs += [ "//build/config/compiler:no_exit_time_destructors" ]
-+    if (is_linux || is_win) {
-+      deps += [ "//fly:session_metadata" ]
-+    }
-+
-   }
- 
-   source_set("tabs") {
