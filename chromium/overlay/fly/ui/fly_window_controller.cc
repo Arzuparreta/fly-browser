@@ -770,7 +770,8 @@ void FlyWindowController::BuildSurfaces() {
                           weak_factory_.GetWeakPtr()),
       base::BindRepeating(&FlyWindowController::RemoveBookmark,
                           weak_factory_.GetWeakPtr()));
-  bookmark_picker_->SetBookmarks(&FlyApp::Get().bookmarks());
+  bookmark_picker_->SetBookmarks(&FlyApp::Get().bookmarks(),
+                                 browser_->GetProfile());
   bookmark_picker_->SetBackgroundOpen(base::BindRepeating(
       &FlyWindowController::OpenBookmarkInBackground, weak_factory_.GetWeakPtr()));
   workspace_picker_ = std::make_unique<CommandPalette>(

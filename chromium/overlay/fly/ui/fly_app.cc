@@ -2,6 +2,7 @@
 // Use of this source code is governed by the GPL-3.0-or-later license in the
 // Fly repository.
 #include "fly/ui/fly_app.h"
+#include "fly/ui/bookmark_favicons.h"
 
 #include <algorithm>
 #include <utility>
@@ -1214,6 +1215,8 @@ void FlyApp::ApplyProfilePreferencesEverywhere() {
 }
 
 void FlyApp::OnBookmarksChanged() {
+  for (auto* profile : WorkspaceProfiles())
+    BookmarkFavicons::Prune(profile, *bookmarks_);
   for (auto* window : Windows())
     window->OnBookmarksChanged();
 }

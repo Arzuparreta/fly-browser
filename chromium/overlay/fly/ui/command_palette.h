@@ -4,10 +4,13 @@
 #ifndef FLY_UI_COMMAND_PALETTE_H_
 #define FLY_UI_COMMAND_PALETTE_H_
 
+#include <memory>
+#include <vector>
 #include "base/callback_list.h"
 #include "base/functional/callback.h"
 #include "base/memory/raw_ptr.h"
 #include "base/memory/weak_ptr.h"
+#include "base/task/cancelable_task_tracker.h"
 #include "content/public/browser/web_contents_observer.h"
 #include "fly/bookmarks/bookmark_service.h"
 #include "fly/commands/palette_catalog.h"
@@ -17,9 +20,8 @@
 #include "ui/gfx/geometry/point.h"
 #include "ui/views/controls/textfield/textfield_controller.h"
 #include "ui/views/widget/widget_observer.h"
-#include <memory>
-#include <vector>
 
+class Profile;
 namespace views {
 class Label;
 class Widget;
@@ -72,7 +74,7 @@ class CommandPalette : public views::TextfieldController,
                                               std::string)> remove = {});
   ~CommandPalette() override;
   void SetStyle(PaletteStyle style) { style_ = std::move(style); }
-  void SetBookmarks(BookmarkService *service) { bookmarks_ = service; }
+  void SetBookmarks(BookmarkService* service, Profile* profile);
   void SetBackgroundOpen(
       base::RepeatingCallback<void(content::WebContents *, std::string)>
           callback) {
@@ -90,6 +92,8 @@ class CommandPalette : public views::TextfieldController,
   void DeleteSelectedBookmark();
   gfx::Rect row_title_bounds_for_testing(size_t index);
   SkColor row_subtitle_color_for_testing(size_t index);
+  gfx::ImageSkia row_favicon_for_testing(size_t index);
+  gfx::Rect row_favicon_bounds_for_testing(size_t index);
   // Runs with the action of each newly highlighted row.
   void SetSelectionCallback(
       base::RepeatingCallback<void(std::string_view)> callback) {
@@ -180,6 +184,7 @@ class CommandPalette : public views::TextfieldController,
   void OpenInBackground(std::string action);
   PaletteStyle style_;
   raw_ptr<BookmarkService> bookmarks_ = nullptr;
+  base::WeakPtr<Profile> bookmark_profile_;
   base::RepeatingCallback<void(content::WebContents *, std::string)>
       background_open_;
   raw_ptr<MenuHeader> header_ = nullptr;
@@ -242,6 +247,7 @@ class CommandPalette : public views::TextfieldController,
   std::string last_group_;
   size_t initial_rows_ = 24;
   base::CallbackListSubscription scroll_subscription_;
+  base::CancelableTaskTracker favicon_tasks_;
   base::WeakPtrFactory<CommandPalette> weak_factory_{this};
 };
 }  // namespace fly
