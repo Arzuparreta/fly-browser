@@ -4,14 +4,20 @@
 #include "fly/ui/command_palette.h"
 #include "fly/ui/new_tab_ui.h"
 
+#include <algorithm>
+#include <cmath>
+#include <utility>
 #include "base/functional/bind.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/strings/string_util.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/task/single_thread_task_runner.h"
 #include "cc/paint/paint_flags.h"
+#include "chrome/browser/profiles/profile.h"
 #include "components/input/native_web_keyboard_event.h"
+#include "components/vector_icons/vector_icons.h"
 #include "content/public/browser/web_contents.h"
+#include "fly/ui/bookmark_favicons.h"
 #include "fly/ui/fly_menu.h"
 #include "fly/ui/fly_theme.h"
 #include "fly/ui/native_commands.h"
@@ -20,9 +26,12 @@
 #include "ui/aura/window.h"
 #include "ui/base/metadata/metadata_header_macros.h"
 #include "ui/base/metadata/metadata_impl_macros.h"
+#include "ui/compositor/compositor.h"
 #include "ui/events/event.h"
 #include "ui/gfx/canvas.h"
 #include "ui/gfx/color_utils.h"
+#include "ui/gfx/image/image_skia_rep.h"
+#include "ui/gfx/paint_vector_icon.h"
 #include "ui/gfx/text_elider.h"
 #include "ui/gfx/text_utils.h"
 #include "ui/views/accessibility/view_accessibility.h"
@@ -34,8 +43,6 @@
 #include "ui/views/layout/box_layout.h"
 #include "ui/views/widget/widget.h"
 #include "url/gurl.h"
-#include <algorithm>
-#include <utility>
 
 namespace fly {
 namespace {
@@ -62,13 +69,15 @@ class PickerButton : public FlyButton {
                std::u16string detail,
                std::vector<std::u16string> keys,
                std::vector<std::u16string> normal_keys,
-               int indent)
+               int indent,
+               bool has_favicon = false)
       : FlyButton(std::move(callback), title, FlyFace::kSans, kMenuTextSize),
         subtitle_(std::move(subtitle)),
         detail_(std::move(detail)),
         keys_(std::move(keys)),
         normal_keys_(std::move(normal_keys)),
-        indent_(indent) {
+        indent_(indent),
+        has_favicon_(has_favicon) {
     SetHorizontalAlignment(gfx::ALIGN_LEFT);
     SetCustomPadding(gfx::Insets());
     SetCornerRadius(S(6));
@@ -90,6 +99,41 @@ class PickerButton : public FlyButton {
     hover_ = std::move(hover);
   }
   gfx::Rect TitleBoundsForTesting() const { return label()->bounds(); }
+  gfx::Rect FaviconBounds() const {
+    // An 18px optical slot with 12px breathing room before the text block.
+    return gfx::Rect(S(13), (height() - S(16)) / 2, S(16), S(16));
+  }
+  gfx::ImageSkia favicon() const { return favicon_; }
+  void SetFavicon(gfx::ImageSkia image) {
+    if (image.isNull() && favicon_.isNull())
+      return;
+    favicon_ = std::move(image);
+    light_glyph_ = dark_glyph_ = false;
+    if (!favicon_.isNull()) {
+      // Some cached icons are white-only or black-only glyphs. Inspect the
+      // tiny decoded bitmap once so they remain legible in either Fly theme.
+      const auto& bitmap = favicon_.GetRepresentation(1).GetBitmap();
+      bool light = true, dark = true, visible = false;
+      for (int y = 0; y < bitmap.height(); ++y) {
+        for (int x = 0; x < bitmap.width(); ++x) {
+          const auto color = bitmap.getColor(x, y);
+          if (SkColorGetA(color) < 128)
+            continue;
+          visible = true;
+          light &= SkColorGetR(color) > 220 && SkColorGetG(color) > 220 &&
+                   SkColorGetB(color) > 220;
+          dark &= SkColorGetR(color) < 48 && SkColorGetG(color) < 48 &&
+                  SkColorGetB(color) < 48;
+        }
+      }
+      light_glyph_ = visible && light;
+      dark_glyph_ = visible && dark;
+    }
+    SchedulePaint();  // The reserved column never changes layout or selection.
+  }
+  base::WeakPtr<PickerButton> GetWeakPtr() {
+    return weak_factory_.GetWeakPtr();
+  }
   SkColor SubtitleColor() const {
     const auto &colors = GetFlyColors();
     const bool hot = GetState() == STATE_HOVERED || GetState() == STATE_PRESSED;
@@ -146,7 +190,7 @@ class PickerButton : public FlyButton {
   }
   void Layout(PassKey) override {
     LayoutSuperclass<FlyButton>(this);
-    const int left = S(12) + S(20) * indent_;
+    const int left = S(12) + S(20) * indent_ + (has_favicon_ ? S(30) : 0);
     const int right = TrailingLeft() - S(12);
     const int line = label()->GetPreferredSize().height();
     if (subtitle_.empty()) {
@@ -182,6 +226,27 @@ class PickerButton : public FlyButton {
     }
   }
   void PaintButtonContents(gfx::Canvas* canvas) override {
+    if (has_favicon_) {
+      const auto bounds = FaviconBounds();
+      if (favicon_.isNull()) {
+        canvas->DrawImageInt(gfx::CreateVectorIcon(vector_icons::kGlobeIcon,
+                                                   S(16), GetFlyColors().dim),
+                             bounds.x(), bounds.y());
+      } else {
+        const auto& colors = GetFlyColors();
+        if ((light_glyph_ && !colors.dark) || (dark_glyph_ && colors.dark)) {
+          cc::PaintFlags flags;
+          flags.setAntiAlias(true);
+          flags.setColor(colors.text);
+          canvas->DrawRoundRect(
+              gfx::RectF(S(12), (height() - S(18)) / 2, S(18), S(18)), S(4),
+              flags);
+        }
+        canvas->DrawImageInt(favicon_, 0, 0, favicon_.width(),
+                             favicon_.height(), bounds.x(), bounds.y(),
+                             bounds.width(), bounds.height(), true);
+      }
+    }
     const int centre = height() / 2;
     int right = width() - S(12);
     if (!normal_keys_.empty())
@@ -237,11 +302,16 @@ class PickerButton : public FlyButton {
   const std::vector<std::u16string> keys_;
   const std::vector<std::u16string> normal_keys_;
   const int indent_;
+  const bool has_favicon_;
+  gfx::ImageSkia favicon_;
+  bool light_glyph_ = false;
+  bool dark_glyph_ = false;
   base::RepeatingClosure hover_;
   base::RepeatingCallback<void(gfx::Point)> dragging_;
   base::RepeatingCallback<void(gfx::Point)> dropped_;
   gfx::Point press_point_;
   bool drag_moved_ = false;
+  base::WeakPtrFactory<PickerButton> weak_factory_{this};
 };
 BEGIN_METADATA(PickerButton)
 END_METADATA
@@ -286,6 +356,10 @@ CommandPalette::~CommandPalette() {
   overlay_.reset();
   if (desktop_)
     desktop_->RemoveObserver(this);
+}
+void CommandPalette::SetBookmarks(BookmarkService* service, Profile* profile) {
+  bookmarks_ = service;
+  bookmark_profile_ = profile->GetWeakPtr();
 }
 void CommandPalette::Toggle(content::WebContents* contents,
                             const KeyboardConfig& config) {
@@ -533,6 +607,7 @@ void CommandPalette::ToggleQuery(content::WebContents* contents,
 void CommandPalette::Refresh() {
   if (!active())
     return;
+  favicon_tasks_.TryCancelAll();
   buttons_.clear();
   button_actions_.clear();
   remove_buttons_.clear();
@@ -702,7 +777,22 @@ void CommandPalette::AppendRow(size_t i) {
         base::UTF8ToUTF16(entry.title),
         secondary_line ? base::UTF8ToUTF16(entry.category) : std::u16string(),
         secondary_line ? std::u16string() : base::UTF8ToUTF16(entry.category),
-        ToUTF16(entry.shortcuts), ToUTF16(entry.normal), entry.indent));
+        ToUTF16(entry.shortcuts), ToUTF16(entry.normal), entry.indent,
+        !!bookmarks_));
+    if (bookmarks_) {
+      if (auto* cache = BookmarkFavicons::ForProfile(bookmark_profile_.get())) {
+        const float scale = desktop_->GetCompositor()->device_scale_factor();
+        cache->Get(
+            GURL(entry.action), std::ceil(S(16) * scale),
+            base::BindOnce(
+                [](base::WeakPtr<PickerButton> row, gfx::ImageSkia image) {
+                  if (row)
+                    row->SetFavicon(std::move(image));
+                },
+                button->GetWeakPtr()),
+            &favicon_tasks_);
+      }
+    }
     if (bookmarks_)
       button->SetTriggerableEventFlags(ui::EF_LEFT_MOUSE_BUTTON |
                                        ui::EF_MIDDLE_MOUSE_BUTTON);
@@ -985,6 +1075,7 @@ void CommandPalette::Activate(std::string action) {
       (!action.starts_with("terminal:") && !available_.Run(action)))
     return;
   closing_ = true;
+  favicon_tasks_.TryCancelAll();
   overlay_->Hide();
   base::SingleThreadTaskRunner::GetCurrentDefault()->PostTask(
       FROM_HERE,
@@ -992,6 +1083,7 @@ void CommandPalette::Activate(std::string action) {
                      true, std::move(action)));
 }
 void CommandPalette::Cancel(bool restore_focus) {
+  favicon_tasks_.TryCancelAll();
   if (!overlay_)
     return;
   if (!restore_focus)
@@ -1364,6 +1456,19 @@ SkColor CommandPalette::row_subtitle_color_for_testing(size_t index) {
              ? static_cast<PickerButton *>(buttons_[index].get())
                    ->SubtitleColor()
              : SK_ColorTRANSPARENT;
+}
+gfx::ImageSkia CommandPalette::row_favicon_for_testing(size_t index) {
+  EnsureRows(index + 1);
+  return index < buttons_.size()
+             ? static_cast<PickerButton*>(buttons_[index].get())->favicon()
+             : gfx::ImageSkia();
+}
+gfx::Rect CommandPalette::row_favicon_bounds_for_testing(size_t index) {
+  EnsureRows(index + 1);
+  return index < buttons_.size()
+             ? static_cast<PickerButton*>(buttons_[index].get())
+                   ->FaviconBounds()
+             : gfx::Rect();
 }
 
 // The Command Centre adds category chips above the list.
