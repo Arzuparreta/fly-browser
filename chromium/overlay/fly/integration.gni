@@ -9,7 +9,13 @@
 # dependency belongs here, not in another upstream patch hunk: one hook per
 # upstream file is all a Chromium update can conflict with.
 
-# //chrome/browser/ui:ui
+# //chrome/browser:browser
+fly_browser_deps = []
+if (is_linux || is_win) {
+  fly_browser_deps += [ "//fly:browser_ui" ]
+}
+
+# //fly:browser_ui, Fly's browser UI (see //fly/BUILD.gn)
 fly_browser_ui_sources = []
 fly_browser_ui_deps = [ "//fly:session_metadata" ]
 fly_browser_ui_data_deps = []

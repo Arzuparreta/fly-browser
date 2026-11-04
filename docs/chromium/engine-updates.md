@@ -33,8 +33,12 @@ brings. Fly's own code lives under `//fly` in `chromium/overlay`, which upstream
 never touches. The patches in `chromium/patches` only connect it to Chromium.
 
 New Fly sources and dependencies are listed in `chromium/overlay/fly/integration.gni`,
-not added to upstream `BUILD.gn` files. Each upstream target that builds Fly code
-(`//chrome/browser/ui:ui`, `//chrome/test:browser_tests`,
+not added to upstream `BUILD.gn` files. Fly's browser UI is its own target,
+`//fly:browser_ui`, with the sources in `fly_browser_ui_sources`; like the
+targets Chromium split out of `//chrome/browser:browser`, it takes
+`//chrome/browser:browser_public_dependencies`, which includes every header the
+browser generates. Each upstream target that uses Fly code
+(`//chrome/browser:browser`, `//chrome/test:browser_tests`,
 `//chrome/browser/prefs:impl`) adds those lists with a single hook from
 `0000-native-build-integration.patch`. When Chromium changes one of those
 files, at most that one hunk needs updating. Previously about twenty patches

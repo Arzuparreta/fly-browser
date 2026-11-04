@@ -17,30 +17,26 @@
  
    if (enable_print_preview) {
      deps += [
---- a/chrome/browser/ui/BUILD.gn
-+++ b/chrome/browser/ui/BUILD.gn
-@@ -28,6 +28,7 @@
- import("//tools/metrics/generate_allowlist_from_histograms_file.gni")
+--- a/chrome/browser/BUILD.gn
++++ b/chrome/browser/BUILD.gn
+@@ -43,6 +43,7 @@
+ import("//tools/grit/grit_rule.gni")
  import("//ui/base/ui_features.gni")
- import("//ui/views/features.gni")
+ import("//ui/webui/webui_features.gni")
 +import("//fly/integration.gni")
  
  assert(enable_supervised_users)
- assert(!is_fuchsia, "Fuchsia shouldn't use anything in //chrome")
-@@ -1625,6 +1626,13 @@
-       deps += [ "//components/captive_portal/content" ]
-     }
-   }
-+
-+  # Fly: sources and dependencies listed in //fly/integration.gni.
-+  sources += fly_browser_ui_sources
-+  deps += fly_browser_ui_deps
-+  if (fly_browser_ui_data_deps != []) {
-+    data_deps = fly_browser_ui_data_deps
-+  }
- }
  
- # These are the dependencies for the "ui" target that are outside of
+@@ -5244,6 +5245,9 @@
+     deps += [ "//chrome/browser/ui/webui/tab_strip_internals:impl" ]
+   }
+ 
++  # Fly: dependencies listed in //fly/integration.gni.
++  deps += fly_browser_deps
++
+   # This target intentionally has no sources of its own and no
+   # allow_circular_includes_from; it only aggregates dependencies. Do NOT add
+   # sources here -- new code belongs in a dedicated, properly-scoped target.
 --- a/chrome/test/BUILD.gn
 +++ b/chrome/test/BUILD.gn
 @@ -64,6 +64,7 @@
