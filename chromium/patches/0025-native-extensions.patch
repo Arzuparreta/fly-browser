@@ -1,6 +1,6 @@
 --- a/chrome/browser/extensions/component_extensions_allowlist/allowlist.cc
 +++ b/chrome/browser/extensions/component_extensions_allowlist/allowlist.cc
-@@ -69,6 +69,13 @@
+@@ -68,6 +68,13 @@
    if (kAllowed.contains(extension_id)) {
      return true;
    }
@@ -16,21 +16,20 @@
    if (extension_id == extension_misc::kODFSExtensionId) {
 --- a/chrome/browser/ui/extensions/extension_dialog_utils_views.cc
 +++ b/chrome/browser/ui/extensions/extension_dialog_utils_views.cc
-@@ -52,7 +52,12 @@
+@@ -54,7 +54,12 @@
                  std::unique_ptr<ui::DialogModel> dialog_model) {
    ExtensionsContainerViews* const container =
        parent ? GetExtensionsContainerViews(parent) : nullptr;
--  if (container && container->IsVisible()) {
 +  // A window without a visible toolbar (Fly's embedded workspaces) has no
 +  // on-screen anchor; use the modal fallback.
 +  BrowserView* const browser_view =
 +      parent ? BrowserView::GetBrowserViewForNativeWindow(parent) : nullptr;
-+  if (container && container->IsVisible() &&
-+      (!browser_view || browser_view->IsToolbarVisible())) {
+   if (container && container->IsVisible() &&
++      (!browser_view || browser_view->IsToolbarVisible()) &&
+       !GetDialogAnchor(container, extension_ids).IsNull()) {
      ShowDialog(container, extension_ids, std::move(dialog_model));
    } else {
-     // If the container is not available, show a modal dialog.
-@@ -85,6 +90,11 @@
+@@ -103,6 +108,11 @@
  
  void ShowDialog(BrowserWindowInterface* browser,
                  std::unique_ptr<ui::DialogModel> dialog_model) {

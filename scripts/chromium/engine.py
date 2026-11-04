@@ -65,8 +65,16 @@ def run(args, cwd, env=None, capture=False, foreground=False):
     return result.stdout.strip() if capture else None
 
 
+# Chromium checkouts hold Git LFS pointer files, never LFS content. A global
+# Git configuration that requires the LFS filter would otherwise make every
+# status check depend on git-lfs being on PATH, and fail where it is not (a
+# runner service's PATH). Without the filter a pointer file hashes as itself.
+NO_LFS = ('-c', 'filter.lfs.process=', '-c', 'filter.lfs.clean=',
+          '-c', 'filter.lfs.smudge=', '-c', 'filter.lfs.required=false')
+
+
 def git(directory, *args):
-    return run(['git', *args], directory, capture=True)
+    return run(['git', *NO_LFS, *args], directory, capture=True)
 
 
 def digest(file):

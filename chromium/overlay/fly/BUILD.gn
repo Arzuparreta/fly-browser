@@ -1,6 +1,20 @@
-# Fly Browser's native services. Upstream browser UI glue is compiled in the
-# existing chrome/browser/ui target to avoid introducing a circular dependency.
+# Fly Browser's native services and browser UI.
+import("//fly/integration.gni")
 import("//testing/test.gni")
+
+if (is_linux || is_win) {
+  # Fly's browser UI. //chrome/browser:browser depends on it
+  # (fly_browser_deps), and it includes headers of that target and of the
+  # targets split out of it. Like those, it takes the browser's public
+  # dependencies, which include every header the browser generates, so none is
+  # compiled before the headers it needs exist.
+  source_set("browser_ui") {
+    sources = fly_browser_ui_sources
+    public_deps = [ "//chrome/browser:browser_public_dependencies" ]
+    deps = fly_browser_ui_deps
+    data_deps = fly_browser_ui_data_deps
+  }
+}
 
 source_set("pref_storage") {
   sources = [ "prefs/dictionary_store.h" ]
@@ -173,7 +187,7 @@ if (is_linux || is_win) {
       "//chrome/browser/profiles:profile_test_util",
       "//chrome/browser/resource_coordinator",
       "//chrome/browser/ssl",
-      "//chrome/browser/ui",
+      ":browser_ui",
       "//chrome/browser/ui/browser_window",
       "//chrome/browser/ui/browser_window:create_browser_window",
       "//chrome/browser/ui/tabs:tab_strip",

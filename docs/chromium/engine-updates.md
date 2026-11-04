@@ -33,8 +33,12 @@ brings. Fly's own code lives under `//fly` in `chromium/overlay`, which upstream
 never touches. The patches in `chromium/patches` only connect it to Chromium.
 
 New Fly sources and dependencies are listed in `chromium/overlay/fly/integration.gni`,
-not added to upstream `BUILD.gn` files. Each upstream target that builds Fly code
-(`//chrome/browser/ui:ui`, `//chrome/test:browser_tests`,
+not added to upstream `BUILD.gn` files. Fly's browser UI is its own target,
+`//fly:browser_ui`, with the sources in `fly_browser_ui_sources`; like the
+targets Chromium split out of `//chrome/browser:browser`, it takes
+`//chrome/browser:browser_public_dependencies`, which includes every header the
+browser generates. Each upstream target that uses Fly code
+(`//chrome/browser:browser`, `//chrome/test:browser_tests`,
 `//chrome/browser/prefs:impl`) adds those lists with a single hook from
 `0000-native-build-integration.patch`. When Chromium changes one of those
 files, at most that one hunk needs updating. Previously about twenty patches
@@ -125,7 +129,9 @@ application.
 Moving the candidate downloads only what changed in Chromium since the previous
 pin: Git objects, toolchain packages and hook downloads. Before `gclient sync`,
 `move` fetches each dependency's new revision alone (`git fetch --depth=1`), one
-repository at a time and waiting when googlesource answers HTTP 429. Left to
+repository at a time and waiting when googlesource answers HTTP 429. A
+dependency with its own `DEPS` (ANGLE, Dawn) is checked out at its new revision
+first, so the dependencies it pins are fetched the same way. Left to
 itself, `gclient sync` fetches every branch's full history into an existing
 dependency that lacks its new revision, which costs gigabytes per version on a
 shallow root. A security update within

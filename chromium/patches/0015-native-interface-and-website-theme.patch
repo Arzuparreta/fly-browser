@@ -1,6 +1,6 @@
 --- a/chrome/browser/BUILD.gn
 +++ b/chrome/browser/BUILD.gn
-@@ -879,6 +879,7 @@
+@@ -1046,6 +1046,7 @@
    }
  
    deps = [
@@ -10,7 +10,7 @@
      ":bad_message",
 --- a/chrome/browser/chrome_content_browser_client.cc
 +++ b/chrome/browser/chrome_content_browser_client.cc
-@@ -54,6 +54,9 @@
+@@ -55,6 +55,9 @@
  #include "build/android_buildflags.h"
  #include "build/branding_buildflags.h"
  #include "build/build_config.h"
@@ -19,8 +19,8 @@
 +#endif
  #include "build/config/chromebox_for_meetings/buildflags.h"  // PLATFORM_CFM
  #include "chrome/browser/accessibility/caption_settings_dialog.h"
- #include "chrome/browser/actor/actor_commit_deferring_condition.h"
-@@ -4037,6 +4040,28 @@
+ #include "chrome/browser/accessibility/page_colors_controller.h"
+@@ -4125,6 +4128,28 @@
            : blink::mojom::PreferredColorScheme::kLight;
  #endif
  

@@ -79,6 +79,27 @@ class EngineTests(unittest.TestCase):
         with self.assertRaisesRegex(RuntimeError, 'Dirty checkout'):
             engine.verify_checkout(directory, pin, submodules=False)
 
+    def test_lfs_pointer_files_need_no_git_lfs(self):
+        directory, pin, git = self.repository()
+        (directory / '.gitattributes').write_text('*.so filter=lfs -text\n')
+        (directory / 'lib.so').write_text(
+            'version https://git-lfs.github.com/spec/v1\n'
+            'oid sha256:' + '0' * 64 + '\nsize 12\n')
+        git('add', '-A')
+        git('commit', '-m', 'lfs pointer')
+        pin['revision'] = git('rev-parse', 'HEAD')
+        # A copied file gets a new time, so Git hashes it again through the
+        # filter that a global configuration requires and that does not exist.
+        config = self.root / 'gitconfig'
+        config.write_text('[filter "lfs"]\n\tprocess = fly-missing-git-lfs filter-process\n'
+                          '\tclean = fly-missing-git-lfs clean -- %f\n\trequired = true\n')
+        os.utime(directory / 'lib.so', (1, 1))
+        with patch.dict(os.environ, {'GIT_CONFIG_GLOBAL': str(config)}):
+            engine.verify_checkout(directory, pin)
+            (directory / 'lib.so').write_text('changed\n')
+            with self.assertRaisesRegex(RuntimeError, 'Dirty checkout'):
+                engine.verify_checkout(directory, pin)
+
     def test_revision_and_remote_mismatches_do_not_reset(self):
         directory, pin, git = self.repository()
         original = git('rev-parse', 'HEAD')

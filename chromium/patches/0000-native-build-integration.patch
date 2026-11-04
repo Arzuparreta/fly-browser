@@ -1,50 +1,6 @@
---- a/chrome/browser/ui/BUILD.gn
-+++ b/chrome/browser/ui/BUILD.gn
-@@ -28,6 +28,7 @@
- import("//tools/metrics/generate_allowlist_from_histograms_file.gni")
- import("//ui/base/ui_features.gni")
- import("//ui/views/features.gni")
-+import("//fly/integration.gni")
- 
- assert(enable_supervised_users)
- assert(!is_fuchsia, "Fuchsia shouldn't use anything in //chrome")
-@@ -4694,6 +4695,13 @@
-           [ "//chrome/browser/ui/views/extensions:extensions_toolbar_desktop" ]
-     }
-   }
-+
-+  # Fly: sources and dependencies listed in //fly/integration.gni.
-+  sources += fly_browser_ui_sources
-+  deps += fly_browser_ui_deps
-+  if (fly_browser_ui_data_deps != []) {
-+    data_deps = fly_browser_ui_data_deps
-+  }
- }
- 
- # These are the dependencies for the "ui" target that are outside of
---- a/chrome/test/BUILD.gn
-+++ b/chrome/test/BUILD.gn
-@@ -50,6 +50,7 @@
- import("//ui/views/features.gni")
- import("//ui/webui/webui_features.gni")
- import("//v8/gni/v8.gni")
-+import("//fly/integration.gni")
- 
- assert(!is_ios, "Chromium/iOS shouldn't use anything in //chrome")
- assert(!is_fuchsia, "Fuchsia shouldn't use anything in //chrome")
-@@ -2830,6 +2831,9 @@
-       "data/webui/mojo/mojo_js_interface_broker_browsertest.cc",
-       "data/webui/mojo/mojo_web_ui_controller_browsertest.cc",
-     ]
-+    # Fly: browser tests listed in //fly/integration.gni.
-+    sources += fly_browser_tests_sources
-+    deps += fly_browser_tests_deps
-     fuzztests = [ "SafeXmlParserFixture.ParseXML" ]
-     fuzztest_additional_args = [
-       "--single-process-tests",
 --- a/chrome/browser/prefs/BUILD.gn
 +++ b/chrome/browser/prefs/BUILD.gn
-@@ -9,6 +9,7 @@
+@@ -10,6 +10,7 @@
  import("//extensions/buildflags/buildflags.gni")
  import("//pdf/features.gni")
  import("//rlz/buildflags/buildflags.gni")
@@ -52,7 +8,7 @@
  
  assert(is_win || is_mac || is_linux || is_chromeos || is_android)
  
-@@ -206,6 +207,8 @@
+@@ -213,6 +214,8 @@
      "//services/preferences/tracked:features",
      "//ui/webui:buildflags",
    ]
@@ -61,3 +17,43 @@
  
    if (enable_print_preview) {
      deps += [
+--- a/chrome/browser/BUILD.gn
++++ b/chrome/browser/BUILD.gn
+@@ -43,6 +43,7 @@
+ import("//tools/grit/grit_rule.gni")
+ import("//ui/base/ui_features.gni")
+ import("//ui/webui/webui_features.gni")
++import("//fly/integration.gni")
+ 
+ assert(enable_supervised_users)
+ 
+@@ -5244,6 +5245,9 @@
+     deps += [ "//chrome/browser/ui/webui/tab_strip_internals:impl" ]
+   }
+ 
++  # Fly: dependencies listed in //fly/integration.gni.
++  deps += fly_browser_deps
++
+   # This target intentionally has no sources of its own and no
+   # allow_circular_includes_from; it only aggregates dependencies. Do NOT add
+   # sources here -- new code belongs in a dedicated, properly-scoped target.
+--- a/chrome/test/BUILD.gn
++++ b/chrome/test/BUILD.gn
+@@ -64,6 +64,7 @@
+ import("//ui/views/features.gni")
+ import("//ui/webui/webui_features.gni")
+ import("//v8/gni/v8.gni")
++import("//fly/integration.gni")
+ 
+ assert(!is_ios, "Chromium/iOS shouldn't use anything in //chrome")
+ assert(!is_fuchsia, "Fuchsia shouldn't use anything in //chrome")
+@@ -1801,6 +1802,9 @@
+       "../../components/record_replay/content/renderer/record_replay_agent_browsertest.cc",
+       "../browser/os_crypt/os_crypt_async_browsertest.cc",
+     ]
++    # Fly: browser tests listed in //fly/integration.gni.
++    sources += fly_browser_tests_sources
++    deps += fly_browser_tests_deps
+     fuzztests = [ "SafeXmlParserFixture.ParseXML" ]
+     fuzztest_additional_args = [
+       "--single-process-tests",

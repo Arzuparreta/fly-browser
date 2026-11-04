@@ -45,6 +45,10 @@ SCRIPTS = Path(__file__).resolve().parent
 SOURCE = 'https://chromium.googlesource.com/chromium/src'
 MOVE_STATE = 'evidence/engine-move.json'
 VALIDATION = 'evidence/engine-validation.json'
+# Present from the first copied file until an adopted root has been checked:
+# the copy brings the candidate's stage records, so without it an adoption
+# that failed its check would look complete.
+ADOPT_STATE = 'evidence/engine-adopt-pending.json'
 
 
 def load_pin():
@@ -205,41 +209,55 @@ def same_remote(first, second):
     return normal(first) == normal(second)
 
 
-def fetch_dependencies(root, env, waits=(30, 60, 120, 240, 480)):
+def fetch_dependencies(root, env, waits=(30, 60, 120, 240, 480), rounds=10):
     """Fetch only the new revision of each dependency already checked out.
     gclient sync fetches every branch's history (no depth) into an existing
     dependency that lacks its new revision; on a shallow engine root that is
     gigabytes per Chromium version. With the revision present, gclient checks
     it out without fetching. One repository at a time: googlesource limits
-    anonymous clients (HTTP 429)."""
-    with tempfile.TemporaryDirectory(prefix='fly-revinfo-') as directory:
-        output = Path(directory) / 'revinfo.json'
-        engine.run(['gclient', 'revinfo', '--output-json', output], root, env)
-        dependencies = json.loads(output.read_text())
+    anonymous clients (HTTP 429).
+
+    gclient reads a nested dependency's revision (recursedeps, such as
+    ANGLE's VK-GL-CTS) from its parent's checkout, so a dependency with its
+    own DEPS is checked out at its new revision, as gclient would, and the
+    revisions are read again until a round changes nothing."""
     fetched = 0
-    for path, info in sorted(dependencies.items()):
-        revision, url = info.get('rev'), info.get('url')
-        checkout = root / path
-        if (path == 'src' or not url or not revision or
-                not re.fullmatch(r'[0-9a-f]{40}', revision) or not (checkout / '.git').exists()):
-            continue
-        if subprocess.run(['git', 'cat-file', '-e', revision + '^{commit}'], cwd=checkout,
-                          stderr=subprocess.DEVNULL).returncode == 0:
-            continue
-        origin = engine.git(checkout, 'remote', 'get-url', 'origin')
-        if not same_remote(origin, url):
-            continue  # The dependency moved repository; gclient replaces it.
-        for wait in (*waits, None):
-            try:
-                engine.run(['git', 'fetch', '--depth=1', '--no-tags', 'origin', revision],
-                           checkout, env)
-                break
-            except subprocess.CalledProcessError:
-                if wait is None:
-                    raise
-                print(f'Fetch failed in {path}; retrying in {wait} s.', flush=True)
-                time.sleep(wait)
-        fetched += 1
+    for _ in range(rounds):
+        with tempfile.TemporaryDirectory(prefix='fly-revinfo-') as directory:
+            output = Path(directory) / 'revinfo.json'
+            engine.run(['gclient', 'revinfo', '--output-json', output], root, env)
+            dependencies = json.loads(output.read_text())
+        changed = False
+        for path, info in sorted(dependencies.items()):
+            revision, url = info.get('rev'), info.get('url')
+            checkout = root / path
+            if (path == 'src' or not url or not revision or
+                    not re.fullmatch(r'[0-9a-f]{40}', revision) or
+                    not (checkout / '.git').exists()):
+                continue
+            origin = engine.git(checkout, 'remote', 'get-url', 'origin')
+            if not same_remote(origin, url):
+                continue  # The dependency moved repository; gclient replaces it.
+            if subprocess.run(['git', 'cat-file', '-e', revision + '^{commit}'], cwd=checkout,
+                              stderr=subprocess.DEVNULL).returncode:
+                for wait in (*waits, None):
+                    try:
+                        engine.run(['git', 'fetch', '--depth=1', '--no-tags', 'origin',
+                                    revision], checkout, env)
+                        break
+                    except subprocess.CalledProcessError:
+                        if wait is None:
+                            raise
+                        print(f'Fetch failed in {path}; retrying in {wait} s.', flush=True)
+                        time.sleep(wait)
+                fetched += 1
+                changed = True
+            if (checkout / 'DEPS').is_file() and head(checkout) != revision:
+                engine.run(['git', '-c', 'core.autocrlf=false', 'checkout', '--quiet',
+                            '--detach', revision], checkout, env)
+                changed = True
+        if not changed:
+            break
     print(f'Fetched the new revision of {fetched} dependencies.', flush=True)
     return fetched
 
@@ -409,6 +427,8 @@ def adopt(candidate, root, lock):
         native.verify_source(candidate, lock, require_current=False)
         print(f'Adopting Chromium {lock["engine_version"]} from {candidate} into {root} '
               f'(was {old["engine_version"]}).', flush=True)
+        engine.atomic_json(root / ADOPT_STATE, {'from': str(candidate),
+                                                'to_version': lock['engine_version']})
         count = copy_root(candidate, root, touch=True)
         # The copied sources carry the candidate's applied overlay, so check
         # them through its manifest rather than as a clean checkout.
@@ -419,6 +439,7 @@ def adopt(candidate, root, lock):
         engine.evidence(root, 'engine-adopt', lock, {'from': str(candidate),
                                                      'moved_from': old['engine_version'],
                                                      'files_written': count})
+        (root / ADOPT_STATE).unlink()
     print(f'{root} is now at Chromium {lock["engine_version"]} ({count} files written).',
           flush=True)
 
@@ -427,6 +448,7 @@ def root_current(root, lock):
     overlay = root / native.MANIFEST
     return (same_pin(recorded_lock(root), lock) and stage_current(root, 'sync') and
             stage_current(root, 'hooks') and not (root / MOVE_STATE).exists() and
+            not (root / ADOPT_STATE).exists() and
             (not overlay.exists() or
              json.loads(overlay.read_text()).get('upstream') == lock['chromium']['revision']))
 

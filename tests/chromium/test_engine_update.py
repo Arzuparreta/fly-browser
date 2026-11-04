@@ -196,6 +196,57 @@ class FetchDependenciesTests(unittest.TestCase):
         self.assertEqual(self.fetches, [])
 
 
+class NestedDependenciesTests(unittest.TestCase):
+    """A nested dependency's revision is read from its parent's DEPS, as
+    gclient does: the parent is checked out at its new revision first, then
+    the child's new revision is fetched alone."""
+
+    def setUp(self):
+        tmp = tempfile.TemporaryDirectory(prefix='fly-nested-')
+        self.addCleanup(tmp.cleanup)
+        base = Path(tmp.name).resolve()
+        self.root = base / 'engine'
+        (self.root / 'src/third_party').mkdir(parents=True)
+        self.child_origin = base / 'child'
+        self.child_origin.mkdir()
+        git(self.child_origin, 'init', '--quiet')
+        child_old = commit(self.child_origin, {'file': 'old\n'}, 'old')
+        self.parent_origin = base / 'parent'
+        self.parent_origin.mkdir()
+        git(self.parent_origin, 'init', '--quiet')
+        commit(self.parent_origin, {'DEPS': child_old + '\n'}, 'old')
+        self.parent = self.root / 'src/third_party/parent'
+        self.child = self.parent / 'child'
+        git(base, 'clone', '--quiet', '--depth=1', self.parent_origin.as_uri(), str(self.parent))
+        git(base, 'clone', '--quiet', '--depth=1', self.child_origin.as_uri(), str(self.child))
+        commit(self.child_origin, {'file': 'history\n'}, 'history')
+        self.child_new = commit(self.child_origin, {'file': 'new\n'}, 'new')
+        self.parent_new = commit(self.parent_origin, {'DEPS': self.child_new + '\n'}, 'new')
+        real = engine.run
+
+        def run(args, cwd, env=None, capture=False, foreground=False):
+            args = [str(arg) for arg in args]
+            if args[:2] == ['gclient', 'revinfo']:
+                # gclient reads the child's pin from the parent's checkout.
+                Path(args[-1]).write_text(json.dumps({
+                    'src/third_party/parent': {'url': self.parent_origin.as_uri(),
+                                               'rev': self.parent_new},
+                    'src/third_party/parent/child': {
+                        'url': self.child_origin.as_uri(),
+                        'rev': (self.parent / 'DEPS').read_text().strip()}}))
+                return ''
+            return real(args, cwd, env, capture, foreground)
+        scope = patch.object(engine, 'run', side_effect=run)
+        scope.start()
+        self.addCleanup(scope.stop)
+
+    def test_fetches_the_child_revision_its_parent_moves_to(self):
+        self.assertEqual(engine_update.fetch_dependencies(self.root, None), 2)
+        self.assertEqual(git(self.parent, 'rev-parse', 'HEAD'), self.parent_new)
+        git(self.child, 'cat-file', '-e', self.child_new + '^{commit}')
+        self.assertEqual(git(self.child, 'rev-list', '--count', self.child_new), '1')
+
+
 class MoveTests(unittest.TestCase):
     """A root at an old pin moves to a new one; the new revision is already
     in the object store, so nothing is fetched."""
@@ -308,7 +359,22 @@ class MoveTests(unittest.TestCase):
                 engine_update.adopt(candidate, self.root, self.new)
             engine.atomic_json(candidate / engine_update.VALIDATION,
                                {'lock_sha256': engine.digest(engine.LOCK)})
+            # A check that fails after the copy leaves the root not current,
+            # so a rerun adopts again instead of reporting nothing to do.
+            real = engine.verify_dependencies
+            calls = []
+
+            def fails_after_copy(*args, **kwargs):
+                calls.append(1)
+                if len(calls) == 2:
+                    raise RuntimeError('git-lfs: command not found')
+                return real(*args, **kwargs)
+            with patch.object(engine, 'verify_dependencies', side_effect=fails_after_copy):
+                with self.assertRaisesRegex(RuntimeError, 'git-lfs'):
+                    engine_update.follow(self.root, self.new, jobs=1, candidate=candidate)
+            self.assertFalse(engine_update.root_current(self.root, self.new))
             self.assertTrue(engine_update.follow(self.root, self.new, jobs=1, candidate=candidate))
+            self.assertFalse((self.root / engine_update.ADOPT_STATE).exists())
             native.verify_source(self.root, self.new, require_current=False)
             self.assertFalse(engine_update.follow(self.root, self.new, jobs=1, candidate=candidate))
         self.assertEqual(git(self.src, 'rev-parse', 'HEAD'), self.new_rev)

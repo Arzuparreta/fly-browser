@@ -1,6 +1,6 @@
 --- a/content/browser/renderer_host/navigator.cc
 +++ b/content/browser/renderer_host/navigator.cc
-@@ -582,11 +582,23 @@
+@@ -581,11 +581,23 @@
    const bool allow_paint_holding_for_initial_empty_document =
        was_on_initial_empty_document && old_frame_origin.opaque() &&
        !old_frame_origin.GetTupleOrPrecursorTupleIfOpaque().IsValid();
@@ -21,6 +21,6 @@
         old_frame_origin.IsSameOriginWith(params.origin) ||
         old_frame_host->HasStickyUserActivation() ||
 +       browser_address_bar_navigation ||
-        client->AllowNonActivatedCrossOriginPaintHolding() ||
-        !base::FeatureList::IsEnabled(
-            features::kLimitCrossOriginNonActivatedPaintHolding));
+        client->AllowNonActivatedCrossOriginPaintHolding());
+ 
+   // Only allow subframe paint holding for same origin.
