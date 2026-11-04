@@ -45,6 +45,10 @@ SCRIPTS = Path(__file__).resolve().parent
 SOURCE = 'https://chromium.googlesource.com/chromium/src'
 MOVE_STATE = 'evidence/engine-move.json'
 VALIDATION = 'evidence/engine-validation.json'
+# Present from the first copied file until an adopted root has been checked:
+# the copy brings the candidate's stage records, so without it an adoption
+# that failed its check would look complete.
+ADOPT_STATE = 'evidence/engine-adopt-pending.json'
 
 
 def load_pin():
@@ -423,6 +427,8 @@ def adopt(candidate, root, lock):
         native.verify_source(candidate, lock, require_current=False)
         print(f'Adopting Chromium {lock["engine_version"]} from {candidate} into {root} '
               f'(was {old["engine_version"]}).', flush=True)
+        engine.atomic_json(root / ADOPT_STATE, {'from': str(candidate),
+                                                'to_version': lock['engine_version']})
         count = copy_root(candidate, root, touch=True)
         # The copied sources carry the candidate's applied overlay, so check
         # them through its manifest rather than as a clean checkout.
@@ -433,6 +439,7 @@ def adopt(candidate, root, lock):
         engine.evidence(root, 'engine-adopt', lock, {'from': str(candidate),
                                                      'moved_from': old['engine_version'],
                                                      'files_written': count})
+        (root / ADOPT_STATE).unlink()
     print(f'{root} is now at Chromium {lock["engine_version"]} ({count} files written).',
           flush=True)
 
@@ -441,6 +448,7 @@ def root_current(root, lock):
     overlay = root / native.MANIFEST
     return (same_pin(recorded_lock(root), lock) and stage_current(root, 'sync') and
             stage_current(root, 'hooks') and not (root / MOVE_STATE).exists() and
+            not (root / ADOPT_STATE).exists() and
             (not overlay.exists() or
              json.loads(overlay.read_text()).get('upstream') == lock['chromium']['revision']))
 

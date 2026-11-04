@@ -359,7 +359,22 @@ class MoveTests(unittest.TestCase):
                 engine_update.adopt(candidate, self.root, self.new)
             engine.atomic_json(candidate / engine_update.VALIDATION,
                                {'lock_sha256': engine.digest(engine.LOCK)})
+            # A check that fails after the copy leaves the root not current,
+            # so a rerun adopts again instead of reporting nothing to do.
+            real = engine.verify_dependencies
+            calls = []
+
+            def fails_after_copy(*args, **kwargs):
+                calls.append(1)
+                if len(calls) == 2:
+                    raise RuntimeError('git-lfs: command not found')
+                return real(*args, **kwargs)
+            with patch.object(engine, 'verify_dependencies', side_effect=fails_after_copy):
+                with self.assertRaisesRegex(RuntimeError, 'git-lfs'):
+                    engine_update.follow(self.root, self.new, jobs=1, candidate=candidate)
+            self.assertFalse(engine_update.root_current(self.root, self.new))
             self.assertTrue(engine_update.follow(self.root, self.new, jobs=1, candidate=candidate))
+            self.assertFalse((self.root / engine_update.ADOPT_STATE).exists())
             native.verify_source(self.root, self.new, require_current=False)
             self.assertFalse(engine_update.follow(self.root, self.new, jobs=1, candidate=candidate))
         self.assertEqual(git(self.src, 'rev-parse', 'HEAD'), self.new_rev)
