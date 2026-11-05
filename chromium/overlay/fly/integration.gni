@@ -112,6 +112,7 @@ fly_browser_tests_deps = []
 if (is_linux || is_win) {
   fly_browser_tests_sources += [ "//fly/test/workspace_browser_test.cc" ]
   fly_browser_tests_deps += [
+    "//ui/snapshot",
     "//chrome/browser/favicon",
     "//components/favicon/core",
     "//fly:bookmarks",
