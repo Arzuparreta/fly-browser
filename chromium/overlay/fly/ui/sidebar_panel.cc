@@ -272,6 +272,12 @@ class SidebarRoot::Edge : public views::View {
   METADATA_HEADER(Edge, views::View)
 
  public:
+  void OnThemeChanged() override {
+    views::View::OnThemeChanged();
+    // This view owns a layer: repainting the widget root does not invalidate
+    // its cached border when only Fly's palette changes.
+    SchedulePaint();
+  }
   void OnPaint(gfx::Canvas* canvas) override {
     canvas->FillRect(gfx::Rect(FlyScaled(kSidebarWidth - 1), 0, 1, height()),
                      GetFlyColors().border);

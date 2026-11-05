@@ -160,7 +160,7 @@ if (is_linux || is_win) {
     use_xvfb = is_linux
     defines = [ "HAS_OUT_OF_PROC_TEST_RUNNER" ]
     sources = [ "test/workspace_browser_test.cc" ]
-    deps = [
+    deps = fly_browser_tests_deps + [
       ":bookmarks",
       ":commands",
       ":preferences",

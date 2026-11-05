@@ -81,6 +81,7 @@
 #include "ui/gfx/x/connection.h"
 #include "ui/gfx/x/xproto.h"
 #include "ui/ozone/public/ozone_platform.h"
+#include "ui/snapshot/snapshot.h"
 #include "ui/views/accessibility/view_accessibility.h"
 #include "ui/views/controls/button/checkbox.h"
 #include "ui/views/controls/label.h"
@@ -934,6 +935,48 @@ class FlySidebarBrowserTest : public FlyWorkspaceBrowserTest {
     base::RunLoop().RunUntilIdle();
   }
 };
+
+// Read the composited pixels: repainting the widget root does not invalidate
+// the edge's independent layer when the palette changes without a resize.
+IN_PROC_BROWSER_TEST_F(FlySidebarBrowserTest, EdgeRepaintsAfterThemeChanges) {
+  OpenByPointer();
+  WaitForSidebarMotion();
+  auto* root = Window().sidebar_root_for_testing();
+  auto edge_pixel = [&]() {
+    base::test::TestFuture<gfx::Image> snapshot;
+    const gfx::Rect strip(FlyScaled(kSidebarWidth - 1),
+                          root->height() / 2, 1, 1);
+    ui::GrabWindowSnapshotAndScale(root->GetWidget()->GetNativeWindow(),
+                                   strip, gfx::Size(1, 1),
+                                   snapshot.GetCallback());
+    const auto image = snapshot.Take();
+    EXPECT_FALSE(image.IsEmpty());
+    return image.IsEmpty() ? SK_ColorTRANSPARENT
+                           : image.AsBitmap().getColor(0, 0);
+  };
+  for (const char* scale : {"normal", "large"}) {
+    SCOPED_TRACE(scale);
+    ASSERT_TRUE(App().preferences().SetString("interface_scale", scale));
+    for (bool floating : {true, false}) {
+      SCOPED_TRACE(floating);
+      ASSERT_TRUE(App().preferences().SetSidebarAutoCollapse(floating));
+      if (floating)
+        OpenByPointer();
+      WaitForSidebarMotion();
+      views::test::RunScheduledLayout(root->GetWidget());
+      // Prime the layer, then change only the palette, keeping the geometry.
+      EXPECT_EQ(GetFlyColors().border, edge_pixel());
+      for (int i = 0; i < 6; ++i) {
+        SCOPED_TRACE(i);
+        const SkColor old_border = GetFlyColors().border;
+        ASSERT_TRUE(App().preferences().ToggleTheme());
+        ASSERT_TRUE(base::test::RunUntil(
+            [&] { return GetFlyColors().border != old_border; }));
+        EXPECT_EQ(GetFlyColors().border, edge_pixel());
+      }
+    }
+  }
+}
 
 IN_PROC_BROWSER_TEST_F(FlySidebarBrowserTest,
                        TopRowGivesNavigationMoreRoomThanWorkspace) {
