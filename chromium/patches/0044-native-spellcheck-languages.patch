@@ -324,27 +324,23 @@
  #endif  // COMPONENTS_SPELLCHECK_RENDERER_SPELLING_ENGINE_H_
 --- a/third_party/hunspell/src/hunspell/hunspell.cxx
 +++ b/third_party/hunspell/src/hunspell/hunspell.cxx
-@@ -83,6 +83,7 @@
- #include "csutil.hxx"
+@@ -84,2 +84,3 @@
  
- #include <limits>
 +#include <optional>
- #include <string>
- 
- #define MAXWORDUTF8LEN (MAXWORDLEN * 2)
-@@ -113,6 +114,11 @@ public:
-              int* info = NULL, std::string* root = NULL);
-   std::vector<std::string> suggest(const std::string& word);
-   std::vector<std::string> suggest(const std::string& word, std::vector<std::string>& suggest_candidate_stack);
+ #include <limits>
+@@ -90,6 +91,11 @@
+ class HunspellImpl
+ {
+ public:
 +  void set_suggest_part(Hunspell::SuggestPart part) {
 +    suggest_part = part;
 +    ngram_skipped_flag = false;
 +  }
 +  bool ngram_skipped() const { return ngram_skipped_flag; }
-   const std::string& get_wordchars_cpp() const;
-   const std::vector<w_char>& get_wordchars_utf16() const;
-   const std::string& get_dict_encoding() const;
-@@ -150,6 +156,18 @@ private:
+ #ifdef HUNSPELL_CHROME_CLIENT
+   explicit HunspellImpl(base::span<const unsigned char> bdict_data);
+ #else
+@@ -150,6 +156,18 @@
    int utf8;
    int complexprefixes;
    std::vector<std::string> wordbreak;
@@ -363,9 +359,7 @@
  
  #ifdef HUNSPELL_CHROME_CLIENT
    // Not owned by us, owned by the Hunspell object.
-@@ -1176,7 +1194,14 @@ std::vector<std::string> HunspellImpl::suggest_internal(const std::string& word,
-     }
-   }
+@@ -1178,4 +1196,11 @@
  
 -  switch (captype) {
 +  // Fly: kSuggestRest takes the near misses kSuggestNearMiss found for this
@@ -378,8 +372,7 @@
 +  switch (resume ? -1 : captype) {
      case NOCAP: {
        good |= pSMgr->suggest(slst, scw, &onlycmpdsug);
-       if (clock() > timelimit + TIMELIMIT_GLOBAL)
-@@ -1320,8 +1345,21 @@ std::vector<std::string> HunspellImpl::suggest_internal(const std::string& word,
+@@ -1320,8 +1345,21 @@
      }
    }
    // END OF LANG_hu section
@@ -402,7 +395,7 @@
      switch (captype) {
        case NOCAP: {
          pSMgr->ngsuggest(slst, scw.c_str(), m_HMgrs, NOCAP);
-@@ -2202,6 +2240,14 @@ std::vector<std::string> Hunspell::suggest(const std::string& word) {
+@@ -2202,6 +2240,14 @@
    return m_Impl->suggest(word);
  }
  

@@ -1,17 +1,15 @@
 --- a/chrome/browser/ui/browser_web_contents_delegate/browser_web_contents_delegate.cc
 +++ b/chrome/browser/ui/browser_web_contents_delegate/browser_web_contents_delegate.cc
-@@ -5,6 +5,10 @@
+@@ -5,3 +5,8 @@
  #include "chrome/browser/ui/browser_web_contents_delegate/browser_web_contents_delegate.h"
- 
- #include "base/check_deref.h"
++
 +#include "build/build_config.h"
 +#if BUILDFLAG(IS_LINUX) || BUILDFLAG(IS_WIN)
 +#include "fly/ui/fly_window_controller.h"
 +#endif
- #include "base/metrics/histogram_macros.h"
- #include "base/notimplemented.h"
- #include "base/trace_event/trace_event.h"
-@@ -798,6 +802,13 @@
+ 
+ #include "base/check_deref.h"
+@@ -788,6 +793,13 @@
  
  void BrowserWebContentsDelegate::UpdateTargetURL(content::WebContents* source,
                                                   const GURL& url) {
@@ -25,7 +23,7 @@
    std::vector<StatusBubble*> status_bubbles =
        browser_ui_controller_->GetStatusBubbles();
    for (StatusBubble* status_bubble : status_bubbles) {
-@@ -817,6 +828,12 @@
+@@ -807,6 +819,12 @@
      const ui::Event& event) {
    const ui::EventType type = event.type();
    const bool exited = type == ui::EventType::kMouseExited;
