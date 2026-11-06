@@ -26,6 +26,56 @@ once or twice a week. Fly follows them automatically:
 A failure stops the process with the pull request still open and the log
 commented on it. Nothing reaches users until the whole chain has passed.
 
+## Pon Chromium al día: complete maintenance task
+
+The owner can invoke this task simply by saying **“Pon Chromium al día”**.
+“Actualiza Chromium” and “encárgate del seguimiento de Chromium” mean the same
+complete task. A fresh agent must execute the following procedure, not return
+a suggested prompt, stop after a status report, or ask the owner to identify
+which patches need work. A question asking only for status remains read-only.
+Explicit limits in the owner's request take precedence.
+
+1. Read this document and `../releasing.md` from latest `origin/main`, and obey
+   `AGENTS.md`, including task worktrees and engine-root coordination. Perform
+   the complete status checklist below: Stable, Beta, workflow enabled state,
+   runner, update PRs, issues, checks and any unfinished release. Use live
+   evidence; issue numbers and versions from old conversations are not a work
+   list. Resume deliberately paused tracking when the owner requests it; do
+   not silently override a pause that is still in force.
+2. Take responsibility for all discovered Chromium maintenance work. Repair
+   Stable patch conflicts, build/test failures and update-branch conflicts;
+   also prepare the failing Beta patches using the Beta repair procedure below.
+   Preserve Fly behavior and current Stable compatibility. Never publish Beta
+   as the shipping engine to clear a warning. If a Beta change cannot coexist
+   with Stable, keep the preparation isolated and record the concrete blocker
+   and remaining work rather than claiming completion.
+3. Run the required local checks and native validation. Commit, push, open
+   appropriately labelled PRs and supervise every check on their latest heads.
+   Fix failures, integrate current main without losing changes, and merge only
+   after the repository gates pass. Coordinate with the automatic update
+   workflow rather than racing it or using an engine root it owns. Re-run the
+   workflow after repairs and verify the actual patch-check results and issue
+   state, even when Actions is green.
+4. Complete publication when the Stable engine changed or the task merged
+   corrections that need shipping. Follow `../releasing.md`: inspect
+   `node scripts/release.js plan`, use `prepare` when a release is needed, and
+   supervise the bump PR, tagging, release and package jobs through completion.
+   If the automatic workflow already started that release, finish supervising
+   it instead of creating another one. Release numbers come from the tooling.
+   Preparation that only supports a future Beta does not itself require an
+   empty release. The invocation authorizes pushes, gated PR merges and release
+   publication; do not stop to request that authorization again.
+5. Verify the published release and its downloadable assets/checksums when a
+   release was produced. Ensure the active native build and ordinary
+   `./launch.sh` use the updated Stable engine and task changes, preserving the
+   owner's session; report any required restart. Do not equate merged source,
+   a published package, a local build and the running browser's state.
+6. Clean up only this task's branches/worktrees. Report the resulting Stable
+   and Beta state, merged PRs, release and validation evidence, and any genuine
+   blocker. If no maintenance or release was needed, say so with the checked
+   evidence. Opening a PR, starting a build or enabling tracking is not task
+   completion.
+
 ## Checking whether there is work to do
 
 There are two independent tracks: **Stable freshness** (the engine Fly ships)
@@ -59,10 +109,8 @@ Notification delivery depends on the owner's GitHub settings; the workflow
 opening an issue does not guarantee an email or a chat message.
 
 The automatic workflow detects conflicts, records them, and processes compatible
-Stable updates. It does **not** repair conflicting patches or start an agent.
-The owner checks GitHub or asks an agent periodically; no scheduled agent
-wakeups or chat monitoring are part of this setup. An agent answering a status
-question must include pending Beta work even when Stable is current.
+Stable updates. It does **not** repair conflicting patches. An agent answering
+a status question must include pending Beta work even when Stable is current.
 
 To resume tracking after a deliberate pause, check the workflow state and
 runner availability, then enable it and dispatch an immediate check:
