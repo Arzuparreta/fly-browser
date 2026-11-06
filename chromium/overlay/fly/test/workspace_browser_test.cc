@@ -175,6 +175,8 @@
 #include "ui/aura/window.h"
 #include "ui/aura/window_tree_host.h"
 #include "ui/base/base_window.h"
+#include "ui/base/ime/input_method.h"
+#include "ui/base/ime/text_input_client.h"
 #include "ui/base/mojom/menu_source_type.mojom.h"
 #include "ui/events/test/event_generator.h"
 #include "ui/menus/simple_menu_model.h"
@@ -6917,6 +6919,109 @@ IN_PROC_BROWSER_TEST_F(FlyWorkspaceBrowserTest,
   EXPECT_EQ(nullptr, state->GetUserPrefValue(kPreferencesPref));
   ASSERT_TRUE(base::test::RunUntil([&] { return !editor.root_for_testing(); }));
   EXPECT_EQ(nullptr, editor.appearance_for_testing("show_clock"));
+}
+
+IN_PROC_BROWSER_TEST_F(FlyWorkspaceBrowserTest,
+                       TabCyclingDoesNotMoveDestinationPageFocus) {
+  ASSERT_TRUE(ui_test_utils::NavigateToURL(
+      browser(), embedded_test_server()->GetURL("/title1.html")));
+  auto* first = Active(browser());
+  ASSERT_TRUE(AddTabAtIndex(1, embedded_test_server()->GetURL("/title2.html"),
+                            ui::PAGE_TRANSITION_TYPED));
+  auto* second = Active(browser());
+  ASSERT_NE(first, second);
+  for (auto* page : {first, second}) {
+    ASSERT_TRUE(content::ExecJs(page, R"js(
+      document.body.innerHTML = '<input id="before"><input id="after">';
+      document.querySelector('#before').focus();
+      window.tabEvents = [];
+      for (const type of ['keydown', 'keypress'])
+        addEventListener(type, e => {
+          if (e.key === 'Tab') tabEvents.push(type);
+        });
+    )js"));
+  }
+  Activate(browser());
+  auto* model = browser()->GetTabStripModel();
+  model->ActivateTabAt(0);
+  first->Focus();
+  ui::test::EventGenerator keys(
+      Window().widget()->GetNativeWindow()->GetRootWindow());
+  for (int modifiers : {int(ui::EF_CONTROL_DOWN),
+                        ui::EF_CONTROL_DOWN | ui::EF_SHIFT_DOWN}) {
+    keys.PressKey(ui::VKEY_TAB, modifiers);
+    // Linux IME can call InsertChar after dispatch changed its input client.
+    // EventGenerator alone does not model this separate character delivery.
+    auto* client = Window().widget()->GetInputMethod()->GetTextInputClient();
+    ASSERT_TRUE(client);
+    client->InsertChar(ui::KeyEvent(ui::EventType::kKeyPressed,
+                                  ui::VKEY_TAB, modifiers));
+    keys.ReleaseKey(ui::VKEY_TAB, modifiers);
+    auto* destination = modifiers == ui::EF_CONTROL_DOWN ? second : first;
+    ASSERT_TRUE(base::test::RunUntil(
+        [&] { return Active(browser()) == destination; }));
+    EXPECT_EQ("before", content::EvalJs(destination, "document.activeElement.id"));
+    EXPECT_EQ(0, content::EvalJs(destination, "tabEvents.length"));
+  }
+  // A separate, ordinary Tab must still move focus inside the editable page.
+  keys.PressAndReleaseKey(ui::VKEY_TAB, ui::EF_NONE);
+  ASSERT_TRUE(base::test::RunUntil([&] {
+    return content::EvalJs(first, "document.activeElement.id") == "after";
+  }));
+}
+
+IN_PROC_BROWSER_TEST_F(FlyWorkspaceBrowserTest,
+                       TabCyclingRespectsRecorderPassthroughAndBindings) {
+  ASSERT_TRUE(ui_test_utils::NavigateToURL(
+      browser(), embedded_test_server()->GetURL("/title1.html")));
+  auto* first = Active(browser());
+  ASSERT_TRUE(AddTabAtIndex(1, embedded_test_server()->GetURL("/title2.html"),
+                            ui::PAGE_TRANSITION_TYPED));
+  auto* second = Active(browser());
+  Activate(browser());
+  auto* model = browser()->GetTabStripModel();
+  model->ActivateTabAt(0);
+  ASSERT_TRUE(content::ExecJs(first, R"js(
+    document.body.innerHTML = '<input id="editable">';
+    document.querySelector('input').focus();
+    window.tabEvents = [];
+    addEventListener('keydown', e => { if (e.key === 'Tab') tabEvents.push(e.type); });
+  )js"));
+  first->Focus();
+  ui::test::EventGenerator keys(
+      Window().widget()->GetNativeWindow()->GetRootWindow());
+  ASSERT_TRUE(InvokeNativeCommand(browser(), "toggle-passthrough"));
+  keys.PressAndReleaseKey(ui::VKEY_TAB, ui::EF_CONTROL_DOWN);
+  EXPECT_EQ(first, Active(browser()));
+  EXPECT_EQ(1, content::EvalJs(first, "tabEvents.length"));
+  ASSERT_TRUE(InvokeNativeCommand(browser(), "toggle-passthrough"));
+
+  ASSERT_TRUE(Window().RunCommand("toggle-help"));
+  auto& editor = Window().keyboard_editor();
+  editor.ShowKeyboard();
+  editor.search_for_testing()->SetText(u"next-tab");
+  editor.ContentsChanged(editor.search_for_testing(), u"next-tab");
+  auto* record = editor.record_for_testing("next-tab", false);
+  ASSERT_TRUE(record);
+  const auto original_bindings = editor.bindings_for_testing("next-tab", false);
+  views::test::ButtonTestApi(record).NotifyDefaultMouseClick();
+  ASSERT_TRUE(editor.recording());
+  keys.PressAndReleaseKey(ui::VKEY_TAB, ui::EF_CONTROL_DOWN);
+  EXPECT_FALSE(editor.recording());
+  EXPECT_EQ(original_bindings, editor.bindings_for_testing("next-tab", false));
+  EXPECT_EQ(first, Active(browser()));
+  editor.Cancel();
+  ASSERT_TRUE(base::test::RunUntil([&] { return !editor.root_for_testing(); }));
+
+  auto config = App().commands().Read()->ToValue();
+  config.FindDict("shortcuts")->Set("next-tab", base::ListValue().Append("Ctrl+Y"));
+  ASSERT_TRUE(App().commands().Save(config).config);
+  first->Focus();
+  keys.PressAndReleaseKey(ui::VKEY_TAB, ui::EF_CONTROL_DOWN);
+  EXPECT_EQ(first, Active(browser()));
+  EXPECT_EQ(2, content::EvalJs(first, "tabEvents.length"));
+  keys.PressAndReleaseKey(ui::VKEY_Y, ui::EF_CONTROL_DOWN);
+  ASSERT_TRUE(base::test::RunUntil([&] { return Active(browser()) == second; }));
 }
 
 IN_PROC_BROWSER_TEST_F(FlyWorkspaceBrowserTest,
