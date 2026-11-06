@@ -26,6 +26,55 @@ once or twice a week. Fly follows them automatically:
 A failure stops the process with the pull request still open and the log
 commented on it. Nothing reaches users until the whole chain has passed.
 
+## Checking whether there is work to do
+
+There are two independent tracks: **Stable freshness** (the engine Fly ships)
+and **Beta patch compatibility** (preparation for the next major release).
+Being on the latest Stable does not mean there are no pending patch repairs.
+When asked about security updates, pending patches, or resuming tracking,
+check all of the following against current GitHub state:
+
+```sh
+python3 scripts/chromium/engine_update.py status
+gh api repos/Arzuparreta/fly-browser/actions/workflows/engine-update.yml --jq .state
+gh run list --workflow engine-update.yml --limit 5
+gh pr list --head engine/chromium-stable
+gh issue list --state open --search 'in:title "Fly patches do not apply to Chromium Beta"'
+```
+
+Read the latest run's jobs/logs, any update PR's checks and failure comments,
+and the Beta issue's body. The workflow can finish successfully **while Beta
+patches fail**: that failure is deliberately recorded in the issue rather than
+failing the whole workflow. No Stable update means the candidate build and
+release steps are skipped; that run is not evidence of a fresh native build.
+Report these results separately, with links and any unverified build or
+installed-browser state. Read current merged main rather than treating an
+open PR or an old conversation as delivered work.
+
+The owner can see pending Beta work in the repository's **Issues**, Stable
+update failures in **Actions** and the update **Pull request**, and published
+updates in **Releases**. To receive GitHub notifications, use **Watch > Custom**
+for issues, pull requests and releases, or subscribe to the Beta issue itself.
+Notification delivery depends on the owner's GitHub settings; the workflow
+opening an issue does not guarantee an email or a chat message.
+
+The automatic workflow detects conflicts, records them, and processes compatible
+Stable updates. It does **not** repair conflicting patches or start an agent.
+The owner checks GitHub or asks an agent periodically; no scheduled agent
+wakeups or chat monitoring are part of this setup. An agent answering a status
+question must include pending Beta work even when Stable is current.
+
+To resume tracking after a deliberate pause, check the workflow state and
+runner availability, then enable it and dispatch an immediate check:
+
+```sh
+gh workflow enable engine-update.yml
+gh workflow run engine-update.yml --ref main
+```
+
+Verify the resulting run; enabling the schedule alone is not proof that an
+update, build or patch repair has completed.
+
 ## The patch series
 
 The fewer upstream lines Fly changes, the fewer conflicts a new Chromium
@@ -123,6 +172,32 @@ patches on it every six hours. While any patch does not apply, it keeps the
 those patches before that version reaches Stable, and the Stable update goes
 through without stopping. Compiling against Beta is not checked: only patch
 application.
+
+### Starting a Beta patch repair
+
+Use the open Beta issue as the current work list, not a hard-coded version or
+issue number in this document. In a dedicated task worktree from latest
+`origin/main`, reproduce it with:
+
+```sh
+python3 scripts/chromium/engine_update.py patch-check --channel Beta
+```
+
+Adapt each failing patch to the upstream changes while preserving its Fly
+behavior. Keep the patch series applicable to the **current Stable pin** as
+well: run `patch-check` without `--channel` and with `--channel Beta`. Do not
+move the shipping pin to Beta or modify the owner's active engine root just
+to investigate an early warning. If the two versions require incompatible
+changes, record that limitation in the issue and keep the preparation isolated
+rather than breaking Stable to make the warning disappear.
+
+Follow the repository's normal commit, PR, local validation and remote-check
+requirements. Patch changes that affect runtime still require the native
+build and acceptance checks described in `AGENTS.md`; successful patch replay
+alone does not prove compilation or runtime compatibility. After merge, rerun
+`engine-update.yml` so its Beta job refreshes or closes the issue based on the
+latest upstream release. An automatic detection system being ready does not
+mean every future compatibility repair is already done.
 
 ## Data use
 

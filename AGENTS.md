@@ -73,3 +73,11 @@
   and do not add required checks, branch rulesets, mandatory PR template
   sections or workflows that act on ordinary pull requests without asking
   the owner first. Whitespace and the documentation build are local checks.
+
+- For questions about Chromium/security updates, paused tracking, or pending
+  patches, read `docs/chromium/engine-updates.md` first and follow its status
+  checklist. Report Stable freshness and Beta patch compatibility separately;
+  `engine_update.py status` alone cannot establish that no work is pending.
+  The workflow detects Beta conflicts and opens an issue; it does not repair
+  them or start an agent. The owner checks GitHub or asks agents periodically;
+  do not create agent wakeups or scheduled chat monitoring unless requested.
