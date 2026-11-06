@@ -268,7 +268,9 @@ an existing root instead of downloading Chromium again.
 
 - Validation runs Fly's own unit and browser tests (`fly_unittests`,
   `Fly*BrowserTest.*`), not Chromium's full test suites. Google tests the engine
-  itself.
+  itself. On the owned Xvfb display, browser tests use software compositing
+  (`native.py test-browser --disable-gpu`): GPU-backed snapshots can return
+  transparent pixels there. This does not establish physical GPU acceptance.
 - Releasing is automatic. Everything merged to main since the last release ships
   with the engine update. To hold the version-bump pull request for a manual
   merge, set the repository variable `FLY_ENGINE_RELEASE` to `hold`.

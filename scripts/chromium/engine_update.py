@@ -603,7 +603,7 @@ def upgrade(root, lock, jobs, through, tools=None, force=False):
             if tools:
                 with virtual_display(tools, logs) as display:
                     steps.append(step(root, 'native.py', 'test-browser', jobs, logs,
-                                      display=display))
+                                      display=display, extra=['--disable-gpu']))
             elif os.environ.get('DISPLAY'):
                 steps.append(step(root, 'native.py', 'test-browser', jobs, logs))
             else:

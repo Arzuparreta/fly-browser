@@ -550,6 +550,7 @@ def execute(args):
                         'native-browser-tests.previous-' + str(time.time_ns()) + '.json'))
                 engine.run([executable, '--gtest_filter=Fly*BrowserTest.*',
                             '--test-launcher-jobs=1',
+                            *(['--disable-gpu'] if args.disable_gpu else []),
                             '--test-launcher-summary-output=' + str(summary)], root / 'src', env, foreground=True)
                 browser_results = verify_browser_results(
                     summary, OVERLAY / 'fly/test/workspace_browser_test.cc')
@@ -578,12 +579,16 @@ def main():
     parser.add_argument('--browser-target', choices=['fly_browser_tests', 'browser_tests'],
                         default='fly_browser_tests',
                         help='Scoped Fly acceptance runner or the complete upstream test binary')
+    parser.add_argument('--disable-gpu', action='store_true',
+                        help='test-browser only: use software compositing on a virtual display')
     parser.add_argument('--minimum-free-gib', type=int, default=100,
                         help='explicit free-space floor for native compilation')
     parser.add_argument('--jobs', type=int, default=min(8, os.cpu_count() or 1))
     args = parser.parse_args()
     if args.include_upstream and args.command != 'refresh-overlay':
         parser.error('--include-upstream requires refresh-overlay')
+    if args.disable_gpu and args.command != 'test-browser':
+        parser.error('--disable-gpu requires test-browser')
     if args.jobs < 1:
         parser.error('--jobs must be positive')
     if args.minimum_free_gib < 40:

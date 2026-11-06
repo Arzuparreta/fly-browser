@@ -27,16 +27,12 @@
  
  assert(enable_supervised_users)
  
-@@ -5244,6 +5245,9 @@
-     deps += [ "//chrome/browser/ui/webui/tab_strip_internals:impl" ]
-   }
+@@ -2243,3 +2244,4 @@
  
+-  deps = [
 +  # Fly: dependencies listed in //fly/integration.gni.
-+  deps += fly_browser_deps
-+
-   # This target intentionally has no sources of its own and no
-   # allow_circular_includes_from; it only aggregates dependencies. Do NOT add
-   # sources here -- new code belongs in a dedicated, properly-scoped target.
++  deps = fly_browser_deps + [
+     ":bad_message",
 --- a/chrome/test/BUILD.gn
 +++ b/chrome/test/BUILD.gn
 @@ -64,6 +64,7 @@
@@ -47,13 +43,19 @@
  
  assert(!is_ios, "Chromium/iOS shouldn't use anything in //chrome")
  assert(!is_fuchsia, "Fuchsia shouldn't use anything in //chrome")
-@@ -1801,6 +1802,9 @@
-       "../../components/record_replay/content/renderer/record_replay_agent_browsertest.cc",
-       "../browser/os_crypt/os_crypt_async_browsertest.cc",
-     ]
+@@ -1331,7 +1332,7 @@
+     configs += [ ":disable_thinlto_cache_flags" ]
+     defines = [ "HAS_OUT_OF_PROC_TEST_RUNNER" ]
+ 
+-    deps = [
++    deps = fly_browser_tests_deps + [
+       ":platform_browser_tests",
+       ":test_interfaces",
+       ":test_support",
+@@ -1804,4 +1805,6 @@
+     fuzztests = [ "SafeXmlParserFixture.ParseXML" ]
 +    # Fly: browser tests listed in //fly/integration.gni.
 +    sources += fly_browser_tests_sources
-+    deps += fly_browser_tests_deps
-     fuzztests = [ "SafeXmlParserFixture.ParseXML" ]
      fuzztest_additional_args = [
        "--single-process-tests",
+       "--single-process",
