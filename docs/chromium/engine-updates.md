@@ -74,7 +74,7 @@ Explicit limits in the owner's request take precedence.
    and Beta state, merged PRs, release and validation evidence, and any genuine
    blocker. If no maintenance or release was needed, say so with the checked
    evidence. Opening a PR, starting a build or enabling tracking is not task
-   completion. No recurring agent wakeups or chat monitoring are included.
+   completion.
 
 ## Checking whether there is work to do
 
@@ -109,10 +109,8 @@ Notification delivery depends on the owner's GitHub settings; the workflow
 opening an issue does not guarantee an email or a chat message.
 
 The automatic workflow detects conflicts, records them, and processes compatible
-Stable updates. It does **not** repair conflicting patches or start an agent.
-The owner checks GitHub or asks an agent periodically; no scheduled agent
-wakeups or chat monitoring are part of this setup. An agent answering a status
-question must include pending Beta work even when Stable is current.
+Stable updates. It does **not** repair conflicting patches. An agent answering
+a status question must include pending Beta work even when Stable is current.
 
 To resume tracking after a deliberate pause, check the workflow state and
 runner availability, then enable it and dispatch an immediate check:

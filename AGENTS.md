@@ -79,8 +79,7 @@
   checklist. Report Stable freshness and Beta patch compatibility separately;
   `engine_update.py status` alone cannot establish that no work is pending.
   The workflow detects Beta conflicts and opens an issue; it does not repair
-  them or start an agent. The owner checks GitHub or asks agents periodically;
-  do not create agent wakeups or scheduled chat monitoring unless requested.
+  them.
 
 - **“Pon Chromium al día”** (also “actualiza Chromium” or “encárgate del
   seguimiento de Chromium”) invokes the complete maintenance task in
