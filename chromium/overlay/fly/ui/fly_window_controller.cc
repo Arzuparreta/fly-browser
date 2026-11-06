@@ -1625,6 +1625,7 @@ void FlyWindowController::OnWidgetActivationChanged(views::Widget* widget,
     return;
   // A blurred window can no longer see the modifier's release.
   if (!active) {
+    consumed_page_key_ = ui::DomCode::NONE;
     SetTabNumbers(false);
     if (scroller_)
       scroller_->Stop();
@@ -3234,6 +3235,16 @@ void FlyWindowController::OnKeyEvent(ui::KeyEvent* event) {
   TrackTabNumbers(event->type() == ui::EventType::kKeyPressed,
                   event->key_code(), event->code(), event->flags(),
                   event->is_repeat(), false);
+  // Match Chromium's per-renderer character suppression across tab switches.
+  // Start a fresh decision for each physical press; releases retain their
+  // existing routing (including scrolling and fullscreen Escape handling).
+  if (event->type() == ui::EventType::kKeyPressed && !event->is_char()) {
+    consumed_page_key_ = ui::DomCode::NONE;
+  } else if (event->is_char() && IsConsumedPageKey(event->code())) {
+    event->SetHandled();
+    event->StopPropagation();
+    return;
+  }
   if (Closing())
     return;
   if ((rename_widget_ && !rename_widget_->IsClosed()) ||

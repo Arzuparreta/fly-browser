@@ -472,6 +472,17 @@ content::KeyboardEventProcessingResult RouteNativePageKey(
   if (!fly_window)
     return Result::NOT_HANDLED;
   auto& window = *fly_window;
+  // Also reset for input delivered directly to the renderer host (e.g. CDP).
+  if (event.GetType() == blink::WebInputEvent::Type::kRawKeyDown ||
+      event.GetType() == blink::WebInputEvent::Type::kKeyDown) {
+    window.ConsumePageKey(ui::DomCode::NONE);
+  }
+  // Linux IME can insert the character directly into the newly focused page,
+  // bypassing the window's native event handler and the old host's suppression.
+  if (event.GetType() == blink::WebInputEvent::Type::kChar &&
+      window.IsConsumedPageKey(static_cast<ui::DomCode>(event.dom_code))) {
+    return Result::HANDLED;
+  }
   if (contents && (event.GetType() == blink::WebInputEvent::Type::kRawKeyDown ||
                    event.GetType() == blink::WebInputEvent::Type::kKeyUp)) {
     PageKeyboardState::CreateForWebContents(contents);
@@ -495,8 +506,10 @@ content::KeyboardEventProcessingResult RouteNativePageKey(
     window.scroller().OtherKey(event.dom_code);
   if (!contents)
     return Result::NOT_HANDLED;
-  if (window.hints().HandleKey(contents, event))
+  if (window.hints().HandleKey(contents, event)) {
+    window.ConsumePageKey(static_cast<ui::DomCode>(event.dom_code));
     return Result::HANDLED;
+  }
   PageKeyboardState::CreateForWebContents(contents);
   auto& router = PageKeyboardState::FromWebContents(contents)->router();
   const auto key =
@@ -512,6 +525,7 @@ content::KeyboardEventProcessingResult RouteNativePageKey(
   window.UpdateModeLabel();
   if (key.kind == KeyResultKind::kPass)
     return Result::NOT_HANDLED;
+  window.ConsumePageKey(static_cast<ui::DomCode>(event.dom_code));
   if (key.kind == KeyResultKind::kExitInsert) {
     contents->ClearFocusedElement();
     contents->Focus();

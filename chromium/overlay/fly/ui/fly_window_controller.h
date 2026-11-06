@@ -151,6 +151,12 @@ class FlyWindowController : public views::WidgetObserver,
                        int flags,
                        bool repeat,
                        bool passthrough);
+  // Remember a page key consumed by Fly across a synchronous tab/focus change.
+  // Its character must not reach the newly focused page.
+  void ConsumePageKey(ui::DomCode code) { consumed_page_key_ = code; }
+  bool IsConsumedPageKey(ui::DomCode code) const {
+    return code != ui::DomCode::NONE && code == consumed_page_key_;
+  }
   bool CreateTab();
 
   CommandPalette& palette() { return *palette_; }
@@ -323,6 +329,7 @@ class FlyWindowController : public views::WidgetObserver,
   raw_ptr<FlyBrowserFrame> frame_ = nullptr;
   base::CallbackListSubscription closed_subscription_;
   bool browser_closed_ = false;
+  ui::DomCode consumed_page_key_ = ui::DomCode::NONE;
 
   // Sidebar.
   std::unique_ptr<views::Widget> sidebar_widget_;

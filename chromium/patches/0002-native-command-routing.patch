@@ -12,20 +12,23 @@
  
  #include <stdint.h>
  
-@@ -3219,6 +3230,12 @@
-   if (focus_manager->shortcut_handling_suspended()) {
-     return content::KeyboardEventProcessingResult::NOT_HANDLED;
-   }
-+
+@@ -3219,6 +3224,15 @@
+ 
+ content::KeyboardEventProcessingResult BrowserView::PreHandleKeyboardEvent(
+     const NativeWebKeyboardEvent& event) {
 +#if BUILDFLAG(IS_LINUX) || BUILDFLAG(IS_WIN)
-+  if (fly::FlyWindowController::ShouldDecorate(browser_)) {
++  // Fly also consumes shortcut characters after a synchronous tab switch.
++  // Route before Chromium's raw-key-only filter, retaining shortcut suspension.
++  if (fly::FlyWindowController::ShouldDecorate(browser_) &&
++      !GetFocusManager()->shortcut_handling_suspended()) {
 +    return fly::RouteNativePageKey(browser_, event);
 +  }
 +#endif
- 
-   ui::Accelerator accelerator =
-       ui::GetAcceleratorFromNativeWebKeyboardEvent(event);
-@@ -5626,6 +5643,13 @@
++
+   if ((event.GetType() != blink::WebInputEvent::Type::kRawKeyDown) &&
+       (event.GetType() != blink::WebInputEvent::Type::kKeyUp)) {
+     return content::KeyboardEventProcessingResult::NOT_HANDLED;
+@@ -5642,6 +5656,13 @@
  #endif
    const std::vector<AcceleratorMapping> accelerator_list(GetAcceleratorList());
    for (const auto& entry : accelerator_list) {
@@ -49,7 +52,7 @@
  
  #include <array>
  #include <optional>
-@@ -1416,6 +1417,7 @@
+@@ -1659,6 +1660,7 @@
  
  void RegisterLocalState(PrefRegistrySimple* registry) {
    fly::WorkspaceService::RegisterLocalStatePrefs(registry);
