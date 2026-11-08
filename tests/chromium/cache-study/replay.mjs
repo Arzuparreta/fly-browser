@@ -45,8 +45,10 @@ function send(method, params = {}, sessionId) {
 }
 const reqs = new Map();
 let inflight = 0, lastActivity = Date.now();
+// networkBytes: transferred (encoded) bytes. hitBodyBytes and networkBodyBytes:
+// decoded body bytes, the only pair that can be compared as a byte hit rate.
 const totals = { requests: 0, diskHits: 0, memHits: 0, revalidated304: 0, networkBytes: 0,
-                 hitBodyBytes: 0, failed: 0 };
+                 hitBodyBytes: 0, networkBodyBytes: 0, failed: 0 };
 const perPass = [];
 let pageSession, loadResolve;
 ws.addEventListener('message', async ev => {
@@ -99,7 +101,7 @@ ws.addEventListener('message', async ev => {
       if (msg.method === 'Network.loadingFailed') { totals.failed++; break; }
       if (r.disk) { totals.diskHits++; totals.hitBodyBytes += r.bytes; }
       else if (r.mem) totals.memHits++;
-      else totals.networkBytes += p.encodedDataLength || 0;
+      else { totals.networkBytes += p.encodedDataLength || 0; totals.networkBodyBytes += r.bytes; }
       if (r.status === 304) totals.revalidated304++;
       break;
     }
