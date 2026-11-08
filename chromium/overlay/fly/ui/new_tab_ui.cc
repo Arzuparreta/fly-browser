@@ -105,8 +105,8 @@ class NewTabResources {
   using Bundle = std::map<std::string, Bytes>;
   struct LoadedBundle {
     Bundle files;
-    SkBitmap dark;
-    SkBitmap light;
+    SkBitmap image;
+    bool dark;
   };
   static NewTabResources& Get() {
     static base::NoDestructor<NewTabResources> instance;
@@ -118,33 +118,77 @@ class NewTabResources {
     loading_ = true;
     base::ThreadPool::PostTaskAndReplyWithResult(
         FROM_HERE, {base::MayBlock(), base::TaskPriority::USER_BLOCKING},
-        base::BindOnce([] {
-          TRACE_EVENT("browser", "Fly.NewTabResources.ReadBundle");
-          LoadedBundle bundle;
-          base::FilePath assets;
-          if (!base::PathService::Get(base::DIR_ASSETS, &assets))
-            return bundle;
-          for (const auto path : kFiles) {
-            std::string bytes;
-            if (base::ReadFileToStringWithMaxSize(
-                    assets.AppendASCII("fly_resources")
-                        .AppendASCII("new_tab")
-                        .AppendASCII(path),
-                    &bytes, 4 * 1024 * 1024)) {
-              if (path == "identity/memory-chasis@2x.png")
-                bundle.dark = gfx::PNGCodec::Decode(base::as_byte_span(bytes));
-              else if (path == "identity/memory-papel@2x.png")
-                bundle.light = gfx::PNGCodec::Decode(base::as_byte_span(bytes));
-              bundle.files.emplace(path, base::MakeRefCounted<base::RefCountedString>(
-                                       std::move(bytes)));
-            }
-          }
-          return bundle;
-        }),
+        base::BindOnce(
+            [](bool dark) {
+              TRACE_EVENT("browser", "Fly.NewTabResources.ReadBundle");
+              LoadedBundle bundle;
+              bundle.dark = dark;
+              base::FilePath assets;
+              if (!base::PathService::Get(base::DIR_ASSETS, &assets))
+                return bundle;
+              for (const auto path : kFiles) {
+                std::string bytes;
+                if (base::ReadFileToStringWithMaxSize(
+                        assets.AppendASCII("fly_resources")
+                            .AppendASCII("new_tab")
+                            .AppendASCII(path),
+                        &bytes, 4 * 1024 * 1024)) {
+                  if (path == MemoryPath(dark))
+                    bundle.image =
+                        gfx::PNGCodec::Decode(base::as_byte_span(bytes));
+                  bundle.files.emplace(
+                      path, base::MakeRefCounted<base::RefCountedString>(
+                                std::move(bytes)));
+                }
+              }
+              return bundle;
+            },
+            GetFlyColors().dark),
         base::BindOnce(&NewTabResources::Loaded, base::Unretained(this)));
   }
-  const gfx::ImageSkia& Memory(bool dark) const {
-    return dark ? dark_ : light_;
+  const gfx::ImageSkia& Memory() {
+    EnsureMemory();
+    return memory_;
+  }
+  base::CallbackListSubscription Subscribe(base::RepeatingClosure changed) {
+    return memory_changed_.Add(std::move(changed));
+  }
+  void EnsureMemory() {
+    if (!loaded_)
+      return;
+    const bool dark = GetFlyColors().dark;
+    if (requested_dark_ == dark)
+      return;
+    requested_dark_ = dark;
+    const size_t generation = ++generation_;
+    // Returning to the retained theme also invalidates an in-flight decode.
+    if (memory_dark_ == dark)
+      return;
+    if (decoding_)
+      return;  // Coalesce rapid changes instead of queueing more workers.
+    const auto it = bundle_.find(std::string(MemoryPath(dark)));
+    if (it == bundle_.end())
+      return;
+    ++decode_count_;
+    decoding_ = true;
+    base::ThreadPool::PostTaskAndReplyWithResult(
+        FROM_HERE, {base::TaskPriority::USER_VISIBLE},
+        base::BindOnce(
+            [](Bytes bytes) {
+              TRACE_EVENT("browser", "Fly.NewTabResources.DecodeTheme");
+              return gfx::PNGCodec::Decode(base::span(*bytes));
+            },
+            it->second),
+        base::BindOnce(&NewTabResources::Decoded, base::Unretained(this),
+                       generation, dark));
+  }
+  NewTabImageCacheState StateForTesting() const {
+    return {memory_dark_, memory_bytes_, decode_count_};
+  }
+  std::optional<bool> MemoryTheme() const { return memory_dark_; }
+  void SetDecodeGateForTesting(
+      base::RepeatingCallback<void(base::OnceClosure)> gate) {
+    decode_gate_for_testing_ = std::move(gate);
   }
   void Read(std::string path, content::WebUIDataSource::GotDataCallback done) {
     if (!kFiles.contains(path)) {
@@ -159,24 +203,67 @@ class NewTabResources {
   }
 
  private:
+  static std::string_view MemoryPath(bool dark) {
+    return dark ? "identity/memory-chasis@2x.png"
+                : "identity/memory-papel@2x.png";
+  }
+  void SetMemory(bool dark, SkBitmap image) {
+    if (image.isNull())
+      return;
+    image.setImmutable();
+    memory_bytes_ = image.computeByteSize();
+    memory_ = gfx::ImageSkia::CreateFromBitmap(image, 2.0f);
+    memory_dark_ = dark;
+  }
+  void Decoded(size_t generation, bool dark, SkBitmap image) {
+    decoding_ = false;
+    if (generation != generation_) {
+      requested_dark_.reset();
+      EnsureMemory();
+      return;
+    }
+    auto publish =
+        base::BindOnce(&NewTabResources::PublishMemory, base::Unretained(this),
+                       generation, dark, std::move(image));
+    if (decode_gate_for_testing_)
+      decode_gate_for_testing_.Run(std::move(publish));
+    else
+      std::move(publish).Run();
+  }
+  void PublishMemory(size_t generation, bool dark, SkBitmap image) {
+    // A theme can change before any renderer has reported its new geometry.
+    EnsureMemory();
+    if (generation != generation_ || image.isNull())
+      return;
+    SetMemory(dark, std::move(image));
+    memory_changed_.Notify();
+  }
   void Loaded(LoadedBundle bundle) {
-    // Decode once off the UI thread, then share immutable pixels across tabs.
-    bundle.dark.setImmutable();
-    bundle.light.setImmutable();
-    dark_ = gfx::ImageSkia::CreateFromBitmap(bundle.dark, 2.0f);
-    light_ = gfx::ImageSkia::CreateFromBitmap(bundle.light, 2.0f);
+    // Keep one decoded theme; all tabs share its immutable pixels. Both small
+    // compressed PNGs remain available to the WebUI and future theme changes.
+    SetMemory(bundle.dark, std::move(bundle.image));
+    requested_dark_ = bundle.dark;
     bundle_ = std::move(bundle.files);
     loaded_ = true;
     loading_ = false;
+    EnsureMemory();
+    memory_changed_.Notify();
     auto pending = std::move(pending_);
     for (auto& [path, done] : pending)
       Read(std::move(path), std::move(done));
   }
   bool loading_ = false;
   bool loaded_ = false;
+  bool decoding_ = false;
   Bundle bundle_;
-  gfx::ImageSkia dark_;
-  gfx::ImageSkia light_;
+  gfx::ImageSkia memory_;
+  std::optional<bool> memory_dark_;
+  std::optional<bool> requested_dark_;
+  size_t memory_bytes_ = 0;
+  size_t generation_ = 0;
+  size_t decode_count_ = 1;
+  base::RepeatingClosureList memory_changed_;
+  base::RepeatingCallback<void(base::OnceClosure)> decode_gate_for_testing_;
   std::vector<std::pair<std::string, content::WebUIDataSource::GotDataCallback>>
       pending_;
 };
@@ -394,6 +481,7 @@ class NewTabHandler : public content::WebUIMessageHandler,
            web_contents()->GetVisibility() == content::Visibility::VISIBLE;
   }
   void Refresh() {
+    NewTabResources::Get().EnsureMemory();
     if (!IsJavascriptAllowed())
       return;
     if (Visible())
@@ -455,7 +543,17 @@ class NewTabConfig : public content::DefaultWebUIConfig<NewTabUI> {
 class NewTabArtworkView : public views::View {
   METADATA_HEADER(NewTabArtworkView, views::View)
  public:
-  NewTabArtworkView() { SetCanProcessEventsWithinSubtree(false); }
+  NewTabArtworkView()
+      : memory_subscription_(NewTabResources::Get().Subscribe(
+            base::BindRepeating(&NewTabArtworkView::SchedulePaint,
+                                base::Unretained(this)))) {
+    SetCanProcessEventsWithinSubtree(false);
+  }
+  void OnThemeChanged() override {
+    views::View::OnThemeChanged();
+    NewTabResources::Get().EnsureMemory();
+    SchedulePaint();
+  }
   void SetPose(int pose) {
     if (pose_ == pose && dark_ == GetFlyColors().dark)
       return;
@@ -464,20 +562,35 @@ class NewTabArtworkView : public views::View {
     SchedulePaint();
   }
   void OnPaint(gfx::Canvas* canvas) override {
-    const auto& strip = NewTabResources::Get().Memory(dark_);
+    const auto& strip = NewTabResources::Get().Memory();
+    painted_dark_ =
+        strip.isNull() ? std::nullopt : NewTabResources::Get().MemoryTheme();
+    ++paints_;
     if (!strip.isNull())
       canvas->DrawImageInt(strip, pose_ * 280, 0, 280, 280, 0, 0, width(),
                            height(), true);
   }
+  std::optional<bool> painted_dark() const { return painted_dark_; }
+  size_t paints() const { return paints_; }
 
  private:
   int pose_ = 0;
   bool dark_ = GetFlyColors().dark;
+  std::optional<bool> painted_dark_;
+  size_t paints_ = 0;
+  base::CallbackListSubscription memory_subscription_;
 };
 BEGIN_METADATA(NewTabArtworkView)
 END_METADATA
 
 WEB_CONTENTS_USER_DATA_KEY_IMPL(NewTabArtwork);
+NewTabImageCacheState NewTabImageCacheStateForTesting() {
+  return NewTabResources::Get().StateForTesting();
+}
+void SetNewTabImageDecodeGateForTesting(
+    base::RepeatingCallback<void(base::OnceClosure)> gate) {
+  NewTabResources::Get().SetDecodeGateForTesting(std::move(gate));
+}
 NewTabArtwork::NewTabArtwork(content::WebContents* contents)
     : content::WebContentsObserver(contents),
       content::WebContentsUserData<NewTabArtwork>(*contents) {}
@@ -499,6 +612,12 @@ bool NewTabArtwork::visible_for_testing() const {
 }
 gfx::Rect NewTabArtwork::bounds_for_testing() const {
   return overlay_ ? overlay_->GetWindowBoundsInScreen() : gfx::Rect();
+}
+std::optional<bool> NewTabArtwork::painted_dark_for_testing() const {
+  return artwork_ ? artwork_->painted_dark() : std::nullopt;
+}
+size_t NewTabArtwork::paints_for_testing() const {
+  return artwork_ ? artwork_->paints() : 0;
 }
 void NewTabArtwork::Sync() {
   auto* parent = web_contents() ? web_contents()->GetNativeView() : nullptr;

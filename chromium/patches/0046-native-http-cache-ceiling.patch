@@ -1,0 +1,77 @@
+--- a/net/disk_cache/cache_util.cc
++++ b/net/disk_cache/cache_util.cc
+@@ -256,6 +256,13 @@
+         size_limit, base::ClampedNumeric<int64_t>(kMaxWebUICodeCacheSize));
+   }
+ 
++  // Fly bounds only the automatic HTTP cache. Explicit sizes bypass this
++  // function; generated code and low-disk adaptation keep Chromium's defaults.
++  if (type == net::DISK_CACHE) {
++    size_limit =
++        std::min(size_limit, base::ClampedNumeric<int64_t>(256 * 1024 * 1024));
++  }
++
+   DCHECK_LT(size_limit, std::numeric_limits<int32_t>::max());
+   return base::ByteSize(
+       static_cast<uint32_t>(std::min(preferred_cache_size, size_limit)));
+--- a/net/disk_cache/cache_util_unittest.cc
++++ b/net/disk_cache/cache_util_unittest.cc
+@@ -20,9 +20,11 @@
+ #include "base/test/bind.h"
+ #include "base/test/scoped_feature_list.h"
+ #include "base/test/task_environment.h"
++#include "base/test/test_future.h"
+ #include "base/threading/platform_thread.h"
+ #include "build/build_config.h"
+ #include "net/base/cache_type.h"
++#include "net/disk_cache/disk_cache.h"
+ #include "testing/gtest/include/gtest/gtest.h"
+ #include "testing/platform_test.h"
+ 
+@@ -244,7 +246,8 @@
+     const base::ByteSize expected = kHTTPCacheSizeIsIncreased
+                                         ? test_case.expected_400percent
+                                         : test_case.expected_100percent;
+-    EXPECT_EQ(expected, PreferredCacheSize(test_case.available));
++    EXPECT_EQ(std::min(base::MiB(256), expected),
++              PreferredCacheSize(test_case.available));
+ 
+     // Preferred size for WebUI code cache is the same as without trial, but
+     // should never be more than 5 MB.
+@@ -303,7 +306,8 @@
+       base::ByteSize default_expected = kHTTPCacheSizeIsIncreased
+                                             ? test_case.expected_400percent
+                                             : test_case.expected_100percent;
+-      EXPECT_EQ(default_expected, PreferredCacheSize(test_case.available));
++      EXPECT_EQ(std::min(base::MiB(256), default_expected),
++                PreferredCacheSize(test_case.available));
+ 
+       // Preferred size for WebUI code cache is not scaled by the trial, and
+       // should never be more than 5 MB.
+@@ -338,4 +342,26 @@
+   }
+ }
+ 
++TEST_F(CacheUtilTest, FlyHttpCacheBackendUsesCeilingUnlessSizeIsExplicit) {
++  for (const auto size : {base::ByteSize(0), base::MiB(64), base::MiB(512)}) {
++    base::test::TestFuture<BackendResult> ready;
++    auto result = CreateCacheBackend(net::DISK_CACHE, net::CACHE_BACKEND_SIMPLE,
++                                     nullptr, cache_dir_, size.InBytes(),
++                                     ResetHandling::kNeverReset, nullptr,
++                                     nullptr, ready.GetCallback());
++    if (result.net_error == net::ERR_IO_PENDING)
++      result = ready.Take();
++    ASSERT_EQ(net::OK, result.net_error);
++    ASSERT_TRUE(result.backend);
++    const auto expected = size == base::ByteSize(0)
++                              ? PreferredCacheSizeForPath(cache_dir_)
++                              : size;
++    EXPECT_EQ(expected, result.backend->GetMaxBytesForTesting());
++    if (size == base::ByteSize(0))
++      EXPECT_LE(expected, base::MiB(256));
++    result.backend.reset();
++    FlushCacheThreadForTesting();
++  }
++}
++
+ }  // namespace disk_cache

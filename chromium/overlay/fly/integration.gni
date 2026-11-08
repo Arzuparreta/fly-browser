@@ -130,3 +130,8 @@ fly_prefs_impl_deps = [
   "//fly:preferences",
   "//fly:workspaces",
 ]
+
+# Exercise Chromium's actual automatic sizing, code-cache experiments and
+# explicit backend overrides in Fly's small native unit-test target.
+fly_cache_test_sources = [ "//net/disk_cache/cache_util_unittest.cc" ]
+fly_cache_test_deps = [ "//net" ]

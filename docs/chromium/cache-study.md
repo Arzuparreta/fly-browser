@@ -10,6 +10,10 @@ documentación; no cambia el comportamiento del navegador.
 Los datos están en [`cache-measurements.json`](./cache-measurements.json) y
 las herramientas en `tests/chromium/cache-study/`.
 
+La [política adoptada](#politica-adoptada) describe los cambios derivados del
+estudio. Las mediciones y los tamaños de las secciones siguientes corresponden
+al navegador anterior a esos cambios; se conservan para poder comparar.
+
 ## Resultado principal
 
 | Caché | Qué se ha medido | Conclusión |
@@ -92,10 +96,13 @@ veces esa suma. El propietario usa hoy un solo perfil.
 
 La preferencia de `Local State` `DiskCacheSize` (la misma que fijan
 `--disk-cache-size` y la política de empresa) sustituye ese cálculo por un
-número fijo, igual para todos los perfiles, y se aplica **a la caché HTTP y a
-la caché de código JS** (`ChromeContentBrowserClient::GetGeneratedCodeCacheSettings`).
-La reproducción lo confirma: con cada límite, las dos cachés terminaron con
-tamaños parecidos.
+número fijo, igual para todos los perfiles. Afecta a HTTP, a los diccionarios
+compartidos y al código generado
+(`ChromeContentBrowserClient::GetGeneratedCodeCacheSettings`). Con WebUI code
+cache activo, JS comparte ese presupuesto con WebUI (hasta 5 MiB o el 2 %);
+WASM tiene otro máximo del tamaño indicado. Por tanto, no es un presupuesto
+único para todas las cachés del perfil. La reproducción midió HTTP y JS,
+que terminaron con tamaños parecidos.
 
 ### El perfil real del propietario
 
@@ -268,10 +275,13 @@ del propietario.
 2. **Fijar `DiskCacheSize` por defecto** (por ejemplo, un valor por defecto de
    la preferencia en `Local State`, que el usuario o la política pueden
    cambiar). Un valor de 256 MiB cubre las dos cargas medidas sin pérdida de
-   aciertos HTTP y acota el disco a 512 MiB por workspace. Hay que tener en
-   cuenta que ese número limita también la caché de código: con 256 MiB, el
-   límite de código **sube** de 200 a 256 MiB en esta máquina; con 128 MiB baja
-   a 128 MiB, por debajo de los 181 MiB que alcanzó la carga sintética. El
+   aciertos HTTP; 512 MiB por workspace sería solo la suma de HTTP y JS,
+   no un límite del disco total. El mismo ajuste también dimensiona WASM y
+   los diccionarios compartidos; WebUI reserva parte del presupuesto de JS.
+   Ese número también limita el código: un presupuesto de 256 MiB puede
+   aumentar el máximo actual de JS de 200 MiB, aunque WebUI tome hasta 5 MiB;
+   uno de 128 MiB lo recorta por debajo de los 181 MiB que alcanzó la carga
+   sintética. El
    efecto de limitar la caché de código en la velocidad de las páginas no se
    ha medido.
 3. **Favicons: dejarla como está.** Alternativas medidas: reducir el límite a
@@ -282,6 +292,90 @@ del propietario.
    (unos pocos ms en un hilo de fondo).
 5. **Workspaces, panel lateral, modo lectura: dejarlas.** No hay nada medido
    que justifique tocarlas.
+
+## Política adoptada
+
+Fly conserva las cachés pequeñas que evitan trabajo repetido y limita la
+retención que no aporta un beneficio medido. No añade nuevas cachés de datos
+del usuario ni cambia el almacenamiento de sitios, sesiones o extensiones.
+
+| Caché | Decisión | Motivo |
+| --- | --- | --- |
+| HTTP | Máximo automático de 256 MiB por perfil, conservando los valores inferiores que calcule Chromium | Cubre las dos cargas medidas; los límites mayores no muestran un beneficio consistente |
+| JS, WASM, WebUI y diccionarios compartidos | Conservar el cálculo de Chromium | No se midieron sus aciertos ni el coste de recortarlos; un ajuste común podría incluso aumentar sus máximos |
+| Favicons de marcadores | Conservar las 256 entradas, caducidad e invalidación existentes | Es una caché local pequeña que evita consultas y decodificación al teclear; 64 entradas pueden producir expulsiones continuas en ventanas muy altas o con varias escalas |
+| Nueva pestaña | Conservar los archivos comprimidos y un solo fondo nativo decodificado, compartido entre ventanas | Retiene 3,59 MiB de píxeles en lugar de 7,18 MiB; el otro tema se decodifica cuando se necesita |
+| Workspaces, panel lateral y modo lectura | Conservarlas | Son pequeñas, ya están acotadas y no hay una mejora medida que justifique complicarlas |
+
+### El límite HTTP conserva la adaptación y los ajustes explícitos
+
+El parche `0046-native-http-cache-ceiling.patch` limita únicamente
+`PreferredCacheSize(..., net::DISK_CACHE)`, después de que Chromium calcule el
+tamaño adaptativo. No modifica `DiskCacheSize` ni consulta el disco desde el
+hilo de interfaz. Los backends llaman a ese cálculo cuando el tamaño solicitado
+es cero; un tamaño explícito, la política de empresa o `--disk-cache-size`
+conservan su comportamiento, incluidos sus efectos sobre las otras cachés.
+El cálculo se repite al crear el backend, también tras reiniciar el servicio
+de red. Como antes, no es una reserva de espacio ni un presupuesto global.
+
+| Espacio libre | HTTP automático anterior | HTTP automático de Fly |
+| --- | ---: | ---: |
+| 1 GiB | 205 MiB | 205 MiB |
+| 2 GiB | 410 MiB | 256 MiB |
+| 6,19 GiB | 800 MiB | 256 MiB |
+| 32 GiB o más | 1280 MiB | 256 MiB |
+
+Se eligen 256 MiB frente a 128 porque la carga sintética aún reduce los bytes
+de red entre ambos, y el conjunto real usado durante siete días suma 153,6 MiB.
+El tamaño final del índice no demuestra por sí solo que nunca haya expulsiones.
+Tampoco se interpreta la reproducción como una mejora demostrada de velocidad.
+El backend gestiona sus propias expulsiones al abrir y usar una caché existente;
+Fly no borra carpetas ni toca el perfil del propietario. Metadatos, escrituras
+en curso y las otras cachés quedan fuera de este máximo de HTTP.
+
+### Cambio del fondo nativo sin dejar un hueco
+
+La carga inicial decodifica solo el tema activo antes de servir la página.
+Después, el cambio de tema solicita una decodificación de los PNG que ya están
+en memoria, en un hilo de fondo. Solo hay un trabajo de decodificación en curso;
+los cambios rápidos se agrupan y un contador de generación descarta resultados
+obsoletos. La imagen anterior sigue disponible hasta sustituirla de una vez.
+Durante esa sustitución pueden coexistir temporalmente los dos mapas de bits.
+
+El cambio se solicita desde las notificaciones de preferencias y de tema de la
+vista, y también al pintar como respaldo. Al terminar se avisa a todas las
+vistas, incluidas las que no tienen animación o usan movimiento reducido. Cada
+vista lee la imagen compartida al pintar, sin retener una copia del tema viejo.
+En esta máquina, las tres decodificaciones de la prueba tardaron 6,03–6,23 ms
+en el worker de un build de componentes con DCHECK. No es una medida de Release
+ni del tiempo completo entre elegir un tema y verlo pintado.
+El ahorro corresponde a la caché nativa de píxeles; no se promete la misma
+reducción de RSS ni se contabilizan aquí las superficies del compositor o las
+imágenes del renderer.
+
+### Verificación de la política
+
+`fly_unittests` incorpora las pruebas reales de `CacheUtilTest` de Chromium,
+con sus expectativas HTTP actualizadas: espacio desconocido, disco casi lleno,
+espacio abundante y experimentos de tamaño de código. También abre backends con
+tamaños explícitos de 64 y 512 MiB para comprobar que no los recorta el máximo
+automático. `preferred_size.py --upstream` reproduce el cálculo histórico;
+sin ese argumento muestra el máximo HTTP de Fly.
+
+`NewTabArtworkKeepsOneThemeAndRejectsLateDecodes` comprueba una única
+decodificación inicial compartida entre dos ventanas, los bytes retenidos,
+la imagen anterior durante un cambio y los repintados con movimiento reducido.
+Retiene las respuestas del worker para comprobar de forma determinista que
+las respuestas tardías no sustituyen el tema elegido. Las pruebas no equivalen
+a una grabación de todos los fotogramas de una pantalla física.
+
+La validación local pasó 125 pruebas unitarias y 15 casos de navegador en un
+Xvfb/Openbox propio con composición por software, además de `npm test`, las
+34 pruebas del tooling nativo, la documentación y la comprobación de espacios.
+Se recompilaron `chrome`, sus recursos y las pruebas; `./launch.sh` abrió el
+build actualizado con un perfil desechable. No se repitió la reproducción de
+300 visitas ni se midió una mejora de carga; Windows, Wayland y la pantalla
+física quedan sin comprobar en este cambio.
 
 ## Límites del estudio
 
