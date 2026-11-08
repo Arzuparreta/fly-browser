@@ -71,6 +71,7 @@ export default defineConfig({
           { text: 'Chromium Development', link: '/chromium/build' },
           { text: 'Chromium Engine Updates', link: '/chromium/engine-updates' },
           { text: 'Startup Performance Study', link: '/chromium/startup-study' },
+          { text: 'Cache Study', link: '/chromium/cache-study' },
           { text: 'Live Media Test', link: '/chromium/live-media' }
         ]
       }

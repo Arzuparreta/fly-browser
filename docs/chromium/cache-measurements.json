@@ -1,0 +1,977 @@
+{
+ "schema": 1,
+ "created": "2026-11-08T13:05:04+00:00",
+ "provenance": {
+  "fly_main": "8e87983ef8b22822a263d9b437a1a27281154b98",
+  "fly_version": "0.42.3",
+  "chromium": "157.0.8103.38",
+  "replay_and_trace_binary": "out/FlyRelease/chrome built 2026-11-06 (0.42.2 overlay; no cache-related difference)",
+  "microbenchmark_binary": "out/FlyNative/fly_browser_tests (component build, DCHECKs on) from 8e87983",
+  "machine": "Ryzen 7 5800X, 32 GiB, /home on SATA SSD (sdb), /mnt/storage on 7200 rpm HDD (sda); X11 virtual display :93 with Openbox"
+ },
+ "owner_profile": {
+  "note": "Default profile of the installed Fly; aggregates only, no URLs",
+  "free_disk_GiB_home": 6.19,
+  "http_cache": {
+   "index_written_utc": "2026-11-08T11:23:13.548376Z",
+   "entries": 6240,
+   "MiB": 335.7,
+   "oldest_last_used_days": 12.7,
+   "windows": {
+    "1h": {
+     "entries": 16,
+     "MiB": 1.8
+    },
+    "1d": {
+     "entries": 28,
+     "MiB": 2.3
+    },
+    "2d": {
+     "entries": 243,
+     "MiB": 13.8
+    },
+    "3d": {
+     "entries": 1338,
+     "MiB": 112.8
+    },
+    "7d": {
+     "entries": 3122,
+     "MiB": 153.6
+    },
+    "14d": {
+     "entries": 6240,
+     "MiB": 335.7
+    }
+   },
+   "entry_KiB_p50_p90_p99_max": [
+    9.8,
+    62.0,
+    489.8,
+    75540.0
+   ],
+   "largest_10_MiB": 125.9
+  },
+  "js_code_cache": {
+   "index_written_utc": "2026-11-06T18:27:38.446671Z",
+   "entries": 3896,
+   "MiB": 136.3,
+   "oldest_last_used_days": 11.7,
+   "windows": {
+    "1h": {
+     "entries": 25,
+     "MiB": 6.6
+    },
+    "1d": {
+     "entries": 961,
+     "MiB": 26.9
+    },
+    "2d": {
+     "entries": 961,
+     "MiB": 26.9
+    },
+    "3d": {
+     "entries": 1705,
+     "MiB": 46.1
+    },
+    "7d": {
+     "entries": 2394,
+     "MiB": 83.3
+    },
+    "14d": {
+     "entries": 3896,
+     "MiB": 136.3
+    }
+   },
+   "entry_KiB_p50_p90_p99_max": [
+    3.2,
+    46.5,
+    585.2,
+    4616.0
+   ],
+   "largest_10_MiB": 34.6
+  },
+  "electron_partitions_GiB": 1.5,
+  "electron_partitions_last_modified": "2026-10-21"
+ },
+ "preferred_cache_size": [
+  {
+   "free_GiB": 1,
+   "http_MiB": 205,
+   "js_code_MiB": 102
+  },
+  {
+   "free_GiB": 2,
+   "http_MiB": 410,
+   "js_code_MiB": 200
+  },
+  {
+   "free_GiB": 4,
+   "http_MiB": 800,
+   "js_code_MiB": 200
+  },
+  {
+   "free_GiB": 6.19,
+   "http_MiB": 800,
+   "js_code_MiB": 200
+  },
+  {
+   "free_GiB": 8,
+   "http_MiB": 800,
+   "js_code_MiB": 200
+  },
+  {
+   "free_GiB": 16,
+   "http_MiB": 800,
+   "js_code_MiB": 200
+  },
+  {
+   "free_GiB": 20,
+   "http_MiB": 819,
+   "js_code_MiB": 205
+  },
+  {
+   "free_GiB": 32,
+   "http_MiB": 1280,
+   "js_code_MiB": 320
+  },
+  {
+   "free_GiB": 100,
+   "http_MiB": 1280,
+   "js_code_MiB": 320
+  }
+ ],
+ "replay": {
+  "real": [
+   {
+    "limit": "8",
+    "pass_": 1,
+    "requests": 8058,
+    "disk_hits": 4518,
+    "hit_pct": 56.2,
+    "network_MiB": 44.5,
+    "hit_MiB": 311.9,
+    "byte_hit_pct": 87.5,
+    "load_s": 103.5,
+    "timeouts": 1,
+    "final_http_cache_MiB": 7.3,
+    "final_code_cache_MiB": 6.6
+   },
+   {
+    "limit": "8",
+    "pass_": 2,
+    "requests": 7850,
+    "disk_hits": 4499,
+    "hit_pct": 57.4,
+    "network_MiB": 44.2,
+    "hit_MiB": 296.2,
+    "byte_hit_pct": 87.0,
+    "load_s": 92.2,
+    "timeouts": 1,
+    "final_http_cache_MiB": 7.3,
+    "final_code_cache_MiB": 6.6
+   },
+   {
+    "limit": "16",
+    "pass_": 1,
+    "requests": 8079,
+    "disk_hits": 4959,
+    "hit_pct": 61.5,
+    "network_MiB": 35.4,
+    "hit_MiB": 434.8,
+    "byte_hit_pct": 92.5,
+    "load_s": 99.8,
+    "timeouts": 1,
+    "final_http_cache_MiB": 14.4,
+    "final_code_cache_MiB": 13.9
+   },
+   {
+    "limit": "16",
+    "pass_": 2,
+    "requests": 7890,
+    "disk_hits": 6013,
+    "hit_pct": 76.3,
+    "network_MiB": 33.3,
+    "hit_MiB": 412.6,
+    "byte_hit_pct": 92.5,
+    "load_s": 85.6,
+    "timeouts": 1,
+    "final_http_cache_MiB": 14.4,
+    "final_code_cache_MiB": 13.9
+   },
+   {
+    "limit": "32",
+    "pass_": 1,
+    "requests": 8158,
+    "disk_hits": 4985,
+    "hit_pct": 61.2,
+    "network_MiB": 31.7,
+    "hit_MiB": 456.2,
+    "byte_hit_pct": 93.5,
+    "load_s": 98.8,
+    "timeouts": 1,
+    "final_http_cache_MiB": 29.2,
+    "final_code_cache_MiB": 28.7
+   },
+   {
+    "limit": "32",
+    "pass_": 2,
+    "requests": 7889,
+    "disk_hits": 6578,
+    "hit_pct": 83.5,
+    "network_MiB": 15.4,
+    "hit_MiB": 518.1,
+    "byte_hit_pct": 97.1,
+    "load_s": 85.7,
+    "timeouts": 1,
+    "final_http_cache_MiB": 29.2,
+    "final_code_cache_MiB": 28.7
+   },
+   {
+    "limit": "64",
+    "pass_": 1,
+    "requests": 7986,
+    "disk_hits": 4936,
+    "hit_pct": 61.9,
+    "network_MiB": 31.4,
+    "hit_MiB": 436.9,
+    "byte_hit_pct": 93.3,
+    "load_s": 94.8,
+    "timeouts": 1,
+    "final_http_cache_MiB": 31.6,
+    "final_code_cache_MiB": 35.7
+   },
+   {
+    "limit": "64",
+    "pass_": 2,
+    "requests": 7904,
+    "disk_hits": 6599,
+    "hit_pct": 83.6,
+    "network_MiB": 10.6,
+    "hit_MiB": 546.8,
+    "byte_hit_pct": 98.1,
+    "load_s": 86.3,
+    "timeouts": 1,
+    "final_http_cache_MiB": 31.6,
+    "final_code_cache_MiB": 35.7
+   },
+   {
+    "limit": "128",
+    "pass_": 1,
+    "requests": 8093,
+    "disk_hits": 4969,
+    "hit_pct": 61.5,
+    "network_MiB": 31.5,
+    "hit_MiB": 447.4,
+    "byte_hit_pct": 93.4,
+    "load_s": 92.3,
+    "timeouts": 1,
+    "final_http_cache_MiB": 31.4,
+    "final_code_cache_MiB": 36.0
+   },
+   {
+    "limit": "128",
+    "pass_": 2,
+    "requests": 7874,
+    "disk_hits": 6600,
+    "hit_pct": 83.9,
+    "network_MiB": 10.3,
+    "hit_MiB": 545.6,
+    "byte_hit_pct": 98.1,
+    "load_s": 85.6,
+    "timeouts": 1,
+    "final_http_cache_MiB": 31.4,
+    "final_code_cache_MiB": 36.0
+   },
+   {
+    "limit": "256",
+    "pass_": 1,
+    "requests": 8004,
+    "disk_hits": 4954,
+    "hit_pct": 62.0,
+    "network_MiB": 31.9,
+    "hit_MiB": 440.2,
+    "byte_hit_pct": 93.2,
+    "load_s": 88.1,
+    "timeouts": 1,
+    "final_http_cache_MiB": 31.5,
+    "final_code_cache_MiB": 35.7
+   },
+   {
+    "limit": "256",
+    "pass_": 2,
+    "requests": 7930,
+    "disk_hits": 6636,
+    "hit_pct": 83.8,
+    "network_MiB": 11.2,
+    "hit_MiB": 553.3,
+    "byte_hit_pct": 98.0,
+    "load_s": 86.1,
+    "timeouts": 1,
+    "final_http_cache_MiB": 31.5,
+    "final_code_cache_MiB": 35.7
+   },
+   {
+    "limit": "512",
+    "pass_": 1,
+    "requests": 7990,
+    "disk_hits": 4968,
+    "hit_pct": 62.3,
+    "network_MiB": 31.5,
+    "hit_MiB": 439.4,
+    "byte_hit_pct": 93.3,
+    "load_s": 86.0,
+    "timeouts": 1,
+    "final_http_cache_MiB": 30.8,
+    "final_code_cache_MiB": 35.9
+   },
+   {
+    "limit": "512",
+    "pass_": 2,
+    "requests": 7993,
+    "disk_hits": 6677,
+    "hit_pct": 83.7,
+    "network_MiB": 11.0,
+    "hit_MiB": 561.0,
+    "byte_hit_pct": 98.1,
+    "load_s": 86.3,
+    "timeouts": 1,
+    "final_http_cache_MiB": 30.8,
+    "final_code_cache_MiB": 35.9
+   },
+   {
+    "limit": "default",
+    "pass_": 1,
+    "requests": 9740,
+    "disk_hits": 5477,
+    "hit_pct": 56.3,
+    "network_MiB": 150.2,
+    "hit_MiB": 457.0,
+    "byte_hit_pct": 75.3,
+    "load_s": 70.1,
+    "timeouts": 0,
+    "final_http_cache_MiB": 37.8,
+    "final_code_cache_MiB": 43.8
+   },
+   {
+    "limit": "default",
+    "pass_": 2,
+    "requests": 9804,
+    "disk_hits": 7782,
+    "hit_pct": 79.5,
+    "network_MiB": 397.6,
+    "hit_MiB": 588.9,
+    "byte_hit_pct": 59.7,
+    "load_s": 86.6,
+    "timeouts": 1,
+    "final_http_cache_MiB": 37.8,
+    "final_code_cache_MiB": 43.8
+   }
+  ],
+  "zipf": [
+   {
+    "limit": "8",
+    "pass_": 1,
+    "requests": 35299,
+    "disk_hits": 1631,
+    "hit_pct": 4.6,
+    "network_MiB": 560.7,
+    "hit_MiB": 144.0,
+    "byte_hit_pct": 20.4,
+    "load_s": 272.9,
+    "timeouts": 0,
+    "final_http_cache_MiB": 7.2,
+    "final_code_cache_MiB": 7.1
+   },
+   {
+    "limit": "16",
+    "pass_": 1,
+    "requests": 35197,
+    "disk_hits": 9350,
+    "hit_pct": 26.7,
+    "network_MiB": 532.1,
+    "hit_MiB": 226.5,
+    "byte_hit_pct": 29.9,
+    "load_s": 267.2,
+    "timeouts": 0,
+    "final_http_cache_MiB": 14.0,
+    "final_code_cache_MiB": 14.4
+   },
+   {
+    "limit": "32",
+    "pass_": 1,
+    "requests": 35386,
+    "disk_hits": 15231,
+    "hit_pct": 43.2,
+    "network_MiB": 476.9,
+    "hit_MiB": 424.2,
+    "byte_hit_pct": 47.1,
+    "load_s": 253.2,
+    "timeouts": 0,
+    "final_http_cache_MiB": 28.9,
+    "final_code_cache_MiB": 29.1
+   },
+   {
+    "limit": "64",
+    "pass_": 1,
+    "requests": 35371,
+    "disk_hits": 19819,
+    "hit_pct": 56.2,
+    "network_MiB": 353.4,
+    "hit_MiB": 900.1,
+    "byte_hit_pct": 71.8,
+    "load_s": 259.3,
+    "timeouts": 0,
+    "final_http_cache_MiB": 58.1,
+    "final_code_cache_MiB": 58.2
+   },
+   {
+    "limit": "128",
+    "pass_": 1,
+    "requests": 36603,
+    "disk_hits": 21514,
+    "hit_pct": 59.0,
+    "network_MiB": 239.7,
+    "hit_MiB": 1280.8,
+    "byte_hit_pct": 84.2,
+    "load_s": 274.7,
+    "timeouts": 0,
+    "final_http_cache_MiB": 113.3,
+    "final_code_cache_MiB": 118.1
+   },
+   {
+    "limit": "256",
+    "pass_": 1,
+    "requests": 35348,
+    "disk_hits": 21515,
+    "hit_pct": 61.1,
+    "network_MiB": 176.6,
+    "hit_MiB": 1382.5,
+    "byte_hit_pct": 88.7,
+    "load_s": 284.8,
+    "timeouts": 0,
+    "final_http_cache_MiB": 146.3,
+    "final_code_cache_MiB": 162.9
+   },
+   {
+    "limit": "512",
+    "pass_": 1,
+    "requests": 36763,
+    "disk_hits": 21829,
+    "hit_pct": 59.6,
+    "network_MiB": 193.8,
+    "hit_MiB": 1384.5,
+    "byte_hit_pct": 87.7,
+    "load_s": 290.4,
+    "timeouts": 0,
+    "final_http_cache_MiB": 169.3,
+    "final_code_cache_MiB": 155.9
+   },
+   {
+    "limit": "default",
+    "pass_": 1,
+    "requests": 40537,
+    "disk_hits": 24449,
+    "hit_pct": 60.6,
+    "network_MiB": 263.4,
+    "hit_MiB": 1462.2,
+    "byte_hit_pct": 84.7,
+    "load_s": 234.9,
+    "timeouts": 0,
+    "final_http_cache_MiB": 253.7,
+    "final_code_cache_MiB": 181.0
+   }
+  ]
+ },
+ "replay_workloads": {
+  "real": {
+   "visits": 107,
+   "distinct_urls": 57,
+   "hosts": 12,
+   "passes": 2,
+   "source": "owner History, chain-end http(s) visits 2026-10-29..11-06, LAN/localhost/tailnet removed"
+  },
+  "zipf": {
+   "visits": 300,
+   "distinct_sites": 38,
+   "catalogue": 40,
+   "passes": 1,
+   "weights": "1/rank, seed 7",
+   "sites": [
+    "https://en.wikipedia.org/wiki/Main_Page",
+    "https://www.bbc.com/news",
+    "https://www.theguardian.com/international",
+    "https://elpais.com/",
+    "https://www.rtve.es/",
+    "https://developer.mozilla.org/en-US/",
+    "https://stackoverflow.com/questions",
+    "https://news.ycombinator.com/",
+    "https://www.reddit.com/r/programming/",
+    "https://www.amazon.es/",
+    "https://www.youtube.com/",
+    "https://www.twitch.tv/",
+    "https://github.com/trending",
+    "https://docs.python.org/3/",
+    "https://www.nytimes.com/",
+    "https://www.lemonde.fr/",
+    "https://www.imdb.com/",
+    "https://www.booking.com/",
+    "https://www.marca.com/",
+    "https://www.xataka.com/",
+    "https://www.elmundo.es/",
+    "https://www.20minutos.es/",
+    "https://www.idealista.com/",
+    "https://es.wallapop.com/",
+    "https://www.zara.com/es/",
+    "https://www.ikea.com/es/es/",
+    "https://www.apple.com/es/",
+    "https://www.microsoft.com/es-es",
+    "https://open.spotify.com/",
+    "https://www.cnn.com/",
+    "https://www.reuters.com/",
+    "https://arstechnica.com/",
+    "https://www.theverge.com/",
+    "https://medium.com/",
+    "https://www.pccomponentes.com/",
+    "https://www.aemet.es/es/portada",
+    "https://www.npmjs.com/",
+    "https://www.rust-lang.org/",
+    "https://www.eldiario.es/",
+    "https://www.lavanguardia.com/"
+   ]
+  }
+ },
+ "microbenchmarks": {
+  "favicon_miss_16px": {
+   "n": 250,
+   "p50_us": 273.0,
+   "p90_us": 399.0,
+   "p99_us": 851.0,
+   "mean_us": 303.8
+  },
+  "favicon_hit_16px": {
+   "n": 250,
+   "p50_us": 1.0,
+   "p90_us": 2.0,
+   "p99_us": 2.0,
+   "mean_us": 1.4
+  },
+  "favicon_absent_miss_16px": {
+   "n": 250,
+   "p50_us": 82.0,
+   "p90_us": 106.0,
+   "p99_us": 512.0,
+   "mean_us": 95.6
+  },
+  "favicon_miss_32px": {
+   "n": 250,
+   "p50_us": 144.0,
+   "p90_us": 165.0,
+   "p99_us": 417.0,
+   "mean_us": 155.4
+  },
+  "favicon_hit_32px": {
+   "n": 250,
+   "p50_us": 1.0,
+   "p90_us": 1.0,
+   "p99_us": 2.0,
+   "mean_us": 1.0
+  },
+  "favicon_absent_miss_32px": {
+   "n": 250,
+   "p50_us": 77.0,
+   "p90_us": 88.0,
+   "p99_us": 151.0,
+   "mean_us": 83.0
+  },
+  "favicon_miss_64px": {
+   "n": 250,
+   "p50_us": 333.0,
+   "p90_us": 399.0,
+   "p99_us": 545.0,
+   "mean_us": 348.8
+  },
+  "favicon_hit_64px": {
+   "n": 250,
+   "p50_us": 1.0,
+   "p90_us": 2.0,
+   "p99_us": 2.0,
+   "mean_us": 1.2
+  },
+  "favicon_absent_miss_64px": {
+   "n": 250,
+   "p50_us": 81.0,
+   "p90_us": 89.0,
+   "p99_us": 109.0,
+   "mean_us": 81.3
+  },
+  "picker_open_icons_cold": {
+   "n": 6,
+   "p50_us": 87468.0,
+   "p90_us": 275301.0,
+   "p99_us": 275301.0,
+   "mean_us": 145968.7
+  },
+  "picker_open_icons_warm": {
+   "n": 6,
+   "p50_us": 84745.0,
+   "p90_us": 255577.0,
+   "p99_us": 255577.0,
+   "mean_us": 116883.5
+  },
+  "picker_keystroke_icons_cold": {
+   "n": 6,
+   "p50_us": 77884.0,
+   "p90_us": 94604.0,
+   "p99_us": 94604.0,
+   "mean_us": 70843.7
+  },
+  "picker_keystroke_icons_warm": {
+   "n": 6,
+   "p50_us": 54493.0,
+   "p90_us": 120076.0,
+   "p99_us": 120076.0,
+   "mean_us": 68321.7
+  },
+  "workspace_read_cached_1": {
+   "n": 20,
+   "p50_us": 0.8,
+   "p90_us": 0.8,
+   "p99_us": 0.8,
+   "mean_us": 0.8
+  },
+  "workspace_read_uncached_1": {
+   "n": 20,
+   "p50_us": 8.9,
+   "p90_us": 8.9,
+   "p99_us": 8.9,
+   "mean_us": 8.9
+  },
+  "workspace_construct_only_1": {
+   "n": 20,
+   "p50_us": 4.8,
+   "p90_us": 4.8,
+   "p99_us": 4.8,
+   "mean_us": 4.8
+  },
+  "workspace_read_cached_5": {
+   "n": 20,
+   "p50_us": 1.2,
+   "p90_us": 1.2,
+   "p99_us": 1.2,
+   "mean_us": 1.2
+  },
+  "workspace_read_uncached_5": {
+   "n": 20,
+   "p50_us": 15.8,
+   "p90_us": 15.8,
+   "p99_us": 15.8,
+   "mean_us": 15.8
+  },
+  "workspace_construct_only_5": {
+   "n": 20,
+   "p50_us": 4.8,
+   "p90_us": 4.8,
+   "p99_us": 4.8,
+   "mean_us": 4.8
+  },
+  "workspace_read_cached_20": {
+   "n": 20,
+   "p50_us": 2.6,
+   "p90_us": 2.6,
+   "p99_us": 2.7,
+   "mean_us": 2.6
+  },
+  "workspace_read_uncached_20": {
+   "n": 20,
+   "p50_us": 40.7,
+   "p90_us": 40.7,
+   "p99_us": 40.8,
+   "mean_us": 40.7
+  },
+  "workspace_construct_only_20": {
+   "n": 20,
+   "p50_us": 4.8,
+   "p90_us": 4.8,
+   "p99_us": 4.8,
+   "mean_us": 4.8
+  },
+  "workspace_read_cached_50": {
+   "n": 20,
+   "p50_us": 5.5,
+   "p90_us": 5.5,
+   "p99_us": 5.5,
+   "mean_us": 5.5
+  },
+  "workspace_read_uncached_50": {
+   "n": 20,
+   "p50_us": 108.0,
+   "p90_us": 108.0,
+   "p99_us": 108.0,
+   "mean_us": 107.8
+  },
+  "workspace_construct_only_50": {
+   "n": 20,
+   "p50_us": 4.8,
+   "p90_us": 4.8,
+   "p99_us": 4.8,
+   "mean_us": 4.8
+  },
+  "favicon_entry_pixels_bytes_16px": 1024,
+  "favicon_entry_pixels_bytes_32px": 4096,
+  "favicon_entry_pixels_bytes_64px": 16384,
+  "picker_built_rows": 34,
+  "picker_bookmarks": 1000
+ },
+ "traces": [
+  {
+   "fly_events": {
+    "Fly.Workspaces.Validate": {
+     "count": 32,
+     "total_ms": 0.169,
+     "max_ms": 0.011
+    },
+    "Fly.UserContent.Generate": {
+     "count": 2,
+     "total_ms": 838.754,
+     "max_ms": 838.566
+    },
+    "Fly.PrepareProfile": {
+     "count": 1,
+     "total_ms": 0.042,
+     "max_ms": 0.042
+    },
+    "Fly.SidebarArtwork.ReadAndDecode": {
+     "count": 1,
+     "total_ms": 1.495,
+     "max_ms": 1.495
+    },
+    "Fly.Sidebar.Refresh": {
+     "count": 112,
+     "total_ms": 15.44,
+     "max_ms": 1.082
+    },
+    "Fly.FirstWindowTasks": {
+     "count": 1,
+     "total_ms": 0.209,
+     "max_ms": 0.209
+    },
+    "Fly.NewTabResources.ReadBundle": {
+     "count": 1,
+     "total_ms": 86.133,
+     "max_ms": 86.133
+    }
+   },
+   "fly_tasks": {
+    "ui/fly_extensions.cc:FlyExtensions": {
+     "count": 2,
+     "total_ms": 0.031,
+     "max_ms": 0.019
+    },
+    "ui/user_content.cc:Regenerate": {
+     "count": 4,
+     "total_ms": 839.602,
+     "max_ms": 838.588
+    },
+    "ui/fly_window_controller.cc:Read": {
+     "count": 2,
+     "total_ms": 1.513,
+     "max_ms": 1.503
+    },
+    "ui/tab_sidebar.cc:PostRefresh": {
+     "count": 112,
+     "total_ms": 15.666,
+     "max_ms": 1.085
+    },
+    "ui/fly_window_controller.cc:ScheduleWorkspaceRefresh": {
+     "count": 1,
+     "total_ms": 0.274,
+     "max_ms": 0.274
+    },
+    "ui/fly_window_controller.cc:ScheduleExtensionRefresh": {
+     "count": 59,
+     "total_ms": 0.318,
+     "max_ms": 0.008
+    },
+    "ui/status_bar.cc:OnZoomChanged": {
+     "count": 4,
+     "total_ms": 0.532,
+     "max_ms": 0.161
+    },
+    "ui/fly_actions.cc:CheckForUpdates": {
+     "count": 2,
+     "total_ms": 2.568,
+     "max_ms": 2.516
+    },
+    "ui/fly_actions.cc:ReadDesktopIntegration": {
+     "count": 2,
+     "total_ms": 22.826,
+     "max_ms": 22.814
+    },
+    "ui/new_tab_ui.cc:Warm": {
+     "count": 2,
+     "total_ms": 86.647,
+     "max_ms": 86.145
+    },
+    "ui/user_content.cc:OnChange": {
+     "count": 1,
+     "total_ms": 0.012,
+     "max_ms": 0.012
+    },
+    "ui/user_content.cc:operator()": {
+     "count": 1,
+     "total_ms": 0.009,
+     "max_ms": 0.009
+    },
+    "ui/new_tab_ui.cc:Sync": {
+     "count": 3,
+     "total_ms": 0.063,
+     "max_ms": 0.038
+    },
+    "ui/fly_window_controller.cc:UpdateClock": {
+     "count": 1,
+     "total_ms": 0.317,
+     "max_ms": 0.317
+    },
+    "ui/fly_app.cc:UpdateSuspensionPolicy": {
+     "count": 2,
+     "total_ms": 0.133,
+     "max_ms": 0.072
+    },
+    "ui/new_tab_ui.cc:Tick": {
+     "count": 7,
+     "total_ms": 0.191,
+     "max_ms": 0.038
+    }
+   }
+  },
+  {
+   "fly_events": {
+    "Fly.Workspaces.Validate": {
+     "count": 32,
+     "total_ms": 0.189,
+     "max_ms": 0.019
+    },
+    "Fly.UserContent.Generate": {
+     "count": 2,
+     "total_ms": 961.857,
+     "max_ms": 961.636
+    },
+    "Fly.PrepareProfile": {
+     "count": 1,
+     "total_ms": 0.041,
+     "max_ms": 0.041
+    },
+    "Fly.SidebarArtwork.ReadAndDecode": {
+     "count": 1,
+     "total_ms": 1.217,
+     "max_ms": 1.217
+    },
+    "Fly.Sidebar.Refresh": {
+     "count": 112,
+     "total_ms": 15.039,
+     "max_ms": 0.981
+    },
+    "Fly.FirstWindowTasks": {
+     "count": 1,
+     "total_ms": 0.148,
+     "max_ms": 0.148
+    },
+    "Fly.NewTabResources.ReadBundle": {
+     "count": 1,
+     "total_ms": 6.012,
+     "max_ms": 6.012
+    }
+   },
+   "fly_tasks": {
+    "ui/fly_extensions.cc:FlyExtensions": {
+     "count": 2,
+     "total_ms": 0.037,
+     "max_ms": 0.021
+    },
+    "ui/user_content.cc:Regenerate": {
+     "count": 4,
+     "total_ms": 962.536,
+     "max_ms": 961.648
+    },
+    "ui/fly_window_controller.cc:Read": {
+     "count": 2,
+     "total_ms": 1.24,
+     "max_ms": 1.225
+    },
+    "ui/tab_sidebar.cc:PostRefresh": {
+     "count": 112,
+     "total_ms": 15.273,
+     "max_ms": 0.983
+    },
+    "ui/fly_window_controller.cc:ScheduleWorkspaceRefresh": {
+     "count": 1,
+     "total_ms": 0.309,
+     "max_ms": 0.309
+    },
+    "ui/fly_window_controller.cc:ScheduleExtensionRefresh": {
+     "count": 59,
+     "total_ms": 0.334,
+     "max_ms": 0.013
+    },
+    "ui/status_bar.cc:OnZoomChanged": {
+     "count": 4,
+     "total_ms": 0.486,
+     "max_ms": 0.145
+    },
+    "ui/fly_actions.cc:CheckForUpdates": {
+     "count": 2,
+     "total_ms": 2.163,
+     "max_ms": 2.13
+    },
+    "ui/fly_actions.cc:ReadDesktopIntegration": {
+     "count": 2,
+     "total_ms": 23.638,
+     "max_ms": 23.628
+    },
+    "ui/user_content.cc:OnChange": {
+     "count": 1,
+     "total_ms": 0.034,
+     "max_ms": 0.034
+    },
+    "ui/user_content.cc:operator()": {
+     "count": 1,
+     "total_ms": 0.047,
+     "max_ms": 0.047
+    },
+    "ui/new_tab_ui.cc:Warm": {
+     "count": 2,
+     "total_ms": 6.465,
+     "max_ms": 6.022
+    },
+    "ui/new_tab_ui.cc:Sync": {
+     "count": 3,
+     "total_ms": 0.058,
+     "max_ms": 0.037
+    },
+    "ui/fly_app.cc:UpdateSuspensionPolicy": {
+     "count": 2,
+     "total_ms": 0.097,
+     "max_ms": 0.058
+    },
+    "ui/new_tab_ui.cc:Tick": {
+     "count": 7,
+     "total_ms": 0.14,
+     "max_ms": 0.036
+    },
+    "ui/fly_window_controller.cc:UpdateClock": {
+     "count": 1,
+     "total_ms": 0.322,
+     "max_ms": 0.322
+    }
+   }
+  }
+ ],
+ "static_caches": {
+  "new_tab_raw_bytes": 494089,
+  "new_tab_decoded_bitmaps_bytes": 7526400,
+  "new_tab_bitmap_px": "2 x 1680x560 RGBA",
+  "sidebar_artwork_decoded_bytes": 968704,
+  "reader_script_bytes": 113329,
+  "reader_script_utf16_bytes": 226658
+ }
+}
