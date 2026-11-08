@@ -150,6 +150,8 @@ test("fly_unittests") {
     "//components/spellcheck/common",
     "//testing/gtest",
   ]
+  sources += fly_cache_test_sources
+  deps += fly_cache_test_deps
 }
 
 # Same upstream in-process browser and out-of-process test launcher, scoped to

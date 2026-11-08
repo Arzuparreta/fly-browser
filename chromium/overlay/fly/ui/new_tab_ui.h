@@ -51,6 +51,8 @@ class NewTabArtwork : public content::WebContentsObserver,
   bool timer_running_for_testing() const { return timer_.IsRunning(); }
   size_t ticks_for_testing() const { return ticks_; }
   gfx::Rect bounds_for_testing() const;
+  std::optional<bool> painted_dark_for_testing() const;
+  size_t paints_for_testing() const;
 
  private:
   friend class content::WebContentsUserData<NewTabArtwork>;
@@ -91,6 +93,16 @@ class NewTabArtwork : public content::WebContentsObserver,
   bool reduced_motion_ = false;
   WEB_CONTENTS_USER_DATA_KEY_DECL();
 };
+
+// Test observation and a completion gate for deterministic theme-decode races.
+struct NewTabImageCacheState {
+  std::optional<bool> dark;
+  size_t bytes;
+  size_t decodes;
+};
+NewTabImageCacheState NewTabImageCacheStateForTesting();
+void SetNewTabImageDecodeGateForTesting(
+    base::RepeatingCallback<void(base::OnceClosure)> gate);
 
 // One demand-driven history snapshot for all regular new tabs. Private pages
 // never subscribe or receive it. Invalidation clears stale/deleted entries even

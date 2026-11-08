@@ -2647,6 +2647,75 @@ IN_PROC_BROWSER_TEST_F(FlyWorkspaceBrowserTest,
 }
 
 IN_PROC_BROWSER_TEST_F(FlyWorkspaceBrowserTest,
+                       NewTabArtworkKeepsOneThemeAndRejectsLateDecodes) {
+  const bool reduced = gfx::Animation::PrefersReducedMotion();
+  base::ScopedClosureRunner restore_motion(base::BindOnce(
+      &gfx::Animation::SetPrefersReducedMotionForTesting, reduced));
+  gfx::Animation::SetPrefersReducedMotionForTesting(true);
+  ASSERT_TRUE(ui_test_utils::NavigateToURL(browser(), GURL(kFlyNewTabURL)));
+  auto* first = Active(browser());
+  auto* second_browser = SecondWorkspace();
+  ASSERT_TRUE(second_browser);
+  auto* second = Active(second_browser);
+  ASSERT_TRUE(content::WaitForLoadStop(second));
+  browser()->GetWindow()->SetBounds(gfx::Rect(0, 0, 780, 1000));
+  second_browser->GetWindow()->SetBounds(gfx::Rect(800, 0, 780, 1000));
+  const bool initial_dark = GetFlyColors().dark;
+  auto painted = [&](bool dark) {
+    for (auto* contents : {first, second}) {
+      auto* artwork = NewTabArtwork::FromWebContents(contents);
+      if (!artwork || !artwork->visible_for_testing() ||
+          artwork->painted_dark_for_testing() != dark)
+        return false;
+    }
+    return true;
+  };
+  ASSERT_TRUE(base::test::RunUntil([&] { return painted(initial_dark); }));
+  const auto initial = NewTabImageCacheStateForTesting();
+  EXPECT_EQ(1680u * 560u * 4u, initial.bytes);
+  EXPECT_EQ(1u, initial.decodes);  // Both windows share the initial decode.
+
+  std::vector<base::OnceClosure> ready;
+  SetNewTabImageDecodeGateForTesting(base::BindLambdaForTesting(
+      [&](base::OnceClosure publish) { ready.push_back(std::move(publish)); }));
+  base::ScopedClosureRunner restore_gate(
+      base::BindOnce([] { SetNewTabImageDecodeGateForTesting({}); }));
+  const auto first_paints =
+      NewTabArtwork::FromWebContents(first)->paints_for_testing();
+  ASSERT_TRUE(App().preferences().ToggleTheme());
+  ASSERT_TRUE(base::test::RunUntil([&] { return ready.size() == 1; }));
+  // The previous theme stays drawable while the worker completes. No blank
+  // frame is introduced even when there is no animation timer to repaint it.
+  EXPECT_EQ(initial.dark, NewTabImageCacheStateForTesting().dark);
+  EXPECT_EQ(initial.bytes, NewTabImageCacheStateForTesting().bytes);
+  ASSERT_TRUE(base::test::RunUntil([&] {
+    return NewTabArtwork::FromWebContents(first)->paints_for_testing() >
+           first_paints;
+  }));
+  EXPECT_TRUE(painted(initial_dark));
+  ASSERT_TRUE(App().preferences().ToggleTheme());
+  ASSERT_TRUE(base::test::RunUntil(
+      [&] { return GetFlyColors().dark == initial_dark; }));
+  std::move(ready.front()).Run();  // A late opposite-theme result is obsolete.
+  ready.clear();
+  EXPECT_EQ(initial.dark, NewTabImageCacheStateForTesting().dark);
+
+  ASSERT_TRUE(App().preferences().ToggleTheme());
+  ASSERT_TRUE(base::test::RunUntil([&] { return ready.size() == 1; }));
+  ASSERT_TRUE(App().preferences().ToggleTheme());
+  ASSERT_TRUE(App().preferences().ToggleTheme());
+  ASSERT_TRUE(base::test::RunUntil([&] { return ready.size() == 2; }));
+  std::move(ready.back()).Run();
+  ASSERT_TRUE(base::test::RunUntil([&] { return painted(!initial_dark); }));
+  std::move(ready.front()).Run();
+  EXPECT_EQ(!initial_dark, NewTabImageCacheStateForTesting().dark);
+  EXPECT_EQ(initial.bytes, NewTabImageCacheStateForTesting().bytes);
+  for (auto* contents : {first, second})
+    EXPECT_FALSE(
+        NewTabArtwork::FromWebContents(contents)->timer_running_for_testing());
+}
+
+IN_PROC_BROWSER_TEST_F(FlyWorkspaceBrowserTest,
                        QuietNewTabFollowsLiveThemeAndScale) {
   ASSERT_TRUE(ExecuteNativeCommand(browser(), "spawn-tab"));
   auto* contents = Active(browser());
