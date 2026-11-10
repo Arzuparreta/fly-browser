@@ -82,6 +82,7 @@ source_set("preferences") {
   deps = [
     ":pref_storage",
     "//components/url_formatter",
+    "//net",
   ]
   public_deps += [ "//url" ]
 }

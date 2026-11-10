@@ -24,6 +24,7 @@
 #include "content/public/browser/render_frame_host.h"
 
 #include <utility>
+#include "base/strings/string_util.h"
 #include "base/strings/utf_string_conversions.h"
 
 #include "chrome/app/chrome_command_ids.h"
@@ -252,6 +253,10 @@ constexpr std::pair<std::string_view, int> kNativeMappings[] = {
     {"reopen-closed-tab", IDC_RESTORE_TAB},
     {"move-tab-left", IDC_MOVE_TAB_PREVIOUS},
     {"move-tab-right", IDC_MOVE_TAB_NEXT},
+    {"first-tab", IDC_SELECT_TAB_0},
+    {"last-tab", IDC_SELECT_LAST_TAB},
+    {"find-next", IDC_FIND_NEXT},
+    {"find-previous", IDC_FIND_PREVIOUS},
     {"go-back", IDC_BACK},
     {"go-forward", IDC_FORWARD},
     {"reload-active-tab", IDC_RELOAD},
@@ -523,8 +528,12 @@ content::KeyboardEventProcessingResult RouteNativePageKey(
                     .editable = browser_ui_editable ||
                                 contents->IsFocusedElementEditable()});
   window.UpdateModeLabel();
-  if (key.kind == KeyResultKind::kPass)
+  if (key.kind == KeyResultKind::kPass) {
+    // Escape still reaches the page; it also ends a search left on screen.
+    if (ui::DomKey(event.dom_key) == ui::DomKey::ESCAPE)
+      window.ClearFindHighlights();
     return Result::NOT_HANDLED;
+  }
   window.ConsumePageKey(static_cast<ui::DomCode>(event.dom_code));
   if (key.kind == KeyResultKind::kExitInsert) {
     contents->ClearFocusedElement();
@@ -559,6 +568,25 @@ std::u16string NativePageModeLabel(BrowserWindowInterface* browser) {
        contents->GetRenderWidgetHostView()->HasFocus()))
     return u"INSERT";
   return u"NORMAL";
+}
+
+std::u16string NativePendingKeys(BrowserWindowInterface* browser) {
+  if (!browser || browser->IsDeleteScheduled())
+    return std::u16string();
+  auto* contents = browser->GetTabStripModel()->GetActiveWebContents();
+  auto* state =
+      contents ? PageKeyboardState::FromWebContents(contents) : nullptr;
+  if (!state)
+    return std::u16string();
+  // Strokes are stored in capitals with their modifiers ("G", "Shift+G");
+  // show a letter the way it was typed.
+  std::string stroke = state->router().pending();
+  if (stroke.size() == 1 && base::IsAsciiUpper(stroke[0]))
+    stroke = base::ToLowerASCII(stroke);
+  else if (stroke.size() == 7 && stroke.starts_with("Shift+") &&
+           base::IsAsciiUpper(stroke[6]))
+    stroke = stroke.substr(6);
+  return base::UTF8ToUTF16(stroke);
 }
 
 bool InvokeNativeCommand(BrowserWindowInterface* browser, std::string action) {
@@ -641,7 +669,15 @@ bool NativeCommandAvailable(BrowserWindowInterface* browser,
       return chrome::IsCommandEnabled(browser, command);
     }
   }
+  if (action.starts_with("workspace-"))
+    return true;
   constexpr std::string_view actions[] = {"enter-insert",
+                                          "alternate-tab",
+                                          "go-up",
+                                          "go-root",
+                                          "trigger-hints",
+                                          "trigger-hints-new-tab",
+                                          "focus-input",
                                           "toggle-passthrough",
                                           "toggle-tab-audio-mute",
                                           "yank-url",

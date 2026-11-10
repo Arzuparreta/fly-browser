@@ -37,6 +37,9 @@ bool ShouldRestoreNativePageFocus(content::WebContents* contents);
 
 std::string NativeEventStroke(const input::NativeWebKeyboardEvent& event);
 std::u16string NativePageModeLabel(BrowserWindowInterface* browser);
+// The keys typed so far of an unfinished NORMAL-mode sequence on the active
+// page, as typed ("g"); empty when there is none.
+std::u16string NativePendingKeys(BrowserWindowInterface* browser);
 
 bool InvokeNativeCommand(BrowserWindowInterface* browser, std::string action);
 bool NativeCommandAvailable(BrowserWindowInterface* browser,

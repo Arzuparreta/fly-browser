@@ -40,9 +40,11 @@ class SearchService {
   // Workspace switching and calculator evaluation belong to the address UI.
   // Invalid explicit URLs/protocols and unreadable search settings return null.
   // `search`, when given, tells whether the result is a search (engine, alias
-  // or bang) rather than an address.
+  // or bang) rather than an address; `engine` then receives what searches it:
+  // the alias's name, "DuckDuckGo bang" or the site of the default engine.
   std::optional<GURL> ResolveNavigation(std::string_view input,
-                                        bool* search = nullptr) const;
+                                        bool* search = nullptr,
+                                        std::string* engine = nullptr) const;
 
  private:
   const raw_ref<PrefService> local_state_;

@@ -23,6 +23,21 @@ inline constexpr std::string_view kKeptFeatures[] = {
     "PrepopulatedEnginesMigration",
     "ApplySearchEngineTypeMigration",
 };
+// Features Fly needs in a state other than Chromium's default.
+//
+// ForceWebRequestProxyForTest: Chromium routes a profile's requests through
+// the extensions' request proxy only once an extension that can block or
+// change requests is loaded, and loading the first one resets the profile's
+// loaders, which aborts every request in flight. Fly loads its bundled
+// uBlock Origin Lite after reading its manifest off the main thread, so that
+// reset used to land on the pages a start was already loading: on a new
+// profile, the address given on the command line never opened. With the
+// proxy in place from the start there is no reset. Despite its name the
+// feature only makes WebRequestAPI::MayHaveProxies() true; every profile
+// with the bundled blocker runs in that state anyway.
+inline constexpr std::string_view kEnabledFeatures[] = {
+    "ForceWebRequestProxyForTest",
+};
 // Privacy Sandbox APIs that the config turned off and Chromium enables by
 // default.
 inline constexpr std::string_view kDisabledFeatures[] = {
@@ -69,6 +84,9 @@ inline void ApplyFeatureDefaults(base::CommandLine* command_line) {
     command_line->AppendSwitchASCII(list, value);
   };
   for (std::string_view feature : kKeptFeatures) {
+    add(switches::kEnableFeatures, feature);
+  }
+  for (std::string_view feature : kEnabledFeatures) {
     add(switches::kEnableFeatures, feature);
   }
   for (std::string_view feature : kDisabledFeatures) {

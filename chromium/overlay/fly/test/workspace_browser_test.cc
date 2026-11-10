@@ -31,6 +31,7 @@
 #include "components/content_settings/core/browser/host_content_settings_map.h"
 #include "components/download/public/common/download_item.h"
 #include "components/favicon/core/favicon_service.h"
+#include "components/find_in_page/find_tab_helper.h"
 #include "components/history/core/browser/history_service.h"
 #include "components/history/core/common/pref_names.h"
 #include "components/history/core/test/history_service_test_util.h"
@@ -1369,8 +1370,10 @@ IN_PROC_BROWSER_TEST_F(FlySidebarBrowserTest,
   EXPECT_EQ(0, content::EvalJs(page, "scrollY"));
 }
 
+// Alt+S moves the keyboard into the tab list and back. A pinned sidebar stays
+// pinned: the shortcut changes focus, never the layout the user chose.
 IN_PROC_BROWSER_TEST_F(FlySidebarBrowserTest,
-                       FocusShortcutUnpinsAndRestoresEditablePage) {
+                       FocusShortcutKeepsThePinAndRestoresEditablePage) {
   ASSERT_TRUE(ui_test_utils::NavigateToURL(
       browser(), embedded_test_server()->GetURL("/title1.html")));
   auto* page = Active(browser());
@@ -1386,28 +1389,94 @@ IN_PROC_BROWSER_TEST_F(FlySidebarBrowserTest,
     keys.PressKey(key, modifiers);
     keys.ReleaseKey(key, modifiers);
   };
+  auto row_focused = [&] {
+    auto* row = window.tab_sidebar_for_testing()->row_for_testing(page);
+    return window.sidebar_expanded_for_testing() && row &&
+           row->children().front()->HasFocus();
+  };
+  // Unpinned: the list opens for the keyboard and closes when it leaves.
+  press(ui::VKEY_S, ui::EF_ALT_DOWN);
+  ASSERT_TRUE(base::test::RunUntil(row_focused));
+  EXPECT_EQ(true, App().preferences().ReadSidebarAutoCollapse());
+  press(ui::VKEY_S, ui::EF_ALT_DOWN);
+  ASSERT_TRUE(base::test::RunUntil([&] {
+    return !window.sidebar_expanded_for_testing() &&
+           content::EvalJs(page, "document.hasFocus()").ExtractBool();
+  }));
+  // Pinned: the same two presses leave it pinned and open.
   press(ui::VKEY_Z, ui::EF_CONTROL_DOWN | ui::EF_SHIFT_DOWN);
   ASSERT_TRUE(base::test::RunUntil([&] {
     return App().preferences().ReadSidebarAutoCollapse() == false &&
            window.sidebar_expanded_for_testing();
   }));
   press(ui::VKEY_S, ui::EF_ALT_DOWN);
-  ASSERT_TRUE(base::test::RunUntil([&] {
-    auto* row = window.tab_sidebar_for_testing()->row_for_testing(page);
-    return App().preferences().ReadSidebarAutoCollapse() == true &&
-           window.sidebar_expanded_for_testing() && row &&
-           row->children().front()->HasFocus();
-  }));
-  EXPECT_FALSE(window.sidebar_pin_for_testing()->selected());
+  ASSERT_TRUE(base::test::RunUntil(row_focused));
+  EXPECT_EQ(false, App().preferences().ReadSidebarAutoCollapse());
+  EXPECT_TRUE(window.sidebar_pin_for_testing()->selected());
   press(ui::VKEY_S, ui::EF_ALT_DOWN);
   ASSERT_TRUE(base::test::RunUntil([&] {
-    return !window.sidebar_expanded_for_testing() &&
-           content::EvalJs(page, "document.hasFocus()").ExtractBool();
+    return content::EvalJs(page, "document.hasFocus()").ExtractBool();
   }));
+  EXPECT_EQ(false, App().preferences().ReadSidebarAutoCollapse());
+  EXPECT_TRUE(window.sidebar_expanded_for_testing());
   press(ui::VKEY_J, ui::EF_NONE);
   ASSERT_TRUE(base::test::RunUntil([&] {
     return content::EvalJs(page, "document.querySelector('#edit').value")
                .ExtractString() == "j";
+  }));
+}
+
+// With the keyboard in the tab list, the keys that scroll a page move a
+// cursor over the rows; the active tab changes only on activation.
+IN_PROC_BROWSER_TEST_F(FlySidebarBrowserTest,
+                       TabListCursorMovesActivatesAndCloses) {
+  ASSERT_TRUE(ui_test_utils::NavigateToURL(
+      browser(), embedded_test_server()->GetURL("/title1.html")));
+  ASSERT_TRUE(AddTabAtIndex(1, embedded_test_server()->GetURL("/title2.html"),
+                            ui::PAGE_TRANSITION_LINK));
+  ASSERT_TRUE(AddTabAtIndex(2, embedded_test_server()->GetURL("/title3.html"),
+                            ui::PAGE_TRANSITION_LINK));
+  auto* model = browser()->GetTabStripModel();
+  auto* first = model->GetWebContentsAt(0);
+  auto* second = model->GetWebContentsAt(1);
+  auto* third = model->GetWebContentsAt(2);
+  ASSERT_EQ(2, model->active_index());
+  auto& window = Window();
+  auto* list = window.tab_sidebar_for_testing();
+  MoveToPage();
+  ui::test::EventGenerator keys(
+      window.widget()->GetNativeWindow()->GetRootWindow());
+  ASSERT_TRUE(InvokeNativeCommand(browser(), "focus-sidebar"));
+  ASSERT_TRUE(base::test::RunUntil(
+      [&] { return list->cursor_contents_for_testing() == third; }));
+  keys.PressAndReleaseKey(ui::VKEY_K, ui::EF_NONE);
+  ASSERT_TRUE(base::test::RunUntil(
+      [&] { return list->cursor_contents_for_testing() == second; }));
+  EXPECT_EQ(2, model->active_index());
+  keys.PressAndReleaseKey(ui::VKEY_HOME, ui::EF_NONE);
+  ASSERT_TRUE(base::test::RunUntil(
+      [&] { return list->cursor_contents_for_testing() == first; }));
+  keys.PressAndReleaseKey(ui::VKEY_END, ui::EF_NONE);
+  ASSERT_TRUE(base::test::RunUntil(
+      [&] { return list->cursor_contents_for_testing() == third; }));
+  keys.PressAndReleaseKey(ui::VKEY_UP, ui::EF_NONE);
+  ASSERT_TRUE(base::test::RunUntil(
+      [&] { return list->cursor_contents_for_testing() == second; }));
+  // x closes the row under the cursor, not the active tab.
+  keys.PressAndReleaseKey(ui::VKEY_X, ui::EF_NONE);
+  ASSERT_TRUE(base::test::RunUntil([&] { return model->count() == 2; }));
+  EXPECT_EQ(TabStripModel::kNoTab, model->GetIndexOfWebContents(second));
+  EXPECT_EQ(third, model->GetActiveWebContents());
+  ASSERT_TRUE(base::test::RunUntil(
+      [&] { return list->cursor_contents_for_testing() != nullptr; }));
+  keys.PressAndReleaseKey(ui::VKEY_HOME, ui::EF_NONE);
+  ASSERT_TRUE(base::test::RunUntil(
+      [&] { return list->cursor_contents_for_testing() == first; }));
+  // l opens the row and returns the keyboard to its page.
+  keys.PressAndReleaseKey(ui::VKEY_L, ui::EF_NONE);
+  ASSERT_TRUE(base::test::RunUntil([&] {
+    return model->GetActiveWebContents() == first &&
+           content::EvalJs(first, "document.hasFocus()").ExtractBool();
   }));
 }
 
@@ -5826,8 +5895,8 @@ IN_PROC_BROWSER_TEST_F(FlyWorkspaceBrowserTest, MenusAreAsTallAsTheirContents) {
   ASSERT_TRUE(panel);
   const gfx::Rect all = laid_out(panel);
   EXPECT_GT(contents_height(panel), all.height());
-  palette.search_for_testing()->SetText(u"New Blank Tab");
-  palette.ContentsChanged(palette.search_for_testing(), u"New Blank Tab");
+  palette.search_for_testing()->SetText(u"Reopen closed tab");
+  palette.ContentsChanged(palette.search_for_testing(), u"Reopen closed tab");
   const gfx::Rect found = laid_out(panel);
   EXPECT_EQ(all.y(), found.y());
   EXPECT_EQ(contents_height(panel), found.height());
@@ -5978,18 +6047,22 @@ IN_PROC_BROWSER_TEST_F(FlyWorkspaceBrowserTest,
   std::string pinned_action;
   for (const auto& entry : entries) {
     titles.push_back(entry.title);
-    if (entry.title.find("\xF0\x9F\x93\x8C") != std::string::npos)
+    if (entry.category.find("pinned") != std::string::npos)
       pinned_action = entry.action;
   }
   ASSERT_GE(titles.size(), 5u);
-  EXPECT_FALSE(titles[0].starts_with("- "));
+  // Workspaces carry the number that Ctrl+1 to Ctrl+9 use and say where
+  // they stand; tabs are indented under them with their site.
+  EXPECT_TRUE(titles[0].starts_with("1: ")) << titles[0];
+  EXPECT_EQ("This window", entries[0].category);
   // Pinned tabs come first in the strip.
-  EXPECT_EQ("- Title Of Awesomeness \xF0\x9F\x93\x8C", titles[1]);
-  EXPECT_TRUE(titles[2].starts_with("- ") &&
-              titles[2].find("title1.html") != std::string::npos)
+  EXPECT_EQ("Title Of Awesomeness", titles[1]);
+  EXPECT_EQ("127.0.0.1 \u00b7 pinned", entries[1].category);
+  EXPECT_TRUE(titles[2].find("title1.html") != std::string::npos)
       << titles[2];
-  // The other workspace is listed; this window's own one is marked active.
-  EXPECT_EQ("Second", titles[3]);
+  // The other workspace is listed with the tabs it has open.
+  EXPECT_EQ("2: Second", titles[3]);
+  EXPECT_EQ("1 tab", entries[3].category);
   EXPECT_EQ(entries[1].action, pinned_action);
   EXPECT_EQ(2u, entries[0].row_actions.size());
   EXPECT_EQ(1, entries[2].indent);
@@ -7440,7 +7513,7 @@ IN_PROC_BROWSER_TEST_F(FlyWorkspaceBrowserTest,
   ASSERT_TRUE(InvokeNativeCommand(browser(), "toggle-palette"));
   ASSERT_TRUE(base::test::RunUntil([&] { return palette.active(); }));
   EXPECT_TRUE(palette.count_for_testing().ends_with(u" commands"));
-  EXPECT_EQ(u"New Blank Tab", palette.inspector_title_for_testing());
+  EXPECT_EQ(u"New tab", palette.inspector_title_for_testing());
   // A row that opens under the resting pointer is not selected by it; once
   // the pointer moves, hovering selects.
   auto* row = palette.row_for_testing(3);
@@ -7450,11 +7523,11 @@ IN_PROC_BROWSER_TEST_F(FlyWorkspaceBrowserTest,
                          gfx::Point(), base::TimeTicks::Now(), ui::EF_NONE,
                          ui::EF_NONE);
   row->OnMouseEntered(resting);
-  EXPECT_EQ(u"New Blank Tab", palette.inspector_title_for_testing());
+  EXPECT_EQ(u"New tab", palette.inspector_title_for_testing());
   ui::test::EventGenerator pointer(
       window.widget()->GetNativeWindow()->GetRootWindow());
   pointer.MoveMouseTo(row_centre);
-  EXPECT_NE(u"New Blank Tab", palette.inspector_title_for_testing());
+  EXPECT_NE(u"New tab", palette.inspector_title_for_testing());
   // Hover and keyboard navigation must leave exactly one selected row.
   const auto assert_single_selection = [&] {
     int count = 0;
@@ -7474,7 +7547,7 @@ IN_PROC_BROWSER_TEST_F(FlyWorkspaceBrowserTest,
     ASSERT_TRUE(palette.HandleOverlayKey(down));
     assert_single_selection();
   }
-  palette.SetCategoryForTesting("Split View");
+  palette.SetCategoryForTesting("Split view");
   EXPECT_EQ(u"6 commands", palette.count_for_testing());
   palette.SetCategoryForTesting("All");
   palette.search_for_testing()->SetText(u"zz-no-command");
@@ -7511,12 +7584,12 @@ IN_PROC_BROWSER_TEST_F(FlyWorkspaceBrowserTest,
       window.widget()->GetNativeWindow()->GetRootWindow());
   keys.PressKey(ui::VKEY_P, ui::EF_CONTROL_DOWN);
   ASSERT_TRUE(base::test::RunUntil([&] { return window.palette().active(); }));
-  // The Command Centre lists New Blank Tab (not Duplicate Tab).
-  for (auto key : {ui::VKEY_N, ui::VKEY_E, ui::VKEY_W, ui::VKEY_SPACE,
-                   ui::VKEY_B, ui::VKEY_L, ui::VKEY_A, ui::VKEY_N, ui::VKEY_K})
+  // Only New tab says that the address bar is "ready".
+  for (auto key :
+       {ui::VKEY_R, ui::VKEY_E, ui::VKEY_A, ui::VKEY_D, ui::VKEY_Y})
     keys.PressKey(key, ui::EF_NONE);
   ASSERT_TRUE(base::test::RunUntil([&] {
-    return window.palette().search_for_testing()->GetText() == u"new blank" &&
+    return window.palette().search_for_testing()->GetText() == u"ready" &&
            window.palette().result_count_for_testing() == 1;
   }));
   EXPECT_EQ("", content::EvalJs(contents,
@@ -7710,16 +7783,16 @@ IN_PROC_BROWSER_TEST_F(FlyWorkspaceBrowserTest,
   status->DidChangeVisibleSecurityState();
   EXPECT_TRUE(status->security_for_testing()->GetTooltipText().starts_with(
       u"Page secure"));
+  // An empty page has no connection to describe.
   ASSERT_TRUE(ui_test_utils::NavigateToURL(browser(), GURL("about:blank")));
-  EXPECT_EQ(u"BLANK", status->security_for_testing()->GetText());
+  EXPECT_FALSE(status->security_for_testing()->GetVisible());
   ASSERT_TRUE(Window(browser()).RunCommand("toggle-private-mode"));
   ASSERT_TRUE(base::test::RunUntil([&] {
     auto* selected = LastActive();
     return selected && selected->GetProfile()->IsOffTheRecord();
   }));
   auto* private_status = Window(LastActive()).status_bar_for_testing();
-  EXPECT_EQ(u"PRIVATE PROFILE",
-            private_status->workspace_for_testing()->GetText());
+  EXPECT_EQ(u"PRIVATE", private_status->workspace_for_testing()->GetText());
   EXPECT_FALSE(
       private_status->security_for_testing()->GetTooltipText().starts_with(
           u"Page secure"));
@@ -8849,6 +8922,234 @@ IN_PROC_BROWSER_TEST_F(FlyWorkspaceBrowserTest,
   EXPECT_TRUE(
       content::test::PrerenderTestHelper::GetHostForUrl(*contents, *results)
           .is_null());
+}
+
+// Two-key sequences show the first key in the status bar while Fly waits for
+// the second, and the tab keys reach the first, last and previous tab.
+IN_PROC_BROWSER_TEST_F(FlyWorkspaceBrowserTest,
+                       TabSequencesShowPendingKeysAndReachTabs) {
+  ASSERT_TRUE(ui_test_utils::NavigateToURL(
+      browser(), embedded_test_server()->GetURL("/title1.html")));
+  ASSERT_TRUE(AddTabAtIndex(1, embedded_test_server()->GetURL("/title2.html"),
+                            ui::PAGE_TRANSITION_LINK));
+  ASSERT_TRUE(AddTabAtIndex(2, embedded_test_server()->GetURL("/title3.html"),
+                            ui::PAGE_TRANSITION_LINK));
+  auto* model = browser()->GetTabStripModel();
+  auto& window = Window();
+  auto* status = window.status_bar_for_testing();
+  Activate(browser());
+  Active(browser())->Focus();
+  ASSERT_EQ(2, model->active_index());
+  EXPECT_EQ(u"3/3", status->tabs_for_testing()->GetText());
+  ui::test::EventGenerator keys(
+      window.widget()->GetNativeWindow()->GetRootWindow());
+  keys.PressAndReleaseKey(ui::VKEY_G, ui::EF_NONE);
+  ASSERT_TRUE(base::test::RunUntil(
+      [&] { return !status->pending_keys_for_testing().empty(); }));
+  EXPECT_EQ(2, model->active_index());
+  keys.PressAndReleaseKey(ui::VKEY_0, ui::EF_NONE);
+  ASSERT_TRUE(
+      base::test::RunUntil([&] { return model->active_index() == 0; }));
+  EXPECT_TRUE(status->pending_keys_for_testing().empty());
+  EXPECT_EQ(u"1/3", status->tabs_for_testing()->GetText());
+  // g a returns to the tab that was active before, in both directions.
+  for (int expected : {2, 0}) {
+    SCOPED_TRACE(expected);
+    Active(browser())->Focus();
+    keys.PressAndReleaseKey(ui::VKEY_G, ui::EF_NONE);
+    keys.PressAndReleaseKey(ui::VKEY_A, ui::EF_NONE);
+    ASSERT_TRUE(base::test::RunUntil(
+        [&] { return model->active_index() == expected; }));
+  }
+  ASSERT_TRUE(ExecuteNativeCommand(browser(), "last-tab"));
+  EXPECT_EQ(2, model->active_index());
+  ASSERT_TRUE(ExecuteNativeCommand(browser(), "first-tab"));
+  EXPECT_EQ(0, model->active_index());
+  // Closing the remembered tab leaves nothing to return to.
+  model->CloseWebContentsAt(2, TabCloseTypes::CLOSE_NONE);
+  ASSERT_TRUE(InvokeNativeCommand(browser(), "alternate-tab"));
+  ASSERT_TRUE(base::test::RunUntil([&] {
+    return window.status_text_for_testing() == u"No earlier tab to go back to";
+  }));
+  EXPECT_EQ(0, model->active_index());
+}
+
+// n and N repeat the last search without opening the find bar, and report
+// the position in the status bar.
+IN_PROC_BROWSER_TEST_F(FlyWorkspaceBrowserTest,
+                       FindAgainRepeatsTheSearchFromThePage) {
+  ASSERT_TRUE(ui_test_utils::NavigateToURL(
+      browser(), embedded_test_server()->GetURL("/title1.html")));
+  auto* contents = Active(browser());
+  ASSERT_TRUE(content::ExecJs(
+      contents,
+      "document.body.innerHTML = '<p>alpha one</p><p>alpha two</p>"
+      "<p>alpha three</p>';"));
+  auto& window = Window();
+  Activate(browser());
+  contents->Focus();
+  ASSERT_TRUE(InvokeNativeCommand(browser(), "find-next"));
+  ASSERT_TRUE(base::test::RunUntil([&] {
+    return window.status_text_for_testing() ==
+           u"Nothing searched yet. Press / to find in the page";
+  }));
+  auto* find = find_in_page::FindTabHelper::FromWebContents(contents);
+  ASSERT_TRUE(find);
+  find->StartFinding(u"alpha", /*forward_direction=*/true,
+                     /*case_sensitive=*/false, /*find_match=*/true);
+  ASSERT_TRUE(base::test::RunUntil([&] {
+    return find->find_result().final_update() &&
+           find->find_result().number_of_matches() == 3 &&
+           find->find_result().active_match_ordinal() == 1;
+  }));
+  ui::test::EventGenerator keys(
+      window.widget()->GetNativeWindow()->GetRootWindow());
+  keys.PressAndReleaseKey(ui::VKEY_N, ui::EF_NONE);
+  ASSERT_TRUE(base::test::RunUntil(
+      [&] { return window.status_text_for_testing() == u"alpha  2/3"; }));
+  keys.PressAndReleaseKey(ui::VKEY_N, ui::EF_NONE);
+  ASSERT_TRUE(base::test::RunUntil(
+      [&] { return window.status_text_for_testing() == u"alpha  3/3"; }));
+  keys.PressAndReleaseKey(ui::VKEY_N, ui::EF_SHIFT_DOWN);
+  ASSERT_TRUE(base::test::RunUntil(
+      [&] { return window.status_text_for_testing() == u"alpha  2/3"; }));
+  EXPECT_FALSE(find->find_ui_active());
+  // Escape ends the search and removes its highlights.
+  keys.PressAndReleaseKey(ui::VKEY_ESCAPE, ui::EF_NONE);
+  ASSERT_TRUE(
+      base::test::RunUntil([&] { return find->find_text().empty(); }));
+}
+
+// g u removes the query, then one path level at a time; g U goes to the
+// site's root. The status bar shows the address of the page.
+IN_PROC_BROWSER_TEST_F(FlyWorkspaceBrowserTest,
+                       GoUpWalksTheAddressAndTheStatusBarShowsIt) {
+  const GURL start = embedded_test_server()->GetURL("/echo?fly=1");
+  ASSERT_TRUE(ui_test_utils::NavigateToURL(browser(), start));
+  auto* contents = Active(browser());
+  auto& window = Window();
+  auto* status = window.status_bar_for_testing();
+  ASSERT_TRUE(base::test::RunUntil([&] {
+    return status->address_for_testing() ==
+           base::UTF8ToUTF16(base::StrCat(
+               {start.host(), ":", start.port(), "/echo?fly=1"}));
+  }));
+  {
+    content::TestNavigationObserver observer(contents);
+    ASSERT_TRUE(InvokeNativeCommand(browser(), "go-up"));
+    observer.Wait();
+  }
+  EXPECT_EQ(embedded_test_server()->GetURL("/echo"),
+            contents->GetLastCommittedURL());
+  {
+    content::TestNavigationObserver observer(contents);
+    ASSERT_TRUE(InvokeNativeCommand(browser(), "go-root"));
+    observer.Wait();
+  }
+  EXPECT_EQ(embedded_test_server()->GetURL("/"),
+            contents->GetLastCommittedURL());
+  ASSERT_TRUE(InvokeNativeCommand(browser(), "go-up"));
+  ASSERT_TRUE(base::test::RunUntil([&] {
+    return window.status_text_for_testing() ==
+           u"Already at the top of the site";
+  }));
+}
+
+// Ctrl+1 to Ctrl+9 name workspaces by their position in the list.
+IN_PROC_BROWSER_TEST_F(FlyWorkspaceBrowserTest,
+                       WorkspaceNumbersFollowTheWorkspaceList) {
+  auto& window = Window();
+  const auto catalog = App().workspaces().Read();
+  ASSERT_TRUE(catalog);
+  ASSERT_LT(catalog->items.size(), 9u);
+  EXPECT_TRUE(NativeCommandAvailable(browser(), "workspace-1"));
+  ASSERT_TRUE(InvokeNativeCommand(browser(), "workspace-9"));
+  ASSERT_TRUE(base::test::RunUntil([&] {
+    return window.status_text_for_testing() == u"There is no workspace 9";
+  }));
+  ASSERT_TRUE(InvokeNativeCommand(browser(), "workspace-1"));
+  base::RunLoop().RunUntilIdle();
+  EXPECT_EQ(browser(), LastActive());
+}
+
+// The address bar lists matching open tabs: choosing one goes to that tab
+// instead of loading its page again.
+IN_PROC_BROWSER_TEST_F(FlyWorkspaceBrowserTest,
+                       AddressBarSwitchesToAnOpenTab) {
+  ASSERT_TRUE(ui_test_utils::NavigateToURL(
+      browser(), embedded_test_server()->GetURL("/title2.html")));
+  ASSERT_TRUE(AddTabAtIndex(1, embedded_test_server()->GetURL("/title1.html"),
+                            ui::PAGE_TRANSITION_LINK));
+  auto* model = browser()->GetTabStripModel();
+  ASSERT_EQ(1, model->active_index());
+  auto& window = Window();
+  auto& address = window.address_picker();
+  ASSERT_TRUE(InvokeNativeCommand(browser(), "toggle-address"));
+  ASSERT_TRUE(base::test::RunUntil([&] { return address.active(); }));
+  address.search_for_testing()->SetText(u"title2");
+  address.ContentsChanged(address.search_for_testing(), u"title2");
+  // The text as typed, then the open tab.
+  ASSERT_EQ(2u, address.result_count_for_testing());
+  const ui::KeyEvent down(ui::EventType::kKeyPressed, ui::VKEY_DOWN,
+                          ui::EF_NONE);
+  ASSERT_TRUE(address.HandleOverlayKey(down));
+  EXPECT_TRUE(address.selected_action_for_testing().starts_with("tab"));
+  const ui::KeyEvent enter(ui::EventType::kKeyPressed, ui::VKEY_RETURN,
+                           ui::EF_NONE);
+  ASSERT_TRUE(address.HandleOverlayKey(enter));
+  ASSERT_TRUE(
+      base::test::RunUntil([&] { return model->active_index() == 0; }));
+  EXPECT_EQ(2, model->count());
+}
+
+// F labels links and opens the chosen one in a background tab; g i puts the
+// caret in the first text field.
+IN_PROC_BROWSER_TEST_F(FlyPageScrollBrowserTest,
+                       HintsOpenBackgroundTabsAndFocusTheFirstInput) {
+  ASSERT_TRUE(ui_test_utils::NavigateToURL(
+      browser(), embedded_test_server()->GetURL("/title1.html")));
+  auto* contents = Active(browser());
+  ASSERT_TRUE(content::ExecJs(contents, R"js(
+    document.body.innerHTML =
+        '<a href="/title2.html">Second page</a> ' +
+        '<button>Not a link</button> ' +
+        '<input id="edit" aria-label="Edit field">';
+  )js"));
+  auto& window = Window();
+  auto* model = browser()->GetTabStripModel();
+  Activate(browser());
+  contents->Focus();
+  ui::test::EventGenerator keys(
+      window.widget()->GetNativeWindow()->GetRootWindow());
+  keys.PressAndReleaseKey(ui::VKEY_F, ui::EF_SHIFT_DOWN);
+  ASSERT_TRUE(base::test::RunUntil([&] {
+    return window.hints().active() &&
+           !window.hints().code_for_testing(u"Second page").empty();
+  }));
+  EXPECT_EQ(HintController::Mode::kBackgroundTab, window.hints().mode());
+  for (char letter : window.hints().code_for_testing(u"Second page")) {
+    keys.PressAndReleaseKey(
+        static_cast<ui::KeyboardCode>(ui::VKEY_A + letter - 'a'), ui::EF_NONE);
+  }
+  ASSERT_TRUE(base::test::RunUntil([&] { return model->count() == 2; }));
+  EXPECT_EQ(0, model->active_index());
+  EXPECT_EQ(embedded_test_server()->GetURL("/title2.html"),
+            model->GetWebContentsAt(1)->GetVisibleURL());
+  ASSERT_TRUE(base::test::RunUntil([&] { return !window.hints().active(); }));
+
+  contents->Focus();
+  keys.PressAndReleaseKey(ui::VKEY_G, ui::EF_NONE);
+  keys.PressAndReleaseKey(ui::VKEY_I, ui::EF_NONE);
+  ASSERT_TRUE(base::test::RunUntil([&] {
+    return content::EvalJs(contents, "document.activeElement.id")
+               .ExtractString() == "edit";
+  }));
+  ASSERT_TRUE(base::test::RunUntil([&] { return !window.hints().active(); }));
+  keys.PressAndReleaseKey(ui::VKEY_J, ui::EF_NONE);
+  ASSERT_TRUE(base::test::RunUntil([&] {
+    return content::EvalJs(contents, "document.querySelector('#edit').value")
+               .ExtractString() == "j";
+  }));
 }
 
 }  // namespace

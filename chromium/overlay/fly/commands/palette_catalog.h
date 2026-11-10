@@ -18,10 +18,11 @@ struct PaletteEntry {
   std::string category;
   std::vector<std::string> shortcuts;
   std::vector<std::string> normal;
-  // Command Centre texts (commands.json).
+  // Command Centre: what the command does, in one line (commands.json), a
+  // longer text for entries built at run time (extension commands), and the
+  // extra words that find it.
   std::string desc;
   std::string details;
-  std::string tip;
   std::vector<std::string> keywords;
   // Nesting level of the row (the dashboard lists tabs under workspaces).
   int indent = 0;
@@ -37,8 +38,9 @@ std::vector<PaletteEntry> FilterPalette(
 // The Command Centre list: the entries of commands.json, with the current
 // bindings (the keyboard editor lists every action).
 std::vector<PaletteEntry> CommandCentreCatalog(const KeyboardConfig& config);
-// Command Centre search: the whole query, case-insensitive, in the
-// title, description, details, category, keywords or a binding.
+// Command Centre search: every word of the query, case-insensitive, in the
+// title, a keyword, a binding, the description or the category. Matches in
+// the title come first.
 std::vector<PaletteEntry> FilterCommandCentre(
     const std::vector<PaletteEntry>& entries,
     std::u16string_view query);

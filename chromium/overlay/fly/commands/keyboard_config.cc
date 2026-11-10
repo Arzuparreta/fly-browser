@@ -369,6 +369,16 @@ KeyboardValidation ResolveKeyboardChanges(const base::DictValue& changes) {
       }
     }
   }
+  // A chosen tab modifier claims its nine chords like any explicit binding:
+  // a default added later (Ctrl+1 for the first workspace) gives way to it.
+  if (const auto* tabs = changes.FindString("tabs"); tabs && !tabs->empty()) {
+    const auto first = NormalizeStroke(*tabs + "+1");
+    if (first.ends_with("+1")) {
+      for (const auto& [chord, action] :
+           CompileBindings({}, first.substr(0, first.size() - 2)))
+        global_choices.insert(chord);
+    }
+  }
   // A newly introduced default tab modifier cannot steal an explicit choice,
   // including any stroke of a page-key sequence.
   if (!changes.contains("tabs")) {

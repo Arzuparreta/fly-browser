@@ -5,6 +5,7 @@
 
 #include <algorithm>
 #include <set>
+#include <utility>
 #include "base/check.h"
 #include "base/no_destructor.h"
 #include "base/strings/string_util.h"
@@ -47,11 +48,8 @@ std::vector<PaletteEntry> PaletteCatalog(const KeyboardConfig& config) {
                                                     : normal->second});
     auto& added = result.back();
     if (texts) {
-      for (auto [key, field] :
-           {std::pair{"desc", &added.desc}, std::pair{"details", &added.details},
-            std::pair{"tip", &added.tip}})
-        if (const auto* value = texts->FindString(key))
-          *field = *value;
+      if (const auto* desc = texts->FindString("desc"))
+        added.desc = *desc;
       if (const auto* keywords = texts->FindList("keywords"))
         for (const auto& keyword : *keywords)
           if (keyword.is_string())
@@ -101,31 +99,53 @@ std::vector<PaletteEntry> CommandCentreCatalog(const KeyboardConfig& config) {
 std::vector<PaletteEntry> FilterCommandCentre(
     const std::vector<PaletteEntry>& entries,
     std::u16string_view query) {
-  const auto search = Fold(std::string(base::TrimWhitespaceASCII(
-      base::UTF16ToUTF8(query), base::TRIM_ALL)));
-  if (search.empty())
+  const auto words =
+      base::SplitString(Fold(base::UTF16ToUTF8(query)), " \t\r\n",
+                        base::TRIM_WHITESPACE, base::SPLIT_WANT_NONEMPTY);
+  if (words.empty())
     return entries;
-  std::vector<PaletteEntry> result;
-  const auto has = [&](std::string_view text) {
-    return Fold(text).find(search) != std::string::npos;
-  };
-  for (const auto& entry : entries) {
-    bool matches = has(entry.title) || has(entry.desc) ||
-                   has(entry.details) || has(entry.category);
-    for (const auto& list : {&entry.keywords, &entry.shortcuts, &entry.normal})
+  // Every word of the search must be found. Where it is found ranks the
+  // command: at the start of its title, at the start of a word of the title,
+  // elsewhere in the title, in a keyword or a binding, and last in its
+  // description or category. A command ranks as its worst word does, and
+  // commands of the same rank keep the catalogue's order.
+  constexpr int kNoMatch = 5;
+  const auto rank = [](const PaletteEntry& entry, const std::string& word) {
+    const auto title = Fold(entry.title);
+    const auto at = title.find(word);
+    if (at == 0)
+      return 0;
+    if (title.find(" " + word) != std::string::npos)
+      return 1;
+    if (at != std::string::npos)
+      return 2;
+    for (const auto* list : {&entry.keywords, &entry.shortcuts, &entry.normal})
       for (const auto& item : *list)
-        matches = matches || has(item);
-    if (matches)
-      result.push_back(entry);
+        if (Fold(item).find(word) != std::string::npos)
+          return 3;
+    for (const auto* text : {&entry.desc, &entry.details, &entry.category})
+      if (Fold(*text).find(word) != std::string::npos)
+        return 4;
+    return kNoMatch;
+  };
+  std::vector<std::pair<int, const PaletteEntry*>> ranked;
+  for (const auto& entry : entries) {
+    int worst = 0;
+    for (const auto& word : words)
+      worst = std::max(worst, rank(entry, word));
+    if (worst < kNoMatch)
+      ranked.emplace_back(worst, &entry);
   }
+  std::ranges::stable_sort(ranked, {}, &std::pair<int, const PaletteEntry*>::first);
+  std::vector<PaletteEntry> result;
+  for (const auto& [score, entry] : ranked)
+    result.push_back(*entry);
   return result;
 }
 const std::vector<std::string>& CommandCentreCategories() {
   static const base::NoDestructor<std::vector<std::string>> categories(
-      std::vector<std::string>{"All", "Tabs & Navigation", "Split View",
-                               "Performance & Memory", "Tools",
-                               "User Scripts & Styles", "Extensions",
-                               "Preferences & System"});
+      std::vector<std::string>{"All", "Tabs", "Page", "Workspaces",
+                               "Split view", "Tools", "Extensions", "Fly"});
   return *categories;
 }
 }  // namespace fly

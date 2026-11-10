@@ -10,6 +10,8 @@
 #include "build/build_config.h"
 #include "components/prefs/pref_service.h"
 #include "components/url_formatter/url_fixer.h"
+#include "net/base/ip_address.h"
+#include "net/base/url_util.h"
 #include "fly/preferences/preferences_service.h"
 #include "url/url_file.h"
 
@@ -75,6 +77,26 @@ std::map<std::string, SearchAlias> Defaults() {
       {"b", {"Brave Search", "https://search.brave.com/search?q=%s"}},
       {"k", {"Kagi", "https://kagi.com/search?q=%s"}},
   };
+}
+// A host that names a machine on this computer or its network: a loopback or
+// private address, a single-label name, or a name under a local-only domain.
+bool IsLocalHost(const GURL& url) {
+  if (net::IsLocalhost(url))
+    return true;
+  const std::string host(url.host());
+  if (url.HostIsIPAddress()) {
+    net::IPAddress address;
+    return address.AssignFromIPLiteral(url.HostNoBrackets()) &&
+           (address.IsLoopback() || address.IsLinkLocal() ||
+            !address.IsPubliclyRoutable());
+  }
+  if (host.find('.') == std::string::npos)
+    return true;
+  for (const std::string_view suffix :
+       {".local", ".localhost", ".lan", ".home.arpa", ".internal", ".test"})
+    if (host.ends_with(suffix))
+      return true;
+  return false;
 }
 std::optional<GURL> CheckedURL(std::string_view value) {
   const GURL url(value);
@@ -189,12 +211,17 @@ bool SearchService::RemoveAlias(std::string_view input) {
   local_state_->SetDict(kPreferencesPref, std::move(store));
   return true;
 }
-std::optional<GURL> SearchService::ResolveNavigation(std::string_view text,
-                                                    bool* search) const {
+std::optional<GURL> SearchService::ResolveNavigation(
+    std::string_view text,
+    bool* search,
+    std::string* engine) const {
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
   bool unused = false;
   bool& is_search = search ? *search : unused;
   is_search = false;
+  std::string unused_engine;
+  std::string& searched_by = engine ? *engine : unused_engine;
+  searched_by.clear();
   const auto input = Trim(text);
   if (input.empty() || !ValidText(input, 2 * 1024 * 1024))
     return std::nullopt;
@@ -218,6 +245,7 @@ std::optional<GURL> SearchService::ResolveNavigation(std::string_view text,
           return base::IsAsciiAlphaNumeric(c);
         })) {
       is_search = true;
+      searched_by = "DuckDuckGo bang";
       return CheckedURL(Expand(kDefaultEngine, input, false));
     }
   }
@@ -230,6 +258,7 @@ std::optional<GURL> SearchService::ResolveNavigation(std::string_view text,
         settings->aliases.find(AliasKey(input.substr(0, separator)));
     if (found != settings->aliases.end()) {
       is_search = true;
+      searched_by = found->second.name;
       return CheckedURL(
           Expand(found->second.url, Trim(input.substr(separator)), true));
     }
@@ -252,12 +281,22 @@ std::optional<GURL> SearchService::ResolveNavigation(std::string_view text,
         return std::nullopt;
       address = colon > 0;
     }
-    if (address || input.find('.') != std::string::npos)
-      return CheckedURL(std::string(local ? "http://" : "https://") + input);
+    if (address || input.find('.') != std::string::npos) {
+      // Servers on this computer or network rarely have a certificate.
+      const GURL secure("https://" + input);
+      const bool plain = local || (secure.is_valid() && IsLocalHost(secure));
+      return CheckedURL(std::string(plain ? "http://" : "https://") + input);
+    }
     if (input.find(':') != std::string::npos)
       return std::nullopt;
   }
   is_search = true;
-  return CheckedURL(Expand(settings->engine, input, false));
+  const auto result = CheckedURL(Expand(settings->engine, input, false));
+  if (result) {
+    searched_by = result->host();
+    if (searched_by.starts_with("www."))
+      searched_by.erase(0, 4);
+  }
+  return result;
 }
 }  // namespace fly

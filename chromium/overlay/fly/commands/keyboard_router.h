@@ -43,6 +43,9 @@ class KeyboardRouter {
   // Trusted native UI actions share mode transitions with keyboard dispatch.
   KeyResult Invoke(std::string action);
   void ClearPending();
+  // The first stroke of a NORMAL-mode sequence that is waiting for its
+  // second one ("G" of "G G"); empty otherwise.
+  const std::string& pending() const { return pending_; }
   KeyboardMode mode() const { return mode_; }
 
  private:

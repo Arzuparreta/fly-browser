@@ -1,235 +1,194 @@
-# Mouse-Free Navigation
+# Keyboard navigation
 
-Fly Browser is built around a keyboard-driven workflow, enabling efficient navigation of complex web pages without reaching for a pointing device.
+Fly is driven from the keyboard. Browser shortcuts (with Ctrl, Alt or a function key) work everywhere, also while you type. Page keys are single keys, as in Vim, and work whenever you are not typing. Every key on this page is a default: change any of them in **Preferences → Keyboard** (**Ctrl + ,**, or **?**). The complete table is in [Keyboard controls](/reference/keybinds).
 
----
+## The status bar
 
-## Link Hints Overlay (`f`)
+The bar at the bottom of the window says where the keyboard is and where the page is, laid out like i3bar.
 
-Link Hints allow you to click any link, button, or input field on a web page using short letter combinations:
+- **Mode block**, at the left edge. `NORMAL` rests on a dark cell. Every other mode is a solid block, so a glance tells you where your keys are going: `INSERT` (light) when they go to a text field, `HINTS` (brass) while link hints are on screen and `PASSTHROUGH` (red) when the page receives everything. Click it to cancel hints, or to enter or leave passthrough.
+- **Pending keys.** After the first key of a two-key sequence, such as **g**, that key shows beside the mode until you finish the sequence or it lapses after 0.7 seconds.
+- **Reload / stop.**
+- **Address line.** The site of the current page in the text colour, followed by the rest of its address in a dimmer one. While you point at a link it shows where the link goes. While a page loads it says **Opening…** (waiting for the site) and then **Loading…**. Short messages, such as **Copied…**, appear here too.
+- **Segments**, at the right: extension buttons, web notifications, the position of the current tab (`3/12`), the page zoom (brighter when it is not 100%), the connection (`HTTPS`; `HTTP` and certificate problems in brass or red), the workspace and the clock. Click the zoom, the workspace or the clock to act on them.
 
-1. Press **f** in NORMAL mode to trigger the hint labels.
-2. Fly draws compact native letter labels over visible interactive elements on the page, using an ergonomic left-hand home-cluster layout: `q, w, e, a, s, d, z, x, c, r, f, v`.
-3. Type the label corresponding to your target element (Fly keeps as many one-letter labels as possible):
-   - Links navigate immediately.
-   - Text inputs and search bars automatically receive focus for immediate typing.
-4. Press **Escape** or the browser hint shortcut (**Alt + F** by default) to dismiss hints without clicking. Within hints, **f** can be part of a target label.
+**Ctrl + /** shows or hides the bar.
 
-Hints follow their targets when the page layout changes, instead of disappearing. While the initial accessibility tree arrives, Fly can add targets; once you start typing a label, that selection stays fixed. Backspace removes a typed letter. Labels for targets removed from the page or moved off screen are hidden.
+## Modes
 
----
+1. **NORMAL**: the default. Page keys scroll, switch tabs and open Fly's panels.
+2. **INSERT**: entered when a text field takes focus, or with **i**. Keys go to the field. **Escape** leaves the field and returns to NORMAL.
+3. **PASSTHROUGH**: for web applications with their own keyboard (documents, terminals, design tools). Every key goes to the page, including browser shortcuts. **Shift + Escape** enters and leaves it.
 
-## Floating Address Bar (`Ctrl + L`)
+## Page keys
 
-Press **Ctrl + L** at any time to open the floating, high-contrast address overlay. **Ctrl + T** and the sidebar's New Tab button open Quiet, where you can choose search or bookmarks.
+### Scrolling
 
-- **Direct Navigation**: Type any full or partial URL and press **Enter**. The current page stays on screen until the new one has painted.
-- **Loading feedback**: A rotating indicator replaces the tab's favicon as soon as navigation starts, including while waiting for the server. It stays visible in the collapsed sidebar and on background tabs. With the status bar enabled, **Opening…** shows the destination before the new page arrives, followed by **Loading…** while its resources load. The button beside the keyboard mode badge stops the active page's load; when finished, it becomes **Reload page**. Hovering a link still shows its destination in the status bar.
-- **Live Search Autocomplete**: As you type, Fly queries the browsing history of the workspaces whose window is open, and your bookmarks. Use the **Up** and **Down** arrow keys to select a suggestion and press **Enter**. Fly connects to the highlighted result's site while you choose.
-- **Preloading**: With **Preferences → Performance → Preload the address bar's result** turned on, Fly also loads the page that the highlighted address, history or bookmark result opens, so it appears at once on **Enter**. The site sees that visit even if you do not open it. Searches are never preloaded. It is off by default.
-- **Direct Calculator**: Type any arithmetic expression (e.g. `240 * 1.2`, `15% of 200`, `sqrt(144)`) to compute the answer live in the dropdown. Press **Enter** to copy the answer to your clipboard, or press the **Down Arrow** or **Tab** to put the result into the address bar and continue calculating.
-- **DuckDuckGo Bangs**: Type any DuckDuckGo bang (e.g. `!w Arch Linux`, `!gh FlyBrowser`, `!yt ambient`) to route directly to thousands of external search destinations.
-- **Workspace Switching**: Type `ws` followed by a workspace name (e.g. `ws work`) to bring that workspace's window to the front, or open it, from the address bar.
-- Press **Escape** to hide the address bar and return focus directly to the active web page.
+| Key | Action |
+| :--- | :--- |
+| `j` / `k` | Scroll down / up. Tap for 60 CSS pixels, hold to keep moving |
+| `h` / `l` | Scroll left / right |
+| `d` / `u` | Half a page down / up |
+| `g g` / `G` | Top / bottom of the page |
 
----
+Holding **j/k/h/l** starts moving without waiting for the keyboard repeat delay, and releasing the key stops it. Scrolling follows the container under your last click or activated hint, falling back to the middle of the focused frame, and works inside cross-origin frames.
 
-## DuckDuckGo Bang Redirection
+### Tabs
+
+| Key | Action |
+| :--- | :--- |
+| `t` | New tab, with the address bar ready |
+| `x` | Close the tab |
+| `X` | Reopen the tab closed last |
+| `J` / `K` | Next / previous tab (down / up the list). Hold to keep going |
+| `g t` / `g T` | Next / previous tab, as in Vim |
+| `g 0` / `g $` | First / last tab |
+| `g a` | The tab you were on before this one (also **Alt + 0**) |
+| `< <` / `> >` | Move the tab up / down the list |
+| `p` | Pin or unpin the tab |
+| `m` / `M` | Mute or unmute the tab / every tab |
+| `W` | Move the tab to another workspace |
+| `s` | Move the keyboard to the tab list |
+
+### The page
+
+| Key | Action |
+| :--- | :--- |
+| `o` | Address bar |
+| `H` / `L` | Back / forward |
+| `g u` / `g U` | Up one level of the address / the first page of the site |
+| `r` / `R` | Reload / reload without the cache |
+| `f` | Link hints |
+| `F` | Link hints that open the link in a background tab |
+| `g i` | Put the caret in the first text field on screen |
+| `/` | Find in the page |
+| `n` / `N` | Next / previous match |
+| `y` | Copy the page's address |
+| `z i` / `z o` / `z z` | Zoom in / out / back to 100% |
+| `e` | Reader view |
+| `i` | INSERT mode |
+
+### Fly
+
+| Key | Action |
+| :--- | :--- |
+| `w` | Workspaces and their tabs |
+| `b` | Bookmarks |
+| `?` | Keyboard settings: every shortcut, and where to change it |
+
+## Link hints (`f`, `F`)
+
+1. Press **f**. Fly puts a small letter label on every link, button and field on screen, using the keys under your left hand: `q, w, e, a, s, d, z, x, c, r, f, v`. As many labels as possible are a single letter.
+2. Type a label. Links open, buttons are pressed and text fields take the caret.
+3. **Escape**, or **Alt + F**, closes the labels without choosing. **Backspace** removes a typed letter.
+
+**F** works the same way, but a link you choose opens in a background tab and you stay on the page: use it to open several results from a list. Anything that is not a link is activated as with **f**.
+
+**g i** needs no label: it puts the caret in the first text field on screen, such as a site's search box.
+
+Labels follow their elements when the page moves and hide while an element is off screen. Until you type, a page that is still loading can add labels; once you start typing, the set stays fixed.
+
+## Address bar (`Ctrl + L`, `o`)
+
+**Ctrl + L** opens the address bar with the page's address selected: type over it, or press **Right** to edit it. **Ctrl + T**, **t** and the sidebar's New Tab button open a new tab with the bar ready.
+
+The first row says in words what **Enter** will do with what you typed: **Open address**, or **Search** followed by the site that will search. The rows after it are your open tabs, bookmarks and history that match.
+
+- **Addresses.** Type all or part of one. Fly uses HTTPS, except for machines on your own computer or network (`localhost`, `127.0.0.1:3000`, `192.168.1.1`, `printer.local`, `server:8080`), which it opens over HTTP because they rarely have a certificate. The current page stays on screen until the new one has painted.
+- **Open tabs.** A row that starts with **Switch to tab** takes you to a tab that is already open in this window instead of loading the page again.
+- **Bookmarks and history** of the workspaces whose window is open. Fly connects to the highlighted result's site while you choose.
+- **Search aliases.** `yt ambient` searches YouTube. The built-in ones are below; add your own in **Preferences → General → Search aliases**.
+- **Bangs.** Any [DuckDuckGo bang](https://duckduckgo.com/bangs), at the start or the end: `!w Arch Linux`, `Arch Linux !w`.
+- **Calculator.** `240 * 1.2`, `15% of 200`, `sqrt(144)`, `2^10`, `sin(pi)`, `log2(256)`. **Enter** copies the result; **Down** or **Tab** puts it in the bar to keep calculating. Nothing leaves your computer.
+- **Workspaces.** `ws work` goes to the workspace named Work.
+- **Preloading.** With **Preferences → Performance → Preload the address bar's result** on, Fly loads the highlighted address, bookmark or history page in the background so that it appears at once. The site sees that visit even if you do not open it. Searches are never preloaded. It is off by default.
+
+**Escape** closes the bar and returns the keyboard to the page.
+
+### Search aliases
+
+| Alias | Searches |
+| :--- | :--- |
+| `g` | Google |
+| `ddg` | DuckDuckGo |
+| `yt` | YouTube |
+| `gh` | GitHub |
+| `a` | ArchWiki |
+| `aur` | Arch User Repository |
+| `pkg` | Arch Linux packages |
+| `so` | Stack Overflow |
+| `r` | Reddit |
+| `sp` | Startpage |
+| `b` | Brave Search |
+| `k` | Kagi |
+
+Without an alias, Fly searches with the engine chosen in **Preferences → General**. Your own aliases can also be written in the configuration file:
 
 ![Preferences General section with search aliases](/screenshots/preferences-5.webp)
 
-Fly supports over 13,500 DuckDuckGo bangs directly from the floating address bar. Bangs route queries directly to the target website:
-
-* `!w Arch Linux`: Redirects directly to the Arch Linux article on Wikipedia.
-* `!gh FlyBrowser`: Redirects directly to GitHub repository search.
-* `!yt lo-fi`: Redirects directly to YouTube video search.
-* `!a NetworkManager`: Redirects directly to the ArchWiki page.
-* `!so promises`: Redirects directly to Stack Overflow.
-
-Popular bangs display rich destination badges in the autocomplete dropdown. You can place the bang at the beginning or end of your query (e.g. `!w Arch Linux` or `Arch Linux !w`).
-
----
-
-## Custom Search Aliases & Shorthand Bangs
-
-In addition to DuckDuckGo bangs, Fly includes native search engine prefixes that execute instantly without redirect delays. Prefix any query with an alias in the floating address bar (**Ctrl + L**):
-
-* `g <query>`: Google
-* `ddg <query>`: DuckDuckGo
-* `yt <query>`: YouTube
-* `gh <query>`: GitHub
-* `a <query>`: ArchWiki
-* `aur <query>`: Arch User Repository
-* `pkg <query>`: Arch Linux Packages
-* `so <query>`: Stack Overflow
-* `r <query>`: Reddit
-* `sp <query>`: Startpage
-* `b <query>`: Brave Search
-* `k <query>`: Kagi
-
-### User-Customised Search Engines
-You can add your own search engines or override existing shortcuts in **Preferences → General → Search aliases** (**Ctrl + H**) or inside `~/.config/fly-browser/config.json`:
-
 ```json
 "custom_search_aliases": {
-    "aur": "https://aur.archlinux.org/packages?K=%s",
     "nix": "https://search.nixos.org/packages?query=%s",
     "mdn": "https://developer.mozilla.org/en-US/search?q=%s"
 }
 ```
 
-Any custom alias is recognised immediately in the address bar and displays an interactive suggestion badge in the autocomplete dropdown.
+## Tabs and the sidebar
 
----
+Tabs are a vertical list in the sidebar. The current tab is a lighter panel with a red bar on its left edge. In a split view the other page on screen has the panel without the bar.
 
-## Live Address Bar Calculator
+- **Collapsed or pinned.** By default the sidebar is a 36 px strip of icons that opens to 260 px under the pointer, over the page, so the page never changes size. **Ctrl + Shift + Z** or the pin button keeps it open.
+- **From the keyboard.** **Alt + S** (or **s**) opens the sidebar and puts the keyboard cursor, four red corner brackets, on the current tab. **j / k** or **Down / Up** move the cursor without switching tabs or waking suspended ones, and **Home / End** (or **G**) jump to the first and last tab. **Enter**, **l** or **Right** selects the tab under the cursor and returns to the page. **x** closes it and keeps the cursor in place. **Escape**, **Alt + S** again or **Alt + W** returns to the page without changing tab. A pinned sidebar stays pinned; an unpinned one closes when the keyboard leaves it. These are the keys you have bound to scrolling and closing, so they follow your own bindings.
+- **By number.** **Alt + 1** to **Alt + 8** select the first eight tabs and **Alt + 9** the last one. Hold **Alt** on its own to see the numbers over the tab icons. **Alt + 0** returns to the tab you were on before.
+- **Sound.** A speaker on a tab's row means it is playing; click it, or press **m**, to mute it.
+- **Closing with the mouse.** The **×** of a row, or a middle click anywhere on it. Pinned tabs have no **×**: unpin them first.
+- **The workspace.** The number on a cell at the top of the strip is the workspace of this window; `P` in red is a private window. Click it, or press **w**, for the list of workspaces and tabs.
+- **New windows and sign-in popups.** Links that ask for a new window open as tabs. Popups with a size, such as "Continue with Google", open as a small window above Fly in the same workspace so that the sign-in can report back; **Ctrl + W** closes it.
 
-The address bar includes a built-in mathematical expression evaluator that runs completely locally without external network requests:
+## Workspaces
 
-* **Basic Arithmetic**: `240 * 1.2`, `(100 + 25) / 5`, `150 - 45`
-* **Powers & Roots**: `2^10`, `sqrt(144)`, `cbrt(27)`
-* **Percentages**: `15% of 200`, `25% * 80`
-* **Trigonometry & Logarithms**: `sin(0)`, `cos(pi)`, `log2(256)`, `log10(1000)`
-* **Constants**: `pi`, `e`
+Each workspace is a separate Chromium profile, with its own cookies, logins and extensions, in its own window. With a tiling window manager such as i3, put each one on its own desktop.
 
-Selecting the calculator result copies the computed value to your system clipboard and displays a status bar confirmation.
+- **Ctrl + 1** to **Ctrl + 9** go to the workspace with that number, opening its window if it is closed.
+- **Alt + PageDown** / **Alt + PageUp** go to the next and previous one.
+- **w** or **Ctrl + Shift + W** lists every workspace with its number and its tabs. Type to filter, **Enter** to go to a workspace or a tab, and use the buttons of a row to rename or delete a workspace or to move a tab. Drag a tab onto another workspace to move it there.
+- **W** moves the current tab to another workspace.
+- **Ctrl + Shift + P** opens a private window, which keeps no history or cookies.
 
----
+See [Workspaces and containers](/guide/workspaces-and-containers).
 
-## Search Engine Aliases
+## Split view
 
-When typing queries into the address bar, prepend shorthand prefixes to route searches directly to specific services:
+Two tabs of the same window side by side, or one above the other.
 
-| Shorthand Alias | Search Destination | Example Query |
-| :--- | :--- | :--- |
-| `g <query>` | Google Search | `g linux kernel archives` |
-| `ddg <query>` | DuckDuckGo | `ddg rust async tutorial` |
-| `a <query>` | Arch Linux Wiki | `a hyprland config` |
-| `pkg <query>` | Arch Linux Package Search | `pkg neovim` |
-| `gh <query>` | GitHub Repository Search | `gh chromium` |
-| `yt <query>` | YouTube Search | `yt ambient coding music` |
-| `r <query>` | Reddit Search | `r archlinux` |
-| `so <query>` | StackOverflow | `so javascript closures` |
-| `sp <query>` | Startpage Search | `sp private search` |
-| `b <query>` | Brave Search | `b web standards` |
-| `k <query>` | Kagi Search | `k technical docs` |
+- **Ctrl + Shift + S** splits the current tab with the next one, or closes the split.
+- **Ctrl + O** moves the keyboard to the other page.
+- **Ctrl + \\** swaps the two pages.
+- **Stacked**, **Change orientation** and **Close** are in the Command Centre (**Ctrl + P**, type `split`). Give them keys of your own in **Preferences → Keyboard**.
+- Right-click a link and choose **Open Link in Split View** to send it to the other page.
 
-If no alias is entered, Fly uses your configured default search engine set in **Preferences → General**. The same section lists your aliases and the built-in ones.
+Both pages of a split are kept awake while they are on screen.
 
-***
+## Find in page (`/`, `n`, `N`)
 
-## Auto-Collapsing Vertical Sidebar (36px Strip)
+**/** or **Ctrl + F** opens the find bar. **Enter** goes to the next match and **Shift + Enter** to the previous one. **Escape** closes the bar.
 
-To dedicate maximum horizontal screen real estate to web content, Fly features an auto-collapsible vertical sidebar:
+Back in NORMAL mode, **n** and **N** go to the next and previous match of the last search without opening the bar again. The status bar shows the searched text and the position, such as `news  3/60`, and **Escape** removes the highlights.
 
-* **Compact 36px Strip**: In its default collapsed state, the sidebar shrinks to a 36px icon bar displaying only your workspace badge and crisp tab favicons.
-* **Smooth Flyout on Hover**: Moving your mouse pointer over the 36px strip smoothly expands the sidebar to 260px as an overlay flyout with drop shadow. Because this expands as an overlay, the active page never resizes, preventing GPU lag and page reflows on fanless hardware.
-* **Shortcut Expansion**: Press **Ctrl + Shift + Z** to pin or unpin the sidebar, using the same state as the pin button. Unpinning clears temporary expansion and sidebar focus; the sidebar shrinks to its 36px strip once the pointer leaves. Press **Alt + S** to expand the unpinned sidebar for keyboard navigation. Pressing **Escape** returns focus to the page.
-* **Pinning**: Click the pin icon button at the bottom of the sidebar, toggle **Auto-collapse sidebar** in **Preferences → Appearance** (**Ctrl + H**), or run **Toggle Sidebar Expansion (Pin / Unpin)** in the Command Palette to pin the sidebar permanently open at 260px.
+## Reader view (`e`, `F9`)
 
-***
+Reader view extracts the article of a page with Mozilla Readability and shows it over the page without reloading it, so closing it (**Escape**, **F9** or its close button) brings the page back as it was. Its controls change the theme (dark, sepia, light), the typeface, the text size (14 to 28 px) and the column width (620, 760 or 940 px). The header estimates the reading time.
 
-## Sidebar and Page Focus Management
+## New tab and bookmarks
 
-Fly maintains clean separation between sidebar navigation and active web page interaction:
+New tabs open a quiet local page with the Fly illustration. Under it, **Search or enter address** opens the address bar and **Bookmarks** opens the same menu as **Ctrl + Shift + B** (or **b**). The keys shown next to them are your current bindings. The fly stays centred in the available page area. The page follows your theme and interface scale without fetching fonts, favicons or anything else from the network.
 
-- **Alt + S**: Shifts keyboard focus to the vertical tab sidebar, smoothly expanding it. Use the **Up** and **Down** arrow keys (or `j` / `k`) to cycle through open tabs, and press **Enter** to switch to the highlighted tab.
-- **Alt + W**: Shifts keyboard focus directly into the active page, automatically collapsing the sidebar back to the 36px strip.
-- **Ctrl + W**: Closes the currently active tab.
-- **Ctrl + R**: Reloads the active tab.
+Below them, one keyboard tip teaches a key you have not used yet, such as **f** for link hints or **Ctrl + P** for the Command Centre. Each new tab shows the next pending tip. A tip stops appearing once you have used its keys twice, or when you click **×** next to it; when you know them all, the line disappears. Turn the tips off, or show them all again, in **Preferences → Appearance → New tab → Keyboard tips**. Fly counts only those keys, in its `Local State`, and nothing leaves your computer.
 
-***
+Bookmarks are your saved pages, shared by every workspace. Opening one uses the current workspace's profile and cookies. Click a row or press **Enter** to open it: from a new tab it replaces that tab, from a page it opens a new one. **Ctrl + Enter**, Ctrl-click or a middle click opens a background tab and keeps the menu open.
 
-## Modal Navigation Engine
+Type in **Search bookmarks** to match names and addresses. **Up/Down** select a result and **Page Up/Page Down** move through long lists.
 
-Fly Browser provides a Vim-inspired modal navigation engine that frees you from chorded modifiers during routine web browsing. The engine distinguishes between three primary operational states:
+**Edit**, or **F2**, changes a bookmark's name or address in the same menu. **Add bookmark** (or **Ctrl + N** inside the menu) starts with the current page. **Enter** or **Ctrl + S** saves and **Escape** cancels. Invalid or already saved addresses are explained and your draft is kept.
 
-1. **NORMAL Mode**: The default state. Home-row keys control page scrolling and browser actions without requiring Ctrl or Alt chords.
-2. **INSERT Mode**: Automatically entered whenever you click or focus a text input, search box, or content-editable field (or press `i` explicitly). Keystrokes pass directly into the field. Pressing **Escape** blurs the field and immediately returns to **NORMAL** mode.
-3. **PASSTHROUGH Mode**: Designed for rich web applications like Google Docs, sheets, design suites, and cloud terminals. In passthrough mode, all keystrokes pass directly to the guest web application without browser interception. Toggle passthrough mode at any time using **Shift + Escape** or by clicking the mode badge in the status bar.
-
-Holding **j/k/h/l** starts moving without waiting for the keyboard repeat delay. Releasing the key stops the continuous movement; a short tap completes one step. Scrolling follows the container under your last page click or activated hint, with a fallback to the middle of the focused frame. This also works inside cross-origin frames. **d/u** make one half-container jump per press; **gg/G** move vertically to its ends.
-
-### NORMAL Mode Keymap
-
-| Key | Action | Description |
-| :--- | :--- | :--- |
-| `j` | Scroll Down | Tap for 60 CSS pixels; hold for continuous scrolling |
-| `k` | Scroll Up | Tap for 60 CSS pixels; hold for continuous scrolling |
-| `d` | Half Page Down | One animated jump of half the scroll container height |
-| `u` | Half Page Up | One animated jump of half the scroll container height |
-| `h` | Scroll Left | Tap for 60 CSS pixels; hold for continuous scrolling |
-| `l` | Scroll Right | Tap for 60 CSS pixels; hold for continuous scrolling |
-| `gg` | Jump to Top | Jump directly to the scroll container's top |
-| `G` | Jump to Bottom | Jump directly to the scroll container's bottom |
-| `t` | New Tab | Opens a new tab with default search engine |
-| `x` | Close Tab | Closes the current active tab |
-| `o` | Address Bar | Opens floating address overlay for navigation |
-| `r` | Reload | Reloads active tab |
-| `R` | Force Reload | Reloads active tab ignoring cache |
-| `H` | History Back | Navigates back in page history |
-| `L` | History Forward | Navigates forward in page history |
-| `/` | Find in Page | Opens the in-page search bar |
-| `f` | Link Hints | Shows native hint labels over visible interactive elements |
-| `e` | Reader View | Toggles native distraction-free reader view |
-| `w` | Dashboard | Opens the Workspace Dashboard tree |
-| `s` | Focus Sidebar | Moves focus to vertical sidebar tab list |
-| `y` | Yank URL | Copies current URL to clipboard with status bar feedback |
-| `i` | Insert Mode | Explicitly enters INSERT mode |
-| `?` | Keyboard Settings | Opens the list of every shortcut and NORMAL key, where you can change them |
-| `Shift + Escape` | Passthrough Mode | Toggles PASSTHROUGH mode on or off |
-
-***
-
-## Workspace Badges, Tab Selection & Favicons
-
-* **Selecting Tabs by Position**: Press **Alt + 1** through **Alt + 8** to select tabs 1 through 8 from anywhere, or the last tab when fewer exist. **Alt + 9** always selects the last tab. To use another modifier for all nine, set it in **Tab numbers** in **Preferences → Keyboard**. Hold the left **Alt** key (or your chosen modifier) on its own to see these numbers painted over the tab icons: 1 to 8 on the first eight tabs and 9 on the last one. They disappear when you release Alt or press any other key.
-* **Non-Disruptive Sidebar Cursor Navigation**: Moving with **j** / **k** or **Down** / **Up** moves the cursor highlight across tabs without activating pages or loading tabs restored on demand. Press **Enter**, **Space**, or **l** / **Right** to activate the highlighted tab.
-* **Workspace Badges**: The top of the strip displays a compact letter or number badge for the current workspace (such as `W1` or `P`). Clicking the workspace badge opens the Workspace Dashboard (**Ctrl + Shift + W**). It shares the top row of the sidebar with the Back, Forward, New Tab and Split View buttons; hover it to see the workspace's full name.
-* **Favicons & Indicators**: Each tab renders its website favicon with smart local and remote caching. Audio and mute icons control sound; pin and split-pane indicators identify those controls. Suspended pages have no extra badge.
-* **Closing Tabs with the Mouse**: Hover a tab in the expanded sidebar and click its **×** button, or middle-click the tab, to close it without selecting it first. The selected tab always shows its **×**. Pinned tabs have no close button and ignore middle-click; unpin them first.
-* **New Windows and Sign-In Popups**: Links that open a new window, and plain `window.open` calls, open as tabs in the current workspace. Popups a page opens with a size, such as "Continue with Google", open as a small window above Fly in the same workspace container, so the sign-in can report back to the page; **Ctrl + W** closes it. A page that closes itself, as many sign-in callbacks do, closes its tab; a pinned tab reloads instead.
-
-***
-
-## Dual Split View (1x2 Side by Side and Stacked)
-
-For comparing documentation, pull requests, or research sources without tiling window manager complexity, Fly includes a built-in dual split view:
-
-* **Instant Comparison**: Press **Ctrl + \\** or **Ctrl + Alt + S** (or click the column icon in the sidebar) to split the viewport into two 50% columns side by side.
-* **Orientation Toggle**: Right-click the split icon button or execute **Cycle Split View Orientation** in the Command Palette to switch between side by side (vertical columns) and stacked (horizontal rows).
-* **Focus Switching**: Press **Ctrl + Alt + O** or **Ctrl + Alt + Tab** to switch keyboard focus between Pane 1 and Pane 2. The active pane displays an accent focus ring, and its matching sidebar tab is highlighted with a numbered badge (1 or 2).
-* **Pane Swapping**: Press **Ctrl + Alt + X** to swap the positions of the two open split panes instantly.
-* **Context Menu Link Routing**: Right-click any hyperlink on a page and select **Open Link in Split View** to open or send that link directly into the adjacent comparison pane.
-* **Tab Assignment**: Clicking any tab in the sidebar while in split mode routes that page into whichever pane currently holds active focus.
-* **Suspension Exemption**: Both visible split panes are automatically protected from background suspension while displayed on screen.
-
-***
-
-## Native Reader View (`F9` / `e`)
-
-Fly includes an in-engine DOM distiller powered by Mozilla Readability to strip ads, sidebars, cookie banners, and visual clutter from articles:
-
-* **Instant Distillation**: Press **F9** or press **e** in NORMAL mode to extract the core article, byline, and imagery into a clean reading format.
-* **Isolated Shadow DOM**: The reader view is rendered inside an isolated Shadow DOM container over the active document. Closing Reader View (via **Escape**, **F9**, or the close icon) restores the original web page instantly without reloading or discarding form inputs.
-* **Custom Typography and Themes**: A floating controls pill at the top-right corner allows adjusting:
-  * **Themes**: Dark (Tokyo Night), Sepia (Warm Paper), and Light.
-  * **Font Families**: Modern Sans-serif, Classic Serif, or Clean Monospace.
-  * **Font Size**: Adjustable scale between 14px and 28px.
-  * **Reading Width**: Narrow (620px), Medium (760px), or Wide (940px).
-* **Reading Metrics**: Header estimates word count and reading time based on typical reading velocity.
-
-
-## Quiet new tab and bookmarks
-
-New tabs open a quiet local page with the Fly illustration. Under it, **Search or enter address** opens Fly's native address overlay, with your configured search engine, aliases, bangs and calculator, and **Bookmarks** opens the same menu as **Ctrl + Shift + B**. The keys shown next to them reflect your current bindings. Both controls work by mouse, Tab and Enter. The fly stays centered in the available page area. A floating sidebar overlays that area without shifting the page; pinning the sidebar reduces the area and Quiet centers itself inside it. The page follows your theme and interface scale without fetching fonts, favicons or other network content. It does not display history suggestions or sample memory use; memory information remains in Diagnostics and the clock remains in the status bar.
-
-Below Search and Bookmarks, one keyboard tip teaches a key you have not used yet, such as **f** for link hints or **Ctrl + P** for the Command Centre. Each new tab shows the next pending tip. A tip stops appearing once you have used its keys twice, or when you click **×** next to it; when you know them all, the line disappears. Tips show your current bindings and skip actions that have no key. Turn them off, or show them all again, in **Preferences → Appearance → New tab → Keyboard tips**. Fly counts only those keys, in its `Local State`, and nothing leaves your computer. To see every shortcut at once, press **?** in NORMAL mode.
-
-Bookmarks are your explicit saved pages, shared across workspaces. Opening a bookmark uses the current workspace's profile, cookies and private-mode identity. Click a row or press Enter to open it. From a new tab, the destination replaces that empty tab; from an existing page, it opens in a new tab. **Ctrl + Enter**, Ctrl-click or middle-click opens a background tab while keeping the menu available for opening several pages.
-
-Type in **Search bookmarks** to match names and addresses. Up/Down selects a result; Page Up/Page Down moves through longer lists. Full names and addresses remain available to accessibility tools and in tooltips when the visible text is shortened.
-
-Choose **Edit** beside a bookmark or press **F2** to change its name or address in the same menu. **Add bookmark** (or **Ctrl + N** inside the menu) starts with the current page's details when available. Enter or Ctrl + S saves the fields; Escape cancels the draft. Invalid or already saved addresses show an explanation and keep your draft. Tab and Shift + Tab move through the editor without triggering page navigation keys.
-
-Use **Move earlier** / **Move later** in the editor or **Alt + Up/Down** in the list to choose a stable order for daily destinations. Order changes in the editor are saved with the name and address; Escape cancels the whole draft. Alt + Up/Down in the list reorders immediately. **Delete** in the editor removes the bookmark; **Undo delete** restores it to its previous position. Delete in the search field keeps normal text-editing behavior, and removes the selected bookmark only when the caret is at the end with no text selected. Escape closes the menu and restores focus to the page.
+**Move earlier** / **Move later** in the editor, or **Alt + Up/Down** in the list, set the order. **Delete** in the editor removes the bookmark and **Undo delete** restores it to its place. In the search field, **Delete** keeps its text-editing role and removes the selected bookmark only when the caret is at the end with nothing selected.

@@ -17,6 +17,8 @@
 #include "ui/views/controls/label.h"
 
 namespace gfx {
+class Canvas;
+class RectF;
 struct VectorIcon;
 }
 namespace views {
@@ -49,8 +51,10 @@ FlyColors DefaultFlyColors(bool dark);
 const FlyColors& GetFlyColors();
 // Returns true when the palette changed.
 bool SetFlyColors(const FlyColors& colors);
-// New native windows take Fly's main background as their window colour, so
-// none shows Chromium's grey before its first frame. Registered once.
+// Chromium's own colours that follow Fly's palette: new native windows take
+// the main background as their window colour, so none shows Chromium's grey
+// before its first frame, and the find bar takes the colours of Fly's
+// panels. Registered once.
 void RegisterFlyWindowColors();
 
 enum class FlyFace { kSans, kMono, kDisplay };
@@ -80,6 +84,21 @@ enum class FlyRole {
   kOverlaySidebar,
 };
 SkColor FlyRoleColor(FlyRole role);
+// Interaction looks shared by every bar and list. They derive from the
+// palette (design/identity: chassis, paper, ink and one red), so both themes
+// and a customised palette get them without a second set of colours.
+// `color` at `alpha` (0 to 1).
+SkColor FlyAlpha(SkColor color, float alpha);
+// The fill under the pointer: the text colour at low strength.
+SkColor FlyHoverColor();
+// Readable text on a solid `fill`: ink on light fills, paper on dark ones.
+SkColor FlyInkOn(SkColor fill);
+// Corner brackets, the mark of whatever the keyboard cursor is on.
+void PaintFlyBrackets(gfx::Canvas* canvas,
+                      const gfx::RectF& bounds,
+                      SkColor color);
+// The accent bar on the left edge of a selected row.
+void PaintFlySelectionBar(gfx::Canvas* canvas, const gfx::RectF& row);
 // Overlay backgrounds may be translucent; labels drawn on them must not use
 // subpixel text. Applies to every label below `root`.
 void DisableSubpixelText(views::View* root);

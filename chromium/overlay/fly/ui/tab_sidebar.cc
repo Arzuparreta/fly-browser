@@ -19,7 +19,6 @@
 #include "base/strings/utf_string_conversions.h"
 #include "base/task/single_thread_task_runner.h"
 #include "base/trace_event/trace_event.h"
-#include "cc/paint/path_effect.h"
 #include "chrome/app/chrome_command_ids.h"
 #include "chrome/browser/ui/browser_commands.h"
 #include "chrome/browser/ui/browser_window/public/browser_window_interface.h"
@@ -63,22 +62,8 @@
 
 namespace fly {
 namespace {
-// Row colours.
-constexpr SkColor kHoverFill = SkColorSetARGB(115, 54, 74, 133);
-constexpr SkColor kFocusFill = SkColorSetARGB(41, 122, 162, 247);
-constexpr SkColor kPinnedFill = SkColorSetARGB(20, 224, 175, 104);
-constexpr SkColor kPinnedBorder = SkColorSetARGB(64, 224, 175, 104);
-constexpr SkColor kPinnedSelectedFill = SkColorSetARGB(51, 122, 162, 247);
-
 int S(int pixels) {
   return FlyScaled(pixels);
-}
-// color-mix(in srgb, a amount%, b).
-SkColor Mix(SkColor a, float amount, SkColor b) {
-  return color_utils::AlphaBlend(a, b, amount);
-}
-SkColor WithAlpha(SkColor color, float alpha) {
-  return SkColorSetA(color, static_cast<U8CPU>(alpha * 255));
 }
 
 // What a row shows; the surfaces and marks layers paint from it.
@@ -90,14 +75,11 @@ struct RowState {
   int split_pane = 0;  // 1 or 2 inside a split view.
   // Closing, while the page's unload handlers run or its leave dialog shows.
   bool closing = false;
-  bool HasSurface() const { return selected || pinned || split_pane; }
+  // On screen: the selected tab and the other pane of its split view.
+  bool HasSurface() const { return selected || split_pane; }
   bool operator==(const RowState&) const = default;
 };
 
-// Titles longer than 24 characters are cut there.
-std::u16string RowTitle(std::u16string title) {
-  return title.size() > 24 ? title.substr(0, 24) + u"..." : title;
-}
 // The row's second line: the host, "local page" without one, and nothing for
 // a new tab (its title says it).
 std::u16string RowDomain(const GURL& url) {
@@ -257,11 +239,8 @@ class RowBadge : public views::Button {
     if (hot) {
       cc::PaintFlags flags;
       flags.setAntiAlias(true);
-      flags.setColor(kind_ == Kind::kPin     ? SkColorSetARGB(38, 224, 175, 104)
-                     : kind_ == Kind::kClose ? SkColorSetARGB(46, 247, 118, 142)
-                     : muted_                ? SkColorSetARGB(38, 247, 118, 142)
-                                             : SkColorSetARGB(38, 122, 162, 247));
-      canvas->DrawRoundRect(gfx::RectF(GetLocalBounds()), S(4), flags);
+      flags.setColor(FlyAlpha(colors.text, 0.12f));
+      canvas->DrawRoundRect(gfx::RectF(GetLocalBounds()), S(2), flags);
     }
     SkColor color;
     const gfx::VectorIcon* icon;
@@ -272,7 +251,7 @@ class RowBadge : public views::Button {
         icon = &views::kKeepFilledIcon;
         break;
       case Kind::kMedia:
-        color = colors.accent;
+        color = muted_ ? colors.dim : colors.text;
         icon = muted_ ? &vector_icons::kVolumeOffIcon
                       : &vector_icons::kVolumeUpIcon;
         break;
@@ -284,7 +263,7 @@ class RowBadge : public views::Button {
     }
     // The pin and audio badges rest at 85% opacity.
     if (kind_ != Kind::kClose && !hot)
-      color = WithAlpha(color, 0.85f);
+      color = FlyAlpha(color, 0.85f);
     const auto image = gfx::CreateVectorIcon(*icon, size, color);
     canvas->DrawImageInt(image, (width() - size) / 2, (height() - size) / 2);
   }
@@ -318,6 +297,17 @@ class FlyTabButton : public FlyButton {
     domain_->SetElideBehavior(gfx::ELIDE_TAIL);
     domain_->SetCanProcessEventsWithinSubtree(false);
     domain_->SetSubpixelRenderingEnabled(false);
+  }
+  // The row draws the keyboard cursor around this button.
+  void OnFocus() override {
+    FlyButton::OnFocus();
+    if (parent())
+      parent()->SchedulePaint();
+  }
+  void OnBlur() override {
+    FlyButton::OnBlur();
+    if (parent())
+      parent()->SchedulePaint();
   }
   void SetDomain(const std::u16string& domain) {
     if (domain_->GetText() == domain)
@@ -473,27 +463,14 @@ class TabRowView : public views::View {
   }
   void OnPaintBackground(gfx::Canvas* canvas) override {
     const auto bounds = gfx::RectF(GetLocalBounds());
-    cc::PaintFlags flags;
-    flags.setAntiAlias(true);
-    if (select_->HasFocus() && !state_.selected) {
-      flags.setColor(kFocusFill);
-      canvas->DrawRoundRect(bounds, S(2), flags);
-      // outline: 1px dashed var(--accent), inside the row.
-      const float dash[] = {static_cast<float>(S(3)), static_cast<float>(S(3))};
-      cc::PaintFlags outline;
-      outline.setStyle(cc::PaintFlags::kStroke_Style);
-      outline.setStrokeWidth(1);
-      outline.setColor(GetFlyColors().accent);
-      outline.setPathEffect(cc::PathEffect::MakeDash(dash, 2, 0));
-      auto inner = bounds;
-      inner.Inset(0.5f);
-      canvas->DrawRect(inner, outline);
-      return;
-    }
-    // Rows with a surface hide the hover tint under it.
-    if (hovered_ && !list_->rail() && !state_.HasSurface()) {
-      flags.setColor(kHoverFill);
-      canvas->DrawRoundRect(bounds, S(2), flags);
+    // The pointer's row, unless a surface already marks it.
+    if (hovered_ && !list_->rail() && !state_.HasSurface())
+      canvas->FillRect(GetLocalBounds(), FlyHoverColor());
+    // The keyboard cursor: corner brackets, on whichever row has focus.
+    if (select_->HasFocus()) {
+      if (!state_.HasSurface() && !hovered_)
+        canvas->FillRect(GetLocalBounds(), FlyHoverColor());
+      PaintFlyBrackets(canvas, bounds, GetFlyColors().accent);
     }
   }
 
@@ -556,8 +533,8 @@ BEGIN_METADATA(ListContents)
 END_METADATA
 }  // namespace
 
-// The expanded row surfaces (li::before: the whole row) or the rail's tiles
-// (li::after: 28 x 40px at the row's left).
+// The surfaces under the rows on screen: the whole row when expanded, or a
+// 28 x 40px tile at the row's left on the rail.
 class TabSidebar::Surfaces : public views::View {
   METADATA_HEADER(Surfaces, views::View)
 
@@ -567,48 +544,22 @@ class TabSidebar::Surfaces : public views::View {
   }
   void OnPaint(gfx::Canvas* canvas) override {
     const auto& colors = GetFlyColors();
-    const SkColor sidebar = colors.bg_sidebar;
     for (views::View* child : list_->rows_->children()) {
       const auto& state = static_cast<TabRowView*>(child)->state();
-      if (!rail_ && !state.HasSurface())
+      if (!state.HasSurface())
         continue;
       gfx::RectF bounds(child->bounds());
       if (rail_)
         bounds.set_width(S(28));
-      SkColor fill = Mix(colors.text, 0.04f, sidebar);
-      SkColor border = Mix(colors.text, 0.09f, sidebar);
-      if (state.pinned) {
-        fill = kPinnedFill;
-        border = kPinnedBorder;
-      }
-      if (state.split_pane) {
-        border = WithAlpha(state.split_pane == 1 ? colors.accent : colors.text,
-                           0.4f);
-      }
-      if (state.selected) {
-        fill = state.pinned ? kPinnedSelectedFill : colors.panel;
-        border = colors.accent;
-      }
-      if (!rail_ && !state.pinned && !state.selected)
-        fill = SK_ColorTRANSPARENT;
-      const float radius = rail_ ? S(4) : S(2);
+      // The selected tab is a panel with the accent bar on its left edge
+      // (design/identity). The other pane of its split view is on screen too
+      // and gets the panel without the bar.
       cc::PaintFlags flags;
-      flags.setAntiAlias(true);
-      flags.setColor(fill);
-      canvas->DrawRoundRect(bounds, radius, flags);
-      flags.setStyle(cc::PaintFlags::kStroke_Style);
-      const float stroke = GetFlyInterfaceScale();
-      flags.setStrokeWidth(stroke);
-      flags.setColor(border);
-      auto outline = bounds;
-      outline.Inset(stroke / 2);
-      canvas->DrawRoundRect(outline, radius, flags);
-      // A selected row's left border is 2px wide.
-      if (state.selected) {
-        flags.setStyle(cc::PaintFlags::kFill_Style);
-        canvas->DrawRect(gfx::RectF(bounds.x() + stroke, bounds.y() + stroke,
-                                   stroke, bounds.height() - 2 * stroke), flags);
-      }
+      flags.setColor(state.selected ? colors.panel
+                                    : FlyAlpha(colors.panel, 0.6f));
+      canvas->DrawRect(bounds, flags);
+      if (state.selected)
+        PaintFlySelectionBar(canvas, bounds);
     }
   }
 
@@ -656,7 +607,7 @@ class TabSidebar::RailMarks : public views::View {
             gfx::CreateVectorIcon(state.muted ? vector_icons::kVolumeOffIcon
                                               : vector_icons::kVolumeUpIcon,
                                   size,
-                                  state.muted ? colors.dim : colors.accent),
+                                  state.muted ? colors.dim : colors.text),
             wrapper.x() + S(3) + (S(12) - size) / 2,
             wrapper.y() + S(18) + (S(9) - size) / 2);
       }
@@ -1122,7 +1073,7 @@ bool TabSidebar::UpdateRow(content::WebContents* contents, int i) {
   if (title.empty())
     title = u"New tab";
   const GURL& url = contents->GetVisibleURL();
-  view->select()->SetText(RowTitle(title));
+  view->select()->SetText(title);
   view->select()->SetDomain(RowDomain(url));
   const auto* audible_helper = RecentlyAudibleHelper::FromWebContents(contents);
   RowState state;
@@ -1196,7 +1147,63 @@ bool TabSidebar::UpdateRow(content::WebContents* contents, int i) {
   view->audio()->GetViewAccessibility().SetName(audio_label);
   return changed;
 }
+int TabSidebar::CursorIndex() const {
+  const auto& rows = rows_->children();
+  for (size_t i = 0; i < rows.size(); ++i) {
+    if (static_cast<TabRowView*>(rows[i].get())->select()->HasFocus())
+      return static_cast<int>(i);
+  }
+  return -1;
+}
+void TabSidebar::FocusRow(int index) {
+  const auto& rows = rows_->children();
+  if (rows.empty())
+    return;
+  index = std::clamp(index, 0, static_cast<int>(rows.size()) - 1);
+  auto* select = static_cast<TabRowView*>(rows[index].get())->select();
+  select->RequestFocus();
+  select->ScrollViewToVisible();
+}
+bool TabSidebar::MoveCursor(int delta) {
+  const int index = CursorIndex();
+  if (index < 0)
+    return false;
+  FocusRow(index + delta);
+  return true;
+}
+bool TabSidebar::MoveCursorToEnd(bool last) {
+  if (CursorIndex() < 0)
+    return false;
+  FocusRow(last ? static_cast<int>(rows_->children().size()) - 1 : 0);
+  return true;
+}
+content::WebContents* TabSidebar::cursor_contents_for_testing() const {
+  const int index = CursorIndex();
+  return index >= 0 && model_ && index < model_->count()
+             ? model_->GetWebContentsAt(index)
+             : nullptr;
+}
+bool TabSidebar::ActivateCursor() {
+  const int index = CursorIndex();
+  if (index < 0 || !model_ || index >= model_->count())
+    return false;
+  Invoke(model_->GetWebContentsAt(index)->GetWeakPtr(), RowAction::kSelect);
+  return true;
+}
+bool TabSidebar::CloseCursor() {
+  const int index = CursorIndex();
+  if (index < 0 || !model_ || index >= model_->count())
+    return false;
+  // A pinned tab stays, as with the row's own controls.
+  if (model_->IsTabPinned(index))
+    return true;
+  pending_cursor_ = index;
+  Invoke(model_->GetWebContentsAt(index)->GetWeakPtr(), RowAction::kClose);
+  return true;
+}
 void TabSidebar::FinishRefresh(bool changed) {
+  if (const int cursor = std::exchange(pending_cursor_, -1); cursor >= 0)
+    FocusRow(cursor);
   if (changed) {
     rows_->InvalidateLayout();
     RepaintSurfaces();

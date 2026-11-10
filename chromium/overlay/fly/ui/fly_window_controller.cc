@@ -43,16 +43,22 @@
 #include "chrome/browser/ui/navigator/browser_navigator_params.h"
 #include "chrome/browser/ui/tabs/tab_muted_utils.h"
 #include "chrome/browser/ui/tabs/tab_strip_model.h"
+#include "chrome/browser/ui/tabs/tab_strip_model_observer.h"
+#include "components/find_in_page/find_result_observer.h"
+#include "components/find_in_page/find_tab_helper.h"
+#include "components/find_in_page/find_types.h"
 #include "components/input/native_web_keyboard_event.h"
 #include "components/omnibox/browser/vector_icons.h"
 #include "components/tabs/public/split_tab_data.h"
 #include "components/tabs/public/tab_interface.h"
+#include "components/url_formatter/url_formatter.h"
 #include "components/vector_icons/vector_icons.h"
 #include "content/public/browser/devtools_agent_host.h"
 #include "content/public/browser/media_session.h"
 #include "content/public/browser/navigation_controller.h"
 #include "content/public/browser/render_widget_host_view.h"
 #include "content/public/browser/web_contents.h"
+#include "content/public/common/referrer.h"
 #include "extensions/common/extension.h"
 #include "fly/bookmarks/bookmark_service.h"
 #include "fly/commands/calculator.h"
@@ -76,6 +82,7 @@
 #include "fly/ui/tab_sidebar.h"
 #include "fly/ui/user_content.h"
 #include "services/network/public/cpp/constants.h"
+#include "services/network/public/mojom/referrer_policy.mojom.h"
 #include "skia/ext/image_operations.h"
 #include "ui/aura/client/focus_client.h"
 #include "ui/aura/window.h"
@@ -123,28 +130,6 @@
 
 namespace fly {
 namespace {
-// The workspace badge: a trailing number of one or two digits after the first
-// letter ("Workspace 1" is "W1"), the first two digits of a longer number,
-// otherwise the first two letters in capitals.
-std::u16string WorkspaceBadgeText(const std::u16string& name) {
-  if (name.empty())
-    return u"1";
-  size_t start = name.size();
-  while (start > 0 && base::IsAsciiDigit(name[start - 1]))
-    --start;
-  if (start < name.size()) {
-    const auto number = name.substr(start);
-    if (number.size() > 2)
-      return number.substr(0, 2);
-    if (name.size() <= 3)
-      return name;
-    std::u16string trimmed;
-    base::TrimWhitespace(name, base::TRIM_LEADING, &trimmed);
-    return base::ToUpperASCII(trimmed.substr(0, 1)) + number;
-  }
-  return base::ToUpperASCII(name.substr(0, 2));
-}
-
 class WorkspaceMenuButton : public FlyButton,
                             public views::ContextMenuController,
                             public ui::SimpleMenuModel::Delegate {
@@ -221,6 +206,24 @@ class WorkspaceMenuButton : public FlyButton,
   std::unique_ptr<views::MenuRunner> runner_;
 };
 BEGIN_METADATA(WorkspaceMenuButton)
+END_METADATA
+
+// The workspace's number on the collapsed sidebar: display type on a cell,
+// as on a departures board (design/identity). The number is the one Ctrl+1
+// to Ctrl+9 and the dashboard use; a private window shows P in the accent.
+class WorkspaceBadge : public FlyLabel {
+  METADATA_HEADER(WorkspaceBadge, FlyLabel)
+
+ public:
+  WorkspaceBadge()
+      : FlyLabel(u"1", FlyFace::kDisplay, 20, gfx::Font::Weight::BLACK) {}
+  void OnPaintBackground(gfx::Canvas* canvas) override {
+    gfx::Rect cell = GetLocalBounds();
+    cell.ClampToCenteredSize(gfx::Size(FlyScaled(24), FlyScaled(26)));
+    canvas->FillRect(cell, FlyRoleColor(FlyRole::kCell));
+  }
+};
+BEGIN_METADATA(WorkspaceBadge)
 END_METADATA
 
 // The texts of Preferences → About → Desktop integration.
@@ -352,6 +355,57 @@ std::vector<BrowserWindowInterface*> DecoratedBrowsers() {
 }
 }  // namespace
 
+// Remembers the tab that was active before the current one.
+class FlyWindowController::TabTrail : public TabStripModelObserver {
+ public:
+  explicit TabTrail(TabStripModel* model) { model->AddObserver(this); }
+  content::WebContents* previous() const { return previous_.get(); }
+  void OnTabStripModelChanged(
+      TabStripModel*,
+      const TabStripModelChange&,
+      const TabStripSelectionChange& selection) override {
+    if (selection.active_tab_changed() && selection.old_contents)
+      previous_ = selection.old_contents->GetWeakPtr();
+  }
+
+ private:
+  base::WeakPtr<content::WebContents> previous_;
+};
+
+// Reports where a search continued with n or N stands ("news 3/60"), since
+// no find bar is on screen to say it.
+class FlyWindowController::FindStatus : public find_in_page::FindResultObserver {
+ public:
+  explicit FindStatus(FlyWindowController* window) : window_(window) {}
+  void Watch(find_in_page::FindTabHelper* find) {
+    observation_.Reset();
+    observation_.Observe(find);
+  }
+  void Stop() { observation_.Reset(); }
+  void OnFindResultAvailable(content::WebContents* contents) override {
+    auto* find = find_in_page::FindTabHelper::FromWebContents(contents);
+    if (!find || !find->find_result().final_update())
+      return;
+    const auto& result = find->find_result();
+    const auto text = find->find_text();
+    window_->ShowStatus(
+        result.number_of_matches() <= 0
+            ? u"Not found: " + text
+            : text + u"  " +
+                  base::NumberToString16(result.active_match_ordinal()) +
+                  u"/" + base::NumberToString16(result.number_of_matches()));
+  }
+  void OnFindTabHelperDestroyed(find_in_page::FindTabHelper*) override {
+    observation_.Reset();
+  }
+
+ private:
+  const raw_ptr<FlyWindowController> window_;
+  base::ScopedObservation<find_in_page::FindTabHelper,
+                          find_in_page::FindResultObserver>
+      observation_{this};
+};
+
 bool FlyWindowController::ShouldDecorate(
     const BrowserWindowInterface* browser) {
   return base::CommandLine::ForCurrentProcess()->HasSwitch("fly-native") &&
@@ -395,6 +449,7 @@ FlyWindowController::FlyWindowController(BrowserWindowInterface* browser,
   if (auto* frame = FlyBrowserFrame::FromWidget(widget_))
     InstallInto(frame);
   tab_sidebar_->SetBrowser(browser_);
+  tab_trail_ = std::make_unique<TabTrail>(browser_->GetTabStripModel());
   const auto workspace = app.WorkspaceFor(browser_->GetProfile());
   status_workspace_name_ =
       workspace ? base::UTF8ToUTF16(workspace->name) : std::u16string();
@@ -422,6 +477,8 @@ FlyWindowController::~FlyWindowController() {
   }
   if (frame_)
     frame_->SetController(nullptr);
+  tab_trail_.reset();
+  find_status_.reset();
   hints_.reset();
   scroller_.reset();
   palette_.reset();
@@ -520,11 +577,10 @@ void FlyWindowController::BuildSidebar() {
                           weak_factory_.GetWeakPtr()),
       u"", FlyFace::kSans, 14));
   workspace_picker_button_->SetTooltipText(
-      u"Workspace: Click to open Workspace Dashboard");
+      u"Workspaces and tabs");
   workspace_picker_button_->SetCornerRadius(6);
   workspace_picker_button_->SetLiftOnHover(true);
-  workspace_badge_ = sidebar->AddChildView(std::make_unique<FlyLabel>(
-      u"W1", FlyFace::kMono, 12, gfx::Font::Weight::MEDIUM));
+  workspace_badge_ = sidebar->AddChildView(std::make_unique<WorkspaceBadge>());
   workspace_badge_->SetHorizontalAlignment(gfx::ALIGN_CENTER);
   workspace_badge_->SetCanProcessEventsWithinSubtree(false);
   workspace_label_ = sidebar->AddChildView(std::make_unique<FlyLabel>(
@@ -560,11 +616,11 @@ void FlyWindowController::BuildSidebar() {
   sidebar_pin_button_ = sidebar->AddChildView(MakeFlyIconButton(
       base::BindRepeating(&FlyWindowController::ToggleSidebarAutoCollapse,
                           weak_factory_.GetWeakPtr()),
-      views::kKeepIcon, u"Pin / Auto-Collapse Sidebar", 36));
+      views::kKeepIcon, u"Pin or unpin the sidebar", 36));
   split_button_ = sidebar->AddChildView(MakeFlyIconButton(
-      action("toggle-split"), kSplitSceneIcon, u"Toggle Split View", 36));
+      action("toggle-split"), kSplitSceneIcon, u"Split view", 36));
   reader_button_ = sidebar->AddChildView(MakeFlyIconButton(
-      action("toggle-reader-view"), kMenuBookIcon, u"Toggle Reader View", 36));
+      action("toggle-reader-view"), kMenuBookIcon, u"Reader view", 36));
   auto* search = sidebar->AddChildView(
       MakeFlyIconButton(action("toggle-address"), vector_icons::kSearchIcon,
                         u"Search or enter address", 36));
@@ -694,12 +750,19 @@ void FlyWindowController::BuildSurfaces() {
   auto& app = FlyApp::Get();
   scroller_ = std::make_unique<PageScroller>(widget_->GetNativeWindow());
   hints_ = std::make_unique<HintController>(
-      widget_, base::BindRepeating(
-                   [](base::WeakPtr<FlyWindowController> window, bool) {
-                     if (window)
-                       window->UpdateModeLabel();
-                   },
-                   weak_factory_.GetWeakPtr()));
+      widget_,
+      base::BindRepeating(
+          [](base::WeakPtr<FlyWindowController> window, bool active) {
+            if (!window)
+              return;
+            window->UpdateModeLabel();
+            if (!active && window->hints_ &&
+                window->hints_->cancellation() == "no-input")
+              window->ShowStatus(u"No text field on screen");
+          },
+          weak_factory_.GetWeakPtr()),
+      base::BindRepeating(&FlyWindowController::OpenLinkInBackground,
+                          weak_factory_.GetWeakPtr()));
   palette_ = std::make_unique<CommandPalette>(
       widget_,
       base::BindRepeating(
@@ -1414,14 +1477,62 @@ void FlyWindowController::ReturnFocusFromSidebar() {
   UpdateSidebarVisibility();
 }
 
+bool FlyWindowController::HandleSidebarKey(const ui::KeyEvent& event) {
+  if (!tab_sidebar_ || Closing())
+    return false;
+  // What the key does on a page decides what it does here: the keys that
+  // scroll down and up move the cursor, the key that scrolls right opens
+  // the tab, the key that closes a tab closes the one under the cursor.
+  std::string action;
+  if (!(event.flags() &
+        (ui::EF_CONTROL_DOWN | ui::EF_ALT_DOWN | ui::EF_COMMAND_DOWN))) {
+    switch (event.key_code()) {
+      case ui::VKEY_DOWN:
+        action = "scroll-down";
+        break;
+      case ui::VKEY_UP:
+        action = "scroll-up";
+        break;
+      case ui::VKEY_RIGHT:
+        action = "scroll-right";
+        break;
+      case ui::VKEY_HOME:
+        action = "page-top";
+        break;
+      case ui::VKEY_END:
+        action = "page-bottom";
+        break;
+      default: {
+        const auto stroke =
+            NativeEventStroke(input::NativeWebKeyboardEvent(event));
+        const auto config =
+            FlyApp::Get().commands().Read().value_or(DefaultKeyboardConfig());
+        const auto keys = CompileBindings(config.normal);
+        if (const auto found = keys.find(stroke); found != keys.end())
+          action = found->second;
+      }
+    }
+  }
+  if (action == "scroll-down")
+    return tab_sidebar_->MoveCursor(1);
+  if (action == "scroll-up")
+    return tab_sidebar_->MoveCursor(-1);
+  if (action == "page-top")
+    return tab_sidebar_->MoveCursorToEnd(false);
+  if (action == "page-bottom")
+    return tab_sidebar_->MoveCursorToEnd(true);
+  if (action == "scroll-right")
+    return tab_sidebar_->ActivateCursor();
+  if (action == "remove-tab")
+    return tab_sidebar_->CloseCursor();
+  return false;
+}
+
 void FlyWindowController::FocusSidebar() {
   if (Closing() || !sidebar_content_)
     return;
-  // An explicit expansion leaves pinned mode. Apply the preference first:
-  // UpdateSidebarMode clears keyboard expansion and focus when unpinning.
-  auto& preferences = FlyApp::Get().preferences();
-  if (preferences.ReadSidebarAutoCollapse() == false)
-    preferences.SetSidebarAutoCollapse(true);
+  // A pinned sidebar stays pinned; an unpinned one opens for as long as it
+  // has the keyboard.
   if (sidebar_focus_inside_) {
     ReturnFocusFromSidebar();
     return;
@@ -1666,6 +1777,8 @@ void FlyWindowController::OnBrowserDidClose(BrowserWindowInterface* browser) {
     return;
   CancelSurfaces();
   browser_closed_ = true;
+  tab_trail_.reset();
+  find_status_.reset();
   if (tab_sidebar_)
     tab_sidebar_->SetBrowser(nullptr);
   if (status_bar_)
@@ -1752,14 +1865,12 @@ void FlyWindowController::UpdateWorkspaceHeader() {
     return;
   std::u16string name = u"Workspace";
   std::u16string badge = u"?";
-  std::u16string compact = u"W";
   const bool is_private = browser_->GetProfile()->IsOffTheRecord();
   auto& app = FlyApp::Get();
   const auto catalog = app.workspaces().Read();
   if (is_private) {
     name = u"Private";
     badge = u"P";
-    compact = u"P";
   } else if (catalog) {
     if (const auto workspace = app.WorkspaceFor(browser_->GetProfile())) {
       for (size_t i = 0; i < catalog->items.size(); ++i) {
@@ -1767,11 +1878,12 @@ void FlyWindowController::UpdateWorkspaceHeader() {
           continue;
         name = base::UTF8ToUTF16(catalog->items[i].name);
         badge = base::NumberToString16(i + 1);
-        compact = u"W" + badge;
       }
     }
   }
-  workspace_badge_->SetText(is_private ? compact : WorkspaceBadgeText(name));
+  workspace_badge_->SetText(badge);
+  workspace_badge_->SetTone(is_private ? FlyLabel::Tone::kAccent
+                                       : FlyLabel::Tone::kText);
   workspace_label_->SetText(name);
   workspace_picker_button_->SetTooltipText(
       name + u": open the workspace dashboard");
@@ -2206,16 +2318,20 @@ std::vector<PaletteEntry> FlyWindowController::WorkspaceEntries() {
       own && !browser_->GetProfile()->IsOffTheRecord() ? own->id : "";
   const bool editable = app.workspaces().CanEdit();
   const auto browsers = DecoratedBrowsers();
+  size_t position = 0;
   for (const auto& item : catalog->items) {
     const auto action = "workspace/" + item.id;
+    // Numbered as Ctrl+1 to Ctrl+9 reach them. What follows the name says
+    // where the workspace stands: this window, its open tabs, or not open.
     PaletteEntry row{action, action,
-                     item.name + (item.id == active ? " (Active)" : ""),
-                     item.profile_directory, {}, {}};
+                     base::NumberToString(++position) + ": " + item.name, "",
+                     {}, {}};
     if (editable) {
       row.row_actions.emplace_back("rename/" + item.id, "Rename");
       if (catalog->items.size() > 1)
         row.row_actions.emplace_back("delete/" + item.id, "Delete");
     }
+    const size_t row_index = result.size();
     result.push_back(std::move(row));
     size_t number = 0;
     for (auto* browser : browsers) {
@@ -2229,22 +2345,26 @@ std::vector<PaletteEntry> FlyWindowController::WorkspaceEntries() {
         const auto key = item.id + "/" + base::NumberToString(number++);
         tab_choices_.emplace(
             key, TabChoice{browser->GetWeakPtr(), contents->GetWeakPtr()});
-        const auto title = contents->GetTitle().empty()
-                               ? contents->GetVisibleURL().spec()
-                               : base::UTF16ToUTF8(contents->GetTitle());
-        PaletteEntry tab{"tab/" + key,
-                         "tab/" + key,
-                         "- " + title +
-                             (model->IsTabPinned(index) ? " \xF0\x9F\x93\x8C"
-                                                        : ""),
-                         "",
-                         {},
-                         {}};
+        const GURL url = contents->GetVisibleURL();
+        const auto title = !contents->GetTitle().empty()
+                               ? base::UTF16ToUTF8(contents->GetTitle())
+                               : IsFlyNewTabPage(url) ? std::string("New tab")
+                                                      : url.spec();
+        std::string detail = IsFlyNewTabPage(url) ? std::string()
+                                                  : std::string(url.host());
+        if (model->IsTabPinned(index))
+          detail += detail.empty() ? "Pinned" : " \u00b7 pinned";
+        PaletteEntry tab{"tab/" + key, "tab/" + key, title, detail, {}, {}};
         tab.indent = 1;
         tab.row_actions.emplace_back("move/" + key, "Move");
         result.push_back(std::move(tab));
       }
     }
+    result[row_index].category =
+        item.id == active ? "This window"
+        : number == 0     ? "Not open"
+        : number == 1     ? "1 tab"
+                          : base::NumberToString(number) + " tabs";
   }
   size_t number = 0;
   for (auto* browser : browsers) {
@@ -2394,7 +2514,7 @@ void FlyWindowController::ToggleWorkspacePicker() {
       FlyApp::Get().commands().Read().value_or(DefaultKeyboardConfig());
   workspace_picker_->ToggleItems(ActiveContents(), WorkspaceEntries(),
                                  config.shortcuts.at("toggle-dashboard"),
-                                 u"Search workspaces", false, true);
+                                 u"Search workspaces and tabs", false, true);
 }
 
 void FlyWindowController::choose_workspace_for_testing(std::string action) {
@@ -2572,8 +2692,8 @@ void FlyWindowController::LoadHistory(HistorySurface surface) {
         window->history_entries_ = rows.value_or(std::vector<HistoryEntry>());
         window->history_rows_deletions_ = deletions;
         window->history_rows_workspaces_ = std::move(workspaces);
-        if (!rows && window->status_)
-          window->status_->SetText(
+        if (!rows)
+          window->ShowStatus(
               u"History is unavailable. Saved data has been preserved.");
         if (surface == HistorySurface::kAddress)
           picker->RefreshQuery();
@@ -2735,6 +2855,7 @@ void FlyWindowController::ToggleAddress() {
 std::vector<PaletteEntry> FlyWindowController::AddressEntries(
     std::u16string_view text) {
   address_choices_.clear();
+  address_tabs_.clear();
   const auto input = base::UTF16ToUTF8(text);
   std::vector<PaletteEntry> result;
   auto add = [&](std::string kind, std::string payload, std::string title,
@@ -2761,18 +2882,52 @@ std::vector<PaletteEntry> FlyWindowController::AddressEntries(
     const auto answer = base::NumberToString(*value);
     add("calculate", input, "= " + answer, "Copy result");
   }
+  // What Enter does with the text as typed: the first row says it in words.
   SearchService search(*g_browser_process->local_state());
-  if (const auto target = search.ResolveNavigation(input))
-    add("navigate", input, target->spec(), "Open in this workspace");
+  bool is_search = false;
+  std::string engine;
+  if (const auto target = search.ResolveNavigation(input, &is_search, &engine)) {
+    if (is_search) {
+      add("navigate", input, std::string(base::TrimWhitespaceASCII(
+                                 input, base::TRIM_ALL)),
+          "Search " + engine);
+    } else {
+      add("navigate", input,
+          base::UTF16ToUTF8(url_formatter::FormatUrl(*target)), "Open address");
+    }
+  }
+  // Tabs already open in this window: go to the tab instead of loading the
+  // page a second time. Their pages are not listed again below.
+  std::set<std::string> open_urls;
+  if (!Closing()) {
+    auto* model = browser_->GetTabStripModel();
+    int listed = 0;
+    for (int index = 0; index < model->count() && listed < 3; ++index) {
+      auto* tab = model->GetWebContentsAt(index);
+      const GURL url = tab->GetVisibleURL();
+      if (index == model->active_index() || IsFlyNewTabPage(url))
+        continue;
+      const auto title = base::UTF16ToUTF8(tab->GetTitle());
+      if (base::ToLowerASCII(title + " " + url.spec()).find(lower) ==
+          std::string::npos)
+        continue;
+      const auto id = base::NumberToString(++listed);
+      address_tabs_[id] = tab->GetWeakPtr();
+      open_urls.insert(url.spec());
+      add("tab", id, title.empty() ? url.spec() : title,
+          "Switch to tab " + base::NumberToString(index + 1) +
+              (url.has_host() ? " \u00b7 " + std::string(url.host()) : ""));
+    }
+  }
   // App bookmarks are an explicit shared product service, never workspace
   // cookies or private history. Results are inert text in native controls.
   if (const auto bookmarks = app.bookmarks().Read())
     for (const auto& item : *bookmarks)
-      if (result.size() < 12 &&
+      if (result.size() < 12 && !open_urls.contains(item.url) &&
           base::ToLowerASCII(item.title + " " + item.url).find(lower) !=
               std::string::npos)
         add("bookmark", item.url, item.title, item.url);
-  std::set<std::string> urls;
+  std::set<std::string> urls = open_urls;
   for (const auto& item : history_entries_)
     if (result.size() < 12 && urls.insert(item.url.spec()).second &&
         base::ToLowerASCII(base::UTF16ToUTF8(item.title) + " " +
@@ -2793,7 +2948,21 @@ void FlyWindowController::ExecuteAddress(content::WebContents* source,
     return;
   const auto payload = choice->second;
   address_choices_.clear();
+  const auto tabs = std::move(address_tabs_);
+  address_tabs_.clear();
   auto& app = FlyApp::Get();
+  if (action.starts_with("tab:")) {
+    const auto tab = tabs.find(payload);
+    auto* model = browser_->GetTabStripModel();
+    const int index = tab != tabs.end() && tab->second
+                          ? model->GetIndexOfWebContents(tab->second.get())
+                          : TabStripModel::kNoTab;
+    if (index != TabStripModel::kNoTab) {
+      model->ActivateTabAt(index);
+      tab->second->Focus();
+    }
+    return;
+  }
   if (action.starts_with("workspace:")) {
     app.OpenWorkspace(payload);
     return;
@@ -3097,14 +3266,36 @@ bool FlyWindowController::RunCommand(std::string_view action) {
     app.TogglePrivate(browser_);
     return true;
   }
-  if (action == "trigger-hints") {
+  if (action == "trigger-hints" || action == "trigger-hints-new-tab" ||
+      action == "focus-input") {
     address_picker_->Cancel();
     workspace_picker_->Cancel();
     tab_move_picker_->Cancel();
     bookmark_picker_->Cancel();
     CancelHistory();
     keyboard_editor_->Cancel();
-    hints_->Toggle(ActiveContents());
+    hints_->Toggle(ActiveContents(),
+                   action == "trigger-hints"
+                       ? HintController::Mode::kActivate
+                       : action == "focus-input"
+                             ? HintController::Mode::kFocusInput
+                             : HintController::Mode::kBackgroundTab);
+    return true;
+  }
+  if (action == "alternate-tab")
+    return SelectAlternateTab();
+  if (action == "find-next" || action == "find-previous")
+    return FindAgain(action == "find-next");
+  if (action == "go-up" || action == "go-root")
+    return GoUp(action == "go-root");
+  if (action.size() == 11 && action.starts_with("workspace-") &&
+      action.back() >= '1' && action.back() <= '9')
+    return OpenWorkspaceNumber(action.back() - '0');
+  if (action == "yank-url") {
+    ExecuteNativeCommand(browser_, action);
+    if (auto* contents = ActiveContents())
+      ShowStatus(u"Copied " +
+                 url_formatter::FormatUrl(contents->GetVisibleURL()));
     return true;
   }
   auto& preferences = app.preferences();
@@ -3163,8 +3354,8 @@ bool FlyWindowController::RunCommand(std::string_view action) {
   if (action == "spawn-tab")
     return CreateTab();
   const bool handled = ExecuteNativeCommand(browser_, action);
-  if (!handled && status_)
-    status_->SetText(base::UTF8ToUTF16(ActionLabel(action) + ": unavailable"));
+  if (!handled)
+    ShowStatus(base::UTF8ToUTF16(ActionLabel(action) + ": not available here"));
   // A close the page holds back shows in the tab list straight away.
   if (handled && tab_sidebar_)
     tab_sidebar_->ScheduleRefresh();
@@ -3285,6 +3476,12 @@ void FlyWindowController::OnKeyEvent(ui::KeyEvent* event) {
     consume(true);
     return;
   }
+  if (sidebar_focus_inside_ && HandleSidebarKey(*event)) {
+    // Its character must not reach a page that takes the keyboard next.
+    ConsumePageKey(event->code());
+    consume(true);
+    return;
+  }
   auto* contents = ActiveContents();
   // Page events use BrowserView::PreHandleKeyboardEvent after native IME
   // processing. Do not dispatch them a second time at the window.
@@ -3309,12 +3506,135 @@ void FlyWindowController::UpdateTargetURL(content::WebContents* source,
 void FlyWindowController::UpdateModeLabel() {
   if (!status_ || Closing())
     return;
+  // Looking for a text field shows no labels and is over in a moment.
+  const bool hints = hints_ && hints_->active() &&
+                     hints_->mode() != HintController::Mode::kFocusInput;
   const std::u16string mode =
-      hints_ && hints_->active()
-          ? (hints_->truncated() ? u"HINTS (target limit)" : u"HINTS")
-          : NativePageModeLabel(browser_);
+      !hints ? NativePageModeLabel(browser_)
+      : hints_->truncated() ? u"HINTS (target limit)"
+      : hints_->mode() == HintController::Mode::kBackgroundTab
+          ? u"HINTS NEW TAB"
+          : u"HINTS";
   // The workspace badge says when the workspace is private.
   status_->SetText(mode);
+  if (status_bar_)
+    status_bar_->SetPendingKeys(NativePendingKeys(browser_));
+}
+
+bool FlyWindowController::SelectAlternateTab() {
+  if (Closing() || !tab_trail_)
+    return false;
+  auto* model = browser_->GetTabStripModel();
+  auto* previous = tab_trail_->previous();
+  const int index = previous ? model->GetIndexOfWebContents(previous)
+                             : TabStripModel::kNoTab;
+  if (index == TabStripModel::kNoTab) {
+    ShowStatus(u"No earlier tab to go back to");
+    return true;
+  }
+  model->ActivateTabAt(index);
+  previous->Focus();
+  return true;
+}
+
+bool FlyWindowController::FindAgain(bool forward) {
+  auto* contents = ActiveContents();
+  auto* find = contents ? find_in_page::FindTabHelper::FromWebContents(contents)
+                        : nullptr;
+  if (!find)
+    return false;
+  // This tab's search, or the text the find bar itself would start with.
+  std::u16string text = find->find_text();
+  if (text.empty())
+    text = find->previous_find_text();
+  if (text.empty())
+    text = find->GetInitialSearchText();
+  if (text.empty()) {
+    ShowStatus(u"Nothing searched yet. Press / to find in the page");
+    return true;
+  }
+  if (!find_status_)
+    find_status_ = std::make_unique<FindStatus>(this);
+  find_status_->Watch(find);
+  find->StartFinding(text, forward, /*case_sensitive=*/false,
+                     /*find_match=*/true);
+  return true;
+}
+
+void FlyWindowController::ClearFindHighlights() {
+  auto* contents = ActiveContents();
+  auto* find = contents ? find_in_page::FindTabHelper::FromWebContents(contents)
+                        : nullptr;
+  if (find_status_)
+    find_status_->Stop();
+  // The find bar ends its own searches.
+  if (!find || find->find_ui_active() || find->find_text().empty())
+    return;
+  find->StopFinding(find_in_page::SelectionAction::kKeep);
+}
+
+bool FlyWindowController::GoUp(bool root) {
+  auto* contents = ActiveContents();
+  if (!contents)
+    return false;
+  const GURL url = contents->GetLastCommittedURL();
+  if (!url.SchemeIsHTTPOrHTTPS() && !url.SchemeIsFile()) {
+    ShowStatus(u"This page has no address to go up from");
+    return true;
+  }
+  GURL target;
+  if (root) {
+    target = url.GetWithEmptyPath();
+  } else if (url.has_ref() || url.has_query()) {
+    // First the part after the path, then the path one level at a time.
+    GURL::Replacements replacements;
+    replacements.ClearRef();
+    replacements.ClearQuery();
+    target = url.ReplaceComponents(replacements);
+  } else {
+    std::string path(url.path());
+    if (path.size() > 1 && path.back() == '/')
+      path.pop_back();
+    path.erase(path.rfind('/') + 1);
+    GURL::Replacements replacements;
+    replacements.SetPathStr(path);
+    target = url.ReplaceComponents(replacements);
+  }
+  if (!target.is_valid() || target == url) {
+    ShowStatus(u"Already at the top of the site");
+    return true;
+  }
+  NavigateFromAddressBar(target);
+  return true;
+}
+
+bool FlyWindowController::OpenWorkspaceNumber(int number) {
+  auto& app = FlyApp::Get();
+  const auto catalog = app.workspaces().Read();
+  if (!catalog)
+    return false;
+  if (number < 1 || static_cast<size_t>(number) > catalog->items.size()) {
+    ShowStatus(u"There is no workspace " + base::NumberToString16(number));
+    return true;
+  }
+  app.OpenWorkspace(catalog->items[number - 1].id);
+  return true;
+}
+
+void FlyWindowController::OpenLinkInBackground(content::WebContents* source,
+                                               GURL url) {
+  if (Closing() || !source || !url.SchemeIsHTTPOrHTTPS() ||
+      browser_->GetTabStripModel()->GetIndexOfWebContents(source) ==
+          TabStripModel::kNoTab)
+    return;
+  NavigateParams params(browser_, url, ui::PAGE_TRANSITION_LINK);
+  params.disposition = WindowOpenDisposition::NEW_BACKGROUND_TAB;
+  params.source_contents = source;
+  params.referrer = content::Referrer::SanitizeForRequest(
+      url, content::Referrer(source->GetLastCommittedURL(),
+                             network::mojom::ReferrerPolicy::kDefault));
+  Navigate(&params);
+  ShowStatus(u"Opened in a background tab: " + url_formatter::FormatUrl(url));
 }
 
 // The mode badge: a click cancels hints, leaves passthrough, or
@@ -3323,7 +3643,7 @@ void FlyWindowController::ClickModeBadge() {
   if (Closing())
     return;
   if (hints_ && hints_->active()) {
-    InvokeNativeCommand(browser_, "trigger-hints");
+    hints_->Cancel();
     return;
   }
   const auto mode = NativePageModeLabel(browser_);
@@ -3722,48 +4042,34 @@ void FlyWindowController::UpdateReaderButton() {
 std::vector<PaletteEntry> FlyWindowController::ExtensionCommandEntries() {
   std::vector<PaletteEntry> entries;
   const auto add = [&](std::string action, std::string title, std::string desc,
-                       std::string details, std::string tip,
                        std::vector<std::string> keywords) {
     PaletteEntry entry{action, action, std::move(title), "Extensions", {}, {}};
     entry.desc = std::move(desc);
-    entry.details = std::move(details);
-    entry.tip = std::move(tip);
     entry.keywords = std::move(keywords);
     entries.push_back(std::move(entry));
   };
-  add("extensions-open-settings", "Extension Settings",
-      "Enable Chrome extensions per workspace and see what they cost",
-      "Opens the Extensions section in Preferences. uBlock Origin Lite runs in "
-      "every workspace unless switched off there; each workspace keeps its own "
-      "extensions.",
-      "Install from Chrome Web Store, a ZIP or CRX package, or an unpacked "
-      "folder.",
+  add("extensions-open-settings", "Extension settings",
+      "Turn extensions on or off for this workspace, and install new ones",
       {"extensions", "addons", "chrome", "plugins", "settings"});
   auto& extensions = FlyApp::Get().extensions();
   if (!extensions.Enabled() || Closing())
     return entries;
-  add("extensions-reload", "Reload Extensions",
-      "Re-read extension code from disk in every workspace using it",
-      "Reloads unpacked extensions in every workspace. Pages that already ran "
-      "the old content scripts need a reload.",
-      "Use this after replacing an extension folder with a newer version.",
+  add("extensions-reload", "Reload extensions",
+      "Read extension code from disk again in every workspace that uses it",
       {"extensions", "reload", "refresh", "update"});
   auto* profile = browser_->GetProfile();
   for (const auto* extension : extensions.ActionExtensions(profile))
-    add("extension:" + extension->id(), extension->name() + ": Open Popup",
-        "Open the extension popup for the active tab",
-        extension->name() + " " + extension->VersionString(),
-        "Press Esc or click outside the popup to close it.",
+    add("extension:" + extension->id(), extension->name() + ": open popup",
+        "Open the popup of " + extension->name() + " " +
+            extension->VersionString() + " for the current tab",
         {"extension", "popup", base::ToLowerASCII(extension->name())});
   for (const auto& info : extensions.List(profile)) {
     if (!info.enabled || !info.has_options)
       continue;
     const auto name = base::UTF16ToUTF8(info.name);
-    add("extension-options:" + info.id, name + ": Options",
-        "Open the extension options page in a new tab",
-        "Options are stored per workspace, like everything else the extension "
-        "saves.",
-        "The options tab stays open like any other tab.",
+    add("extension-options:" + info.id, name + ": options",
+        "Open the options of " + name + " in a new tab. They are kept per "
+        "workspace",
         {"extension", "options", "settings", base::ToLowerASCII(name)});
   }
   return entries;

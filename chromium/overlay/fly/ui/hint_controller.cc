@@ -27,6 +27,7 @@
 #include "ui/accessibility/ax_mode.h"
 #include "ui/accessibility/ax_node.h"
 #include "ui/accessibility/ax_offscreen_result.h"
+#include "ui/accessibility/ax_role_properties.h"
 #include "ui/accessibility/ax_tree.h"
 #include "ui/accessibility/ax_updates_and_events.h"
 #include "ui/accessibility/platform/browser_accessibility.h"
@@ -133,9 +134,13 @@ bool SameTargets(const auto& a, const auto& b) {
 }
 }  // namespace
 
-HintController::HintController(views::Widget* desktop,
-                               base::RepeatingCallback<void(bool)> changed)
-    : desktop_(desktop), state_changed_(std::move(changed)) {
+HintController::HintController(
+    views::Widget* desktop,
+    base::RepeatingCallback<void(bool)> changed,
+    base::RepeatingCallback<void(content::WebContents*, GURL)> open_link)
+    : desktop_(desktop),
+      state_changed_(std::move(changed)),
+      open_link_(std::move(open_link)) {
   desktop_->AddObserver(this);
 }
 HintController::~HintController() {
@@ -166,31 +171,40 @@ gfx::Rect HintController::label_bounds_for_testing(
   }
   return {};
 }
-void HintController::Toggle(content::WebContents* contents) {
+void HintController::Toggle(content::WebContents* contents, Mode mode) {
   if (active_) {
+    // The key of the mode on screen closes it; another mode replaces it.
+    const bool same = mode == mode_;
     Cancel();
-    return;
+    if (same)
+      return;
   }
   if (!desktop_ || !contents || !contents->GetRenderWidgetHostView() ||
       contents->GetVisibility() != content::Visibility::VISIBLE)
     return;
   Observe(contents);
+  mode_ = mode;
   active_ = true;
   cancellation_ = "none";
   state_changed_.Run(true);
   // Hints only need what is on screen, so Blink serializes the visible part of
   // the page. Filters add to every mode the page receives, so a page that
   // already has a tree for an assistive technology keeps its full tree.
-  const ui::AXMode mode =
+  const ui::AXMode tree_mode =
       contents->GetAccessibilityMode().has_mode(ui::AXMode::kWebContents)
           ? ui::kAXModeBasic
           : ui::AXMode(ui::kAXModeBasic.flags(), ui::AXMode::kOnScreenOnly);
   accessibility_ = content::BrowserAccessibilityState::GetInstance()
-                       ->CreateScopedModeForWebContents(contents, mode);
+                       ->CreateScopedModeForWebContents(contents, tree_mode);
+  // Looking for a text field ends sooner: there is no overlay to say that
+  // Fly is still waiting for the page.
   startup_timeout_.Start(
-      FROM_HERE, base::Seconds(5),
+      FROM_HERE,
+      mode_ == Mode::kFocusInput ? base::Milliseconds(1500) : base::Seconds(5),
       base::BindOnce(&HintController::CancelWithReason,
-                     weak_factory_.GetWeakPtr(), "startup-timeout"));
+                     weak_factory_.GetWeakPtr(),
+                     mode_ == Mode::kFocusInput ? "no-input"
+                                                : "startup-timeout"));
   tree_changed_ = true;
   ScheduleUpdate();
 }
@@ -243,6 +257,11 @@ void HintController::Update() {
     // An initial empty tree may precede the renderer's load-complete update.
     if (targets.empty() && !ready_)
       return;
+    if (mode_ == Mode::kFocusInput) {
+      // A later update may still bring the field; the timeout ends the wait.
+      FocusFirstInput(targets);
+      return;
+    }
     if (!ready_ || !SameTargets(targets, targets_)) {
       Relabel(std::move(targets));
       return;
@@ -379,12 +398,57 @@ void HintController::Draw() {
   overlay_->ShowInactive();
   desktop_->GetNativeWindow()->StackChildAtTop(overlay_->GetNativeWindow());
 }
+bool HintController::FocusFirstInput(const std::vector<Target>& targets) {
+  for (const auto& target : targets) {
+    auto* manager = ui::BrowserAccessibilityManager::FromID(target.tree);
+    auto* node = manager ? manager->GetFromID(target.node) : nullptr;
+    auto* frame = content::RenderFrameHost::FromAXTreeID(target.tree);
+    if (!node || !frame || !node->GetData().IsTextField() ||
+        node->GetData().GetRestriction() != ax::mojom::Restriction::kNone)
+      continue;
+    ui::AXActionData action;
+    action.target_tree_id = target.tree;
+    action.target_node_id = target.node;
+    action.action = ax::mojom::Action::kFocus;
+    frame->AccessibilityPerformAction(action);
+    PageScroller::SetAnchor(web_contents(),
+                            gfx::PointF(target.bounds.CenterPoint()));
+    CancelWithReason("input-focused");
+    return true;
+  }
+  return false;
+}
+GURL HintController::LinkOf(const Target& target) const {
+  auto* manager = ui::BrowserAccessibilityManager::FromID(target.tree);
+  auto* node = manager ? manager->GetFromID(target.node) : nullptr;
+  // The label may sit on the text or image inside the link.
+  for (int depth = 0; node && depth < 4; ++depth) {
+    if (ui::IsLink(node->GetRole())) {
+      const GURL url(
+          node->GetStringAttribute(ax::mojom::StringAttribute::kUrl));
+      // Pages of the web only: a script or an internal address is left to
+      // the page's own click handling.
+      return url.is_valid() && url.SchemeIsHTTPOrHTTPS() ? url : GURL();
+    }
+    node = node->PlatformGetParent();
+  }
+  return GURL();
+}
 void HintController::Activate(const Target& target) {
   const auto bounds = CurrentBounds(target);
   auto* frame = content::RenderFrameHost::FromAXTreeID(target.tree);
   if (bounds.IsEmpty() || !frame) {
     CancelWithReason("target-gone");
     return;
+  }
+  if (mode_ == Mode::kBackgroundTab && open_link_) {
+    if (const GURL link = LinkOf(target); link.is_valid()) {
+      auto* contents = web_contents();
+      auto open = open_link_;
+      Cancel();
+      open.Run(contents, link);
+      return;
+    }
   }
   ui::AXActionData action;
   action.target_tree_id = target.tree;
@@ -402,6 +466,11 @@ bool HintController::HandleKey(content::WebContents* contents,
                                const input::NativeWebKeyboardEvent& event) {
   if (!active_)
     return false;
+  // Without labels there is nothing to type: the key goes where it would.
+  if (mode_ == Mode::kFocusInput) {
+    Cancel();
+    return false;
+  }
   if (contents != web_contents()) {
     Cancel();
     return false;
