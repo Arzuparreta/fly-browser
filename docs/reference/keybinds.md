@@ -17,7 +17,7 @@ Fly uses a native Vim-style controller with continuous scrolling inspired by Vim
 
 Escape and Tab are reserved for cancellation and focus navigation. Native control keys such as arrows, Enter, Space and Delete remain contextual UI behaviour. Configured page keys also work from non-editable browser navigation controls, outside browser panels. They use the same saved assignments as the page; there is no hidden set of sidebar shortcuts. Tab stays within visible overlays; arrow keys navigate tab lists, dashboard selections and bookmark columns.
 
-Alt+S (sidebar focus) opens and focuses the tab list; pressing it again from any sidebar control returns focus to the active page and collapses an unpinned sidebar, including retained pointer expansion. Pinning remains unchanged: a pinned sidebar stays open. Custom bindings and the NORMAL-mode S action use the same behaviour. In the tab list, the configured scroll-down/up actions (j/k by default) move the cursor without activating or waking tabs. Enter/Space activate and retain sidebar focus; scroll-right (l) or Right activates and focuses the page. The close and yank actions target the highlighted tab. Fixed arrow/Delete keys retain their native UI roles. The tab selection modifier (Alt by default) with 1 through 8 activates the numbered tab, or the last tab when fewer exist, and with 9 always selects the last tab. Holding it on its own (the left key, for Alt) paints these numbers over the tab icons, whether a page or the interface has the keyboard; releasing it, pressing any other key or leaving the window hides them. Pages in passthrough mode show none.
+Alt+S (sidebar focus) opens and focuses the tab list; pressing it again from any sidebar control returns focus to the active page and collapses an unpinned sidebar, including retained pointer expansion. Pinning remains unchanged: a pinned sidebar stays open. Custom bindings and the NORMAL-mode S action use the same behaviour. In the tab list the keyboard cursor is drawn as four corner brackets. The keys bound to scroll down and up (j/k by default), and Down/Up, move it without activating or waking tabs; the key bound to the bottom of the page (G), and Home/End, move it to the ends. Enter, Space, the key bound to scroll right (l) or Right select the tab under the cursor and give its page the keyboard. The key bound to closing a tab (x) closes the tab under the cursor, which stays where it was; pinned tabs are left alone. The tab selection modifier (Alt by default) with 1 through 8 activates the numbered tab, or the last tab when fewer exist, and with 9 always selects the last tab. Holding it on its own (the left key, for Alt) paints these numbers over the tab icons, whether a page or the interface has the keyboard; releasing it, pressing any other key or leaving the window hides them. Pages in passthrough mode show none.
 
 Opening address/search, find, dashboard, preferences, palette, bookmarks, history or diagnostics closes the previous browser panel; the exception is find inside Preferences, which focuses the settings search. Escape closes the current panel and returns focus to the page; pressing its opening shortcut again also closes it. Ctrl+L can be cancelled even after focus moves to another browser control. In the dashboard, Escape first cancels workspace creation or renaming, then closes the dashboard. The binding recorder and native dialogs keep their own cancellation. Delayed data loads cannot reopen closed panels or take focus from a newer panel. Sharing accepts Escape from its controls and embedded page, except in page passthrough mode.
 
@@ -35,87 +35,105 @@ The table lists the bindings of a new profile.
 
 | Action | Browser shortcuts | Page keys |
 | :--- | :--- | :--- |
-| Enter insert mode | Unassigned | `i` |
-| Toggle passthrough mode | `Shift+Escape` | Unassigned |
-| Close Current Tab | `Ctrl+W` | `x` |
-| Create workspace | Unassigned | Unassigned |
-| Cycle Clock Format (Date & Time / Time / Seconds) | Unassigned | Unassigned |
-| Focus Active Page | `Alt+W` | Unassigned |
-| Focus Navigation Buttons | `Alt+N` | Unassigned |
-| Go back | `Alt+ArrowLeft` | `Shift+H` |
-| Go forward | `Alt+ArrowRight` | `Shift+L` |
-| New Blank Tab | `Ctrl+T` | `t` |
-| Next workspace | `Alt+PageDown` | Unassigned |
-| Open Bookmarks | `Ctrl+Shift+B` | Unassigned |
-| Pin / Unpin Active Tab | `Ctrl+Shift+X` / `F4` | `p` |
-| Previous workspace | `Alt+PageUp` | Unassigned |
-| Reload Active Tab | `Ctrl+R` / `F5` | `r` |
-| Swap Split Panes (Left / Right) | `Ctrl+\` | Unassigned |
-| Switch Split Pane Focus (Pane 1 / Pane 2) | `Ctrl+O` | Unassigned |
-| Toggle Actionable History | `Ctrl+Shift+H` | Unassigned |
-| Toggle Command Palette | `Ctrl+P` | Unassigned |
-| Toggle Downloads Shelf | `Ctrl+Shift+D` | Unassigned |
-| Toggle Dual-Split View (Side-by-Side) | `Ctrl+Shift+S` | Unassigned |
-| Toggle Floating Address Bar | `Ctrl+L` | `o` |
-| Toggle Live Clock & Date Display | Unassigned | Unassigned |
-| Toggle Sidebar Expansion (Pin / Unpin) | `Ctrl+Shift+Z` | Unassigned |
-| Toggle Sidebar Focus | `Alt+S` | `s` |
-| Toggle Status & Mode Bar | `Ctrl+/` | Unassigned |
-| Toggle Workspace Dashboard | `Ctrl+Shift+W` | `w` |
-| Go to page bottom | Unassigned | `Shift+G` |
-| Go to page top | Unassigned | `g g` |
+| Change the clock format | Unassigned | Unassigned |
+| Check for updates | Unassigned | Unassigned |
+| Diagnostics | Unassigned | Unassigned |
+| Fly menu | `F1` | Unassigned |
+| Fly menu (same as above) | Unassigned | Unassigned |
+| Keyboard settings | `Ctrl+,` | `Shift+?` |
+| Open Google sign-in in a private window | Unassigned | Unassigned |
+| Pin or unpin the sidebar | `Ctrl+Shift+Z` | Unassigned |
+| Pin or unpin the sidebar (same as above) | Unassigned | Unassigned |
+| Preferences | `Ctrl+H` | Unassigned |
+| Show or hide the clock | Unassigned | Unassigned |
+| Show or hide the status bar | `Ctrl+/` | Unassigned |
+| Show or hide the window buttons | Unassigned | Unassigned |
+| Switch between dark and light | Unassigned | Unassigned |
+| Turn diagnostics recording on or off | Unassigned | Unassigned |
+| Turn web notifications on or off | Unassigned | Unassigned |
+| What's New | Unassigned | Unassigned |
+| Insert mode | Unassigned | `i` |
+| Passthrough mode | `Shift+Escape` | Unassigned |
+| Address bar | `Ctrl+L` | `o` |
+| Back | `Alt+ArrowLeft` | `Shift+H` |
+| Copy page address | Unassigned | `y` |
+| Find in page | `Ctrl+F` / `F3` | `/` |
+| Find next | Unassigned | `n` |
+| Find previous | Unassigned | `Shift+N` |
+| Focus the first text field | Unassigned | `g i` |
+| Forward | `Alt+ArrowRight` | `Shift+L` |
+| Full screen | `F11` | Unassigned |
+| Link hints | `Alt+F` | `f` |
+| Link hints: open in a background tab | Unassigned | `Shift+F` |
+| Print | Unassigned | Unassigned |
+| Reader view | `F9` | `e` |
+| Reload | `Ctrl+R` / `F5` | `r` |
+| Reload without cache | `Ctrl+Shift+R` | `Shift+R` |
+| Reset zoom | `Ctrl+0` | `z z` |
+| Stop loading | Unassigned | Unassigned |
+| Top of the site | Unassigned | `g Shift+U` |
+| Up one level of the address | Unassigned | `g u` |
+| Zoom in | `Ctrl+Plus` / `Ctrl+=` | `z i` |
+| Zoom out | `Ctrl+-` | `z o` |
+| Bottom of the page | Unassigned | `Shift+G` |
+| Half a page down | Unassigned | `d` |
+| Half a page up | Unassigned | `u` |
 | Scroll down | Unassigned | `j` |
-| Scroll half a page down | Unassigned | `d` |
-| Scroll half a page up | Unassigned | `u` |
 | Scroll left | Unassigned | `h` |
 | Scroll right | Unassigned | `l` |
 | Scroll up | Unassigned | `k` |
-| Resume Tabs in Workspace | Unassigned | Unassigned |
-| Suspend Inactive Tabs | Unassigned | Unassigned |
-| Check for Updates | Unassigned | Unassigned |
-| Open Diagnostics & Health Hub | Unassigned | Unassigned |
-| Test Clean Google Sign-In Flow | Unassigned | Unassigned |
-| Toggle Colour Theme (Dark / Light) | Unassigned | Unassigned |
-| Toggle Diagnostics Recording (In-Memory) | Unassigned | Unassigned |
-| Toggle Window Controls (Minimise, Maximise, Close) | Unassigned | Unassigned |
-| Close Split View | Unassigned | Unassigned |
-| Cycle Split View Orientation | Unassigned | Unassigned |
-| Toggle Dual-Split View (Stacked) | Unassigned | Unassigned |
-| Customise keyboard controls | `Ctrl+,` | `Shift+?` |
-| Open native settings menu | `F1` | Unassigned |
-| Show What's New | Unassigned | Unassigned |
-| Toggle full screen | `F11` | Unassigned |
-| Toggle native menu bar visibility | Unassigned | Unassigned |
-| Toggle Preferences / Help | `Ctrl+H` | Unassigned |
-| Toggle Private Browsing Mode | `Ctrl+Shift+P` | Unassigned |
-| Toggle web notifications | Unassigned | Unassigned |
-| Duplicate active tab | `Ctrl+Shift+K` | Unassigned |
-| Move active tab to another workspace | Unassigned | Unassigned |
-| Move tab left | `Ctrl+Shift+PageUp` | Unassigned |
-| Move tab right | `Ctrl+Shift+PageDown` | Unassigned |
-| Next tab | `Ctrl+Tab` / `Ctrl+PageDown` | Unassigned |
-| Previous tab | `Ctrl+Shift+Tab` / `Ctrl+PageUp` | Unassigned |
-| Reopen last closed tab | `Ctrl+Shift+T` | Unassigned |
-| Reset Tab Zoom Level | `Ctrl+0` | Unassigned |
-| Toggle Auto-Collapse Sidebar (Pin / Unpin) | Unassigned | Unassigned |
-| Open User Scripts Directory | Unassigned | Unassigned |
-| Open User Styles Directory | Unassigned | Unassigned |
-| Reload User Scripts and Styles | Unassigned | Unassigned |
-| Add Current Page to Bookmarks | `Ctrl+D` | Unassigned |
-| Copy page URL | Unassigned | `y` |
-| Find In Page | `Ctrl+F` / `F3` | `/` |
-| Open Extension Actions (Popups, Commands, Options) | Unassigned | Unassigned |
-| Play/Pause Media Playback Globally | `Ctrl+Shift+0` / `F10` | Unassigned |
-| Print active page | Unassigned | Unassigned |
-| Reload without cache | `Ctrl+Shift+R` | `Shift+R` |
-| Stop loading | Unassigned | Unassigned |
-| Toggle Audio Mute Globally (All Tabs) | Unassigned | `Shift+M` |
-| Toggle Audio Mute on Active Tab | `Ctrl+Shift+M` / `F8` | `m` |
-| Toggle Developer Tools | `Ctrl+Shift+I` / `F12` | Unassigned |
-| Toggle Link Hints Overlay | `Alt+F` | `f` |
-| Toggle Reader View on Active Tab | `F9` | `e` |
-| Zoom in | `Ctrl+Plus` / `Ctrl+=` | Unassigned |
-| Zoom out | `Ctrl+-` | Unassigned |
+| Top of the page | Unassigned | `g g` |
+| Split view: change orientation | Unassigned | Unassigned |
+| Split view: close | Unassigned | Unassigned |
+| Split view: focus the other pane | `Ctrl+O` | Unassigned |
+| Split view: side by side | `Ctrl+Shift+S` | Unassigned |
+| Split view: stacked | Unassigned | Unassigned |
+| Split view: swap panes | `Ctrl+\` | Unassigned |
+| Close tab | `Ctrl+W` | `x` |
+| Duplicate tab | `Ctrl+Shift+K` | Unassigned |
+| First tab | Unassigned | `g 0` |
+| Focus the page | `Alt+W` | Unassigned |
+| Focus the sidebar buttons | `Alt+N` | Unassigned |
+| Focus the tab list | `Alt+S` | `s` |
+| Last tab | Unassigned | `g $` |
+| Move tab down | `Ctrl+Shift+PageDown` | `> >` |
+| Move tab to another workspace | Unassigned | `Shift+W` |
+| Move tab up | `Ctrl+Shift+PageUp` | `< <` |
+| Mute or unmute tab | `Ctrl+Shift+M` / `F8` | `m` |
+| New tab | `Ctrl+T` | `t` |
+| Next tab | `Ctrl+Tab` / `Ctrl+PageDown` | `Shift+J` / `g t` |
+| Pin or unpin tab | `Ctrl+Shift+X` / `F4` | `p` |
+| Previous tab | `Ctrl+Shift+Tab` / `Ctrl+PageUp` | `Shift+K` / `g Shift+T` |
+| Previously used tab | `Alt+0` | `g a` |
+| Reopen closed tab | `Ctrl+Shift+T` | `Shift+X` |
+| Bookmark this page | `Ctrl+D` | Unassigned |
+| Bookmarks | `Ctrl+Shift+B` | `b` |
+| Command Centre | `Ctrl+P` | Unassigned |
+| Developer tools | `Ctrl+Shift+I` / `F12` | Unassigned |
+| Downloads | `Ctrl+Shift+D` | Unassigned |
+| Extension actions | Unassigned | Unassigned |
+| History | `Ctrl+Shift+H` | Unassigned |
+| Mute or unmute every tab | Unassigned | `Shift+M` |
+| Open the user scripts folder | Unassigned | Unassigned |
+| Open the user styles folder | Unassigned | Unassigned |
+| Play or pause media in every tab | `Ctrl+Shift+0` / `F10` | Unassigned |
+| Reload user scripts and styles | Unassigned | Unassigned |
+| Resume suspended tabs | Unassigned | Unassigned |
+| Suspend background tabs | Unassigned | Unassigned |
+| New workspace | Unassigned | Unassigned |
+| Next workspace | `Alt+PageDown` | Unassigned |
+| Previous workspace | `Alt+PageUp` | Unassigned |
+| Private window | `Ctrl+Shift+P` | Unassigned |
+| Workspace 1 | `Ctrl+1` | Unassigned |
+| Workspace 2 | `Ctrl+2` | Unassigned |
+| Workspace 3 | `Ctrl+3` | Unassigned |
+| Workspace 4 | `Ctrl+4` | Unassigned |
+| Workspace 5 | `Ctrl+5` | Unassigned |
+| Workspace 6 | `Ctrl+6` | Unassigned |
+| Workspace 7 | `Ctrl+7` | Unassigned |
+| Workspace 8 | `Ctrl+8` | Unassigned |
+| Workspace 9 | `Ctrl+9` | Unassigned |
+| Workspaces and tabs | `Ctrl+Shift+W` | `w` |
 | Select tab by number (9: last tab) | `Alt+1` … `Alt+9` | Unassigned |
 
 <!-- end of default bindings -->
@@ -128,7 +146,10 @@ the defaults of the Fly version you run, so later default improvements still
 apply. An empty list disables an action. Your bindings take precedence: a
 default that would collide with one of them gives up only the colliding chord.
 If one of your bindings uses a default tab-number chord, tab numbers are off
-until you choose a modifier.
+until you choose a modifier. A tab modifier you choose keeps its nine chords
+too: with **Tab numbers** set to Ctrl, Ctrl+1 to Ctrl+9 select tabs and the
+default workspace shortcuts on those chords are off until you bind them to
+other keys.
 
 **Export to file…** writes the same changes, including unsaved ones, as JSON:
 

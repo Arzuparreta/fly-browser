@@ -63,7 +63,7 @@ for (const command of commands) {
     if (!isText(name)) fail('commands.json: every entry needs an id');
     if (commandIds.has(name)) fail(`commands.json: ${name} is listed twice`);
     commandIds.add(name);
-    for (const field of ['title', 'desc', 'details', 'tip', 'category']) {
+    for (const field of ['title', 'desc', 'category']) {
         if (!isText(command[field])) fail(`commands.json: ${name} needs a "${field}"`);
     }
     if (!Object.hasOwn(actions, command.actionId)) fail(`commands.json: ${name} runs "${command.actionId}", which actions.json does not define`);
@@ -77,8 +77,8 @@ const defaults = {
     normal: Object.fromEntries(Object.entries(actions).map(([id, action]) => [id, action.normal])),
     tabs: catalogue.tabs
 };
-const entries = commands.map(({id, title, desc, details, tip, category, actionId, keywords}) =>
-    ({id, title, desc, details, tip, category, actionId, keywords}));
+const entries = commands.map(({id, title, desc, category, actionId, keywords}) =>
+    ({id, title, desc, category, actionId, keywords}));
 
 const literal = value => {
     const json = JSON.stringify(value);

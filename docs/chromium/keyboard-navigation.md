@@ -99,6 +99,35 @@ The overlay uses small bold capitals with a thin neutral border and faded typed
 letters. Label views are reused when filtering or moving. `commands/hint_codes.*`
 keeps the easiest labels as single letters until more prefixes are necessary.
 
+## Hint modes
+
+`HintController::Mode` says what typing a label does. `kActivate` is the
+original behaviour. `kBackgroundTab` reads the address of the link a label is
+on (the node itself or up to three ancestors, since a label may sit on the
+text or image inside the link) and opens it with `NEW_BACKGROUND_TAB` through
+a callback of the window controller; only `http` and `https` addresses take
+this path, and anything else is activated as in `kActivate`, so a script link
+or a button still runs under the page's own click handling. `kFocusInput`
+draws no labels: it focuses the first on-screen text field of the collected
+targets, gives keys back to their normal route while it waits, and ends after
+1.5 seconds with a status message when the page has none.
+
+## Sequences, the tab list and find
+
+- The router exposes the pending first stroke of a two-stroke sequence
+  (`KeyboardRouter::pending`). The status bar shows it beside the mode and
+  clears it after the router's own 700 ms.
+- While the tab list has the keyboard, `FlyWindowController::HandleSidebarKey`
+  runs before page keys. It asks the saved configuration what the pressed key
+  does on a page and maps that action to the list: scroll down and up move
+  the cursor, scroll right opens the tab, close tab closes the one under the
+  cursor. The arrows, Home and End are fixed. Before this, those keys fell
+  through to the page route and scrolled the page behind the list.
+- `find-next` and `find-previous` call `FindTabHelper::StartFinding` with the
+  tab's last search text and never show the find bar, which would take the
+  keyboard. A `FindResultObserver` reports the position in the status bar, and
+  Escape in NORMAL mode ends that search with `SelectionAction::kKeep`.
+
 ## Limits and regression coverage
 
 The activated scroll target is a hit-test point, not a DOM element reference.

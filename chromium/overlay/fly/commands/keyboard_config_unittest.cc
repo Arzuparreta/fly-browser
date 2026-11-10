@@ -188,6 +188,28 @@ TEST(KeyboardConfigTest, ChangesWinAndDefaultsGiveUpCollidingChords) {
   EXPECT_EQ("Ctrl", resolved.config->tabs);
 }
 
+TEST(KeyboardConfigTest, AChosenTabModifierKeepsItsChordsFromLaterDefaults) {
+  // Ctrl+1 to Ctrl+9 open workspaces by default. Someone who selects tabs
+  // with Ctrl keeps doing so: the defaults give those chords up.
+  const auto changes = base::DictValue()
+                           .Set("tabs", "ctrl")
+                           .Set("shortcuts", base::DictValue())
+                           .Set("normal", base::DictValue());
+  const auto resolved = ResolveKeyboardChanges(changes);
+  ASSERT_TRUE(resolved.config) << resolved.error;
+  EXPECT_EQ("Ctrl", resolved.config->tabs);
+  EXPECT_TRUE(resolved.config->shortcuts.at("workspace-1").empty());
+  EXPECT_TRUE(resolved.config->shortcuts.at("workspace-9").empty());
+  const auto compiled =
+      CompileBindings(resolved.config->shortcuts, resolved.config->tabs);
+  EXPECT_EQ("tab-1", compiled.at("Ctrl+1"));
+  // Without a choice, both defaults stand side by side.
+  const auto& defaults = DefaultKeyboardConfig();
+  const auto standard = CompileBindings(defaults.shortcuts, defaults.tabs);
+  EXPECT_EQ("workspace-3", standard.at("Ctrl+3"));
+  EXPECT_EQ("tab-3", standard.at("Alt+3"));
+}
+
 TEST(KeyboardConfigTest, ChangesAreComparedInTheirNormalisedSpelling) {
   const auto changes =
       base::DictValue()
@@ -263,7 +285,8 @@ TEST_F(KeyboardRouterTest, EditablesKeepPageKeysButReceiveBrowserShortcuts) {
   EXPECT_EQ("spawn-tab", Press("Ctrl+T", true).action);
   EXPECT_EQ("scroll-down", Press("J").action);
   EXPECT_EQ("tab-9", Press("Alt+9", true).action);
-  EXPECT_EQ(KeyResultKind::kPass, Press("Ctrl+1", true).kind);
+  EXPECT_EQ("workspace-1", Press("Ctrl+1", true).action);
+  EXPECT_EQ(KeyResultKind::kPass, Press("Ctrl+Alt+1", true).kind);
 }
 
 TEST_F(KeyboardRouterTest, PassthroughRetainsOnlyItsEscapeShortcut) {
@@ -299,6 +322,41 @@ TEST_F(KeyboardRouterTest, PrefixTimeoutAndFocusReset) {
   EXPECT_EQ(KeyResultKind::kConsume, Press("G").kind);
   Press("X", true);
   EXPECT_EQ(KeyResultKind::kConsume, Press("G").kind);
+}
+
+TEST_F(KeyboardRouterTest, SequencesReportTheirPendingStrokeAndRunVimKeys) {
+  EXPECT_TRUE(router_.pending().empty());
+  EXPECT_EQ(KeyResultKind::kConsume, Press("G").kind);
+  EXPECT_EQ("G", router_.pending());
+  EXPECT_EQ("next-tab", Press("T", false, false, 100).action);
+  EXPECT_TRUE(router_.pending().empty());
+  Press("G");
+  EXPECT_EQ("previous-tab", Press("Shift+T", false, false, 100).action);
+  Press("G");
+  EXPECT_EQ("first-tab", Press("0", false, false, 100).action);
+  Press("G");
+  EXPECT_EQ("last-tab", Press("$", false, false, 100).action);
+  Press("G");
+  EXPECT_EQ("alternate-tab", Press("A", false, false, 100).action);
+  Press("G");
+  EXPECT_EQ("go-up", Press("U", false, false, 100).action);
+  Press("G");
+  EXPECT_EQ("focus-input", Press("I", false, false, 100).action);
+  Press("Z");
+  EXPECT_EQ("zoom-in", Press("I", false, false, 100).action);
+  Press("<");
+  EXPECT_EQ("move-tab-left", Press("<", false, false, 100).action);
+  EXPECT_EQ("next-tab", Press("Shift+J").action);
+  EXPECT_EQ("previous-tab", Press("Shift+K").action);
+  EXPECT_EQ("reopen-closed-tab", Press("Shift+X").action);
+  EXPECT_EQ("find-next", Press("N").action);
+  EXPECT_EQ("find-previous", Press("Shift+N").action);
+  EXPECT_EQ("trigger-hints-new-tab", Press("Shift+F").action);
+  EXPECT_EQ("toggle-bookmarks", Press("B").action);
+  EXPECT_EQ("workspace-2", Press("Ctrl+2").action);
+  // A prefix followed by a key that completes nothing runs that key alone.
+  Press("G");
+  EXPECT_EQ("scroll-down", Press("J", false, false, 100).action);
 }
 
 TEST_F(KeyboardRouterTest, AutoRepeatConsumesNonRepeatableActions) {

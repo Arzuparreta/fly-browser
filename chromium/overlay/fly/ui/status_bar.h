@@ -31,9 +31,11 @@ namespace fly {
 class FlyButton;
 class FlyLabel;
 class StatusBadge;
-// Page and profile state: mode, stop/reload and hovered link or loading
-// destination on the left; zoom, extension actions, notifications, connection,
-// workspace and clock badges on the right. Link targets arrive from the browser
+// Page and profile state, laid out like i3bar. On the left the keyboard mode
+// block, the keys of an unfinished sequence, stop/reload and the address line
+// (the page's address, or a hovered link, the loading destination or a short
+// message). On the right extension actions, notifications and the segments:
+// tab position, zoom, connection, workspace and clock. Link targets arrive from the browser
 // delegate; page code never receives a privileged UI binding.
 class StatusBar : public views::View,
                   public TabStripModelObserver,
@@ -65,6 +67,14 @@ class StatusBar : public views::View,
   void SetNotificationsEnabled(bool enabled);
   // A short message in the link area, replaced by the next hovered link.
   void ShowMessage(std::u16string text, base::TimeDelta timeout);
+  // The keys typed so far of a NORMAL-mode sequence ("g" of "g g"), shown
+  // beside the mode until the sequence ends or lapses.
+  void SetPendingKeys(std::u16string keys);
+  std::u16string pending_keys_for_testing() const;
+  // The page's own address as the bar shows it, or nothing while a link, a
+  // loading destination or a message takes its place.
+  std::u16string address_for_testing() const;
+  FlyButton* tabs_for_testing() const;
   std::u16string message_for_testing() const { return message_; }
   bool zoom_controls_open_for_testing() const;
   // Container for per-profile extension action buttons.
@@ -94,6 +104,8 @@ class StatusBar : public views::View,
   // Light mode lays the paper grain over the bar.
   void SetPaperGrain(gfx::ImageSkia grain);
   void OnPaintBackground(gfx::Canvas* canvas) override;
+  gfx::Size CalculatePreferredSize(
+      const views::SizeBounds& available) const override;
 
  private:
   gfx::ImageSkia paper_grain_;
@@ -109,13 +121,19 @@ class StatusBar : public views::View,
   void SelectContents();
   void Update();
   void UpdateZoom();
+  void UpdateTabPosition();
   void ReloadOrStop();
   base::WeakPtr<BrowserWindowInterface> browser_;
   raw_ptr<TabStripModel> model_ = nullptr;
   raw_ptr<FlyLabel> mode_;
-  raw_ptr<FlyLabel> location_;
+  raw_ptr<FlyLabel> keys_;
+  base::OneShotTimer keys_timer_;
+  raw_ptr<FlyLabel> site_;
+  raw_ptr<FlyLabel> path_ = nullptr;
+  raw_ptr<FlyLabel> location_ = nullptr;
   raw_ptr<FlyButton> reload_;
-  raw_ptr<FlyButton> zoom_;
+  raw_ptr<StatusBadge> tabs_;
+  raw_ptr<StatusBadge> zoom_;
   raw_ptr<views::View> extensions_;
   raw_ptr<FlyButton> notifications_;
   raw_ptr<StatusBadge> security_;

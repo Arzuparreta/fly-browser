@@ -68,6 +68,16 @@ class TabSidebar : public views::View,
   bool numbers_visible() const { return numbers_visible_; }
   void OnThemeChanged() override;
   void FocusActiveTab();
+  // The keyboard cursor is the row that has keyboard focus; moving it never
+  // selects a tab or wakes a suspended one. These return false while no row
+  // has focus.
+  bool MoveCursor(int delta);
+  bool MoveCursorToEnd(bool last);
+  // Selects the tab under the cursor and gives its page the keyboard.
+  bool ActivateCursor();
+  // Closes the tab under the cursor; the cursor stays at that position.
+  bool CloseCursor();
+  content::WebContents* cursor_contents_for_testing() const;
   size_t row_count_for_testing() const;
   size_t row_updates_for_testing() const { return row_updates_; }
   views::View* row_for_testing(content::WebContents* contents) const;
@@ -110,6 +120,9 @@ class TabSidebar : public views::View,
                          base::WeakPtr<content::WebContents> contents,
                          int action);
   void RepaintSurfaces();
+  // The index of the row with keyboard focus, or -1.
+  int CursorIndex() const;
+  void FocusRow(int index);
 
   struct Row {
     base::WeakPtr<content::WebContents> contents;
@@ -134,6 +147,8 @@ class TabSidebar : public views::View,
   raw_ptr<views::View> rail_marks_ = nullptr;
   raw_ptr<views::View> numbers_ = nullptr;
   bool numbers_visible_ = false;
+  // Where the cursor goes once the rows have been rebuilt after a close.
+  int pending_cursor_ = -1;
   base::RepeatingClosure new_tab_;
   bool rail_ = false;
   bool refresh_pending_ = false;

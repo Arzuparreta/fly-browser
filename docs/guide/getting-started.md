@@ -1,21 +1,14 @@
-# Overview & Philosophy
+# Getting started
 
-Fly Browser is a small, minimal alternative to the typical Linux browsers. It keeps full control of the browser on the keyboard while offering a polished experience for mouse users.
+Fly is the full Chromium browser with its own interface: vertical tabs in a sidebar, one status bar and floating panels, all of it reachable from the keyboard. It is the renamed, independent continuation of [Mise by Rakosn1cek](https://github.com/Rakosn1cek/Mise-browser).
 
-Fly is the renamed, independent continuation of [Mise by Rakosn1cek](https://github.com/Rakosn1cek/Mise-browser). It aims to stay a lean, intentional tool built for privacy, focus and low resource use rather than an all-consuming platform of its own.
+## Design principles
 
-Typical desktop browsers consume gigabytes of memory across dozens of background processes, producing heat and throttling on fanless hardware. Fly provides an ultra-lean browsing environment by stripping away unnecessary browser overhead while delivering modern privacy isolation, multi-account containers, and complete mouse-free operation.
-
----
-
-## Design Principles
-
-- **Keyboard First**: Every single feature, tab switch, link click, and setting can be reached without touching a mouse.
-- **Resource Respect**: Eligible background pages pause without unloading, saving CPU and battery while preserving page state.
-- **Strict Privacy Isolation**: Workspaces operate in isolated Chromium profiles. Work and personal profiles never leak cookies or storage.
-- **Crash & Session Resilience**: Atomic disk writes, rolling backup journals, and clean-exit sentinels protect active workspaces against power cuts or sudden terminations.
-- **Air-Gapped Security**: Untrusted scripts and shell commands are never blindly executed; they pass through clipboard verification.
-- **Distro & Shell Agnostic**: Fully integrated with Arch Linux and native terminal emulators while functioning seamlessly across all environments.
+- **The keyboard reaches everything.** Browser shortcuts work everywhere; single page keys, as in Vim, work whenever you are not typing. The mouse works everywhere too.
+- **The interface stays out of the way.** The page gets the window, except a strip of tab icons and one status line.
+- **Workspaces are isolated.** Each one is a separate Chromium profile in its own window: cookies, logins and extensions never cross.
+- **Background tabs do not cost.** Idle pages are paused in memory and resume where they were.
+- **Local by default.** No Fly telemetry and no account. See the [privacy policy](/guide/privacy-policy) for what Chromium's own services contact.
 
 ---
 
@@ -36,10 +29,12 @@ Once launched, Fly opens a window for your first workspace with a new tab:
 
 ![Fly Browser New Tab](/screenshots/new-tab.webp)
 
-- Press **Ctrl + L** to open the floating address bar and navigate to any site.
-- Press **Ctrl + T** to open a new tab with the address bar ready for typing.
-- Press **Alt + F** (or **f** in NORMAL mode) to activate the Link Hints overlay and navigate links using your keyboard.
-- Press **Ctrl + P** to bring up the Command Palette for quick access to all browser functions.
+- Press **Ctrl + L** (or **o**) to open the address bar and go to any site.
+- Press **Ctrl + T** (or **t**) to open a new tab with the address bar ready for typing.
+- Press **f** and type the letters that appear on a link to follow it without the mouse.
+- Press **j** and **k** to scroll, **J** and **K** to change tab, **H** and **L** to go back and forward.
+- Look at the left end of the status bar: it shows `NORMAL` while single keys act on the browser and `INSERT` while they go to a text field. **Escape** returns to `NORMAL`.
+- Press **Ctrl + P** to open the Command Centre, which finds any command and shows its key.
 - Press **Ctrl + H** to open Preferences, and again to close it. Use the section index on the left, or ↑/↓ once it has focus, to move between sections. Press **/** or **Ctrl + F** to search every setting.
 - Press **Ctrl + ,** (or **?** in NORMAL mode) to open Preferences directly on its **Keyboard** section, where you see every shortcut and can change it.
 

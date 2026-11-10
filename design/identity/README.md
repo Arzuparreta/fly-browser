@@ -58,9 +58,9 @@ These are the values used in the mockups. The browser's palette is in `chromium/
 | :--- | :--- | :--- |
 | Interface | IBM Plex Sans 400, 500, 600 | Titles, settings, body text. |
 | Data | IBM Plex Mono 400, 500, italic 400 | Domains, memory, key hints, captions. |
-| Display | Doto 500 to 900 | Clock, mode badge, workspace number, counters. |
+| Display | Doto 500 to 900 | The workspace number on the collapsed sidebar, counters and headings of 14 px or more. |
 
-All three are under the SIL Open Font License. The browser bundles them (`chromium/overlay/fly/resources/fonts` for the interface, subset `woff2` files in `resources/new_tab/fonts` for its pages) and never fetches fonts at runtime. Doto sits on cells (`Cell` token) the way a departures board does.
+All three are under the SIL Open Font License. The browser bundles them (`chromium/overlay/fly/resources/fonts` for the interface, subset `woff2` files in `resources/new_tab/fonts` for its pages) and never fetches fonts at runtime. Doto sits on cells (`Cell` token) the way a departures board does. Below 14 px its dots merge and words stop being readable, so small labels that must be read at a glance (the mode block, the status bar's segments) are set in IBM Plex Mono capitals.
 
 ### Textures and devices
 
@@ -69,18 +69,30 @@ All three are under the SIL Open Font License. The browser bundles them (`chromi
 | Dot grid, 16 px pitch | New tab background. | 04 |
 | Paper grain | Light theme surfaces only, as a static tiled image. | 07 |
 | One bit dither | Empty states and loading placeholders. | 06 |
-| Corner brackets | Whatever has keyboard focus (search field, focused panel). | 05 |
+| Corner brackets | The keyboard cursor: the row of the tab list the keys act on. | 05 |
 | Red hairline, 1 px, right angles | Connects an element to its data. | 08 |
 | Red bar, 2 px | Left edge of the active tab or selected row. | 07, 08 |
+
+### Interface rules
+
+These hold in every bar, list and panel. `chromium/overlay/fly/ui/fly_theme.{h,cc}` implements them as shared helpers (`FlyHoverColor`, `PaintFlyBrackets`, `PaintFlySelectionBar`, `FlyInkOn`), so a surface gets them by using the helper.
+
+| Rule | Meaning |
+| :--- | :--- |
+| One red | Red marks where you are: the selected row's bar, the keyboard cursor's brackets, the passthrough block, a private window. It is never decoration and never a large fill. |
+| States come from the palette | Hover is the text colour at 7 to 8% strength. A selected row is the Panel token. Brass (Latón) is for what needs attention: an insecure page, hint mode. Blue is for addresses and links. No surface defines colours of its own. |
+| Tiled is square, floating is round | Surfaces that tile the window (sidebar, status bar, tab rows) have right angles and are separated by 1 px rules. Surfaces that float over the page (menus, the address bar, bubbles) have an 8 px radius and their rows 6 px. |
+| The mode is a block | The keyboard mode sits flush in the status bar's left corner. NORMAL rests on a cell; INSERT (paper), HINTS (brass) and PASSTHROUGH (red) are solid blocks with ink or paper text. |
+| The status bar is text | Segments are IBM Plex Mono capitals separated by hairlines, dim unless they differ from the usual (a zoom other than 100%, an insecure page, a private window). |
 
 ## Components shown in the mockups
 
 - **Sidebar header:** the text FLY.
-- **Workspace card:** workspace number in Doto cells, name, its key hint.
-- **Tab board:** title over domain (domain in Link colour, mono). Audio/mute, pin and split-pane controls convey actionable state. The active row gets the panel background and the red bar.
+- **Workspace card:** workspace number in Doto on a cell (the number Ctrl+1 to Ctrl+9 use), and its name when the sidebar is open.
+- **Tab board:** title over domain (domain in Link colour, mono). Audio/mute, pin and split-pane controls convey actionable state. The active row gets the panel background and the red bar; the other page of a split view gets the panel alone; the keyboard cursor is drawn as corner brackets.
 - **Engraving:** the engraved fly at the bottom of the sidebar, under the tabs.
 - **New tab:** Quiet keeps the fly memory, a small native-search entry point and a Bookmarks shortcut. The native menu hosts saved-page navigation and editing; the status bar hosts the clock and Diagnostics hosts memory data.
-- **Status bar:** mode badge in Doto on a cell (`NORMAL`, `INSERT`, `HINTS`, `PASSTHROUGH`), key hints, and on the right connection security and time.
+- **Status bar:** the mode block (`NORMAL`, `INSERT`, `HINTS`, `PASSTHROUGH`), the keys of an unfinished sequence, the page's address with its site emphasised, and on the right the tab position, zoom, connection, workspace and time.
 
 ## Assets in this folder
 

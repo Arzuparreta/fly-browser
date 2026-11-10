@@ -3,109 +3,90 @@ layout: home
 
 hero:
   name: Fly Browser
-  text: Small, Minimal Linux Browser
-  tagline: Full keyboard control of the browser with a polished experience for mouse users. State-preserving tab suspension, side-by-side split view and isolated multi-account containers.
+  text: A fast Chromium you drive from the keyboard
+  tagline: Vertical tabs, Vim-style page keys, link hints, workspaces in separate profiles and a status bar that reads like i3bar. For Linux.
   image:
     src: /logo.png
-    alt: Fly Browser Logo
+    alt: Fly Browser logo
   actions:
     - theme: brand
-      text: Get Started
+      text: Get started
       link: /guide/getting-started
     - theme: alt
-      text: Download Release
+      text: Install
       link: /guide/installation
     - theme: alt
-      text: Keyboard Shortcuts
-      link: /reference/keybinds
+      text: Keyboard
+      link: /guide/navigation
     - theme: alt
-      text: View on GitHub
+      text: GitHub
       link: https://github.com/Arzuparreta/fly-browser
 
 features:
-  - title: Tab Suspension
-    details: Eligible background pages pause in memory and resume without reloading, preserving their document and JavaScript state.
-  - title: Dual-Split View
-    details: Browse two pages side-by-side with customisable split ratios. Swap panes, open links directly into split view, or toggle seamlessly via keyboard shortcuts.
-  - title: Multi-Account Containers
-    details: Every workspace runs inside an isolated Chromium profile. Run multiple corporate and personal logins simultaneously with zero cookie cross-contamination.
-  - title: Mouse-Free Navigation
-    details: Full Vim-inspired link hints (f), floating omnibar, and browser and page-key customisation in Preferences.
+  - title: Keyboard first
+    details: Single keys scroll, follow links, switch tabs and open every panel. Every binding can be changed, and the status bar always shows the mode you are in.
+  - title: Link hints
+    details: Press f and type one or two letters to click anything on screen. F opens links in background tabs; g i jumps to the first text field.
+  - title: Workspaces
+    details: Each workspace is a separate Chromium profile in its own window, with its own cookies, logins and extensions. Ctrl+1 to Ctrl+9 switch between them.
+  - title: Vertical tabs
+    details: A 36 px strip of icons that opens over the page, or a pinned list. Alt+1 to Alt+9 select tabs; g a returns to the previous one.
+  - title: Split view
+    details: Two tabs side by side or stacked in one window, with keys to change focus and swap them.
+  - title: Tab suspension
+    details: Idle background pages are paused in memory and resume where they were, without reloading.
+  - title: Address bar
+    details: Addresses, search aliases, DuckDuckGo bangs, a calculator, your open tabs, bookmarks and history in one floating bar.
   - title: uBlock Origin Lite
-    details: Included ad and tracker blocking for persistent workspaces, with filter lists and site exceptions managed in uBlock Origin Lite.
-  - title: Clipboard-Mediated Oversight
-    details: Web commands and script executions stage safely onto your system clipboard. External terminal scanning tools like Oversight can inspect actions before execution.
-  - title: User Scripts & Styles Engine
-    details: Local .user.js and .user.css files loaded through a generated component extension. Automatic file watching and live hot-reloading keep workflows fluid.
-  - title: History & Bookmarks
-    details: Actionable history overlay (Ctrl + Shift + H), structured bookmarks built right into the interface.
-  - title: Distro-Agnostic & Zero Telemetry
-    details: Native Linux x64 tarballs and an Arch package. Zero telemetry, zero usage tracking, and anonymous GitHub release notifications for effortless updates.
+    details: Bundled and on by default in every workspace. Chrome Web Store extensions install as in Chromium.
+  - title: Local by default
+    details: No Fly telemetry and no account. Settings, bookmarks and history stay under ~/.config/fly-browser.
 ---
 
-![Fly Browser New Tab](/screenshots/new-tab.webp)
+![Fly Browser new tab](/screenshots/new-tab.webp)
 
-## Why Fly Browser?
+## What Fly is
 
-Most modern web browsers consume gigabytes of memory and leak telemetry continuously. **Fly** takes a smaller path: an intentional, distraction-free browser that respects your hardware and privacy, where every action works from the keyboard and pointer use remains comfortable and polished.
+Fly is the full Chromium browser with its own interface, written in Chromium's native toolkit: a sidebar of vertical tabs, a status bar and floating panels in place of the tab strip and toolbar. Pages render and behave exactly as in Chromium, and Chrome Web Store extensions work.
 
-::: tip ARCHITECTURAL PILLARS
-* **Memory Conservation:** Eligible idle tabs pause in memory and resume their existing document.
-* **Complete Isolation:** Separate workspace containers keep cookies, caches, and logins entirely segregated.
-* **Crash Resilience:** Atomic file writes, rolling backup journals, and on-demand session restoration prevent data loss and crash loops.
-* **Transparent Storage:** Configuration, history, and keybinds live in human-readable files under `~/.config/fly-browser/`.
-* **Zero Cloud Dependence:** No remote telemetry, no forced account sync, and zero phone-home profiling.
-:::
+Its design follows three ideas:
 
----
+- **The keyboard reaches everything.** Browser shortcuts work everywhere; single page keys work whenever you are not typing. The mouse works everywhere too.
+- **The interface stays out of the way.** The page gets the whole window except a thin strip of tab icons and one status line.
+- **It runs well on modest hardware.** The interface animates only on the compositor, background tabs are suspended, and Chromium's field-trial experiments are off.
 
-## Fast-Track Navigation
+## The keys to learn first
 
-Keep your hands on the home row. Every major workflow is reachable via concise, mnemonic keybindings:
+| Key | What it does |
+| :--- | :--- |
+| `j` `k` `d` `u` | Scroll |
+| `f` | Link hints: type the label of what you want to click |
+| `o` / `Ctrl + L` | Address bar |
+| `t` / `x` / `X` | New tab / close tab / reopen the closed tab |
+| `J` `K` | Next / previous tab |
+| `H` `L` | Back / forward |
+| `/` then `n` `N` | Find in the page, next and previous match |
+| `Ctrl + 1` … `9` | Go to a workspace |
+| `Ctrl + P` | Command Centre: find any command and its key |
+| `?` | Every shortcut, and where to change it |
 
-| Shortcut | Command | Action |
-| :--- | :--- | :--- |
-| `f` | Link Hints | Highlight all clickable page links with two-letter tags |
-| `Alt + S` | Dual Split | Toggle side-by-side split screen view |
-| `Alt + \` | Swap Panes | Swap active page and split page positions |
-| `Ctrl + 1` to `9` | Workspace Jump | Switch between isolated multi-account containers |
-| `Ctrl + L` / `o` | Omnibar | Open floating address bar with search engine aliases |
-| `Ctrl + Shift + H` | History Overlay | Search, reopen, or purge visited history records |
-| `Ctrl + Shift + P` | Private Window | Open zero-trace volatile browsing container |
-| `Ctrl + H` | Preferences | Adjust hardware flags, suspension timeouts, and site permissions |
-| `Ctrl + ,` / `?` | Keyboard Controls | Open Preferences on the Keyboard section to see and change every shortcut |
+The complete list is in [Keyboard navigation](/guide/navigation).
 
----
-
-## Quick Start on Linux
-
-Paste this into a terminal:
+## Install
 
 ```bash
 mkdir -p ~/.local/bin
-curl -fsSL https://raw.githubusercontent.com/Arzuparreta/fly-browser/main/scripts/fly-install -o ~/.local/bin/fly-install
+curl -fsSL https://arzuparreta.github.io/fly-browser.github.io/packages/fly-install -o ~/.local/bin/fly-install
 chmod +x ~/.local/bin/fly-install
-~/.local/bin/fly-install install
+~/.local/bin/fly-install install --package
 ```
 
-On Arch-based systems it installs `fly-browser-bin`; elsewhere it installs the
-Linux x64 tarball. Both add Fly to the applications menu.
-`fly-install update` keeps it current. See [Installation](/guide/installation)
-for uninstall options.
+`fly-install` verifies Fly's release signature and installs the official DEB, RPM or pacman package with its signed repository, so your package manager keeps Fly up to date. `install --native` installs for your user without root. See [Installation](/guide/installation). Releases are built for Linux x86_64.
 
-Building from source requires the pinned external Chromium checkout and Fly's
-overlay, not just `npm install`. Follow [Chromium development](/chromium/build),
-then run `FLY_ENGINE_ROOT=/path/to/fly-chromium npm start`.
+Building from source needs the pinned Chromium checkout and Fly's overlay, not only `npm install`: follow [Chromium development](/chromium/build).
 
-## Built on Chromium
-
-Fly uses Chromium's full browser layer, native Views controls, separate workspace
-profiles and narrowly scoped internal WebUI. uBlock Origin Lite provides
-rule-based blocking. User content is loaded through a generated component
-extension.
-
-## Source & Issues
+## Source and issues
 
 * [Source repository](https://github.com/Arzuparreta/fly-browser)
 * [Issues](https://github.com/Arzuparreta/fly-browser/issues)
-* Independent continuation of [Mise by Rakosn1cek](https://github.com/Rakosn1cek/Mise-browser); it does not track that repository.
+* Fly is the independent continuation of [Mise by Rakosn1cek](https://github.com/Rakosn1cek/Mise-browser); it does not track that repository.

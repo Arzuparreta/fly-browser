@@ -158,6 +158,10 @@ class FlyWindowController : public views::WidgetObserver,
     return code != ui::DomCode::NONE && code == consumed_page_key_;
   }
   bool CreateTab();
+  // Selects the tab that was active before the current one.
+  bool SelectAlternateTab();
+  // Escape in NORMAL mode ends a search that n or N left highlighted.
+  void ClearFindHighlights();
 
   CommandPalette& palette() { return *palette_; }
   CommandPalette& address_picker() { return *address_picker_; }
@@ -259,10 +263,20 @@ class FlyWindowController : public views::WidgetObserver,
   void OnSidebarMotionEnded();
   void ToggleSidebarAutoCollapse();
   void ReturnFocusFromSidebar();
+  // Keys of the tab list while it has the keyboard: the cursor moves with
+  // the arrows and the keys bound to scrolling, without selecting tabs.
+  bool HandleSidebarKey(const ui::KeyEvent& event);
   void UpdateWindowControls();
   void RunWindowControl(std::string action);
   void SetTabNumbers(bool shown);
   void ClickModeBadge();
+  // Opens the address one level above the page's (or the site's first page).
+  bool GoUp(bool root);
+  bool OpenWorkspaceNumber(int number);
+  // n and N: the next or previous match of the page's last search, without
+  // opening the find bar.
+  bool FindAgain(bool forward);
+  void OpenLinkInBackground(content::WebContents* source, GURL url);
   void UpdateWorkspaceHeader();
   void RebuildWorkspaceButtons();
   void UpdateClock();
@@ -324,8 +338,12 @@ class FlyWindowController : public views::WidgetObserver,
   void RefreshReaderState();
   void UpdateReaderButton();
 
+  class TabTrail;
   raw_ptr<BrowserWindowInterface> browser_;
   raw_ptr<views::Widget> widget_;
+  std::unique_ptr<TabTrail> tab_trail_;
+  class FindStatus;
+  std::unique_ptr<FindStatus> find_status_;
   raw_ptr<FlyBrowserFrame> frame_ = nullptr;
   base::CallbackListSubscription closed_subscription_;
   bool browser_closed_ = false;
@@ -420,6 +438,8 @@ class FlyWindowController : public views::WidgetObserver,
   GURL prerendered_url_;
   std::set<std::string> bookmark_urls_;
   std::map<std::string, std::string> address_choices_;
+  // The open tabs among the address bar's rows, by the row's payload.
+  std::map<std::string, base::WeakPtr<content::WebContents>> address_tabs_;
 
   // Dashboard and tab moves.
   std::map<std::string, TabChoice> tab_choices_;

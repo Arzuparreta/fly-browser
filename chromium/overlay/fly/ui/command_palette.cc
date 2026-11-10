@@ -1477,15 +1477,7 @@ void CommandPalette::BuildCommandCentre(views::View* panel) {
   chips->SetLayoutManager(std::make_unique<views::BoxLayout>(
       views::BoxLayout::Orientation::kHorizontal, gfx::Insets(), S(4)));
   for (const auto& category : CommandCentreCategories()) {
-    std::u16string label = base::UTF8ToUTF16(category);
-    if (category == "Performance & Memory")
-      label = u"Performance";
-    else if (category == "User Scripts & Styles")
-      label = u"Scripts";
-    else if (category == "Preferences & System")
-      label = u"Preferences";
-    else if (category == "Tabs & Navigation")
-      label = u"Tabs";
+    const std::u16string label = base::UTF8ToUTF16(category);
     auto* chip = chips->AddChildView(std::make_unique<FlyButton>(
         base::BindRepeating(&CommandPalette::SetCategory,
                             weak_factory_.GetWeakPtr(), category),

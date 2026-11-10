@@ -18,6 +18,7 @@
 #include "ui/accessibility/ax_node_id_forward.h"
 #include "ui/accessibility/ax_tree_id.h"
 #include "ui/gfx/geometry/rect.h"
+#include "url/gurl.h"
 #include "ui/views/widget/widget_observer.h"
 
 namespace content {
@@ -44,11 +45,24 @@ class HintLabel;
 class HintController : public content::WebContentsObserver,
                        public views::WidgetObserver {
  public:
+  // What typing a label does.
+  enum class Mode {
+    kActivate,       // Click the element, or focus it for typing.
+    kBackgroundTab,  // Open a link in a background tab; other elements as
+                     // kActivate.
+    kFocusInput,     // No labels: focus the first text field on screen.
+  };
+  // `open_link` opens a link of the page in a background tab.
   HintController(views::Widget* desktop,
-                 base::RepeatingCallback<void(bool)> state_changed);
+                 base::RepeatingCallback<void(bool)> state_changed,
+                 base::RepeatingCallback<void(content::WebContents*, GURL)>
+                     open_link);
   ~HintController() override;
-  void Toggle(content::WebContents* contents);
+  void Toggle(content::WebContents* contents, Mode mode = Mode::kActivate);
   void Cancel();
+  Mode mode() const { return mode_; }
+  // Why the last session ended ("command", "navigation", "no-input"...).
+  std::string_view cancellation() const { return cancellation_; }
   bool HandleKey(content::WebContents* contents,
                  const input::NativeWebKeyboardEvent& event);
   bool active() const { return active_; }
@@ -93,9 +107,16 @@ class HintController : public content::WebContentsObserver,
   void Draw();
   gfx::Rect CurrentBounds(const Target& target) const;
   void Activate(const Target& target);
+  // kFocusInput: focuses the first text field among `targets`.
+  bool FocusFirstInput(const std::vector<Target>& targets);
+  // The address of the link `target` is or sits in, if it is one Fly may
+  // open in another tab.
+  GURL LinkOf(const Target& target) const;
 
   raw_ptr<views::Widget> desktop_;
   base::RepeatingCallback<void(bool)> state_changed_;
+  base::RepeatingCallback<void(content::WebContents*, GURL)> open_link_;
+  Mode mode_ = Mode::kActivate;
   std::unique_ptr<content::ScopedAccessibilityMode> accessibility_;
   std::unique_ptr<views::Widget> overlay_;
   std::vector<Target> targets_;

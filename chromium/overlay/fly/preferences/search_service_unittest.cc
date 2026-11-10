@@ -47,13 +47,39 @@ TEST_F(SearchServiceTest, BuiltinsEncodingAndDirectNavigationNeverWrite) {
   EXPECT_FALSE(service_.ResolveNavigation("ftp://files.example.org"));
   EXPECT_EQ(GURL("https://example.com:8443/path"),
             service_.ResolveNavigation("example.com:8443/path"));
-  EXPECT_EQ(GURL("https://[::1]:8080/index.html"),
+  // Machines on this computer or its network are reached over plain HTTP,
+  // as "localhost" is: they rarely have a certificate.
+  EXPECT_EQ(GURL("http://[::1]:8080/index.html"),
             service_.ResolveNavigation("[::1]:8080/index.html"));
-  EXPECT_EQ(GURL("https://intranet:8080/?q=a.b"),
+  EXPECT_EQ(GURL("http://intranet:8080/?q=a.b"),
             service_.ResolveNavigation("intranet:8080?q=a.b"));
-  EXPECT_EQ(GURL("https://[::1]:8080/"), service_.ResolveNavigation("[::1]:8080"));
-  EXPECT_EQ(GURL("https://intranet:8080/path"),
+  EXPECT_EQ(GURL("http://[::1]:8080/"), service_.ResolveNavigation("[::1]:8080"));
+  EXPECT_EQ(GURL("http://intranet:8080/path"),
             service_.ResolveNavigation("intranet:8080/path"));
+  EXPECT_EQ(GURL("http://127.0.0.1:3000/"),
+            service_.ResolveNavigation("127.0.0.1:3000"));
+  EXPECT_EQ(GURL("http://192.168.1.1/"),
+            service_.ResolveNavigation("192.168.1.1"));
+  EXPECT_EQ(GURL("http://10.0.0.7/admin"),
+            service_.ResolveNavigation("10.0.0.7/admin"));
+  EXPECT_EQ(GURL("http://printer.local/"),
+            service_.ResolveNavigation("printer.local"));
+  EXPECT_EQ(GURL("http://app.localhost:5173/"),
+            service_.ResolveNavigation("app.localhost:5173"));
+  // Public addresses stay on HTTPS, numeric or not.
+  EXPECT_EQ(GURL("https://1.1.1.1/"), service_.ResolveNavigation("1.1.1.1"));
+  EXPECT_EQ(GURL("https://[2606:4700:4700::1111]/"),
+            service_.ResolveNavigation("[2606:4700:4700::1111]"));
+  // What searches a search: the alias, the bang or the default engine's site.
+  std::string engine;
+  ASSERT_TRUE(service_.ResolveNavigation("yt lo-fi", &search, &engine));
+  EXPECT_EQ("YouTube", engine);
+  ASSERT_TRUE(service_.ResolveNavigation("fly browser", &search, &engine));
+  EXPECT_EQ("duckduckgo.com", engine);
+  ASSERT_TRUE(service_.ResolveNavigation("fly !w", &search, &engine));
+  EXPECT_EQ("DuckDuckGo bang", engine);
+  ASSERT_TRUE(service_.ResolveNavigation("example.com", &search, &engine));
+  EXPECT_TRUE(engine.empty());
   EXPECT_FALSE(service_.ResolveNavigation(":8080"));
 #if BUILDFLAG(IS_WIN)
   EXPECT_EQ(GURL("file:///C:/Fly%20fixture.txt"),

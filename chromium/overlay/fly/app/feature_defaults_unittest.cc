@@ -3,6 +3,7 @@
 // Fly repository.
 #include "fly/app/feature_defaults.h"
 
+#include <algorithm>
 #include <string>
 #include <vector>
 
@@ -24,9 +25,13 @@ TEST(FeatureDefaultsTest, DisablesTheTestingConfigAndAddsFlyFeatures) {
   base::CommandLine command_line(base::CommandLine::NO_PROGRAM);
   ApplyFeatureDefaults(&command_line);
   EXPECT_TRUE(command_line.HasSwitch("disable-field-trial-config"));
-  EXPECT_EQ(std::vector<std::string>(std::begin(kKeptFeatures),
-                                     std::end(kKeptFeatures)),
-            List(command_line, switches::kEnableFeatures));
+  std::vector<std::string> enabled(std::begin(kKeptFeatures),
+                                   std::end(kKeptFeatures));
+  enabled.insert(enabled.end(), std::begin(kEnabledFeatures),
+                 std::end(kEnabledFeatures));
+  EXPECT_EQ(enabled, List(command_line, switches::kEnableFeatures));
+  // The first page of a new profile depends on it (feature_defaults.h).
+  EXPECT_TRUE(std::ranges::contains(enabled, "ForceWebRequestProxyForTest"));
   EXPECT_EQ(std::vector<std::string>(std::begin(kDisabledFeatures),
                                      std::end(kDisabledFeatures)),
             List(command_line, switches::kDisableFeatures));
@@ -47,7 +52,8 @@ TEST(FeatureDefaultsTest, KeepsFeaturesNamedOnTheCommandLine) {
                 "BrowsingTopics:a/b",
                 "IdbSqliteOnDiskRollout:stage/UseSqliteForNewStores",
                 "PrepopulatedEnginesMigration",
-                "ApplySearchEngineTypeMigration"}),
+                "ApplySearchEngineTypeMigration",
+                "ForceWebRequestProxyForTest"}),
             enabled);
   EXPECT_EQ((std::vector<std::string>{"DomStorageSqliteNewDatabases",
                                       "ConversionMeasurement",

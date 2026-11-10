@@ -3,6 +3,7 @@
 // Fly repository.
 #include "fly/ui/fly_theme.h"
 
+#include <algorithm>
 #include <map>
 #include <tuple>
 #include <utility>
@@ -15,6 +16,7 @@
 #include "build/build_config.h"
 #include "cc/paint/draw_looper.h"
 #include "cc/paint/paint_flags.h"
+#include "chrome/browser/ui/color/chrome_color_id.h"
 #include "ui/base/metadata/metadata_impl_macros.h"
 #include "ui/base/models/image_model.h"
 #include "ui/color/color_id.h"
@@ -185,11 +187,10 @@ bool SetFlyColors(const FlyColors& colors) {
       current.dim != colors.dim || current.link != colors.link ||
       current.sidebar_opacity != colors.sidebar_opacity ||
       current.overlay_opacity != colors.overlay_opacity;
-  const bool window_colour_changed =
-      current.dark != colors.dark || current.bg_main != colors.bg_main;
   current = colors;
-  // Windows created from now on take the new background.
-  if (window_colour_changed)
+  // Chromium's own colours that follow the palette (the window background
+  // of new windows, the find bar) are computed again.
+  if (changed)
     ui::ColorProviderManager::Get().ResetColorProviderCache();
   return changed;
 }
@@ -203,11 +204,20 @@ void RegisterFlyWindowColors() {
         const bool dark =
             key.color_mode == ui::ColorProviderKey::ColorMode::kDark;
         const auto& current = GetFlyColors();
-        const SkColor background = current.dark == dark
-                                       ? current.bg_main
-                                       : DefaultFlyColors(dark).bg_main;
-        provider->AddMixer()[ui::kColorWindowBackground] =
-            ui::ColorTransform(background);
+        const FlyColors colors =
+            current.dark == dark ? current : DefaultFlyColors(dark);
+        auto& mixer = provider->AddMixer();
+        mixer[ui::kColorWindowBackground] = ui::ColorTransform(colors.bg_main);
+        // Chromium's find bar is the one bar Fly does not draw itself; it
+        // takes the palette of Fly's panels.
+        mixer[kColorFindBarBackground] = ui::ColorTransform(colors.panel);
+        mixer[kColorFindBarForeground] = ui::ColorTransform(colors.text);
+        mixer[kColorFindBarMatchCount] = ui::ColorTransform(colors.dim);
+        mixer[kColorFindBarButtonIcon] = ui::ColorTransform(colors.dim);
+        mixer[kColorFindBarButtonIconHovered] =
+            ui::ColorTransform(colors.text);
+        mixer[kColorFindBarButtonIconDisabled] =
+            ui::ColorTransform(colors.border);
       }));
 }
 SkColor FlyRoleColor(FlyRole role) {
@@ -236,6 +246,45 @@ SkColor FlyRoleColor(FlyRole role) {
       return SkColorSetA(colors.bg_sidebar,
                          colors.overlay_opacity * 255 / 100);
   }
+}
+SkColor FlyAlpha(SkColor color, float alpha) {
+  return SkColorSetA(color, static_cast<U8CPU>(alpha * SkColorGetA(color)));
+}
+SkColor FlyHoverColor() {
+  const auto& colors = GetFlyColors();
+  return FlyAlpha(colors.text, colors.dark ? 0.07f : 0.08f);
+}
+SkColor FlyInkOn(SkColor fill) {
+  // Brass (0.38) takes ink; red (0.17) and the dark cells take paper.
+  return color_utils::GetRelativeLuminance(fill) > 0.3f
+             ? SkColorSetRGB(0x15, 0x13, 0x10)
+             : SkColorSetRGB(0xf3, 0xee, 0xe3);
+}
+void PaintFlyBrackets(gfx::Canvas* canvas,
+                      const gfx::RectF& bounds,
+                      SkColor color) {
+  const float stroke = std::max(1.f, GetFlyInterfaceScale());
+  const float arm = FlyScaled(5);
+  cc::PaintFlags flags;
+  flags.setColor(color);
+  const float l = bounds.x();
+  const float t = bounds.y();
+  const float r = bounds.right();
+  const float b = bounds.bottom();
+  for (const auto& rect :
+       {gfx::RectF(l, t, arm, stroke), gfx::RectF(l, t, stroke, arm),
+        gfx::RectF(r - arm, t, arm, stroke), gfx::RectF(r - stroke, t, stroke, arm),
+        gfx::RectF(l, b - stroke, arm, stroke), gfx::RectF(l, b - arm, stroke, arm),
+        gfx::RectF(r - arm, b - stroke, arm, stroke),
+        gfx::RectF(r - stroke, b - arm, stroke, arm)}) {
+    canvas->DrawRect(rect, flags);
+  }
+}
+void PaintFlySelectionBar(gfx::Canvas* canvas, const gfx::RectF& row) {
+  cc::PaintFlags flags;
+  flags.setColor(GetFlyColors().accent);
+  canvas->DrawRect(
+      gfx::RectF(row.x(), row.y(), FlyScaled(2), row.height()), flags);
 }
 void DisableSubpixelText(views::View* root) {
   if (!root)
