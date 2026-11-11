@@ -73,6 +73,12 @@
   and do not add required checks, branch rulesets, mandatory PR template
   sections or workflows that act on ordinary pull requests without asking
   the owner first. Whitespace and the documentation build are local checks.
+- Finishing a release includes deleting the local artifacts it left on the
+  build host, once the GitHub release and its packages are public: the release
+  output directory (and the directory a symlink points to), preserved copies of
+  it, and the package temporary directory. Keep `out/FlyNative` and
+  `out/FlyControl`, which `./launch.sh` uses. See
+  `docs/releasing.md#cleaning-up-a-published-release`.
 
 - For questions about Chromium/security updates, paused tracking, or pending
   patches, read `docs/chromium/engine-updates.md` first and follow its status
