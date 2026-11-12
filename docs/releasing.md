@@ -164,31 +164,41 @@ integration. Passing `npm test` does not establish that the package works.
 
 ### Cleaning up a published release
 
-A release leaves large one-off artifacts on the build host: the release output
-directory (tens of gigabytes of objects and ThinLTO cache), any copy of an
-earlier one kept aside, and the package directory the workflow uploads. Nothing
-reads them again, they cost the next build its free space, and a stale copy can
-be mistaken for the build of a newer tag.
-
-Deleting them is the last step of the release, done in the same task once the
-GitHub release, its checksums and its packages are public:
+A release leaves one-off artifacts on the build host: the package directory the
+workflow uploads, and any copy of a release output kept aside. Nothing reads
+them again and they cost the next build its free space. Deleting them is the
+last step of the release, done in the same task once the GitHub release, its
+checksums and its packages are public:
 
 ```sh
-root="${FLY_ENGINE_ROOT:-/mnt/storage/fly-chromium}"
-output="$root/src/out/FlyRelease"
-
-# The output may be a symlink to another disk (see "Build host"): remove the
-# directory it points to as well, or its space is never reclaimed.
-[ -L "$output" ] && rm -rf "$(readlink -f "$output")"
-rm -rf "$output"
-rm -rf "$root"/src/out/FlyRelease.*
 rm -rf /mnt/storage/fly-actions-runner/_work/_temp/fly-release-*
+rm -rf /mnt/storage/fly-chromium/src/out/FlyRelease.*
 ```
 
-Keep `out/FlyNative`, `out/FlyControl` and `out/FlyControlInitial`: they are the
-development browsers `./launch.sh` runs, not release output. Keep the engine
-checkout, the runner and the release itself; a published release is never
-rebuilt from these files.
+Keep the active root's `out/FlyRelease`. The next release builds into it, and
+a release that does not move Chromium only compiles what changed: the build
+jobs of v0.42.2 and v0.42.3 took 22 and 14 minutes, against 3 h 29 min and
+3 h 30 min for v0.42.4 and v0.42.1, which recompiled nearly everything. It may be a symlink to another disk; keep the
+directory it points to as well.
+
+After a release that moved Chromium, the previous active slot is the candidate
+(`/mnt/storage/fly-chromium-next`). Its `out/FlyRelease` holds the previous
+engine's release build, which no release uses until that slot is active again,
+two engine versions later. Delete it, and the directory it points to if it is a
+symlink:
+
+```sh
+output=/mnt/storage/fly-chromium-next/src/out/FlyRelease
+[ -L "$output" ] && rm -rf "$(readlink -f "$output")"
+rm -rf "$output"
+```
+
+Keep `out/FlyNative`, `out/FlyControl` and `out/FlyControlInitial` in both
+roots: they are the development browser, the unmodified control the native tooling
+requires before it builds Fly, and the candidate's starting point for the next
+update. Keep
+the engine checkouts, the runner and the release itself; a published release is
+never rebuilt from these files.
 
 ## Test builds of pull requests
 

@@ -19,9 +19,11 @@ once or twice a week. Fly follows them automatically:
    `engine-validation` status on the commit.
 4. It merges the pull request once every check passes, then cuts a release with
    `scripts/release.js prepare`.
-5. `release.yml` gives the owner's engine root the exact sources validated in the
-   candidate, copied locally, builds the packages and publishes them. A separate
-   job then rebuilds `out/FlyNative`, so `./launch.sh` runs the new engine.
+5. `release.yml` makes the validated candidate the active engine root by
+   swapping the two roots' symlinks ([Engine roots](#engine-roots)), builds the
+   packages and publishes them. A separate job then brings `out/FlyNative` to
+   the release commit, so `./launch.sh` runs the new engine. The candidate
+   already built and tested it, so only the release's own changes compile.
 
 A failure stops the process with the pull request still open and the log
 commented on it. Nothing reaches users until the whole chain has passed.
@@ -147,19 +149,53 @@ When you add a file under `chromium/overlay/fly/ui/`, add it to
 
 ## Engine roots
 
-The engine host has two Chromium checkouts:
+The engine host has two Chromium checkouts, reached by two fixed paths:
 
-| Root | Environment variable | Used by |
-| --- | --- | --- |
-| Active, `/mnt/storage/fly-chromium` | `FLY_ENGINE_ROOT` | Development builds, `./launch.sh`, releases |
-| Candidate, `/mnt/storage/fly-chromium-next` | `FLY_ENGINE_CANDIDATE_ROOT` | Validating engine updates |
+| Role | Path | Environment variable | Used by |
+| --- | --- | --- | --- |
+| Active | `/mnt/storage/fly-chromium` | `FLY_ENGINE_ROOT` | Development builds, `./launch.sh`, releases |
+| Candidate | `/mnt/storage/fly-chromium-next` | `FLY_ENGINE_CANDIDATE_ROOT` | Validating engine updates |
 
 An update is built and tested in the candidate first. If a patch or the build
 fails there, the active root keeps working on the current pin, and the agents
-and the owner using it are not blocked. A release then adopts the validated
-sources: `rsync` copies only the files that differ (never build outputs) and
-dates each written file now, so ninja rebuilds exactly what changed. The release
-downloads nothing.
+and the owner using it are not blocked.
+
+### Slots
+
+The two paths are symlinks to two slots, `/mnt/storage/fly-chromium-a` and
+`/mnt/storage/fly-chromium-b`. Which slot is active changes; the paths do not,
+so commands, `./launch.sh` and the runner service always use the paths above.
+
+A release whose pin the candidate validated makes it the active root by
+swapping the two symlinks (`engine_update.py follow`). Nothing is copied: the
+candidate's control and `out/FlyNative`, which validate built and tested, become
+the active builds as they are, and the previous active slot becomes the next
+candidate, still at the previous pin. The next update moves it from there.
+
+Every tool resolves a root to its slot before building, so the build state Siso
+keeps in each output directory, which records absolute paths, stays valid in
+its slot across swaps. Each root's `test-tools` is copied to the new active
+slot if it lacks one. The swap holds both roots' leases; if it stops between its
+two symlink changes, the next `follow` completes it from
+`evidence/engine-swap-pending.json`.
+
+A running Fly keeps using the slot it was started from. Restart it after a
+release to run the new engine.
+
+`engine_update.py slots --root /mnt/storage/fly-chromium --candidate
+/mnt/storage/fly-chromium-next` sets slots up once on a host: it renames the two
+roots to `-a` and `-b`, leaves symlinks at their paths, and rewrites the
+absolute paths their evidence records and Siso states hold (the previous state
+stays beside it as `.siso_fs_state.before-slots`), so nothing is rebuilt.
+Check afterwards with `autoninja -C out/FlyNative -n chrome` in each slot.
+
+### Plain roots
+
+On a host whose roots are plain directories, a release adopts the validated
+sources instead (`engine_update.py adopt`): `rsync` copies the files whose
+contents differ (never build outputs) and dates each written file now, so the
+build compiles exactly what changed, and nothing is downloaded. The active
+root then still compiles that change itself, which the candidate already did.
 
 Both variables are set by the runner service,
 `~/.config/systemd/user/fly-chromium-runner.service` (see
@@ -179,7 +215,8 @@ Both variables are set by the runner service,
 | `upgrade --root R [--through apply\|build]` | `move`, then rebuilds the control, applies the overlay and, with `build`, builds `out/FlyNative`. Does nothing when R is already current |
 | `validate --root R --test-tools DIR` | `upgrade`, then Fly's unit and browser tests on an owned Xvfb display |
 | `adopt --candidate C --root R` | Gives R the sources of candidate C, when C passed `validate` for this pin |
-| `follow --root R [--candidate C]` | What a release runs: `adopt` when possible, otherwise `upgrade --through apply` |
+| `slots --root R --candidate C` | Turns two plain roots into slots behind their paths (once per host) |
+| `follow --root R [--candidate C]` | What a release runs: with slots, swaps them when C passed `validate`; with plain roots, `adopt`; otherwise `upgrade --through apply` |
 
 A long command holds the root's engine lease for its whole sequence. The
 `engine.py` and `native.py` commands it runs inherit the lease; any other
@@ -247,6 +284,53 @@ alone does not prove compilation or runtime compatibility. After merge, rerun
 latest upstream release. An automatic detection system being ready does not
 mean every future compatibility repair is already done.
 
+## Cost of an update
+
+What the engine host compiles for one Chromium update, from the
+`evidence/engine-update-logs` of each root and the Actions job times. Before
+slots (the update released as v0.42.4, 9–10 November 2026, a security update
+within 157):
+
+| Step | Root | Siso steps | Time |
+| --- | --- | --- | --- |
+| Validate: control | candidate | 406 | 13 min |
+| Validate: `out/FlyNative` | candidate | 487 | 12 min |
+| Release: `out/FlyRelease` | active | n/a | 3 h 29 min |
+| Development build: control | active | 56 138 | 2 h 35 min |
+| Development build: `out/FlyNative` | active | 56 218 | 2 h 36 min |
+
+The update released as v0.42.1 (4 November) had the same shape: 56 611 and
+56 691 steps in the active root.
+
+The development build compiled again what validate had just compiled, and
+about 140 times as much: adopting wrote 152 061 files
+(`evidence/engine-adopt.json`) because rsync compared times rather than
+contents, and every written file was dated now. Each adoption left the active
+root's times different from the candidate's, so the next one rewrote them all
+again. Slots remove the copy and that development build; plain roots now copy
+only files whose contents differ.
+
+The release build itself stays: `out/FlyRelease` uses other build arguments
+(PGO, ThinLTO, the Google API key) and cannot be taken from validate. The
+control also stays in validate: `native.py` requires a control built for the
+pin before it applies the overlay or builds Fly.
+
+Setting up slots on the engine host (12 November 2026) took 17 seconds and
+rewrote 22 evidence records and the Siso state of five output directories.
+`autoninja -n chrome` reported 0 steps for the control and `out/FlyNative` of
+both roots before and after.
+
+Two more causes of repeated work were removed with slots:
+
+- The **Cut the release** step failed both times it ran, on 9 and 12
+  November: `engine-update-ci.sh` set its Git credential helper twice in one
+  checkout, and the second `git config credential.helper ''` exits 5 when two
+  values exist. Both updates had to be released by hand.
+- `scripts/release.js prepare` refuses to release while an engine update is
+  being validated (`--during-engine-update` overrides it): that update releases
+  everything on main itself when it merges, so a release cut meanwhile built
+  the optimised package one more time and shipped the old engine.
+
 ## Data use
 
 Moving the candidate downloads only what changed in Chromium since the previous
@@ -263,6 +347,10 @@ weeks of Chromium changes and usually new toolchains come with it. Adopting a
 candidate into the active root and building packages downloads nothing more than
 the release's PGO profile. A new engine root is created with `seed`, which copies
 an existing root instead of downloading Chromium again.
+
+With slots, each slot moves every other update and covers the two versions
+since it was last active, so it downloads the changes of both. For security
+updates within a major version that is still a small download.
 
 ## Limits
 

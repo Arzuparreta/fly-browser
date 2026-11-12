@@ -42,6 +42,12 @@ const VERSION_RE = /^(\d+)\.(\d+)\.(\d+)(?:-rc\.(\d+))?$/;
 // clocks say, and are skipped without asking git about them.
 const CLOCK_SLACK_MS = 60 * 60 * 1000;
 
+// The branch engine-update.yml opens its Chromium update from. When that
+// pull request merges, the same workflow cuts a release with everything on
+// main, so a release cut while it is being validated builds the whole
+// optimised package once more, a few hours apart, and ships the old engine.
+const ENGINE_BRANCH = 'engine/chromium-stable';
+
 const CHECK_TIMEOUT_MS = 45 * 60 * 1000;
 const CHECK_INTERVAL_MS = 15 * 1000;
 
@@ -194,7 +200,39 @@ function waitForChecks(url) {
     return false;
 }
 
+// The open engine update pull request and its native validation state
+// (pending, success, failure, error, or none when it has not started), or null.
+function pendingEngineUpdate() {
+    const listed = run('gh', ['pr', 'list', '--head', ENGINE_BRANCH, '--state', 'open',
+        '--json', 'number,title,headRefOid'], {check: false});
+    let pulls = [];
+    try { pulls = JSON.parse(listed.stdout || '[]'); } catch {}
+    const pull = pulls[0];
+    if (!pull) return null;
+    const status = run('gh', ['api', `repos/{owner}/{repo}/commits/${pull.headRefOid}/statuses`,
+        '--jq', '[.[] | select(.context == "engine-validation")][0].state // ""'], {check: false});
+    return {number: pull.number, title: pull.title, validation: status.stdout || 'none'};
+}
+
+// 'wait' while the update is on its way to merging and releasing by itself;
+// 'note' when it is stuck on a failure that needs a repair first.
+function engineUpdateAdvice(update) {
+    if (!update) return null;
+    return ['failure', 'error'].includes(update.validation) ? 'note' : 'wait';
+}
+
+function describeEngineUpdate(update) {
+    return `#${update.number} ${update.title} (engine-validation: ${update.validation})`;
+}
+
 function plan(options) {
+    const update = pendingEngineUpdate();
+    if (engineUpdateAdvice(update) === 'wait') {
+        console.log(`Engine update in progress: ${describeEngineUpdate(update)}.`);
+        console.log('When it merges, engine-update.yml releases it together with everything below.\n');
+    } else if (update) {
+        console.log(`Engine update stopped: ${describeEngineUpdate(update)}; this release keeps the current Chromium.\n`);
+    }
     const {version, impact, pulls, tag} = resolve(options);
     console.log(`${declaredVersion()} → ${version}  (${impact})\n`);
     console.log(summarise(pulls, tag));
@@ -207,6 +245,12 @@ function plan(options) {
 
 function prepare(options) {
     if (git('status', '--porcelain')) fail('Working tree is dirty; commit or stash first.');
+    const update = pendingEngineUpdate();
+    if (engineUpdateAdvice(update) === 'wait' && !options.duringEngineUpdate) {
+        fail(`Engine update in progress: ${describeEngineUpdate(update)}. When it merges, ` +
+            'engine-update.yml releases everything on main with it; a release now builds the ' +
+            'package twice and ships the old Chromium. Wait for it, or pass --during-engine-update.');
+    }
 
     const {version, impact, pulls, tag} = resolve(options);
     const branch = `release/v${version}`;
@@ -265,14 +309,15 @@ function finish() {
 }
 
 function parseOptions(argv) {
-    const options = {rc: argv.includes('--rc'), hold: argv.includes('--hold'), version: null};
+    const options = {rc: argv.includes('--rc'), hold: argv.includes('--hold'),
+        duringEngineUpdate: argv.includes('--during-engine-update'), version: null};
     const index = argv.indexOf('--version');
     if (index !== -1) options.version = argv[index + 1] || fail('--version needs a value');
     return options;
 }
 
 const COMMANDS = {plan, prepare, finish};
-const USAGE = `Usage: node scripts/release.js <plan|prepare|finish> [--rc] [--version X.Y.Z] [--hold]
+const USAGE = `Usage: node scripts/release.js <plan|prepare|finish> [--rc] [--version X.Y.Z] [--hold] [--during-engine-update]
 
   plan      show what would be released and as what number
   prepare   open the version-bump pull request, wait for its checks and merge it
@@ -280,7 +325,10 @@ const USAGE = `Usage: node scripts/release.js <plan|prepare|finish> [--rc] [--ve
 
   --rc            cut a release candidate instead of a stable release
   --version X.Y.Z release this exact version instead of the derived one
-  --hold          prepare only: open the pull request but do not merge it`;
+  --hold          prepare only: open the pull request but do not merge it
+  --during-engine-update
+                  prepare only: release although a Chromium update is being
+                  validated (it releases itself, with everything, when it merges)`;
 
 if (require.main === module) {
     const [command, ...rest] = process.argv.slice(2);
@@ -298,4 +346,5 @@ if (require.main === module) {
     }
 }
 
-module.exports = {IMPACTS, UNLABELLED, classify, inRelease, nextVersion, highestImpact, summarise, parseOptions};
+module.exports = {IMPACTS, UNLABELLED, classify, inRelease, nextVersion, highestImpact, summarise, parseOptions,
+    engineUpdateAdvice};

@@ -74,10 +74,11 @@
   sections or workflows that act on ordinary pull requests without asking
   the owner first. Whitespace and the documentation build are local checks.
 - Finishing a release includes deleting the local artifacts it left on the
-  build host, once the GitHub release and its packages are public: the release
-  output directory (and the directory a symlink points to), preserved copies of
-  it, and the package temporary directory. Keep `out/FlyNative` and
-  `out/FlyControl`, which `./launch.sh` uses. See
+  build host, once the GitHub release and its packages are public: the package
+  temporary directory, preserved copies of the release output and, after a
+  release that moved Chromium, the candidate slot's `out/FlyRelease`. Keep the
+  active root's `out/FlyRelease`: the next release builds incrementally from it.
+  Keep `out/FlyNative` and `out/FlyControl` in both roots. See
   `docs/releasing.md#cleaning-up-a-published-release`.
 
 - For questions about Chromium/security updates, paused tracking, or pending

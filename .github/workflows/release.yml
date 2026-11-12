@@ -57,10 +57,12 @@ jobs:
           node-version: 22
       - name: Require provisioned engine checkout
         run: test -n "$FLY_ENGINE_ROOT" && test -d "$FLY_ENGINE_ROOT/src"
-      # When the release moves Chromium, take the exact sources the engine
-      # update validated in the candidate root (copied locally, nothing is
-      # downloaded again); without such a candidate, move and rebuild here.
-      # Dry runs on a branch never move the owner's engine root.
+      # When the release moves Chromium, the candidate root the engine update
+      # validated becomes the active root: with slots its symlink is swapped
+      # (nothing copied, its builds kept); with plain roots its sources are
+      # copied. Without such a candidate, move and rebuild here. Nothing is
+      # downloaded again. Dry runs on a branch never move the engine root.
+      # docs/chromium/engine-updates.md#engine-roots
       - name: Bring the engine checkout to this release's Chromium
         id: engine
         if: github.ref_type == 'tag'
@@ -83,7 +85,9 @@ jobs:
 
   # The owner's ./launch.sh runs out/FlyNative. Bring it (and the unmodified
   # control it is checked against) to the engine and overlay this release left
-  # in the engine root. upgrade does nothing when both are already current, so
+  # in the engine root. After a slot swap both were built by validate, so only
+  # this release's own changes compile. upgrade does nothing when both are
+  # already current, so
   # this does not depend on whether this attempt of the run moved Chromium: a
   # rerun after a failed attempt may find the move already done.
   # Packages do not wait for this.

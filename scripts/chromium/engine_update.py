@@ -9,8 +9,11 @@
                without downloading anything (build outputs are not copied)
   adopt        give an engine root the exact sources of a validated candidate
                root, copied locally (no second download)
-  follow       bring an engine root to this checkout's pin: adopt a candidate
-               validated for it, or move and rebuild; nothing when current
+  slots        turn two plain engine roots into two slots behind the same
+               paths, which become symlinks (once per host)
+  follow       bring an engine root to this checkout's pin: with slots, make
+               the validated candidate the active root; otherwise adopt it,
+               or move and rebuild; nothing when current
   move         bring an existing engine root to this checkout's pin: revert
                the overlay, move the sources, sync dependencies, run hooks
   upgrade      move, then rebuild the unmodified control and apply the overlay
@@ -335,13 +338,21 @@ SEED_EVIDENCE = ('bootstrap.json', 'sync.json', 'dependency-revisions.json', 'ho
 
 def copy_root(source, root, touch):
     """rsync an engine root's sources and dependency state (never build
-    outputs). With `touch`, every file written gets the current time: ninja
-    rebuilds by modification time, and a copied file keeps the source root's
-    time, which can be older than outputs built later in this root."""
+    outputs). With `touch`, every file written gets the current time: the
+    build rebuilds by modification time, and a copied file keeps the source
+    root's time, which can be older than outputs built later in this root.
+
+    With `touch` the copy compares contents, not times. Comparing times wrote
+    (and so dated now) every file whose time differed between the roots, and
+    after one adoption that is most of the tree: 152061 files for a security
+    update, and nearly all of Chromium rebuilt twice. A file with the same
+    contents only takes the source's time, which never triggers a rebuild."""
     entries = [name for name in SEED_ENTRIES if (source / name).exists()]
     # --modify-window=-1: compare times to the nanosecond, not the second.
-    result = subprocess.run(['rsync', '-a', '--delete', '--modify-window=-1', '--exclude=/src/out/',
-                             '--out-format=%i %n', *[str(source / name) for name in entries],
+    compare = ['--checksum'] if touch else []
+    result = subprocess.run(['rsync', '-a', *compare, '--delete', '--modify-window=-1',
+                             '--exclude=/src/out/', '--out-format=%i %n',
+                             *[str(source / name) for name in entries],
                              str(root) + '/'], cwd=root, check=True, text=True,
                             stdout=subprocess.PIPE)
     written = [line.split(' ', 1)[1] for line in result.stdout.splitlines()
@@ -453,14 +464,190 @@ def root_current(root, lock):
              json.loads(overlay.read_text()).get('upstream') == lock['chromium']['revision']))
 
 
+# --- slots ----------------------------------------------------------------------
+#
+# The active and the candidate root can be two symlinks to two slots, e.g.
+#   /mnt/storage/fly-chromium      -> fly-chromium-a
+#   /mnt/storage/fly-chromium-next -> fly-chromium-b
+# A release then makes the validated candidate active by swapping the two
+# symlinks: nothing is copied, and the candidate's builds (the control and
+# out/FlyNative, built and tested by validate) become the active ones as they
+# are. Every tool resolves a root to its slot before it builds, so a slot's
+# build state (Siso records absolute paths) stays valid across swaps.
+
+SWAP_STATE = 'evidence/engine-swap-pending.json'
+# Top-level entries of a root that are not engine state but that every active
+# root needs: validate runs the browser tests with the active root's tools.
+SLOT_TOOLS = ('test-tools',)
+
+
+def role(raw):
+    """The path a role is reached by, without resolving its symlink."""
+    return Path(os.path.abspath(os.path.expanduser(str(raw))))
+
+
+def point(link, target):
+    """Make `link` a relative symlink to `target`, replacing it atomically."""
+    temporary = link.with_name('.' + link.name + '.swap')
+    temporary.unlink(missing_ok=True)
+    os.symlink(os.path.relpath(target, link.parent), temporary)
+    os.replace(temporary, link)
+
+
+def finish_swap(active, candidate):
+    """Complete a swap that stopped between its two symlink changes."""
+    for slot in {active.resolve(), candidate.resolve()}:
+        file = slot / SWAP_STATE
+        if file.is_file():
+            record = json.loads(file.read_text())
+            point(active, Path(record['active']))
+            point(candidate, Path(record['candidate']))
+            for path in (record['active'], record['candidate']):
+                (Path(path) / SWAP_STATE).unlink(missing_ok=True)
+            print(f'Completed an interrupted swap: {active} -> {record["active"]}.', flush=True)
+            return
+
+
+def slot_roles(active, candidate):
+    """(active link, candidate link) when both roots are symlinks to two
+    different slots; None for plain directories."""
+    if not candidate:
+        return None
+    active, candidate = role(active), role(candidate)
+    if not (active.is_symlink() and candidate.is_symlink()):
+        if active.is_symlink() or candidate.is_symlink():
+            engine.fail(f'Only one of {active} and {candidate} is a symlink; '
+                        'both roots must be slots, or neither')
+        return None
+    finish_swap(active, candidate)
+    if active.resolve() == candidate.resolve():
+        engine.fail(f'{active} and {candidate} point to the same slot')
+    return active, candidate
+
+
+def swap(active, candidate, lock):
+    """Make the slot `candidate` points to, validated for this pin, the active
+    root, and the previous active slot the next candidate."""
+    old, new = engine.engine_root(active), engine.engine_root(candidate)
+    if not validated(new, lock):
+        engine.fail(f'{new} has not passed validate for Chromium {lock["engine_version"]}')
+    with engine.exclusive(new), engine.exclusive(old):
+        engine.verify_checkout(new / 'depot_tools', lock['depot_tools'])
+        if engine.digest(new / 'src/DEPS') != lock['chromium']['deps_sha256']:
+            engine.fail('DEPS differs from the pinned upstream content in the candidate')
+        engine.verify_dependencies(new, source_verifier=source_verifier(new, lock))
+        for name in SLOT_TOOLS:
+            if (old / name).is_dir() and not (new / name).exists():
+                shutil.copytree(old / name, new / name, symlinks=True)
+        moved_from = recorded_lock(old)['engine_version']
+        record = {'active': str(new), 'candidate': str(old)}
+        for slot in (old, new):
+            engine.atomic_json(slot / SWAP_STATE, record)
+        point(active, new)
+        point(candidate, old)
+        for slot in (old, new):
+            (slot / SWAP_STATE).unlink()
+        engine.evidence(new, 'engine-swap', lock, {'from': str(old), 'moved_from': moved_from})
+    print(f'{active} is now {new} at Chromium {lock["engine_version"]} (was {old}, '
+          f'{moved_from}); {candidate} is now {old}.', flush=True)
+
+
+def remap(value, prefixes):
+    """`value` with every string under one of `prefixes` (old: new) rewritten."""
+    if isinstance(value, dict):
+        return {key: remap(item, prefixes) for key, item in value.items()}
+    if isinstance(value, list):
+        return [remap(item, prefixes) for item in value]
+    if isinstance(value, str):
+        for old, new in prefixes.items():
+            if value == old or value.startswith(old + '/'):
+                return new + value[len(old):]
+    return value
+
+
+def siso(root):
+    return root / 'src/third_party/siso/cipd/siso'
+
+
+def move_build_state(slot, old, other):
+    """Rewrite the absolute paths in a slot's Siso build state from the root's
+    previous path `old` to `slot`. Entries under the other root's previous
+    path are leftovers of copied outputs and are dropped. The previous state
+    is kept beside it."""
+    changed = []
+    # An output directory may be a symlink to another disk; its state is
+    # still this root's and is rewritten through the symlink.
+    for output in sorted((slot / 'src/out').glob('*/.siso_fs_state')):
+        name = output.parent.relative_to(slot / 'src').as_posix()
+        exported = subprocess.run([siso(slot), 'fs', 'export', '-C', name], cwd=slot / 'src',
+                                  check=True, stdout=subprocess.PIPE).stdout
+        state = json.loads(exported)
+        state['entries'] = [dict(entry, name=remap(entry.get('name', ''), {old: str(slot)}))
+                            for entry in state.get('entries', [])
+                            if not (entry.get('name', '') == other or
+                                    entry.get('name', '').startswith(other + '/'))]
+        backup = output.with_name(output.name + '.before-slots')
+        if not backup.exists():
+            shutil.copy2(output, backup)
+        subprocess.run([siso(slot), 'fs', 'import', '-C', name], cwd=slot / 'src', check=True,
+                       input=json.dumps(state).encode())
+        changed.append(name)
+    return changed
+
+
+def make_slots(active, candidate):
+    """Rename the two roots to slots beside them and leave symlinks at their
+    paths, rewriting the absolute paths their records and build state hold,
+    so nothing has to be rebuilt."""
+    active, candidate = role(active), role(candidate)
+    links = (active, candidate)
+    for link in links:
+        if link.is_symlink():
+            engine.fail(f'{link} is already a symlink')
+        if not (link / 'evidence/sync.json').is_file():
+            engine.fail(f'{link} is not an engine root')
+        if (link / '.fly-engine-operation').exists():
+            engine.fail(f'An engine command owns {link}; wait for it to finish')
+    slots = (active.parent / (active.name + '-a'), active.parent / (active.name + '-b'))
+    for slot in slots:
+        if slot.exists() or slot.is_symlink():
+            engine.fail(f'{slot} already exists')
+    if len({os.stat(path).st_dev for path in (*links, active.parent, candidate.parent)}) != 1:
+        engine.fail('Both roots and their directories must be on one file system')
+    for link, slot in zip(links, slots):
+        os.rename(link, slot)
+        os.symlink(os.path.relpath(slot, link.parent), link)
+    prefixes = {str(active): str(slots[0]), str(candidate): str(slots[1])}
+    os.environ.setdefault(engine.LEASE_TOKEN, secrets.token_hex(16))
+    with engine.exclusive(slots[0]), engine.exclusive(slots[1]):
+        for (link, slot), other in zip(zip(links, slots), (candidate, active)):
+            records = 0
+            for file in sorted((slot / 'evidence').glob('*.json')):
+                try:
+                    value = json.loads(file.read_text())
+                except ValueError:
+                    continue
+                rewritten = remap(value, prefixes)
+                if rewritten != value:
+                    engine.atomic_json(file, rewritten)
+                    records += 1
+            outputs = move_build_state(slot, str(link), str(other))
+            print(f'{link} -> {slot}: {records} records and the build state of '
+                  f'{", ".join(outputs) or "no output"} rewritten.', flush=True)
+
+
 def follow(root, lock, jobs, candidate=None):
     """What a release runs first: bring its engine root to the release's pin."""
+    slots = slot_roles(root, candidate)
     root = engine.engine_root(root)
     if root_current(root, lock):
         print(f'Engine root is already at Chromium {lock["engine_version"]}.', flush=True)
         return False
     if candidate and validated(engine.engine_root(candidate), lock):
-        adopt(candidate, root, lock)
+        if slots:
+            swap(*slots, lock)
+        else:
+            adopt(candidate, root, lock)
         return True
     print('No candidate root validated this pin; moving and rebuilding this root.', flush=True)
     upgrade(root, lock, jobs, 'apply')
@@ -625,10 +812,10 @@ def main():
     parser = argparse.ArgumentParser(description=__doc__,
                                      formatter_class=argparse.RawDescriptionHelpFormatter)
     parser.add_argument('command', choices=['status', 'pin', 'patch-check', 'seed', 'adopt',
-                                            'follow', 'move', 'upgrade', 'validate'])
+                                            'slots', 'follow', 'move', 'upgrade', 'validate'])
     parser.add_argument('--root', help='engine root (every command but status, pin, patch-check)')
     parser.add_argument('--from', dest='source', help='seed: the existing engine root to copy')
-    parser.add_argument('--candidate', help='adopt, follow: the root validate ran in')
+    parser.add_argument('--candidate', help='adopt, slots, follow: the root validate runs in')
     parser.add_argument('--jobs', type=int, default=os.cpu_count() or 1)
     parser.add_argument('--channel', choices=['Stable', 'Beta'],
                         help='patch-check: the latest release of this channel '
@@ -642,12 +829,12 @@ def main():
     args = parser.parse_args()
     if args.jobs < 1:
         parser.error('--jobs must be positive')
-    if args.command in ('seed', 'adopt', 'follow', 'move', 'upgrade', 'validate') and not args.root:
+    if args.command in ('seed', 'adopt', 'slots', 'follow', 'move', 'upgrade', 'validate') and not args.root:
         parser.error('--root is required for ' + args.command)
     if (args.command == 'seed') != bool(args.source):
         parser.error('--from belongs to seed, and seed requires it')
-    if args.command == 'adopt' and not args.candidate:
-        parser.error('adopt requires --candidate')
+    if args.command in ('adopt', 'slots') and not args.candidate:
+        parser.error(args.command + ' requires --candidate')
     try:
         lock = engine.read_lock()
         if args.command in ('status', 'pin'):
@@ -681,6 +868,8 @@ def main():
         elif args.command == 'adopt':
             os.environ.setdefault(engine.LEASE_TOKEN, secrets.token_hex(16))
             adopt(args.candidate, args.root, lock)
+        elif args.command == 'slots':
+            make_slots(args.root, args.candidate)
         elif args.command == 'follow':
             os.environ.setdefault(engine.LEASE_TOKEN, secrets.token_hex(16))
             write_github_output({'moved': follow(args.root, lock, args.jobs, args.candidate)})

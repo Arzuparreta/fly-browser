@@ -63,8 +63,20 @@ assert.equal(release.inRelease('abc', '2026-10-14T10:55:07Z', 'v1', taggedAt, ()
 assert.equal(release.inRelease(null, '2026-10-14T10:50:00Z', 'v1', taggedAt, never), true);
 assert.equal(release.inRelease('abc', '2026-10-14T11:30:00Z', 'v1', taggedAt, () => null), false, 'Missing commit: the instants decide');
 
-assert.deepEqual(release.parseOptions(['--rc', '--version', '1.0.0']), {rc: true, hold: false, version: '1.0.0'});
+assert.deepEqual(release.parseOptions(['--rc', '--version', '1.0.0']),
+    {rc: true, hold: false, duringEngineUpdate: false, version: '1.0.0'});
+assert.equal(release.parseOptions(['--during-engine-update']).duringEngineUpdate, true);
 throws(() => release.parseOptions(['--version']), /needs a value/);
+
+// A Chromium update on its way to merging releases itself with everything on
+// main; one stuck on a failure does not hold back a release.
+assert.equal(release.engineUpdateAdvice(null), null);
+for (const validation of ['none', 'pending', 'success']) {
+    assert.equal(release.engineUpdateAdvice({number: 1, title: 't', validation}), 'wait', validation);
+}
+for (const validation of ['failure', 'error']) {
+    assert.equal(release.engineUpdateAdvice({number: 1, title: 't', validation}), 'note', validation);
+}
 
 // Propagation rewrites only Fly's own entries and keeps npm's formatting.
 const temporary = fs.mkdtempSync(path.join(os.tmpdir(), 'fly-version-'));
