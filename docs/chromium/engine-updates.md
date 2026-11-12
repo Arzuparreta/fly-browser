@@ -295,7 +295,7 @@ within 157):
 | --- | --- | --- | --- |
 | Validate: control | candidate | 406 | 13 min |
 | Validate: `out/FlyNative` | candidate | 487 | 12 min |
-| Release: `out/FlyRelease` | active | n/a | 3 h 29 min |
+| Release: `out/FlyRelease` | active | n/a | 3 h 01 min |
 | Development build: control | active | 56 138 | 2 h 35 min |
 | Development build: `out/FlyNative` | active | 56 218 | 2 h 36 min |
 
@@ -319,6 +319,28 @@ Setting up slots on the engine host (12 November 2026) took 17 seconds and
 rewrote 22 evidence records and the Siso state of five output directories.
 `autoninja -n chrome` reported 0 steps for the control and `out/FlyNative` of
 both roots before and after.
+
+The first release with slots, v0.43.1 (12 November 2026, Chromium
+157.0.8103.78, run 43209127877), measured against v0.42.4:
+
+| Release run | v0.42.4 (adopt) | v0.43.1 (slots) |
+| --- | --- | --- |
+| Build job | 3 h 29 min | 2 h 54 min |
+| of which `follow` (move the active root to the validated pin) | 26 min 52 s | 5 s |
+| of which compiling and packaging `out/FlyRelease` | 3 h 01 min | 2 h 54 min |
+| Development build job | 5 h 21 min | 6 min 35 s |
+
+The development build job of v0.43.1 compiled 7 steps in 2 min 15 s for
+`out/FlyNative`; the rest of the job is checking the dependency records,
+`gn gen` and applying the overlay. The release build started from an empty
+`out/FlyRelease`, since the slot that became active had never built one; a
+release that moves Chromium recompiles nearly everything in either case
+(57 875 steps, against 56 882 for v0.42.4 in an existing `out/FlyRelease`). The release and its checksums were public
+2 h 55 min after the build job started, and the official packages 5 min later.
+
+The automatic **Cut the release** step of `engine-update.yml` was not part of
+this release, which was cut by hand with `scripts/release.js`. Its fix is
+covered by the tests and is first exercised by the next Stable update.
 
 Two more causes of repeated work were removed with slots:
 
