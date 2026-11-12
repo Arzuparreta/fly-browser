@@ -326,10 +326,12 @@ Two more causes of repeated work were removed with slots:
   November: `engine-update-ci.sh` set its Git credential helper twice in one
   checkout, and the second `git config credential.helper ''` exits 5 when two
   values exist. Both updates had to be released by hand.
-- `scripts/release.js prepare` refuses to release while an engine update is
-  being validated (`--during-engine-update` overrides it): that update releases
-  everything on main itself when it merges, so a release cut meanwhile built
-  the optimised package one more time and shipped the old engine.
+- `scripts/release.js prepare` refuses to release while an `engine-update.yml`
+  run is taking an open update pull request to its merge
+  (`--during-engine-update` overrides it): that update releases everything on
+  main itself when it merges, so a release cut meanwhile built the optimised
+  package one more time and shipped the old engine. An update that failed, or
+  that no run is working on, does not hold a release back.
 
 ## Data use
 

@@ -200,8 +200,9 @@ function waitForChecks(url) {
     return false;
 }
 
-// The open engine update pull request and its native validation state
-// (pending, success, failure, error, or none when it has not started), or null.
+// The open engine update pull request, its native validation state (pending,
+// success, failure, error, or none when it has not started) and whether an
+// engine-update.yml run is working on it, or null.
 function pendingEngineUpdate() {
     const listed = run('gh', ['pr', 'list', '--head', ENGINE_BRANCH, '--state', 'open',
         '--json', 'number,title,headRefOid'], {check: false});
@@ -211,18 +212,24 @@ function pendingEngineUpdate() {
     if (!pull) return null;
     const status = run('gh', ['api', `repos/{owner}/{repo}/commits/${pull.headRefOid}/statuses`,
         '--jq', '[.[] | select(.context == "engine-validation")][0].state // ""'], {check: false});
-    return {number: pull.number, title: pull.title, validation: status.stdout || 'none'};
+    const runs = run('gh', ['run', 'list', '--workflow', 'engine-update.yml', '--limit', '5',
+        '--json', 'status', '--jq', '[.[] | select(.status != "completed")] | length'], {check: false});
+    return {number: pull.number, title: pull.title, validation: status.stdout || 'none',
+        running: Number(runs.stdout) > 0};
 }
 
-// 'wait' while the update is on its way to merging and releasing by itself;
-// 'note' when it is stuck on a failure that needs a repair first.
+// 'wait' while a run is taking the update to its merge and release; 'note'
+// when it failed validation, or nothing is working on it (a merge conflict,
+// a failed check or a cancelled run stops the workflow with it still open).
 function engineUpdateAdvice(update) {
     if (!update) return null;
-    return ['failure', 'error'].includes(update.validation) ? 'note' : 'wait';
+    if (['failure', 'error'].includes(update.validation)) return 'note';
+    return update.running ? 'wait' : 'note';
 }
 
 function describeEngineUpdate(update) {
-    return `#${update.number} ${update.title} (engine-validation: ${update.validation})`;
+    return `#${update.number} ${update.title} (engine-validation: ${update.validation}, ` +
+        `${update.running ? 'engine-update.yml running' : 'no engine-update.yml run in progress'})`;
 }
 
 function plan(options) {

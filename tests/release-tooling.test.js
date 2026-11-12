@@ -68,14 +68,16 @@ assert.deepEqual(release.parseOptions(['--rc', '--version', '1.0.0']),
 assert.equal(release.parseOptions(['--during-engine-update']).duringEngineUpdate, true);
 throws(() => release.parseOptions(['--version']), /needs a value/);
 
-// A Chromium update on its way to merging releases itself with everything on
-// main; one stuck on a failure does not hold back a release.
+// A Chromium update a run is taking to its merge releases itself with
+// everything on main; one that failed or that nothing is working on (merge
+// conflict, failed check, cancelled run) does not hold back a release.
 assert.equal(release.engineUpdateAdvice(null), null);
 for (const validation of ['none', 'pending', 'success']) {
-    assert.equal(release.engineUpdateAdvice({number: 1, title: 't', validation}), 'wait', validation);
+    assert.equal(release.engineUpdateAdvice({number: 1, title: 't', validation, running: true}), 'wait', validation);
+    assert.equal(release.engineUpdateAdvice({number: 1, title: 't', validation, running: false}), 'note', validation);
 }
 for (const validation of ['failure', 'error']) {
-    assert.equal(release.engineUpdateAdvice({number: 1, title: 't', validation}), 'note', validation);
+    assert.equal(release.engineUpdateAdvice({number: 1, title: 't', validation, running: true}), 'note', validation);
 }
 
 // Propagation rewrites only Fly's own entries and keeps npm's formatting.

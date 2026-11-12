@@ -345,11 +345,12 @@ def copy_root(source, root, touch):
     With `touch` the copy compares contents, not times. Comparing times wrote
     (and so dated now) every file whose time differed between the roots, and
     after one adoption that is most of the tree: 152061 files for a security
-    update, and nearly all of Chromium rebuilt twice. A file with the same
-    contents only takes the source's time, which never triggers a rebuild."""
+    update, and nearly all of Chromium rebuilt twice. Times are then not
+    copied at all: a file with the same contents keeps this root's time, since
+    the source's could be older than outputs built here from other contents."""
     entries = [name for name in SEED_ENTRIES if (source / name).exists()]
     # --modify-window=-1: compare times to the nanosecond, not the second.
-    compare = ['--checksum'] if touch else []
+    compare = ['--checksum', '--no-times'] if touch else []
     result = subprocess.run(['rsync', '-a', *compare, '--delete', '--modify-window=-1',
                              '--exclude=/src/out/', '--out-format=%i %n',
                              *[str(source / name) for name in entries],
@@ -490,7 +491,9 @@ def point(link, target):
     """Make `link` a relative symlink to `target`, replacing it atomically."""
     temporary = link.with_name('.' + link.name + '.swap')
     temporary.unlink(missing_ok=True)
-    os.symlink(os.path.relpath(target, link.parent), temporary)
+    # Relative to where the link really is: `target` is resolved, and the
+    # link's directory may itself be reached through a symlink.
+    os.symlink(os.path.relpath(Path(target).resolve(), link.parent.resolve()), temporary)
     os.replace(temporary, link)
 
 
@@ -510,14 +513,12 @@ def finish_swap(active, candidate):
 
 def slot_roles(active, candidate):
     """(active link, candidate link) when both roots are symlinks to two
-    different slots; None for plain directories."""
+    different slots; None otherwise, and the roots are copied as plain
+    directories (one of them may be a symlink to another disk)."""
     if not candidate:
         return None
     active, candidate = role(active), role(candidate)
     if not (active.is_symlink() and candidate.is_symlink()):
-        if active.is_symlink() or candidate.is_symlink():
-            engine.fail(f'Only one of {active} and {candidate} is a symlink; '
-                        'both roots must be slots, or neither')
         return None
     finish_swap(active, candidate)
     if active.resolve() == candidate.resolve():

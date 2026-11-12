@@ -462,11 +462,17 @@ class MoveTests(unittest.TestCase):
         self.assertEqual(active.resolve(), slot_b)
         self.assertEqual(candidate.resolve(), slot_a)
         self.assertFalse((slot_a / engine_update.SWAP_STATE).exists())
-        engine_update.point(candidate, slot_b)
+        # A link whose directory is reached through a symlink still points
+        # to the slot it names.
+        alias = self.root.parent / 'nested/alias'
+        alias.parent.mkdir()
+        alias.symlink_to(self.root.parent)
+        engine_update.point(alias / 'engine-next', slot_b)
+        self.assertEqual((alias / 'engine-next').resolve(), slot_b)
         with self.assertRaisesRegex(RuntimeError, 'point to the same slot'):
             engine_update.slot_roles(active, candidate)
-        with self.assertRaisesRegex(RuntimeError, 'Only one'):
-            engine_update.slot_roles(active, slot_a)
+        # One symlinked root is a plain root on another disk, not a slot.
+        self.assertIsNone(engine_update.slot_roles(active, slot_a))
 
     def test_reverts_the_managed_overlay_before_moving(self):
         with tempfile.TemporaryDirectory() as tmp:
@@ -539,7 +545,8 @@ class CopyTests(unittest.TestCase):
             self.assertEqual((root / 'src/changed.cc').read_text(), 'new\n')
             self.assertGreater((root / 'src/changed.cc').stat().st_mtime, past + 3600)
             self.assertAlmostEqual((root / 'src/same.cc').stat().st_mtime, past, delta=1)
-            self.assertAlmostEqual((root / 'src/retimed.cc').stat().st_mtime, past, delta=1)
+            # Not the source's older time: outputs here may be newer than it.
+            self.assertAlmostEqual((root / 'src/retimed.cc').stat().st_mtime, past - 3600, delta=1)
             self.assertFalse((root / 'src/removed.cc').exists())
             self.assertEqual((root / 'src/out/Fly/chrome').read_text(), 'active build\n')
 
