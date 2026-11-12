@@ -36,7 +36,12 @@ credentials() {
     git config user.name >/dev/null || fail "The engine host has no git user.name."
     git remote set-url origin "https://github.com/$REPO.git"
     git config --local --unset-all http.https://github.com/.extraheader 2>/dev/null || true
-    git config --local credential.helper ''
+    # prepare and release both call this in the same checkout. Replace the
+    # helpers instead of overwriting one value: after the first call there
+    # are two, and `git config credential.helper ''` refuses to overwrite
+    # several values (exit 5), which stopped every automatic release.
+    git config --local --unset-all credential.helper 2>/dev/null || true
+    git config --local --add credential.helper ''
     git config --local --add credential.helper '!gh auth git-credential'
 }
 

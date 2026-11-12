@@ -381,6 +381,99 @@ class MoveTests(unittest.TestCase):
         self.assertEqual((self.src / 'fly/native.cc').read_text(), 'native\n')
         self.assertEqual(engine_update.recorded_lock(self.root)['engine_version'], '156.0.1.1')
 
+    def fake_siso(self, root):
+        """A stand-in for Siso's `fs export`/`fs import`: the state file holds
+        the exported JSON itself."""
+        tool = engine_update.siso(root)
+        tool.parent.mkdir(parents=True, exist_ok=True)
+        tool.write_text('#!/bin/sh\ncd "$4" || exit 1\n'
+                        'case $2 in export) cat .siso_fs_state ;; import) cat > .siso_fs_state ;; esac\n')
+        tool.chmod(0o755)
+        with (root / 'src/.git/info/exclude').open('a') as exclude:
+            exclude.write('third_party/siso/\n')
+
+    @unittest.skipUnless(shutil.which('rsync'), 'rsync is not installed')
+    def test_slots_swap_to_a_validated_candidate(self):
+        candidate = self.root.parent / 'engine-next'
+        candidate.mkdir()
+        engine_update.copy_root(self.root, candidate, touch=False)
+        (self.root / 'test-tools/xvfb').mkdir(parents=True)
+        for base in (self.root, candidate):
+            self.fake_siso(base)
+            output = base / 'src/out/FlyNative'
+            output.mkdir(parents=True)
+            (output / '.siso_fs_state').write_text(json.dumps({'entries': [
+                {'name': str(base / 'src/fly/native.cc'), 'digest': {'hash': 'a'}},
+                {'name': str(self.root.parent / 'elsewhere/kept.h')},
+                {'name': str((candidate if base == self.root else self.root) / 'src/copied.o')}]}))
+        engine.atomic_json(candidate / 'evidence/build.json',
+                           {'details': {'binary': str(candidate / 'src/out/FlyControl/chrome'),
+                                        'other': str(self.root) + '-unrelated'}})
+        active_link, candidate_link = self.root, candidate
+        engine_update.make_slots(active_link, candidate_link)
+        slot_a, slot_b = self.root.parent / 'engine-a', self.root.parent / 'engine-b'
+        self.assertEqual(active_link.resolve(), slot_a)
+        self.assertEqual(candidate_link.resolve(), slot_b)
+        self.assertFalse(os.path.isabs(os.readlink(active_link)))
+        record = json.loads((slot_b / 'evidence/build.json').read_text())['details']
+        self.assertEqual(record['binary'], str(slot_b / 'src/out/FlyControl/chrome'))
+        self.assertEqual(record['other'], str(self.root) + '-unrelated')
+        state = json.loads((slot_b / 'src/out/FlyNative/.siso_fs_state').read_text())
+        self.assertEqual([entry['name'] for entry in state['entries']],
+                         [str(slot_b / 'src/fly/native.cc'), str(self.root.parent / 'elsewhere/kept.h')])
+        self.assertEqual(state['entries'][0]['digest'], {'hash': 'a'})
+        self.assertTrue((slot_b / 'src/out/FlyNative/.siso_fs_state.before-slots').is_file())
+        with self.assertRaisesRegex(RuntimeError, 'already a symlink'):
+            engine_update.make_slots(active_link, candidate_link)
+
+        self.assertTrue(engine_update.move(candidate_link, self.new, jobs=1))
+        with tempfile.TemporaryDirectory() as tmp, self.overlay(tmp):
+            native.apply_core(slot_b, self.new)
+            with self.assertRaisesRegex(RuntimeError, 'has not passed validate'):
+                engine_update.swap(active_link, candidate_link, self.new)
+            engine.atomic_json(slot_b / engine_update.VALIDATION,
+                               {'lock_sha256': engine.digest(engine.LOCK)})
+            self.assertTrue(engine_update.follow(active_link, self.new, jobs=1,
+                                                 candidate=candidate_link))
+            self.assertEqual(active_link.resolve(), slot_b)
+            self.assertEqual(candidate_link.resolve(), slot_a)
+            self.assertTrue((slot_b / 'test-tools/xvfb').is_dir())
+            self.assertFalse((slot_a / engine_update.SWAP_STATE).exists())
+            self.assertFalse((slot_b / engine_update.SWAP_STATE).exists())
+            self.assertEqual(json.loads((slot_b / 'evidence/engine-swap.json').read_text())
+                             ['details']['from'], str(slot_a))
+            # Nothing is copied: the previous active slot keeps its pin.
+            self.assertEqual(engine_update.recorded_lock(slot_a)['engine_version'], '155.0.1.1')
+            self.assertFalse(engine_update.follow(active_link, self.new, jobs=1,
+                                                  candidate=candidate_link))
+            self.assertEqual(active_link.resolve(), slot_b)
+
+    def test_an_interrupted_swap_is_completed(self):
+        slot_a, slot_b = self.root.parent / 'engine-a', self.root.parent / 'engine-b'
+        os.rename(self.root, slot_a)
+        slot_b.mkdir()
+        active, candidate = self.root.parent / 'engine', self.root.parent / 'engine-next'
+        engine_update.point(active, slot_a)
+        engine_update.point(candidate, slot_a)
+        record = {'active': str(slot_b), 'candidate': str(slot_a)}
+        for slot in (slot_a, slot_b):
+            engine.atomic_json(slot / engine_update.SWAP_STATE, record)
+        self.assertEqual(engine_update.slot_roles(active, candidate), (active, candidate))
+        self.assertEqual(active.resolve(), slot_b)
+        self.assertEqual(candidate.resolve(), slot_a)
+        self.assertFalse((slot_a / engine_update.SWAP_STATE).exists())
+        # A link whose directory is reached through a symlink still points
+        # to the slot it names.
+        alias = self.root.parent / 'nested/alias'
+        alias.parent.mkdir()
+        alias.symlink_to(self.root.parent)
+        engine_update.point(alias / 'engine-next', slot_b)
+        self.assertEqual((alias / 'engine-next').resolve(), slot_b)
+        with self.assertRaisesRegex(RuntimeError, 'point to the same slot'):
+            engine_update.slot_roles(active, candidate)
+        # One symlinked root is a plain root on another disk, not a slot.
+        self.assertIsNone(engine_update.slot_roles(active, slot_a))
+
     def test_reverts_the_managed_overlay_before_moving(self):
         with tempfile.TemporaryDirectory() as tmp:
             with self.overlay(tmp):
@@ -439,14 +532,21 @@ class CopyTests(unittest.TestCase):
             (root / 'src/changed.cc').write_text('old\n')
             (root / 'src/removed.cc').write_text('gone\n')
             (root / 'src/out/Fly/chrome').write_text('active build\n')
+            # Same contents, different times: what an earlier adoption leaves.
+            (source / 'src/retimed.cc').write_text('same bytes\n')
+            (root / 'src/retimed.cc').write_text('same bytes\n')
             past = time.time() - 86400
-            for file in (source / 'src/same.cc', root / 'src/same.cc', source / 'src/changed.cc'):
+            for file in (source / 'src/same.cc', root / 'src/same.cc', source / 'src/changed.cc',
+                         source / 'src/retimed.cc'):
                 os.utime(file, (past, past))
+            os.utime(root / 'src/retimed.cc', (past - 3600, past - 3600))
             written = engine_update.copy_root(source, root, touch=True)
             self.assertEqual(written, 1)
             self.assertEqual((root / 'src/changed.cc').read_text(), 'new\n')
             self.assertGreater((root / 'src/changed.cc').stat().st_mtime, past + 3600)
             self.assertAlmostEqual((root / 'src/same.cc').stat().st_mtime, past, delta=1)
+            # Not the source's older time: outputs here may be newer than it.
+            self.assertAlmostEqual((root / 'src/retimed.cc').stat().st_mtime, past - 3600, delta=1)
             self.assertFalse((root / 'src/removed.cc').exists())
             self.assertEqual((root / 'src/out/Fly/chrome').read_text(), 'active build\n')
 
