@@ -39,6 +39,10 @@ class EngineWorkflowTests(unittest.TestCase):
         git(self.repo, 'add', '.')
         git(self.repo, 'commit', '--quiet', '-m', 'fixture')
         git(self.repo, 'remote', 'add', 'origin', str(self.remote))
+        # credentials() normalises origin to HTTPS. Keep ALL fixture Git
+        # calls local, including helper calls outside the child's environment.
+        git(self.repo, 'config', 'url.' + self.remote.as_uri() + '.insteadOf',
+            'https://github.com/fixture/Fly.git')
         git(self.repo, 'push', '--quiet', 'origin', 'main')
         self.initial = git(self.repo, 'rev-parse', 'HEAD')
         config = self.base / 'gitconfig'
@@ -150,6 +154,35 @@ esac
         self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
         self.assertGreaterEqual(events.count('patch-verify'), 3)
         self.assertEqual(git(self.repo, 'show', 'origin/main:unrelated'), 'new main')
+
+    def test_retry_preserves_main_changes_and_reuses_the_existing_repair_pr(self):
+        result, _ = self.run_beta(SCENARIO='review')
+        self.assertNotEqual(result.returncode, 0)
+        git(self.repo, 'switch', '--quiet', '-c', 'future')
+        (self.repo / 'unrelated').write_text('new main\n')
+        git(self.repo, 'add', '.')
+        git(self.repo, 'commit', '--quiet', '-m', 'main moved between runs')
+        git(self.repo, 'push', '--quiet', 'origin', 'HEAD:main')
+        git(self.repo, 'switch', '--quiet', 'main')
+        result, events = self.run_beta()
+        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+        self.assertEqual(events.count('gh pr create'), 1)
+        self.assertEqual(git(self.repo, 'show', 'origin/main:unrelated'), 'new main')
+
+    def test_retry_refuses_branch_scripts_before_running_any_of_them(self):
+        result, events = self.run_beta(SCENARIO='review')
+        self.assertNotEqual(result.returncode, 0)
+        git(self.repo, 'fetch', '--quiet', 'origin', 'engine/chromium-beta')
+        git(self.repo, 'switch', '--quiet', '-c', 'modified', 'origin/engine/chromium-beta')
+        (self.repo / 'scripts/chromium/engine_update.py').write_text('unexpected branch code\n')
+        git(self.repo, 'add', '.')
+        git(self.repo, 'commit', '--quiet', '-m', 'unexpected script')
+        git(self.repo, 'push', '--quiet', 'origin', 'HEAD:engine/chromium-beta')
+        git(self.repo, 'switch', '--quiet', 'main')
+        result, new_events = self.run_beta()
+        self.assertNotEqual(result.returncode, 0)
+        self.assertNotIn('python ', new_events[len(events):])
+        self.assertNotIn('gh pr merge', new_events)
 
 
 if __name__ == '__main__':
