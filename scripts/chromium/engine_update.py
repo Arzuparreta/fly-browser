@@ -5,6 +5,8 @@
   pin          write the latest Stable pin into chromium/upstream.lock.json
   patch-check  replay the patch series on a release's upstream files, without
                a checkout (an early warning for the next major version)
+  patch-repair repair context drift while preserving Fly's exact edits
+  patch-verify prove a context-only repair preserves main's Stable output
   seed         create a second engine root by copying an existing one locally,
                without downloading anything (build outputs are not copied)
   adopt        give an engine root the exact sources of a validated candidate
@@ -812,7 +814,8 @@ def upgrade(root, lock, jobs, through, tools=None, force=False):
 def main():
     parser = argparse.ArgumentParser(description=__doc__,
                                      formatter_class=argparse.RawDescriptionHelpFormatter)
-    parser.add_argument('command', choices=['status', 'pin', 'patch-check', 'seed', 'adopt',
+    parser.add_argument('command', choices=['status', 'pin', 'patch-check', 'patch-repair',
+                                            'patch-verify', 'seed', 'adopt',
                                             'slots', 'follow', 'move', 'upgrade', 'validate'])
     parser.add_argument('--root', help='engine root (every command but status, pin, patch-check)')
     parser.add_argument('--from', dest='source', help='seed: the existing engine root to copy')
@@ -821,6 +824,8 @@ def main():
     parser.add_argument('--channel', choices=['Stable', 'Beta'],
                         help='patch-check: the latest release of this channel '
                              'instead of the pinned revision')
+    parser.add_argument('--reference', help='patch-repair: known-good Chromium revision')
+    parser.add_argument('--base', help='patch-verify: Git ref to compare against')
     parser.add_argument('--through', choices=['apply', 'build'], default='build',
                         help='upgrade: stop after applying the overlay, or after building Fly')
     parser.add_argument('--test-tools', type=Path,
@@ -849,13 +854,26 @@ def main():
                     print(f'Pinned Chromium {latest["engine_version"]}.')
                 else:
                     print('The pin is already the latest Stable release.')
-        elif args.command == 'patch-check':
+        elif args.command in ('patch-check', 'patch-repair', 'patch-verify'):
             pin = load_pin()
             if args.channel:
                 target = pin.resolve(args.channel)
                 revision, label = target['chromium']['revision'], f'{args.channel} {target["engine_version"]}'
             else:
                 revision, label = lock['chromium']['revision'], f'pinned {lock["engine_version"]}'
+            if args.command == 'patch-repair':
+                import patch_repair
+                changed = patch_repair.repair(args.reference or lock['chromium']['revision'],
+                                              revision, pin.fetch)
+                write_github_output({'repaired': bool(changed), 'version': label.split()[-1]})
+                return 0
+            if args.command == 'patch-verify':
+                import patch_repair
+                if not args.base or args.channel:
+                    parser.error('patch-verify requires --base and uses the pinned Stable')
+                patch_repair.verify_base(args.base, revision, pin.fetch)
+                print('Context-only repair: the complete pinned Stable output is unchanged.')
+                return 0
             print(f'Replaying {native.SERIES.parent.name}/series on Chromium {label} ({revision}).')
             failures = patch_check(revision, pin.fetch)
             write_github_output({'version': label.split()[-1], 'failed': len(failures),

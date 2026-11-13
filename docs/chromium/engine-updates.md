@@ -25,8 +25,11 @@ once or twice a week. Fly follows them automatically:
    the release commit, so `./launch.sh` runs the new engine. The candidate
    already built and tested it, so only the release's own changes compile.
 
-A failure stops the process with the pull request still open and the log
-commented on it. Nothing reaches users until the whole chain has passed.
+A patch-context conflict first receives a conservative automatic repair
+([Automatic patch repair](#automatic-patch-repair)). A semantic conflict, an
+ambiguous edit or another validation failure stops the process with the pull
+request still open and the log commented on it. Nothing reaches users until
+the whole chain has passed.
 
 ## Pon Chromium al día: complete maintenance task
 
@@ -110,9 +113,10 @@ for issues, pull requests and releases, or subscribe to the Beta issue itself.
 Notification delivery depends on the owner's GitHub settings; the workflow
 opening an issue does not guarantee an email or a chat message.
 
-The automatic workflow detects conflicts, records them, and processes compatible
-Stable updates. It does **not** repair conflicting patches. An agent answering
-a status question must include pending Beta work even when Stable is current.
+The automatic workflow detects conflicts, repairs unambiguous context drift,
+and processes validated Stable updates. Semantic/API changes still need
+development work. An agent answering a status question must include pending
+Beta work even when Stable is current.
 
 To resume tracking after a deliberate pause, check the workflow state and
 runner availability, then enable it and dispatch an immediate check:
@@ -210,6 +214,8 @@ Both variables are set by the runner service,
 | `status` | Prints the pinned and the latest Stable versions |
 | `pin` | Writes the latest Stable pin into `chromium/upstream.lock.json` when it is newer |
 | `patch-check [--channel Stable\|Beta]` | Replays the patch series on the upstream files of the pin, or of the latest release of a channel, fetched from Gitiles. Needs no checkout; downloads a few MB |
+| `patch-repair [--channel Beta] [--reference REV]` | Reanchors the complete patch series on the target using a known-good Chromium revision (the pin by default); preserves every added/removed line and proves the reference output unchanged, or writes nothing |
+| `patch-verify --base REF` | Proves that a Beta preparation only changes existing patch context and leaves the complete patched Stable files byte-identical to REF |
 | `seed --from A --root B` | Creates root B by copying root A locally (sources and dependency state, no build outputs) |
 | `move --root R` | Moves root R from the pin it was synced to onto this checkout's pin: reverts the overlay, checks out the new revisions, `gclient sync`, hooks. Resumable after an interruption |
 | `upgrade --root R [--through apply\|build]` | `move`, then rebuilds the control, applies the overlay and, with `build`, builds `out/FlyNative`. Does nothing when R is already current |
@@ -257,6 +263,44 @@ patches on it every six hours. While any patch does not apply, it keeps the
 those patches before that version reaches Stable, and the Stable update goes
 through without stopping. Compiling against Beta is not checked: only patch
 application.
+
+### Automatic patch repair
+
+After the Beta warning job finishes, the trusted engine host attempts a repair
+in a dedicated worktree from current main. It never moves either engine root
+for Beta preparation. Repair and Stable update use the same scheduled workflow,
+host login, PR checks and guarded merge process; a failed Beta repair does not
+block the separate Stable update.
+
+The mechanical repair only replaces unchanged context around Fly's edits. It
+preserves all added and removed lines, accepts only exact anchors that occur
+once in each version, and strictly replays the entire series on both versions.
+For every repaired patch, the output on the known-good reference must remain
+byte-for-byte identical. Downloads, ambiguous matches, changed/deleted code and
+unsupported patch formats fail closed. A late failure writes no patches,
+including earlier repairs in that attempt. No code-generating model or API key
+is used by this layer.
+
+A successful Beta repair opens `engine/chromium-beta` with `impact:none`. Before
+merging, it proves the complete Stable output is identical to current main,
+replays Stable and Beta, and waits for the latest head's `verify`, `impact_label`
+and `engine-validation` checks plus any other registered checks. If main moves,
+the combined result is checked again. This changes patch metadata, so it needs
+neither a native rebuild nor an empty release. It does not establish Beta build
+or runtime compatibility: the normal Stable update still compiles the control
+and Fly and runs Fly's native tests before shipping that engine.
+
+The warning closes only after strict Beta replay succeeds on merged main.
+Failures leave it open; a distinct mechanical blocker is commented once with
+its workflow log. If a function moves, an API changes or a match is ambiguous,
+development work is still required. The next run retries against current
+upstream and main; it never drops a patch to obtain a green result.
+
+Stable patch replay uses the same repair engine when needed, with main's
+previous pin as the known-good reference. It commits and pushes a successful
+repair on the existing Stable update PR, then builds/tests that new head in
+the candidate root. Any failed repair leaves that PR open. Publication retains
+all its existing native validation and release gates.
 
 ### Starting a Beta patch repair
 

@@ -17,6 +17,7 @@ sys.path.insert(0, str(ROOT / 'scripts/chromium'))
 import engine
 import engine_update
 import native
+import patch_repair
 
 SRC_URL = 'https://chromium.googlesource.com/chromium/src.git'
 TOOLS_URL = 'https://chromium.googlesource.com/chromium/tools/depot_tools.git'
@@ -141,6 +142,104 @@ class PatchCheckTests(unittest.TestCase):
             with self.assertRaisesRegex(ValueError, 'Gitiles 503'):
                 engine_update.gitiles_file('c' * 40, 'a.cc', busy, attempts=3)
         self.assertEqual(len(calls), 3)
+
+
+class PatchRepairTests(PatchCheckTests):
+    def configure(self, first, second=None):
+        self.patches = native.SERIES.parent
+        (self.patches / 'first.patch').write_text(first)
+        (self.patches / 'second.patch').write_text(second or (
+            '--- a/a.cc\n+++ b/a.cc\n@@ -1,3 +1,4 @@\n'
+            ' top\n TWO\n+three\n bottom\n'))
+        return {path.name: path.read_bytes() for path in self.patches.iterdir()}
+
+    def run_repair(self, original, target):
+        reference, destination = 'a' * 40, 'b' * 40
+        def fetch(url):
+            revision = url.split('/+/', 1)[1].split('/', 1)[0]
+            return self.fetch(original if revision == reference else target)(url)
+        return patch_repair.repair(reference, destination, fetch, log=lambda _: None)
+
+    def test_reanchors_context_and_replays_dependent_patches(self):
+        old = self.configure('--- a/a.cc\n+++ b/a.cc\n@@ -1,3 +1,3 @@\n'
+                             ' top\n-two\n+TWO\n bottom\n')
+        changed = self.run_repair({'a.cc': 'top\ntwo\nbottom\n'},
+                                  {'a.cc': 'new top\ntwo\nbottom\n'})
+        self.assertEqual(changed, ['first.patch', 'second.patch'])
+        for name in changed:
+            self.assertEqual(patch_repair.edits(old[name]),
+                             patch_repair.edits((self.patches / name).read_bytes()))
+        self.assertEqual(engine_update.patch_check('b' * 40,
+                         self.fetch({'a.cc': 'new top\ntwo\nbottom\n'}), log=lambda _: None), {})
+
+    def test_late_semantic_conflict_writes_nothing_including_earlier_repairs(self):
+        old = self.configure('--- a/a.cc\n+++ b/a.cc\n@@ -1,3 +1,3 @@\n'
+                             ' top\n-two\n+TWO\n bottom\n',
+                             '--- a/b.cc\n+++ b/b.cc\n@@ -1,3 +1,3 @@\n'
+                             ' head\n-old API\n+Fly API\n tail\n')
+        with self.assertRaisesRegex(ValueError, 'second.patch:'):
+            self.run_repair({'a.cc': 'top\ntwo\nbottom\n', 'b.cc': 'head\nold API\ntail\n'},
+                            {'a.cc': 'new top\ntwo\nbottom\n', 'b.cc': 'head\nnew API\ntail\n'})
+        self.assertEqual(old, {path.name: path.read_bytes() for path in self.patches.iterdir()})
+
+    def test_ambiguous_anchor_is_refused_without_writes(self):
+        old = self.configure('--- a/a.cc\n+++ b/a.cc\n@@ -1,3 +1,4 @@\n'
+                             ' head\n+Fly\n anchor\n tail\n')
+        with self.assertRaisesRegex(ValueError, 'no unique unchanged context'):
+            self.run_repair({'a.cc': 'head\nanchor\ntail\n'},
+                            {'a.cc': 'new\nanchor\ntail\nnew\nanchor\ntail\n'})
+        self.assertEqual(old, {path.name: path.read_bytes() for path in self.patches.iterdir()})
+
+    def test_repair_is_idempotent_and_does_not_weaken_working_patches(self):
+        old = self.configure('--- a/a.cc\n+++ b/a.cc\n@@ -1,3 +1,3 @@\n'
+                             ' top\n-two\n+TWO\n bottom\n')
+        self.assertEqual(self.run_repair({'a.cc': 'top\ntwo\nbottom\n'},
+                                         {'a.cc': 'top\ntwo\nbottom\n'}), [])
+        self.assertEqual(old, {path.name: path.read_bytes() for path in self.patches.iterdir()})
+
+    def test_transport_failure_never_changes_patches(self):
+        old = self.configure('--- a/a.cc\n+++ b/a.cc\n@@ -1,3 +1,3 @@\n'
+                             ' top\n-two\n+TWO\n bottom\n')
+        with self.assertRaises(OSError):
+            patch_repair.repair('a' * 40, 'b' * 40,
+                                lambda _: (_ for _ in ()).throw(OSError('network')), log=lambda _: None)
+        self.assertEqual(old, {path.name: path.read_bytes() for path in self.patches.iterdir()})
+
+    def test_verify_base_rejects_code_changes_even_when_patches_apply(self):
+        self.configure('--- a/a.cc\n+++ b/a.cc\n@@ -1,3 +1,3 @@\n'
+                       ' top\n-two\n+TWO\n bottom\n')
+        repo = self.patches.parent
+        git(repo, 'init', '--quiet')
+        commit(repo, {}, 'base')
+        base = git(repo, 'rev-parse', 'HEAD')
+        # Both patches continue to apply, but a Fly edit was changed.
+        first = self.patches / 'first.patch'
+        first.write_text(first.read_text().replace('+TWO\n', '+OTHER\n'))
+        commit(repo, {}, 'changed code')
+        with patch.object(engine, 'REPO', repo), self.assertRaisesRegex(ValueError, 'changed Fly edits'):
+            patch_repair.verify_base(base, 'a' * 40, self.fetch({'a.cc': 'top\ntwo\nbottom\n'}))
+
+    def test_verify_base_compares_full_output_and_refuses_unrelated_files(self):
+        self.configure('--- a/a.cc\n+++ b/a.cc\n@@ -1,3 +1,3 @@\n'
+                       ' top\n-two\n+TWO\n bottom\n')
+        repo = self.patches.parent
+        git(repo, 'init', '--quiet')
+        commit(repo, {}, 'base')
+        base = git(repo, 'rev-parse', 'HEAD')
+        self.run_repair({'a.cc': 'top\ntwo\nbottom\n'}, {'a.cc': 'new top\ntwo\nbottom\n'})
+        commit(repo, {}, 'context repair')
+        with patch.object(engine, 'REPO', repo):
+            patch_repair.verify_base(base, 'a' * 40, self.fetch({'a.cc': 'top\ntwo\nbottom\n'}))
+            commit(repo, {'config': 'unexpected'}, 'unrelated')
+            with self.assertRaisesRegex(ValueError, 'only change existing integration patches'):
+                patch_repair.verify_base(base, 'a' * 40, self.fetch({}))
+
+    def test_rejects_new_files_traversal_and_malformed_patches(self):
+        for data in (b'--- /dev/null\n+++ b/file\n',
+                     b'--- a/../escape\n+++ b/../escape\n',
+                     b'--- a/a.cc\n+++ b/a.cc\n@@ -1,3 +1,3 @@\n-x\n+y\n'):
+            with self.subTest(data=data), self.assertRaises((ValueError, RuntimeError)):
+                patch_repair.parse(data)
 
 
 class FetchDependenciesTests(unittest.TestCase):
