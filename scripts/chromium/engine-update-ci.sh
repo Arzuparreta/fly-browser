@@ -288,7 +288,7 @@ beta() (
         git fetch --quiet origin "$BRANCH"
         # Never load scripts, hooks or configuration from an automation PR.
         # Its only allowed changes are existing plain-text patch files.
-        unexpected=$(git diff --name-only origin/main "origin/$BRANCH" | \
+        unexpected=$(git diff --name-only "origin/main...origin/$BRANCH" | \
             sed -E '/^chromium\/patches\/[a-zA-Z0-9._-]+\.patch$/d')
         [ -z "$unexpected" ] || fail "Unexpected Beta branch changes; preserving it: $unexpected"
         git merge --quiet --no-edit "origin/$BRANCH" || fail "Beta branch conflicts with main; preserving it."
@@ -361,7 +361,7 @@ beta_failure() {
     marker="<!-- fly-beta-repair:$(sha256sum "$LOGS/beta-repair.log" | cut -d' ' -f1) -->"
     # One explanation per distinct blocker, not a comment every six hours.
     if gh issue view "$issue" --repo "$REPO" --json comments --jq '.comments[].body' | \
-            grep -Fq -- "$marker"; then
+            grep -F -- "$marker" >/dev/null; then
         return
     fi
     {
