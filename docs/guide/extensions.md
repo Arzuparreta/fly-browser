@@ -14,6 +14,18 @@ Fly includes **uBlock Origin Lite**, pinned by archive checksum and Web Store
 identity in `chromium/bundled-extensions.json`. It uses Chromium's Manifest V3
 declarative network rules.
 
+Its filter lists are indexed into the `Bundled Extension Rules` folder of your
+Fly data directory, once after each blocker update; the installation folder
+stays untouched.
+
+At startup Fly loads the blocker into each workspace before its tabs are
+restored, and holds a page's first request while any extension's
+declarative network rules are still loading, so restored tabs and an address
+given on the command line are filtered like every later page. This works for
+any blocker built on those rules. A page waits at most five seconds. Blockers
+that inject their scripts from their background service worker instead of
+registering them with Chromium can still miss the first page after a start.
+
 New workspaces receive the bundled blocker unless it was removed or disabled.
 The bundled component also blocks in private workspaces. Other extensions follow Chromium's
 incognito controls; do not assume every installed extension runs privately.

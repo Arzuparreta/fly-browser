@@ -19,6 +19,7 @@
 #include "extensions/browser/extension_registry.h"
 #include "extensions/browser/extension_registry_observer.h"
 #include "fly/commands/palette_catalog.h"
+#include "fly/ui/bundled_extensions.h"
 #include "ui/gfx/image/image.h"
 
 class BrowserWindowInterface;
@@ -125,27 +126,18 @@ class FlyExtensions : public extensions::ExtensionRegistryObserver,
   void OnProfileWillBeDestroyed(Profile* profile) override;
 
  private:
-  struct Bundle {
-    std::string id;
-    base::FilePath path;
-    base::DictValue manifest;
-  };
-  void BundlesRead(std::vector<Bundle> bundles);
+  void BundlesRead();
   void ApplyProfile(Profile* profile);
   bool RestoreUserDisable(Profile* profile, const std::string& id);
   bool BundleWanted(Profile* profile, const std::string& id) const;
   base::DictValue ReadState() const;
   bool WriteState(base::DictValue state);
-  bool ListContains(const base::DictValue& state,
-                    std::string_view section,
-                    Profile* profile,
-                    const std::string& id) const;
   static std::string Directory(Profile* profile);
 
   const raw_ref<PreferencesService> preferences_;
   base::RepeatingClosure changed_;
   base::RepeatingCallback<void(std::u16string)> announce_;
-  std::vector<Bundle> bundles_;
+  std::vector<BundledExtension> bundles_;
   bool bundles_ready_ = false;
   std::set<raw_ptr<Profile>> profiles_;
   base::ScopedMultiSourceObservation<extensions::ExtensionRegistry,

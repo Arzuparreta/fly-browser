@@ -44,7 +44,11 @@
 #include "crypto/sha2.h"
 #include "extensions/browser/extension_action.h"
 #include "extensions/browser/extension_action_manager.h"
+#include "extensions/browser/api/declarative_net_request/prefs_helper.h"
+#include "extensions/browser/api/declarative_net_request/rules_monitor_service.h"
+#include "extensions/browser/extension_prefs.h"
 #include "extensions/browser/extension_registry.h"
+#include "extensions/common/file_util.h"
 #include "fly/bookmarks/bookmark_service.h"
 #include "fly/bookmarks/frequent_sites_service.h"
 #include "fly/preferences/search_service.h"
@@ -171,6 +175,7 @@
 #include "net/test/embedded_test_server/embedded_test_server.h"
 #include "net/test/embedded_test_server/controllable_http_response.h"
 #include "net/test/embedded_test_server/http_request.h"
+#include "net/test/embedded_test_server/http_response.h"
 #include "ui/accessibility/ax_mode.h"
 #include "ui/aura/client/focus_client.h"
 #include "ui/aura/window.h"
@@ -6199,6 +6204,144 @@ IN_PROC_BROWSER_TEST_F(FlyWorkspaceBrowserTest,
                                    [&](const FlyExtensionInfo& info) {
                                      return info.id == kId;
                                    }));
+}
+
+// uBlock Origin Lite against a page whose script comes from a host its
+// default EasyList ruleset blocks by domain (every host resolves to the test
+// server).
+class FlyBlockerStartupBrowserTest : public FlyWorkspaceBrowserTest {
+ public:
+  static constexpr char kId[] = "ddkjiahejlhfcafbddmgiahcphecmpfh";
+
+  void SetUpOnMainThread() override {
+    embedded_test_server()->RegisterRequestHandler(base::BindRepeating(
+        &FlyBlockerStartupBrowserTest::Handle, base::Unretained(this)));
+    host_resolver()->AddRule("*", "127.0.0.1");
+    FlyWorkspaceBrowserTest::SetUpOnMainThread();
+  }
+
+ protected:
+  bool Staged() {
+    base::FilePath assets;
+    base::ScopedAllowBlockingForTesting allow_blocking;
+    return base::PathService::Get(base::DIR_ASSETS, &assets) &&
+           base::PathExists(
+               assets.AppendASCII("fly_extensions").AppendASCII(kId));
+  }
+  extensions::declarative_net_request::RulesMonitorService& Rules() {
+    return *extensions::declarative_net_request::RulesMonitorService::Get(
+        browser()->GetProfile());
+  }
+  bool RulesInEffect() {
+    return !Rules().HasPendingInitialLoads() &&
+           Rules().ruleset_manager()->GetMatcherForExtension(kId);
+  }
+  GURL Page() { return embedded_test_server()->GetURL("news.test", "/probe"); }
+  int Requests(const std::string& host) {
+    base::AutoLock lock(lock_);
+    return requests_[host];
+  }
+
+ private:
+  std::unique_ptr<net::test_server::HttpResponse> Handle(
+      const net::test_server::HttpRequest& request) {
+    const auto host = request.headers.find("Host");
+    if (host == request.headers.end())
+      return nullptr;
+    const std::string name = host->second.substr(0, host->second.find(':'));
+    if (name == "news.test" && request.relative_url != "/probe")
+      return nullptr;
+    {
+      base::AutoLock lock(lock_);
+      ++requests_[name];
+    }
+    auto response = std::make_unique<net::test_server::BasicHttpResponse>();
+    if (name == "news.test") {
+      response->set_content_type("text/html");
+      response->set_content(base::StrCat(
+          {"<!doctype html><title>probe</title><script src=\"",
+           embedded_test_server()->GetURL("01counter.com", "/ad.js").spec(),
+           "\"></script>"}));
+    } else {
+      response->set_content_type("text/javascript");
+      response->set_content("document.title = 'ad';");
+    }
+    return response;
+  }
+
+  base::Lock lock_;
+  std::map<std::string, int> requests_;
+};
+
+IN_PROC_BROWSER_TEST_F(FlyBlockerStartupBrowserTest,
+                       BundledRulesIndexInTheUserDataDirectoryAndBlock) {
+  if (!Staged())
+    GTEST_SKIP() << "bundled extensions are not staged in this build";
+  ASSERT_TRUE(base::test::RunUntil([&] { return RulesInEffect(); }));
+  // Indexed outside the installation, which is read-only once packaged, and
+  // recorded so that the next start loads them without indexing again.
+  base::FilePath user_data;
+  ASSERT_TRUE(base::PathService::Get(chrome::DIR_USER_DATA, &user_data));
+  {
+    base::ScopedAllowBlockingForTesting allow_blocking;
+    EXPECT_TRUE(base::PathExists(
+        user_data.AppendASCII("Bundled Extension Rules")
+            .AppendASCII(kId)
+            .Append(extensions::file_util::GetIndexedRulesetRelativePath(
+                extensions::declarative_net_request::kMinValidStaticRulesetID
+                    .value()))));
+  }
+  int checksum = 0;
+  EXPECT_TRUE(extensions::declarative_net_request::PrefsHelper(
+                  *extensions::ExtensionPrefs::Get(browser()->GetProfile()))
+                  .GetStaticRulesetChecksum(
+                      kId,
+                      extensions::declarative_net_request::
+                          kMinValidStaticRulesetID,
+                      checksum));
+  ASSERT_TRUE(ui_test_utils::NavigateToURL(browser(), Page()));
+  EXPECT_EQ(Requests("news.test"), 1);
+  EXPECT_EQ(Requests("01counter.com"), 0);
+  EXPECT_EQ(Active(browser())->GetTitle(), u"probe");
+}
+
+IN_PROC_BROWSER_TEST_F(FlyBlockerStartupBrowserTest,
+                       PagesWaitForExtensionRequestRules) {
+  if (!Staged())
+    GTEST_SKIP() << "bundled extensions are not staged in this build";
+  ASSERT_TRUE(base::test::RunUntil([&] { return RulesInEffect(); }));
+  // Hold the blocker's next ruleset load, as a slow disk would at startup.
+  std::vector<base::OnceClosure> held;
+  extensions::declarative_net_request::LoadRulesetThrottleCallback hold =
+      base::BindLambdaForTesting(
+          [&](base::OnceClosure load) { held.push_back(std::move(load)); });
+  auto reset = extensions::declarative_net_request::RulesMonitorService::
+      SetLoadRulesetThrottleCallbackForTesting(&hold);
+  auto& extensions = App().extensions();
+  auto* profile = browser()->GetProfile();
+  ASSERT_TRUE(extensions.SetExtensionEnabled(profile, kId, false));
+  ASSERT_TRUE(extensions.SetExtensionEnabled(profile, kId, true));
+  ASSERT_TRUE(Rules().HasPendingInitialLoads());
+  auto* contents = Active(browser());
+  contents->GetController().LoadURL(Page(), content::Referrer(),
+                                    ui::PAGE_TRANSITION_TYPED, std::string());
+  ASSERT_TRUE(base::test::RunUntil([&] { return !held.empty(); }));
+  {
+    base::RunLoop wait;
+    base::SingleThreadTaskRunner::GetCurrentDefault()->PostDelayedTask(
+        FROM_HERE, wait.QuitClosure(), base::Milliseconds(300));
+    wait.Run();
+  }
+  // Nothing was sent while the rules were loading.
+  EXPECT_EQ(Requests("news.test"), 0);
+  EXPECT_NE(contents->GetLastCommittedURL(), Page());
+  for (auto& load : held)
+    std::move(load).Run();
+  ASSERT_TRUE(content::WaitForLoadStop(contents));
+  EXPECT_EQ(contents->GetLastCommittedURL(), Page());
+  EXPECT_EQ(Requests("news.test"), 1);
+  EXPECT_EQ(Requests("01counter.com"), 0);
+  EXPECT_FALSE(Rules().HasPendingInitialLoads());
 }
 
 IN_PROC_BROWSER_TEST_F(FlyWorkspaceBrowserTest,

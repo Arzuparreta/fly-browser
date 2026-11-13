@@ -21,8 +21,12 @@ fly_browser_ui_deps = [ "//fly:session_metadata" ]
 fly_browser_ui_data_deps = []
 if (is_linux || is_win) {
   fly_browser_ui_sources += [
+    "//fly/ui/blocker_startup_throttle.cc",
+    "//fly/ui/blocker_startup_throttle.h",
     "//fly/ui/bookmark_favicons.cc",
     "//fly/ui/bookmark_favicons.h",
+    "//fly/ui/bundled_extensions.cc",
+    "//fly/ui/bundled_extensions.h",
     "//fly/ui/command_palette.cc",
     "//fly/ui/command_palette.h",
     "//fly/ui/diagnostics_hub.cc",

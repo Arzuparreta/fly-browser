@@ -66,34 +66,6 @@
 
 namespace fly {
 namespace {
-// Reads <assets>/fly_extensions/<id>/manifest.json for every bundled copy.
-std::vector<std::pair<std::string, std::pair<base::FilePath, base::DictValue>>>
-ReadBundles() {
-  std::vector<std::pair<std::string, std::pair<base::FilePath, base::DictValue>>>
-      result;
-  base::FilePath assets;
-  if (!base::PathService::Get(base::DIR_ASSETS, &assets))
-    return result;
-  base::FileEnumerator dirs(assets.AppendASCII("fly_extensions"), false,
-                            base::FileEnumerator::DIRECTORIES);
-  for (auto path = dirs.Next(); !path.empty(); path = dirs.Next()) {
-    std::string text;
-    if (!base::ReadFileToStringWithMaxSize(path.AppendASCII("manifest.json"),
-                                           &text, 1024 * 1024))
-      continue;
-    auto manifest = base::JSONReader::ReadDict(text, base::JSON_PARSE_RFC);
-    if (!manifest || !manifest->FindString("key"))
-      continue;
-    // Component loading skips Chromium's localisation of __MSG_ names.
-    std::string error;
-    extension_l10n_util::LocalizeExtension(
-        path, &*manifest,
-        extension_l10n_util::GzippedMessagesPermission::kDisallow, &error);
-    result.emplace_back(path.BaseName().AsUTF8Unsafe(),
-                        std::make_pair(path, std::move(*manifest)));
-  }
-  return result;
-}
 base::ListValue* EnsureList(base::DictValue& state,
                             std::string_view section,
                             const std::string& directory) {
@@ -111,42 +83,21 @@ FlyExtensions::FlyExtensions(
     : preferences_(preferences),
       changed_(std::move(changed)),
       announce_(std::move(announce)) {
-  base::ThreadPool::PostTaskAndReplyWithResult(
-      FROM_HERE, {base::MayBlock(), base::TaskPriority::USER_VISIBLE},
-      base::BindOnce(&ReadBundles),
-      base::BindOnce(
-          [](base::WeakPtr<FlyExtensions> self,
-             std::vector<std::pair<
-                 std::string, std::pair<base::FilePath, base::DictValue>>>
-                 read) {
-            if (!self)
-              return;
-            std::vector<Bundle> bundles;
-            for (auto& [id, data] : read)
-              bundles.push_back(
-                  {id, std::move(data.first), std::move(data.second)});
-            self->BundlesRead(std::move(bundles));
-          },
-          weak_factory_.GetWeakPtr()));
+  // Native Fly reads the catalog before any profile loads
+  // (bundled_extensions.h); this only waits in other starts.
+  ReadBundledExtensionCatalogAsync(base::BindOnce(
+      &FlyExtensions::BundlesRead, weak_factory_.GetWeakPtr()));
 }
 FlyExtensions::~FlyExtensions() = default;
 
 std::string FlyExtensions::Directory(Profile* profile) {
-  return profile->GetPath().BaseName().AsUTF8Unsafe();
+  return BundledExtensionsWorkspaceKey(profile);
 }
 base::DictValue FlyExtensions::ReadState() const {
   return preferences_->ReadNativeExtensions().value_or(base::DictValue());
 }
 bool FlyExtensions::WriteState(base::DictValue state) {
   return preferences_->SetNativeExtensions(std::move(state));
-}
-bool FlyExtensions::ListContains(const base::DictValue& state,
-                                 std::string_view section,
-                                 Profile* profile,
-                                 const std::string& id) const {
-  const auto* dict = state.FindDict(section);
-  const auto* list = dict ? dict->FindList(Directory(profile)) : nullptr;
-  return list && std::ranges::find(*list, base::Value(id)) != list->end();
 }
 bool FlyExtensions::Enabled() const {
   return preferences_->ReadBool("extensions_enabled").value_or(true);
@@ -155,22 +106,19 @@ bool FlyExtensions::CanEdit() const {
   return preferences_->CanEdit();
 }
 bool FlyExtensions::IsBundled(const std::string& id) const {
-  return std::ranges::any_of(bundles_,
-                             [&](const Bundle& b) { return b.id == id; });
+  return std::ranges::any_of(
+      bundles_, [&](const BundledExtension& b) { return b.id == id; });
 }
 bool FlyExtensions::BundleWanted(Profile* profile,
                                  const std::string& id) const {
-  if (!Enabled())
-    return false;
-  const auto state = ReadState();
-  if (const auto* removed = state.FindList("removed");
-      removed && std::ranges::find(*removed, base::Value(id)) != removed->end())
-    return false;
-  return !ListContains(state, "workspace_off", profile, id);
+  return BundledExtensionWanted(*preferences_, profile, id);
 }
 
-void FlyExtensions::BundlesRead(std::vector<Bundle> bundles) {
-  bundles_ = std::move(bundles);
+void FlyExtensions::BundlesRead() {
+  bundles_.clear();
+  if (const auto* catalog = BundledExtensionCatalog())
+    for (const auto& bundle : *catalog)
+      bundles_.push_back(bundle.Clone());
   bundles_ready_ = true;
   for (Profile* profile : profiles_)
     ApplyProfile(profile);
