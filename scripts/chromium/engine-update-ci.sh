@@ -8,6 +8,8 @@
 #   engine-update-ci.sh merge      merge once every check passed, revalidating
 #                                  after main moves
 #   engine-update-ci.sh release    cut the release that ships it
+#   engine-update-ci.sh beta       repair Beta context drift in an isolated
+#                                  worktree, validate and merge without shipping
 #
 # Pushes, pull requests and merges use the host's `gh` login, not
 # GITHUB_TOKEN: a push made with GITHUB_TOKEN starts no workflows, so the
@@ -143,6 +145,10 @@ validate() {
     local pr version sha
     pr=$(saved pr) version=$(saved version) sha=$(git rev-parse HEAD)
     [ -n "$pr" ] || fail "No update pull request was prepared."
+    if [ "$(saved kind)" = beta ]; then
+        validate_beta
+        return
+    fi
     if [ "$(status_of "$sha")" = success ]; then
         note "$sha already passed native validation."
         return
@@ -151,9 +157,24 @@ validate() {
     : "${FLY_ENGINE_ROOT:?the runner service must set FLY_ENGINE_ROOT}"
     set_status "$sha" pending "Checking that every patch applies to Chromium $version"
     if ! python3 scripts/chromium/engine_update.py patch-check 2>&1 | tee "$LOGS/patch-check.log"; then
-        set_status "$sha" failure "Patches do not apply to Chromium $version"
-        comment_failure "$pr" "$LOGS/patch-check.log" "Replaying the patch series on Chromium $version"
-        fail "Patches do not apply to Chromium $version; see the pull request."
+        local reference
+        reference=$(git show origin/main:chromium/upstream.lock.json | python3 -c \
+            'import json,sys; print(json.load(sys.stdin)["chromium"]["revision"])')
+        if ! python3 scripts/chromium/engine_update.py patch-repair --reference "$reference" \
+                >"$LOGS/repair.log" 2>&1; then
+            set_status "$sha" failure "Patch conflict needs a semantic repair"
+            comment_failure "$pr" "$LOGS/repair.log" "Automatic context repair"
+            fail "Safe automatic repair stopped; the update stays open."
+        fi
+        npm test >"$LOGS/npm-test.log" 2>&1
+        git diff --check
+        if ! git diff --quiet; then
+            git add chromium/patches
+            git commit --quiet -m "Reanchor Fly patches for Chromium $version"
+            git push --quiet origin "HEAD:refs/heads/$BRANCH"
+            set_status "$sha" failure "Superseded by the automatically repaired head"
+            sha=$(git rev-parse HEAD)
+        fi
     fi
     set_status "$sha" pending "Building Chromium $version and Fly, then running Fly's tests"
     if ! python3 scripts/chromium/engine_update.py validate --root "$FLY_ENGINE_CANDIDATE_ROOT" \
@@ -175,7 +196,8 @@ checks_passed() {
             note "$checks"
             return 1
         fi
-        if jq -e 'length > 0 and all(.[]; .bucket == "pass" or .bucket == "skipping")' >/dev/null <<<"$checks"; then
+        if jq -e '(["verify", "impact_label", "engine-validation"] - [.[] | select(.bucket == "pass") | .name] | length == 0)
+                and all(.[]; .bucket == "pass" or .bucket == "skipping")' >/dev/null <<<"$checks"; then
             return 0
         fi
         sleep 30
@@ -195,12 +217,19 @@ merge() {
             # combination (an incremental build).
             git merge --quiet --no-edit origin/main ||
                 fail "origin/main does not merge cleanly into $BRANCH; resolve it on the branch."
+            npm test >"$LOGS/merged-npm-test.log" 2>&1
+            git diff --check
             git push --quiet origin "HEAD:refs/heads/$BRANCH"
             validate
             continue
         fi
         sha=$(git rev-parse HEAD)
         checks_passed "$pr" || fail "Checks of #$pr did not pass; it stays open."
+        # Checks can take an hour. Recheck the base AFTER waiting as well.
+        git fetch --quiet origin main
+        git merge-base --is-ancestor origin/main HEAD || continue
+        [ "$(gh pr view "$pr" --repo "$REPO" --json reviewDecision --jq .reviewDecision)" != CHANGES_REQUESTED ] ||
+            fail "#$pr has a review requesting changes; it stays open."
         if gh pr merge "$pr" --repo "$REPO" --squash --delete-branch --match-head-commit "$sha"; then
             note "Merged #$pr."
             save merged true
@@ -222,7 +251,130 @@ release() {
     node scripts/release.js prepare "${hold[@]}"
 }
 
+validate_beta() {
+    local sha pr
+    sha=$(git rev-parse HEAD) pr=$(saved pr)
+    set_status "$sha" pending "Proving unchanged Stable output and replaying both channels"
+    if ! {
+        python3 scripts/chromium/engine_update.py patch-verify --base origin/main &&
+        python3 scripts/chromium/engine_update.py patch-check &&
+        python3 scripts/chromium/engine_update.py patch-check --channel Beta
+    } >"$LOGS/beta-validation.log" 2>&1; then
+        set_status "$sha" failure "Beta repair proof or strict patch replay failed"
+        comment_failure "$pr" "$LOGS/beta-validation.log" "Beta repair validation"
+        return 1
+    fi
+    set_status "$sha" success "Context only; Stable output identical, Stable and Beta patches apply"
+}
+
+beta() (
+    # This job only runs main's trusted tooling. Repair files live in a new
+    # task worktree, never in the active/candidate engines or the runner's
+    # primary checkout. Stable work is prepared separately afterwards.
+    credentials
+    git fetch --quiet origin main
+    local directory local_branch pr unexpected
+    directory=$(mktemp -d "${RUNNER_TEMP:-/tmp}/fly-beta-repair.XXXXXX")
+    local_branch="automation/beta-${GITHUB_RUN_ID:-local}-$(basename "$directory")"
+    git worktree add --quiet -b "$local_branch" "$directory/repo" origin/main
+    trap 'cd "$directory/.."; git -C "$SOURCE_CHECKOUT" worktree remove --force "$directory/repo"; git -C "$SOURCE_CHECKOUT" branch -D "$local_branch" >/dev/null; rmdir "$directory"' EXIT
+    SOURCE_CHECKOUT=$(git rev-parse --show-toplevel)
+    cd "$directory/repo"
+    BRANCH=engine/chromium-beta
+    : >"$STATE"
+    save kind beta
+    pr=$(open_pr)
+    if [ -n "$pr" ] || [ -n "$(git ls-remote --heads origin "$BRANCH")" ]; then
+        git fetch --quiet origin "$BRANCH"
+        # Never load scripts, hooks or configuration from an automation PR.
+        # Its only allowed changes are existing plain-text patch files.
+        unexpected=$(git diff --name-only "origin/main...origin/$BRANCH" | \
+            sed -E '/^chromium\/patches\/[a-zA-Z0-9._-]+\.patch$/d')
+        [ -z "$unexpected" ] || fail "Unexpected Beta branch changes; preserving it: $unexpected"
+        git merge --quiet --no-edit "origin/$BRANCH" || fail "Beta branch conflicts with main; preserving it."
+    fi
+    if ! python3 scripts/chromium/engine_update.py patch-repair --channel Beta \
+            >"$LOGS/beta-repair.log" 2>&1; then
+        tail -n 60 "$LOGS/beta-repair.log"
+        beta_failure
+        note "::warning::Safe Beta repair stopped; the warning issue remains open. Stable tracking continues."
+        return 1
+    fi
+    if ! git diff --quiet; then
+        git diff --check
+        git add chromium/patches
+        git commit --quiet -m "Reanchor Fly integration patches for Chromium Beta"
+    fi
+    if git diff --quiet origin/main HEAD; then
+        if [ -n "$pr" ]; then
+            gh pr close "$pr" --repo "$REPO" --delete-branch \
+                --comment "main already contains this preparation; no Beta patch changes remain."
+        fi
+        note "No Beta context repair is needed."
+        return
+    fi
+    # Reject unexpected edits on a reused automation PR BEFORE pushing it.
+    python3 scripts/chromium/engine_update.py patch-verify --base origin/main
+    npm test >"$LOGS/beta-npm-test.log" 2>&1
+    git diff --check origin/main HEAD
+    git fetch --quiet origin main
+    git merge-base --is-ancestor origin/main HEAD || {
+        note "main moved during Beta preparation; retrying on the next scheduled run."
+        return 1
+    }
+    git push --quiet origin "HEAD:refs/heads/$BRANCH"
+    if [ -z "$pr" ]; then
+        cat >"$LOGS/beta-body.md" <<'TEXT'
+Reanchors Fly's existing integration edits where Chromium changed the surrounding lines. All added and removed lines remain identical, every repaired anchor is unique in both versions, and the full patched Stable sources are byte-for-byte identical to main.
+
+Validation: local npm tests, strict Stable and Beta patch replay, and the `engine-validation` proof against current main. Checks are repeated if main moves. No engine checkout is changed; Beta compilation and runtime compatibility remain unverified until the normal Stable update builds and tests that engine. Semantic/API conflicts are refused and leave the warning issue open. This preparation does not cut a release.
+TEXT
+        gh pr create --repo "$REPO" --base main --head "$BRANCH" \
+            --title "Prepare Fly patches for Chromium Beta" --label impact:none \
+            --body-file "$LOGS/beta-body.md" >/dev/null
+        pr=$(open_pr)
+    fi
+    save pr "$pr"
+    validate_beta
+    merge
+    git fetch --quiet origin main
+    git switch --quiet --detach origin/main
+    # Close only after a new strict check of MERGED main. A green PR alone
+    # never clears the issue, and a network failure leaves it open.
+    python3 scripts/chromium/engine_update.py patch-check --channel Beta
+    local issue
+    issue=$(gh issue list --repo "$REPO" --state open \
+        --search 'in:title "Fly patches do not apply to Chromium Beta"' \
+        --json number,title --jq '.[] | select(.title == "Fly patches do not apply to Chromium Beta") | .number' | head -1)
+    if [ -n "$issue" ]; then
+        gh issue close "$issue" --repo "$REPO" \
+            --comment "Automatic context repair merged in #$pr. Every patch applies to Chromium Beta on main again."
+    fi
+)
+
+beta_failure() {
+    local issue marker
+    issue=$(gh issue list --repo "$REPO" --state open \
+        --search 'in:title "Fly patches do not apply to Chromium Beta"' \
+        --json number,title --jq '.[] | select(.title == "Fly patches do not apply to Chromium Beta") | .number' | head -1)
+    [ -n "$issue" ] || return 0
+    marker="<!-- fly-beta-repair:$(sha256sum "$LOGS/beta-repair.log" | cut -d' ' -f1) -->"
+    # One explanation per distinct blocker, not a comment every six hours.
+    if gh issue view "$issue" --repo "$REPO" --json comments --jq '.comments[].body' | \
+            grep -F -- "$marker" >/dev/null; then
+        return
+    fi
+    {
+        printf '%s\n\nAutomatic context repair stopped without changing any patches. A developer must resolve this semantic or ambiguous conflict; Stable tracking continues.\n\n' "$marker"
+        printf '<details><summary>Repair log</summary>\n\n```\n'
+        tail -n 30 "$LOGS/beta-repair.log" | sed 's/```/` ` `/g'
+        printf '```\n\n</details>\n\nRun: %s/%s/actions/runs/%s\n' \
+            "${GITHUB_SERVER_URL:-https://github.com}" "$REPO" "${GITHUB_RUN_ID:-0}"
+    } >"$LOGS/beta-blocker.md"
+    gh issue comment "$issue" --repo "$REPO" --body-file "$LOGS/beta-blocker.md" >/dev/null
+}
+
 case "${1:-}" in
-    prepare|validate|merge|release) "$1" ;;
-    *) fail "usage: engine-update-ci.sh prepare|validate|merge|release" ;;
+    prepare|validate|merge|release|beta) "$1" ;;
+    *) fail "usage: engine-update-ci.sh prepare|validate|merge|release|beta" ;;
 esac

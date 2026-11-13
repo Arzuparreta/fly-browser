@@ -85,8 +85,9 @@
   patches, read `docs/chromium/engine-updates.md` first and follow its status
   checklist. Report Stable freshness and Beta patch compatibility separately;
   `engine_update.py status` alone cannot establish that no work is pending.
-  The workflow detects Beta conflicts and opens an issue; it does not repair
-  them.
+  The workflow detects Beta conflicts and opens an issue, then attempts exact
+  context-only repairs. Semantic/API conflicts still need development work;
+  a green workflow is not proof that the warning issue has been resolved.
 
 - **“Pon Chromium al día”** (also “actualiza Chromium” or “encárgate del
   seguimiento de Chromium”) invokes the complete maintenance task in
