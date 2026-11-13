@@ -1,0 +1,279 @@
+--- a/chrome/browser/chrome_browser_main.cc
++++ b/chrome/browser/chrome_browser_main.cc
+@@ -35,6 +35,9 @@
+ #include "chrome/browser/browser_process.h"
+ #include "chrome/browser/browser_process_impl.h"
+ #include "chrome/browser/chrome_browser_main_extra_parts.h"
++#if BUILDFLAG(IS_LINUX) || BUILDFLAG(IS_WIN)
++#include "fly/ui/bundled_extensions.h"
++#endif
+ #include "chrome/browser/component_updater/registration.h"
+ #include "chrome/browser/enterprise/browser_management/management_service_factory.h"
+ #include "chrome/browser/enterprise/chrome_browser_main_extra_parts_enterprise.h"
+@@ -870,6 +873,11 @@ std::unique_ptr<content::BrowserMainParts> ChromeBrowserMainParts::Create(
+   main_parts->AddParts(
+       std::make_unique<ChromeBrowserMainExtraPartsSegmentationPlatform>());
+ 
++#if BUILDFLAG(IS_LINUX) || BUILDFLAG(IS_WIN)
++  // Fly: loads the bundled extensions into each profile before its tabs.
++  main_parts->AddParts(fly::CreateBundledExtensionsMainParts());
++#endif
++
+   return main_parts;
+ }
+ 
+--- a/chrome/browser/chrome_content_browser_client_navigation_throttles.cc
++++ b/chrome/browser/chrome_content_browser_client_navigation_throttles.cc
+@@ -8,6 +8,9 @@
+ #include "base/feature_list.h"
+ #include "build/build_config.h"
+ #include "build/buildflag.h"
++#if BUILDFLAG(IS_LINUX) || BUILDFLAG(IS_WIN)
++#include "fly/ui/blocker_startup_throttle.h"
++#endif
+ #include "chrome/browser/actor/actor_navigation_throttle.h"
+ #include "chrome/browser/autocomplete/aim_eligibility_refresh_navigation_throttle.h"
+ #include "chrome/browser/browser_process.h"
+@@ -378,6 +381,11 @@ void CreateAndAddChromeThrottlesForNavigation(
+   }
+ #endif  // !BUILDFLAG(IS_ANDROID)
+ 
++#if BUILDFLAG(IS_LINUX) || BUILDFLAG(IS_WIN)
++  // Fly: before the user script listener, which this may give more scripts.
++  fly::BlockerStartupThrottle::MaybeCreateAndAdd(registry);
++#endif
++
+ #if BUILDFLAG(ENABLE_EXTENSIONS_CORE)
+   if (!extensions::ChromeContentBrowserClientExtensionsPart::
+           AreExtensionsDisabledForProfile(profile)) {
+--- a/extensions/browser/api/declarative_net_request/file_backed_ruleset_source.cc
++++ b/extensions/browser/api/declarative_net_request/file_backed_ruleset_source.cc
+@@ -4,6 +4,7 @@
+ 
+ #include "extensions/browser/api/declarative_net_request/file_backed_ruleset_source.h"
+ 
++#include <map>
+ #include <memory>
+ #include <optional>
+ #include <set>
+@@ -17,11 +18,13 @@
+ #include "base/json/json_writer.h"
+ #include "base/memory/ptr_util.h"
+ #include "base/metrics/histogram_macros.h"
++#include "base/no_destructor.h"
+ #include "base/strings/strcat.h"
+ #include "base/strings/string_number_conversions.h"
+ #include "base/strings/string_util.h"
+ #include "base/strings/stringprintf.h"
+ #include "base/strings/utf_string_conversions.h"
++#include "base/synchronization/lock.h"
+ #include "base/timer/elapsed_timer.h"
+ #include "base/types/expected.h"
+ #include "base/values.h"
+@@ -34,6 +37,7 @@
+ #include "extensions/common/error_utils.h"
+ #include "extensions/common/file_util.h"
+ #include "extensions/common/install_warning.h"
++#include "extensions/common/manifest.h"
+ #include "tools/json_schema_compiler/util.h"
+ 
+ namespace extensions::declarative_net_request {
+@@ -252,12 +256,42 @@ std::vector<FileBackedRulesetSource> FileBackedRulesetSource::CreateStatic(
+   return sources;
+ }
+ 
++namespace {
++// Fly: see FileBackedRulesetSource::SetIndexedRulesetDirectory().
++base::Lock& IndexedRulesetDirectoryLock() {
++  static base::NoDestructor<base::Lock> lock;
++  return *lock;
++}
++std::map<ExtensionId, base::FilePath>& IndexedRulesetDirectories() {
++  static base::NoDestructor<std::map<ExtensionId, base::FilePath>> directories;
++  return *directories;
++}
++base::FilePath IndexedRulesetBase(const Extension& extension) {
++  // A store copy with the same id keeps its own, writable folder.
++  if (!Manifest::IsComponentLocation(extension.location())) {
++    return extension.path();
++  }
++  base::AutoLock lock(IndexedRulesetDirectoryLock());
++  const auto& directories = IndexedRulesetDirectories();
++  const auto it = directories.find(extension.id());
++  return it == directories.end() ? extension.path() : it->second;
++}
++}  // namespace
++
++// static
++void FileBackedRulesetSource::SetIndexedRulesetDirectory(
++    const ExtensionId& extension_id,
++    const base::FilePath& directory) {
++  base::AutoLock lock(IndexedRulesetDirectoryLock());
++  IndexedRulesetDirectories()[extension_id] = directory;
++}
++
+ FileBackedRulesetSource FileBackedRulesetSource::CreateStatic(
+     const Extension& extension,
+     const DNRManifestData::RulesetInfo& info) {
+   return FileBackedRulesetSource(
+       extension.path().Append(info.relative_path),
+-      extension.path().Append(
++      IndexedRulesetBase(extension).Append(
+           file_util::GetIndexedRulesetRelativePath(info.id.value())),
+       info.id, GetMaximumRulesPerRuleset(), extension.id(), info.enabled);
+ }
+--- a/extensions/browser/api/declarative_net_request/file_backed_ruleset_source.h
++++ b/extensions/browser/api/declarative_net_request/file_backed_ruleset_source.h
+@@ -152,6 +152,13 @@ class FileBackedRulesetSource : public RulesetSource {
+     kIncludeAll
+   };
+ 
++  // Fly: keeps the indexed static rulesets of the component extension
++  // `extension_id` below `directory` instead of the extension's own folder,
++  // which is read-only for an extension shipped inside an installation. Call
++  // it before the extension loads. Thread-safe.
++  static void SetIndexedRulesetDirectory(const ExtensionId& extension_id,
++                                         const base::FilePath& directory);
++
+   // Creates FileBackedRulesetSources corresponding to the static rulesets in
+   // the extension package.
+   static std::vector<FileBackedRulesetSource> CreateStatic(
+--- a/extensions/browser/api/declarative_net_request/rules_monitor_service.cc
++++ b/extensions/browser/api/declarative_net_request/rules_monitor_service.cc
+@@ -14,6 +14,7 @@
+ #include "base/files/file_util.h"
+ #include "base/functional/bind.h"
+ #include "base/functional/callback.h"
++#include "base/functional/callback_helpers.h"
+ #include "base/location.h"
+ #include "base/logging.h"
+ #include "base/memory/ptr_util.h"
+@@ -575,6 +576,7 @@ void RulesMonitorService::OnExtensionLoaded(
+ 
+   LoadRequestData load_data(extension->id(), extension->version(),
+                             LoadRulesetRequestSource::kOnExtensionLoad);
++  pending_initial_loads_[extension->id()].insert(load_data.load_request_id);
+   int expected_ruleset_checksum;
+ 
+   PrefsHelper helper(*prefs_);
+@@ -601,6 +603,13 @@ void RulesMonitorService::OnExtensionLoaded(
+ 
+       if (!helper.GetStaticRulesetChecksum(extension->id(), source.id(),
+                                            expected_ruleset_checksum)) {
++        // Fly: component extensions install without indexing their rulesets
++        // (see ExtensionRegistrar::AddComponentExtension). Index them now
++        // instead of leaving them off until the extension enables them again.
++        if (Manifest::IsComponentLocation(extension->location())) {
++          load_data.rulesets.emplace_back(std::move(source));
++          continue;
++        }
+         // This might happen on prefs corruption.
+         LogLoadRulesetResult(LoadRulesetResult::kErrorChecksumNotFound);
+         ruleset_failed_to_load = true;
+@@ -657,6 +666,12 @@ void RulesMonitorService::OnExtensionUnloaded(
+     return;
+   }
+ 
++  if (pending_initial_loads_.erase(extension->id())) {
++    for (auto& observer : initial_load_observers_) {
++      observer.OnInitialRulesetsLoaded(extension->id());
++    }
++  }
++
+   // If the extension is unloaded for any reason other than an update, the
+   // unused rule allocation should not be kept for this extension the next
+   // time its rulesets are loaded, as it is no longer "the first load after an
+@@ -986,6 +1001,10 @@ void RulesMonitorService::GetDisabledRuleIdsInternal(
+ 
+ void RulesMonitorService::OnInitialRulesetsLoadedFromDisk(
+     LoadRequestData load_data) {
++  // Fly: once this load has taken effect, on every return below.
++  base::ScopedClosureRunner finish_initial_load(base::BindOnce(
++      &RulesMonitorService::FinishInitialLoad, base::Unretained(this),
++      load_data.extension_id, load_data.load_request_id));
+   if (test_observer_) {
+     test_observer_->OnRulesetLoadComplete(load_data.extension_id);
+   }
+@@ -1299,6 +1318,24 @@ void RulesMonitorService::UpdateRulesetMatcher(
+   matcher->AddOrUpdateRuleset(std::move(ruleset_matcher));
+ }
+ 
++void RulesMonitorService::FinishInitialLoad(
++    const ExtensionId& extension_id,
++    const base::Token& load_request_id) {
++  // A load invalidated by an unload was already finished there.
++  const auto it = pending_initial_loads_.find(extension_id);
++  if (load_request_id.is_zero() || it == pending_initial_loads_.end() ||
++      !it->second.erase(load_request_id)) {
++    return;
++  }
++  if (!it->second.empty()) {
++    return;
++  }
++  pending_initial_loads_.erase(it);
++  for (auto& observer : initial_load_observers_) {
++    observer.OnInitialRulesetsLoaded(extension_id);
++  }
++}
++
+ void RulesMonitorService::LogMetricsAndUpdateChecksumsIfNeeded(
+     const LoadRequestData& load_data) {
+   for (const RulesetInfo& ruleset : load_data.rulesets) {
+--- a/extensions/browser/api/declarative_net_request/rules_monitor_service.h
++++ b/extensions/browser/api/declarative_net_request/rules_monitor_service.h
+@@ -16,7 +16,10 @@
+ #include "base/containers/flat_map.h"
+ #include "base/memory/raw_ptr.h"
+ #include "base/memory/weak_ptr.h"
++#include "base/observer_list.h"
++#include "base/observer_list_types.h"
+ #include "base/scoped_observation.h"
++#include "base/token.h"
+ #include "base/values.h"
+ #include "extensions/browser/api/declarative_net_request/action_tracker.h"
+ #include "extensions/browser/api/declarative_net_request/composite_matcher.h"
+@@ -77,6 +80,13 @@ class RulesMonitorService : public BrowserContextKeyedAPI,
+     virtual ~TestObserver() = default;
+   };
+ 
++  // Fly: told when the rulesets an extension had when it loaded are in effect
++  // or failed to load, so that startup navigations can wait for them.
++  class InitialLoadObserver : public base::CheckedObserver {
++   public:
++    virtual void OnInitialRulesetsLoaded(const ExtensionId& extension_id) = 0;
++  };
++
+   explicit RulesMonitorService(content::BrowserContext* browser_context);
+   RulesMonitorService(const RulesMonitorService&) = delete;
+   RulesMonitorService& operator=(const RulesMonitorService&) = delete;
+@@ -164,6 +174,17 @@ class RulesMonitorService : public BrowserContextKeyedAPI,
+ 
+   void SetObserverForTest(TestObserver* observer) { test_observer_ = observer; }
+ 
++  // Fly: whether a loaded extension's initial rulesets are still loading.
++  bool HasPendingInitialLoads() const {
++    return !pending_initial_loads_.empty();
++  }
++  void AddInitialLoadObserver(InitialLoadObserver* observer) {
++    initial_load_observers_.AddObserver(observer);
++  }
++  void RemoveInitialLoadObserver(InitialLoadObserver* observer) {
++    initial_load_observers_.RemoveObserver(observer);
++  }
++
+   bool HasAnyExtraHeadersMatcher() const {
+     return ruleset_manager_.HasAnyExtraHeadersMatcher();
+   }
+@@ -296,6 +317,12 @@ class RulesMonitorService : public BrowserContextKeyedAPI,
+   // Non-owned pointer.
+   raw_ptr<TestObserver> test_observer_ = nullptr;
+ 
++  // Fly: initial ruleset loads that have not completed, by extension.
++  void FinishInitialLoad(const ExtensionId& extension_id,
++                         const base::Token& load_request_id);
++  std::map<ExtensionId, std::set<base::Token>> pending_initial_loads_;
++  base::ObserverList<InitialLoadObserver> initial_load_observers_;
++
+   // Api call queues to ensure only one api call of the given type proceeds at a
+   // time. Only maintained for enabled extensions.
+   std::map<ExtensionId, ApiCallQueue> update_enabled_rulesets_queue_map_;
