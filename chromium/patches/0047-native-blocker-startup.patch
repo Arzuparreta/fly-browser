@@ -70,7 +70,15 @@
  #include "base/timer/elapsed_timer.h"
  #include "base/types/expected.h"
  #include "base/values.h"
-@@ -252,12 +255,38 @@ std::vector<FileBackedRulesetSource> FileBackedRulesetSource::CreateStatic(
+@@ -34,6 +37,7 @@
+ #include "extensions/common/error_utils.h"
+ #include "extensions/common/file_util.h"
+ #include "extensions/common/install_warning.h"
++#include "extensions/common/manifest.h"
+ #include "tools/json_schema_compiler/util.h"
+ 
+ namespace extensions::declarative_net_request {
+@@ -252,12 +256,42 @@ std::vector<FileBackedRulesetSource> FileBackedRulesetSource::CreateStatic(
    return sources;
  }
  
@@ -85,6 +93,10 @@
 +  return *directories;
 +}
 +base::FilePath IndexedRulesetBase(const Extension& extension) {
++  // A store copy with the same id keeps its own, writable folder.
++  if (!Manifest::IsComponentLocation(extension.location())) {
++    return extension.path();
++  }
 +  base::AutoLock lock(IndexedRulesetDirectoryLock());
 +  const auto& directories = IndexedRulesetDirectories();
 +  const auto it = directories.find(extension.id());
@@ -116,10 +128,10 @@
      kIncludeAll
    };
  
-+  // Fly: keeps the indexed static rulesets of `extension_id` below
-+  // `directory` instead of the extension's own folder, which is read-only for
-+  // an extension shipped inside an installation. Call it before the extension
-+  // loads. Thread-safe.
++  // Fly: keeps the indexed static rulesets of the component extension
++  // `extension_id` below `directory` instead of the extension's own folder,
++  // which is read-only for an extension shipped inside an installation. Call
++  // it before the extension loads. Thread-safe.
 +  static void SetIndexedRulesetDirectory(const ExtensionId& extension_id,
 +                                         const base::FilePath& directory);
 +
