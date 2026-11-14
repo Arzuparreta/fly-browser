@@ -1,4 +1,6 @@
-<!-- The only requirement: add ONE label from the Labels box.
+<!-- Use Conventional Commits for commit subjects and the PR title,
+     for example fix(ci): preserve validation logs (scope optional).
+     Add exactly ONE label from the Labels box.
      impact:patch  a fix                impact:minor  something new
      impact:major  upgrading needs action by hand
      impact:none   nobody using Fly would notice (docs, CI, tests)

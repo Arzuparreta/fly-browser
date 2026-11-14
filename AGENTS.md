@@ -12,6 +12,13 @@
 - Every completed implementation in Fly ends with a git commit. The owner does
   not create these commits manually. Commit only the changes that belong to
   the completed task unless the owner explicitly asks to include others.
+- Commit subjects and pull-request titles must use Conventional Commits:
+  `type(scope): description`, for example `fix(ci): preserve validation logs`.
+  Types: `feat`, `fix`, `docs`, `style`, `refactor`, `perf`, `test`, `build`,
+  `ci`, `chore`, `revert`. The scope is optional; `!` before the colon marks a
+  breaking change. Apply this to automation and merge commits too (supply
+  `git merge -m 'chore(merge): integrate origin/main'` when needed). Keep squash
+  merge subjects conventional. Do not rewrite already merged history.
 - All work reaches `main` through a pull request from a branch, never by
   committing to `main` directly. Any branch name works except `release/v*`,
   which is reserved for version bumps (merging one tags a release).
@@ -68,8 +75,10 @@
   changes, verify the recorder and editable-page behaviour in a Fly build with
   a disposable profile (`--user-data-dir`).
 - The owner also opens pull requests by hand, and that must stay effortless:
-  one impact label is the only requirement. Keep CI light (`npm test` only),
-  and do not add required checks, branch rulesets, mandatory PR template
+  use conventional commit subjects/PR titles and exactly one impact label.
+  The `impact_label` metadata check enforces these; `verify` stays `npm test`.
+  Commit types do not replace impact labels or determine release versions.
+  Keep CI light and do not add required checks, branch rulesets, mandatory PR template
   sections or workflows that act on ordinary pull requests without asking
   the owner first. Whitespace and the documentation build are local checks.
 - Finishing a release includes deleting the local artifacts it left on the

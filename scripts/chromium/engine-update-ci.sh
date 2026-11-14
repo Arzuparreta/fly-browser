@@ -88,7 +88,7 @@ prepare() {
         git fetch --quiet origin "$BRANCH"
         git switch --quiet --force-create "$BRANCH" "origin/$BRANCH"
         if ! git merge-base --is-ancestor origin/main HEAD; then
-            git merge --quiet --no-edit origin/main ||
+            git merge --quiet --no-edit -m "chore(chromium): integrate origin/main" origin/main ||
                 fail "origin/main does not merge cleanly into $BRANCH; resolve it on the branch."
         fi
     elif [ "$newer" = True ]; then
@@ -109,7 +109,7 @@ prepare() {
     local version
     version=$(pinned)
     if ! git diff --quiet; then
-        git commit --quiet --all --message "Update Chromium to $version"
+        git commit --quiet --all --message "fix(chromium): update engine to $version"
     fi
     if [ -n "$pr" ]; then
         git push --quiet origin "HEAD:refs/heads/$BRANCH"
@@ -120,11 +120,11 @@ prepare() {
     if [ -n "$pr" ]; then
         # Keep a description written for fixes on the branch; rewrite it only
         # when the pull request moves to another Chromium version.
-        if [ "$(gh pr view "$pr" --repo "$REPO" --json title --jq .title)" != "Update Chromium to $version" ]; then
-            gh pr edit "$pr" --repo "$REPO" --title "Update Chromium to $version" --body-file "$LOGS/body.md" >/dev/null
+        if [ "$(gh pr view "$pr" --repo "$REPO" --json title --jq .title)" != "fix(chromium): update engine to $version" ]; then
+            gh pr edit "$pr" --repo "$REPO" --title "fix(chromium): update engine to $version" --body-file "$LOGS/body.md" >/dev/null
         fi
     else
-        gh pr create --repo "$REPO" --base main --head "$BRANCH" --title "Update Chromium to $version" \
+        gh pr create --repo "$REPO" --base main --head "$BRANCH" --title "fix(chromium): update engine to $version" \
             --body-file "$LOGS/body.md" --label impact:patch >/dev/null
         pr=$(open_pr)
     fi
@@ -201,7 +201,7 @@ validate() {
                 fi
                 save kind stable-semantic
             fi
-            commit_repair "Repair Fly integration for Chromium $version"
+            commit_repair "fix(chromium): repair integration for $version"
             if [ "$sha" != "$(git rev-parse HEAD)" ]; then
                 set_status "$sha" failure "Superseded by the automatically repaired head"
                 sha=$(git rev-parse HEAD)
@@ -230,7 +230,7 @@ validate() {
             return 1
         fi
         save kind stable-semantic
-        commit_repair "Adapt Fly to Chromium $version APIs"
+        commit_repair "fix(chromium): adapt to $version APIs"
     done
 }
 
@@ -274,7 +274,7 @@ merge() {
         if ! git merge-base --is-ancestor origin/main HEAD; then
             # main moved while this was built: bring it in and validate the
             # combination (an incremental build).
-            git merge --quiet --no-edit origin/main ||
+            git merge --quiet --no-edit -m "chore(chromium): integrate origin/main" origin/main ||
                 fail "origin/main does not merge cleanly into $BRANCH; resolve it on the branch."
             npm test >"$LOGS/merged-npm-test.log" 2>&1
             git diff --check
@@ -354,7 +354,7 @@ publish_beta() {
     git add chromium/patches chromium/overlay/fly
     git diff --cached --check
     if ! git diff --cached --quiet; then
-        git commit --quiet -m "Repair Fly compatibility with Chromium Beta"
+        git commit --quiet -m "fix(chromium): repair Beta compatibility"
     fi
     python3 scripts/chromium/agent_repair.py scope --base origin/main
     git fetch --quiet origin main
@@ -380,7 +380,7 @@ Validation: local npm tests, strict Stable/Beta replay and the `engine-validatio
 TEXT
         fi
         gh pr create --repo "$REPO" --base main --head "$BRANCH" \
-            --title "Prepare Fly patches for Chromium Beta" --label impact:none \
+            --title "fix(chromium): prepare Fly patches for Beta" --label impact:none \
             --body-file "$LOGS/beta-body.md" >/dev/null
         pr=$(open_pr)
     fi
@@ -417,7 +417,7 @@ beta() (
             -e '/^chromium\/overlay\/fly\/integration\.gni$/d')
         [ -z "$unexpected" ] || fail "Unexpected Beta branch changes; preserving it: $unexpected"
         python3 scripts/chromium/agent_repair.py scope --base origin/main --head "origin/$BRANCH"
-        git merge --quiet --no-edit "origin/$BRANCH" || fail "Beta branch conflicts with main; preserving it."
+        git merge --quiet --no-edit -m "chore(chromium): integrate Beta repair branch" "origin/$BRANCH" || fail "Beta branch conflicts with main; preserving it."
     fi
     if ! python3 scripts/chromium/engine_update.py patch-repair --channel Beta \
             >"$LOGS/beta-repair.log" 2>&1; then

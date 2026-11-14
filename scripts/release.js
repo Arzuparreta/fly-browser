@@ -268,7 +268,7 @@ function prepare(options) {
     sync(version, {check: false});
     whatsNew.recordRelease(version, pulls);
     git('add', whatsNew.DATA_FILE);
-    git('commit', '--quiet', '--all', '--message', `Version ${version}`);
+    git('commit', '--quiet', '--all', '--message', `chore(release): prepare ${version}`);
     git('push', '--quiet', '--set-upstream', 'origin', branch);
 
     const body = [
@@ -278,7 +278,7 @@ function prepare(options) {
         `Merging this tags \`v${version}\` and publishes the Linux package. Nothing in this pull request is hand-written: \`scripts/version-sync.js\` wrote the version and \`scripts/whats-new.js\` the What's New page from the pull requests above.`,
         ''
     ].join('\n');
-    const url = gh('pr', 'create', '--base', 'main', '--head', branch, '--title', `Version ${version}`,
+    const url = gh('pr', 'create', '--base', 'main', '--head', branch, '--title', `chore(release): prepare ${version}`,
         '--body', body, '--label', 'impact:none').split('\n').pop();
     console.log(`\n${url}`);
 
