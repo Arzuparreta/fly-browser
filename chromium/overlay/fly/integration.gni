@@ -147,6 +147,8 @@ fly_cache_test_deps = [ "//net" ]
 # Pure compatibility regressions run in //fly:fly_unittests. Keep these lists
 # open for scoped repair entries without permitting new GN statements.
 fly_compatibility_test_sources = [
+  "//fly/test/compat_desktop_identity_test.cc",
 ]
 fly_compatibility_test_deps = [
+  "//base/version_info",
 ]

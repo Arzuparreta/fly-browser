@@ -185,6 +185,44 @@
 +  // Fly: Electron/Chromium parents can export their own CHROME_DESKTOP.
 +  // Fly must still match its installed desktop entry for Wayland app IDs,
 +  // X11 identity, default-browser registration and notification icons.
-   return "fly-browser.desktop";
+-  return "fly-browser.desktop";
++  return version_info::nix::GetDesktopName(*env);
  }
  #else
+--- a/base/version_info/nix/version_extra_utils.cc
++++ b/base/version_info/nix/version_extra_utils.cc
+@@ -85,3 +85,7 @@
+   return base::StrCat({kSessionNamePrefix, suffix});
+ }
++
++// Fly: retain Beta's moved implementation only for branded builds. Stable
++// has no shared desktop helper here yet; Fly uses the same API on both pins.
++#if BUILDFLAG(GOOGLE_CHROME_BRANDING)
+ 
+@@ -88,1 +92,9 @@
++#else
++std::string GetDesktopName(base::Environment& env) {
++  // Parent applications and channel variables must not change the installed
++  // identity used by camera portals, media controls and browser integration.
++  return "fly-browser.desktop";
++}
++#endif  // BUILDFLAG(GOOGLE_CHROME_BRANDING)
++
+ }  // namespace version_info::nix
+--- a/base/version_info/nix/version_extra_utils.h
++++ b/base/version_info/nix/version_extra_utils.h
+@@ -11,2 +11,3 @@
+ #include "base/version_info/channel.h"
++#include "build/branding_buildflags.h"
+ 
+@@ -35,2 +36,3 @@
+ BASE_EXPORT std::string GetSessionNamePrefix(base::Environment& env);
++#if BUILDFLAG(GOOGLE_CHROME_BRANDING)
+ 
+@@ -37,1 +39,6 @@
++#else
++// Fly: the shared installed identity is also available on the Stable pin.
++BASE_EXPORT std::string GetDesktopName(base::Environment& env);
++#endif  // BUILDFLAG(GOOGLE_CHROME_BRANDING)
++
+ }  // namespace version_info::nix
