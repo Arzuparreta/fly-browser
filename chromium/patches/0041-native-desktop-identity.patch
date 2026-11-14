@@ -1,6 +1,6 @@
 --- a/chrome/app/chrome_main_delegate.cc
 +++ b/chrome/app/chrome_main_delegate.cc
-@@ -612,21 +612,10 @@ void InitializeUserDataDir(base::CommandLine* command_line) {
+@@ -678,19 +678,8 @@
    std::string process_type =
        command_line->GetSwitchValueASCII(switches::kProcessType);
  
@@ -24,9 +24,7 @@
 +  // $XDG_CONFIG_HOME/fly-browser (chrome_paths_linux.cc); only --user-data-dir
 +  // moves it.
  #if BUILDFLAG(IS_MAC)
-   policy::path_parser::CheckUserDataDirPolicy(&user_data_dir);
- #endif  // BUILDFLAG(IS_MAC)
-@@ -1131,6 +1120,14 @@ std::optional<int> ChromeMainDelegate::BasicStartupComplete() {
+@@ -1203,6 +1192,14 @@
  #endif  // !defined(BUILDING_CHROME_RENDERER)
  
  #if !defined(BUILDING_CHROME_RENDERER)
@@ -43,7 +41,7 @@
    if (command_line.HasSwitch("fly-native") &&
 --- a/chrome/browser/BUILD.gn
 +++ b/chrome/browser/BUILD.gn
-@@ -69,6 +69,11 @@ declare_args() {
+@@ -71,6 +71,11 @@
    # was explicitly set to true, i.e. they always use official keys,
    # and will fail to build if the internal file is missing.
    use_official_enterprise_connectors_api_keys = false
@@ -55,7 +53,7 @@
  }
  
  if (is_win) {
-@@ -96,6 +101,7 @@ buildflag_header("buildflags") {
+@@ -98,6 +103,7 @@
      "ENABLE_UPDATE_NOTIFICATIONS=$enable_update_notifications",
      "USE_MINIKIN_HYPHENATION=$use_minikin_hyphenation",
      "USE_THIN_LTO=$use_thin_lto",
@@ -65,7 +63,7 @@
    if (is_win) {
 --- a/chrome/browser/notifications/notification_platform_bridge_linux.cc
 +++ b/chrome/browser/notifications/notification_platform_bridge_linux.cc
-@@ -884,7 +884,8 @@ class NotificationPlatformBridgeLinuxImpl : public NotificationPlatformBridge {
+@@ -882,7 +882,8 @@
        return;
      }
  
@@ -77,7 +75,7 @@
          data->files.has_logo
 --- a/chrome/browser/shell_integration_linux.cc
 +++ b/chrome/browser/shell_integration_linux.cc
-@@ -471,7 +471,8 @@ std::string GetIconName() {
+@@ -471,7 +471,8 @@
  #if BUILDFLAG(GOOGLE_CHROME_BRANDING)
    return "google-chrome";
  #else  // BUILDFLAG(CHROMIUM_BRANDING)
@@ -89,19 +87,30 @@
  
 --- a/chrome/common/channel_info_posix.cc
 +++ b/chrome/common/channel_info_posix.cc
-@@ -148,7 +148,8 @@ std::string GetDesktopName(base::Environment* env) {
-   if (name.has_value() && !name.value().empty()) {
-     return name.value();
-   }
--  return "chromium-browser.desktop";
-+  // Fly: the desktop entry Fly's packages install.
-+  return "fly-browser.desktop";
- #endif
- }
+@@ -118,4 +118,14 @@
  #endif  // BUILDFLAG(IS_LINUX)
+ 
+ #if BUILDFLAG(IS_LINUX)
++#if !BUILDFLAG(GOOGLE_CHROME_BRANDING)
++std::string GetDesktopName(base::Environment* env) {
++  // Fly: preserve development overrides and the installed desktop identity.
++  const auto name = env->GetVar("CHROME_DESKTOP");
++  if (name && !name->empty()) {
++    return *name;
++  }
++  return "fly-browser.desktop";
++}
++#else
+ std::string GetDesktopName(base::Environment* env) {
+@@ -153,4 +163,5 @@
+ }
++#endif  // !BUILDFLAG(GOOGLE_CHROME_BRANDING)
+ #endif  // BUILDFLAG(IS_LINUX)
+ 
+ version_info::Channel GetChannel() {
 --- a/chrome/common/chrome_paths_linux.cc
 +++ b/chrome/common/chrome_paths_linux.cc
-@@ -79,6 +79,15 @@ bool GetUserMediaDirectory(const std::string& xdg_name,
+@@ -79,6 +79,15 @@
  // issues with other apps grabbing ~/.chromium .
  bool GetDefaultUserDataDirectory(base::FilePath* result) {
    std::unique_ptr<base::Environment> env(base::Environment::Create());
@@ -117,8 +126,7 @@
    base::FilePath config_dir;
    std::optional<std::string> chrome_config_home_str =
        env->GetVar("CHROME_CONFIG_HOME");
-@@ -99,6 +108,7 @@ bool GetDefaultUserDataDirectory(base::FilePath* result) {
- #endif
+@@ -100,5 +109,6 @@
    *result = config_dir.Append(data_dir_basename + GetChannelSuffixForDataDir());
    return true;
 +#endif
@@ -127,7 +135,7 @@
  void GetUserCacheDirectory(const base::FilePath& profile_dir,
 --- a/components/crash/core/app/crashpad_linux.cc
 +++ b/components/crash/core/app/crashpad_linux.cc
-@@ -15,6 +15,7 @@
+@@ -16,6 +16,7 @@
  
  #include "base/base_switches.h"
  #include "base/command_line.h"
@@ -135,7 +143,7 @@
  #include "base/linux_util.h"
  #include "base/logging.h"
  #include "base/path_service.h"
-@@ -173,7 +174,12 @@ bool PlatformCrashpadInitialization(
+@@ -175,7 +176,12 @@
      if (!base::PathService::Get(base::DIR_EXE, &handler_path)) {
        return false;
      }
@@ -151,7 +159,7 @@
      // to ChromeOS's /sbin/crash_reporter which in turn passes the dump to
 --- a/ui/ozone/platform/x11/x11_utils.cc
 +++ b/ui/ozone/platform/x11/x11_utils.cc
-@@ -18,6 +18,11 @@ gfx::ImageSkia X11Utils::GetNativeWindowIcon(intptr_t target_window_id) {
+@@ -18,6 +18,11 @@
  }
  
  std::string X11Utils::GetWmWindowClass(const std::string& desktop_base_name) {
