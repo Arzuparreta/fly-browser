@@ -459,12 +459,6 @@ beta() (
     git fetch --quiet origin main
     git switch --quiet --detach origin/main
     python3 scripts/chromium/engine_update.py patch-check --channel Beta
-    if [ "$(saved kind)" = beta-semantic ]; then
-        # Only merged, fully validated source reaches the usual local launcher.
-        python3 scripts/chromium/engine_update.py upgrade --root "$FLY_ENGINE_ROOT" \
-            --through build >"$LOGS/merged-native.log" 2>&1
-        python3 scripts/chromium/native.py verify --root "$FLY_ENGINE_ROOT"
-    fi
     local issue
     issue=$(gh issue list --repo "$REPO" --state open \
         --search 'in:title "Fly patches do not apply to Chromium Beta"' \

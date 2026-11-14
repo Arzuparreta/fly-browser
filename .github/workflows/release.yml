@@ -83,25 +83,6 @@ jobs:
           if-no-files-found: error
           retention-days: 3
 
-  # The owner's ./launch.sh runs out/FlyNative. Bring it (and the unmodified
-  # control it is checked against) to the engine and overlay this release left
-  # in the engine root. After a slot swap both were built by validate, so only
-  # this release's own changes compile. upgrade does nothing when both are
-  # already current, so
-  # this does not depend on whether this attempt of the run moved Chromium: a
-  # rerun after a failed attempt may find the move already done.
-  # Packages do not wait for this.
-  development-build:
-    name: Rebuild the development browser on the new engine
-    needs: build
-    if: github.ref_type == 'tag'
-    runs-on: [self-hosted, linux, x64, fly-chromium]
-    timeout-minutes: 720
-    steps:
-      - uses: actions/checkout@v4
-      - name: Rebuild out/FlyControl and out/FlyNative
-        run: python3 scripts/chromium/engine_update.py upgrade --through build --root "$FLY_ENGINE_ROOT" --jobs "$(nproc)"
-
   publish:
     name: Publish release
     needs: build
