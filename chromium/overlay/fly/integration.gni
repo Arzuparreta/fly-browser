@@ -17,6 +17,33 @@ if (is_linux || is_win) {
 
 # //fly:browser_ui, Fly's browser UI (see //fly/BUILD.gn)
 fly_browser_ui_sources = []
+# Browser-facing types and generators used by Fly's actual include closure.
+# These concrete targets exist on Stable and Beta; do not borrow Chromium's
+# removed browser_public_dependencies/browser_generated_files umbrellas.
+fly_browser_ui_public_deps = [
+  "//base",
+  "//chrome/app/vector_icons",
+  "//chrome/browser:browser_process",
+  "//chrome/browser:buildflags",
+  "//chrome/browser:main_extra_parts",
+  "//chrome/browser/predictors:resource_prefetch_predictor_proto",
+  "//chrome/browser/predictors/lcp_critical_path_predictor:lcp_critical_path_predictor_proto",
+  "//chrome/browser/profiles:profile_manager",
+  "//chrome/browser/profiles:profile_util",
+  "//chrome/browser/ui/browser_window",
+  "//chrome/browser/ui/tabs:tab_strip_model_observer",
+  "//chrome/browser/ui/webui/tab_search:mojo_bindings",
+  "//chrome/common",
+  "//components/content_settings/core/browser",
+  "//components/input",
+  "//components/omnibox/browser:vector_icons",
+  "//components/tab_groups/public/mojom:mojo_bindings",
+  "//components/tabs/public/mojom:mojom",
+  "//content/public/browser",
+  "//extensions/browser",
+  "//ui/shell_dialogs",
+  "//ui/views",
+]
 fly_browser_ui_deps = [ "//fly:session_metadata" ]
 fly_browser_ui_data_deps = []
 if (is_linux || is_win) {
@@ -79,11 +106,9 @@ if (is_linux || is_win) {
     "//fly/ui/workspace_close_transaction.h",
   ]
   fly_browser_ui_deps += [
-    "//chrome/browser/dom_distiller",
     "//chrome/browser/favicon",
     "//chrome/browser/ssl",
     "//chrome/browser/ui/navigator",
-    "//components/dom_distiller/core",
     "//components/favicon/core",
     "//components/find_in_page",
     "//components/history/core/common",

@@ -6118,8 +6118,36 @@ IN_PROC_BROWSER_TEST_F(FlyWorkspaceBrowserTest,
 // lights the reader button, and closes on the second toggle and on Escape.
 IN_PROC_BROWSER_TEST_F(FlyWorkspaceBrowserTest,
                        ReaderViewOpensOverTheArticleAndCloses) {
-  const GURL article =
-      embedded_test_server()->GetURL("/dom_distiller/simple_article.html");
+  // Fly's reader uses its bundled Readability script. Its test article must
+  // also belong to Fly, rather than an upstream reader-mode test directory
+  // whose name changes between Chromium pins.
+  net::EmbeddedTestServer article_server;
+  article_server.RegisterRequestHandler(base::BindRepeating(
+      [](const net::test_server::HttpRequest& request)
+          -> std::unique_ptr<net::test_server::HttpResponse> {
+        if (request.relative_url != "/article")
+          return nullptr;
+        std::string html =
+            "<!doctype html><title>Community library</title><article>"
+            "<h1>Community library</h1>";
+        for (int paragraph = 0; paragraph < 12; ++paragraph) {
+          html +=
+              "<p>This article describes a small community library and the "
+              "volunteers who keep its collection available. Readers bring "
+              "photographs and letters from their families, while archivists "
+              "record the date and source of each item. The library keeps "
+              "copies in separate places so that local stories can be read "
+              "by future generations.</p>";
+        }
+        html += "</article>";
+        auto response =
+            std::make_unique<net::test_server::BasicHttpResponse>();
+        response->set_content_type("text/html");
+        response->set_content(std::move(html));
+        return response;
+      }));
+  ASSERT_TRUE(article_server.Start());
+  const GURL article = article_server.GetURL("/article");
   ASSERT_TRUE(ui_test_utils::NavigateToURL(browser(), article));
   auto* contents = Active(browser());
   const auto open = [&] {
