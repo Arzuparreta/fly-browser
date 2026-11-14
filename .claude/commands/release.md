@@ -4,6 +4,11 @@ description: Cut a Fly release from the impact labels of what has merged
 
 Release Fly. The version number is derived, never invented: it comes from the
 `impact:` labels on the pull requests merged since the last tag.
+First apply `docs/releasing.md#when-to-publish`: publish a change to the shipped
+Stable product. Correctly labelled `impact:none` maintenance and future-Beta
+preparation wait for the next warranted release. In that case, report that no
+release is needed and stop; do not force an empty bump with `--version` or add
+a binary-comparison build.
 
 $ARGUMENTS may contain `--rc` (cut a release candidate) or `--version X.Y.Z`
 (override the derived number, only for deliberate moves like reaching 1.0).

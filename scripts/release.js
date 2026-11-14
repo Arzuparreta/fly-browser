@@ -173,8 +173,8 @@ function resolve(options) {
     if (options.version) return {version: validate(options.version), impact: 'explicit', pulls, tag};
     const impact = highestImpact(pulls);
     if (impact === 'none') fail(`Nothing merged since ${tag || 'the beginning'} claims any user-visible impact. ` +
-        'Automatic version selection stopped. If publication was explicitly requested, follow ' +
-        'docs/releasing.md#explicitly-publishing-current-main; that request still requires a release.');
+        'No release is needed for maintenance-only changes. If a shipping product change was mislabelled, ' +
+        'correct its impact label; see docs/releasing.md#when-to-publish.');
     return {version: nextVersion(declaredVersion(), impact, {rc: options.rc}), impact, pulls, tag};
 }
 
