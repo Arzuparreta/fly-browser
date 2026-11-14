@@ -14,6 +14,30 @@ import socket
 import subprocess
 
 
+class CodexQuotaUnavailable(RuntimeError):
+    pass
+
+
+def quota_failure(log):
+    """Read CLI failure events, never model/tool text containing these words."""
+    for line in log.read_text(errors='replace').splitlines():
+        try:
+            event = json.loads(line)
+        except ValueError:
+            continue
+        if not isinstance(event, dict):
+            continue
+        message = None
+        if event.get('type') == 'error':
+            message = event.get('message')
+        elif event.get('type') == 'turn.failed':
+            error = event.get('error')
+            message = error.get('message') if isinstance(error, dict) else None
+        if isinstance(message, str) and 'usage limit' in message.lower():
+            return message[:2000]
+    return None
+
+
 def test_source(name):
     path = Path(name)
     return (any(part in ('test', 'tests', 'testing') for part in path.parts) or
@@ -193,7 +217,13 @@ def codex(codex, workspace, upstream, prompt, schema, output, log, writable, tim
     env = clean_environment()
     if os.environ.get('CODEX_HOME'):
         env['CODEX_HOME'] = os.environ['CODEX_HOME']
-    run(command, workspace, log, timeout, env, prompt)
+    try:
+        run(command, workspace, log, timeout, env, prompt)
+    except RuntimeError as error:
+        quota = quota_failure(log)
+        if quota:
+            raise CodexQuotaUnavailable(quota) from error
+        raise
     if not output.is_file() or output.stat().st_size > 128 * 1024:
         raise RuntimeError('Codex returned no bounded structured result')
     return json.loads(output.read_text())

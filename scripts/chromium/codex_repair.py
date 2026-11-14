@@ -544,7 +544,7 @@ def main():
                 raise RuntimeError('Stable release has not reached the active root; defer the Beta merge')
         else:
             {'prepare': prepare, 'propose': propose, 'validate': validate}[args.command](args, frozen)
-    except DeferredRepair as error:
+    except (DeferredRepair, repair_sandbox.CodexQuotaUnavailable) as error:
         print('Codex engine repair deferred: ' + str(error), file=sys.stderr)
         return 2
     except (urllib.error.URLError, TimeoutError) as error:

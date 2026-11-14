@@ -111,6 +111,31 @@ class ScopeTests(unittest.TestCase):
 
 
 class SandboxTests(unittest.TestCase):
+    def test_only_cli_failure_events_classify_an_exhausted_quota(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            log = Path(tmp) / 'codex.log'
+            message = "You've hit your usage limit. Try again later."
+            for event in ({'type': 'error', 'message': message},
+                          {'type': 'turn.failed', 'error': {'message': message}}):
+                log.write_text(json.dumps(event) + '\n')
+                self.assertEqual(repair_sandbox.quota_failure(log), message)
+            for event in ({'type': 'item.completed', 'item': {'text': message}},
+                          {'type': 'error', 'message': 'Compilation failed'},
+                          {'type': 'turn.failed', 'error': None}, []):
+                log.write_text(json.dumps(event) + '\n')
+                self.assertIsNone(repair_sandbox.quota_failure(log))
+
+    def test_codex_quota_does_not_become_a_source_failure(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            workspace = Path(tmp)
+            log = workspace / 'codex.log'
+            log.write_text(json.dumps({'type': 'error', 'message': 'Usage limit reached'}) + '\n')
+            with patch.object(repair_sandbox, 'codex_runtime', return_value=None), \
+                    patch.object(repair_sandbox, 'run', side_effect=RuntimeError('CLI failed')), \
+                    self.assertRaises(repair_sandbox.CodexQuotaUnavailable):
+                repair_sandbox.codex('codex', workspace, [], 'review', workspace / 'schema',
+                                     workspace / 'result', log, False)
+
     def test_failure_feedback_keeps_the_first_assertion_before_a_long_summary(self):
         with tempfile.TemporaryDirectory() as tmp:
             log = Path(tmp) / 'native.log'
@@ -234,6 +259,13 @@ class SandboxTests(unittest.TestCase):
 
 
 class BudgetAndReviewTests(unittest.TestCase):
+    def test_exhausted_review_quota_returns_deferral_for_the_ci_driver(self):
+        with tempfile.TemporaryDirectory() as tmp, \
+                patch.object(sys, 'argv', ['codex_repair.py', 'validate', '--logs', tmp]), \
+                patch.object(codex_repair, 'target', return_value={}), \
+                patch.object(codex_repair, 'validate', side_effect=repair_sandbox.CodexQuotaUnavailable('Usage limit reached')):
+            self.assertEqual(codex_repair.main(), 2)
+
     def test_upstream_outage_defers_without_running_a_proposer(self):
         with tempfile.TemporaryDirectory() as tmp, \
                 patch.object(sys, 'argv', ['codex_repair.py', 'validate', '--logs', tmp]), \
