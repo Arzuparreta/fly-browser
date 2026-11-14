@@ -75,13 +75,15 @@ class SandboxTests(unittest.TestCase):
     def test_a_running_output_is_deferred_without_interrupting_its_process(self):
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
-            binary = root / 'src/out/FlyNative/chrome'
+            # Multicall coreutils can choose their applet using the executable
+            # path, not argv[0]. The guard covers every binary under src/out.
+            binary = root / 'src/out/FlyNative/sleep'
             binary.parent.mkdir(parents=True)
             shutil.copy2('/usr/bin/sleep', binary)
-            # Ubuntu can provide sleep through a multicall coreutils binary.
-            # Preserve argv[0] while /proc/PID/exe still points into the output.
-            process = subprocess.Popen(['sleep', '30'], executable=binary)
+            process = subprocess.Popen([binary, '30'])
             try:
+                self.assertIsNone(process.poll(), 'The fixture must still be running')
+                self.assertEqual((Path('/proc') / str(process.pid) / 'exe').readlink(), binary)
                 with self.assertRaisesRegex(codex_repair.DeferredRepair, 'preserve its session'):
                     codex_repair.idle_output(root)
                 self.assertIsNone(process.poll())
