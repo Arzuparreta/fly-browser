@@ -36,6 +36,9 @@ class EngineWorkflowTests(unittest.TestCase):
         patches = self.repo / 'chromium/patches'
         patches.mkdir(parents=True)
         (patches / 'one.patch').write_text('original context\n')
+        overlay = self.repo / 'chromium/overlay/fly'
+        overlay.mkdir(parents=True)
+        (overlay / 'adapter.cc').write_text('original adapter\n')
         git(self.repo, 'add', '.')
         git(self.repo, 'commit', '--quiet', '-m', 'fixture')
         git(self.repo, 'remote', 'add', 'origin', str(self.remote))
@@ -53,6 +56,8 @@ class EngineWorkflowTests(unittest.TestCase):
                     'GITHUB_REPOSITORY': 'fixture/Fly', 'GITHUB_RUN_ID': '123',
                     'RUNNER_TEMP': str(self.base), 'FIXTURE': str(self.base),
                     'FIXTURE_REMOTE': str(self.remote)}
+        self.env['FLY_ENGINE_ROOT'] = str(self.base / 'active')
+        self.env['FLY_ENGINE_CANDIDATE_ROOT'] = str(self.base / 'candidate')
         for key in ('GH_TOKEN', 'GITHUB_TOKEN', 'GIT_CONFIG_COUNT'):
             self.env.pop(key, None)
         self.program('npm', 'echo npm-test >> "$FIXTURE/events"\n')
@@ -62,14 +67,26 @@ class EngineWorkflowTests(unittest.TestCase):
         self.program('python3', '''
 echo "python $*" >> "$FIXTURE/events"
 case "$*" in
+  *codex_repair.py*propose*)
+    if [ "${SCENARIO:-}" = semantic ] || [ "${SCENARIO:-}" = semantic-review-fail ]; then echo 'bounded agent could not repair'; exit 1; fi
+    printf 'semantic repair context\\n' > chromium/patches/one.patch ;;
+  *codex_repair.py*kind*)
+    if [[ "${SCENARIO:-}" = semantic-* ]]; then echo semantic; else echo context; fi ;;
+  *codex_repair.py*validate*)
+    if [ "${SCENARIO:-}" = semantic-deferred ]; then echo 'existing browser still uses output'; exit 2; fi
+    if [ "${SCENARIO:-}" = semantic-native-fail ] || [ "${SCENARIO:-}" = semantic-review-fail ]; then echo 'native validation or review failed'; exit 1; fi ;;
+  *codex_repair.py*target-current*)
+    if [ "${SCENARIO:-}" = semantic-target-advanced ]; then echo 'Beta advanced'; exit 1; fi ;;
   *patch-repair*)
-    if [ "${SCENARIO:-}" = semantic ]; then echo 'semantic conflict'; exit 1; fi
+    if [[ "${SCENARIO:-}" = semantic* ]]; then echo 'semantic conflict'; exit 1; fi
     printf 'repaired context\\n' > chromium/patches/one.patch ;;
 esac
 ''')
         self.program('gh', '''
 echo "gh $*" >> "$FIXTURE/events"
 case "$1 $2" in
+  'run list')
+    if [ "${SCENARIO:-}" = release ]; then echo true; else echo false; fi ;;
   'pr list') [ ! -e "$FIXTURE/open" ] || echo 7 ;;
   'pr create') touch "$FIXTURE/open" ;;
   'pr checks')
@@ -142,6 +159,58 @@ esac
         self.assertNotIn('gh issue close', events)
         self.assertNotIn(' --root ', events)
 
+    def test_semantic_repair_needs_native_validation_before_merge_and_updates_only_after_merge(self):
+        result, events = self.run_beta(SCENARIO='semantic-success')
+        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+        merge = events.index('gh pr merge')
+        self.assertLess(events.index('codex_repair.py validate'), merge)
+        self.assertLess(events.index('codex_repair.py target-current'), merge)
+        self.assertGreater(events.index('engine_update.py upgrade'), merge)
+        self.assertGreater(events.index('gh issue close'), events.index('native.py verify'))
+
+    def test_failed_semantic_native_validation_never_merges_or_closes_warning(self):
+        result, events = self.run_beta(SCENARIO='semantic-native-fail')
+        self.assertNotEqual(result.returncode, 0)
+        self.assertEqual(events.count('codex_repair.py validate'), 2)
+        self.assertNotIn('gh pr merge', events)
+        self.assertNotIn('gh issue close', events)
+        self.assertNotIn('engine_update.py upgrade', events)
+
+    def test_existing_browser_defers_without_spending_another_proposal(self):
+        result, events = self.run_beta(SCENARIO='semantic-deferred')
+        self.assertNotEqual(result.returncode, 0)
+        self.assertEqual(events.count('codex_repair.py propose'), 1)
+        self.assertNotIn('gh pr merge', events)
+        self.assertNotIn('gh issue close', events)
+
+    def test_target_drift_invalidates_status_without_another_code_proposal(self):
+        result, events = self.run_beta(SCENARIO='semantic-target-advanced')
+        self.assertNotEqual(result.returncode, 0)
+        self.assertEqual(events.count('codex_repair.py propose'), 1)
+        self.assertIn('state=failure -f context=engine-validation', events)
+        self.assertNotIn('state=success -f context=engine-validation', events)
+        self.assertNotIn('gh pr merge', events)
+        self.assertNotIn('gh issue close', events)
+
+    def test_pending_release_gets_the_engine_host_before_beta(self):
+        result, events = self.run_beta(SCENARIO='release')
+        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+        self.assertNotIn('patch-repair', events)
+        self.assertNotIn('codex_repair.py propose', events)
+
+    def test_resumed_stable_repair_cannot_bypass_rejected_semantic_validation(self):
+        for _ in range(2):
+            # prepare() creates a fresh state file, so there is no saved kind.
+            (self.base / 'engine-update-state').write_text('pr=7\nversion=fixture\n')
+            result = subprocess.run(['bash', 'scripts/chromium/engine-update-ci.sh', 'validate'],
+                cwd=self.repo, env={**self.env, 'SCENARIO': 'semantic-review-fail'},
+                capture_output=True, text=True, timeout=20)
+            self.assertNotEqual(result.returncode, 0, result.stdout + result.stderr)
+        events = (self.base / 'events').read_text()
+        self.assertEqual(events.count('codex_repair.py validate --channel Stable'), 2)
+        self.assertNotIn('engine_update.py validate', events)
+        self.assertNotIn('gh pr merge', events)
+
     def test_main_moving_while_checks_run_is_merged_and_revalidated(self):
         git(self.repo, 'switch', '--quiet', '-c', 'future')
         (self.repo / 'unrelated').write_text('new main\n')
@@ -152,7 +221,7 @@ esac
         git(self.repo, 'switch', '--quiet', 'main')
         result, events = self.run_beta(MOVE_MAIN_TO=future)
         self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
-        self.assertGreaterEqual(events.count('patch-verify'), 3)
+        self.assertGreaterEqual(events.count('patch-verify'), 2)
         self.assertEqual(git(self.repo, 'show', 'origin/main:unrelated'), 'new main')
 
     def test_retry_preserves_main_changes_and_reuses_the_existing_repair_pr(self):

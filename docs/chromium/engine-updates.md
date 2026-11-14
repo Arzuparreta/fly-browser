@@ -26,10 +26,11 @@ once or twice a week. Fly follows them automatically:
    already built and tested it, so only the release's own changes compile.
 
 A patch-context conflict first receives a conservative automatic repair
-([Automatic patch repair](#automatic-patch-repair)). A semantic conflict, an
-ambiguous edit or another validation failure stops the process with the pull
-request still open and the log commented on it. Nothing reaches users until
-the whole chain has passed.
+([Automatic patch repair](#automatic-patch-repair)). Code/API conflicts and
+native validation failures can then receive a bounded Codex proposal and an
+independent review. A repair that cannot satisfy all gates stops with the
+pull request or warning issue open and its reason recorded. Nothing reaches
+users until the whole chain has passed.
 
 ## Pon Chromium al día: complete maintenance task
 
@@ -100,8 +101,9 @@ gh issue list --state open --search 'in:title "Fly patches do not apply to Chrom
 Read the latest run's jobs/logs, any update PR's checks and failure comments,
 and the Beta issue's body. The workflow can finish successfully **while Beta
 patches fail**: that failure is deliberately recorded in the issue rather than
-failing the whole workflow. No Stable update means the candidate build and
-release steps are skipped; that run is not evidence of a fresh native build.
+failing the whole workflow. No Stable update skips the candidate/release steps
+in the update job. Inspect the separate repair job before claiming a native
+build ran: a context-only or blocked repair does not establish that.
 Report these results separately, with links and any unverified build or
 installed-browser state. Read current merged main rather than treating an
 open PR or an old conversation as delivered work.
@@ -114,9 +116,10 @@ Notification delivery depends on the owner's GitHub settings; the workflow
 opening an issue does not guarantee an email or a chat message.
 
 The automatic workflow detects conflicts, repairs unambiguous context drift,
-and processes validated Stable updates. Semantic/API changes still need
-development work. An agent answering a status question must include pending
-Beta work even when Stable is current.
+and attempts bounded code/API repairs with Codex. Failed proposals, exhausted
+quota or validation failures remain visible; they are never silently accepted.
+An agent answering a status question must include pending Beta work even when
+Stable is current.
 
 To resume tracking after a deliberate pause, check the workflow state and
 runner availability, then enable it and dispatch an immediate check:
@@ -159,6 +162,7 @@ The engine host has two Chromium checkouts, reached by two fixed paths:
 | --- | --- | --- | --- |
 | Active | `/mnt/storage/fly-chromium` | `FLY_ENGINE_ROOT` | Development builds, `./launch.sh`, releases |
 | Candidate | `/mnt/storage/fly-chromium-next` | `FLY_ENGINE_CANDIDATE_ROOT` | Validating engine updates |
+| Repair | `/mnt/storage/fly-chromium-repair` | `FLY_ENGINE_REPAIR_ROOT` | Isolated Beta compilation/testing; never swapped into production |
 
 An update is built and tested in the candidate first. If a patch or the build
 fails there, the active root keeps working on the current pin, and the agents
@@ -262,15 +266,17 @@ patches on it every six hours. While any patch does not apply, it keeps the
 **Fly patches do not apply to Chromium Beta** issue open with the list. Rebase
 those patches before that version reaches Stable, and the Stable update goes
 through without stopping. Compiling against Beta is not checked: only patch
-application.
+application in that baseline job. A semantic repair additionally builds and
+tests the frozen Beta in the separate repair root before its PR can merge.
 
 ### Automatic patch repair
 
-After the Beta warning job finishes, the trusted engine host attempts a repair
-in a dedicated worktree from current main. It never moves either engine root
-for Beta preparation. Repair and Stable update use the same scheduled workflow,
-host login, PR checks and guarded merge process; a failed Beta repair does not
-block the separate Stable update.
+After the warning and Stable jobs finish, a separate job on the trusted engine
+host attempts a repair in a dedicated worktree from current main. Pending
+releases get the host first: Beta preparation defers while any release is
+running or queued. The same scheduled workflow, host login, PR checks and
+guarded merge process handle both channels. A failed Beta repair does not
+block Stable publication.
 
 The mechanical repair only replaces unchanged context around Fly's edits. It
 preserves all added and removed lines, accepts only exact anchors that occur
@@ -281,7 +287,7 @@ unsupported patch formats fail closed. A late failure writes no patches,
 including earlier repairs in that attempt. No code-generating model or API key
 is used by this layer.
 
-A successful Beta repair opens `engine/chromium-beta` with `impact:none`. Before
+A successful context-only Beta repair opens `engine/chromium-beta` with `impact:none`. Before
 merging, it proves the complete Stable output is identical to current main,
 replays Stable and Beta, and waits for the latest head's `verify`, `impact_label`
 and `engine-validation` checks plus any other registered checks. If main moves,
@@ -291,16 +297,102 @@ or runtime compatibility: the normal Stable update still compiles the control
 and Fly and runs Fly's native tests before shipping that engine.
 
 The warning closes only after strict Beta replay succeeds on merged main.
-Failures leave it open; a distinct mechanical blocker is commented once with
-its workflow log. If a function moves, an API changes or a match is ambiguous,
-development work is still required. The next run retries against current
-upstream and main; it never drops a patch to obtain a green result.
+Failures leave it open; a distinct blocker is commented with its workflow log.
+If the mechanical layer cannot repair a function move, API change or ambiguous
+match, the Codex layer below attempts the code adaptation. It never drops a
+patch to obtain a green result.
 
 Stable patch replay uses the same repair engine when needed, with main's
 previous pin as the known-good reference. It commits and pushes a successful
 repair on the existing Stable update PR, then builds/tests that new head in
 the candidate root. Any failed repair leaves that PR open. Publication retains
 all its existing native validation and release gates.
+
+Source preparation snapshots the previous dependency inventory before moving.
+When Chromium replaces or retires a managed dependency Git repository,
+source preparation first verifies its recorded origin, revision and clean tree.
+It moves that checkout to `evidence/retired-dependencies/` with a recovery journal
+before checking out the new upstream tree. Checkout failure restores the
+verified dependency; edited/unrecognised paths stop the operation. Neither
+`git reset --hard` nor `git clean` is used to clear a collision.
+The same checks cover nested managed repositories and Git links no longer
+managed by DEPS; their complete old checkouts remain recoverable. The known
+removed generated `reproxy.cfg` is likewise preserved outside the source tree.
+Arbitrary untracked files still stop validation. Git hooks/LFS filters are
+disabled only in the isolated runtime, leaving the host's configuration intact.
+
+### Codex code/API repairs
+
+The owner has authorised the engine host's authenticated Codex CLI to propose
+and review repairs using its Codex quota. The CLI runs non-interactively with
+structured results. The proposer gets a separate disposable Git worktree and
+object store, scoped source writes, public upstream sources as read-only data,
+and no shell network, host credentials, SSH socket, desktop session, build
+outputs or real profiles. Its client retains its normal login outside the
+tool sandbox. Installed plugins/apps and user tool configuration are disabled
+for this execution. If the installed CLI cannot enforce that isolation, repair
+stops; there is no unsandboxed fallback.
+
+The controller, not the model, enforces the accepted diff. It permits existing
+integration patches and C++/headers under the Fly overlay, new
+`compat_*_test.cc` files, and string entries in `integration.gni`. Deletions,
+new patch files, scripts, workflows, existing tests, resources, command catalogs,
+version data and the shipping pin are forbidden. Upstream build-hook edits
+must remain unchanged; new sources/dependencies go through `integration.gni`.
+File count and proposal size are bounded, and symlinks are refused. For Beta,
+the same complete patch series must still apply to current Stable.
+
+A fresh read-only Codex execution reviews the actual diff against current
+main and the upstream callers, including committed changes. It must explicitly
+approve with no findings. The proposer cannot approve itself or set commit
+statuses. Strict patch replay and `npm test` precede publication of its proposal.
+The `engine-validation` status for a semantic Beta PR additionally requires
+control/Fly compilation and native unit/browser tests for both Stable and the
+frozen Beta. Builds/tests run in separate filesystem, PID and network namespaces
+with an empty HOME and no host authentication or real user profiles. Trusted
+source/dependency preparation downloads before those offline tests.
+
+Stable tests use the candidate root; Beta tests use the separately owned repair
+root. Its first preparation copies public sources locally without build outputs,
+then moves only that copy to Beta. Its first native validation can take hours;
+later attempts reuse its incremental outputs. The active root and both existing
+slot build caches are preserved. Beta is never the shipping pin and the repair
+root is never an adoption/swap candidate. Only after a semantic Beta repair has
+merged and passed replay does the usual local Stable native build refresh from
+merged main, preserving running sessions. Restart Fly to load rebuilt code.
+
+Every repair head must pass all remote checks. If main moves, the combined
+result is reviewed/validated again. A Beta target that advances during validation
+keeps the PR open for a new run, as does a Stable release that has not reached
+the active root. A semantic repair that fails compilation/tests can receive one
+further proposal with that log; an incomplete result stays open.
+
+Cost and recovery controls:
+
+- At most two proposals per Chromium input and target in 24 hours, with bounded
+  author/review durations; documentation-only main changes do not reset it.
+  State lives in `~/.cache/fly-engine-repair` (override `FLY_ENGINE_REPAIR_STATE`).
+- The workflow's manual `retry_repair=true` input permits one fresh bounded
+  attempt for that run, for example after renewing a Codex login or quota.
+- Set the repository variable `FLY_ENGINE_CODEX_REPAIR=off` to stop Codex usage;
+  detection and mechanical repair continue. Missing login/CLI, quota exhaustion,
+  unavailable isolation, resource limits or rejected reviews leave the warning
+  open with evidence. No provider/model fallback or automatic authentication
+  change is attempted.
+- The host needs its existing Codex login, Linux namespaces and `bubblewrap`.
+  Roots can be selected with `FLY_ENGINE_ROOT`, `FLY_ENGINE_CANDIDATE_ROOT` and
+  `FLY_ENGINE_REPAIR_ROOT`; they must resolve to separate, non-nested directories.
+  An existing unowned repair directory is never reset or adopted implicitly.
+
+This automates proposing, reviewing and validating compatible repairs; it
+cannot guarantee that every future upstream redesign admits a safe automatic
+adaptation. Human work remains necessary when the bounded process cannot pass
+the gates. Ordinary pull-request CI and repository branch rules are unchanged.
+If a previous active slot still hosts a running browser, unmerged repair
+validation defers instead of overwriting its output or interrupting that
+session. Retrying after it exits or restarts on the active build needs no code
+change. Each repair job has a total 45-hour deadline within Actions' job limit;
+author/review calls and native phases also have their own shorter limits.
 
 ### Starting a Beta patch repair
 

@@ -86,8 +86,11 @@
   checklist. Report Stable freshness and Beta patch compatibility separately;
   `engine_update.py status` alone cannot establish that no work is pending.
   The workflow detects Beta conflicts and opens an issue, then attempts exact
-  context-only repairs. Semantic/API conflicts still need development work;
-  a green workflow is not proof that the warning issue has been resolved.
+  context-only repairs, then bounded Codex API/code repairs in isolation.
+  Semantic repairs require independent review, strict replay and native
+  control/Fly builds and unit/browser tests on Stable and Beta before merge.
+  A blocked repair leaves the issue open; a green workflow alone is not proof
+  that Beta is compatible. See the repair limits and host setup in that doc.
 
 - **“Pon Chromium al día”** (also “actualiza Chromium” or “encárgate del
   seguimiento de Chromium”) invokes the complete maintenance task in

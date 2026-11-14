@@ -26,9 +26,17 @@ on:
         description: Cut a release after the update merges
         type: boolean
         default: true
+      retry_repair:
+        description: Allow one fresh bounded Codex repair attempt for unchanged inputs
+        type: boolean
+        default: false
 
 permissions:
   contents: read
+
+env:
+  FLY_ENGINE_CODEX_REPAIR: ${{ vars.FLY_ENGINE_CODEX_REPAIR || 'on' }}
+  FLY_ENGINE_REPAIR_RETRY: ${{ github.event.inputs.retry_repair || 'false' }}
 
 concurrency:
   group: engine-update
@@ -131,9 +139,24 @@ jobs:
         env:
           FLY_ENGINE_RELEASE: ${{ vars.FLY_ENGINE_RELEASE }}
         run: scripts/chromium/engine-update-ci.sh release
-      - name: Repair Beta context drift without changing Stable
-        # Security updates get the host first. A failed Stable update still
-        # allows independent Beta preparation from main, without engine writes.
-        if: ${{ !cancelled() }}
+
+  repair:
+    name: Repair Chromium Beta compatibility
+    needs: update
+    if: ${{ !cancelled() }}
+    runs-on: [self-hosted, linux, x64, fly-chromium]
+    timeout-minutes: 2880
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+          fetch-depth: 0
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Repair, independently review and validate Beta compatibility
+        # The warning remains open for a blocked repair. Stable publication
+        # has its own job and is never contingent on a Beta result.
         continue-on-error: true
         run: scripts/chromium/engine-update-ci.sh beta

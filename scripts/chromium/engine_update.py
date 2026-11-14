@@ -54,6 +54,8 @@ VALIDATION = 'evidence/engine-validation.json'
 # the copy brings the candidate's stage records, so without it an adoption
 # that failed its check would look complete.
 ADOPT_STATE = 'evidence/engine-adopt-pending.json'
+RETIRED_STATE = 'evidence/engine-retired-dependencies-pending.json'
+LEGACY_REPROXY = 'src/buildtools/reclient_cfgs/reproxy.cfg'
 
 
 def load_pin():
@@ -167,24 +169,198 @@ def head(directory):
     return engine.git(directory, 'rev-parse', 'HEAD')
 
 
-def move_checkout(directory, old, new, submodules=True):
+def move_checkout(directory, old, new, submodules=True, transition=None):
     """Detach a shallow official checkout at a new revision. Refuses anything
     but a clean tree at the old or the new pin; never resets. With
     `submodules=False` the tree at the new pin may still have its gitlinks at
     the old dependency revisions (gclient sync moves them next)."""
     current = head(directory)
     if current == new['revision']:
-        engine.verify_checkout(directory, new, submodules)
+        with transition() if transition else contextlib.nullcontext():
+            engine.verify_checkout(directory, new, submodules)
         return False
     engine.verify_checkout(directory, old)
     present = subprocess.run(['git', 'cat-file', '-e', new['revision'] + '^{commit}'],
                              cwd=directory, stderr=subprocess.DEVNULL).returncode == 0
     if not present:
         engine.run(['git', 'fetch', '--depth=1', 'origin', new['revision']], directory)
-    engine.run(['git', '-c', 'core.autocrlf=false', 'checkout', '--quiet', '--detach',
-                new['revision']], directory)
+    with transition() if transition else contextlib.nullcontext():
+        engine.run(['git', '-c', 'core.autocrlf=false', 'checkout', '--quiet', '--detach',
+                    new['revision']], directory)
     engine.verify_checkout(directory, new, submodules)
     return True
+
+
+def retirement_journal(root, parent='src'):
+    native.relative_path(parent)
+    if parent == 'src':
+        return root / RETIRED_STATE
+    if not parent.startswith('src/'):
+        engine.fail('Invalid dependency parent path')
+    suffix = native.bytes_digest(parent.encode())[:16]
+    return root / 'evidence' / ('engine-retired-dependencies-' + suffix + '-pending.json')
+
+
+def restore_retired_dependencies(root, old, new, parent='src'):
+    """Resume a stopped checkout without resetting or deleting any sources."""
+    journal = retirement_journal(root, parent)
+    if not journal.exists():
+        return
+    record = json.loads(journal.read_text())
+    if record['from'] != old['revision'] or record['to'] != new['revision']:
+        engine.fail('Retired dependency journal belongs to another transition')
+    if record.get('parent', 'src') != parent:
+        engine.fail('Retired dependency journal belongs to another parent')
+    current = head(root / parent)
+    if current not in (old['revision'], new['revision']):
+        engine.fail('Unexpected source HEAD during dependency transition')
+    for item in record['entries']:
+        native.relative_path(item['path'])
+        native.relative_path(item['backup'])
+        if not item['path'].startswith(parent + '/') or not item['backup'].startswith('evidence/retired-dependencies/'):
+            engine.fail('Invalid retired dependency recovery path')
+        original = native.checked_path(root, item['path'])
+        backup = native.checked_path(root, item['backup'])
+        if backup.exists():
+            if original.exists() and current == old['revision'] and item.get('placeholder'):
+                if original.is_dir() and not any(original.iterdir()):
+                    original.rmdir()  # Only the empty placeholder we created.
+            if original.exists() and current == old['revision']:
+                engine.fail('Both dependency and recovery copy exist; preserve and inspect ' + item['path'])
+            if item.get('kind') == 'generated':
+                if item['path'] != LEGACY_REPROXY or engine.digest(backup) != item['sha256']:
+                    engine.fail('Generated recovery copy changed; preserve and inspect it')
+            else:
+                engine.verify_checkout(backup, item['pin'])
+            if current == old['revision']:
+                original.parent.mkdir(parents=True, exist_ok=True)
+                backup.rename(original)
+        elif current == new['revision'] or not original.exists():
+            engine.fail('Dependency and recovery copy are both missing: ' + item['path'])
+    if current == new['revision']:
+        # Do not require global source cleanliness here: another known
+        # retirement (for example the removed generated reproxy config) may
+        # still be pending. The normal checkout verifier runs afterwards.
+        finish_retired_dependencies(root, parent)
+    else:
+        journal.unlink()
+
+
+def finish_retired_dependencies(root, parent='src'):
+    journal = retirement_journal(root, parent)
+    last = journal.with_name(journal.name.replace('-pending.json', '-last.json'))
+    if last.exists():
+        archive = root / 'evidence/retired-dependencies' / ('journal-' + str(time.time_ns()) + '.json')
+        archive.parent.mkdir(parents=True, exist_ok=True)
+        last.rename(archive)
+    journal.rename(last)
+
+
+def retired_reproxy(root, old, new):
+    """One removed upstream-generated file, not arbitrary untracked data.
+    Old Chromium generated/ignored reproxy.cfg; newer Siso setup no longer
+    reads or generates it. Preserve its bytes outside the source tree."""
+    file = native.checked_path(root, LEGACY_REPROXY)
+    if not file.exists():
+        return []
+    script = 'buildtools/reclient_cfgs/configure_reclient_cfgs.py'
+    def source(revision, path):
+        result = subprocess.run(['git', 'show', revision + ':' + path], cwd=root / 'src',
+                                stdout=subprocess.PIPE, stderr=subprocess.DEVNULL)
+        return None if result.returncode else result.stdout
+    previous = source(old['revision'], script)
+    target = source(new['revision'], script)
+    ignore = source(old['revision'], 'buildtools/reclient_cfgs/.gitignore')
+    if (previous is None or target is None or ignore is None or
+            b'reproxy.cfg' not in previous or b'reproxy.cfg' in target or
+            b'reproxy.cfg' not in ignore.splitlines()):
+        return []
+    if not file.is_file():
+        engine.fail('Legacy generated config is not a regular file; preserve it')
+    backup = Path('evidence/retired-dependencies') / (str(time.time_ns()) + '-' + old['revision']) / LEGACY_REPROXY
+    return [{'path': LEGACY_REPROXY, 'backup': backup.as_posix(),
+             'kind': 'generated', 'sha256': engine.digest(file)}]
+
+
+@contextlib.contextmanager
+def retire_vendored_dependencies(root, old, new, parent='src', inventory=None, desired=None):
+    """Chromium can remove a DEPS gitlink or replace it with tracked files.
+    Preserve each exact, clean managed checkout before that checkout; never
+    overwrite it with --force or remove it with git clean."""
+    if inventory is None:
+        file = root / 'evidence/dependency-revisions.json'
+        sync = json.loads((root / 'evidence/sync.json').read_text())
+        if engine.digest(file) != sync['details']['dependency_revisions_sha256']:
+            engine.fail('Dependency inventory differs before ownership transition')
+        inventory = json.loads(file.read_text())
+    entries = []
+    source = native.checked_path(root, parent)
+    for name, pin in inventory.items():
+        if name == parent or not name.startswith(parent + '/') or not pin.get('rev'):
+            continue
+        ancestors = [path for path, value in inventory.items()
+                     if path != name and value.get('rev') and name.startswith(path + '/')]
+        if ancestors and max(ancestors, key=len) != parent:
+            continue  # The nearest managed repository owns this path.
+        native.relative_path(name)
+        if not name.startswith('src/'):
+            continue
+        path = name.removeprefix(parent + '/')
+        previous = engine.git(source, 'ls-tree', old['revision'], '--', path)
+        target = engine.git(source, 'ls-tree', new['revision'], '--', path)
+        unmanaged_link = target.startswith('160000 commit ') and desired is not None and name not in desired
+        old_link = previous.startswith('160000 commit ' + pin['rev'] + '\t')
+        deps_only = not previous and (bool(target) or (desired is not None and name not in desired))
+        if not (old_link or deps_only) or (target.startswith('160000 commit ') and not unmanaged_link):
+            continue
+        directory = native.checked_path(root, name)
+        if not directory.exists():
+            continue  # Already preserved/removed during this transition.
+        if head(source) == new['revision'] and target and not (directory / '.git').exists():
+            continue  # A completed checkout already installed upstream files.
+        if not (directory / '.git').is_dir() or (directory / '.git').is_symlink():
+            engine.fail('A vendored transition needs a standalone dependency Git directory: ' + name)
+        expected = {'url': pin['url'], 'revision': pin['rev']}
+        engine.verify_checkout(directory, expected)
+        backup = Path('evidence/retired-dependencies') / (str(time.time_ns()) + '-' + old['revision']) / name
+        entries.append({'path': name, 'backup': backup.as_posix(), 'pin': expected,
+                        'placeholder': unmanaged_link})
+    if parent == 'src':
+        entries += retired_reproxy(root, old, new)
+    if entries:
+        engine.atomic_json(retirement_journal(root, parent),
+                           {'parent': parent, 'from': old['revision'], 'to': new['revision'], 'entries': entries})
+        for item in entries:
+            backup = native.checked_path(root, item['backup'])
+            backup.parent.mkdir(parents=True, exist_ok=True)
+            (root / item['path']).rename(backup)
+            if item.get('placeholder'):
+                (root / item['path']).mkdir()
+            print('Preserved retired dependency ' + item['path'] + ' in ' + item['backup'], flush=True)
+    try:
+        yield
+    except BaseException:
+        restore_retired_dependencies(root, old, new, parent)
+        raise
+    if entries:
+        finish_retired_dependencies(root, parent)
+
+
+def retire_nested_dependencies(root, previous, current):
+    for parent, old in previous.items():
+        new = current.get(parent)
+        if (not new or not old.get('rev') or not new.get('rev') or
+                old['rev'] == new['rev'] or
+                not any(name.startswith(parent + '/') for name in previous)):
+            continue
+        directory = native.checked_path(root, parent)
+        if not (directory / '.git').exists() or not same_remote(old['url'], new['url']):
+            continue
+        old_pin = {'url': old['url'], 'revision': old['rev']}
+        new_pin = {'url': new['url'], 'revision': new['rev']}
+        restore_retired_dependencies(root, old_pin, new_pin, parent)
+        with retire_vendored_dependencies(root, old_pin, new_pin, parent, previous, current):
+            engine.verify_checkout(directory, new_pin, submodules=False)
 
 
 def revert_overlay(root, old, lock):
@@ -214,7 +390,7 @@ def same_remote(first, second):
     return normal(first) == normal(second)
 
 
-def fetch_dependencies(root, env, waits=(30, 60, 120, 240, 480), rounds=10):
+def fetch_dependencies(root, env, waits=(30, 60, 120, 240, 480), rounds=10, previous=None):
     """Fetch only the new revision of each dependency already checked out.
     gclient sync fetches every branch's history (no depth) into an existing
     dependency that lacks its new revision; on a shallow engine root that is
@@ -258,8 +434,16 @@ def fetch_dependencies(root, env, waits=(30, 60, 120, 240, 480), rounds=10):
                 fetched += 1
                 changed = True
             if (checkout / 'DEPS').is_file() and head(checkout) != revision:
-                engine.run(['git', '-c', 'core.autocrlf=false', 'checkout', '--quiet',
-                            '--detach', revision], checkout, env)
+                old = (previous or {}).get(path)
+                transition = contextlib.nullcontext()
+                if old and old.get('rev'):
+                    old_pin = {'url': old['url'], 'revision': old['rev']}
+                    new_pin = {'url': url, 'revision': revision}
+                    restore_retired_dependencies(root, old_pin, new_pin, path)
+                    transition = retire_vendored_dependencies(root, old_pin, new_pin, path, previous, dependencies)
+                with transition:
+                    engine.run(['git', '-c', 'core.autocrlf=false', 'checkout', '--quiet',
+                                '--detach', revision], checkout, env)
                 changed = True
         if not changed:
             break
@@ -293,7 +477,16 @@ def move(root, lock, jobs, minimum_free_gib=100):
         state = {'from': old['chromium']['revision'], 'from_version': old['engine_version'],
                  'to': lock['chromium']['revision'], 'to_version': lock['engine_version'],
                  'started_at': datetime.datetime.now(datetime.timezone.utc).isoformat()}
+        state['dependencies'] = json.loads((root / 'evidence/dependency-revisions.json').read_text())
         engine.atomic_json(state_file, state)
+    elif 'dependencies' not in state:
+        if old['chromium']['revision'] != state['from']:
+            engine.fail('This interrupted move predates dependency snapshots; preserve its old inventory before resuming')
+        state['dependencies'] = json.loads((root / 'evidence/dependency-revisions.json').read_text())
+        engine.atomic_json(state_file, state)
+    previous = state['dependencies']
+    if previous.get('src', {}).get('rev') != state['from']:
+        engine.fail('Previous dependency inventory differs from the interrupted source pin')
     revert_overlay(root, old, lock)
     env = engine.environment(root)
     if move_checkout(root / 'depot_tools', old['depot_tools'], lock['depot_tools']):
@@ -304,17 +497,27 @@ def move(root, lock, jobs, minimum_free_gib=100):
             engine.run([root / 'depot_tools/ensure_bootstrap'], root, env)
         engine.verify_checkout(root / 'depot_tools', lock['depot_tools'])
     synced = stage_current(root, 'sync')
-    move_checkout(root / 'src', old['chromium'], lock['chromium'], submodules=synced)
+    if synced:
+        retire_nested_dependencies(root, previous, json.loads((root / 'evidence/dependency-revisions.json').read_text()))
+    source_old = dict(old['chromium'], revision=state['from'])
+    restore_retired_dependencies(root, source_old, lock['chromium'])
+    move_checkout(root / 'src', source_old, lock['chromium'], submodules=synced,
+                  transition=lambda: retire_vendored_dependencies(root, source_old, lock['chromium'], inventory=previous))
     env = engine.verify(root, lock, submodules=synced)
     if not synced:
         engine.gclient_config(root, lock)
-        fetch_dependencies(root, env)
+        fetch_dependencies(root, env, previous=previous)
         engine.run(['gclient', 'sync', '--nohooks', '--no-history',
                     '--revision', 'src@' + lock['chromium']['revision'],
                     '--jobs', str(jobs)], root, env)
-        env = engine.verify(root, lock)
+        # A removed nested checkout can make its parent gitlink look dirty
+        # until retirement handles it. Verify the top-level sources now and
+        # every gitlink immediately after the scoped cleanup below.
+        env = engine.verify(root, lock, submodules=False)
         revisions = root / 'evidence/dependency-revisions.json'
         engine.run(['gclient', 'revinfo', '--actual', '--output-json', revisions], root, env)
+        retire_nested_dependencies(root, previous, json.loads(revisions.read_text()))
+        env = engine.verify(root, lock)
         engine.evidence(root, 'sync', lock,
                         {'dependency_revisions_sha256': engine.digest(revisions),
                          'moved_from': state['from_version']})
