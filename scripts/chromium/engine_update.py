@@ -36,6 +36,8 @@ from pathlib import Path
 import re
 import secrets
 import shutil
+import socket
+import struct
 import subprocess
 import sys
 import tempfile
@@ -862,6 +864,19 @@ def follow(root, lock, jobs, candidate=None):
 
 # --- upgrade and validate -------------------------------------------------------
 
+def display_ready(number):
+    """An X11 setup reply proves more than the socket's early appearance."""
+    try:
+        with socket.socket(socket.AF_UNIX, socket.SOCK_STREAM) as connection:
+            connection.settimeout(0.1)
+            connection.connect(f'/tmp/.X11-unix/X{number}')
+            # Little-endian X11 setup, protocol 11.0, no authentication data.
+            connection.sendall(b'l\0' + struct.pack('<5H', 11, 0, 0, 0, 0))
+            return connection.recv(8)[:1] == b'\x01'
+    except OSError:
+        return False
+
+
 @contextlib.contextmanager
 def virtual_display(tools, log_directory):
     """An owned Xvfb (and Openbox when present) for browser tests. Never the
@@ -880,13 +895,15 @@ def virtual_display(tools, log_directory):
     try:
         with (log_directory / 'xvfb.log').open('wb') as log:
             processes.append(subprocess.Popen(
-                [str(xvfb), display, '-screen', '0', '1920x1080x24', '-nolisten', 'tcp'],
+                [str(xvfb), display, '-screen', '0', '1920x1080x24', '-nolisten', 'tcp',
+                 '-extension', 'GLX'],
+                env=dict(os.environ, LIBGL_ALWAYS_SOFTWARE='1'),
                 stdout=log, stderr=subprocess.STDOUT, start_new_session=True))
         for _ in range(300):
-            if Path(f'/tmp/.X11-unix/X{number}').exists():
-                break
             if processes[0].poll() is not None:
                 engine.fail('Xvfb exited; see ' + str(log_directory / 'xvfb.log'))
+            if display_ready(number):
+                break
             time.sleep(0.1)
         else:
             engine.fail('Xvfb did not start')
@@ -902,6 +919,8 @@ def virtual_display(tools, log_directory):
                                                   stderr=subprocess.STDOUT,
                                                   start_new_session=True))
             time.sleep(2)
+        if any(process.poll() is not None for process in processes) or not display_ready(number):
+            engine.fail('Owned test display exited during startup; see ' + str(log_directory))
         yield display
     finally:
         for process in reversed(processes):

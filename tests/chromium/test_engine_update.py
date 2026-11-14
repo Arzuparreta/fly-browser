@@ -10,7 +10,7 @@ import sys
 import tempfile
 import time
 import unittest
-from unittest.mock import patch
+from unittest.mock import Mock, patch
 
 ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(ROOT / 'scripts/chromium'))
@@ -68,6 +68,34 @@ class VersionTests(unittest.TestCase):
         lock['chromium']['url'] = 'https://example.invalid/src.git'
         with self.assertRaisesRegex(RuntimeError, 'Invalid official source pin'):
             engine.validate_lock(lock)
+
+
+class DisplayTests(unittest.TestCase):
+    def test_socket_existence_is_insufficient_without_a_successful_x11_setup(self):
+        connection = Mock()
+        connection.__enter__ = Mock(return_value=connection)
+        connection.__exit__ = Mock(return_value=False)
+        with patch.object(engine_update.socket, 'socket', return_value=connection):
+            for reply, expected in ((b'', False), (b'\0rejected', False), (b'\1ready', True)):
+                connection.recv.return_value = reply
+                self.assertEqual(engine_update.display_ready(94), expected)
+            connection.connect.side_effect = ConnectionRefusedError()
+            self.assertFalse(engine_update.display_ready(94))
+
+    def test_display_crashing_after_initial_readiness_never_starts_tests(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            executable = root / 'xvfb/usr/bin/Xvfb'
+            executable.parent.mkdir(parents=True)
+            executable.touch()
+            process = Mock()
+            # Xvfb passes the first poll/setup, then crashes before handoff.
+            process.poll.side_effect = [None, 1, 1]
+            with patch.object(engine_update.subprocess, 'Popen', return_value=process), \
+                    patch.object(engine_update, 'display_ready', return_value=True), \
+                    self.assertRaisesRegex(RuntimeError, 'display exited during startup'):
+                with engine_update.virtual_display(root, root / 'logs'):
+                    self.fail('Tests must not start on a dead display')
 
 
 class LeaseTests(unittest.TestCase):

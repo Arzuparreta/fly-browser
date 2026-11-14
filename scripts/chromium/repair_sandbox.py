@@ -23,6 +23,17 @@ def clean_environment(home=None):
     return env
 
 
+def failure_excerpt(log):
+    text = log.read_text(errors='replace')
+    # Native launchers end with long lists of test names. Keep the first
+    # assertion/startup/compiler failure too, so a proposer gets its cause.
+    match = re.search(r'(?im)^.*(?:Missing X server|FATAL:|fatal error:|: error:|'
+                      r': Failure|\[\s*FAILED\s*\]|Fatal server error:).*$', text)
+    if match and match.start() < len(text) - 8000:
+        return text[match.start():match.start() + 4000] + '\n...\n' + text[-4000:]
+    return text[-8000:]
+
+
 def run(command, directory, log, timeout, env=None, input=None):
     """Bound the entire process group, including compilers/agent children."""
     log.parent.mkdir(parents=True, exist_ok=True)
@@ -56,7 +67,7 @@ def run(command, directory, log, timeout, env=None, input=None):
                     pass
             raise
     if process.returncode:
-        tail = log.read_text(errors='replace')[-8000:]
+        tail = failure_excerpt(log)
         raise RuntimeError(f'Command failed ({process.returncode}); log: {log}\n{tail}')
 
 
