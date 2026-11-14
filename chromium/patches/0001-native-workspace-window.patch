@@ -48,7 +48,7 @@
    if (WindowFeatureController::From(view->browser())
 --- a/chrome/browser/ui/views/frame/browser_widget.cc
 +++ b/chrome/browser/ui/views/frame/browser_widget.cc
-@@ -51,6 +51,11 @@
+@@ -51,5 +51,10 @@
  #include "ui/aura/window.h"
  #endif
  
@@ -59,8 +59,7 @@
 +
  #if BUILDFLAG(IS_LINUX)
  #include "ui/linux/linux_ui.h"
- #endif
-@@ -322,7 +327,15 @@
+@@ -314,7 +319,15 @@
  }
  
  std::unique_ptr<views::FrameView> BrowserWidget::CreateFrameView() {
@@ -88,7 +87,7 @@
  
  #include <array>
  #include <optional>
-@@ -1413,6 +1415,7 @@
+@@ -1656,6 +1658,7 @@
  }
  
  void RegisterLocalState(PrefRegistrySimple* registry) {

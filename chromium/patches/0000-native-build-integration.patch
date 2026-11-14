@@ -43,15 +43,13 @@
  
  assert(!is_ios, "Chromium/iOS shouldn't use anything in //chrome")
  assert(!is_fuchsia, "Fuchsia shouldn't use anything in //chrome")
-@@ -1331,7 +1332,7 @@
+@@ -1331,5 +1332,5 @@
      configs += [ ":disable_thinlto_cache_flags" ]
      defines = [ "HAS_OUT_OF_PROC_TEST_RUNNER" ]
  
 -    deps = [
 +    deps = fly_browser_tests_deps + [
        ":platform_browser_tests",
-       ":test_interfaces",
-       ":test_support",
 @@ -1804,4 +1805,6 @@
      fuzztests = [ "SafeXmlParserFixture.ParseXML" ]
 +    # Fly: browser tests listed in //fly/integration.gni.

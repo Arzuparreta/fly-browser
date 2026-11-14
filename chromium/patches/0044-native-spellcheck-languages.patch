@@ -1,8 +1,6 @@
 --- a/chrome/browser/renderer_context_menu/spelling_options_submenu_observer.cc
 +++ b/chrome/browser/renderer_context_menu/spelling_options_submenu_observer.cc
-@@ -50,6 +50,26 @@ void SpellingOptionsSubMenuObserver::InitMenu(
-     const content::ContextMenuParams& params) {
-   DCHECK_CURRENTLY_ON(BrowserThread::UI);
+@@ -52,3 +52,23 @@
  
 +  // Fly: its Preferences choose the spelling languages, all checked together.
 +  // Chromium's list here (the languages sent to websites) would replace them
@@ -26,7 +24,6 @@
 +
    // Add available spell-checker languages to the sub menu.
    content::BrowserContext* browser_context = proxy_->GetBrowserContext();
-   DCHECK(browser_context);
 --- a/chrome/browser/spellchecker/spellcheck_service.cc
 +++ b/chrome/browser/spellchecker/spellcheck_service.cc
 @@ -11,6 +11,7 @@
@@ -37,7 +34,7 @@
  #include "base/containers/to_vector.h"
  #include "base/functional/bind.h"
  #include "base/functional/callback_helpers.h"
-@@ -569,15 +570,22 @@ void SpellcheckService::LoadDictionaries() {
+@@ -568,15 +569,22 @@
      blocked_dictionaries_lookup.insert(blocked_dict.GetString());
    }
  
@@ -64,7 +61,7 @@
    }
  
    for (const std::string& dictionary : dictionaries) {
-@@ -998,6 +1006,11 @@ void SpellcheckService::OnUseSpellingServiceChanged() {
+@@ -997,6 +1005,11 @@
  void SpellcheckService::OnAcceptLanguagesChanged() {
    // Accept-Languages and spell check are decoupled on CrOS.
  #if !BUILDFLAG(IS_CHROMEOS)
@@ -78,7 +75,7 @@
    StringListPrefMember dictionaries_pref;
 --- a/components/spellcheck/renderer/hunspell_engine.cc
 +++ b/components/spellcheck/renderer/hunspell_engine.cc
-@@ -117,6 +117,23 @@ void HunspellEngine::FillSuggestionList(
+@@ -117,6 +117,23 @@
    }
  }
  
@@ -104,7 +101,7 @@
      mojo::Remote<spellcheck::mojom::SpellCheckInitializationHost>
 --- a/components/spellcheck/renderer/hunspell_engine.h
 +++ b/components/spellcheck/renderer/hunspell_engine.h
-@@ -36,6 +36,11 @@ class HunspellEngine : public SpellingEngine {
+@@ -36,6 +36,11 @@
        const std::u16string& wrong_word,
        spellcheck::mojom::SpellCheckHost& host,
        std::vector<std::u16string>* optional_suggestions) override;
@@ -126,7 +123,7 @@
  #include <string_view>
  #include <utility>
  #include <vector>
-@@ -311,9 +312,19 @@ bool SpellCheck::SpellCheckWord(
+@@ -301,9 +302,19 @@
    // A vector of vectors containing spelling suggestions from different
    // languages.
    std::vector<std::vector<std::u16string>> suggestions_list;
@@ -146,7 +143,7 @@
  
    const size_t text_length = text.size();
    size_t position_in_text = 0;
-@@ -328,6 +339,8 @@ bool SpellCheck::SpellCheckWord(
+@@ -318,6 +329,8 @@
      *misspelling_start = 0;
      *misspelling_len = 0;
      suggestions_list.clear();
@@ -155,7 +152,7 @@
  
      for (auto language = languages_.begin(); language != languages_.end();) {
  #if BUILDFLAG(IS_WIN) && BUILDFLAG(USE_BROWSER_SPELLCHECKER)
-@@ -349,7 +362,8 @@ bool SpellCheck::SpellCheckWord(
+@@ -339,7 +352,8 @@
                &possible_misspelling_start_relative_to_substring,
                &possible_misspelling_len,
                optional_per_language_suggestions ? &language_suggestions
@@ -165,7 +162,7 @@
        // SpellCheckWord informs us of a misspelling index relative to the
        // substring of text which was passed in, so add `position_in_text` to
        // this value to get the offset relative to `text`.
-@@ -374,6 +388,8 @@ bool SpellCheck::SpellCheckWord(
+@@ -364,6 +378,8 @@
              *misspelling_len = 0;
              position_in_text = possible_misspelling_start;
              suggestions_list.clear();
@@ -174,7 +171,7 @@
              language = languages_.begin();
            } else {
              language++;
-@@ -387,10 +403,15 @@ bool SpellCheck::SpellCheckWord(
+@@ -377,10 +393,15 @@
            // another spellcheck language marked it as correct.
            if (position_in_text != *misspelling_start) {
              suggestions_list.clear();
@@ -190,7 +187,7 @@
              language++;
            }
            break;
-@@ -401,6 +422,29 @@ bool SpellCheck::SpellCheckWord(
+@@ -391,6 +412,29 @@
      // marked a word misspelled and no other language considered it correct.
      if (*misspelling_len != 0) {
        if (optional_per_language_suggestions) {
@@ -222,7 +219,7 @@
        return false;
 --- a/components/spellcheck/renderer/spellcheck_language.cc
 +++ b/components/spellcheck/renderer/spellcheck_language.cc
-@@ -45,7 +45,9 @@ SpellcheckLanguage::SpellcheckWordResult SpellcheckLanguage::SpellCheckWord(
+@@ -45,7 +45,9 @@
      spellcheck::mojom::SpellCheckHost& host,
      size_t* skip_or_misspelling_start,
      size_t* skip_or_misspelling_len,
@@ -233,7 +230,7 @@
    DCHECK(skip_or_misspelling_start && skip_or_misspelling_len)
        << "Out vars must be given.";
  
-@@ -109,7 +111,13 @@ SpellcheckLanguage::SpellcheckWordResult SpellcheckLanguage::SpellCheckWord(
+@@ -109,7 +111,13 @@
      *skip_or_misspelling_len = word_length;
  
      // Get the list of suggested words.
@@ -258,7 +255,7 @@
  
  namespace service_manager {
  class LocalInterfaceProvider;
-@@ -22,8 +23,6 @@ namespace spellcheck::mojom {
+@@ -22,8 +23,6 @@
  class SpellCheckHost;
  }
  
@@ -267,7 +264,7 @@
  class SpellcheckLanguage {
   public:
    enum SpellcheckWordResult {
-@@ -67,12 +66,17 @@ class SpellcheckLanguage {
+@@ -67,12 +66,17 @@
    //   suggested words for a given misspelled word and puts them into
    //   |*optional_suggestions|. If optional_suggestions is nullptr, suggested
    //   words will not be looked up. Note that doing suggest lookups can be slow.
@@ -288,7 +285,7 @@
    bool InitializeIfNeeded();
 --- a/components/spellcheck/renderer/spelling_engine.cc
 +++ b/components/spellcheck/renderer/spelling_engine.cc
-@@ -37,3 +37,12 @@ SpellingEngine* CreateNativeSpellingEngine(
+@@ -37,3 +37,12 @@
    return nullptr;
  #endif
  }
@@ -303,7 +300,7 @@
 +}
 --- a/components/spellcheck/renderer/spelling_engine.h
 +++ b/components/spellcheck/renderer/spelling_engine.h
-@@ -47,6 +47,18 @@ class SpellingEngine {
+@@ -47,6 +47,18 @@
        const std::u16string& wrong_word,
        spellcheck::mojom::SpellCheckHost& host,
        std::vector<std::u16string>* optional_suggestions) = 0;
@@ -324,7 +321,9 @@
  #endif  // COMPONENTS_SPELLCHECK_RENDERER_SPELLING_ENGINE_H_
 --- a/third_party/hunspell/src/hunspell/hunspell.cxx
 +++ b/third_party/hunspell/src/hunspell/hunspell.cxx
-@@ -84,2 +84,3 @@
+@@ -82,4 +82,5 @@
+ #endif
+ #include "csutil.hxx"
  
 +#include <optional>
  #include <limits>
@@ -359,7 +358,9 @@
  
  #ifdef HUNSPELL_CHROME_CLIENT
    // Not owned by us, owned by the Hunspell object.
-@@ -1178,4 +1196,11 @@
+@@ -1176,6 +1194,13 @@
+     }
+   }
  
 -  switch (captype) {
 +  // Fly: kSuggestRest takes the near misses kSuggestNearMiss found for this
@@ -412,7 +413,7 @@
  }
 --- a/third_party/hunspell/src/hunspell/hunspell.hxx
 +++ b/third_party/hunspell/src/hunspell/hunspell.hxx
-@@ -152,6 +152,17 @@ class LIBHUNSPELL_DLL_EXPORTED Hunspell {
+@@ -152,6 +152,17 @@
    std::vector<std::string> suggest(const std::string& word);
    H_DEPRECATED int suggest(char*** slst, const char* word);
  
