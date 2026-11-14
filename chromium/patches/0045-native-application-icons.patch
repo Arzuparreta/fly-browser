@@ -174,21 +174,62 @@
  bool disable_unpinning_for_unit_tests = false;
 --- a/chrome/common/channel_info_posix.cc
 +++ b/chrome/common/channel_info_posix.cc
-@@ -141,14 +141,9 @@
-       return "google-chrome.desktop";
-   }
- #else  // BUILDFLAG(CHROMIUM_BRANDING)
--  // Allow $CHROME_DESKTOP to override the built-in value, so that development
--  // versions can set themselves as the default without interfering with
--  // non-official, packaged versions using the built-in value.
--  std::optional<std::string> name = env->GetVar("CHROME_DESKTOP");
--  if (name.has_value() && !name.value().empty()) {
--    return name.value();
+@@ -121,10 +121,8 @@
+ #if !BUILDFLAG(GOOGLE_CHROME_BRANDING)
+ std::string GetDesktopName(base::Environment* env) {
+-  // Fly: preserve development overrides and the installed desktop identity.
+-  const auto name = env->GetVar("CHROME_DESKTOP");
+-  if (name && !name->empty()) {
+-    return *name;
 -  }
--  // Fly: the desktop entry Fly's packages install.
 +  // Fly: Electron/Chromium parents can export their own CHROME_DESKTOP.
 +  // Fly must still match its installed desktop entry for Wayland app IDs,
 +  // X11 identity, default-browser registration and notification icons.
-   return "fly-browser.desktop";
- #endif
+-  return "fly-browser.desktop";
++  return version_info::nix::GetDesktopName(*env);
  }
+ #else
+--- a/base/version_info/nix/version_extra_utils.cc
++++ b/base/version_info/nix/version_extra_utils.cc
+@@ -85,3 +85,14 @@
+   return base::StrCat({kSessionNamePrefix, suffix});
+ }
++
++#if !BUILDFLAG(GOOGLE_CHROME_BRANDING)
++// Fly: every Linux caller (shell integration, notifications, downloads,
++// camera portal, media controls) must name the desktop entry Fly installs.
++// Electron/Chromium parents can export their own CHROME_DESKTOP and channel
++// variables do not rename Fly, so neither is consulted here.
++std::string GetDesktopName(base::Environment& env) {
++  return "fly-browser.desktop";
++}
++#else  // BUILDFLAG(GOOGLE_CHROME_BRANDING)
++// Branded builds keep upstream's implementation, where Chromium has one.
+ 
+@@ -88,1 +99,3 @@
++#endif  // !BUILDFLAG(GOOGLE_CHROME_BRANDING)
++
+ }  // namespace version_info::nix
+--- a/base/version_info/nix/version_extra_utils.h
++++ b/base/version_info/nix/version_extra_utils.h
+@@ -9,4 +9,5 @@
+ 
+ #include "base/base_export.h"
+ #include "base/version_info/channel.h"
++#include "build/branding_buildflags.h"
+ 
+@@ -34,3 +35,10 @@
+ // Returns the session name prefix (e.g. "chrome_beta" or "chromium").
+ BASE_EXPORT std::string GetSessionNamePrefix(base::Environment& env);
++
++#if !BUILDFLAG(GOOGLE_CHROME_BRANDING)
++// Fly: returns "fly-browser.desktop", the desktop entry Fly installs,
++// regardless of $CHROME_DESKTOP or the channel.
++BASE_EXPORT std::string GetDesktopName(base::Environment& env);
++#else  // BUILDFLAG(GOOGLE_CHROME_BRANDING)
++// Branded builds keep upstream's declaration, where Chromium has one.
+ 
+@@ -37,1 +45,3 @@
++#endif  // !BUILDFLAG(GOOGLE_CHROME_BRANDING)
++
+ }  // namespace version_info::nix
