@@ -14,6 +14,12 @@ import socket
 import subprocess
 
 
+def test_source(name):
+    path = Path(name)
+    return (any(part in ('test', 'tests', 'testing') for part in path.parts) or
+            re.search(r'(^|_)(test|unittest|browsertest|testing)(_|$)', path.stem) is not None)
+
+
 def clean_environment(home=None):
     env = {key: os.environ[key] for key in ('PATH', 'LANG', 'LC_ALL', 'TZ',
                                            'SSL_CERT_FILE', 'SSL_CERT_DIR') if key in os.environ}
@@ -71,7 +77,7 @@ def run(command, directory, log, timeout, env=None, input=None):
         raise RuntimeError(f'Command failed ({process.returncode}); log: {log}\n{tail}')
 
 
-def codex_options(workspace, upstream, writable, runtime_binary=None):
+def codex_options(workspace, upstream, writable, runtime_binary=None, editable_tests=()):
     workspace = Path(workspace).resolve()
     # A private HOME is passed to shell tools. CLI authentication is loaded by
     # the client before it invokes a sandbox and is never granted to tools.
@@ -80,8 +86,9 @@ def codex_options(workspace, upstream, writable, runtime_binary=None):
     if writable:
         for name in ('chromium/patches', 'chromium/overlay/fly'):
             rules[str(workspace / name)] = 'write'
-        for file in (workspace / 'chromium/overlay/fly/test').rglob('*'):
-            if file.is_file():
+        for file in (workspace / 'chromium/overlay/fly').rglob('*'):
+            name = file.relative_to(workspace).as_posix()
+            if file.is_file() and test_source(name) and name not in editable_tests:
                 rules[str(file)] = 'read'
     for name in ('chromium/overlay/fly/fly_version.h', 'chromium/overlay/fly/commands',
                  'chromium/overlay/fly/resources', 'chromium/patches/series'):
@@ -107,10 +114,10 @@ def codex_options(workspace, upstream, writable, runtime_binary=None):
                 'GIT_OPTIONAL_LOCKS': '0'}).replace(': ', '=')]
 
 
-def codex_runtime(codex, workspace, upstream, writable=True):
+def codex_runtime(codex, workspace, upstream, writable=True, editable_tests=()):
     """Probe the installed CLI's sandbox, including its native re-exec path.
     Do not weaken isolation if its version cannot enforce this profile."""
-    options = codex_options(workspace, upstream, True)
+    options = codex_options(workspace, upstream, True, editable_tests=editable_tests)
     command = [codex, 'sandbox', '-P', 'fly-repair', '-C', str(workspace), *options,
                '--', '/usr/bin/true']
     result = subprocess.run(command, capture_output=True, text=True, timeout=30)
@@ -123,7 +130,7 @@ def codex_runtime(codex, workspace, upstream, writable=True):
         if not binary.is_file() or binary.open('rb').read(4) != b'\x7fELF':
             raise RuntimeError('Invalid Codex sandbox runtime')
         command = [codex, 'sandbox', '-P', 'fly-repair', '-C', str(workspace),
-                   *codex_options(workspace, upstream, True, binary), '--', '/usr/bin/true']
+                   *codex_options(workspace, upstream, True, binary, editable_tests), '--', '/usr/bin/true']
         subprocess.run(command, capture_output=True, text=True, check=True, timeout=30)
     # Capability probing must prove denials, not just that the CLI accepts a
     # profile name (older CLIs could ignore unknown permission settings).
@@ -156,7 +163,7 @@ if pathlib.Path(adapter).parent.is_dir():
   if writable != "true":raise SystemExit("reviewer could write source")
 '''
         command = [codex, 'sandbox', '-P', 'fly-repair', '-C', str(workspace),
-                   *codex_options(workspace, upstream, writable, binary), '--', '/usr/bin/python3',
+                   *codex_options(workspace, upstream, writable, binary, editable_tests), '--', '/usr/bin/python3',
                    '-c', program, str(canary), f'/proc/{os.getpid()}/root{canary}',
                    str(protected), str(adapter), str(listener.getsockname()[1]),
                    'true' if writable else 'false']
@@ -170,8 +177,8 @@ if pathlib.Path(adapter).parent.is_dir():
     return binary
 
 
-def codex(codex, workspace, upstream, prompt, schema, output, log, writable, timeout=1200):
-    runtime = codex_runtime(codex, workspace, upstream, writable)
+def codex(codex, workspace, upstream, prompt, schema, output, log, writable, timeout=1200, editable_tests=()):
+    runtime = codex_runtime(codex, workspace, upstream, writable, editable_tests)
     (workspace / '.repair-runtime').mkdir(exist_ok=True)
     command = [codex, '--no-daemon', '-a', 'never', 'exec', '--ephemeral',
                '--ignore-user-config', '--ignore-rules', '--strict-config',
@@ -179,7 +186,7 @@ def codex(codex, workspace, upstream, prompt, schema, output, log, writable, tim
                '--disable', 'multi_agent_v2', '--disable', 'browser_use',
                '--disable', 'computer_use', '--disable', 'view_image',
                '-c', 'web_search="disabled"', '-c', 'plugins._default.enabled=false',
-               *codex_options(workspace, upstream, writable, runtime),
+               *codex_options(workspace, upstream, writable, runtime, editable_tests),
                '-C', str(workspace), '--output-schema', str(schema),
                '--output-last-message', str(output), '--json', '-']
     # Keep the user's selected Codex home for client auth, not for tool shells.

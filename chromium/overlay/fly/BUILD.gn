@@ -153,6 +153,8 @@ test("fly_unittests") {
   ]
   sources += fly_cache_test_sources
   deps += fly_cache_test_deps
+  sources += fly_compatibility_test_sources
+  deps += fly_compatibility_test_deps
 }
 
 # Same upstream in-process browser and out-of-process test launcher, scoped to
@@ -162,7 +164,7 @@ if (is_linux || is_win) {
   test("fly_browser_tests") {
     use_xvfb = is_linux
     defines = [ "HAS_OUT_OF_PROC_TEST_RUNNER" ]
-    sources = [ "test/workspace_browser_test.cc" ]
+    sources = fly_browser_tests_sources
     deps = fly_browser_tests_deps + [
       ":bookmarks",
       ":commands",
