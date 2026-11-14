@@ -915,6 +915,8 @@ class FlySidebarBrowserTest : public FlyWorkspaceBrowserTest {
   }
 
  protected:
+  void CheckViewportAndPageClicks();
+
   void MovePointer(gfx::Point point) {
     ui::test::EventGenerator mouse(Window().widget()
                                        ->GetNativeWindow()
@@ -1088,8 +1090,7 @@ IN_PROC_BROWSER_TEST_F(FlySidebarBrowserTest,
       [&] { return window.workspace_picker().active(); }));
 }
 
-IN_PROC_BROWSER_TEST_F(FlySidebarBrowserTest,
-                       HoverKeepsViewportVisibilityAndBlocksPageClickThrough) {
+void FlySidebarBrowserTest::CheckViewportAndPageClicks() {
   ASSERT_TRUE(ui_test_utils::NavigateToURL(
       browser(), embedded_test_server()->GetURL("/title1.html")));
   auto* page = Active(browser());
@@ -1133,6 +1134,11 @@ IN_PROC_BROWSER_TEST_F(FlySidebarBrowserTest,
   EXPECT_EQ(width, content::EvalJs(page, "innerWidth"));
   EXPECT_EQ(0, content::EvalJs(page, "resizes"));
   EXPECT_EQ(0, content::EvalJs(page, "visibilityEvents.length"));
+}
+
+IN_PROC_BROWSER_TEST_F(FlySidebarBrowserTest,
+                       HoverKeepsViewportVisibilityAndBlocksPageClickThrough) {
+  CheckViewportAndPageClicks();
 }
 
 // Opening the sidebar over a row shows that row's hover look and close
@@ -1275,6 +1281,11 @@ class FlyViewsManagedSidebarBrowserTest : public FlySidebarBrowserTest {
   base::AutoReset<bool> views_host_ =
       FlyWindowController::UseViewsManagedSidebarHostForTesting();
 };
+
+IN_PROC_BROWSER_TEST_F(FlyViewsManagedSidebarBrowserTest,
+                       HoverKeepsViewportVisibilityAndBlocksPageClickThrough) {
+  CheckViewportAndPageClicks();
+}
 
 IN_PROC_BROWSER_TEST_F(FlyViewsManagedSidebarBrowserTest,
                        FloatingSurfaceKeepsClicksWhenSidebarExpands) {

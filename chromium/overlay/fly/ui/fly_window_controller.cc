@@ -124,9 +124,11 @@
 #include "ui/views/vector_icons.h"
 #include "ui/views/view.h"
 #include "ui/views/view_class_properties.h"
+#include "ui/views/view_targeter.h"
+#include "ui/views/view_targeter_delegate.h"
 #include "ui/views/widget/native_widget_aura.h"
-#include "ui/views/window/non_client_view.h"
 #include "ui/views/window/dialog_delegate.h"
+#include "ui/views/window/non_client_view.h"
 #include "ui/views/window/vector_icons/vector_icons.h"
 #include "ui/wm/core/coordinate_conversion.h"
 #include "url/origin.h"
@@ -134,6 +136,25 @@
 namespace fly {
 namespace {
 bool g_views_managed_sidebar_host_for_testing = false;
+
+// Views must ignore the same hidden strip that the native targeter ignores.
+// Otherwise its layered host prevents events from reaching the page below.
+class SidebarHostTargeter : public views::ViewTargeterDelegate {
+ public:
+  explicit SidebarHostTargeter(base::RepeatingCallback<int()> visible_width)
+      : visible_width_(std::move(visible_width)) {}
+
+  bool DoesIntersectRect(const views::View* target,
+                         const gfx::Rect& rect) const override {
+    auto bounds = target->GetLocalBounds();
+    bounds.set_width(std::clamp(visible_width_.Run(), 0, bounds.width()));
+    return bounds.Intersects(rect);
+  }
+
+ private:
+  base::RepeatingCallback<int()> visible_width_;
+};
+
 class WorkspaceMenuButton : public FlyButton,
                             public views::ContextMenuController,
                             public ui::SimpleMenuModel::Delegate {
@@ -704,6 +725,14 @@ void FlyWindowController::BuildSidebar() {
   // above the client view instead of underneath it in the frame.
   sidebar_host_uses_clip_window_ = ConfigureSidebarClipWindow(
       host.get(), !g_views_managed_sidebar_host_for_testing);
+  if (!sidebar_host_uses_clip_window_) {
+    host->SetEventTargeter(std::make_unique<views::ViewTargeter>(
+        std::make_unique<SidebarHostTargeter>(base::BindRepeating(
+            [](base::WeakPtr<FlyWindowController> window) {
+              return window ? window->sidebar_hit_width_ : 0;
+            },
+            weak_factory_.GetWeakPtr()))));
+  }
   host->SetProperty(views::kViewIgnoredByLayoutKey, true);
   owned_sidebar_host_ = std::move(host);
   sidebar_host_ = owned_sidebar_host_.get();
