@@ -1056,7 +1056,6 @@ void FlyWindowController::InstallInto(FlyBrowserFrame* frame) {
   if (footer_ && footer_->parent())
     owned_footer_ = footer_->parent()->RemoveChildViewT(footer_.get());
   if (sidebar_host_ && sidebar_host_->parent()) {
-    sidebar_targeter_ = nullptr;
     if (sidebar_host_->native_view())
       sidebar_host_->Detach();
     owned_sidebar_host_ =
@@ -1083,7 +1082,6 @@ void FlyWindowController::InstallInto(FlyBrowserFrame* frame) {
             ? aura::EventTargetingPolicy::kDescendantsOnly
             : aura::EventTargetingPolicy::kTargetAndDescendants);
     clip->SetEventTargeter(std::make_unique<aura::WindowTargeter>());
-    sidebar_targeter_ = clip->targeter();
   }
   sidebar_motion_applied_ = false;
   UpdateFullscreenChrome();
@@ -1096,7 +1094,6 @@ void FlyWindowController::FrameDestroying(FlyBrowserFrame* frame) {
   frame_ = nullptr;
   // The frame destroys its children with it; a replacement frame installs
   // them first. Without one the window is closing.
-  sidebar_targeter_ = nullptr;
   if (sidebar_host_ && sidebar_host_->native_view())
     sidebar_host_->Detach();
   sidebar_host_ = nullptr;
@@ -1238,9 +1235,15 @@ void FlyWindowController::UpdateSidebarBounds() {
 }
 
 void FlyWindowController::UpdateSidebarHitArea() {
-  if (!sidebar_targeter_ || !sidebar_host_)
+  if (!sidebar_host_)
     return;
-  sidebar_targeter_->SetInsets(gfx::Insets::TLBR(
+  // The native window owns the targeter and can destroy it before the frame
+  // during browser teardown. Resolve it from the live host instead of keeping
+  // a borrowed pointer across those lifetimes.
+  auto* container = sidebar_host_->GetNativeViewContainer();
+  if (!container || !container->targeter())
+    return;
+  container->targeter()->SetInsets(gfx::Insets::TLBR(
       0, 0, 0, std::max(0, sidebar_host_->width() - sidebar_hit_width_)));
 }
 

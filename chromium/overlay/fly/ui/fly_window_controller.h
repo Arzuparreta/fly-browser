@@ -33,9 +33,6 @@
 class BrowserWindowInterface;
 class GURL;
 class Profile;
-namespace aura {
-class WindowTargeter;
-}
 namespace aura::client {
 class FocusClient;
 }
@@ -359,8 +356,6 @@ class FlyWindowController : public views::WidgetObserver,
   raw_ptr<views::View> sidebar_content_ = nullptr;
   raw_ptr<SidebarPanel> sidebar_panel_ = nullptr;
   raw_ptr<SidebarRoot> sidebar_root_ = nullptr;
-  // Limits the sidebar host's hit area to the visible panel.
-  raw_ptr<aura::WindowTargeter> sidebar_targeter_ = nullptr;
   bool sidebar_expanded_ = false;
   // The first state and mode changes apply without motion.
   bool sidebar_motion_ready_ = false;
