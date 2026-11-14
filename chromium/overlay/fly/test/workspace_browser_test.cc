@@ -170,6 +170,9 @@
 #include "content/public/test/browser_test_utils.h"
 #include "content/public/test/test_navigation_observer.h"
 #include "extensions/browser/background_script_executor.h"
+#include "extensions/browser/extension_system.h"
+#include "extensions/browser/extension_user_script_loader.h"
+#include "extensions/browser/user_script_manager.h"
 #include "extensions/test/test_extension_dir.h"
 #include "net/dns/mock_host_resolver.h"
 #include "net/test/embedded_test_server/embedded_test_server.h"
@@ -6649,8 +6652,19 @@ IN_PROC_BROWSER_TEST_F(FlyGmRequestBrowserTest, RedirectHopsAreCheckedBeforeSend
                "location.port + '/echo?local');\n")));
   }
   App().user_content().Reload();
-  ASSERT_TRUE(base::test::RunUntil(
-      [&] { return App().user_content().script_count() == 2u; }));
+  // File generation precedes asynchronous script registration. Wait for the
+  // browser's loaded scripts before navigating: reloading while GM requests
+  // are in flight destroys the document receiving their results.
+  ASSERT_TRUE(base::test::RunUntil([&] {
+    if (App().user_content().script_count() != 2u ||
+        App().user_content().generating_for_testing())
+      return false;
+    auto* manager = extensions::ExtensionSystem::Get(browser()->GetProfile())
+                        ->user_script_manager();
+    auto* loader = manager->GetUserScriptLoaderForExtension(
+        UserContentService::kExtensionId);
+    return loader && loader->GetLoadedDynamicScripts().size() == 2u;
+  }));
   const auto url = embedded_test_server()->GetURL("page.test", "/title1.html");
   const auto result = [&](std::string_view key) {
     return content::EvalJs(Active(browser()),
@@ -6658,11 +6672,8 @@ IN_PROC_BROWSER_TEST_F(FlyGmRequestBrowserTest, RedirectHopsAreCheckedBeforeSend
                                          key, " || ''"}))
         .ExtractString();
   };
+  ASSERT_TRUE(ui_test_utils::NavigateToURL(browser(), url));
   ASSERT_TRUE(base::test::RunUntil([&] {
-    if (result("direct").empty() &&
-        !ui_test_utils::NavigateToURL(browser(), url)) {
-      return false;
-    }
     return !result("direct").empty() && !result("hop").empty() &&
            !result("open").empty() && !result("local").empty();
   }));
