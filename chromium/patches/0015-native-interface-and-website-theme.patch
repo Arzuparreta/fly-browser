@@ -20,17 +20,26 @@
  #include "build/config/chromebox_for_meetings/buildflags.h"  // PLATFORM_CFM
  #include "chrome/browser/accessibility/caption_settings_dialog.h"
  #include "chrome/browser/accessibility/page_colors_controller.h"
-@@ -4125,6 +4128,28 @@
+@@ -4125,6 +4128,37 @@
            : blink::mojom::PreferredColorScheme::kLight;
  #endif
  
 +#if BUILDFLAG(IS_LINUX) || BUILDFLAG(IS_WIN)
 +  // Fly's explicit application preference controls actual native web preferences.
 +  // Keep internal WebUI, native enterprise policy and forced-colors semantics.
++  // Keep Chromium's effective profile, whether upstream passes it as a
++  // pointer (Stable) or a reference (Beta).
++  const Profile& fly_profile = [](const auto& current) -> const Profile& {
++    if constexpr (requires { current->GetPrefs(); }) {
++      return *current;
++    } else {
++      return current;
++    }
++  }(profile);
 +  if (base::CommandLine::ForCurrentProcess()->HasSwitch("fly-native") &&
 +      !security_principal.IsWebUI() &&
-+      !profile->IsEnterpriseIsolatedModeProfile() &&
-+      !profile->GetPrefs()->IsManagedPreference(prefs::kBrowserColorScheme) &&
++      !fly_profile.IsEnterpriseIsolatedModeProfile() &&
++      !fly_profile.GetPrefs()->IsManagedPreference(prefs::kBrowserColorScheme) &&
 +      ui::NativeTheme::GetInstanceForWeb()->forced_colors() ==
 +          ui::ColorProviderKey::ForcedColors::kNone && g_browser_process) {
 +    auto* state = g_browser_process->local_state();
