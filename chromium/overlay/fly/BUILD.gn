@@ -5,12 +5,12 @@ import("//testing/test.gni")
 if (is_linux || is_win) {
   # Fly's browser UI. //chrome/browser:browser depends on it
   # (fly_browser_deps), and it includes headers of that target and of the
-  # targets split out of it. Like those, it takes the browser's public
-  # dependencies, which include every header the browser generates, so none is
-  # compiled before the headers it needs exist.
+  # targets split out of it. Declare Fly's own public/generated-header
+  # dependencies in integration.gni: Chromium no longer provides the
+  # browser_public_dependencies umbrella on every supported pin.
   source_set("browser_ui") {
     sources = fly_browser_ui_sources
-    public_deps = [ "//chrome/browser:browser_public_dependencies" ]
+    public_deps = fly_browser_ui_public_deps
     deps = fly_browser_ui_deps
     data_deps = fly_browser_ui_data_deps
   }
@@ -203,7 +203,6 @@ if (is_linux || is_win) {
       "//chrome/test/base:ui_test_utils",
       "//components/javascript_dialogs",
       "//components/content_settings/core/browser",
-      "//components/dom_distiller/core",
       "//components/performance_manager",
       "//components/password_manager/core/common",
       "//components/signin/public/base",
@@ -232,7 +231,6 @@ if (is_linux || is_win) {
       "//chrome/test/data/title1.html",
       "//chrome/test/data/favicon/page_with_favicon.html",
       "//chrome/test/data/favicon/icon.png",
-      "//chrome/test/data/dom_distiller/simple_article.html",
     ]
   }
 }
