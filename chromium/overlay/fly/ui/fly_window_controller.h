@@ -352,6 +352,7 @@ class FlyWindowController : public views::WidgetObserver,
   // Sidebar.
   std::unique_ptr<views::Widget> sidebar_widget_;
   raw_ptr<views::NativeViewHost> sidebar_host_ = nullptr;
+  bool sidebar_host_uses_clip_window_ = false;
   raw_ptr<views::View> sidebar_content_ = nullptr;
   raw_ptr<SidebarPanel> sidebar_panel_ = nullptr;
   raw_ptr<SidebarRoot> sidebar_root_ = nullptr;

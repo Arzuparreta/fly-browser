@@ -65,6 +65,7 @@
 #include "fly/ui/history_service.h"
 #include "fly/ui/keyboard_editor.h"
 #include "fly/ui/native_commands.h"
+#include "fly/ui/navigation_disposition.h"
 #include "fly/ui/new_tab_ui.h"
 #include "fly/ui/page_scroller.h"
 #include "fly/ui/sidebar_panel.h"
@@ -2401,7 +2402,7 @@ IN_PROC_BROWSER_TEST_F(FlyNavigationFeedbackBrowserTest,
   EXPECT_EQ(0, content::EvalJs(contents, "document.getAnimations().length"));
   ui_test_utils::NavigateToURLWithDisposition(
       browser(), server_.GetURL("/waiting"),
-      WindowOpenDisposition::NEW_BACKGROUND_TAB,
+      NewBackgroundTabDisposition(),
       ui_test_utils::BROWSER_TEST_NO_WAIT);
   EXPECT_EQ(contents, Active(browser()));
   waiting_->WaitForRequest();
@@ -2811,7 +2812,7 @@ IN_PROC_BROWSER_TEST_F(FlyWorkspaceBrowserTest,
                        QuietBackgroundNewTabHasNoTelemetryOrHistoryWork) {
   const auto queries = App().new_tab_history().query_count_for_testing();
   ASSERT_TRUE(ui_test_utils::NavigateToURLWithDisposition(
-      browser(), GURL(kFlyNewTabURL), WindowOpenDisposition::NEW_BACKGROUND_TAB,
+      browser(), GURL(kFlyNewTabURL), NewBackgroundTabDisposition(),
       ui_test_utils::BROWSER_TEST_WAIT_FOR_LOAD_STOP));
   auto* model = browser()->GetTabStripModel();
   auto* contents = model->GetWebContentsAt(model->count() - 1);
@@ -6006,7 +6007,7 @@ IN_PROC_BROWSER_TEST_F(FlyWorkspaceBrowserTest, DashboardDragReordersTabs) {
       browser(), embedded_test_server()->GetURL("/title1.html")));
   ASSERT_TRUE(ui_test_utils::NavigateToURLWithDisposition(
       browser(), embedded_test_server()->GetURL("/title2.html"),
-      WindowOpenDisposition::NEW_FOREGROUND_TAB,
+      NewForegroundTabDisposition(),
       ui_test_utils::BROWSER_TEST_WAIT_FOR_LOAD_STOP));
   auto* model = browser()->GetTabStripModel();
   auto* first = model->GetWebContentsAt(0);
@@ -6041,7 +6042,7 @@ IN_PROC_BROWSER_TEST_F(FlyWorkspaceBrowserTest,
       original, embedded_test_server()->GetURL("/title1.html")));
   ASSERT_TRUE(ui_test_utils::NavigateToURLWithDisposition(
       original, embedded_test_server()->GetURL("/title2.html"),
-      WindowOpenDisposition::NEW_FOREGROUND_TAB,
+      NewForegroundTabDisposition(),
       ui_test_utils::BROWSER_TEST_WAIT_FOR_LOAD_STOP));
   original->GetTabStripModel()->SetTabPinned(1, true);
   App().CreateWorkspace("Second");
@@ -8221,8 +8222,8 @@ class FlyTabMenuBrowserTest : public FlyWorkspaceBrowserTest {
     auto native_point = point;
     wm::ConvertPointFromScreen(root_window, &native_point);
     auto* native_target = root_window->GetEventHandlerForPoint(native_point);
-    const std::string native_target_name =
-        native_target ? native_target->GetName() : "<none>";
+    const std::string native_target_name(
+        native_target ? native_target->GetName() : "<none>");
     auto* root_view = sidebar->GetWidget()->GetRootView();
     auto view_point = point;
     views::View::ConvertPointFromScreen(root_view, &view_point);
