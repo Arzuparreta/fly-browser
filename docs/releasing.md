@@ -147,6 +147,12 @@ dependencies and fingerprint, regenerates `out/FlyRelease`, builds `chrome` and
 binary without rebuilding it. Provisioning the host and validating a packaged
 browser are separate from the lightweight PR checks.
 
+Publication does not refresh or rebuild `out/FlyNative` afterwards. The owner
+normally tests the published release through `fly-install`, exercising its
+installation/update path too. Update the local development browser only on an
+explicit request. Native acceptance builds in isolated roots and the
+`out/FlyRelease` build required for packaging remain part of the release gates.
+
 Local equivalent after preparing the overlay:
 
 ```sh

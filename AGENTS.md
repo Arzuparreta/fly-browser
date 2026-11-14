@@ -45,22 +45,21 @@
   with `scripts/release.js` (see `docs/releasing.md`, or `/release`).
 - The PR description says what changed and why, how it was validated and what
   remains unverified or limited. Report failures and gaps honestly.
-- After every runtime or visual change, including each iteration the owner is
-  about to try, update the local native build before handing it back so the
-  owner can test with the usual `./launch.sh`. Sync this task's overlay into
-  the engine checkout with `scripts/chromium/native.py refresh-overlay`,
-  configure as required and rebuild `chrome`, including its runtime resources.
-  Verify that the default launcher selects that updated build. Updating Git or
-  passing `npm test` alone does not make the local browser current. If the build
-  is unavailable or fails, report that explicitly. Preserve the owner's running
-  session and say when a full restart is needed to load the changes.
-  Documentation-only changes do not require a native rebuild.
+- The owner normally tests published releases through `fly-install`, including
+  their installation/update path. Refresh or rebuild the owner's local
+  development browser (`out/FlyNative`, `./launch.sh`) only when explicitly
+  requested; runtime changes, merges and releases do not imply that request.
+  Preserve the running session. Required native acceptance builds/tests still
+  run in isolated validation roots, and release packaging still builds
+  `out/FlyRelease`. Report merged source, native validation, published packages
+  and the owner's installed/running browser as separate evidence.
 - New Fly sources and dependencies go into
   `chromium/overlay/fly/integration.gni`, not into new hunks in upstream
   `BUILD.gn` files. Chromium updates are automatic
   (`docs/chromium/engine-updates.md`); when main moved the Chromium pin, bring
-  `origin/main` into your branch and run
-  `python3 scripts/chromium/engine_update.py upgrade --root /mnt/storage/fly-chromium`.
+  `origin/main` into your branch and follow its validation/release procedure.
+  Use the isolated candidate/repair roots for acceptance; updating a local
+  development launcher requires the explicit request described above.
 - Run `npm test` and `git diff --check` before pushing (and `npm run docs:build` when docs change). Actions, their default
   bindings and the Command Centre entries live in
   `chromium/overlay/fly/commands/actions.json` and `commands.json`; after
