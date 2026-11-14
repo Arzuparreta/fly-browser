@@ -403,6 +403,11 @@ number of times. If upstream remains unavailable, native repair validation
 defers without spending another code proposal. The final Beta freshness check
 reads only the current release revision; it does not refetch tools, DEPS or
 VERSION just to confirm that the validated Beta target has not changed.
+The engine jobs preserve their logs, structured proposals and independent review
+verdicts in `engine-update-diagnostics` and `engine-repair-diagnostics` Actions
+artifacts for seven days, including failed attempts. Python output is unbuffered
+so failure comments end
+with the actual error rather than earlier successful replay messages.
 
 ### Starting a Beta patch repair
 
