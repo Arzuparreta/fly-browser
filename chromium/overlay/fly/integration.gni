@@ -115,7 +115,9 @@ if (is_linux || is_win) {
 fly_browser_tests_sources = []
 fly_browser_tests_deps = []
 if (is_linux || is_win) {
-  fly_browser_tests_sources += [ "//fly/test/workspace_browser_test.cc" ]
+  fly_browser_tests_sources += [
+    "//fly/test/workspace_browser_test.cc",
+  ]
   fly_browser_tests_deps += [
     "//ui/snapshot",
     "//chrome/browser/favicon",
@@ -141,3 +143,10 @@ fly_prefs_impl_deps = [
 # explicit backend overrides in Fly's small native unit-test target.
 fly_cache_test_sources = [ "//net/disk_cache/cache_util_unittest.cc" ]
 fly_cache_test_deps = [ "//net" ]
+
+# Pure compatibility regressions run in //fly:fly_unittests. Keep these lists
+# open for scoped repair entries without permitting new GN statements.
+fly_compatibility_test_sources = [
+]
+fly_compatibility_test_deps = [
+]

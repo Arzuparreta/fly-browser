@@ -139,6 +139,14 @@ jobs:
         env:
           FLY_ENGINE_RELEASE: ${{ vars.FLY_ENGINE_RELEASE }}
         run: scripts/chromium/engine-update-ci.sh release
+      - name: Preserve Stable update diagnostics
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: engine-update-diagnostics-${{ github.run_id }}
+          path: ${{ runner.temp }}/engine-update-logs
+          if-no-files-found: ignore
+          retention-days: 7
 
   repair:
     name: Repair Chromium Beta compatibility
@@ -160,3 +168,11 @@ jobs:
         # has its own job and is never contingent on a Beta result.
         continue-on-error: true
         run: scripts/chromium/engine-update-ci.sh beta
+      - name: Preserve repair proposals, reviews and validation diagnostics
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: engine-repair-diagnostics-${{ github.run_id }}
+          path: ${{ runner.temp }}/engine-update-logs
+          if-no-files-found: ignore
+          retention-days: 7

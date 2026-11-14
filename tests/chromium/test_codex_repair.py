@@ -37,6 +37,9 @@ class ScopeTests(unittest.TestCase):
                  'chromium/patches/series', 'chromium/overlay/fly/fly_version.h',
                  'chromium/overlay/fly/resources/file.cc',
                  'chromium/overlay/fly/test/workspace_browser_test.cc',
+                 'chromium/overlay/fly/preferences/search_service_unittest.cc',
+                 'chromium/overlay/fly/bookmarks/bookmark_service_unittest.cc',
+                 'chromium/overlay/fly/app/feature_defaults_unittest.cc',
                  'chromium/overlay/fly/commands/actions.json']
         for name in names:
             with self.subTest(name=name), self.assertRaises(RuntimeError):
@@ -69,6 +72,42 @@ class ScopeTests(unittest.TestCase):
         with self.assertRaises(RuntimeError):
             codex_repair.changes({'chromium/overlay/fly/ui/a.cc': b'a', 'AGENTS.md': b'old'},
                                  {'chromium/overlay/fly/ui/a.cc': b'b', 'AGENTS.md': b'new'})
+
+    def test_only_compatibility_tests_introduced_since_base_can_be_refined(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            repo = Path(tmp)
+            old = 'chromium/overlay/fly/preferences/search_service_unittest.cc'
+            old_compat = 'chromium/overlay/fly/test/compat_existing_test.cc'
+            new = 'chromium/overlay/fly/test/compat_repair_test.cc'
+            (repo / old).parent.mkdir(parents=True)
+            (repo / old).write_bytes(b'base assertion')
+            (repo / old_compat).parent.mkdir(parents=True)
+            (repo / old_compat).write_bytes(b'base compatibility assertion')
+            def git(*args):
+                return subprocess.run(['git', *args], cwd=repo, check=True,
+                                      text=True, capture_output=True).stdout.strip()
+            git('init', '--quiet')
+            git('add', '.')
+            git('-c', 'user.name=Fixture', '-c', 'user.email=fixture@invalid.example',
+                'commit', '--quiet', '-m', 'base')
+            base = git('rev-parse', 'HEAD')
+            (repo / new).parent.mkdir(parents=True, exist_ok=True)
+            (repo / new).write_bytes(b'new assertion')
+            (repo / old_compat).write_bytes(b'weakened compatibility assertion')
+            git('add', '.')
+            git('-c', 'user.name=Fixture', '-c', 'user.email=fixture@invalid.example',
+                'commit', '--quiet', '-m', 'repair regression')
+            editable = codex_repair.introduced_tests(base, repo)
+            self.assertEqual(editable, {new})
+            with self.assertRaises(RuntimeError):
+                codex_repair.scope(base, repo=repo)
+            self.assertEqual(codex_repair.changes({new: b'new assertion'},
+                {new: b'corrected assertion'}, editable), {new: b'corrected assertion'})
+            for before, after in (({old: b'base assertion'}, {old: b'weakened'}),
+                                   ({old_compat: b'base compatibility assertion'}, {old_compat: b'weakened'}),
+                                   ({new: b'new assertion'}, {})):
+                with self.assertRaises(RuntimeError):
+                    codex_repair.changes(before, after, editable)
 
 
 class SandboxTests(unittest.TestCase):
@@ -150,6 +189,26 @@ class SandboxTests(unittest.TestCase):
             self.assertEqual(rules.get('/tmp/repair-test/worktree/chromium/patches') == 'write', writable)
             self.assertEqual(rules['/tmp/repair-test/worktree/chromium/patches/series'], 'read')
             self.assertIn('shell_environment_policy.inherit="none"', arguments)
+
+    def test_test_write_permissions_preserve_base_tests_and_read_only_review(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            repo = Path(tmp)
+            old = 'chromium/overlay/fly/preferences/search_service_unittest.cc'
+            new = 'chromium/overlay/fly/test/compat_repair_test.cc'
+            for name in (old, new):
+                (repo / name).parent.mkdir(parents=True, exist_ok=True)
+                (repo / name).touch()
+            for writable in (True, False):
+                arguments = repair_sandbox.codex_options(repo, [], writable, editable_tests={new})
+                profile = next(arg for arg in arguments if arg.startswith('permissions.fly-repair.filesystem='))
+                rules = tomllib.loads('rules=' + profile.split('=', 1)[1])['rules']
+                if writable:
+                    self.assertEqual(rules[str(repo / old)], 'read')
+                    self.assertNotIn(str(repo / new), rules)
+                    self.assertEqual(rules[str(repo / 'chromium/overlay/fly')], 'write')
+                else:
+                    self.assertNotIn('write', [value for name, value in rules.items()
+                                              if name.startswith(str(repo / 'chromium'))])
 
     def test_build_has_no_host_home_credentials_network_or_display(self):
         with tempfile.TemporaryDirectory() as tmp, patch.object(repair_sandbox.shutil, 'which', return_value='/usr/bin/bwrap'):

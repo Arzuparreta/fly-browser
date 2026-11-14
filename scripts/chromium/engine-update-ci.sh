@@ -16,6 +16,9 @@
 # pull request would never receive its checks. docs/chromium/engine-updates.md
 # describes the process.
 set -euo pipefail
+# Keep replay output ahead of a later exception in captured Python logs, so
+# failure comments retain the diagnostic instead of a buffered success list.
+export PYTHONUNBUFFERED=1
 
 BRANCH=${FLY_ENGINE_UPDATE_BRANCH:-engine/chromium-stable}
 CONTEXT=engine-validation

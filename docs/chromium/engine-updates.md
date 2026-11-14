@@ -342,6 +342,17 @@ must remain unchanged; new sources/dependencies go through `integration.gni`.
 File count and proposal size are bounded, and symlinks are refused. For Beta,
 the same complete patch series must still apply to current Stable.
 
+Pure compatibility regressions use the predeclared
+`fly_compatibility_test_sources` and `fly_compatibility_test_deps` lists in
+`integration.gni` and run in `fly_unittests`. Platform-specific headers and
+test bodies must be guarded in C++, so adding a test never needs a new GN
+conditional. Browser regressions use `fly_browser_tests_sources`, which also
+feeds the scoped native browser target, and must match its
+`Fly*BrowserTest.*` filter. A later attempt may refine a `compat_*_test.cc`
+introduced by this repair branch. Tests already present on the base commit
+stay read-only; ownership comes from trusted Git history rather than model
+claims or its disposable Git index. Scope checks enforce the same distinction.
+
 A fresh read-only Codex execution reviews the actual diff against current
 main and the upstream callers, including committed changes. It must explicitly
 approve with no findings. The proposer cannot approve itself or set commit
@@ -403,6 +414,11 @@ number of times. If upstream remains unavailable, native repair validation
 defers without spending another code proposal. The final Beta freshness check
 reads only the current release revision; it does not refetch tools, DEPS or
 VERSION just to confirm that the validated Beta target has not changed.
+The engine jobs preserve their logs, structured proposals and independent review
+verdicts in `engine-update-diagnostics` and `engine-repair-diagnostics` Actions
+artifacts for seven days, including failed attempts. Python output is unbuffered
+so failure comments end
+with the actual error rather than earlier successful replay messages.
 
 ### Starting a Beta patch repair
 
