@@ -65,6 +65,36 @@ stays `npm test`, with no new required checks, branch rules or PR-body template.
 Already merged history is not rewritten. The only reserved branch names are
 `release/v*`.
 
+## When to publish
+
+Publish when merged work changes the Stable product people receive: a feature,
+fix, security or performance improvement, runtime resource, or installation or
+update behavior. Reliability fixes count even when the interface looks the
+same. A new Chromium Stable pin is a shipping change.
+
+Documentation, CI, tests, internal refactoring that preserves product behavior,
+and preparation for a future Chromium Beta belong to the next warranted
+release. Beta preparation that also fixes the current Stable product needs the
+corresponding impact label and a release.
+
+Assess the merged changes against the last release using `plan` and the diff.
+Impact labels record that assessment and determine the version. If all changes
+are correctly labelled `impact:none`, report that no release is needed. If a
+shipping change was mislabelled, correct its label based on its actual effect.
+Source-code changes and time spent compiling do not establish a reason to
+publish by themselves.
+
+This is a product-change decision, not a byte-for-byte comparison of executables.
+Version strings, build metadata and repackaging can change hashes without
+delivering an improvement. Do not add a comparison build solely to decide
+whether to release; native acceptance and official packaging keep their usual
+gates.
+
+A request to release or publish current `main` authorizes the complete gated
+publication when there is a shipping change. It does not require an empty
+release when only maintenance remains. Do not use `--version` to force one;
+that option remains for deliberate version-policy decisions.
+
 ## Cutting a release
 
 ```bash
@@ -82,28 +112,11 @@ In Claude Code, `/release` runs these steps and waits between them.
 
 `--rc` cuts a release candidate. `--version X.Y.Z` overrides the derived number, which is how 1.0 will eventually happen: a label cannot decide that.
 
-### Explicitly publishing current main
-
-An explicit owner request to publish a release with everything on `main` is
-publication authorization even if all merged PRs have `impact:none`. The
-planner's default refusal in that case means automatic version selection found
-no user-visible impact; it does not cancel the requested release. Keep those
-labels accurate instead of relabelling internal changes to force a release.
-
-When that default is the only reason planning stops, derive the next patch
-version through the existing tooling and use its explicit-version path:
-
-```sh
-task_release_version=$(node -p 'require("./scripts/release").nextVersion(require("./scripts/version-sync").declaredVersion(), "patch")')
-node scripts/release.js plan --version "$task_release_version"
-node scripts/release.js prepare --version "$task_release_version"
-```
-
-Use a dedicated worktree from current `origin/main` and complete the usual local
-checks, version PR, latest-head CI, merge/tag, release build, signed packages,
-public asset verification and cleanup. An orchestrator may use `--hold` while
-it supervises PR checks separately; the publication request already authorizes
-the gated merge. Do not stop at preparation or ask for that authorization again.
+When publication is warranted, use a dedicated worktree from current
+`origin/main` and complete the usual local checks, version PR, latest-head CI,
+merge/tag, release build, signed packages, public asset verification and
+cleanup. An orchestrator may use `--hold` while it supervises PR checks
+separately; the publication request already authorizes the gated merge.
 
 The owner's request to omit a local development rebuild affects only
 `out/FlyNative`/`./launch.sh`. It does not omit the official `out/FlyRelease`

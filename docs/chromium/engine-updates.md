@@ -68,11 +68,14 @@ Explicit limits in the owner's request take precedence.
    supervise the bump PR, tagging, release and package jobs through completion.
    If the automatic workflow already started that release, finish supervising
    it instead of creating another one. Release numbers come from the tooling.
-   Future-Beta preparation alone does not automatically trigger publication.
-   An explicit request to release all of main still requires publication; use
-   [the explicit publication procedure](../releasing.md#explicitly-publishing-current-main)
-   even when all impact labels are `none`. Omitting the local development
-   rebuild does not omit the release build or publication.
+   Apply [the publication criterion](../releasing.md#when-to-publish) to the
+   shipped Stable product. Future-Beta preparation and maintenance alone do
+   not require a release, even when the task includes a request to release.
+   Report that outcome instead of forcing a version bump for correctly
+   labelled `impact:none` changes. If the repair also fixes Stable, label its
+   actual impact and publish it. No literal binary comparison or extra
+   preflight build is required. Omitting the local development rebuild does
+   not omit the build or publication of a warranted release.
    The invocation authorizes pushes, gated PR merges and release
    publication; do not stop to request that authorization again.
 5. Verify the published release and its downloadable assets/checksums when a
