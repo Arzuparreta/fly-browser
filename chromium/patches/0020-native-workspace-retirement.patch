@@ -102,19 +102,22 @@
        Profile* profile =
            profile_manager->GetProfile(profile_manager->user_data_dir().Append(
                base::FilePath::FromUTF8Unsafe(*profile_base_name)));
-@@ -950,12 +961,32 @@
-       local_state->GetFilePath(prefs::kProfileLastUsed);
-   // Make sure the system profile can't be the one marked as the last one used
-   // since it shouldn't get a browser.
--  if (!last_used_profile_base_name.empty() &&
--      last_used_profile_base_name.value() != chrome::kSystemProfileDir) {
--    return last_used_profile_base_name;
-+  if (last_used_profile_base_name.empty() ||
-+      last_used_profile_base_name.value() == chrome::kSystemProfileDir) {
-+    last_used_profile_base_name = base::FilePath::FromASCII(chrome::kInitialProfile);
-+  }
+@@ -946,3 +957,35 @@
+ // static
+ base::FilePath ProfileManager::GetLastUsedProfileBaseName() {
 +#if BUILDFLAG(IS_LINUX) || BUILDFLAG(IS_WIN)
 +  if (base::CommandLine::ForCurrentProcess()->HasSwitch("fly-native")) {
++    PrefService* local_state = g_browser_process->local_state();
++    CHECK(local_state);
++    // Keep the desktop default/system-profile normalization shared by Stable
++    // and Beta before applying Fly's persistent retirement policy.
++    auto last_used_profile_base_name =
++        local_state->GetFilePath(prefs::kProfileLastUsed);
++    if (last_used_profile_base_name.empty() ||
++        last_used_profile_base_name.value() == chrome::kSystemProfileDir) {
++      last_used_profile_base_name =
++          base::FilePath::FromASCII(chrome::kInitialProfile);
++    }
 +    fly::WorkspaceService workspaces(*local_state);
 +    if (workspaces.IsProfileRetired(last_used_profile_base_name.AsUTF8Unsafe())
 +            .value_or(false)) {
@@ -132,11 +135,6 @@
 +      local_state->SetFilePath(prefs::kProfileLastUsed, fresh);
 +      return fresh;
 +    }
-   }
--
--  return base::FilePath::FromASCII(chrome::kInitialProfile);
++  }
 +#endif
-+  return last_used_profile_base_name;
- }
- 
- base::FilePath ProfileManager::GetProfileDirForEmail(const std::string& email) {
+   PrefService* local_state = g_browser_process->local_state();
