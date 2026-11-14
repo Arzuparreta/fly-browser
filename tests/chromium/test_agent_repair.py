@@ -16,7 +16,8 @@ from unittest.mock import patch
 
 ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(ROOT / 'scripts/chromium'))
-import codex_repair
+import agent_repair
+import repair_agents
 import engine
 import repair_sandbox
 
@@ -25,10 +26,10 @@ PATCH = b'--- a/chrome/file.cc\n+++ b/chrome/file.cc\n@@ -1,3 +1,3 @@\n top\n-ol
 
 class ScopeTests(unittest.TestCase):
     def test_adapters_existing_patches_and_new_compatibility_tests_are_allowed(self):
-        codex_repair.guarded_change('chromium/patches/0001.patch', PATCH, PATCH.replace(b'+Fly', b'+FlyAPI'))
-        codex_repair.guarded_change('chromium/overlay/fly/ui/adapter.cc', b'old', b'new')
-        codex_repair.guarded_change('chromium/overlay/fly/test/compat_profile_test.cc', None, b'test')
-        codex_repair.guarded_change('chromium/overlay/fly/integration.gni',
+        agent_repair.guarded_change('chromium/patches/0001.patch', PATCH, PATCH.replace(b'+Fly', b'+FlyAPI'))
+        agent_repair.guarded_change('chromium/overlay/fly/ui/adapter.cc', b'old', b'new')
+        agent_repair.guarded_change('chromium/overlay/fly/test/compat_profile_test.cc', None, b'test')
+        agent_repair.guarded_change('chromium/overlay/fly/integration.gni',
                                    b'  "//fly/old.cc",\n', b'  "//fly/old.cc",\n  "//fly/new.cc",\n')
 
     def test_model_cannot_change_authority_pin_versions_resources_or_existing_tests(self):
@@ -43,7 +44,7 @@ class ScopeTests(unittest.TestCase):
                  'chromium/overlay/fly/commands/actions.json']
         for name in names:
             with self.subTest(name=name), self.assertRaises(RuntimeError):
-                codex_repair.guarded_change(name, b'old', b'new')
+                agent_repair.guarded_change(name, b'old', b'new')
 
     def test_cannot_delete_sources_add_patches_or_inject_build_execution(self):
         for name, before, after in [
@@ -53,14 +54,14 @@ class ScopeTests(unittest.TestCase):
             ('chromium/patches/0001.patch', PATCH, PATCH.replace(b'+Fly', b'+exec_script("steal.py")')),
         ]:
             with self.subTest(name=name), self.assertRaises((RuntimeError, ValueError)):
-                codex_repair.guarded_change(name, before, after)
+                agent_repair.guarded_change(name, before, after)
 
     def test_new_upstream_build_hooks_are_refused_but_context_changes_are_allowed(self):
         original = PATCH.replace(b'chrome/file.cc', b'chrome/BUILD.gn')
-        codex_repair.guarded_change('chromium/patches/0001.patch', original,
+        agent_repair.guarded_change('chromium/patches/0001.patch', original,
                                    original.replace(b' top\n', b' new top\n'))
         with self.assertRaisesRegex(RuntimeError, 'integration.gni'):
-            codex_repair.guarded_change('chromium/patches/0001.patch', original,
+            agent_repair.guarded_change('chromium/patches/0001.patch', original,
                                        original.replace(b'+Fly', b'+"//fly/new.cc",'))
 
     def test_symlinks_and_late_forbidden_changes_are_not_proposals(self):
@@ -68,9 +69,9 @@ class ScopeTests(unittest.TestCase):
             root = Path(tmp)
             (root / 'link').symlink_to('/etc/passwd')
             with self.assertRaisesRegex(RuntimeError, 'Symlink'):
-                codex_repair.tree(root)
+                agent_repair.tree(root)
         with self.assertRaises(RuntimeError):
-            codex_repair.changes({'chromium/overlay/fly/ui/a.cc': b'a', 'AGENTS.md': b'old'},
+            agent_repair.changes({'chromium/overlay/fly/ui/a.cc': b'a', 'AGENTS.md': b'old'},
                                  {'chromium/overlay/fly/ui/a.cc': b'b', 'AGENTS.md': b'new'})
 
     def test_only_compatibility_tests_introduced_since_base_can_be_refined(self):
@@ -97,20 +98,35 @@ class ScopeTests(unittest.TestCase):
             git('add', '.')
             git('-c', 'user.name=Fixture', '-c', 'user.email=fixture@invalid.example',
                 'commit', '--quiet', '-m', 'repair regression')
-            editable = codex_repair.introduced_tests(base, repo)
+            editable = agent_repair.introduced_tests(base, repo)
             self.assertEqual(editable, {new})
             with self.assertRaises(RuntimeError):
-                codex_repair.scope(base, repo=repo)
-            self.assertEqual(codex_repair.changes({new: b'new assertion'},
+                agent_repair.scope(base, repo=repo)
+            self.assertEqual(agent_repair.changes({new: b'new assertion'},
                 {new: b'corrected assertion'}, editable), {new: b'corrected assertion'})
             for before, after in (({old: b'base assertion'}, {old: b'weakened'}),
                                    ({old_compat: b'base compatibility assertion'}, {old_compat: b'weakened'}),
                                    ({new: b'new assertion'}, {})):
                 with self.assertRaises(RuntimeError):
-                    codex_repair.changes(before, after, editable)
+                    agent_repair.changes(before, after, editable)
 
 
 class SandboxTests(unittest.TestCase):
+    def test_atomic_root_lease_defers_a_race_and_preserves_the_other_owner(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            with engine.exclusive(root):
+                owner = (root / '.fly-engine-operation/owner.json').read_bytes()
+                with self.assertRaises(agent_repair.DeferredRepair):
+                    with agent_repair.owned_root(root):
+                        self.fail('A busy root was acquired')
+                self.assertEqual((root / '.fly-engine-operation/owner.json').read_bytes(), owner)
+            with agent_repair.owned_root(root) as token:
+                self.assertEqual(os.environ[engine.LEASE_TOKEN], token)
+                with engine.exclusive(root):
+                    pass  # The sandbox child uses the same reentrant token.
+            self.assertFalse((root / '.fly-engine-operation').exists())
+
     def test_only_cli_failure_events_classify_an_exhausted_quota(self):
         with tempfile.TemporaryDirectory() as tmp:
             log = Path(tmp) / 'codex.log'
@@ -159,8 +175,8 @@ class SandboxTests(unittest.TestCase):
             try:
                 self.assertIsNone(process.poll(), 'The fixture must still be running')
                 self.assertEqual((Path('/proc') / str(process.pid) / 'exe').readlink(), binary)
-                with self.assertRaisesRegex(codex_repair.DeferredRepair, 'preserve its session'):
-                    codex_repair.idle_output(root)
+                with self.assertRaisesRegex(agent_repair.DeferredRepair, 'preserve its session'):
+                    agent_repair.idle_output(root)
                 self.assertIsNone(process.poll())
             finally:
                 process.terminate()
@@ -171,13 +187,17 @@ class SandboxTests(unittest.TestCase):
             tool = repo / 'tool.sh'
             tool.write_text('#!/bin/sh\nexit 0\n')
             tool.chmod(0o755)
+            obsolete = repo / 'obsolete_test.py'
+            obsolete.write_text('old fixture')
             for command in (['git', 'init', '--quiet'], ['git', 'add', '.'],
                             ['git', '-c', 'user.name=Fixture', '-c', 'user.email=fixture@invalid.example',
                              'commit', '--quiet', '-m', 'fixture']):
                 subprocess.run(command, cwd=repo, check=True, capture_output=True)
-            with codex_repair.proposal(repo) as workspace:
+            subprocess.run(['git', 'rm', '--quiet', 'obsolete_test.py'], cwd=repo, check=True)
+            with agent_repair.proposal(repo) as workspace:
                 self.assertTrue((workspace / 'tool.sh').stat().st_mode & 0o111)
-                self.assertEqual(subprocess.run(['git', 'diff', '--summary', 'HEAD'], cwd=workspace,
+                self.assertFalse((workspace / 'obsolete_test.py').exists())
+                self.assertEqual(subprocess.run(['git', 'diff', '--summary', 'HEAD', '--', 'tool.sh'], cwd=workspace,
                                                capture_output=True, text=True, check=True).stdout, '')
                 self.assertFalse((workspace.parent / 'repo.git/objects/info/alternates').exists())
 
@@ -261,70 +281,70 @@ class SandboxTests(unittest.TestCase):
 class BudgetAndReviewTests(unittest.TestCase):
     def test_exhausted_review_quota_returns_deferral_for_the_ci_driver(self):
         with tempfile.TemporaryDirectory() as tmp, \
-                patch.object(sys, 'argv', ['codex_repair.py', 'validate', '--logs', tmp]), \
-                patch.object(codex_repair, 'target', return_value={}), \
-                patch.object(codex_repair, 'validate', side_effect=repair_sandbox.CodexQuotaUnavailable('Usage limit reached')):
-            self.assertEqual(codex_repair.main(), 2)
+                patch.object(sys, 'argv', ['agent_repair.py', 'validate', '--logs', tmp]), \
+                patch.object(agent_repair, 'target', return_value={}), \
+                patch.object(agent_repair, 'validate', side_effect=repair_sandbox.CodexQuotaUnavailable('Usage limit reached')):
+            self.assertEqual(agent_repair.main(), 2)
 
     def test_upstream_outage_defers_without_running_a_proposer(self):
         with tempfile.TemporaryDirectory() as tmp, \
-                patch.object(sys, 'argv', ['codex_repair.py', 'validate', '--logs', tmp]), \
-                patch.object(codex_repair, 'target', side_effect=urllib.error.URLError('unavailable')), \
-                patch.object(codex_repair, 'validate') as validate:
-            self.assertEqual(codex_repair.main(), 2)
+                patch.object(sys, 'argv', ['agent_repair.py', 'validate', '--logs', tmp]), \
+                patch.object(agent_repair, 'target', side_effect=urllib.error.URLError('unavailable')), \
+                patch.object(agent_repair, 'validate') as validate:
+            self.assertEqual(agent_repair.main(), 2)
             validate.assert_not_called()
 
     def test_total_deadline_is_not_reset_between_repair_phases(self):
         with tempfile.TemporaryDirectory() as tmp:
             args = argparse.Namespace(logs=Path(tmp))
-            with patch.object(codex_repair.time, 'time', return_value=0):
-                self.assertEqual(codex_repair.time_left(args, 1200), 1200)
-            with patch.object(codex_repair.time, 'time', return_value=45 * 3600 - 10):
-                self.assertEqual(codex_repair.time_left(args, 1200), 10)
-            with patch.object(codex_repair.time, 'time', return_value=45 * 3600 + 1):
+            with patch.object(agent_repair.time, 'time', return_value=0):
+                self.assertEqual(agent_repair.time_left(args, 1200), 1200)
+            with patch.object(agent_repair.time, 'time', return_value=45 * 3600 - 10):
+                self.assertEqual(agent_repair.time_left(args, 1200), 10)
+            with patch.object(agent_repair.time, 'time', return_value=45 * 3600 + 1):
                 with self.assertRaisesRegex(RuntimeError, 'time budget exhausted'):
-                    codex_repair.time_left(args, 1200)
+                    agent_repair.time_left(args, 1200)
     def test_beta_resolution_timestamps_do_not_invalidate_unchanged_pins(self):
         first = dict(engine.read_lock(), channel='Beta', platform='Linux', resolved_at='first')
         second = dict(first, resolved_at='second')
-        with tempfile.TemporaryDirectory() as tmp, patch.object(codex_repair.engine_update, 'load_pin') as pin:
+        with tempfile.TemporaryDirectory() as tmp, patch.object(agent_repair.engine_update, 'load_pin') as pin:
             pin.return_value.resolve.side_effect = [first, second]
             args = argparse.Namespace(logs=Path(tmp), channel='Beta')
-            original = codex_repair.target(args)
+            original = agent_repair.target(args)
             (Path(tmp) / 'target.lock.json').unlink()
-            self.assertEqual(codex_repair.target(args), original)
+            self.assertEqual(agent_repair.target(args), original)
             self.assertNotIn('resolved_at', original)
 
     def test_validation_cache_is_bound_to_full_trees_target_source_and_validator(self):
         values = {'HEAD^{tree}': 'head', 'origin/main^{tree}': 'base', 'validator': 'v1'}
         with patch.object(engine, 'git', side_effect=lambda repo, *args: values[args[-1]]), \
                 patch.object(engine, 'digest', side_effect=lambda file: values['validator'] + str(file)), \
-                patch.object(codex_repair.native, 'fingerprint', return_value='source'):
+                patch.object(agent_repair.native, 'fingerprint', return_value='source'):
             args = argparse.Namespace(base='origin/main')
             target = {'revision': 'one'}
-            original = codex_repair.validation_key(args, target)
+            original = agent_repair.validation_key(args, target)
             for name in ('HEAD^{tree}', 'origin/main^{tree}', 'validator'):
                 values[name] += '-changed'
-                self.assertNotEqual(codex_repair.validation_key(args, target), original)
+                self.assertNotEqual(agent_repair.validation_key(args, target), original)
                 values[name] = values[name].removesuffix('-changed')
-            self.assertNotEqual(codex_repair.validation_key(args, {'revision': 'two'}), original)
+            self.assertNotEqual(agent_repair.validation_key(args, {'revision': 'two'}), original)
 
     def test_rejected_review_never_creates_a_native_success_certificate(self):
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
             args = argparse.Namespace(logs=root, base='origin/main', channel='Beta')
-            with patch.object(codex_repair, 'scope'), \
-                    patch.object(codex_repair, 'roots', return_value=(root / 'active', root / 'candidate', root / 'beta')), \
-                    patch.object(codex_repair, 'validation_key', return_value='key'), \
-                    patch.object(codex_repair, 'state_directory', return_value=root), \
-                    patch.object(codex_repair, 'prepare', return_value=root / 'beta'), \
-                    patch.object(codex_repair, 'prepare_source'), \
-                    patch.object(codex_repair, 'proposal', return_value=contextlib.nullcontext(root)), \
-                    patch.object(codex_repair, 'replay'), \
-                    patch.object(codex_repair, 'review', side_effect=RuntimeError('rejected')), \
+            with patch.object(agent_repair, 'scope'), \
+                    patch.object(agent_repair, 'roots', return_value=(root / 'active', root / 'candidate', root / 'beta')), \
+                    patch.object(agent_repair, 'validation_key', return_value='key'), \
+                    patch.object(agent_repair, 'state_directory', return_value=root), \
+                    patch.object(agent_repair, 'prepare', return_value=root / 'beta'), \
+                    patch.object(agent_repair, 'prepare_source'), \
+                    patch.object(agent_repair, 'proposal', return_value=contextlib.nullcontext(root)), \
+                    patch.object(agent_repair, 'replay'), \
+                    patch.object(agent_repair, 'review', side_effect=RuntimeError('rejected')), \
                     patch.object(repair_sandbox, 'run') as native:
                 with self.assertRaisesRegex(RuntimeError, 'rejected'):
-                    codex_repair.validate(args, {})
+                    agent_repair.validate(args, {})
                 self.assertFalse((root / 'validated-key.json').exists())
                 native.assert_not_called()
 
@@ -334,33 +354,33 @@ class BudgetAndReviewTests(unittest.TestCase):
                 patch.object(engine, 'git', return_value='base-chromium-tree'):
             args = argparse.Namespace(base='origin/main')
             frozen = {'chromium': {'revision': 'a' * 40}}
-            self.assertEqual(codex_repair.reserve_attempt(args, frozen), 1)
-            self.assertEqual(codex_repair.reserve_attempt(args, frozen), 2)
+            self.assertEqual(agent_repair.reserve_attempt(args, frozen), 1)
+            self.assertEqual(agent_repair.reserve_attempt(args, frozen), 2)
             with self.assertRaisesRegex(RuntimeError, 'budget exhausted'):
-                codex_repair.reserve_attempt(args, frozen)
+                agent_repair.reserve_attempt(args, frozen)
             os.environ['FLY_ENGINE_REPAIR_RETRY'] = 'true'
-            self.assertEqual(codex_repair.reserve_attempt(args, frozen), 1)
-            self.assertEqual(codex_repair.reserve_attempt(args, frozen), 2)
+            self.assertEqual(agent_repair.reserve_attempt(args, frozen), 1)
+            self.assertEqual(agent_repair.reserve_attempt(args, frozen), 2)
             with self.assertRaisesRegex(RuntimeError, 'budget exhausted'):
-                codex_repair.reserve_attempt(args, frozen)
+                agent_repair.reserve_attempt(args, frozen)
 
     def test_review_covers_committed_changes_and_requires_unambiguous_approval(self):
         with tempfile.TemporaryDirectory() as tmp:
             args = argparse.Namespace(logs=Path(tmp), base='origin/main')
-            with patch.object(codex_repair, 'roots', return_value=(Path('/active'), Path('/candidate'), Path('/repair'))), \
+            with patch.object(agent_repair, 'roots', return_value=(Path('/active'), Path('/candidate'), Path('/repair'))), \
                     patch.object(engine, 'git', return_value='trusted-base-sha'), \
-                    patch.object(repair_sandbox, 'codex', return_value={'approved': False, 'findings': ['lost hook']}) as model:
+                    patch.object(repair_agents, 'run', return_value={'approved': False, 'findings': ['lost hook']}) as model:
                 with self.assertRaisesRegex(RuntimeError, 'review rejected'):
-                    codex_repair.review(Path(tmp), args, {}, Path('/repair'), Path(tmp) / 'review.json')
-                self.assertIn('git diff trusted-base-sha', model.call_args.args[3])
-                self.assertIn('committed AND uncommitted', model.call_args.args[3])
+                    agent_repair.review(Path(tmp), args, {}, Path('/repair'), Path(tmp) / 'review.json')
+                self.assertIn('git diff trusted-base-sha', model.call_args.args[2])
+                self.assertIn('committed AND uncommitted', model.call_args.args[2])
                 self.assertIs(model.call_args.args[-2], False)
                 self.assertLessEqual(model.call_args.args[-1], 1200)
 
     def test_root_aliasing_and_ancestor_paths_are_refused(self):
         args = argparse.Namespace(stable_root='/engine', candidate='/candidate', repair_root='/engine/subdir')
         with self.assertRaisesRegex(RuntimeError, 'separate'):
-            codex_repair.roots(args)
+            agent_repair.roots(args)
 
 
 if __name__ == '__main__':

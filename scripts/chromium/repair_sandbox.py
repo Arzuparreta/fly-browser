@@ -1,6 +1,6 @@
 """Isolation for engine repair proposals and untrusted native validation.
 
-The Codex client keeps its normal login, outside tool sandboxes. Its tools see
+Agent clients keep their normal login outside tool sandboxes. Their tools see
 only the proposal and public upstream sources. Native validation has its own
 filesystem/PID/network namespaces and an empty HOME, never the runner's login.
 """
@@ -12,9 +12,14 @@ import shutil
 import signal
 import socket
 import subprocess
+import time
 
 
 class CodexQuotaUnavailable(RuntimeError):
+    pass
+
+
+class CodexClientFailed(RuntimeError):
     pass
 
 
@@ -49,7 +54,7 @@ def clean_environment(home=None):
                                            'SSL_CERT_FILE', 'SSL_CERT_DIR') if key in os.environ}
     env.update({'HOME': str(home or Path.home()), 'GIT_CONFIG_NOSYSTEM': '1',
                 'GIT_CONFIG_GLOBAL': '/dev/null', 'GIT_OPTIONAL_LOCKS': '0',
-                'PYTHONDONTWRITEBYTECODE': '1'})
+                'PYTHONDONTWRITEBYTECODE': '1', 'PYTHONNOUSERSITE': '1'})
     return env
 
 
@@ -96,6 +101,14 @@ def run(command, directory, log, timeout, env=None, input=None):
                 except ProcessLookupError:
                     pass
             raise
+        finally:
+            # MCP servers and other helper children belong to this invocation,
+            # even when the client exits normally or reports a quota error.
+            if process.poll() is not None:
+                try:
+                    os.killpg(process.pid, signal.SIGKILL)
+                except ProcessLookupError:
+                    pass
     if process.returncode:
         tail = failure_excerpt(log)
         raise RuntimeError(f'Command failed ({process.returncode}); log: {log}\n{tail}')
@@ -135,7 +148,7 @@ def codex_options(workspace, upstream, writable, runtime_binary=None, editable_t
             '-c', 'shell_environment_policy.set=' + json.dumps({
                 'PATH': '/usr/bin:/bin', 'HOME': str(home), 'LANG': 'C.UTF-8',
                 'GIT_CONFIG_NOSYSTEM': '1', 'GIT_CONFIG_GLOBAL': '/dev/null',
-                'GIT_OPTIONAL_LOCKS': '0'}).replace(': ', '=')]
+                'GIT_OPTIONAL_LOCKS': '0', 'PYTHONNOUSERSITE': '1'}).replace(': ', '=')]
 
 
 def codex_runtime(codex, workspace, upstream, writable=True, editable_tests=()):
@@ -167,8 +180,8 @@ def codex_runtime(codex, workspace, upstream, writable=True, editable_tests=()):
         listener.bind(('127.0.0.1', 0))
         listener.listen(1)
         program = '''import pathlib,socket,sys
-outside,alias,protected,adapter,port,writable=sys.argv[1:]
-for name in (outside,alias):
+outside,alias,protected,adapter,port,writable=sys.argv[1:7]
+for name in (outside,alias, *sys.argv[7:]):
  try:pathlib.Path(name).read_bytes()
  except OSError:pass
  else:raise SystemExit("host reads were allowed")
@@ -190,7 +203,8 @@ if pathlib.Path(adapter).parent.is_dir():
                    *codex_options(workspace, upstream, writable, binary, editable_tests), '--', '/usr/bin/python3',
                    '-c', program, str(canary), f'/proc/{os.getpid()}/root{canary}',
                    str(protected), str(adapter), str(listener.getsockname()[1]),
-                   'true' if writable else 'false']
+                   'true' if writable else 'false', f'/proc/{os.getpid()}/cmdline',
+                   f'/proc/{os.getpid()}/environ']
         try:
             result = subprocess.run(command, capture_output=True, text=True, timeout=30)
             if result.returncode:
@@ -201,7 +215,9 @@ if pathlib.Path(adapter).parent.is_dir():
     return binary
 
 
-def codex(codex, workspace, upstream, prompt, schema, output, log, writable, timeout=1200, editable_tests=()):
+def codex(codex, workspace, upstream, prompt, schema, output, log, writable, timeout=1200, editable_tests=(),
+          connection_options=(), client_environment=None):
+    started = time.monotonic()
     runtime = codex_runtime(codex, workspace, upstream, writable, editable_tests)
     (workspace / '.repair-runtime').mkdir(exist_ok=True)
     command = [codex, '--no-daemon', '-a', 'never', 'exec', '--ephemeral',
@@ -210,26 +226,31 @@ def codex(codex, workspace, upstream, prompt, schema, output, log, writable, tim
                '--disable', 'multi_agent_v2', '--disable', 'browser_use',
                '--disable', 'computer_use', '--disable', 'view_image',
                '-c', 'web_search="disabled"', '-c', 'plugins._default.enabled=false',
+               '--model', 'gpt-6.1-sol', '-c', 'model_reasoning_effort="high"',
+               *connection_options,
                *codex_options(workspace, upstream, writable, runtime, editable_tests),
                '-C', str(workspace), '--output-schema', str(schema),
                '--output-last-message', str(output), '--json', '-']
     # Keep the user's selected Codex home for client auth, not for tool shells.
-    env = clean_environment()
+    env = dict(client_environment) if client_environment is not None else clean_environment()
     if os.environ.get('CODEX_HOME'):
         env['CODEX_HOME'] = os.environ['CODEX_HOME']
+    remaining = timeout - (time.monotonic() - started)
+    if remaining < 1:
+        raise RuntimeError('The bounded Codex phase exhausted its time budget during isolation checks')
     try:
-        run(command, workspace, log, timeout, env, prompt)
+        run(command, workspace, log, remaining, env, prompt)
     except RuntimeError as error:
         quota = quota_failure(log)
         if quota:
             raise CodexQuotaUnavailable(quota) from error
-        raise
+        raise CodexClientFailed(str(error)) from error
     if not output.is_file() or output.stat().st_size > 128 * 1024:
         raise RuntimeError('Codex returned no bounded structured result')
     return json.loads(output.read_text())
 
 
-def build_command(repo, root, tools, command, network=False, extra_read=()):
+def build_command(repo, root, tools, command, network=False, extra_read=(), lease_token=None):
     """Only the selected non-production engine is writable. No host /home,
     GitHub/Codex auth, SSH socket, desktop display or user profiles are mounted."""
     if not shutil.which('bwrap'):
@@ -264,6 +285,8 @@ def build_command(repo, root, tools, command, network=False, extra_read=()):
     env.update({'PATH': '/usr/local/bin:/usr/bin:/bin', 'LANG': 'C.UTF-8',
                 'XDG_CONFIG_HOME': str(home / 'config'), 'XDG_CACHE_HOME': str(home / 'cache'),
                 'XDG_DATA_HOME': str(home / 'data')})
+    if lease_token:
+        env['FLY_ENGINE_LEASE'] = lease_token
     # Chromium dependencies retain Git LFS pointer bytes. Seeded repositories
     # can also retain old LFS post-checkout hooks; do not execute them or need
     # the host's LFS installation/auth inside this namespace. No config edits.

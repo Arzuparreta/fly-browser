@@ -144,10 +144,10 @@ comment_failure() {
     gh pr comment "$pr" --repo "$REPO" --body-file "$LOGS/comment.md" >/dev/null || true
 }
 
-codex_propose() {
+agent_propose() {
     local channel=$1 feedback=$2
-    python3 scripts/chromium/codex_repair.py propose --channel "$channel" \
-        --logs "$LOGS/codex-$channel" --failure-log "$feedback"
+    python3 scripts/chromium/agent_repair.py propose --channel "$channel" \
+        --logs "$LOGS/agent-$channel" --failure-log "$feedback"
 }
 
 commit_repair() {
@@ -177,7 +177,7 @@ validate() {
         deferred=false
         # A job's state file is ephemeral. Derive semantic validation from
         # the actual PR diff on EVERY run, including rejected/failed retries.
-        kind=$(python3 scripts/chromium/codex_repair.py kind --channel Stable --base origin/main) || {
+        kind=$(python3 scripts/chromium/agent_repair.py kind --channel Stable --base origin/main) || {
             fail "The update branch contains changes outside automatic repair scope; preserve it for review."
         }
         if [ "$kind" = semantic ]; then
@@ -194,9 +194,9 @@ validate() {
                 'import json,sys; print(json.load(sys.stdin)["chromium"]["revision"])')
             if ! python3 scripts/chromium/engine_update.py patch-repair --reference "$reference" \
                     >"$LOGS/repair.log" 2>&1; then
-                if ! codex_propose Stable "$LOGS/repair.log" >"$LOGS/codex-propose.log" 2>&1; then
+                if ! agent_propose Stable "$LOGS/repair.log" >"$LOGS/agent-propose.log" 2>&1; then
                     set_status "$sha" failure "Automatic patch repair stopped safely"
-                    comment_failure "$pr" "$LOGS/codex-propose.log" "Automatic Codex patch repair"
+                    comment_failure "$pr" "$LOGS/agent-propose.log" "Automatic coding-agent patch repair"
                     return 1
                 fi
                 save kind stable-semantic
@@ -209,8 +209,8 @@ validate() {
         fi
         set_status "$sha" pending "Building Chromium $version and Fly, then running Fly's tests"
         if [ "$(saved kind)" = stable-semantic ]; then
-            if python3 scripts/chromium/codex_repair.py validate --channel Stable \
-                    --logs "$LOGS/codex-Stable" >"$LOGS/validate.log" 2>&1; then
+            if python3 scripts/chromium/agent_repair.py validate --channel Stable \
+                    --logs "$LOGS/agent-Stable" >"$LOGS/validate.log" 2>&1; then
                 set_status "$sha" success "Independent review, control/Fly builds and native tests passed"
                 return
             else
@@ -225,7 +225,7 @@ validate() {
         tail -n 80 "$LOGS/validate.log"
         set_status "$sha" failure "Native validation failed on Chromium $version"
         comment_failure "$pr" "$LOGS/validate.log" "Native validation"
-        if [ "$deferred" = true ] || [ "$attempt" = 2 ] || ! codex_propose Stable "$LOGS/validate.log" >"$LOGS/codex-propose.log" 2>&1; then
+        if [ "$deferred" = true ] || [ "$attempt" = 2 ] || ! agent_propose Stable "$LOGS/validate.log" >"$LOGS/agent-propose.log" 2>&1; then
             note "Safe repair did not pass; #$pr remains open."
             return 1
         fi
@@ -254,8 +254,8 @@ checks_passed() {
 
 beta_target_current() {
     local sha=$1 pr=$2
-    if python3 scripts/chromium/codex_repair.py target-current --channel Beta \
-            --logs "$LOGS/codex-Beta" >"$LOGS/beta-target.log" 2>&1; then
+    if python3 scripts/chromium/agent_repair.py target-current --channel Beta \
+            --logs "$LOGS/agent-Beta" >"$LOGS/beta-target.log" 2>&1; then
         return
     fi
     set_status "$sha" failure "Beta or active Stable changed; revalidation is required"
@@ -316,16 +316,16 @@ release() {
 validate_beta() {
     local sha pr kind result
     sha=$(git rev-parse HEAD) pr=$(saved pr)
-    kind=$(python3 scripts/chromium/codex_repair.py kind --base origin/main)
+    kind=$(python3 scripts/chromium/agent_repair.py kind --base origin/main)
     if [ "$kind" = semantic ]; then
         save kind beta-semantic
         set_status "$sha" pending "Independent review and Stable/Beta native compilation/tests"
-        if python3 scripts/chromium/codex_repair.py validate --channel Beta \
-                --logs "$LOGS/codex-Beta" >"$LOGS/beta-validation.log" 2>&1; then
+        if python3 scripts/chromium/agent_repair.py validate --channel Beta \
+                --logs "$LOGS/agent-Beta" >"$LOGS/beta-validation.log" 2>&1; then
             :
         else
             result=$?
-            set_status "$sha" failure "Codex review or Stable/Beta native validation failed"
+            set_status "$sha" failure "coding-agent review or Stable/Beta native validation failed"
             comment_failure "$pr" "$LOGS/beta-validation.log" "Semantic Beta repair validation"
             return "$result"
         fi
@@ -356,7 +356,7 @@ publish_beta() {
     if ! git diff --cached --quiet; then
         git commit --quiet -m "Repair Fly compatibility with Chromium Beta"
     fi
-    python3 scripts/chromium/codex_repair.py scope --base origin/main
+    python3 scripts/chromium/agent_repair.py scope --base origin/main
     git fetch --quiet origin main
     git merge-base --is-ancestor origin/main HEAD || {
         note "main moved during Beta preparation; retrying on the next run."
@@ -364,9 +364,9 @@ publish_beta() {
     }
     git push --quiet origin "HEAD:refs/heads/$BRANCH"
     if [ -z "$pr" ]; then
-        if [ "$(python3 scripts/chromium/codex_repair.py kind --base origin/main)" = semantic ]; then
+        if [ "$(python3 scripts/chromium/agent_repair.py kind --base origin/main)" = semantic ]; then
             cat >"$LOGS/beta-body.md" <<'TEXT'
-Adapts Fly's integration to Chromium Beta while preserving current Stable behavior. Proposed by the authenticated host Codex in a restricted, separate worktree; an independent read-only Codex execution reviewed the actual diff and upstream callers. Scripts, workflows, existing tests, command catalogs, version data, and the shipping pin cannot be changed by the proposer.
+Adapts Fly's integration to Chromium Beta while preserving current Stable behavior. Proposed by the authenticated host coding-agent in a restricted, separate worktree; an independent read-only agent execution reviewed the actual diff and upstream callers. Scripts, workflows, existing tests, command catalogs, version data, and the shipping pin cannot be changed by the proposer.
 
 Local validation: strict complete-series replay on Stable and the frozen Beta plus npm tests. The `engine-validation` status additionally requires independent review and full control/Fly builds and unit/browser tests for both pins, in isolated non-production engine roots with no host credentials or real user profiles. Native validation remains pending until that status passes. The target is checked again before merge; main moving invalidates the old validation.
 
@@ -416,12 +416,12 @@ beta() (
             -e '/^chromium\/overlay\/fly\/.*\.(cc|h|mm)$/d' \
             -e '/^chromium\/overlay\/fly\/integration\.gni$/d')
         [ -z "$unexpected" ] || fail "Unexpected Beta branch changes; preserving it: $unexpected"
-        python3 scripts/chromium/codex_repair.py scope --base origin/main --head "origin/$BRANCH"
+        python3 scripts/chromium/agent_repair.py scope --base origin/main --head "origin/$BRANCH"
         git merge --quiet --no-edit "origin/$BRANCH" || fail "Beta branch conflicts with main; preserving it."
     fi
     if ! python3 scripts/chromium/engine_update.py patch-repair --channel Beta \
             >"$LOGS/beta-repair.log" 2>&1; then
-        if ! codex_propose Beta "$LOGS/beta-repair.log" >>"$LOGS/beta-repair.log" 2>&1; then
+        if ! agent_propose Beta "$LOGS/beta-repair.log" >>"$LOGS/beta-repair.log" 2>&1; then
             tail -n 50 "$LOGS/beta-repair.log"
             beta_failure
             return 1
@@ -449,7 +449,7 @@ beta() (
                 return 1
             fi
         fi
-        if [ "$attempt" = 2 ] || ! codex_propose Beta "$LOGS/beta-validation.log" >"$LOGS/beta-repair.log" 2>&1; then
+        if [ "$attempt" = 2 ] || ! agent_propose Beta "$LOGS/beta-validation.log" >"$LOGS/beta-repair.log" 2>&1; then
             beta_failure
             return 1
         fi
@@ -488,7 +488,7 @@ beta_failure() {
         return
     fi
     {
-        printf '%s\n\nAutomatic repair could not complete safely. See the bounded Codex attempt and validation logs below. The warning remains open; Stable tracking continues.\n\n' "$marker"
+        printf '%s\n\nAutomatic repair could not complete safely. See the bounded coding-agent attempt and validation logs below. The warning remains open; Stable tracking continues.\n\n' "$marker"
         printf '<details><summary>Repair log</summary>\n\n```\n'
         tail -n 30 "$LOGS/beta-repair.log" | sed 's/```/` ` `/g'
         printf '```\n\n</details>\n\nRun: %s/%s/actions/runs/%s\n' \
