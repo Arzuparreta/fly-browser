@@ -27,7 +27,7 @@ once or twice a week. Fly follows them automatically:
 
 A patch-context conflict first receives a conservative automatic repair
 ([Automatic patch repair](#automatic-patch-repair)). Code/API conflicts and
-native validation failures can then receive a bounded Codex proposal and an
+native validation failures can then receive a bounded agent proposal and an
 independent review. A repair that cannot satisfy all gates stops with the
 pull request or warning issue open and its reason recorded. Nothing reaches
 users until the whole chain has passed.
@@ -116,7 +116,7 @@ Notification delivery depends on the owner's GitHub settings; the workflow
 opening an issue does not guarantee an email or a chat message.
 
 The automatic workflow detects conflicts, repairs unambiguous context drift,
-and attempts bounded code/API repairs with Codex. Failed proposals, exhausted
+and attempts bounded code/API repairs with coding agents. Failed proposals, exhausted
 quota or validation failures remain visible; they are never silently accepted.
 An agent answering a status question must include pending Beta work even when
 Stable is current.
@@ -299,7 +299,7 @@ and Fly and runs Fly's native tests before shipping that engine.
 The warning closes only after strict Beta replay succeeds on merged main.
 Failures leave it open; a distinct blocker is commented with its workflow log.
 If the mechanical layer cannot repair a function move, API change or ambiguous
-match, the Codex layer below attempts the code adaptation. It never drops a
+match, the agent layer below attempts the code adaptation. It never drops a
 patch to obtain a green result.
 
 Stable patch replay uses the same repair engine when needed, with main's
@@ -321,108 +321,115 @@ removed generated `reproxy.cfg` is likewise preserved outside the source tree.
 Arbitrary untracked files still stop validation. Git hooks/LFS filters are
 disabled only in the isolated runtime, leaving the host's configuration intact.
 
-### Codex code/API repairs
+### Shared agent policy for code/API repairs
 
-The owner has authorised the engine host's authenticated Codex CLI to propose
-and review repairs using its Codex quota. The CLI runs non-interactively with
-structured results. The proposer gets a separate disposable Git worktree and
-object store, scoped source writes, public upstream sources as read-only data,
-and no shell network, host credentials, SSH socket, desktop session, build
-outputs or real profiles. Its client retains its normal login outside the
-tool sandbox. Installed plugins/apps and user tool configuration are disabled
-for this execution. If the installed CLI cannot enforce that isolation, repair
-stops; there is no unsandboxed fallback.
+The update, validation and release pipeline consists of repository scripts and
+GitHub Actions; it does not depend on the agent supervising it. Any configured
+T3 Code agent can run the documented maintenance task. Stable and Beta use the
+same repair controller, `scripts/chromium/agent_repair.py`, and the same policy
+for both author proposals and independent reviews:
 
-The controller, not the model, enforces the accepted diff. It permits existing
-integration patches and C++/headers under the Fly overlay, new
-`compat_*_test.cc` files, and string entries in `integration.gni`. Deletions,
-new patch files, scripts, workflows, existing tests, resources, command catalogs,
-version data and the shipping pin are forbidden. Upstream build-hook edits
-must remain unchanged; new sources/dependencies go through `integration.gni`.
-File count and proposal size are bounded, and symlinks are refused. For Beta,
-the same complete patch series must still apply to current Stable.
+1. **Claude Opus 5.5, high**, using the existing Claude Code session configured
+   on the host/T3.
+2. If Claude reports a quota or availability failure, **Codex Sol 6.1, high**,
+   using T3's existing Codex provider connection and the existing CLIProxyAPI
+   route for the owner's two Codex accounts. The proxy owns account routing;
+   Fly never copies tokens or selects a single account behind it.
 
-Pure compatibility regressions use the predeclared
-`fly_compatibility_test_sources` and `fly_compatibility_test_deps` lists in
-`integration.gni` and run in `fly_unittests`. Platform-specific headers and
-test bodies must be guarded in C++, so adding a test never needs a new GN
-conditional. Browser regressions use `fly_browser_tests_sources`, which also
-feeds the scoped native browser target, and must match its
-`Fly*BrowserTest.*` filter. A later attempt may refine a `compat_*_test.cc`
-introduced by this repair branch. Tests already present on the base commit
-stay read-only; ownership comes from trusted Git history rather than model
-claims or its disposable Git index. Scope checks enforce the same distinction.
+The controller preserves connection/authentication configuration while excluding
+user/project tools, hooks, plugins and commands from repair executions. Ignoring
+user tools must not silently discard the proxy endpoint and fall back to a
+personal default Codex login. Claude currently uses its existing Claude Code
+login; it does not require moving that login into the Codex proxy.
+No global T3, proxy, model-default or authentication configuration is changed.
 
-A fresh read-only Codex execution reviews the actual diff against current
-main and the upstream callers, including committed changes. It must explicitly
-approve with no findings. The proposer cannot approve itself or set commit
-statuses. Strict patch replay and `npm test` precede publication of its proposal.
-The `engine-validation` status for a semantic Beta PR additionally requires
-control/Fly compilation and native unit/browser tests for both Stable and the
-frozen Beta. Builds/tests run in separate filesystem, PID and network namespaces
-with an empty HOME and no host authentication or real user profiles. Trusted
-source/dependency preparation downloads before those offline tests.
+Only explicit client quota/availability failures trigger the alternative
+provider. A blocked proposal, rejected review, malformed result, isolation
+failure, compilation error or failing test is never an excuse to seek a more
+favourable verdict from another model. A partially written proposal is restored
+to its exact starting state before another provider is tried. Evidence records
+which provider, exact model and effort actually completed each role. If both
+providers are unavailable, the validation defers and the issue/PR stays open.
 
-Stable tests use the candidate root; Beta tests use the separately owned repair
-root. Its first preparation copies public sources locally without build outputs,
-then moves only that copy to Beta. Its first native validation can take hours;
-later attempts reuse its incremental outputs. The active root and both existing
-slot build caches are preserved. Beta is never the shipping pin and the repair
-root is never an adoption/swap candidate. Only after a semantic Beta repair has
-merged and passed replay does the usual local Stable native build refresh from
-merged main, preserving running sessions. Restart Fly to load rebuilt code.
+Each proposal has a disposable Git worktree and independent object store.
+Agent tools see public upstream sources read-only, scoped Fly source writes and
+a scratch directory, with no host HOME/authentication, network, display, build
+outputs or real profiles. Claude receives only the controller's isolated MCP
+shell tool, with built-in tools disabled. Codex also enforces a custom filesystem
+profile and a credential-free tool environment. Claude checks its installed
+client's tool inventory with a harmless preflight before receiving repair
+instructions. Every role starts with a fresh scratch HOME, and Python user-site
+loading is disabled. Live denial probes must pass before either provider runs;
+there is no unsandboxed fallback. Clients retain
+their normal host authentication outside those tool namespaces.
 
-Every repair head must pass all remote checks. If main moves, the combined
-result is reviewed/validated again. A Beta target that advances during validation
-keeps the PR open for a new run, as does a Stable release that has not reached
-the active root. A semantic repair that fails compilation/tests can receive one
-further proposal with that log; an incomplete result stays open.
+The controller enforces the diff independently of the model's Git index. It
+allows existing integration patches and C++/headers, new compatibility tests,
+and quoted list entries/comments in `integration.gni`. It refuses deletions,
+new patch files, scripts, workflows, resources, command catalogs, version data,
+the shipping pin, symlinks and excessive file/diff sizes. Baseline test sources
+remain read-only throughout the overlay. Only `compat_*_test.cc` files proven
+introduced after the trusted base may be refined by later repair attempts.
+New upstream build hooks and executable GN statements remain forbidden.
 
-Cost and recovery controls:
+Pure compatibility tests use `fly_compatibility_test_sources` and
+`fly_compatibility_test_deps` and run in `fly_unittests`; guard platform-specific
+headers and test bodies in C++. Browser regressions use
+`fly_browser_tests_sources` and match `Fly*BrowserTest.*`, so the native browser
+target really executes them. A fresh read-only execution independently reviews
+the complete committed/uncommitted repair and upstream callers. It must approve
+with no findings. Model assertions cannot replace replay, tests or that review.
 
-- At most two proposals per Chromium input and target in 24 hours, with bounded
-  author/review durations; documentation-only main changes do not reset it.
-  State lives in `~/.cache/fly-engine-repair` (override `FLY_ENGINE_REPAIR_STATE`).
-- The workflow's manual `retry_repair=true` input permits one fresh bounded
-  attempt for that run, for example after renewing a Codex login or quota.
-- Set the repository variable `FLY_ENGINE_CODEX_REPAIR=off` to stop Codex usage;
-  detection and mechanical repair continue. Missing login/CLI, quota exhaustion,
-  unavailable isolation, resource limits or rejected reviews leave the warning
-  open with evidence. No provider/model fallback or automatic authentication
-  change is attempted.
-- An explicit CLI usage-limit failure defers the current validation instead of
-  sending it to another author proposal. The PR remains blocked; a later
-  scheduled/manual run can retry the required review with the same login after
-  quota is available. Text produced by a model or tool is not a quota signal.
-- The host needs its existing Codex login, Linux namespaces and `bubblewrap`.
-  Roots can be selected with `FLY_ENGINE_ROOT`, `FLY_ENGINE_CANDIDATE_ROOT` and
-  `FLY_ENGINE_REPAIR_ROOT`; they must resolve to separate, non-nested directories.
-  An existing unowned repair directory is never reset or adopted implicitly.
+Every semantic Beta head needs strict full-series replay on current Stable and
+the frozen Beta, local npm checks, independent approval, and control/Fly builds
+plus native unit/browser tests for both pins. Builds use separate filesystem,
+PID and network namespaces with an empty HOME. Trusted dependency preparation
+happens first; untrusted native tests have no external network or credentials.
+Stable uses the candidate slot; Beta uses the dedicated repair root, which is
+never a production/adoption candidate. A root already leased by another build
+or still running a browser defers without spending a code proposal or
+interrupting that session. A semantic repair updates the active Stable native
+build only after merge and merged-main replay; restart Fly to load rebuilt code.
 
-This automates proposing, reviewing and validating compatible repairs; it
-cannot guarantee that every future upstream redesign admits a safe automatic
-adaptation. Human work remains necessary when the bounded process cannot pass
-the gates. Ordinary pull-request CI and repository branch rules are unchanged.
-If a previous active slot still hosts a running browser, unmerged repair
-validation defers instead of overwriting its output or interrupting that
-session. Retrying after it exits or restarts on the active build needs no code
-change. Each repair job has a total 45-hour deadline within Actions' job limit;
-author/review calls and native phases also have their own shorter limits.
-The owned Xvfb uses software rendering with GLX disabled, so isolated tests
-do not need host GPU devices or drivers. An X11 setup reply and live display
-processes are required before handing the display to browser tests. Failure
-feedback retains the first assertion/startup error alongside the final summary,
-even when the native launcher ends with a long list of failed test names.
-Official pin metadata requests retry throttling and temporary outages a bounded
-number of times. If upstream remains unavailable, native repair validation
-defers without spending another code proposal. The final Beta freshness check
-reads only the current release revision; it does not refetch tools, DEPS or
-VERSION just to confirm that the validated Beta target has not changed.
-The engine jobs preserve their logs, structured proposals and independent review
-verdicts in `engine-update-diagnostics` and `engine-repair-diagnostics` Actions
-artifacts for seven days, including failed attempts. Python output is unbuffered
-so failure comments end
-with the actual error rather than earlier successful replay messages.
+All latest-head remote checks must pass. Main moving invalidates the old
+combined validation. Beta advancing or an active Stable slot lagging behind
+main also prevents merge. A native failure can receive one further bounded
+proposal; a rejected or incomplete result stays open. No Beta engine is shipped
+and future-Beta preparation alone does not cut a release.
+
+Cost, isolation and recovery controls:
+
+- At most two logical proposals per Chromium input/target in 24 hours. Each
+  author/review phase has one shared time budget across its provider fallback;
+  native phases and the whole repair job also have bounded durations.
+- State lives in `~/.cache/fly-engine-repair` (override
+  `FLY_ENGINE_REPAIR_STATE`). `retry_repair=true` permits a fresh bounded pair
+  for that workflow run; it does not weaken scope/review/test requirements.
+- Set `FLY_ENGINE_AGENT_REPAIR=off` to stop model usage. The old
+  `FLY_ENGINE_CODEX_REPAIR` setting/entry point remains a compatibility alias.
+  Detection and exact context-only repair continue while models are disabled.
+- The host needs its configured Claude/Codex clients, existing provider logins,
+  the Codex proxy, Linux namespaces and bubblewrap. Optional T3 provider binary
+  and home paths are read from the existing T3 settings. No credentials belong
+  in the repository or repair prompts.
+- Engine roots remain selectable through `FLY_ENGINE_ROOT`,
+  `FLY_ENGINE_CANDIDATE_ROOT` and `FLY_ENGINE_REPAIR_ROOT`; they must be separate,
+  non-nested and external to the Fly repository. An unowned existing repair
+  directory is never adopted/reset implicitly.
+- Owned Xvfb uses software rendering with GLX disabled and must answer X11 setup
+  with live display processes before tests start. Native diagnostics retain the
+  first assertion/startup failure alongside the final summary. This does not
+  establish physical GPU acceptance.
+- Official metadata throttling/outages have bounded retries and then defer.
+  Final Beta freshness uses only the official release revision.
+- Stable/Beta jobs preserve full diagnostics and role/provider metadata as
+  Actions artifacts for seven days, including failed attempts. Python output
+  is unbuffered so the actual error remains at the end of failure comments.
+
+A model-independent pipeline cannot guarantee that every future Chromium
+redesign has a compatible automatic repair. A concrete blocker remains visible
+when the bounded proposal/review/native gates cannot be satisfied. Ordinary PR
+CI and branch rules remain unchanged.
 
 ### Starting a Beta patch repair
 
