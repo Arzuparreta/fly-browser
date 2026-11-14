@@ -390,6 +390,10 @@ Cost and recovery controls:
   unavailable isolation, resource limits or rejected reviews leave the warning
   open with evidence. No provider/model fallback or automatic authentication
   change is attempted.
+- An explicit CLI usage-limit failure defers the current validation instead of
+  sending it to another author proposal. The PR remains blocked; a later
+  scheduled/manual run can retry the required review with the same login after
+  quota is available. Text produced by a model or tool is not a quota signal.
 - The host needs its existing Codex login, Linux namespaces and `bubblewrap`.
   Roots can be selected with `FLY_ENGINE_ROOT`, `FLY_ENGINE_CANDIDATE_ROOT` and
   `FLY_ENGINE_REPAIR_ROOT`; they must resolve to separate, non-nested directories.
