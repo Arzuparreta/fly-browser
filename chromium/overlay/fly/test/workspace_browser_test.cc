@@ -91,6 +91,7 @@
 #include "ui/views/accessibility/view_accessibility.h"
 #include "ui/views/controls/button/checkbox.h"
 #include "ui/views/controls/label.h"
+#include "ui/views/controls/native/native_view_host.h"
 #include "ui/views/controls/tabbed_pane/tabbed_pane.h"
 #include "ui/views/controls/textfield/textfield.h"
 #include "url/origin.h"
@@ -1237,12 +1238,11 @@ IN_PROC_BROWSER_TEST_F(FlySidebarBrowserTest,
   // its shadow or the hidden part of the collapsed panel.
   auto* host_root = window.widget()->GetNativeWindow()->GetRootWindow();
   auto* sidebar = window.sidebar_widget_for_testing()->GetNativeWindow();
-  auto* clip = sidebar->parent();
   auto sidebar_at = [&](int x) {
     gfx::Point point(origin.x() + x, origin.y() + 300);
     wm::ConvertPointFromScreen(host_root, &point);
     auto* hit = host_root->GetEventHandlerForPoint(point);
-    return hit && clip->Contains(hit);
+    return hit && sidebar->Contains(hit);
   };
   EXPECT_TRUE(sidebar_at(100));
   EXPECT_FALSE(sidebar_at(FlyScaled(260) + 20));
@@ -1266,6 +1266,45 @@ IN_PROC_BROWSER_TEST_F(FlySidebarBrowserTest,
   ASSERT_TRUE(base::test::RunUntil([&] {
     return root->edge()->layer()->transform().To2dTranslation().x() == -shift;
   }));
+}
+
+// Force the Views-managed path on Stable too, so its layering regression is
+// exercised before a future Chromium pin removes the clipping-window API.
+class FlyViewsManagedSidebarBrowserTest : public FlySidebarBrowserTest {
+ private:
+  base::AutoReset<bool> views_host_ =
+      FlyWindowController::UseViewsManagedSidebarHostForTesting();
+};
+
+IN_PROC_BROWSER_TEST_F(FlyViewsManagedSidebarBrowserTest,
+                       FloatingSurfaceKeepsClicksWhenSidebarExpands) {
+  auto& window = Window();
+  ASSERT_TRUE(window.sidebar_host()->layer());
+  MoveToPage();
+  ASSERT_TRUE(InvokeNativeCommand(browser(), "open-diagnostics"));
+  auto* hub = window.diagnostics_hub_for_testing();
+  ASSERT_TRUE(hub && hub->active());
+  auto* panel = hub->panel_for_testing();
+  ASSERT_TRUE(panel && panel->GetWidget());
+  views::test::RunScheduledLayout(panel->GetWidget());
+  OpenByPointer();
+  WaitForSidebarMotion();
+  // The floating surface starts just beyond the rail and is drawn above the
+  // expanded sidebar. Its overlapping part must receive the pointer too.
+  const auto desktop =
+      window.widget()->GetContentsView()->GetBoundsInScreen();
+  gfx::Point point(desktop.x() + FlyScaled(100),
+                   panel->GetBoundsInScreen().CenterPoint().y());
+  ASSERT_TRUE(panel->GetBoundsInScreen().Contains(point));
+  auto* root = window.widget()->GetNativeWindow()->GetRootWindow();
+  auto* surface = panel->GetWidget()->GetNativeWindow();
+  wm::ConvertPointFromScreen(root, &point);
+  window.widget()->ReorderNativeViews();
+  auto* hit = root->GetEventHandlerForPoint(point);
+  EXPECT_TRUE(hit && surface->Contains(hit));
+  EXPECT_FALSE(hit &&
+               window.sidebar_widget_for_testing()->GetNativeWindow()->Contains(
+                   hit));
 }
 
 // Leaving the window (the screen's left edge, the window border) keeps the

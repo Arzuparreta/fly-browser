@@ -12,6 +12,7 @@
 #include <string>
 #include <vector>
 
+#include "base/auto_reset.h"
 #include "base/callback_list.h"
 #include "base/memory/raw_ptr.h"
 #include "base/memory/weak_ptr.h"
@@ -109,6 +110,8 @@ class FlyWindowController : public views::WidgetObserver,
   int FooterHeight() const;
   views::View* footer() const { return footer_; }
   views::NativeViewHost* sidebar_host() const { return sidebar_host_; }
+  // Exercise the current Views-managed host on either supported pin.
+  static base::AutoReset<bool> UseViewsManagedSidebarHostForTesting();
   void LayoutFrameChrome();
   void UpdateFullscreenChrome();
 

@@ -12,10 +12,10 @@ namespace fly {
 // ChromeOS: its Views-managed host must instead be above the client view in
 // the Views hierarchy. The caller owns that placement and hit testing.
 template <typename Host>
-bool ConfigureSidebarClipWindow(Host* host) {
+bool ConfigureSidebarClipWindow(Host* host, bool use_clip_window = true) {
   if constexpr (requires { host->SetLayerManagedByViews(false); }) {
-    host->SetLayerManagedByViews(false);
-    return true;
+    host->SetLayerManagedByViews(!use_clip_window);
+    return use_clip_window;
   } else {
     return false;
   }

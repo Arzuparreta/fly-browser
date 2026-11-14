@@ -133,6 +133,7 @@
 
 namespace fly {
 namespace {
+bool g_views_managed_sidebar_host_for_testing = false;
 class WorkspaceMenuButton : public FlyButton,
                             public views::ContextMenuController,
                             public ui::SimpleMenuModel::Delegate {
@@ -428,6 +429,11 @@ FlyWindowController* FlyWindowController::FromContents(
   return tab ? FromBrowser(tab->GetBrowserWindowInterface()) : nullptr;
 }
 
+base::AutoReset<bool>
+FlyWindowController::UseViewsManagedSidebarHostForTesting() {
+  return base::AutoReset<bool>(&g_views_managed_sidebar_host_for_testing, true);
+}
+
 FlyWindowController::FlyWindowController(BrowserWindowInterface* browser,
                                          views::Widget* widget)
     : browser_(browser), widget_(widget) {
@@ -696,7 +702,8 @@ void FlyWindowController::BuildSidebar() {
   // A native clip window stays above the page independently of Views' frame
   // ordering. Where that API is gone, InstallInto puts the Views-managed host
   // above the client view instead of underneath it in the frame.
-  sidebar_host_uses_clip_window_ = ConfigureSidebarClipWindow(host.get());
+  sidebar_host_uses_clip_window_ = ConfigureSidebarClipWindow(
+      host.get(), !g_views_managed_sidebar_host_for_testing);
   host->SetProperty(views::kViewIgnoredByLayoutKey, true);
   owned_sidebar_host_ = std::move(host);
   sidebar_host_ = owned_sidebar_host_.get();
@@ -1328,7 +1335,7 @@ void FlyWindowController::UpdateSidebarVisibility() {
   sidebar_host_->SetVisible(true);
   // Keep the overlay above the page's native views; a floating surface
   // stays above the sidebar.
-  if (!blocked) {
+  if (!blocked && sidebar_host_uses_clip_window_) {
     auto* clip = sidebar_host_->GetNativeViewContainer();
     if (clip && clip->parent())
       clip->parent()->StackChildAtTop(clip);
