@@ -78,7 +78,9 @@ class SandboxTests(unittest.TestCase):
             binary = root / 'src/out/FlyNative/chrome'
             binary.parent.mkdir(parents=True)
             shutil.copy2('/usr/bin/sleep', binary)
-            process = subprocess.Popen([binary, '30'])
+            # Ubuntu can provide sleep through a multicall coreutils binary.
+            # Preserve argv[0] while /proc/PID/exe still points into the output.
+            process = subprocess.Popen(['sleep', '30'], executable=binary)
             try:
                 with self.assertRaisesRegex(codex_repair.DeferredRepair, 'preserve its session'):
                     codex_repair.idle_output(root)
