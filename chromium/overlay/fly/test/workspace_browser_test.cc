@@ -8537,6 +8537,10 @@ IN_PROC_BROWSER_TEST_F(FlyPageScrollBrowserTest,
       )js", axis, offset)).ExtractBool();
     });
   };
+  // ExecJs can finish before the compositor commits the zoomed fixture. Make
+  // its nested scroller available to hit testing before clicking and scrolling.
+  content::MainThreadFrameObserver(
+      contents->GetRenderWidgetHostView()->GetRenderWidgetHost()).Wait();
   // Keyboard scrolling follows a real click, including nested scrollers.
   auto origin = contents->GetRenderWidgetHostView()->GetViewBounds().origin();
   keys.MoveMouseTo(origin + gfx::Vector2d(100, 100));
