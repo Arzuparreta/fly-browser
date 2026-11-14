@@ -1,8 +1,8 @@
 name: Verify changes
 
 # Deliberately light: only what means the app is actually broken. A pull
-# request opened by hand should go green with nothing more than its impact
-# label. Whitespace and the documentation build stay local checks.
+# request opened by hand uses conventional subjects/title and one impact label,
+# checked separately by pr-guardrails.yml. Whitespace and docs stay local checks.
 on:
   pull_request:
   push:

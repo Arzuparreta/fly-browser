@@ -51,7 +51,7 @@ fi
 if [ ! -f "$temp/site/README.md" ]; then cp scripts/distribution/site-README.md "$temp/site/README.md"; fi
 git -C "$temp/site" add packages .nojekyll index.html README.md .github/workflows/fly-packages-pages.yml .github/fly-packages-build.py
 if ! git -C "$temp/site" diff --cached --quiet; then
-    git -C "$temp/site" -c user.name='Fly packages' -c user.email='41898282+github-actions[bot]@users.noreply.github.com' commit -m "Publish official packages for $tag"
+    git -C "$temp/site" -c user.name='Fly packages' -c user.email='41898282+github-actions[bot]@users.noreply.github.com' commit -m "chore(packages): publish official packages for $tag"
     git -C "$temp/site" push origin gh-pages
 fi
 

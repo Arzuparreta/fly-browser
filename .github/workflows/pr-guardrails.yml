@@ -1,12 +1,10 @@
 name: PR guardrails
 
-# Separate from verification on purpose: this has to re-run when a label
-# changes, and `labeled`/`unlabeled` on verify.yml would rerun the whole test
-# suite every time someone touched a label.
+# Metadata only: title/label changes must not rerun the verification suite.
 on:
   pull_request:
     branches: [main]
-    types: [opened, reopened, synchronize, labeled, unlabeled]
+    types: [opened, reopened, synchronize, edited, labeled, unlabeled]
 
 permissions:
   contents: read
@@ -25,40 +23,53 @@ jobs:
     name: impact_label
     runs-on: ubuntu-latest
     steps:
-      - name: Require exactly one impact label
+      - name: Require conventional commits/title and exactly one impact label
         env:
           GH_TOKEN: ${{ github.token }}
           PR: ${{ github.event.pull_request.number }}
         shell: bash
-        # Ask for the labels the pull request has now, not the ones in the
+        # Ask for the metadata the pull request has now, not the values in the
         # event. `gh pr create --label` opens the pull request and only then
         # labels it, so the `opened` event carries no labels, and its run can
         # finish after the `labeled` one. A re-run replays that same event.
         run: |
-          set -euo pipefail
-          LABELS=$(gh api "repos/$GITHUB_REPOSITORY/pulls/$PR" --jq '[.labels[].name]')
-          mapfile -t impact < <(jq -r '.[] | select(startswith("impact:"))' <<<"$LABELS")
+          python3 - <<'PY'
+          import json
+          import os
+          import re
+          import subprocess
+          import sys
 
-          if [ "${#impact[@]}" -eq 1 ]; then
-            echo "::notice::${impact[0]}"
-            exit 0
-          fi
-
-          if [ "${#impact[@]}" -eq 0 ]; then
-            echo "::error::This pull request has no impact label."
-          else
-            echo "::error::Conflicting impact labels: ${impact[*]}"
-          fi
-
-          cat <<'TEXT'
-          Add exactly one, describing what merging this does to someone who
-          upgrades:
-
-            impact:major   they have to do something by hand to upgrade
-            impact:minor   new capability, upgrading still needs nothing else
-            impact:patch   a fix
-            impact:none    nothing a user could observe (docs, CI, tests)
-
-            gh pr edit <number> --add-label impact:minor
-          TEXT
-          exit 1
+          endpoint = 'repos/' + os.environ['GITHUB_REPOSITORY'] + '/pulls/' + os.environ['PR']
+          pull = json.loads(subprocess.check_output(['gh', 'api', endpoint], text=True))
+          pages = json.loads(subprocess.check_output(
+              ['gh', 'api', '--paginate', '--slurp', endpoint + '/commits'], text=True))
+          commits = [commit for page in pages for commit in page]
+          conventional = re.compile(
+              r'(?:feat|fix|docs|style|refactor|perf|test|build|ci|chore|revert)'
+              r'(?:\([^()\s:]+\))?!?: \S[^\r\n]*')
+          errors = []
+          if not conventional.fullmatch(pull['title']):
+              errors.append('PR title must use type(scope): description: ' + repr(pull['title']))
+          if not commits:
+              errors.append('No PR commits were returned; cannot verify their subjects.')
+          if len(commits) != pull['commits']:
+              errors.append('Incomplete PR commit list; cannot verify every subject: '
+                            + str(len(commits)) + ' of ' + str(pull['commits']))
+          for commit in commits:
+              lines = commit['commit']['message'].splitlines()
+              subject = lines[0] if lines else ''
+              if not conventional.fullmatch(subject):
+                  errors.append('Commit ' + commit['sha'][:12] +
+                                ' must use type(scope): description: ' + repr(subject))
+          impact = [label['name'] for label in pull['labels']
+                    if label['name'].startswith('impact:')]
+          if len(impact) != 1 or impact[0] not in {
+                  'impact:major', 'impact:minor', 'impact:patch', 'impact:none'}:
+              errors.append('Add exactly one of impact:major, impact:minor, impact:patch, '
+                            'impact:none; current labels: ' + repr(impact))
+          if errors:
+              print('\n'.join(errors), file=sys.stderr)
+              sys.exit(1)
+          print(f'Conventional title and {len(commits)} commits verified; {impact[0]}.')
+          PY

@@ -42,11 +42,28 @@ impact:patch   a fix
 impact:none    nothing a user could observe (docs, CI, tests)
 ```
 
-The `impact_label` check rejects a pull request without one. Releasing takes the highest label merged since the last tag and moves the number accordingly: nobody rereads a month of diffs trying to remember whether something was a feature. A pull request merged without a label counts as a patch, and the release plan lists it by name so the claim can be checked.
+The `impact_label` metadata check requires exactly one of these labels. Releasing takes the highest label merged since the last tag and moves the number accordingly: nobody rereads a month of diffs trying to remember whether something was a feature. A historical pull request merged without a label counts as a patch, and the release plan lists it by name so the claim can be checked.
 
 ### Opening a pull request by hand
 
-Add one impact label from the Labels box, and that is all. CI runs `npm test` and nothing more, no check is required to merge, and either merge button works. A pull request merged without a label is not lost: it counts as a patch and is listed by name when the next release is planned. The only reserved branch names are `release/v*`.
+Use Conventional Commits for every commit subject and the PR title, for example
+`fix(ci): preserve validation logs`. Allowed types are `feat`, `fix`, `docs`,
+`style`, `refactor`, `perf`, `test`, `build`, `ci`, `chore` and `revert`.
+The scope is optional; `!` before `:` marks a breaking change. Merge commits
+also use this format; supply `git merge -m 'chore(merge): integrate origin/main'`
+when merging a base into your branch. Keep the squash title conventional.
+
+Add exactly one impact label from the Labels box. Commit types describe the
+kind of work; impact labels describe what changes for someone who upgrades.
+The label determines the release number independently of the commit prefix.
+GitHub labels apply to PRs; no extra impact trailer is required on commits.
+
+The existing `impact_label` check validates the live title/labels and all PR
+commit subjects, including paginated commit lists. It reruns on title edits,
+pushes and label changes without rerunning `npm test`. The verification suite
+stays `npm test`, with no new required checks, branch rules or PR-body template.
+Already merged history is not rewritten. The only reserved branch names are
+`release/v*`.
 
 ## Cutting a release
 
