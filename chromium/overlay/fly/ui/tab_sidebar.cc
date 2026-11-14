@@ -962,7 +962,8 @@ void TabSidebar::Refresh() {
     auto dirty = std::move(dirty_rows_);
     dirty_rows_.clear();
     bool changed = false;
-    for (auto* contents : dirty) {
+    for (const auto& pending : dirty) {
+      auto* contents = pending.get();
       auto it = tab_rows_.find(contents);
       if (model_ && it != tab_rows_.end() && it->second.contents) {
         const int index = it->second.index;

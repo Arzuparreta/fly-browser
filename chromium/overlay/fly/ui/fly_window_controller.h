@@ -12,6 +12,7 @@
 #include <string>
 #include <vector>
 
+#include "base/auto_reset.h"
 #include "base/callback_list.h"
 #include "base/memory/raw_ptr.h"
 #include "base/memory/weak_ptr.h"
@@ -32,9 +33,6 @@
 class BrowserWindowInterface;
 class GURL;
 class Profile;
-namespace aura {
-class WindowTargeter;
-}
 namespace aura::client {
 class FocusClient;
 }
@@ -109,6 +107,8 @@ class FlyWindowController : public views::WidgetObserver,
   int FooterHeight() const;
   views::View* footer() const { return footer_; }
   views::NativeViewHost* sidebar_host() const { return sidebar_host_; }
+  // Exercise the current Views-managed host on either supported pin.
+  static base::AutoReset<bool> UseViewsManagedSidebarHostForTesting();
   void LayoutFrameChrome();
   void UpdateFullscreenChrome();
 
@@ -352,11 +352,10 @@ class FlyWindowController : public views::WidgetObserver,
   // Sidebar.
   std::unique_ptr<views::Widget> sidebar_widget_;
   raw_ptr<views::NativeViewHost> sidebar_host_ = nullptr;
+  bool sidebar_host_uses_clip_window_ = false;
   raw_ptr<views::View> sidebar_content_ = nullptr;
   raw_ptr<SidebarPanel> sidebar_panel_ = nullptr;
   raw_ptr<SidebarRoot> sidebar_root_ = nullptr;
-  // Limits the sidebar host's hit area to the visible panel.
-  raw_ptr<aura::WindowTargeter> sidebar_targeter_ = nullptr;
   bool sidebar_expanded_ = false;
   // The first state and mode changes apply without motion.
   bool sidebar_motion_ready_ = false;

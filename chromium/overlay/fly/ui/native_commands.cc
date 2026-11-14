@@ -4,6 +4,7 @@
 #include "fly/ui/native_commands.h"
 #include "fly/bookmarks/bookmark_service.h"
 #include "fly/ui/command_palette.h"
+#include "fly/ui/navigation_disposition.h"
 #include "fly/ui/new_tab_ui.h"
 #include "ui/events/blink/blink_event_util.h"
 
@@ -427,7 +428,7 @@ bool OpenNativeBlankTab(BrowserWindowInterface* browser, int index) {
   // Fly's new tab page.
   NavigateParams params(browser, GURL(kFlyNewTabURL),
                         ui::PAGE_TRANSITION_AUTO_TOPLEVEL);
-  params.disposition = WindowOpenDisposition::NEW_FOREGROUND_TAB;
+  params.disposition = NewForegroundTabDisposition();
   params.window_action = NavigateParams::WindowAction::kShowWindow;
   if (index >= 0) {
     params.tabstrip_index = index;

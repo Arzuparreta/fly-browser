@@ -47,6 +47,7 @@
 #include "fly/ui/fly_theme.h"
 #include "fly/ui/fly_window_controller.h"
 #include "fly/ui/native_commands.h"
+#include "fly/ui/navigation_disposition.h"
 #include "fly/ui/new_tab_ui.h"
 #include "fly/ui/startup_maintenance.h"
 #include "fly/ui/tab_move_transaction.h"
@@ -775,7 +776,7 @@ void FlyApp::OpenInNewTab(GURL url, BrowserWindowInterface* browser) {
   }
   if (browser) {
     NavigateParams params(browser, url, ui::PAGE_TRANSITION_AUTO_TOPLEVEL);
-    params.disposition = WindowOpenDisposition::NEW_FOREGROUND_TAB;
+    params.disposition = NewForegroundTabDisposition();
     params.window_action = NavigateParams::WindowAction::kShowWindow;
     Navigate(&params);
     return;
@@ -784,7 +785,7 @@ void FlyApp::OpenInNewTab(GURL url, BrowserWindowInterface* browser) {
   if (!profile)
     return;
   NavigateParams params(profile, url, ui::PAGE_TRANSITION_AUTO_TOPLEVEL);
-  params.disposition = WindowOpenDisposition::NEW_FOREGROUND_TAB;
+  params.disposition = NewForegroundTabDisposition();
   params.window_action = NavigateParams::WindowAction::kShowWindow;
   Navigate(&params);
 }
@@ -801,7 +802,7 @@ void FlyApp::OpenInNewWindow(GURL url, Profile* profile) {
   NavigateParams params(profile, url, ui::PAGE_TRANSITION_AUTO_TOPLEVEL);
   // A normal window, so Fly decorates it like any other window of the
   // workspace.
-  params.disposition = WindowOpenDisposition::NEW_WINDOW;
+  params.disposition = NewWindowDisposition();
   params.window_action = NavigateParams::WindowAction::kShowWindow;
   Navigate(&params);
 }

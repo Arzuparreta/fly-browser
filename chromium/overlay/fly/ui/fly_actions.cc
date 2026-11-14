@@ -61,6 +61,7 @@
 #include "fly/fly_version.h"
 #include "fly/preferences/preferences_service.h"
 #include "fly/preferences/spellcheck_languages.h"
+#include "fly/ui/navigation_disposition.h"
 #include "net/base/filename_util.h"
 #include "net/base/net_errors.h"
 #include "net/base/url_util.h"
@@ -1183,7 +1184,7 @@ bool OpenDownloadEntry(const std::vector<Profile*>& profiles,
       return false;
     NavigateParams params(browser, GURL("chrome://downloads/"),
                           ui::PAGE_TRANSITION_AUTO_TOPLEVEL);
-    params.disposition = WindowOpenDisposition::NEW_FOREGROUND_TAB;
+    params.disposition = NewForegroundTabDisposition();
     Navigate(&params);
     return true;
   }
