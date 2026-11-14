@@ -6315,31 +6315,41 @@ IN_PROC_BROWSER_TEST_F(FlyBlockerStartupBrowserTest,
   ASSERT_TRUE(base::test::RunUntil([&] { return RulesInEffect(); }));
   // Hold the blocker's next ruleset load, as a slow disk would at startup.
   std::vector<base::OnceClosure> held;
-  extensions::declarative_net_request::LoadRulesetThrottleCallback hold =
-      base::BindLambdaForTesting(
-          [&](base::OnceClosure load) { held.push_back(std::move(load)); });
-  auto reset = extensions::declarative_net_request::RulesMonitorService::
-      SetLoadRulesetThrottleCallbackForTesting(&hold);
-  auto& extensions = App().extensions();
-  auto* profile = browser()->GetProfile();
-  ASSERT_TRUE(extensions.SetExtensionEnabled(profile, kId, false));
-  ASSERT_TRUE(extensions.SetExtensionEnabled(profile, kId, true));
-  ASSERT_TRUE(Rules().HasPendingInitialLoads());
+  // Restore the throttle before draining, including on an ASSERT return.
+  // Dropping a held updateEnabledRulesets response without running it would
+  // destroy an unanswered ExtensionFunction while the extension is enabled.
+  base::ScopedClosureRunner release_loads(base::BindLambdaForTesting([&] {
+    for (auto& load : held)
+      std::move(load).Run();
+  }));
   auto* contents = Active(browser());
-  contents->GetController().LoadURL(Page(), content::Referrer(),
-                                    ui::PAGE_TRANSITION_TYPED, std::string());
-  ASSERT_TRUE(base::test::RunUntil([&] { return !held.empty(); }));
   {
-    base::RunLoop wait;
-    base::SingleThreadTaskRunner::GetCurrentDefault()->PostDelayedTask(
-        FROM_HERE, wait.QuitClosure(), base::Milliseconds(300));
-    wait.Run();
+    extensions::declarative_net_request::LoadRulesetThrottleCallback hold =
+        base::BindLambdaForTesting(
+            [&](base::OnceClosure load) { held.push_back(std::move(load)); });
+    auto reset = extensions::declarative_net_request::RulesMonitorService::
+        SetLoadRulesetThrottleCallbackForTesting(&hold);
+    auto& extensions = App().extensions();
+    auto* profile = browser()->GetProfile();
+    ASSERT_TRUE(extensions.SetExtensionEnabled(profile, kId, false));
+    ASSERT_TRUE(extensions.SetExtensionEnabled(profile, kId, true));
+    ASSERT_TRUE(Rules().HasPendingInitialLoads());
+    contents->GetController().LoadURL(Page(), content::Referrer(),
+                                      ui::PAGE_TRANSITION_TYPED, std::string());
+    ASSERT_TRUE(base::test::RunUntil([&] { return !held.empty(); }));
+    {
+      base::RunLoop wait;
+      base::SingleThreadTaskRunner::GetCurrentDefault()->PostDelayedTask(
+          FROM_HERE, wait.QuitClosure(), base::Milliseconds(300));
+      wait.Run();
+    }
+    // Nothing was sent while the rules were loading.
+    EXPECT_EQ(Requests("news.test"), 0);
+    EXPECT_NE(contents->GetLastCommittedURL(), Page());
   }
-  // Nothing was sent while the rules were loading.
-  EXPECT_EQ(Requests("news.test"), 0);
-  EXPECT_NE(contents->GetLastCommittedURL(), Page());
-  for (auto& load : held)
-    std::move(load).Run();
+  // Later background ruleset updates must complete normally while navigation
+  // finishes, rather than accumulating new callbacks in `held` at teardown.
+  release_loads.RunAndReset();
   ASSERT_TRUE(content::WaitForLoadStop(contents));
   EXPECT_EQ(contents->GetLastCommittedURL(), Page());
   EXPECT_EQ(Requests("news.test"), 1);
