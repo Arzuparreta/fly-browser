@@ -393,6 +393,11 @@ validation defers instead of overwriting its output or interrupting that
 session. Retrying after it exits or restarts on the active build needs no code
 change. Each repair job has a total 45-hour deadline within Actions' job limit;
 author/review calls and native phases also have their own shorter limits.
+The owned Xvfb uses software rendering with GLX disabled, so isolated tests
+do not need host GPU devices or drivers. An X11 setup reply and live display
+processes are required before handing the display to browser tests. Failure
+feedback retains the first assertion/startup error alongside the final summary,
+even when the native launcher ends with a long list of failed test names.
 
 ### Starting a Beta patch repair
 

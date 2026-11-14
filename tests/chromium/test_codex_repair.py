@@ -71,6 +71,16 @@ class ScopeTests(unittest.TestCase):
 
 
 class SandboxTests(unittest.TestCase):
+    def test_failure_feedback_keeps_the_first_assertion_before_a_long_summary(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            log = Path(tmp) / 'native.log'
+            log.write_text('build output\n' * 1000 + 'test.cc:42: Failure\nactual: wrong\n' +
+                           'FailedTestName\n' * 2000 + 'final failure summary\n')
+            excerpt = repair_sandbox.failure_excerpt(log)
+            self.assertIn('test.cc:42: Failure\nactual: wrong', excerpt)
+            self.assertTrue(excerpt.endswith('final failure summary\n'))
+            self.assertLess(len(excerpt), 8100)
+
     @unittest.skipUnless(Path('/proc').exists(), 'Linux running-output guard')
     def test_a_running_output_is_deferred_without_interrupting_its_process(self):
         with tempfile.TemporaryDirectory() as tmp:
