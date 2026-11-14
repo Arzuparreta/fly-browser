@@ -398,6 +398,11 @@ do not need host GPU devices or drivers. An X11 setup reply and live display
 processes are required before handing the display to browser tests. Failure
 feedback retains the first assertion/startup error alongside the final summary,
 even when the native launcher ends with a long list of failed test names.
+Official pin metadata requests retry throttling and temporary outages a bounded
+number of times. If upstream remains unavailable, native repair validation
+defers without spending another code proposal. The final Beta freshness check
+reads only the current release revision; it does not refetch tools, DEPS or
+VERSION just to confirm that the validated Beta target has not changed.
 
 ### Starting a Beta patch repair
 

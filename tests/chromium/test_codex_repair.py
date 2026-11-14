@@ -11,6 +11,7 @@ import tempfile
 import tomllib
 import time
 import unittest
+import urllib.error
 from unittest.mock import patch
 
 ROOT = Path(__file__).resolve().parents[2]
@@ -174,6 +175,14 @@ class SandboxTests(unittest.TestCase):
 
 
 class BudgetAndReviewTests(unittest.TestCase):
+    def test_upstream_outage_defers_without_running_a_proposer(self):
+        with tempfile.TemporaryDirectory() as tmp, \
+                patch.object(sys, 'argv', ['codex_repair.py', 'validate', '--logs', tmp]), \
+                patch.object(codex_repair, 'target', side_effect=urllib.error.URLError('unavailable')), \
+                patch.object(codex_repair, 'validate') as validate:
+            self.assertEqual(codex_repair.main(), 2)
+            validate.assert_not_called()
+
     def test_total_deadline_is_not_reset_between_repair_phases(self):
         with tempfile.TemporaryDirectory() as tmp:
             args = argparse.Namespace(logs=Path(tmp))

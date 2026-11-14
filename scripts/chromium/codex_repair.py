@@ -20,6 +20,7 @@ import subprocess
 import sys
 import tempfile
 import time
+import urllib.error
 
 import engine
 import engine_update
@@ -523,7 +524,9 @@ def main():
             raise RuntimeError('Automatic Codex repair is disabled')
         frozen = target(args)
         if args.command == 'target-current':
-            if args.channel == 'Beta' and engine_update.load_pin().resolve('Beta')['chromium']['revision'] != frozen['chromium']['revision']:
+            # Freshness needs only the release revision, not another tools
+            # HEAD/DEPS/VERSION download after hours of native validation.
+            if args.channel == 'Beta' and engine_update.load_pin().latest_release('Beta')['hashes']['chromium'] != frozen['chromium']['revision']:
                 raise RuntimeError('Beta advanced during validation; keep PR open for the next run')
             if args.channel == 'Beta' and not engine_update.same_pin(
                     engine_update.recorded_lock(roots(args)[0]), engine.read_lock()):
@@ -532,6 +535,11 @@ def main():
             {'prepare': prepare, 'propose': propose, 'validate': validate}[args.command](args, frozen)
     except DeferredRepair as error:
         print('Codex engine repair deferred: ' + str(error), file=sys.stderr)
+        return 2
+    except (urllib.error.URLError, TimeoutError) as error:
+        # An unavailable upstream is not a source bug for another model
+        # proposal. Keep validation failed and retry on a later workflow run.
+        print('Codex engine repair deferred: official source unavailable: ' + str(error), file=sys.stderr)
         return 2
     except (RuntimeError, ValueError, OSError, subprocess.SubprocessError) as error:
         print('Codex engine repair: ' + str(error), file=sys.stderr)

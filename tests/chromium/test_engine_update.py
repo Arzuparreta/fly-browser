@@ -10,6 +10,7 @@ import sys
 import tempfile
 import time
 import unittest
+import urllib.error
 from unittest.mock import Mock, patch
 
 ROOT = Path(__file__).resolve().parents[2]
@@ -68,6 +69,41 @@ class VersionTests(unittest.TestCase):
         lock['chromium']['url'] = 'https://example.invalid/src.git'
         with self.assertRaisesRegex(RuntimeError, 'Invalid official source pin'):
             engine.validate_lock(lock)
+
+
+class OfficialMetadataTests(unittest.TestCase):
+    def test_throttled_metadata_retries_the_same_url_and_respects_bounded_retry_after(self):
+        pin = engine_update.load_pin()
+        error = urllib.error.HTTPError('https://official.invalid/metadata', 429, 'busy',
+                                       {'Retry-After': '1000'}, None)
+        self.addCleanup(error.close)
+        with patch.object(pin.urllib.request, 'urlopen', side_effect=[error, io.BytesIO(b'valid')]) as request, \
+                patch.object(pin.time, 'sleep') as sleep:
+            self.assertEqual(pin.fetch(error.url), b'valid')
+        self.assertEqual(request.call_count, 2)
+        self.assertEqual(request.call_args_list[0], request.call_args_list[1])
+        sleep.assert_called_once_with(60)
+
+    def test_outage_retries_are_bounded_and_not_found_is_not_retried(self):
+        pin = engine_update.load_pin()
+        for code, attempts in ((503, 3), (404, 1)):
+            error = urllib.error.HTTPError('https://official.invalid/metadata', code, 'failed', {}, None)
+            self.addCleanup(error.close)
+            with patch.object(pin.urllib.request, 'urlopen', side_effect=error) as request, \
+                    patch.object(pin.time, 'sleep'), self.assertRaises(urllib.error.HTTPError):
+                pin.fetch(error.url, attempts=3)
+            self.assertEqual(request.call_count, attempts)
+
+    def test_freshness_uses_only_the_validated_release_record(self):
+        pin = engine_update.load_pin()
+        release = {'channel': 'Beta', 'platform': 'Linux', 'hashes': {'chromium': 'a' * 40}}
+        with patch.object(pin, 'fetch', return_value=json.dumps([release]).encode()) as fetch:
+            self.assertEqual(pin.latest_release('Beta'), release)
+        fetch.assert_called_once_with(pin.DASH.format(channel='Beta'))
+        release['hashes']['chromium'] = 'invalid'
+        with patch.object(pin, 'fetch', return_value=json.dumps([release]).encode()), \
+                self.assertRaisesRegex(ValueError, 'Invalid revision'):
+            pin.latest_release('Beta')
 
 
 class DisplayTests(unittest.TestCase):

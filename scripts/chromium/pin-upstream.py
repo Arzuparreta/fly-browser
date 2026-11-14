@@ -8,20 +8,41 @@ import hashlib
 import json
 from pathlib import Path
 import re
+import sys
+import time
+import urllib.error
 import urllib.request
 
 DASH = 'https://chromiumdash.appspot.com/fetch_releases?channel={channel}&platform=Linux&num=1'
 CHANNELS = ('Stable', 'Beta')
+TRANSIENT_HTTP = (429, 500, 502, 503, 504)
 SOURCE = 'https://chromium.googlesource.com/chromium/src'
 TOOLS = 'https://chromium.googlesource.com/chromium/tools/depot_tools'
 
 
-def fetch(url):
-    with urllib.request.urlopen(url, timeout=60) as response:
-        data = response.read(8 * 1024 * 1024 + 1)
-        if len(data) > 8 * 1024 * 1024:
-            raise ValueError('Official response exceeds expected size')
-        return data
+def fetch(url, attempts=6):
+    for attempt in range(attempts):
+        try:
+            with urllib.request.urlopen(url, timeout=60) as response:
+                data = response.read(8 * 1024 * 1024 + 1)
+                if len(data) > 8 * 1024 * 1024:
+                    raise ValueError('Official response exceeds expected size')
+                return data
+        except urllib.error.HTTPError as error:
+            if error.code not in TRANSIENT_HTTP or attempt == attempts - 1:
+                raise
+            delay = 2 ** (attempt + 1)
+            retry_after = error.headers.get('Retry-After', '') if error.headers else ''
+            if retry_after.isdigit():
+                delay = max(delay, min(int(retry_after), 60))
+            error.close()
+            print(f'Official source HTTP {error.code}; retrying {url} in {delay}s', file=sys.stderr, flush=True)
+        except (urllib.error.URLError, TimeoutError):
+            if attempt == attempts - 1:
+                raise
+            delay = 2 ** (attempt + 1)
+            print(f'Official source unavailable; retrying {url} in {delay}s', file=sys.stderr, flush=True)
+        time.sleep(delay)
 
 
 def gitiles_json(url):
@@ -31,13 +52,21 @@ def gitiles_json(url):
     return json.loads(raw[5:])
 
 
-def resolve(channel='Stable'):
+def latest_release(channel='Stable'):
     if channel not in CHANNELS:
         raise ValueError('Unsupported release channel: ' + channel)
     source = DASH.format(channel=channel)
     release = json.loads(fetch(source))[0]
     if release['channel'] != channel or release['platform'] != 'Linux':
         raise ValueError('Release endpoint did not return ' + channel + '/Linux')
+    if not re.fullmatch('[0-9a-f]{40}', release['hashes']['chromium']):
+        raise ValueError('Invalid revision from official endpoint')
+    return release
+
+
+def resolve(channel='Stable'):
+    release = latest_release(channel)
+    source = DASH.format(channel=channel)
     chromium = release['hashes']['chromium']
     tools = gitiles_json(TOOLS + '/+/HEAD?format=JSON')['commit']
     for sha in (chromium, tools):
