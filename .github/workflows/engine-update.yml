@@ -27,7 +27,7 @@ on:
         type: boolean
         default: true
       retry_repair:
-        description: Allow one fresh bounded Codex repair attempt for unchanged inputs
+        description: Allow one fresh bounded agent repair attempt for unchanged inputs
         type: boolean
         default: false
 
@@ -35,7 +35,7 @@ permissions:
   contents: read
 
 env:
-  FLY_ENGINE_CODEX_REPAIR: ${{ vars.FLY_ENGINE_CODEX_REPAIR || 'on' }}
+  FLY_ENGINE_AGENT_REPAIR: ${{ vars.FLY_ENGINE_AGENT_REPAIR || vars.FLY_ENGINE_CODEX_REPAIR || 'on' }}
   FLY_ENGINE_REPAIR_RETRY: ${{ github.event.inputs.retry_repair || 'false' }}
 
 concurrency:

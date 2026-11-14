@@ -67,15 +67,15 @@ class EngineWorkflowTests(unittest.TestCase):
         self.program('python3', '''
 echo "python $*" >> "$FIXTURE/events"
 case "$*" in
-  *codex_repair.py*propose*)
+  *agent_repair.py*propose*)
     if [ "${SCENARIO:-}" = semantic ] || [ "${SCENARIO:-}" = semantic-review-fail ]; then echo 'bounded agent could not repair'; exit 1; fi
     printf 'semantic repair context\\n' > chromium/patches/one.patch ;;
-  *codex_repair.py*kind*)
+  *agent_repair.py*kind*)
     if [[ "${SCENARIO:-}" = semantic-* ]]; then echo semantic; else echo context; fi ;;
-  *codex_repair.py*validate*)
+  *agent_repair.py*validate*)
     if [ "${SCENARIO:-}" = semantic-deferred ]; then echo 'existing browser still uses output'; exit 2; fi
     if [ "${SCENARIO:-}" = semantic-native-fail ] || [ "${SCENARIO:-}" = semantic-review-fail ]; then echo 'native validation or review failed'; exit 1; fi ;;
-  *codex_repair.py*target-current*)
+  *agent_repair.py*target-current*)
     if [ "${SCENARIO:-}" = semantic-target-advanced ]; then echo 'Beta advanced'; exit 1; fi ;;
   *patch-repair*)
     if [[ "${SCENARIO:-}" = semantic* ]]; then echo 'semantic conflict'; exit 1; fi
@@ -163,15 +163,15 @@ esac
         result, events = self.run_beta(SCENARIO='semantic-success')
         self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
         merge = events.index('gh pr merge')
-        self.assertLess(events.index('codex_repair.py validate'), merge)
-        self.assertLess(events.index('codex_repair.py target-current'), merge)
+        self.assertLess(events.index('agent_repair.py validate'), merge)
+        self.assertLess(events.index('agent_repair.py target-current'), merge)
         self.assertGreater(events.index('engine_update.py upgrade'), merge)
         self.assertGreater(events.index('gh issue close'), events.index('native.py verify'))
 
     def test_failed_semantic_native_validation_never_merges_or_closes_warning(self):
         result, events = self.run_beta(SCENARIO='semantic-native-fail')
         self.assertNotEqual(result.returncode, 0)
-        self.assertEqual(events.count('codex_repair.py validate'), 2)
+        self.assertEqual(events.count('agent_repair.py validate'), 2)
         self.assertNotIn('gh pr merge', events)
         self.assertNotIn('gh issue close', events)
         self.assertNotIn('engine_update.py upgrade', events)
@@ -179,14 +179,14 @@ esac
     def test_existing_browser_defers_without_spending_another_proposal(self):
         result, events = self.run_beta(SCENARIO='semantic-deferred')
         self.assertNotEqual(result.returncode, 0)
-        self.assertEqual(events.count('codex_repair.py propose'), 1)
+        self.assertEqual(events.count('agent_repair.py propose'), 1)
         self.assertNotIn('gh pr merge', events)
         self.assertNotIn('gh issue close', events)
 
     def test_target_drift_invalidates_status_without_another_code_proposal(self):
         result, events = self.run_beta(SCENARIO='semantic-target-advanced')
         self.assertNotEqual(result.returncode, 0)
-        self.assertEqual(events.count('codex_repair.py propose'), 1)
+        self.assertEqual(events.count('agent_repair.py propose'), 1)
         self.assertIn('state=failure -f context=engine-validation', events)
         self.assertNotIn('state=success -f context=engine-validation', events)
         self.assertNotIn('gh pr merge', events)
@@ -196,7 +196,7 @@ esac
         result, events = self.run_beta(SCENARIO='release')
         self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
         self.assertNotIn('patch-repair', events)
-        self.assertNotIn('codex_repair.py propose', events)
+        self.assertNotIn('agent_repair.py propose', events)
 
     def test_resumed_stable_repair_cannot_bypass_rejected_semantic_validation(self):
         for _ in range(2):
@@ -207,7 +207,7 @@ esac
                 capture_output=True, text=True, timeout=20)
             self.assertNotEqual(result.returncode, 0, result.stdout + result.stderr)
         events = (self.base / 'events').read_text()
-        self.assertEqual(events.count('codex_repair.py validate --channel Stable'), 2)
+        self.assertEqual(events.count('agent_repair.py validate --channel Stable'), 2)
         self.assertNotIn('engine_update.py validate', events)
         self.assertNotIn('gh pr merge', events)
 
