@@ -528,6 +528,12 @@ Two more causes of repeated work were removed with slots:
   package one more time and shipped the old engine. An update that failed, or
   that no run is working on, does not hold a release back.
 
+Deferred investigation of earlier failure detection, phase-level proof reuse
+and repeated acceptance work is recorded in the
+[engine pipeline performance study](./engine-pipeline-study.md). It is a
+follow-up for after the current maintenance/release work, not a change to the
+validation or publication gates described here.
+
 ## Data use
 
 Moving the candidate downloads only what changed in Chromium since the previous
