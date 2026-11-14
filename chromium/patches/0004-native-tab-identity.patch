@@ -1,13 +1,11 @@
 --- a/chrome/browser/sessions/BUILD.gn
 +++ b/chrome/browser/sessions/BUILD.gn
-@@ -85,6 +85,7 @@
+@@ -85,4 +85,5 @@
    deps = [
      "//chrome/browser:buildflags",
      "//chrome/browser/glic",
 +    "//fly:session_metadata",
      "//chrome/browser/lifetime",
-   ]
- 
 --- a/chrome/browser/sessions/session_service.cc
 +++ b/chrome/browser/sessions/session_service.cc
 @@ -4,6 +4,8 @@
@@ -57,7 +55,7 @@
      SetTabExtensionAppID(session_tab_helper->window_id(),
 --- a/chrome/browser/ui/BUILD.gn
 +++ b/chrome/browser/ui/BUILD.gn
-@@ -498,6 +498,7 @@
+@@ -497,6 +497,7 @@
      sources = [ "browser_tabrestore.cc" ]
      public_deps = [ ":browser_tabrestore" ]
      deps = [
