@@ -130,7 +130,7 @@ Capture a reproducible baseline and proposed result for each case:
 | Busy root or overlapping workflow | Defer through leases; preserve the browser session and avoid duplicate heavy jobs. |
 | Quota/availability failure or rejected review | Preserve the provider policy and rejection semantics; caching cannot turn either into approval. |
 | Beta advances, active Stable lags, or checks/reviews block merge | Freshness and remote gates block merge regardless of cached native proof. |
-| Final merge/publication | All current gates, issue lifecycle, active-build verification and release provenance remain satisfied. |
+| Final merge/publication | All current gates, issue lifecycle, published-package verification and release provenance remain satisfied; local development refresh is opt-in. |
 
 Measure time to first actionable failure, configuration/compilation/link/test
 time, repeated translation units, repeated test phases, review duration, cache

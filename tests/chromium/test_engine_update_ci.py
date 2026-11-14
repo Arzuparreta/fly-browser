@@ -159,14 +159,18 @@ esac
         self.assertNotIn('gh issue close', events)
         self.assertNotIn(' --root ', events)
 
-    def test_semantic_repair_needs_native_validation_before_merge_and_updates_only_after_merge(self):
+    def test_semantic_repair_validates_before_merge_and_closes_without_a_local_rebuild(self):
         result, events = self.run_beta(SCENARIO='semantic-success')
         self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
         merge = events.index('gh pr merge')
         self.assertLess(events.index('agent_repair.py validate'), merge)
         self.assertLess(events.index('agent_repair.py target-current'), merge)
-        self.assertGreater(events.index('engine_update.py upgrade'), merge)
-        self.assertGreater(events.index('gh issue close'), events.index('native.py verify'))
+        replay = events.rindex('patch-check --channel Beta')
+        self.assertGreater(replay, merge)
+        self.assertGreater(events.index('gh issue close'), replay)
+        self.assertNotIn('engine_update.py upgrade', events)
+        self.assertNotIn('native.py verify', events)
+        self.assertNotIn('release.js', events)
 
     def test_failed_semantic_native_validation_never_merges_or_closes_warning(self):
         result, events = self.run_beta(SCENARIO='semantic-native-fail')

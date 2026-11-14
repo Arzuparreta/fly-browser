@@ -21,9 +21,9 @@ once or twice a week. Fly follows them automatically:
    `scripts/release.js prepare`.
 5. `release.yml` makes the validated candidate the active engine root by
    swapping the two roots' symlinks ([Engine roots](#engine-roots)), builds the
-   packages and publishes them. A separate job then brings `out/FlyNative` to
-   the release commit, so `./launch.sh` runs the new engine. The candidate
-   already built and tested it, so only the release's own changes compile.
+   packages and publishes them. The owner normally tests that published
+   release through `fly-install`. Development builds are refreshed only on an
+   explicit request; publication does not rebuild `out/FlyNative` afterwards.
 
 A patch-context conflict first receives a conservative automatic repair
 ([Automatic patch repair](#automatic-patch-repair)). Code/API conflicts and
@@ -72,10 +72,12 @@ Explicit limits in the owner's request take precedence.
    empty release. The invocation authorizes pushes, gated PR merges and release
    publication; do not stop to request that authorization again.
 5. Verify the published release and its downloadable assets/checksums when a
-   release was produced. Ensure the active native build and ordinary
-   `./launch.sh` use the updated Stable engine and task changes, preserving the
-   owner's session; report any required restart. Do not equate merged source,
-   a published package, a local build and the running browser's state.
+   release was produced. The owner's normal acceptance path is the published
+   package installed through `fly-install`. Preserve the running session and
+   refresh/rebuild the local development browser only when explicitly asked.
+   Required native validation in isolated roots and release packaging still
+   run. Do not equate merged source, native validation, a published package
+   and the owner's installed/running browser.
 6. Clean up only this task's branches/worktrees. Report the resulting Stable
    and Beta state, merged PRs, release and validation evidence, and any genuine
    blocker. If no maintenance or release was needed, say so with the checked
@@ -160,7 +162,7 @@ The engine host has two Chromium checkouts, reached by two fixed paths:
 
 | Role | Path | Environment variable | Used by |
 | --- | --- | --- | --- |
-| Active | `/mnt/storage/fly-chromium` | `FLY_ENGINE_ROOT` | Development builds, `./launch.sh`, releases |
+| Active | `/mnt/storage/fly-chromium` | `FLY_ENGINE_ROOT` | Releases; development builds on request |
 | Candidate | `/mnt/storage/fly-chromium-next` | `FLY_ENGINE_CANDIDATE_ROOT` | Validating engine updates |
 | Repair | `/mnt/storage/fly-chromium-repair` | `FLY_ENGINE_REPAIR_ROOT` | Isolated Beta compilation/testing; never swapped into production |
 
@@ -388,8 +390,10 @@ happens first; untrusted native tests have no external network or credentials.
 Stable uses the candidate slot; Beta uses the dedicated repair root, which is
 never a production/adoption candidate. A root already leased by another build
 or still running a browser defers without spending a code proposal or
-interrupting that session. A semantic repair updates the active Stable native
-build only after merge and merged-main replay; restart Fly to load rebuilt code.
+interrupting that session. After merge, the workflow replays merged main before
+closing the warning. It does not refresh or rebuild the owner's development
+browser; that is a separate, explicit request. Published releases remain the
+owner's normal installation/testing path through `fly-install`.
 
 All latest-head remote checks must pass. Main moving invalidates the old
 combined validation. Beta advancing or an active Stable slot lagging behind
@@ -458,6 +462,11 @@ latest upstream release. An automatic detection system being ready does not
 mean every future compatibility repair is already done.
 
 ## Cost of an update
+
+The historical measurements below include a post-release development-build
+job. That job and the post-merge Beta development refresh have since been
+removed at the owner's request: local development builds are now opt-in.
+Candidate/repair acceptance and `out/FlyRelease` packaging remain required.
 
 What the engine host compiles for one Chromium update, from the
 `evidence/engine-update-logs` of each root and the Actions job times. Before
