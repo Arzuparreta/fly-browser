@@ -141,51 +141,94 @@ comment_failure() {
     gh pr comment "$pr" --repo "$REPO" --body-file "$LOGS/comment.md" >/dev/null || true
 }
 
-validate() {
-    local pr version sha
-    pr=$(saved pr) version=$(saved version) sha=$(git rev-parse HEAD)
-    [ -n "$pr" ] || fail "No update pull request was prepared."
-    if [ "$(saved kind)" = beta ]; then
-        validate_beta
-        return
+codex_propose() {
+    local channel=$1 feedback=$2
+    python3 scripts/chromium/codex_repair.py propose --channel "$channel" \
+        --logs "$LOGS/codex-$channel" --failure-log "$feedback"
+}
+
+commit_repair() {
+    local message=$1
+    npm test >"$LOGS/repair-npm-test.log" 2>&1
+    git diff --check
+    if ! git diff --quiet; then
+        git add chromium/patches chromium/overlay/fly
+        git diff --cached --check
+        git commit --quiet -m "$message"
+        git push --quiet origin "HEAD:refs/heads/$BRANCH"
     fi
-    if [ "$(status_of "$sha")" = success ]; then
-        note "$sha already passed native validation."
+}
+
+validate() {
+    local pr version sha reference kind attempt deferred result
+    pr=$(saved pr) version=$(saved version)
+    kind=$(saved kind)
+    [ -n "$pr" ] || fail "No update pull request was prepared."
+    if [ "$kind" = beta ] || [ "$kind" = beta-semantic ]; then
+        validate_beta
         return
     fi
     : "${FLY_ENGINE_CANDIDATE_ROOT:?the runner service must set FLY_ENGINE_CANDIDATE_ROOT}"
     : "${FLY_ENGINE_ROOT:?the runner service must set FLY_ENGINE_ROOT}"
-    set_status "$sha" pending "Checking that every patch applies to Chromium $version"
-    if ! python3 scripts/chromium/engine_update.py patch-check 2>&1 | tee "$LOGS/patch-check.log"; then
-        local reference
-        reference=$(git show origin/main:chromium/upstream.lock.json | python3 -c \
-            'import json,sys; print(json.load(sys.stdin)["chromium"]["revision"])')
-        if ! python3 scripts/chromium/engine_update.py patch-repair --reference "$reference" \
-                >"$LOGS/repair.log" 2>&1; then
-            set_status "$sha" failure "Patch conflict needs a semantic repair"
-            comment_failure "$pr" "$LOGS/repair.log" "Automatic context repair"
-            fail "Safe automatic repair stopped; the update stays open."
+    for attempt in 1 2; do
+        deferred=false
+        # A job's state file is ephemeral. Derive semantic validation from
+        # the actual PR diff on EVERY run, including rejected/failed retries.
+        kind=$(python3 scripts/chromium/codex_repair.py kind --channel Stable --base origin/main) || {
+            fail "The update branch contains changes outside automatic repair scope; preserve it for review."
+        }
+        if [ "$kind" = semantic ]; then
+            save kind stable-semantic
         fi
-        npm test >"$LOGS/npm-test.log" 2>&1
-        git diff --check
-        if ! git diff --quiet; then
-            git add chromium/patches
-            git commit --quiet -m "Reanchor Fly patches for Chromium $version"
-            git push --quiet origin "HEAD:refs/heads/$BRANCH"
-            set_status "$sha" failure "Superseded by the automatically repaired head"
-            sha=$(git rev-parse HEAD)
+        sha=$(git rev-parse HEAD)
+        if [ "$kind" != semantic ] && [ "$(status_of "$sha")" = success ]; then
+            note "$sha already passed native validation."
+            return
         fi
-    fi
-    set_status "$sha" pending "Building Chromium $version and Fly, then running Fly's tests"
-    if ! python3 scripts/chromium/engine_update.py validate --root "$FLY_ENGINE_CANDIDATE_ROOT" \
-            --test-tools "$FLY_ENGINE_ROOT/test-tools" --jobs "$(nproc)" >"$LOGS/validate.log" 2>&1; then
-        tail -n 200 "$LOGS/validate.log"
+        set_status "$sha" pending "Checking patches and native compatibility on Chromium $version"
+        if ! python3 scripts/chromium/engine_update.py patch-check >"$LOGS/patch-check.log" 2>&1; then
+            reference=$(git show origin/main:chromium/upstream.lock.json | python3 -c \
+                'import json,sys; print(json.load(sys.stdin)["chromium"]["revision"])')
+            if ! python3 scripts/chromium/engine_update.py patch-repair --reference "$reference" \
+                    >"$LOGS/repair.log" 2>&1; then
+                if ! codex_propose Stable "$LOGS/repair.log" >"$LOGS/codex-propose.log" 2>&1; then
+                    set_status "$sha" failure "Automatic patch repair stopped safely"
+                    comment_failure "$pr" "$LOGS/codex-propose.log" "Automatic Codex patch repair"
+                    return 1
+                fi
+                save kind stable-semantic
+            fi
+            commit_repair "Repair Fly integration for Chromium $version"
+            if [ "$sha" != "$(git rev-parse HEAD)" ]; then
+                set_status "$sha" failure "Superseded by the automatically repaired head"
+                sha=$(git rev-parse HEAD)
+            fi
+        fi
+        set_status "$sha" pending "Building Chromium $version and Fly, then running Fly's tests"
+        if [ "$(saved kind)" = stable-semantic ]; then
+            if python3 scripts/chromium/codex_repair.py validate --channel Stable \
+                    --logs "$LOGS/codex-Stable" >"$LOGS/validate.log" 2>&1; then
+                set_status "$sha" success "Independent review, control/Fly builds and native tests passed"
+                return
+            else
+                result=$?
+                [ "$result" != 2 ] || deferred=true
+            fi
+        elif python3 scripts/chromium/engine_update.py validate --root "$FLY_ENGINE_CANDIDATE_ROOT" \
+                --test-tools "$FLY_ENGINE_ROOT/test-tools" --jobs "$(nproc)" >"$LOGS/validate.log" 2>&1; then
+            set_status "$sha" success "Chromium $version: control and Fly built, Fly's tests passed"
+            return
+        fi
+        tail -n 80 "$LOGS/validate.log"
         set_status "$sha" failure "Native validation failed on Chromium $version"
         comment_failure "$pr" "$LOGS/validate.log" "Native validation"
-        fail "Native validation failed; see the pull request."
-    fi
-    tail -n 20 "$LOGS/validate.log"
-    set_status "$sha" success "Chromium $version: control and Fly built, Fly's tests passed"
+        if [ "$deferred" = true ] || [ "$attempt" = 2 ] || ! codex_propose Stable "$LOGS/validate.log" >"$LOGS/codex-propose.log" 2>&1; then
+            note "Safe repair did not pass; #$pr remains open."
+            return 1
+        fi
+        save kind stable-semantic
+        commit_repair "Adapt Fly to Chromium $version APIs"
+    done
 }
 
 checks_passed() {
@@ -204,6 +247,19 @@ checks_passed() {
     done
     note "Timed out waiting for the checks of #$pr."
     return 1
+}
+
+beta_target_current() {
+    local sha=$1 pr=$2
+    if python3 scripts/chromium/codex_repair.py target-current --channel Beta \
+            --logs "$LOGS/codex-Beta" >"$LOGS/beta-target.log" 2>&1; then
+        return
+    fi
+    set_status "$sha" failure "Beta or active Stable changed; revalidation is required"
+    comment_failure "$pr" "$LOGS/beta-target.log" "Beta target freshness check"
+    # Target drift is an operational deferral, not a code failure for the
+    # proposer to repair. Never leave a stale green engine-validation status.
+    return 2
 }
 
 merge() {
@@ -230,6 +286,9 @@ merge() {
         git merge-base --is-ancestor origin/main HEAD || continue
         [ "$(gh pr view "$pr" --repo "$REPO" --json reviewDecision --jq .reviewDecision)" != CHANGES_REQUESTED ] ||
             fail "#$pr has a review requesting changes; it stays open."
+        if [ "$(saved kind)" = beta-semantic ]; then
+            beta_target_current "$sha" "$pr" || fail "Beta or Stable advanced; preserve #$pr for revalidation."
+        fi
         if gh pr merge "$pr" --repo "$REPO" --squash --delete-branch --match-head-commit "$sha"; then
             note "Merged #$pr."
             save merged true
@@ -252,8 +311,25 @@ release() {
 }
 
 validate_beta() {
-    local sha pr
+    local sha pr kind result
     sha=$(git rev-parse HEAD) pr=$(saved pr)
+    kind=$(python3 scripts/chromium/codex_repair.py kind --base origin/main)
+    if [ "$kind" = semantic ]; then
+        save kind beta-semantic
+        set_status "$sha" pending "Independent review and Stable/Beta native compilation/tests"
+        if python3 scripts/chromium/codex_repair.py validate --channel Beta \
+                --logs "$LOGS/codex-Beta" >"$LOGS/beta-validation.log" 2>&1; then
+            :
+        else
+            result=$?
+            set_status "$sha" failure "Codex review or Stable/Beta native validation failed"
+            comment_failure "$pr" "$LOGS/beta-validation.log" "Semantic Beta repair validation"
+            return "$result"
+        fi
+        beta_target_current "$sha" "$pr" || return $?
+        set_status "$sha" success "Independent review, Stable/Beta control/Fly builds and native tests passed"
+        return
+    fi
     set_status "$sha" pending "Proving unchanged Stable output and replaying both channels"
     if ! {
         python3 scripts/chromium/engine_update.py patch-verify --base origin/main &&
@@ -267,13 +343,57 @@ validate_beta() {
     set_status "$sha" success "Context only; Stable output identical, Stable and Beta patches apply"
 }
 
+publish_beta() {
+    # Caller owns pr and the worktree. Every new head receives local tests and
+    # then remote checks; an existing branch is updated without force-pushing.
+    npm test >"$LOGS/beta-npm-test.log" 2>&1
+    git diff --check
+    git add chromium/patches chromium/overlay/fly
+    git diff --cached --check
+    if ! git diff --cached --quiet; then
+        git commit --quiet -m "Repair Fly compatibility with Chromium Beta"
+    fi
+    python3 scripts/chromium/codex_repair.py scope --base origin/main
+    git fetch --quiet origin main
+    git merge-base --is-ancestor origin/main HEAD || {
+        note "main moved during Beta preparation; retrying on the next run."
+        return 1
+    }
+    git push --quiet origin "HEAD:refs/heads/$BRANCH"
+    if [ -z "$pr" ]; then
+        if [ "$(python3 scripts/chromium/codex_repair.py kind --base origin/main)" = semantic ]; then
+            cat >"$LOGS/beta-body.md" <<'TEXT'
+Adapts Fly's integration to Chromium Beta while preserving current Stable behavior. Proposed by the authenticated host Codex in a restricted, separate worktree; an independent read-only Codex execution reviewed the actual diff and upstream callers. Scripts, workflows, existing tests, command catalogs, version data, and the shipping pin cannot be changed by the proposer.
+
+Local validation: strict complete-series replay on Stable and the frozen Beta plus npm tests. The `engine-validation` status additionally requires independent review and full control/Fly builds and unit/browser tests for both pins, in isolated non-production engine roots with no host credentials or real user profiles. Native validation remains pending until that status passes. The target is checked again before merge; main moving invalidates the old validation.
+
+All ordinary latest-head PR checks must pass. Beta is never published and this preparation does not cut a release. An incomplete repair stays open with its logs; the warning closes only after merged main passes replay again.
+TEXT
+        else
+            cat >"$LOGS/beta-body.md" <<'TEXT'
+Reanchors Fly's existing integration edits where Chromium changed the surrounding lines. Added and removed lines remain identical; every repaired anchor is unique in both versions and the full patched Stable sources are byte-identical to main.
+
+Validation: local npm tests, strict Stable/Beta replay and the `engine-validation` proof against current main. Checks are repeated if main moves. No engine checkout changes for a context-only repair. Beta compilation/runtime remain unverified until that engine undergoes native validation. No release is cut.
+TEXT
+        fi
+        gh pr create --repo "$REPO" --base main --head "$BRANCH" \
+            --title "Prepare Fly patches for Chromium Beta" --label impact:none \
+            --body-file "$LOGS/beta-body.md" >/dev/null
+        pr=$(open_pr)
+    fi
+    save pr "$pr"
+}
+
 beta() (
-    # This job only runs main's trusted tooling. Repair files live in a new
-    # task worktree, never in the active/candidate engines or the runner's
-    # primary checkout. Stable work is prepared separately afterwards.
     credentials
     git fetch --quiet origin main
-    local directory local_branch pr unexpected
+    local directory local_branch pr unexpected attempt result ready=false
+    # Do not hold the only engine runner while a security release waits for it.
+    if gh run list --repo "$REPO" --workflow release.yml --limit 30 \
+            --json status --jq 'any(.[]; .status != "completed")' | grep -Fxq true; then
+        note "A release owns or is waiting for the engine host; defer Beta repair to the next run."
+        return
+    fi
     directory=$(mktemp -d "${RUNNER_TEMP:-/tmp}/fly-beta-repair.XXXXXX")
     local_branch="automation/beta-${GITHUB_RUN_ID:-local}-$(basename "$directory")"
     git worktree add --quiet -b "$local_branch" "$directory/repo" origin/main
@@ -286,69 +406,69 @@ beta() (
     pr=$(open_pr)
     if [ -n "$pr" ] || [ -n "$(git ls-remote --heads origin "$BRANCH")" ]; then
         git fetch --quiet origin "$BRANCH"
-        # Never load scripts, hooks or configuration from an automation PR.
-        # Its only allowed changes are existing plain-text patch files.
-        unexpected=$(git diff --name-only "origin/main...origin/$BRANCH" | \
-            sed -E '/^chromium\/patches\/[a-zA-Z0-9._-]+\.patch$/d')
+        # Reject executable/configuration changes before loading any branch
+        # file. The trusted controller then enforces the narrower file rules.
+        unexpected=$(git diff --name-only "origin/main...origin/$BRANCH" | sed -E \
+            -e '/^chromium\/patches\/[a-zA-Z0-9._-]+\.patch$/d' \
+            -e '/^chromium\/overlay\/fly\/.*\.(cc|h|mm)$/d' \
+            -e '/^chromium\/overlay\/fly\/integration\.gni$/d')
         [ -z "$unexpected" ] || fail "Unexpected Beta branch changes; preserving it: $unexpected"
+        python3 scripts/chromium/codex_repair.py scope --base origin/main --head "origin/$BRANCH"
         git merge --quiet --no-edit "origin/$BRANCH" || fail "Beta branch conflicts with main; preserving it."
     fi
     if ! python3 scripts/chromium/engine_update.py patch-repair --channel Beta \
             >"$LOGS/beta-repair.log" 2>&1; then
-        tail -n 60 "$LOGS/beta-repair.log"
-        beta_failure
-        note "::warning::Safe Beta repair stopped; the warning issue remains open. Stable tracking continues."
-        return 1
+        if ! codex_propose Beta "$LOGS/beta-repair.log" >>"$LOGS/beta-repair.log" 2>&1; then
+            tail -n 50 "$LOGS/beta-repair.log"
+            beta_failure
+            return 1
+        fi
     fi
-    if ! git diff --quiet; then
-        git diff --check
-        git add chromium/patches
-        git commit --quiet -m "Reanchor Fly integration patches for Chromium Beta"
-    fi
-    if git diff --quiet origin/main HEAD; then
+    if git diff --quiet origin/main HEAD && git diff --quiet && \
+            [ -z "$(git ls-files --others --exclude-standard)" ]; then
         if [ -n "$pr" ]; then
             gh pr close "$pr" --repo "$REPO" --delete-branch \
-                --comment "main already contains this preparation; no Beta patch changes remain."
+                --comment "main already contains this preparation; no Beta changes remain."
         fi
-        note "No Beta context repair is needed."
+        note "No Beta repair is needed."
         return
     fi
-    # Reject unexpected edits on a reused automation PR BEFORE pushing it.
-    python3 scripts/chromium/engine_update.py patch-verify --base origin/main
-    npm test >"$LOGS/beta-npm-test.log" 2>&1
-    git diff --check origin/main HEAD
-    git fetch --quiet origin main
-    git merge-base --is-ancestor origin/main HEAD || {
-        note "main moved during Beta preparation; retrying on the next scheduled run."
-        return 1
-    }
-    git push --quiet origin "HEAD:refs/heads/$BRANCH"
-    if [ -z "$pr" ]; then
-        cat >"$LOGS/beta-body.md" <<'TEXT'
-Reanchors Fly's existing integration edits where Chromium changed the surrounding lines. All added and removed lines remain identical, every repaired anchor is unique in both versions, and the full patched Stable sources are byte-for-byte identical to main.
-
-Validation: local npm tests, strict Stable and Beta patch replay, and the `engine-validation` proof against current main. Checks are repeated if main moves. No engine checkout is changed; Beta compilation and runtime compatibility remain unverified until the normal Stable update builds and tests that engine. Semantic/API conflicts are refused and leave the warning issue open. This preparation does not cut a release.
-TEXT
-        gh pr create --repo "$REPO" --base main --head "$BRANCH" \
-            --title "Prepare Fly patches for Chromium Beta" --label impact:none \
-            --body-file "$LOGS/beta-body.md" >/dev/null
-        pr=$(open_pr)
-    fi
-    save pr "$pr"
-    validate_beta
+    for attempt in 1 2; do
+        publish_beta
+        if validate_beta; then
+            ready=true
+            break
+        else
+            result=$?
+            if [ "$result" = 2 ]; then
+                cp "$LOGS/beta-validation.log" "$LOGS/beta-repair.log"
+                beta_failure
+                return 1
+            fi
+        fi
+        if [ "$attempt" = 2 ] || ! codex_propose Beta "$LOGS/beta-validation.log" >"$LOGS/beta-repair.log" 2>&1; then
+            beta_failure
+            return 1
+        fi
+    done
+    [ "$ready" = true ] || return 1
     merge
     git fetch --quiet origin main
     git switch --quiet --detach origin/main
-    # Close only after a new strict check of MERGED main. A green PR alone
-    # never clears the issue, and a network failure leaves it open.
     python3 scripts/chromium/engine_update.py patch-check --channel Beta
+    if [ "$(saved kind)" = beta-semantic ]; then
+        # Only merged, fully validated source reaches the usual local launcher.
+        python3 scripts/chromium/engine_update.py upgrade --root "$FLY_ENGINE_ROOT" \
+            --through build >"$LOGS/merged-native.log" 2>&1
+        python3 scripts/chromium/native.py verify --root "$FLY_ENGINE_ROOT"
+    fi
     local issue
     issue=$(gh issue list --repo "$REPO" --state open \
         --search 'in:title "Fly patches do not apply to Chromium Beta"' \
         --json number,title --jq '.[] | select(.title == "Fly patches do not apply to Chromium Beta") | .number' | head -1)
     if [ -n "$issue" ]; then
         gh issue close "$issue" --repo "$REPO" \
-            --comment "Automatic context repair merged in #$pr. Every patch applies to Chromium Beta on main again."
+            --comment "Automatic repair merged in #$pr. Every patch applies to Chromium Beta on main again; required validation passed."
     fi
 )
 
@@ -365,7 +485,7 @@ beta_failure() {
         return
     fi
     {
-        printf '%s\n\nAutomatic context repair stopped without changing any patches. A developer must resolve this semantic or ambiguous conflict; Stable tracking continues.\n\n' "$marker"
+        printf '%s\n\nAutomatic repair could not complete safely. See the bounded Codex attempt and validation logs below. The warning remains open; Stable tracking continues.\n\n' "$marker"
         printf '<details><summary>Repair log</summary>\n\n```\n'
         tail -n 30 "$LOGS/beta-repair.log" | sed 's/```/` ` `/g'
         printf '```\n\n</details>\n\nRun: %s/%s/actions/runs/%s\n' \

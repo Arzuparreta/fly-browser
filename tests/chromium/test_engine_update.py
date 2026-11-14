@@ -242,6 +242,218 @@ class PatchRepairTests(PatchCheckTests):
                 patch_repair.parse(data)
 
 
+class VendoredDependencyTests(unittest.TestCase):
+    def setUp(self):
+        self.tmp = tempfile.TemporaryDirectory(prefix='fly-vendored-dependency-')
+        self.addCleanup(self.tmp.cleanup)
+        self.root = Path(self.tmp.name)
+        self.source = self.root / 'src'
+        self.source.mkdir()
+        git(self.source, 'init', '--quiet')
+        git(self.source, 'remote', 'add', 'origin', SRC_URL)
+        self.dependency = self.source / 'vendor'
+        self.dependency.mkdir()
+        git(self.dependency, 'init', '--quiet')
+        git(self.dependency, 'remote', 'add', 'origin', 'https://example.invalid/managed.git')
+        dep = commit(self.dependency, {'file.cc': 'managed dependency\n'}, 'dependency')
+        old = commit(self.source, {'main.cc': 'main\n'}, 'old source')
+        self.old = {'url': SRC_URL, 'revision': old}
+        env = {**os.environ, 'GIT_INDEX_FILE': str(self.root / 'new.index')}
+        def index(*args):
+            return subprocess.run(['git', *args], cwd=self.source, env=env, check=True,
+                                  capture_output=True, text=True).stdout.strip()
+        self.index = index
+        index('read-tree', old)
+        index('update-index', '--force-remove', 'vendor')
+        blob = subprocess.run(['git', 'hash-object', '-w', '--stdin'], cwd=self.source,
+                               input='vendored upstream\n', check=True, capture_output=True, text=True).stdout.strip()
+        index('update-index', '--add', '--cacheinfo', '100644,' + blob + ',vendor/file.cc')
+        tree = index('write-tree')
+        new = git(self.source, '-c', 'user.name=Fixture', '-c', 'user.email=fixture@invalid.example',
+                  'commit-tree', tree, '-p', old, '-m', 'vendored upstream')
+        self.new = {'url': SRC_URL, 'revision': new}
+        inventory = self.root / 'evidence/dependency-revisions.json'
+        engine.atomic_json(inventory, {'src': {'url': SRC_URL, 'rev': old},
+            'src/vendor': {'url': 'https://example.invalid/managed.git', 'rev': dep}})
+        engine.atomic_json(self.root / 'evidence/sync.json', {
+            'details': {'dependency_revisions_sha256': engine.digest(inventory)}})
+
+    def transition(self):
+        return engine_update.retire_vendored_dependencies(self.root, self.old, self.new)
+
+    def test_gitlink_becomes_vendored_files_without_deleting_the_dependency(self):
+        engine_update.move_checkout(self.source, self.old, self.new, submodules=False, transition=self.transition)
+        self.assertEqual((self.dependency / 'file.cc').read_text(), 'vendored upstream\n')
+        record = json.loads((self.root / 'evidence/engine-retired-dependencies-last.json').read_text())
+        backup = self.root / record['entries'][0]['backup']
+        self.assertEqual((backup / 'file.cc').read_text(), 'managed dependency\n')
+        self.assertTrue((backup / '.git').is_dir())
+        self.assertFalse((self.root / engine_update.RETIRED_STATE).exists())
+        engine.verify_checkout(self.source, self.new)
+
+    def test_dirty_dependency_is_preserved_and_blocks_the_transition(self):
+        (self.dependency / 'owner.txt').write_text('owner work\n')
+        with self.assertRaisesRegex(RuntimeError, 'Dirty checkout'):
+            engine_update.move_checkout(self.source, self.old, self.new, submodules=False, transition=self.transition)
+        self.assertEqual((self.dependency / 'owner.txt').read_text(), 'owner work\n')
+        self.assertEqual(git(self.source, 'rev-parse', 'HEAD'), self.old['revision'])
+        self.assertFalse((self.root / engine_update.RETIRED_STATE).exists())
+
+    def removed_target(self):
+        self.index('read-tree', self.old['revision'])
+        self.index('update-index', '--force-remove', 'vendor')
+        tree = self.index('write-tree')
+        revision = git(self.source, '-c', 'user.name=Fixture', '-c', 'user.email=fixture@invalid.example',
+                       'commit-tree', tree, '-p', self.old['revision'], '-m', 'removed dependency')
+        self.new = {'url': SRC_URL, 'revision': revision}
+
+    def test_removed_gitlink_is_preserved_before_checkout(self):
+        self.removed_target()
+        engine_update.move_checkout(self.source, self.old, self.new, submodules=False, transition=self.transition)
+        self.assertFalse(self.dependency.exists())
+        record = json.loads((self.root / 'evidence/engine-retired-dependencies-last.json').read_text())
+        self.assertEqual((self.root / record['entries'][0]['backup'] / 'file.cc').read_text(), 'managed dependency\n')
+        engine.verify_checkout(self.source, self.new)
+
+    def test_resume_new_head_preserves_obsolete_checkout_before_verifying_sources(self):
+        self.removed_target()
+        git(self.source, 'checkout', '--quiet', '--detach', self.new['revision'])
+        self.assertTrue(self.dependency.exists())
+        self.assertFalse(engine_update.move_checkout(self.source, self.old, self.new,
+                         submodules=False, transition=self.transition))
+        self.assertFalse(self.dependency.exists())
+        engine.verify_checkout(self.source, self.new)
+
+    def generated_target(self):
+        script = 'buildtools/reclient_cfgs/configure_reclient_cfgs.py'
+        ignore = 'buildtools/reclient_cfgs/.gitignore'
+        old = commit(self.source, {script: "print('generate reproxy.cfg')\n", ignore: 'reproxy.cfg\n'}, 'old generator')
+        self.old = {'url': SRC_URL, 'revision': old}
+        self.generated = self.source / 'buildtools/reclient_cfgs/reproxy.cfg'
+        self.generated.write_text('preserved configuration\n')
+        self.index('read-tree', old)
+        for name, value in ((script, "print('modern Siso')\n"), (ignore, '')):
+            blob = subprocess.run(['git', 'hash-object', '-w', '--stdin'], cwd=self.source,
+                                   input=value, check=True, capture_output=True, text=True).stdout.strip()
+            self.index('update-index', '--add', '--cacheinfo', '100644,' + blob + ',' + name)
+        revision = git(self.source, '-c', 'user.name=Fixture', '-c', 'user.email=fixture@invalid.example',
+                       'commit-tree', self.index('write-tree'), '-p', old, '-m', 'new generator')
+        self.new = {'url': SRC_URL, 'revision': revision}
+
+    def test_only_the_retired_upstream_generated_config_is_preserved(self):
+        self.generated_target()
+        engine_update.move_checkout(self.source, self.old, self.new, submodules=False, transition=self.transition)
+        self.assertFalse(self.generated.exists())
+        record = json.loads((self.root / 'evidence/engine-retired-dependencies-last.json').read_text())
+        item = record['entries'][0]
+        self.assertEqual(item['kind'], 'generated')
+        self.assertEqual((self.root / item['backup']).read_text(), 'preserved configuration\n')
+        engine.verify_checkout(self.source, self.new)
+
+    def test_failed_checkout_restores_the_generated_config_bytes(self):
+        self.generated_target()
+        real = engine.run
+        def run(args, *positional, **kwargs):
+            if args[:4] == ['git', '-c', 'core.autocrlf=false', 'checkout']:
+                raise subprocess.CalledProcessError(1, args)
+            return real(args, *positional, **kwargs)
+        with patch.object(engine, 'run', side_effect=run), self.assertRaises(subprocess.CalledProcessError):
+            engine_update.move_checkout(self.source, self.old, self.new, submodules=False, transition=self.transition)
+        self.assertEqual(self.generated.read_text(), 'preserved configuration\n')
+        self.assertFalse((self.root / engine_update.RETIRED_STATE).exists())
+        engine.verify_checkout(self.source, self.old)
+
+    def test_failed_checkout_restores_the_managed_checkout_without_reset(self):
+        real = engine.run
+        def run(args, *positional, **kwargs):
+            if args[:4] == ['git', '-c', 'core.autocrlf=false', 'checkout']:
+                raise subprocess.CalledProcessError(1, args)
+            return real(args, *positional, **kwargs)
+        with patch.object(engine, 'run', side_effect=run), self.assertRaises(subprocess.CalledProcessError):
+            engine_update.move_checkout(self.source, self.old, self.new, submodules=False, transition=self.transition)
+        self.assertEqual((self.dependency / 'file.cc').read_text(), 'managed dependency\n')
+        self.assertTrue((self.dependency / '.git').is_dir())
+        self.assertFalse((self.root / engine_update.RETIRED_STATE).exists())
+        engine.verify_checkout(self.source, self.old)
+
+    def nested_case(self, keep_gitlink=False):
+        child = self.dependency / 'child'
+        child.mkdir()
+        git(child, 'init', '--quiet')
+        git(child, 'remote', 'add', 'origin', 'https://example.invalid/child.git')
+        child_rev = commit(child, {'file.cc': 'nested managed source\n'}, 'child')
+        parent_old = commit(self.dependency, {'DEPS': 'old nested dependencies\n'}, 'parent with child')
+        source_old = commit(self.source, {}, 'record parent')
+        env = {**os.environ, 'GIT_INDEX_FILE': str(self.root / 'parent.index')}
+        def index(*args):
+            return subprocess.run(['git', *args], cwd=self.dependency, env=env, check=True,
+                                  capture_output=True, text=True).stdout.strip()
+        index('read-tree', parent_old)
+        if keep_gitlink:
+            newer = git(child, '-c', 'user.name=Fixture', '-c', 'user.email=fixture@invalid.example',
+                        'commit-tree', git(child, 'write-tree'), '-p', child_rev, '-m', 'unmanaged pointer')
+            index('update-index', '--cacheinfo', '160000,' + newer + ',child')
+        else:
+            index('update-index', '--force-remove', 'child')
+        parent_new = git(self.dependency, '-c', 'user.name=Fixture', '-c', 'user.email=fixture@invalid.example',
+                         'commit-tree', index('write-tree'), '-p', parent_old, '-m', 'parent removes child')
+        previous = {'src': {'url': SRC_URL, 'rev': source_old},
+            'src/vendor': {'url': 'https://example.invalid/managed.git', 'rev': parent_old},
+            'src/vendor/child': {'url': 'https://example.invalid/child.git', 'rev': child_rev}}
+        current = {'src/vendor': {'url': 'https://example.invalid/managed.git', 'rev': parent_new}}
+        return child, previous, current
+
+    def test_nested_retirement_after_gclient_sync_preserves_the_old_child(self):
+        child, previous, current = self.nested_case()
+        git(self.dependency, 'checkout', '--quiet', '--detach', current['src/vendor']['rev'])
+        engine_update.retire_nested_dependencies(self.root, previous, current)
+        self.assertFalse(child.exists())
+        backup = next((self.root / 'evidence/retired-dependencies').glob('*/src/vendor/child/file.cc'))
+        self.assertEqual(backup.read_text(), 'nested managed source\n')
+        engine.verify_checkout(self.dependency, {'url': current['src/vendor']['url'],
+                                                 'revision': current['src/vendor']['rev']})
+
+    def test_nested_retirement_refuses_owner_edits(self):
+        child, previous, current = self.nested_case()
+        (child / 'owner.txt').write_text('owner work\n')
+        git(self.dependency, 'checkout', '--quiet', '--detach', current['src/vendor']['rev'])
+        with self.assertRaisesRegex(RuntimeError, 'Dirty checkout'):
+            engine_update.retire_nested_dependencies(self.root, previous, current)
+        self.assertEqual((child / 'owner.txt').read_text(), 'owner work\n')
+
+    def test_gitlink_no_longer_managed_by_deps_is_preserved_and_left_uninitialised(self):
+        child, previous, current = self.nested_case(keep_gitlink=True)
+        git(self.dependency, 'checkout', '--quiet', '--detach', current['src/vendor']['rev'])
+        engine_update.retire_nested_dependencies(self.root, previous, current)
+        self.assertTrue(child.is_dir())
+        self.assertEqual(list(child.iterdir()), [])
+        backup = next((self.root / 'evidence/retired-dependencies').glob('*/src/vendor/child/file.cc'))
+        self.assertEqual(backup.read_text(), 'nested managed source\n')
+        engine.verify_checkout(self.dependency, {'url': current['src/vendor']['url'],
+                                                 'revision': current['src/vendor']['rev']})
+
+    def test_nested_checkout_is_prepared_before_recursive_dependency_fetch(self):
+        child, previous, current = self.nested_case()
+        real = engine.run
+        def run(args, cwd, env=None, capture=False, foreground=False):
+            if args[:2] == ['gclient', 'revinfo']:
+                Path(args[-1]).write_text(json.dumps(current))
+                return ''
+            return real(args, cwd, env, capture, foreground)
+        with patch.object(engine, 'run', side_effect=run):
+            engine_update.fetch_dependencies(self.root, None, previous=previous)
+        self.assertFalse(child.exists())
+        self.assertEqual(git(self.dependency, 'rev-parse', 'HEAD'), current['src/vendor']['rev'])
+
+    def test_resume_after_checkout_finalises_the_recovery_journal(self):
+        self.test_gitlink_becomes_vendored_files_without_deleting_the_dependency()
+        last = self.root / 'evidence/engine-retired-dependencies-last.json'
+        last.rename(self.root / engine_update.RETIRED_STATE)
+        engine_update.restore_retired_dependencies(self.root, self.old, self.new)
+        self.assertFalse((self.root / engine_update.RETIRED_STATE).exists())
+        self.assertTrue(last.exists())
+
+
 class FetchDependenciesTests(unittest.TestCase):
     """Only the missing new revision of each dependency is fetched, shallow,
     from a local origin; gclient revinfo is simulated."""
@@ -428,6 +640,61 @@ class MoveTests(unittest.TestCase):
         self.assertTrue((self.root / engine_update.MOVE_STATE).exists())
         self.assertTrue(engine_update.move(self.root, self.new, jobs=1))
         self.assertFalse((self.root / engine_update.MOVE_STATE).exists())
+
+    def test_sync_retires_nested_checkouts_before_full_gitlink_verification(self):
+        parent = self.src / 'vendor'
+        child = parent / 'child'
+        child.mkdir(parents=True)
+        git(parent, 'init', '--quiet')
+        git(parent, 'remote', 'add', 'origin', 'https://example.invalid/parent.git')
+        git(child, 'init', '--quiet')
+        git(child, 'remote', 'add', 'origin', 'https://example.invalid/child.git')
+        child_rev = commit(child, {'child.cc': 'managed child\n'}, 'child')
+        parent_old = commit(parent, {'parent.cc': 'parent\n'}, 'old parent')
+        self.old_rev = commit(self.src, {}, 'record old parent')
+        index = self.root / 'parent.index'
+        env = {**os.environ, 'GIT_INDEX_FILE': str(index)}
+        def parent_index(*args):
+            return subprocess.run(['git', *args], cwd=parent, env=env, check=True,
+                                  text=True, capture_output=True).stdout.strip()
+        parent_index('read-tree', parent_old)
+        child_new = git(child, '-c', 'user.name=Fixture', '-c', 'user.email=fixture@invalid.example',
+                        'commit-tree', git(child, 'write-tree'), '-p', child_rev, '-m', 'unmanaged pointer')
+        parent_index('update-index', '--cacheinfo', '160000,' + child_new + ',child')
+        parent_new = git(parent, '-c', 'user.name=Fixture', '-c', 'user.email=fixture@invalid.example',
+                         'commit-tree', parent_index('write-tree'), '-p', parent_old, '-m', 'retire child')
+        # Only gclient sync moves this parent (it has no nested DEPS file).
+        git(self.src, 'update-index', '--cacheinfo', '160000,' + parent_new + ',vendor')
+        self.new_rev = git(self.src, '-c', 'user.name=Fixture', '-c', 'user.email=fixture@invalid.example',
+                           'commit-tree', git(self.src, 'write-tree'), '-p', self.old_rev, '-m', 'new parent')
+        git(self.src, 'read-tree', self.old_rev)
+        self.old = lock_for(self.old_rev, 'old deps\n', self.tools_rev, '155.0.1.1')
+        self.new = lock_for(self.new_rev, 'old deps\n', self.tools_rev, '156.0.1.1')
+        inventory = {'src': {'url': SRC_URL, 'rev': self.old_rev},
+            'src/vendor': {'url': 'https://example.invalid/parent.git', 'rev': parent_old},
+            'src/vendor/child': {'url': 'https://example.invalid/child.git', 'rev': child_rev}}
+        revisions = self.root / 'evidence/dependency-revisions.json'
+        engine.atomic_json(revisions, inventory)
+        self.lock_file.write_text(json.dumps(self.old))
+        engine.evidence(self.root, 'sync', self.old, {'dependency_revisions_sha256': engine.digest(revisions)})
+        self.lock_file.write_text(json.dumps(self.new))
+        desired = {'src': {'url': SRC_URL, 'rev': self.new_rev},
+                   'src/vendor': dict(inventory['src/vendor'], rev=parent_new)}
+        real = self.run_command
+        def sync(args, cwd, env=None, capture=False, foreground=False):
+            if list(map(str, args[:2])) == ['gclient', 'sync']:
+                git(parent, 'checkout', '--quiet', '--detach', parent_new)
+            if list(map(str, args[:2])) == ['gclient', 'revinfo']:
+                Path(args[-1]).write_text(json.dumps(desired))
+                return ''
+            return real(args, cwd, env, capture, foreground)
+        engine.run.side_effect = sync
+        self.assertTrue(engine_update.move(self.root, self.new, jobs=1))
+        self.assertTrue(child.is_dir())
+        self.assertEqual(list(child.iterdir()), [])
+        saved = next((self.root / 'evidence/retired-dependencies').glob('*/src/vendor/child/child.cc'))
+        self.assertEqual(saved.read_text(), 'managed child\n')
+        engine.verify_dependencies(self.root)
 
     def test_refuses_unexplained_source_changes(self):
         (self.src / 'upstream.cc').write_text('local edit\n')
