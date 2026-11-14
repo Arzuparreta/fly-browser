@@ -1222,7 +1222,8 @@ void FlyWindowController::UpdateSidebarBounds() {
   bounds.set_width(FlyScaled(kSidebarWidth) +
                    (sidebar_auto_collapse_ ? kSidebarShadowExtent : 0));
   if (sidebar_host_->parent() != frame_)
-    views::View::ConvertRectToTarget(frame_, sidebar_host_->parent(), &bounds);
+    bounds = views::View::ConvertRectToTarget(frame_, sidebar_host_->parent(),
+                                             bounds);
   sidebar_host_->SetBoundsRect(bounds);
   // This overlay is excluded from layout; update its native clip explicitly.
   sidebar_host_->DeprecatedLayoutImmediately();
