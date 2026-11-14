@@ -153,7 +153,7 @@ class TabSidebar : public views::View,
   bool rail_ = false;
   bool refresh_pending_ = false;
   bool full_refresh_pending_ = false;
-  std::set<content::WebContents*> dirty_rows_;
+  std::set<raw_ptr<content::WebContents>> dirty_rows_;
   size_t row_updates_ = 0;
   base::WeakPtrFactory<TabSidebar> weak_factory_{this};
 };

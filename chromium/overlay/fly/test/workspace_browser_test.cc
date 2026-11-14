@@ -65,6 +65,7 @@
 #include "fly/ui/history_service.h"
 #include "fly/ui/keyboard_editor.h"
 #include "fly/ui/native_commands.h"
+#include "fly/ui/navigation_disposition.h"
 #include "fly/ui/new_tab_ui.h"
 #include "fly/ui/page_scroller.h"
 #include "fly/ui/sidebar_panel.h"
@@ -90,6 +91,7 @@
 #include "ui/views/accessibility/view_accessibility.h"
 #include "ui/views/controls/button/checkbox.h"
 #include "ui/views/controls/label.h"
+#include "ui/views/controls/native/native_view_host.h"
 #include "ui/views/controls/tabbed_pane/tabbed_pane.h"
 #include "ui/views/controls/textfield/textfield.h"
 #include "url/origin.h"
@@ -913,6 +915,8 @@ class FlySidebarBrowserTest : public FlyWorkspaceBrowserTest {
   }
 
  protected:
+  void CheckViewportAndPageClicks();
+
   void MovePointer(gfx::Point point) {
     ui::test::EventGenerator mouse(Window().widget()
                                        ->GetNativeWindow()
@@ -1086,8 +1090,7 @@ IN_PROC_BROWSER_TEST_F(FlySidebarBrowserTest,
       [&] { return window.workspace_picker().active(); }));
 }
 
-IN_PROC_BROWSER_TEST_F(FlySidebarBrowserTest,
-                       HoverKeepsViewportVisibilityAndBlocksPageClickThrough) {
+void FlySidebarBrowserTest::CheckViewportAndPageClicks() {
   ASSERT_TRUE(ui_test_utils::NavigateToURL(
       browser(), embedded_test_server()->GetURL("/title1.html")));
   auto* page = Active(browser());
@@ -1131,6 +1134,11 @@ IN_PROC_BROWSER_TEST_F(FlySidebarBrowserTest,
   EXPECT_EQ(width, content::EvalJs(page, "innerWidth"));
   EXPECT_EQ(0, content::EvalJs(page, "resizes"));
   EXPECT_EQ(0, content::EvalJs(page, "visibilityEvents.length"));
+}
+
+IN_PROC_BROWSER_TEST_F(FlySidebarBrowserTest,
+                       HoverKeepsViewportVisibilityAndBlocksPageClickThrough) {
+  CheckViewportAndPageClicks();
 }
 
 // Opening the sidebar over a row shows that row's hover look and close
@@ -1236,12 +1244,11 @@ IN_PROC_BROWSER_TEST_F(FlySidebarBrowserTest,
   // its shadow or the hidden part of the collapsed panel.
   auto* host_root = window.widget()->GetNativeWindow()->GetRootWindow();
   auto* sidebar = window.sidebar_widget_for_testing()->GetNativeWindow();
-  auto* clip = sidebar->parent();
   auto sidebar_at = [&](int x) {
     gfx::Point point(origin.x() + x, origin.y() + 300);
     wm::ConvertPointFromScreen(host_root, &point);
     auto* hit = host_root->GetEventHandlerForPoint(point);
-    return hit && clip->Contains(hit);
+    return hit && sidebar->Contains(hit);
   };
   EXPECT_TRUE(sidebar_at(100));
   EXPECT_FALSE(sidebar_at(FlyScaled(260) + 20));
@@ -1265,6 +1272,50 @@ IN_PROC_BROWSER_TEST_F(FlySidebarBrowserTest,
   ASSERT_TRUE(base::test::RunUntil([&] {
     return root->edge()->layer()->transform().To2dTranslation().x() == -shift;
   }));
+}
+
+// Force the Views-managed path on Stable too, so its layering regression is
+// exercised before a future Chromium pin removes the clipping-window API.
+class FlyViewsManagedSidebarBrowserTest : public FlySidebarBrowserTest {
+ private:
+  base::AutoReset<bool> views_host_ =
+      FlyWindowController::UseViewsManagedSidebarHostForTesting();
+};
+
+IN_PROC_BROWSER_TEST_F(FlyViewsManagedSidebarBrowserTest,
+                       HoverKeepsViewportVisibilityAndBlocksPageClickThrough) {
+  CheckViewportAndPageClicks();
+}
+
+IN_PROC_BROWSER_TEST_F(FlyViewsManagedSidebarBrowserTest,
+                       FloatingSurfaceKeepsClicksWhenSidebarExpands) {
+  auto& window = Window();
+  ASSERT_TRUE(window.sidebar_host()->layer());
+  MoveToPage();
+  ASSERT_TRUE(InvokeNativeCommand(browser(), "open-diagnostics"));
+  auto* hub = window.diagnostics_hub_for_testing();
+  ASSERT_TRUE(hub && hub->active());
+  auto* panel = hub->panel_for_testing();
+  ASSERT_TRUE(panel && panel->GetWidget());
+  views::test::RunScheduledLayout(panel->GetWidget());
+  OpenByPointer();
+  WaitForSidebarMotion();
+  // The floating surface starts just beyond the rail and is drawn above the
+  // expanded sidebar. Its overlapping part must receive the pointer too.
+  const auto desktop =
+      window.widget()->GetContentsView()->GetBoundsInScreen();
+  gfx::Point point(desktop.x() + FlyScaled(100),
+                   panel->GetBoundsInScreen().CenterPoint().y());
+  ASSERT_TRUE(panel->GetBoundsInScreen().Contains(point));
+  auto* root = window.widget()->GetNativeWindow()->GetRootWindow();
+  auto* surface = panel->GetWidget()->GetNativeWindow();
+  wm::ConvertPointFromScreen(root, &point);
+  window.widget()->ReorderNativeViews();
+  auto* hit = root->GetEventHandlerForPoint(point);
+  EXPECT_TRUE(hit && surface->Contains(hit));
+  EXPECT_FALSE(hit &&
+               window.sidebar_widget_for_testing()->GetNativeWindow()->Contains(
+                   hit));
 }
 
 // Leaving the window (the screen's left edge, the window border) keeps the
@@ -2401,7 +2452,7 @@ IN_PROC_BROWSER_TEST_F(FlyNavigationFeedbackBrowserTest,
   EXPECT_EQ(0, content::EvalJs(contents, "document.getAnimations().length"));
   ui_test_utils::NavigateToURLWithDisposition(
       browser(), server_.GetURL("/waiting"),
-      WindowOpenDisposition::NEW_BACKGROUND_TAB,
+      NewBackgroundTabDisposition(),
       ui_test_utils::BROWSER_TEST_NO_WAIT);
   EXPECT_EQ(contents, Active(browser()));
   waiting_->WaitForRequest();
@@ -2811,7 +2862,7 @@ IN_PROC_BROWSER_TEST_F(FlyWorkspaceBrowserTest,
                        QuietBackgroundNewTabHasNoTelemetryOrHistoryWork) {
   const auto queries = App().new_tab_history().query_count_for_testing();
   ASSERT_TRUE(ui_test_utils::NavigateToURLWithDisposition(
-      browser(), GURL(kFlyNewTabURL), WindowOpenDisposition::NEW_BACKGROUND_TAB,
+      browser(), GURL(kFlyNewTabURL), NewBackgroundTabDisposition(),
       ui_test_utils::BROWSER_TEST_WAIT_FOR_LOAD_STOP));
   auto* model = browser()->GetTabStripModel();
   auto* contents = model->GetWebContentsAt(model->count() - 1);
@@ -6006,7 +6057,7 @@ IN_PROC_BROWSER_TEST_F(FlyWorkspaceBrowserTest, DashboardDragReordersTabs) {
       browser(), embedded_test_server()->GetURL("/title1.html")));
   ASSERT_TRUE(ui_test_utils::NavigateToURLWithDisposition(
       browser(), embedded_test_server()->GetURL("/title2.html"),
-      WindowOpenDisposition::NEW_FOREGROUND_TAB,
+      NewForegroundTabDisposition(),
       ui_test_utils::BROWSER_TEST_WAIT_FOR_LOAD_STOP));
   auto* model = browser()->GetTabStripModel();
   auto* first = model->GetWebContentsAt(0);
@@ -6041,7 +6092,7 @@ IN_PROC_BROWSER_TEST_F(FlyWorkspaceBrowserTest,
       original, embedded_test_server()->GetURL("/title1.html")));
   ASSERT_TRUE(ui_test_utils::NavigateToURLWithDisposition(
       original, embedded_test_server()->GetURL("/title2.html"),
-      WindowOpenDisposition::NEW_FOREGROUND_TAB,
+      NewForegroundTabDisposition(),
       ui_test_utils::BROWSER_TEST_WAIT_FOR_LOAD_STOP));
   original->GetTabStripModel()->SetTabPinned(1, true);
   App().CreateWorkspace("Second");
@@ -8221,8 +8272,8 @@ class FlyTabMenuBrowserTest : public FlyWorkspaceBrowserTest {
     auto native_point = point;
     wm::ConvertPointFromScreen(root_window, &native_point);
     auto* native_target = root_window->GetEventHandlerForPoint(native_point);
-    const std::string native_target_name =
-        native_target ? native_target->GetName() : "<none>";
+    const std::string native_target_name(
+        native_target ? native_target->GetName() : "<none>");
     auto* root_view = sidebar->GetWidget()->GetRootView();
     auto view_point = point;
     views::View::ConvertPointFromScreen(root_view, &view_point);
@@ -8486,6 +8537,10 @@ IN_PROC_BROWSER_TEST_F(FlyPageScrollBrowserTest,
       )js", axis, offset)).ExtractBool();
     });
   };
+  // ExecJs can finish before the compositor commits the zoomed fixture. Make
+  // its nested scroller available to hit testing before clicking and scrolling.
+  content::MainThreadFrameObserver(
+      contents->GetRenderWidgetHostView()->GetRenderWidgetHost()).Wait();
   // Keyboard scrolling follows a real click, including nested scrollers.
   auto origin = contents->GetRenderWidgetHostView()->GetViewBounds().origin();
   keys.MoveMouseTo(origin + gfx::Vector2d(100, 100));

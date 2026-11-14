@@ -74,8 +74,10 @@
 #include "fly/ui/hint_controller.h"
 #include "fly/ui/keyboard_editor.h"
 #include "fly/ui/native_commands.h"
+#include "fly/ui/navigation_disposition.h"
 #include "fly/ui/new_tab_ui.h"
 #include "fly/ui/page_scroller.h"
+#include "fly/ui/sidebar_native_host.h"
 #include "fly/ui/sidebar_panel.h"
 #include "fly/ui/status_bar.h"
 #include "fly/ui/tab_move_transaction.h"
@@ -122,14 +124,37 @@
 #include "ui/views/vector_icons.h"
 #include "ui/views/view.h"
 #include "ui/views/view_class_properties.h"
+#include "ui/views/view_targeter.h"
+#include "ui/views/view_targeter_delegate.h"
 #include "ui/views/widget/native_widget_aura.h"
 #include "ui/views/window/dialog_delegate.h"
+#include "ui/views/window/non_client_view.h"
 #include "ui/views/window/vector_icons/vector_icons.h"
 #include "ui/wm/core/coordinate_conversion.h"
 #include "url/origin.h"
 
 namespace fly {
 namespace {
+bool g_views_managed_sidebar_host_for_testing = false;
+
+// Views must ignore the same hidden strip that the native targeter ignores.
+// Otherwise its layered host prevents events from reaching the page below.
+class SidebarHostTargeter : public views::ViewTargeterDelegate {
+ public:
+  explicit SidebarHostTargeter(base::RepeatingCallback<int()> visible_width)
+      : visible_width_(std::move(visible_width)) {}
+
+  bool DoesIntersectRect(const views::View* target,
+                         const gfx::Rect& rect) const override {
+    auto bounds = target->GetLocalBounds();
+    bounds.set_width(std::clamp(visible_width_.Run(), 0, bounds.width()));
+    return bounds.Intersects(rect);
+  }
+
+ private:
+  base::RepeatingCallback<int()> visible_width_;
+};
+
 class WorkspaceMenuButton : public FlyButton,
                             public views::ContextMenuController,
                             public ui::SimpleMenuModel::Delegate {
@@ -425,6 +450,11 @@ FlyWindowController* FlyWindowController::FromContents(
   return tab ? FromBrowser(tab->GetBrowserWindowInterface()) : nullptr;
 }
 
+base::AutoReset<bool>
+FlyWindowController::UseViewsManagedSidebarHostForTesting() {
+  return base::AutoReset<bool>(&g_views_managed_sidebar_host_for_testing, true);
+}
+
 FlyWindowController::FlyWindowController(BrowserWindowInterface* browser,
                                          views::Widget* widget)
     : browser_(browser), widget_(widget) {
@@ -690,10 +720,19 @@ void FlyWindowController::BuildSidebar() {
   sidebar_widget_->AddObserver(this);
   LoadSidebarArtwork();
   auto host = std::make_unique<views::NativeViewHost>();
-  // The sidebar overlays the page while it slides. A clip window that Aura
-  // stacks above the page's native views keeps it on top; Views-managed layer
-  // reordering would put it below the BrowserView's contents.
-  host->SetLayerManagedByViews(false);
+  // A native clip window stays above the page independently of Views' frame
+  // ordering. Where that API is gone, InstallInto puts the Views-managed host
+  // above the client view instead of underneath it in the frame.
+  sidebar_host_uses_clip_window_ = ConfigureSidebarClipWindow(
+      host.get(), !g_views_managed_sidebar_host_for_testing);
+  if (!sidebar_host_uses_clip_window_) {
+    host->SetEventTargeter(std::make_unique<views::ViewTargeter>(
+        std::make_unique<SidebarHostTargeter>(base::BindRepeating(
+            [](base::WeakPtr<FlyWindowController> window) {
+              return window ? window->sidebar_hit_width_ : 0;
+            },
+            weak_factory_.GetWeakPtr()))));
+  }
   host->SetProperty(views::kViewIgnoredByLayoutKey, true);
   owned_sidebar_host_ = std::move(host);
   sidebar_host_ = owned_sidebar_host_.get();
@@ -1046,7 +1085,6 @@ void FlyWindowController::InstallInto(FlyBrowserFrame* frame) {
   if (footer_ && footer_->parent())
     owned_footer_ = footer_->parent()->RemoveChildViewT(footer_.get());
   if (sidebar_host_ && sidebar_host_->parent()) {
-    sidebar_targeter_ = nullptr;
     if (sidebar_host_->native_view())
       sidebar_host_->Detach();
     owned_sidebar_host_ =
@@ -1057,17 +1095,22 @@ void FlyWindowController::InstallInto(FlyBrowserFrame* frame) {
   frame_ = frame;
   frame_->SetController(weak_factory_.GetWeakPtr());
   frame_->AddChildView(std::move(owned_footer_));
-  frame_->AddChildView(std::move(owned_sidebar_host_));
+  views::View* sidebar_parent = sidebar_host_uses_clip_window_
+                                   ? static_cast<views::View*>(frame_)
+                                   : widget_->non_client_view();
+  sidebar_parent->AddChildView(std::move(owned_sidebar_host_));
   sidebar_host_->Attach(sidebar_widget_->GetNativeView());
   // Only the visible panel takes the pointer; the rest of the host (the
   // panel while collapsed, its shadow) leaves events to the page below.
   if (auto* clip = sidebar_host_->GetNativeViewContainer()) {
-    // The clip window itself never takes events; the panel's hit mask
-    // decides for points such as drops.
+    // A separate clip window delegates to the sidebar child. A Views-managed
+    // host returns the sidebar's own native window, which must receive events
+    // itself. The targeter insets limit both to the visible panel/rail.
     clip->SetEventTargetingPolicy(
-        aura::EventTargetingPolicy::kDescendantsOnly);
+        sidebar_host_uses_clip_window_
+            ? aura::EventTargetingPolicy::kDescendantsOnly
+            : aura::EventTargetingPolicy::kTargetAndDescendants);
     clip->SetEventTargeter(std::make_unique<aura::WindowTargeter>());
-    sidebar_targeter_ = clip->targeter();
   }
   sidebar_motion_applied_ = false;
   UpdateFullscreenChrome();
@@ -1080,7 +1123,6 @@ void FlyWindowController::FrameDestroying(FlyBrowserFrame* frame) {
   frame_ = nullptr;
   // The frame destroys its children with it; a replacement frame installs
   // them first. Without one the window is closing.
-  sidebar_targeter_ = nullptr;
   if (sidebar_host_ && sidebar_host_->native_view())
     sidebar_host_->Detach();
   sidebar_host_ = nullptr;
@@ -1212,6 +1254,9 @@ void FlyWindowController::UpdateSidebarBounds() {
   // compositor, and only the hit area follows it.
   bounds.set_width(FlyScaled(kSidebarWidth) +
                    (sidebar_auto_collapse_ ? kSidebarShadowExtent : 0));
+  if (sidebar_host_->parent() != frame_)
+    bounds = views::View::ConvertRectToTarget(frame_, sidebar_host_->parent(),
+                                             bounds);
   sidebar_host_->SetBoundsRect(bounds);
   // This overlay is excluded from layout; update its native clip explicitly.
   sidebar_host_->DeprecatedLayoutImmediately();
@@ -1219,9 +1264,15 @@ void FlyWindowController::UpdateSidebarBounds() {
 }
 
 void FlyWindowController::UpdateSidebarHitArea() {
-  if (!sidebar_targeter_ || !sidebar_host_)
+  if (!sidebar_host_)
     return;
-  sidebar_targeter_->SetInsets(gfx::Insets::TLBR(
+  // The native window owns the targeter and can destroy it before the frame
+  // during browser teardown. Resolve it from the live host instead of keeping
+  // a borrowed pointer across those lifetimes.
+  auto* container = sidebar_host_->GetNativeViewContainer();
+  if (!container || !container->targeter())
+    return;
+  container->targeter()->SetInsets(gfx::Insets::TLBR(
       0, 0, 0, std::max(0, sidebar_host_->width() - sidebar_hit_width_)));
 }
 
@@ -1316,7 +1367,7 @@ void FlyWindowController::UpdateSidebarVisibility() {
   sidebar_host_->SetVisible(true);
   // Keep the overlay above the page's native views; a floating surface
   // stays above the sidebar.
-  if (!blocked) {
+  if (!blocked && sidebar_host_uses_clip_window_) {
     auto* clip = sidebar_host_->GetNativeViewContainer();
     if (clip && clip->parent())
       clip->parent()->StackChildAtTop(clip);
@@ -2999,7 +3050,7 @@ void FlyWindowController::NavigateFromAddressBar(const GURL& url) {
                         ui::PageTransitionFromInt(
                             ui::PAGE_TRANSITION_TYPED |
                             ui::PAGE_TRANSITION_FROM_ADDRESS_BAR));
-  params.disposition = WindowOpenDisposition::CURRENT_TAB;
+  params.disposition = CurrentTabDisposition();
   params.window_action = NavigateParams::WindowAction::kShowWindow;
   Navigate(&params);
 }
@@ -3087,7 +3138,7 @@ void FlyWindowController::OpenBookmark(content::WebContents* source,
     return;
   if (source && IsFlyNewTabPage(source->GetLastCommittedURL())) {
     NavigateParams params(browser_, GURL(url), ui::PAGE_TRANSITION_AUTO_BOOKMARK);
-    params.disposition = WindowOpenDisposition::CURRENT_TAB;
+    params.disposition = CurrentTabDisposition();
     Navigate(&params);
   } else {
     app.OpenInNewTab(GURL(url), browser_);
@@ -3100,7 +3151,7 @@ void FlyWindowController::OpenBookmarkInBackground(content::WebContents* source,
       !FlyApp::Get().bookmarks().Contains(url))
     return;
   NavigateParams params(browser_, GURL(url), ui::PAGE_TRANSITION_AUTO_BOOKMARK);
-  params.disposition = WindowOpenDisposition::NEW_BACKGROUND_TAB;
+  params.disposition = NewBackgroundTabDisposition();
   Navigate(&params);
 }
 
@@ -3628,7 +3679,7 @@ void FlyWindowController::OpenLinkInBackground(content::WebContents* source,
           TabStripModel::kNoTab)
     return;
   NavigateParams params(browser_, url, ui::PAGE_TRANSITION_LINK);
-  params.disposition = WindowOpenDisposition::NEW_BACKGROUND_TAB;
+  params.disposition = NewBackgroundTabDisposition();
   params.source_contents = source;
   params.referrer = content::Referrer::SanitizeForRequest(
       url, content::Referrer(source->GetLastCommittedURL(),
@@ -3767,7 +3818,7 @@ bool FlyWindowController::RunProductAction(std::string_view action) {
             /*create_if_needed=*/true),
         GURL("https://accounts.google.com/"),
         ui::PAGE_TRANSITION_AUTO_TOPLEVEL);
-    params.disposition = WindowOpenDisposition::NEW_FOREGROUND_TAB;
+    params.disposition = NewForegroundTabDisposition();
     Navigate(&params);
     return true;
   }

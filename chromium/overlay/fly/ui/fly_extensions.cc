@@ -61,6 +61,7 @@
 #include "extensions/common/manifest.h"
 #include "extensions/common/manifest_handlers/options_page_info.h"
 #include "fly/preferences/preferences_service.h"
+#include "fly/ui/navigation_disposition.h"
 #include "ui/views/bubble/bubble_anchor.h"
 #include "ui/views/bubble/bubble_border.h"
 
@@ -338,7 +339,7 @@ void FlyExtensions::OpenOptions(BrowserWindowInterface* browser,
                         extensions::OptionsPageInfo::GetOptionsPage(extension),
                         ui::PAGE_TRANSITION_LINK);
   params.browser = browser;
-  params.disposition = WindowOpenDisposition::NEW_FOREGROUND_TAB;
+  params.disposition = NewForegroundTabDisposition();
   params.window_action = NavigateParams::WindowAction::kShowWindow;
   Navigate(&params);
 }
