@@ -50,6 +50,13 @@
 - Never write a version number by hand, anywhere. `package.json` declares it,
   `scripts/version-sync.js` copies it where it is needed, and releases are cut
   with `scripts/release.js` (see `docs/releasing.md`, or `/release`).
+- An explicit request to publish a release with all of `main` requires the
+  complete publication/verification chain even when every merged PR has
+  `impact:none`. That label controls automatic version selection; it does not
+  cancel the owner's publication request. Keep impact labels accurate and use
+  `docs/releasing.md#explicitly-publishing-current-main` to derive the version
+  through the tooling. Omitting a local development rebuild never omits the
+  official release build, packages or publication.
 - The PR description says what changed and why, how it was validated and what
   remains unverified or limited. Report failures and gaps honestly.
 - The owner normally tests published releases through `fly-install`, including

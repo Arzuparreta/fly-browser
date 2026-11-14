@@ -172,7 +172,9 @@ function resolve(options) {
     const pulls = mergedSince(tag);
     if (options.version) return {version: validate(options.version), impact: 'explicit', pulls, tag};
     const impact = highestImpact(pulls);
-    if (impact === 'none') fail(`Nothing merged since ${tag || 'the beginning'} claims any user-visible impact.`);
+    if (impact === 'none') fail(`Nothing merged since ${tag || 'the beginning'} claims any user-visible impact. ` +
+        'Automatic version selection stopped. If publication was explicitly requested, follow ' +
+        'docs/releasing.md#explicitly-publishing-current-main; that request still requires a release.');
     return {version: nextVersion(declaredVersion(), impact, {rc: options.rc}), impact, pulls, tag};
 }
 
