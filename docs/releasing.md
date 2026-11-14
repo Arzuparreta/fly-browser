@@ -82,6 +82,33 @@ In Claude Code, `/release` runs these steps and waits between them.
 
 `--rc` cuts a release candidate. `--version X.Y.Z` overrides the derived number, which is how 1.0 will eventually happen: a label cannot decide that.
 
+### Explicitly publishing current main
+
+An explicit owner request to publish a release with everything on `main` is
+publication authorization even if all merged PRs have `impact:none`. The
+planner's default refusal in that case means automatic version selection found
+no user-visible impact; it does not cancel the requested release. Keep those
+labels accurate instead of relabelling internal changes to force a release.
+
+When that default is the only reason planning stops, derive the next patch
+version through the existing tooling and use its explicit-version path:
+
+```sh
+task_release_version=$(node -p 'require("./scripts/release").nextVersion(require("./scripts/version-sync").declaredVersion(), "patch")')
+node scripts/release.js plan --version "$task_release_version"
+node scripts/release.js prepare --version "$task_release_version"
+```
+
+Use a dedicated worktree from current `origin/main` and complete the usual local
+checks, version PR, latest-head CI, merge/tag, release build, signed packages,
+public asset verification and cleanup. An orchestrator may use `--hold` while
+it supervises PR checks separately; the publication request already authorizes
+the gated merge. Do not stop at preparation or ask for that authorization again.
+
+The owner's request to omit a local development rebuild affects only
+`out/FlyNative`/`./launch.sh`. It does not omit the official `out/FlyRelease`
+build, signed packages, publication or verification through the release channel.
+
 ## The What's New page
 
 After an upgrade Fly opens its What's New page (`chromium/overlay/fly/resources/whats_new/`), listing every release since the version that profile last ran. Opened by hand (command palette → Show What's New) it lists the latest release.

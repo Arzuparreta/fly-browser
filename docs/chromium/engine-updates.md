@@ -68,8 +68,12 @@ Explicit limits in the owner's request take precedence.
    supervise the bump PR, tagging, release and package jobs through completion.
    If the automatic workflow already started that release, finish supervising
    it instead of creating another one. Release numbers come from the tooling.
-   Preparation that only supports a future Beta does not itself require an
-   empty release. The invocation authorizes pushes, gated PR merges and release
+   Future-Beta preparation alone does not automatically trigger publication.
+   An explicit request to release all of main still requires publication; use
+   [the explicit publication procedure](../releasing.md#explicitly-publishing-current-main)
+   even when all impact labels are `none`. Omitting the local development
+   rebuild does not omit the release build or publication.
+   The invocation authorizes pushes, gated PR merges and release
    publication; do not stop to request that authorization again.
 5. Verify the published release and its downloadable assets/checksums when a
    release was produced. The owner's normal acceptance path is the published
@@ -294,7 +298,9 @@ merging, it proves the complete Stable output is identical to current main,
 replays Stable and Beta, and waits for the latest head's `verify`, `impact_label`
 and `engine-validation` checks plus any other registered checks. If main moves,
 the combined result is checked again. This changes patch metadata, so it needs
-neither a native rebuild nor an empty release. It does not establish Beta build
+no native acceptance rebuild and triggers no automatic release. An explicit
+request to publish current main still follows the release procedure above.
+Patch replay does not establish Beta build
 or runtime compatibility: the normal Stable update still compiles the control
 and Fly and runs Fly's native tests before shipping that engine.
 
@@ -399,7 +405,9 @@ All latest-head remote checks must pass. Main moving invalidates the old
 combined validation. Beta advancing or an active Stable slot lagging behind
 main also prevents merge. A native failure can receive one further bounded
 proposal; a rejected or incomplete result stays open. No Beta engine is shipped
-and future-Beta preparation alone does not cut a release.
+and future-Beta preparation alone does not automatically cut a release. An
+explicit request to publish current main still ships its Stable pin through
+the normal release gates.
 
 Cost, isolation and recovery controls:
 
