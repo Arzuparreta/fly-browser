@@ -48,6 +48,88 @@ def lock_for(source_rev, deps_text, tools_rev, version):
             'depot_tools': {'url': TOOLS_URL, 'revision': tools_rev}}
 
 
+class ManagedGitlinkTests(unittest.TestCase):
+    def setUp(self):
+        temporary = tempfile.TemporaryDirectory(prefix='fly-managed-gitlink-')
+        self.addCleanup(temporary.cleanup)
+        self.root = Path(temporary.name).resolve()
+        self.parent = self.root / 'src'
+        self.child = self.parent / 'nested dependency'
+        self.child.mkdir(parents=True)
+        for directory in (self.parent, self.child):
+            git(directory, 'init')
+            git(directory, 'remote', 'add', 'origin', SRC_URL)
+        self.old = commit(self.child, {'file': 'old'}, 'old')
+        self.new = commit(self.child, {'file': 'new'}, 'new')
+        git(self.parent, 'update-index', '--add', '--cacheinfo',
+            '160000,' + self.old + ',nested dependency')
+        self.revision = commit(self.parent, {'DEPS': 'fixture'}, 'parent')
+        # commit() stages the actual child HEAD; retain the older gitlink.
+        git(self.parent, 'update-index', '--cacheinfo',
+            '160000,' + self.old + ',nested dependency')
+        git(self.parent, '-c', 'user.name=Fixture', '-c', 'user.email=fixture@invalid.example',
+            'commit', '-m', 'older gitlink')
+        self.revision = git(self.parent, 'rev-parse', 'HEAD')
+        self.inventory = {
+            'src': {'url': SRC_URL, 'rev': self.revision},
+            'src/nested dependency': {'url': SRC_URL, 'rev': self.new},
+        }
+        self.record_inventory()
+
+    def record_inventory(self):
+        file = self.root / 'evidence/dependency-revisions.json'
+        engine.atomic_json(file, self.inventory)
+        engine.atomic_json(self.root / 'evidence/sync.json', {
+            'details': {'dependency_revisions_sha256': engine.digest(file)}})
+
+    def test_effective_deps_revision_can_override_the_parent_gitlink(self):
+        pin = {'url': SRC_URL, 'revision': self.revision}
+        with self.assertRaisesRegex(RuntimeError, 'Dirty checkout'):
+            engine.verify_checkout(self.parent, pin)
+        engine.verify_dependencies(self.root)
+
+    def test_local_nested_edits_are_preserved_and_rejected(self):
+        for kind in ('tracked', 'untracked', 'staged'):
+            with self.subTest(kind=kind):
+                path = self.child / ('extra' if kind == 'untracked' else 'file')
+                path.write_text('owner work')
+                if kind == 'staged':
+                    git(self.child, 'add', 'file')
+                with self.assertRaisesRegex(RuntimeError, 'Dirty checkout'):
+                    engine.verify_dependencies(self.root)
+                self.assertEqual(path.read_text(), 'owner work')
+                if kind == 'untracked':
+                    path.unlink()
+                else:
+                    git(self.child, 'restore', '--staged', '--worktree', 'file')
+
+    def test_wrong_nested_revision_or_origin_is_rejected(self):
+        git(self.child, 'checkout', '--detach', self.old)
+        with self.assertRaisesRegex(RuntimeError, 'Unexpected source revision'):
+            engine.verify_dependencies(self.root)
+        git(self.child, 'checkout', '--detach', self.new)
+        git(self.child, 'remote', 'set-url', 'origin', 'https://invalid.example/dependency')
+        with self.assertRaisesRegex(RuntimeError, 'Unexpected origin'):
+            engine.verify_dependencies(self.root)
+
+    def test_parent_edits_are_not_hidden_by_the_managed_gitlink(self):
+        (self.parent / 'DEPS').write_text('owner work')
+        with self.assertRaisesRegex(RuntimeError, 'Dirty checkout'):
+            engine.verify_dependencies(self.root)
+        self.assertEqual((self.parent / 'DEPS').read_text(), 'owner work')
+
+    def test_unmanaged_or_staged_gitlink_changes_are_rejected(self):
+        del self.inventory['src/nested dependency']
+        self.record_inventory()
+        with self.assertRaisesRegex(RuntimeError, 'Dirty checkout'):
+            engine.verify_dependencies(self.root)
+        self.inventory['src/nested dependency'] = {'url': SRC_URL, 'rev': self.new}
+        self.record_inventory()
+        git(self.parent, 'add', 'nested dependency')
+        with self.assertRaisesRegex(RuntimeError, 'Dirty checkout'):
+            engine.verify_dependencies(self.root)
+
+
 class VersionTests(unittest.TestCase):
     def test_status_compares_numerically(self):
         result = engine_update.status({'engine_version': '155.0.8059.84'},
