@@ -295,7 +295,7 @@ def doctor(root, minimum_free_gib=100):
     return result
 
 
-def verify_checkout(directory, pin, submodules=True):
+def verify_checkout(directory, pin, submodules=True, managed_dependencies=None):
     """`submodules=False` ignores gitlink differences: right after src moves
     to a new pin its dependencies still sit at the old revisions until gclient
     sync moves them, and verify_dependencies checks each one after that."""
@@ -307,10 +307,23 @@ def verify_checkout(directory, pin, submodules=True):
         fail(f'Unexpected source revision in {directory}; no reset is permitted. '
              'If the Chromium pin moved, update this checkout with '
              'scripts/chromium/engine_update.py upgrade')
-    status = ['status', '--porcelain', '--untracked-files=normal']
+    status = ['status', '--porcelain=v2', '-z', '--untracked-files=normal']
     if not submodules:
         status.append('--ignore-submodules=all')
-    if git(directory, *status):
+    for entry in git(directory, *status).split('\0'):
+        if not entry:
+            continue
+        fields = entry.split(' ', 8)
+        # gclient's inherited DEPS variables can override a nested gitlink.
+        # Accept only an unstaged gitlink difference covered by the completed
+        # inventory, and verify that checkout's origin, revision and contents.
+        if (managed_dependencies and len(fields) == 9 and fields[:2] == ['1', '.M']
+                and fields[3:6] == ['160000'] * 3):
+            child = directory / fields[8]
+            expected = managed_dependencies.get(child)
+            if expected:
+                verify_checkout(child, expected, managed_dependencies=managed_dependencies)
+                continue
         fail(f'Dirty checkout: {directory}; preserve and inspect changes first')
 
 
@@ -366,6 +379,14 @@ def verify_dependencies(root, source_verifier=None):
     if digest(file) != expected:
         fail('Dependency revision inventory changed since sync')
     dependencies = json.loads(file.read_text())
+    managed = {}
+    for relative, pin in dependencies.items():
+        if pin.get('rev') is None:
+            continue
+        directory = (root / relative).resolve()
+        if root not in directory.parents or ':' in relative or not re.fullmatch('[0-9a-f]{40}', pin['rev']):
+            fail('Invalid dependency inventory path or revision')
+        managed[directory] = {'url': pin['url'], 'revision': pin['rev']}
     def check(item):
         relative, pin = item
         if pin.get('rev') is None:
@@ -374,9 +395,7 @@ def verify_dependencies(root, source_verifier=None):
             source_verifier()
             return
         directory = (root / relative).resolve()
-        if root not in directory.parents or ':' in relative or not re.fullmatch('[0-9a-f]{40}', pin['rev']):
-            fail('Invalid dependency inventory path or revision')
-        verify_checkout(directory, {'url': pin['url'], 'revision': pin['rev']})
+        verify_checkout(directory, managed[directory], managed_dependencies=managed)
     with ThreadPoolExecutor(max_workers=8) as pool:
         # Consume all futures; do not leave background Git operations running.
         results = list(pool.map(check, dependencies.items()))
