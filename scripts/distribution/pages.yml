@@ -16,7 +16,7 @@ jobs:
     runs-on: ubuntu-latest
     environment:
       name: github-pages
-      url: ${{ steps.deployment.outputs.page_url }}
+      url: ${{ steps.deploy1.outputs.page_url || steps.deploy2.outputs.page_url || steps.deploy3.outputs.page_url }}
     steps:
       - uses: actions/checkout@v4
       - uses: actions/configure-pages@v5
@@ -27,23 +27,43 @@ jobs:
       - uses: actions/upload-pages-artifact@v3
         with:
           path: _site
-      # deploy-pages looks the artifact up within a second of the upload, and
-      # GitHub's run artifact listing can lag behind it: since 2026-11-23 it
-      # failed with 'No artifacts named "github-pages"' while the upload had
-      # succeeded. Deploy only once the listing shows the artifact.
+      # deploy-pages looks the artifact up by name within a second of the
+      # upload. Since 2026-11-23 GitHub's run artifact listing answers
+      # inconsistently for a while after an upload: one call lists the
+      # artifact and the next returns none, and the deploy failed with
+      # 'No artifacts named "github-pages"' although the upload had succeeded.
+      # Wait for the same filtered listing deploy-pages uses to answer three
+      # times in a row, and retry the deploy if it still misses the artifact.
       - name: Wait until the Pages artifact is listed
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          for attempt in $(seq 1 30); do
-            if gh api "repos/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID/artifacts" \
-                --jq '.artifacts[].name' | grep -qx github-pages; then
-              exit 0
-            fi
+          seen=0
+          for attempt in $(seq 1 60); do
+            count=$(gh api "repos/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID/artifacts?name=github-pages" \
+                --jq .total_count || echo 0)
+            if [ "$count" -ge 1 ]; then seen=$((seen + 1)); else seen=0; fi
+            [ "$seen" -ge 3 ] && exit 0
             sleep 5
           done
-          echo 'The github-pages artifact was never listed for this run.' >&2
+          echo 'The github-pages artifact was not listed consistently for this run.' >&2
           exit 1
       - name: Publish Pages
-        id: deployment
+        id: deploy1
+        continue-on-error: true
+        uses: actions/deploy-pages@v4
+      - name: Wait before retrying the deploy
+        if: steps.deploy1.outcome == 'failure'
+        run: sleep 60
+      - name: Publish Pages (second attempt)
+        id: deploy2
+        if: steps.deploy1.outcome == 'failure'
+        continue-on-error: true
+        uses: actions/deploy-pages@v4
+      - name: Wait before the last deploy attempt
+        if: steps.deploy1.outcome == 'failure' && steps.deploy2.outcome == 'failure'
+        run: sleep 120
+      - name: Publish Pages (last attempt)
+        id: deploy3
+        if: steps.deploy1.outcome == 'failure' && steps.deploy2.outcome == 'failure'
         uses: actions/deploy-pages@v4
