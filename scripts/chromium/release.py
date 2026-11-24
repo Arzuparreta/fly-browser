@@ -131,13 +131,13 @@ def main():
         engine.run(['gn', 'gen', str(output_name)], root / 'src', env)
         # Check the full graph before spending hours compiling it. In particular,
         # GN can succeed while the V8 snapshot's selected PGO input is missing.
-        engine.run(['autoninja', '-C', str(output_name), '-n',
-                    'chrome', 'chrome_sandbox'], root / 'src', env)
+        engine.autoninja(root, ['-C', str(output_name), '-n',
+                                'chrome', 'chrome_sandbox'], env)
         if args.prepare_only:
             print('Release inputs and build graph are ready; no compilation requested.')
             return
-        engine.run(['autoninja', '-C', str(output_name), '-j', str(args.jobs),
-                    'chrome', 'chrome_sandbox'], root / 'src', env)
+        engine.autoninja(root, ['-C', str(output_name), '-j', str(args.jobs),
+                                'chrome', 'chrome_sandbox'], env)
         native.verify_source(root, lock)
         if profile and engine.digest(root / 'src/chrome/build/pgo_profiles' /
                                      profile['filename']) != profile['sha256']:

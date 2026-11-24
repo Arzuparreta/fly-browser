@@ -16,6 +16,7 @@ import stat
 import subprocess
 import sys
 import tempfile
+import time
 
 REPO = Path(__file__).resolve().parents[2]
 LOCK = REPO / 'chromium/upstream.lock.json'
@@ -274,6 +275,32 @@ def environment(root):
     return env
 
 
+SISO_LOG_RETENTION_SECONDS = 7 * 24 * 3600
+
+
+def autoninja(root, arguments, env):
+    """Build in root/src with the build's temporary files under the engine root.
+
+    Siso writes its glog logs (around 100 MB per full build) to $TMPDIR and
+    never removes them. Where /tmp is a size-limited tmpfs it fills up, and
+    Siso aborts the build as soon as it cannot write a log line. Keep them on
+    the build's own disk, under root/tmp, and drop the ones older than a week.
+    Only builds use this directory: tests keep the caller's $TMPDIR."""
+    env = dict(env if env is not None else os.environ)
+    if sys.platform != 'win32':
+        temporary = root / 'tmp'
+        temporary.mkdir(parents=True, exist_ok=True)
+        cutoff = time.time() - SISO_LOG_RETENTION_SECONDS
+        for log in temporary.glob('siso.*'):
+            try:
+                if log.is_symlink() or log.stat().st_mtime < cutoff:
+                    log.unlink()
+            except FileNotFoundError:
+                pass
+        env['TMPDIR'] = str(temporary)
+    run(['autoninja', *arguments], root / 'src', env)
+
+
 def doctor(root, minimum_free_gib=100):
     for tool in ('git', 'python3'):
         if not shutil.which(tool):
@@ -505,7 +532,7 @@ def execute(args):
             require_stage(root, 'configure', lock)
             if digest(root / 'src/out/FlyControl/args.gn') != digest(CONFIG):
                 fail('Control build arguments changed since configuration')
-            run(['autoninja', '-C', 'out/FlyControl', '-j', str(args.jobs), 'chrome'], root / 'src', env)
+            autoninja(root, ['-C', 'out/FlyControl', '-j', str(args.jobs), 'chrome'], env)
             verify(root, lock)
             evidence(root, 'build', lock, {'binary': str(binary(root)),
                                           'sha256': digest(binary(root)),

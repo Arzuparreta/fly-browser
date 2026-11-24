@@ -200,6 +200,31 @@ class EngineTests(unittest.TestCase):
         self.assertEqual(env['GIT_CONFIG_KEY_1'], 'core.autocrlf')
         self.assertEqual(env['GIT_CONFIG_VALUE_1'], 'false')
 
+    @unittest.skipIf(os.name == 'nt', 'Siso logs stay in %TEMP% on Windows')
+    def test_builds_keep_siso_logs_under_the_engine_root(self):
+        temporary = self.root / 'tmp'
+        temporary.mkdir()
+        stale = temporary / 'siso.host.user.log.INFO.20200101-000000.1'
+        recent = temporary / 'siso.host.user.log.WARNING.20991231-000000.2'
+        other = temporary / 'clang-output.o'
+        for file in (stale, recent, other):
+            file.write_text('log')
+        old = 1_000_000
+        os.utime(stale, (old, old))
+        os.utime(other, (old, old))
+        caller = {'PATH': '/usr/bin', 'TMPDIR': '/tmp'}
+        with patch.object(engine, 'run') as run:
+            engine.autoninja(self.root, ['-C', 'out/FlyControl', 'chrome'], caller)
+        args, cwd, env = run.call_args.args
+        self.assertEqual(args, ['autoninja', '-C', 'out/FlyControl', 'chrome'])
+        self.assertEqual(cwd, self.root / 'src')
+        self.assertEqual(env['TMPDIR'], str(temporary))
+        self.assertEqual(env['PATH'], '/usr/bin')
+        self.assertEqual(caller['TMPDIR'], '/tmp')
+        self.assertFalse(stale.exists())
+        self.assertTrue(recent.exists())
+        self.assertTrue(other.exists())
+
     def test_space_floor_is_explicit_and_checked(self):
         with patch.object(engine.shutil, 'disk_usage') as usage:
             usage.return_value.free = 50 * 1024**3
