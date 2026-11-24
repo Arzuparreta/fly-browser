@@ -1,18 +1,18 @@
 {
   "schema": 1,
-  "resolved_at": "2026-11-17T21:18:55.941254+00:00",
+  "resolved_at": "2026-11-24T00:19:28.443454+00:00",
   "release_source": "https://chromiumdash.appspot.com/fetch_releases?channel=Stable&platform=Linux&num=1",
   "channel": "Stable",
   "platform": "Linux",
-  "release_time": 1794941800005,
-  "engine_version": "158.0.8127.36",
+  "release_time": 1795466737426,
+  "engine_version": "158.0.8127.88",
   "chromium": {
     "url": "https://chromium.googlesource.com/chromium/src.git",
-    "revision": "14d6f648e8cd7ad750a4044200ce94d3321be260",
+    "revision": "0cefb18236a23db1ebb6b2bc040fbbaf8cbe759e",
     "deps_sha256": "db3d3a3f508dd4210446814aa977d6ef9e4a046194b04a94ad6a0d3ea5f39017"
   },
   "depot_tools": {
     "url": "https://chromium.googlesource.com/chromium/tools/depot_tools.git",
-    "revision": "1d75f8bf20fa6b7b91ab95517df794b1aa6f586c"
+    "revision": "25e7767e91a5e7f3209c947b07c52e7a45dda6b5"
   }
 }
