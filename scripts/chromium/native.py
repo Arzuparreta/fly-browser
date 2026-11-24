@@ -434,8 +434,8 @@ def compile_objects(root, lock, manifest, env, jobs):
                'native_desktop_supported': sys.platform in ('linux', 'win32'),
                'acceptance': 'Object compilation only; no linked browser or runtime acceptance'}
     engine.atomic_json(root / 'evidence/native-object-plan.json', details)
-    engine.run(['autoninja', '-C', relative, '-j', str(jobs),
-                '-f', plan['manifest'], plan['target']], root / 'src', env)
+    engine.autoninja(root, ['-C', relative, '-j', str(jobs),
+                            '-f', plan['manifest'], plan['target']], env)
     compiled = {}
     for source, target in targets.items():
         file = output / target
@@ -513,7 +513,7 @@ def execute(args):
                 engine.fail('Core test build arguments differ; preserve existing output')
             config.write_bytes(CONFIG.read_bytes())
             engine.run(['gn', 'gen', 'out/FlyUnit', '--root-target=//fly'], root / 'src', env)
-            engine.run(['autoninja', '-C', 'out/FlyUnit', '-j', str(args.jobs), 'fly_unittests'], root / 'src', env)
+            engine.autoninja(root, ['-C', 'out/FlyUnit', '-j', str(args.jobs), 'fly_unittests'], env)
             executable = unit_output / ('fly_unittests.exe' if sys.platform == 'win32' else 'fly_unittests')
             engine.run([executable, '--test-launcher-jobs=2',
                         '--test-launcher-summary-output=' + str(root / 'evidence/native-core-tests.json')], root / 'src', env, foreground=True)
@@ -539,7 +539,7 @@ def execute(args):
                 engine.fail('Native inputs differ from configuration; configure again')
             target = {'build': 'chrome', 'test': 'fly_unittests',
                       'test-browser': args.browser_target}[args.command]
-            engine.run(['autoninja', '-C', OUTPUT, '-j', str(args.jobs), target], root / 'src', env)
+            engine.autoninja(root, ['-C', OUTPUT, '-j', str(args.jobs), target], env)
             if args.command == 'test':
                 engine.run([output / ('fly_unittests.exe' if sys.platform == 'win32' else 'fly_unittests')], root / 'src', env, foreground=True)
             if args.command == 'test-browser':
